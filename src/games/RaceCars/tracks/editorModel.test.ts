@@ -597,3 +597,31 @@ describe("connectByGeometry lines lanes up off the shape, not the placement orde
         expect(connected.find(candidate => candidate.id === "y")!.autoExits).toBeUndefined();
     });
 });
+
+describe("a grid behind a line that spans rows", () => {
+    // The line's earliest row is the boundary (§15), so a slot on a later row of
+    // the same line is past it — behind the line in its own lane and over it as
+    // far as the lap is concerned. Seated a lap short, that car drives the whole
+    // circuit before it banks anything.
+    const behind = (grid: string[], finish: string[]): EditorState => ({
+        ...tinyState(),
+        grid,
+        finish,
+        gridBehindFinishLine: true,
+    });
+
+    it("refuses the slots that are not behind the line", () => {
+        // Rows: sf.*.0 is row 0, bend.*.0 row 1, bend.*.1 row 2. With the line on
+        // row 0 only rows 2 are behind it — P1/P2 stand on the line itself and
+        // P3/P4 are a row past it.
+        const state = behind(["sf.1.0", "sf.2.0", "bend.1.0", "bend.2.0", "bend.1.1", "bend.2.1"], ["sf.1.0", "sf.2.0"]);
+        const stray = validateTrack(state).errors.filter(error => error.includes("behind the finish line"));
+        expect(stray).toHaveLength(1);
+        expect(stray[0]).toContain("P1, P2, P3, P4");
+    });
+
+    it("accepts a grid wholly behind the line, wrap and all", () => {
+        const state = behind(["bend.1.1", "bend.2.1", "bend.1.1", "bend.2.1", "bend.1.1", "bend.2.1"], ["sf.1.0", "sf.2.0"]);
+        expect(validateTrack(state).errors.filter(error => error.includes("behind the finish line"))).toEqual([]);
+    });
+});

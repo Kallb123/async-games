@@ -25,6 +25,7 @@ import {
     driveableSteps,
     gearDef,
     MIN_MOVE_STEPS,
+    rowsBetween,
     OIL_DIE_SIDES,
     OIL_SPIN_FACE,
     RaceCarsCorner,
@@ -534,9 +535,46 @@ export function resolveArrival(
     let lapsCompleted = ps.lapsCompleted;
     let stops = ps.cornerStops;
 
+    // The row each lap banked this move was banked at, so `rest` can tell one the
+    // car actually drove past from one it is about to be pulled back behind.
+    const bankedAt: number[] = [];
+
+    /**
+     * Give back a lap the car never really completed.
+     *
+     * §10 puts a car that cannot pay its overshoot **back in the corner**, which
+     * on a circuit whose line is painted near a corner's exit is behind a line
+     * the same move crossed a step earlier. §10's own words are that such a move
+     * "stops there and never reaches" what is past it — and the line is past it,
+     * so the lap does not stand. Without this a car banks the lap, spins back
+     * behind the line, and banks it again next turn: two laps for one.
+     *
+     * Measured forward from where the move began rather than by step, because a
+     * spin lands on the highest free row of the corner and a line may be painted
+     * inside one — what settles it is where the car comes to rest, not which step
+     * the corner fell behind at. A move is never longer than a lap, so one walk
+     * forward from the start orders every row it touched.
+     */
+    const unbankLapsPast = (space: RaceCarsSpace) => {
+        const reached = rowsBetween(track, start.row, space.row);
+        while (bankedAt.length > 0 && rowsBetween(track, start.row, bankedAt[bankedAt.length - 1]) > reached) {
+            bankedAt.pop();
+            const undone = lapsCompleted;
+            lapsCompleted -= 1;
+            for (let i = events.length - 1; i >= 0; i--) {
+                const event = events[i];
+                if (event.type === 'lap' && event.lapsCompleted === undone) {
+                    events.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    };
+
     // A turn that ends inside a corner banks a stop, however it ended there —
     // including standing still while boxed in (§18).
     const rest = (space: RaceCarsSpace, gear: RaceCarsGear, spun: boolean, banks: boolean): RaceCarsArrival => {
+        unbankLapsPast(space);
         const corner = cornerAt(track, space.row, space.lane);
         if (corner && banks) {
             stops += 1;
@@ -590,6 +628,7 @@ export function resolveArrival(
         // nothing further along the path is resolved or charged (§4.1, §18).
         if (crossesFinishLine(track, path[step - 1].row, to.row)) {
             lapsCompleted += 1;
+            bankedAt.push(to.row);
             // On a circuit whose grid sits behind the line, the field starts a
             // lap short (`startingLaps`) and this first crossing only brings it
             // to nought: the race has started rather than a lap been completed,

@@ -571,16 +571,25 @@ export function crossesFinishLine(track: RaceCarsTrack, fromRow: number, toRow: 
  * with it, and a car yet to reach the line for the first time genuinely is a
  * lap's worth of progress behind one sitting on it.
  *
- * Two readers see the negative and are meant to. The result page's rows-covered
- * chart (`GameResultData.ts`) opens below nought for such a race and climbs
- * through it at the first crossing, which is the truth about where the field
- * was; clamping it would flatten the opening turns of every driver's line
- * equally and lose the slope that is the whole point of the chart. The board's
- * lap readout clamps instead, because "lap 0 of 1" is not a thing a driver is
- * ever on — the lap they are working on before the first crossing is the first.
+ * Every reader of the negative clamps it, and none of them loses anything by it.
+ * The board's lap readout would otherwise say "lap 0 of 1", which is not a lap a
+ * driver is ever on — before the first crossing they are working on the first.
+ * Rows covered would otherwise report "covered −75 rows" on the result page, and
+ * draw those rounds off the bottom of a chart whose axis floors at nought
+ * (`LineChart`) rather than below the line. What the negative is *for* is the
+ * ordering, and that is pure subtraction — `recomputeRoundOrder`, the
+ * classification and `rowsBehindLeader` all read it unclamped and all come out
+ * right, because a car yet to reach the line genuinely is a lap down.
  */
 export function startingLaps(track: RaceCarsTrack): number {
-    return track.gridBehindFinishLine ? -1 : 0;
+    // Both halves, not just the toggle. "Behind the finish line" is only a
+    // statement about a circuit that has one: with no line painted the boundary
+    // falls back to row 0, which is where the first section begins rather than
+    // anywhere an author drew, and seating a field a lap short of *that* makes
+    // every race on the circuit one whole lap longer than the distance the
+    // players picked. The editor warns on the combination; this refuses to act
+    // on it.
+    return track.gridBehindFinishLine && track.finish?.length ? -1 : 0;
 }
 
 /**

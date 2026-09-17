@@ -15,7 +15,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
-import { behindLineTrack, car, kettleCorner, LINE_SECTIONS, race, testTrack } from "./testFixtures";
+import { behindLineTrack, car, kettleCorner, race, staggeredGrid, testTrack } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -503,7 +503,7 @@ describe("the painted finish line (§15)", () => {
     it("counts the lap where the line is painted, not at row 0", () => {
         expect(lapBoundary(BEHIND_LINE)).toBe(3);
         // A circuit that paints no line still counts its lap at row 0.
-        expect(lapBoundary(testTrack(LINE_SECTIONS))).toBe(0);
+        expect(lapBoundary(behindLineTrack({ id: 'noline', finish: undefined }))).toBe(0);
     });
 
     it("crosses at the painted row, whichever lane takes the step", () => {
@@ -549,6 +549,68 @@ describe("a grid drawn behind the finish line (§15)", () => {
         expect(arrival).toMatchObject({ row: 3, lapsCompleted: 1, finished: true });
         expect(arrival.events).toContainEqual({ type: 'lap', lapsCompleted: 1 });
         expect(arrival.events).toContainEqual({ type: 'finish' });
+    });
+
+    it("only seats a lap short when a line is actually painted", () => {
+        // The toggle alone is not enough: with no line the boundary falls back
+        // to row 0, and a field seated a lap short of *that* would drive one
+        // whole lap more than the distance its players picked. The editor warns
+        // on the combination; this refuses to act on it.
+        const noLine = behindLineTrack({ id: 'togglenoline', finish: undefined });
+        expect(startingLaps(noLine)).toBe(0);
+    });
+
+    it("gives back a lap the car is spun back behind (§10)", () => {
+        // A line painted just past a corner's exit, and an overshoot the car
+        // cannot pay: §10 puts it back in the corner, which is behind the line
+        // it crossed a step earlier. It never reached the line, so the lap does
+        // not stand — without this it banks the lap, spins back, and banks it
+        // again next turn, taking a one-lap race on nine spaces of driving.
+        const spinback: RaceCarsTrack = testTrack([
+            { id: 'approach', name: 'Approach', lanes: 3, corner: null, length: 3 },
+            { id: 'bend', name: 'Bend', lanes: 3, corner: { stops: 1 }, length: 3 },
+            { id: 'run', name: 'Run', lanes: 3, corner: null, length: 8 },
+        ], {
+            id: 'spinback',
+            grid: staggeredGrid(),
+            finish: [1, 2, 3].map(lane => ({ row: 6, lane })),
+        });
+        TRACKS[spinback.id] = spinback;
+        try {
+            const state = race({ a: { row: 2, lane: 1, tyres: 0, lapsCompleted: 0 } },
+                { trackId: spinback.id, laps: 3 });
+            const arrival = drive(state, 'a', 5);
+            // Back in the corner, spun, and no lap to its name.
+            expect(arrival).toMatchObject({ row: 5, spun: true, lapsCompleted: 0 });
+            expect(arrival.events.filter(event => event.type === 'lap')).toEqual([]);
+        } finally {
+            delete TRACKS[spinback.id];
+        }
+    });
+
+    it("keeps a lap the car is spun back to but not behind", () => {
+        // The same circuit with the line painted *inside* the approach, well
+        // before the corner: the spin lands past it, so the lap stands. The undo
+        // is about where the car comes to rest, not about having spun at all.
+        const early: RaceCarsTrack = testTrack([
+            { id: 'approach', name: 'Approach', lanes: 3, corner: null, length: 3 },
+            { id: 'bend', name: 'Bend', lanes: 3, corner: { stops: 1 }, length: 3 },
+            { id: 'run', name: 'Run', lanes: 3, corner: null, length: 8 },
+        ], {
+            id: 'earlyline',
+            grid: staggeredGrid(),
+            finish: [1, 2, 3].map(lane => ({ row: 2, lane })),
+        });
+        TRACKS[early.id] = early;
+        try {
+            const state = race({ a: { row: 1, lane: 1, tyres: 0, lapsCompleted: 0 } },
+                { trackId: early.id, laps: 3 });
+            const arrival = drive(state, 'a', 5);
+            expect(arrival).toMatchObject({ spun: true, lapsCompleted: 1 });
+            expect(arrival.events).toContainEqual({ type: 'lap', lapsCompleted: 1 });
+        } finally {
+            delete TRACKS[early.id];
+        }
     });
 
     it("leaves a car that has not reached the line behind one that has", () => {

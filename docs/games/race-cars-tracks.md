@@ -277,9 +277,24 @@ shape in the editor rather than in a race.
   One row for the whole circuit, deliberately: per-lane boundaries would let a
   car crossing in an early lane and changing into a later one bank two laps a few
   spaces apart, and would hand the early lanes a free head start every lap.
-- **A grid drawn behind the line needs the toggle.** `gridBehindFinishLine` seats
-  the field a lap short, so the first crossing starts lap 1 rather than ending
-  it. Without it, every car banks a lap within a few spaces of the flag dropping.
+- **A grid drawn behind the line needs the toggle, and the toggle needs a line.**
+  `gridBehindFinishLine` seats the field a lap short, so the first crossing
+  starts lap 1 rather than ending it. Without it, every car banks a lap within a
+  few spaces of the flag dropping. Ticked without a line painted it does nothing
+  — "behind the finish line" is only a statement about a circuit that has one,
+  and `startingLaps` refuses to seat a field a lap short of the derivation's row
+  0. Every grid slot must also be behind the line's **earliest** painted row, not
+  merely behind the line in its own lane: a slot between the earliest and latest
+  painted rows is past the boundary already, and seated a lap short it would
+  drive the whole circuit before banking anything. `board.test.ts` asserts this
+  per track.
+- **Never paint a line onto a circuit that is already in play.** The boundary is
+  read live off the track module and a saved game stores only the `trackId`, so
+  adding a `finish:` to a shipped circuit moves the line under every race in
+  flight: a car between the old boundary and the new one has banked its lap at
+  row 0 and banks a second on reaching the new line — a free lap, possibly the
+  win. This is the same hazard as re-tracing (§5), and the same answer: ship the
+  change as a new track id.
 - **Check the editor's derived rows before exporting.** The canvas prints each
   tile's derived row, which is the fastest way to see a skewed section — that is
   what it is there for.
