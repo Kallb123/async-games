@@ -109,3 +109,22 @@ export function resolveHistory(
         return resolved;
     });
 }
+
+/**
+ * A freshly created game's setup lines, flipped into the newest-first order
+ * `gameState.history` is stored in. Applied once, by `startGameFromInvitation`
+ * — the single path from an invitation to a live game — so no game's
+ * `CreateGame` has to remember it.
+ *
+ * Every in-game write is an `unshift`, so the stored log runs newest line
+ * first: a push notification and the recap both read `history[0]` as the
+ * latest thing that happened, and the match-history panel reverses the whole
+ * array to show a game oldest-line-first. A setup block is written the way it
+ * reads instead — the roll-off, then what the host turned on — so it has to be
+ * flipped once on its way into the document. Stored unflipped it renders
+ * backwards, which is how a roll-off came to print the re-rolls *above* the
+ * line announcing the tie that caused them.
+ */
+export function asStoredHistory(setupLines: IHistoryEntry[]): IHistoryEntry[] {
+    return [...setupLines].reverse();
+}

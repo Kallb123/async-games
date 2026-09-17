@@ -40,11 +40,17 @@ describe("rollOffTurnOrder", () => {
         expect(history.every(entry => entry.actorId === undefined)).toBe(true);
     });
 
-    it("records the re-roll it had to run", () => {
+    it("records the re-roll it had to run, and says which rolls came off it", () => {
         rolling(4, 4, 5, 2);
 
         const { history } = rollOffTurnOrder(["u1", "u2"], 6);
 
-        expect(history[0].text).toBe("Setup: {{u1}} & {{u2}} rolled a 4 and are re-rolling");
+        // A result off the second throw says so — otherwise a 4 re-rolled to
+        // break a tie on 4 reads as another player who somehow tied and didn't.
+        expect(history.map(entry => entry.text)).toEqual([
+            "Setup: {{u1}} & {{u2}} rolled a 4 and are re-rolling",
+            "Setup: {{u1}} re-rolled a 5 and goes first",
+            "Setup: {{u2}} re-rolled a 2",
+        ]);
     });
 });
