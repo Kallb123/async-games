@@ -136,7 +136,7 @@ export function staggeredGrid(rows = 2): RaceCarsTrack["grid"] {
 }
 
 /** Fourteen rows of plain three-lane road: rows 0-3 the grid straight, 4-13 the lap. */
-export const LINE_SECTIONS: TrackSection[] = [
+const LINE_SECTIONS: TrackSection[] = [
     { id: 'gridstraight', name: 'Grid Straight', lanes: 3, corner: null, length: 4 },
     { id: 'lap', name: 'Lap', lanes: 3, corner: null, length: 10 },
 ];
