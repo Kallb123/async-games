@@ -98,7 +98,7 @@ export default function OutbreakBoard({ cities, playerStates, userIdList, validC
     return (
         <div className="ag-board-frame ag-outbreak-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
-            <BoardZoom zoomWidth="220%">
+            <BoardZoom zoomWidth={220}>
                 <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                     <image
                         href="/art/outbreak/board.png"

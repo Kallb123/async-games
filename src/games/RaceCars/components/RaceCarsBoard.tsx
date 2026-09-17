@@ -13,6 +13,8 @@ import { cornerAt, spaceKey, spacesInRow, trackById, type RaceCarsGeometry, type
 // the same spacing, so the art slides in underneath without resizing these.
 const SPACE_LENGTH = 23;
 const SPACE_WIDTH = 20;
+/** How far outside a space its "you may finish here" ring is drawn. */
+const RING_GROW = 2;
 
 // §19.1's car: one silhouette — a single path — filled with the driver's
 // `playerColourForId` and turned to the heading of the space it stands on.
@@ -84,9 +86,10 @@ interface RaceCarsBoardProps {
  * deliberately no second cropped copy of it for a phone — Outbreak, World
  * Domination and Settlements & Cities all solve "board too big for a column"
  * with `BoardZoom` inside `ag-board-frame` and none of them has needed one.
- * If a playtest proves 78 rows still can't be tapped, §19.2's answer is a
- * `window` prop narrowing *this* component's viewBox, and it is not built
- * until a playtest asks for it.
+ * 78 rows did prove too many to tap at one zoom step, and the answer was to
+ * give the shared `BoardZoom` a second step and a pinch rather than to crop a
+ * phone-only copy of the circuit: every board gets the deeper zoom, and this
+ * one still draws the whole track.
  *
  * The spaces are SVG over the art rather than drawn by it (§23.6), so a space's
  * position and its drawing can never drift apart. They are plain `<rect>`s and
@@ -143,7 +146,11 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
     return (
         <div className="ag-board-frame ag-racecars-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
-            <BoardZoom zoomWidth="240%">
+            {/* The circuit is 2835 units wide with 23-unit spaces on it, so one
+                zoom step still leaves a space a few pixels across on a phone.
+                The deep step is what makes one tappable; a pinch reaches the
+                same ceiling by hand. */}
+            <BoardZoom zoomWidth={240} maxWidth={640}>
                 <svg viewBox={`0 0 ${width} ${height}`}>
                     {/* The circuit render of §23.6 — tarmac, kerbs, run-off and
                         the painted corner boundaries. It lands in PR 9; until
@@ -188,6 +195,24 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                             </rect>
                         );
                     })}
+
+                    {/* The ring round each space this move may finish on, drawn
+                        after the whole space layer so paint order alone keeps a
+                        neighbouring lozenge from half-covering it. Its own
+                        element rather than a stroke on the space, which is what
+                        lets it reuse the shared `ag-pulse` — see the CSS. */}
+                    {track.geometry.filter(space => validSpaces.has(spaceKey(space.row, space.lane))).map(space => (
+                        <rect
+                            key={`ring-${spaceKey(space.row, space.lane)}`}
+                            className="ag-rc-space-ring"
+                            x={space.x - SPACE_LENGTH / 2 - RING_GROW}
+                            y={space.y - SPACE_WIDTH / 2 - RING_GROW}
+                            width={SPACE_LENGTH + RING_GROW * 2}
+                            height={SPACE_WIDTH + RING_GROW * 2}
+                            rx={6}
+                            transform={`rotate(${space.heading} ${space.x} ${space.y})`}
+                        />
+                    ))}
 
                     {startLine && (
                         <text
