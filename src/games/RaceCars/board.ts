@@ -8,6 +8,7 @@
 // `node:`.
 import { ANGLET } from "./tracks/anglet";
 import { ASHCOMBE } from "./tracks/ashcombe";
+import { MONACO } from "./tracks/monaco";
 
 // ─── The circuit (§5.1) ─────────────────────────────────────────────────────
 
@@ -153,17 +154,17 @@ export interface RaceCarsTrack {
 }
 
 /** Every circuit, in the order the setup screen offers them. */
-export const TRACK_LIST: RaceCarsTrack[] = [ASHCOMBE, ANGLET];
+export const TRACK_LIST: RaceCarsTrack[] = [MONACO, ASHCOMBE, ANGLET];
 
 export const TRACKS: Record<string, RaceCarsTrack> = Object.fromEntries(
     TRACK_LIST.map(track => [track.id, track]),
 );
 
-export const DEFAULT_TRACK_ID = ASHCOMBE.id;
+export const DEFAULT_TRACK_ID = MONACO.id;
 
 /** The named circuit, falling back to the one that ships rather than throwing. */
 export function trackById(trackId: string): RaceCarsTrack {
-    return TRACKS[trackId] ?? ASHCOMBE;
+    return TRACKS[trackId] ?? MONACO;
 }
 
 // ─── The field (§5.2, §11) ──────────────────────────────────────────────────

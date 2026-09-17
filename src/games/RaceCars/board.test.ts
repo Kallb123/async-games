@@ -33,6 +33,7 @@ import {
     WEAR_TOKENS_PER_CAR,
 } from "./board";
 import { ASHCOMBE } from "./tracks/ashcombe";
+import { MONACO } from "./tracks/monaco";
 import { assembleSpaces, type TrackSection } from "./tracks/sections";
 import { kettleCorner, testTrack } from "./testFixtures";
 
@@ -765,8 +766,8 @@ describe("deriveTrack refuses a circuit that cannot be driven", () => {
 });
 
 describe("the track registry (§20)", () => {
-    it("finds Ashcombe and falls back to it", () => {
+    it("finds Ashcombe and falls back to Monaco", () => {
         expect(trackById('ashcombe')).toBe(ASHCOMBE);
-        expect(trackById('nowhere')).toBe(ASHCOMBE);
+        expect(trackById('nowhere')).toBe(MONACO);
     });
 });
