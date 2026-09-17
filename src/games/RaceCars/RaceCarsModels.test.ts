@@ -129,13 +129,18 @@ describe("buildInitialRaceCarsState — the grid (§6)", () => {
     });
 
     it("seats a full grid of six, and refuses a seventh driver rather than parking it nowhere", () => {
+        // Ashcombe's grid holds exactly MAX_PLAYERS slots; Monaco and other
+        // circuits are free to draw more (§23.4 bounds each track by its own
+        // `grid.length`, not a single global cap), so this pins a track that
+        // actually caps at six rather than riding whatever DEFAULT_TRACK_ID is.
+        const ASHCOMBE_SETTINGS = { ...SPRINT, trackId: "ashcombe" } as const;
         const six = Array.from({ length: MAX_PLAYERS }, (_, i) => `u${i + 1}`);
-        expect(mongoMap(buildInitialRaceCarsState(six, SPRINT).players).size).toBe(MAX_PLAYERS);
+        expect(mongoMap(buildInitialRaceCarsState(six, ASHCOMBE_SETTINGS).players).size).toBe(MAX_PLAYERS);
 
         // Unreachable through either creation path — both bound the party — so
         // a seventh car is a programming error, and better thrown here than
         // discovered as `grid[6] === undefined` at an undefined row.
-        expect(() => buildInitialRaceCarsState([...six, "u7"], SPRINT)).toThrow(/grid slots/);
+        expect(() => buildInitialRaceCarsState([...six, "u7"], ASHCOMBE_SETTINGS)).toThrow(/grid slots/);
     });
 });
 
