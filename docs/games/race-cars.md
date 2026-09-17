@@ -1108,10 +1108,14 @@ somebody overtook, in the scoreboard, the board, the log and the recap at once.
 
 Two shared surfaces also **write** `currentTurn` along `turnOrder`, neither of
 them game-aware: `POST /api/game/taketurn`, and the turn-timer cron's
-`noAdapter` branch. Race Cars cannot stop either, so it has to survive both —
-which is what the per-player `phase`/`roll` of 23.4 and the
-`roundOrder[roundIndex]` guard are for. Any game whose turn order differs from
-its seating order inherits this, and Race Cars is the first.
+`noAdapter` branch. Both now refuse to run on a game that registers a
+turn-timeout adapter — Race Cars has since PR 6 — because that registration is
+itself the signal that the game's real turn order lives somewhere `turnOrder`
+doesn't reach (§23.7 PR 6). Race Cars still doesn't *rely* on that: the
+per-player `phase`/`roll` of 23.4 and the `roundOrder[roundIndex]` guard are
+what it actually depends on, kept as the defence a future hole in either
+surface would need. Any game whose turn order differs from its seating order
+inherits the same shape, and Race Cars was the first.
 
 **2. `GameResultEventIcon` is a closed union.** It is
 `'landmark' | 'explosion' | 'rescue' | 'epidemic' | 'sinking'` in
@@ -1375,12 +1379,17 @@ fields they are a security bug and a deadlock waiting together:
 
 - `POST /api/game/taketurn` advances `currentTurn` along `gameState.turnOrder`
   for *any* game, with no game-type awareness and without running
-  `CheckEndTurn`. A driver who shifts, sees a 17 they cannot afford, and then
-  calls that route instead of moving gets a **free skip on a bad roll** — the
-  one thing §9 forbids — and leaves a global `roll: 17` and `phase: 'move'`
-  behind for the next driver to spend on *their own* car.
-- The turn-timer cron's `noAdapter` branch does the same thing, which is
-  precisely the state Race Cars is in between PR 3 and PR 6.
+  `CheckEndTurn`. Between PR 3 and PR 6, a driver who shifted, saw a 17 they
+  could not afford, and called that route instead of moving got a **free skip
+  on a bad roll** — the one thing §9 forbids — and left a global `roll: 17`
+  and `phase: 'move'` behind for the next driver to spend on *their own* car.
+  The route now refuses outright for any game with a registered turn-timeout
+  adapter (which Race Cars has had since PR 6), closing this specific door;
+  per-player `phase`/`roll` is what would have held even if it hadn't.
+- The turn-timer cron's `noAdapter` branch does the same `turnOrder` walk,
+  which is precisely the state Race Cars was in between PR 3 and PR 6 — and,
+  since a registered adapter is also what keeps the cron out of `noAdapter`
+  in the first place (`resolveStalledTurn`), both doors close on the same PR.
 - And a global `phase` that `CheckEndTurn` forgets to reset locks out every
   driver after the first. That is not hypothetical: `turnTimeout.ts` records
   this repo shipping the identical bug on Banned Islet's `actionsLeft`.

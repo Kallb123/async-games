@@ -76,9 +76,14 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
  * surfaces write it along `gameState.turnOrder` with no idea what game they
  * are in — `POST /api/game/taketurn` and the turn-timer cron's `noAdapter`
  * branch — and `turnOrder` is the join order the roster and the colour map key
- * on, deliberately *not* the race order. The race order is `roundOrder`, so
- * that is what a command is checked against: a driver acting out of race order
- * is refused even when `currentTurn` says otherwise.
+ * on, deliberately *not* the race order. Both now refuse to touch a game that
+ * registers a turn-timeout adapter (`taketurn/route.ts`, and the cron only
+ * ever reaches `noAdapter` for a game with none — see `resolveStalledTurn`),
+ * which Race Cars does, so neither should reach here in practice any more.
+ * The guard stays regardless, as the one this game actually depends on: the
+ * race order is `roundOrder`, so that is what a command is checked against,
+ * and a driver acting out of race order is refused even when `currentTurn`
+ * says otherwise.
  */
 function driverOnTurn(gs: IRaceCarsSpecificGameState, userId: string): IRaceCarsPlayerState | null {
     if (gs.roundOrder[gs.roundIndex] !== userId) return null;

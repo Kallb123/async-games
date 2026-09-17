@@ -28,25 +28,19 @@ export const meta: GameMeta = {
     // rather than hand-requested. Two things ride with it until their own PRs
     // land, listed here rather than left to be discovered:
     //
-    // - **No turn-timeout adapter until PR 6**, and the cron's `noAdapter`
-    //   fallback is not harmless here. It advances `currentTurn` one step along
-    //   `gameState.turnOrder` — the join order — while the race order lives in
-    //   `roundOrder`/`roundIndex` and is untouched (§23.2). The two then
-    //   disagree: the driver `currentTurn` now names passes the command route's
-    //   gate and is refused by `driverOnTurn`, and every other driver is
-    //   refused by the route. The race stalls until the sweep walks
-    //   `currentTurn` back round to `roundOrder[roundIndex]`, banking a missed
-    //   turn against an innocent driver each tick on the way — and the abandon
-    //   ladder can end the game first. Per-player `phase`/`roll` (§23.4) is
-    //   what keeps this to a stall rather than one driver spending another's
-    //   roll; PR 6's adapter is what removes it. Until then a race wants a
-    //   turn timer its drivers will actually beat.
-    //
-    //   PR 5 raises the stakes without changing the shape: a turn is now up to
-    //   three POSTs, so the cron can find a driver stalled in the `slipstream`
-    //   phase having *already* been moved — a corner banked and tyres spent —
-    //   and the fallback, which never runs `CheckEndTurn`, leaves them frozen
-    //   there with the move paid for and the tow unanswered.
+    // - **PR 6 landed the turn-timeout adapter** (`turnTimeout.ts`'s
+    //   `RaceCarsGameType` registration), so the cron's plain-advance
+    //   `noAdapter` fallback — which walked `currentTurn` one step along
+    //   `gameState.turnOrder`, the join order, while the race order in
+    //   `roundOrder`/`roundIndex` sat untouched (§23.2) — no longer runs for
+    //   Race Cars. The one other surface that did the same untouched-`turnOrder`
+    //   walk, `POST /api/game/taketurn`, now refuses outright for any game with
+    //   a registered adapter, for the identical reason: a driver could call it
+    //   on their own turn to desync `currentTurn` from `roundOrder[roundIndex]`
+    //   onto an innocent driver who could never satisfy `driverOnTurn`, banking
+    //   a missed turn against them every sweep until the abandon ladder ended
+    //   the race. `roundOrder[roundIndex]` (§23.4) stays as the guard Race Cars
+    //   actually depends on regardless.
     // - **No replay adapter until PR 8**, so the board's "Review actions"
     //   scrubber reports that it cannot build the timeline rather than showing
     //   one. That one is inert: it fails in place and nothing else is touched.
