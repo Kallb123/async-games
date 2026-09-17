@@ -50,7 +50,7 @@ export default function WorldDominationBoard({
     return (
         <div className="ag-board-frame ag-world-domination-frame">
             {placementPrompt && <div className="ag-board-tag">{placementPrompt}</div>}
-            <BoardZoom zoomWidth="220%">
+            <BoardZoom zoomWidth={220}>
                 <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                     <image
                         href="/art/world-domination/world-domination-map.png"

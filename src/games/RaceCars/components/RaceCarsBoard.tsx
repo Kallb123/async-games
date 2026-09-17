@@ -13,6 +13,8 @@ import { cornerAt, spaceKey, spacesInRow, trackById, type RaceCarsGeometry, type
 // the same spacing, so the art slides in underneath without resizing these.
 const SPACE_LENGTH = 23;
 const SPACE_WIDTH = 20;
+/** How far outside a space its "you may finish here" ring is drawn. */
+const RING_GROW = 2;
 
 // §19.1's car: one silhouette — a single path — filled with the driver's
 // `playerColourForId` and turned to the heading of the space it stands on.
@@ -141,14 +143,6 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
 
     const startLine = anchorOn(0);
 
-    // The tappable spaces drawn last, so the ring pulsing round one is never
-    // half-painted over by the lozenge next to it. Same single loop below —
-    // only the order changes, and only while a move is being picked.
-    const spaces = validSpaces.size === 0
-        ? track.geometry
-        : [...track.geometry].sort((a, b) =>
-            Number(validSpaces.has(spaceKey(a.row, a.lane))) - Number(validSpaces.has(spaceKey(b.row, b.lane))));
-
     return (
         <div className="ag-board-frame ag-racecars-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
@@ -156,7 +150,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                 zoom step still leaves a space a few pixels across on a phone.
                 The deep step is what makes one tappable; a pinch reaches the
                 same ceiling by hand. */}
-            <BoardZoom zoomWidth="240%" maxWidth="640%">
+            <BoardZoom zoomWidth={240} maxWidth={640}>
                 <svg viewBox={`0 0 ${width} ${height}`}>
                     {/* The circuit render of §23.6 — tarmac, kerbs, run-off and
                         the painted corner boundaries. It lands in PR 9; until
@@ -168,7 +162,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                         preserveAspectRatio="xMidYMid slice"
                     />
 
-                    {spaces.map(space => {
+                    {track.geometry.map(space => {
                         const key = spaceKey(space.row, space.lane);
                         const isValid = validSpaces.has(key);
                         const corner = cornerAt(track, space.row, space.lane);
@@ -201,6 +195,24 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                             </rect>
                         );
                     })}
+
+                    {/* The ring round each space this move may finish on, drawn
+                        after the whole space layer so paint order alone keeps a
+                        neighbouring lozenge from half-covering it. Its own
+                        element rather than a stroke on the space, which is what
+                        lets it reuse the shared `ag-pulse` — see the CSS. */}
+                    {track.geometry.filter(space => validSpaces.has(spaceKey(space.row, space.lane))).map(space => (
+                        <rect
+                            key={`ring-${spaceKey(space.row, space.lane)}`}
+                            className="ag-rc-space-ring"
+                            x={space.x - SPACE_LENGTH / 2 - RING_GROW}
+                            y={space.y - SPACE_WIDTH / 2 - RING_GROW}
+                            width={SPACE_LENGTH + RING_GROW * 2}
+                            height={SPACE_WIDTH + RING_GROW * 2}
+                            rx={6}
+                            transform={`rotate(${space.heading} ${space.x} ${space.y})`}
+                        />
+                    ))}
 
                     {startLine && (
                         <text

@@ -61,7 +61,7 @@ export default function TrainTimeBoard({
     return (
         <div className="ag-board-frame ag-tt-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
-            <BoardZoom zoomWidth="260%">
+            <BoardZoom zoomWidth={260}>
                 <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                     {ROUTES.map(route => {
                         const owner = routeOwners[route.id];

@@ -1756,7 +1756,8 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-map-node-pulse { --ag-pulse-min: 0.4; }
 
 @media (prefers-reduced-motion: reduce) {
-    .ag-hand-card--highlighted, .ag-map-highlight-ring, .ag-map-node-pulse { animation: none; }
+    .ag-hand-card--highlighted, .ag-map-highlight-ring, .ag-map-node-pulse,
+    .ag-rc-space-ring { animation: none; }
 }
 
 /* Dev-card chips shown under the resource hand */
@@ -4551,9 +4552,12 @@ button.ag-tt-ticket { cursor: pointer; }
     --rc-tarmac: oklch(0.44 0.01 250);
     --rc-tarmac-corner: oklch(0.5 0.02 250);
     --rc-kerb: oklch(0.62 0.18 25);
-    /* How much of a space's tarmac tint is painted over the track art beneath
-       it. One number for the whole layer: the lozenges exist to say where a car
-       may stand, not to hide the circuit that was drawn under them. */
+    /* How much of a plain space's tarmac tint is painted over the track art
+       beneath it — one number for both the road and the corner bands, since
+       what tells them apart is the kerb stroke and not the depth of the tint.
+       A lozenge exists to say where a car may stand, not to hide the circuit
+       drawn under it. The start/finish row and a tappable destination carry
+       their own marks and set their own. */
     --rc-space-veil: 26%;
 }
 .ag-game--racecars .ag-game-topbar { background: var(--rc-night); }
@@ -4603,26 +4607,25 @@ button.ag-tt-ticket { cursor: pointer; }
 /* Row 0 — the start/finish line. */
 .ag-rc-space--line { fill: color-mix(in oklch, oklch(0.78 0.01 250) 50%, transparent); }
 
-/* The spaces this move may finish on. The ring breathes rather than sitting
-   still: three lozenges out of 214 are easy to lose on a circuit this size, and
-   a moving edge is what says "pick one of these" without a legend. `ag-pulse`
-   is the app's shared breath, but it fades a whole element — here only the ring
-   may move, because the art the fill now lets through has to stay readable. */
-@keyframes ag-rc-choose {
-    0%, 100% { stroke-width: 2.4; stroke-opacity: 1; }
-    50% { stroke-width: 4.8; stroke-opacity: 0.45; }
-}
+/* The spaces this move may finish on: a gold wash on the lozenge, and the ring
+   round it as its own element. Same trick `ClickableMapNode` plays for a
+   highlighted city, and for the same reason — it is what lets the ring reuse
+   the app's shared `ag-pulse`, which fades a whole element and would otherwise
+   take the track art the fill now lets through out with it. Three lozenges out
+   of 214 are easy to lose on a circuit this size; a breathing edge is what says
+   "pick one of these" without a legend. */
 .ag-rc-space--valid {
     fill: color-mix(in oklch, var(--ag-gold) 40%, transparent);
-    stroke: var(--ag-gold);
-    stroke-width: 2.4;
     cursor: pointer;
-    animation: ag-rc-choose 1.3s ease-in-out infinite;
 }
 .ag-rc-space--valid:hover { fill: color-mix(in oklch, var(--ag-gold) 72%, transparent); }
-
-@media (prefers-reduced-motion: reduce) {
-    .ag-rc-space--valid { animation: none; stroke-width: 3.2; }
+.ag-rc-space-ring {
+    fill: none;
+    stroke: var(--ag-gold);
+    stroke-width: 2.8;
+    pointer-events: none;
+    --ag-pulse-min: 0.3;
+    animation: ag-pulse 1.3s ease-in-out infinite;
 }
 
 /* §19.1's car: the shared silhouette, filled with the driver's own colour and

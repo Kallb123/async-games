@@ -68,7 +68,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Race Cars: get right in on the track",
-                detail: "The circuit is a big board with small spaces, so the zoom pill now goes a step further than it used to — and you can pinch to zoom anywhere in between, on any board that has one. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
+                detail: "The circuit is a big board with small spaces, so the zoom pill has grown a second step — and you can now pinch to zoom anywhere in between. Both work on every board with a zoom pill, Outbreak and World Domination and the rest, and Race Cars goes deepest of the lot. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
                 game: "racecars",
             },
             {

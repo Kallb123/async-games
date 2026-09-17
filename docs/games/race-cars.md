@@ -854,7 +854,9 @@ Playtesting proved that 78 rows at 240% still cannot be tapped reliably, and
 the answer was **to deepen the shared control rather than crop the board**.
 `BoardZoom` now steps fit → 240% → 640% (its `maxWidth` prop, which only this
 board sets — every other board keeps the default second step of twice its
-first), and takes a pinch, or a trackpad's ctrl-wheel, to anything in between.
+first, and `zoomLevels` in `src/utils/ui/boardZoom.ts` is where that ladder is
+worked out and tested), and takes a pinch, or a trackpad's ctrl-wheel, to
+anything in between.
 Both keep the point the player was looking at under the same spot on screen.
 Panning stays the pane's own scrolling.
 
@@ -865,11 +867,13 @@ second copy of the board:
   `--rc-space-veil` of its tarmac tint over the art (26%), so the circuit that
   was painted underneath reads through the grid instead of being hidden by it.
   A corner's kerb stroke and the start/finish row stay the marks they were.
-- **The legal destinations pulse.** `.ag-rc-space--valid` breathes its ring
-  (`ag-rc-choose`, stroke width and opacity only — the shared `ag-pulse` fades
-  a whole element, which would take the art back out with it), and those spaces
-  are drawn last so a neighbour never half-paints over the ring. Stilled under
-  `prefers-reduced-motion`.
+- **The legal destinations pulse.** The ring round a tappable space is its own
+  `.ag-rc-space-ring` element, drawn after the whole space layer so paint order
+  keeps a neighbouring lozenge off it. Its own element because that is what lets
+  it reuse the app's shared `ag-pulse` — `ClickableMapNode` does the same for a
+  highlighted city, and for the same reason: breathing the space itself would
+  fade the track art the fill now lets through. Stilled under
+  `prefers-reduced-motion` with every other `ag-pulse` ring.
 
 If even that is not enough, the fallback on the table remains **a
 `window?: { fromRow, toRow }` prop on the same board component** that narrows

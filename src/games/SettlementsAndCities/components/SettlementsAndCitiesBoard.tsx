@@ -96,7 +96,7 @@ export default function SettlementsAndCitiesBoard({
                 {placementPrompt && (
                     <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
                 )}
-                <BoardZoom zoomWidth="240%">
+                <BoardZoom zoomWidth={240}>
                     <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={SVG_W} height={SVG_H}>
                 {/* ── Hex tiles ── */}
                 {hexes.map((hex, hexId) => {

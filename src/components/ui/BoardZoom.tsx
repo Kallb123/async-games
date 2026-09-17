@@ -1,22 +1,20 @@
 'use client'
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FIT_WIDTH, wheelZoomFactor, zoomLevels } from '@/utils/ui/boardZoom';
 
 interface BoardZoomProps {
-    /** Width the board is stretched to at the first zoom step, e.g. '260%'. */
-    zoomWidth: string;
+    /** Percentage of the column the board is stretched to at the first zoom step, e.g. 260. */
+    zoomWidth: number;
     /**
-     * Width of the second step, and the ceiling a pinch may reach. Defaults to
-     * twice `zoomWidth`, which is as far as a node-and-edge map ever needs to
-     * go; a board whose pieces are still tiny at that — Race Cars draws 214
-     * spaces across a 78-row circuit — names its own.
+     * The second step, and the ceiling a pinch may reach. Defaults to twice
+     * `zoomWidth`, which is as far as a node-and-edge map ever needs to go; a
+     * board whose pieces are still tiny at that — Race Cars draws 214 spaces
+     * across a 78-row circuit — names its own.
      */
-    maxWidth?: string;
+    maxWidth?: number;
     /** The board <svg>. */
     children: React.ReactNode;
 }
-
-/** The width the board is drawn at when it's fitted to the column. */
-const FIT = 100;
 
 /**
  * Where in the board a zoom should leave the player: a point on the content as
@@ -24,6 +22,16 @@ const FIT = 100;
  * Recorded before the zoom changes and applied once the new width has laid out.
  */
 interface ZoomAnchor { cx: number; cy: number; vx: number; vy: number }
+
+/** The content point under (vx, vy) in the pane, as a fraction of the board. */
+function anchorAt(pane: HTMLDivElement, vx: number, vy: number): ZoomAnchor {
+    return {
+        cx: (pane.scrollLeft + vx) / (pane.scrollWidth || 1),
+        cy: (pane.scrollTop + vy) / (pane.scrollHeight || 1),
+        vx,
+        vy,
+    };
+}
 
 function spread(touches: TouchList): number {
     return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
@@ -50,23 +58,13 @@ function midpoint(touches: TouchList): { x: number; y: number } {
  * Panning is the pane's own scrolling; nothing here reimplements a drag.
  */
 export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomProps) {
-    const levels = useMemo(() => {
-        const step = parseFloat(zoomWidth) || FIT;
-        if (step <= FIT) return [FIT];
-        const deep = Math.max(step, maxWidth ? parseFloat(maxWidth) || step * 2 : step * 2);
-        return [FIT, step, deep];
-    }, [zoomWidth, maxWidth]);
+    const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
-    const [zoom, setZoom] = useState(FIT);
+    const [zoom, setZoom] = useState(FIT_WIDTH);
     const paneRef = useRef<HTMLDivElement>(null);
     const anchorRef = useRef<ZoomAnchor | null>(null);
-    const zoomRef = useRef(FIT);
-    const pinchRef = useRef<{ spread: number; zoom: number; cx: number; cy: number } | null>(null);
-
-    // The gesture handlers need the live zoom without being re-bound on every
-    // pinch frame, so it is mirrored into a ref rather than closed over.
-    useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+    const pinchRef = useRef<{ spread: number; cx: number; cy: number } | null>(null);
 
     // Put the recorded point back under the finger (or back in the middle) once
     // the new width has laid out — before paint, so the board never flashes at
@@ -79,15 +77,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomPr
         pane.scrollTop = anchor.cy * pane.scrollHeight - anchor.vy;
     }, [zoom]);
 
-    /** The content point under (vx, vy) in the pane, as a fraction of the board. */
-    const anchorAt = useCallback((pane: HTMLDivElement, vx: number, vy: number): ZoomAnchor => ({
-        cx: (pane.scrollLeft + vx) / (pane.scrollWidth || 1),
-        cy: (pane.scrollTop + vy) / (pane.scrollHeight || 1),
-        vx,
-        vy,
-    }), []);
-
-    const next = levels.find(level => level > zoom + 1) ?? FIT;
+    const next = levels.find(level => level > zoom + 1) ?? FIT_WIDTH;
     const stepZoom = () => {
         const pane = paneRef.current;
         if (pane) anchorRef.current = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
@@ -97,46 +87,48 @@ export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomPr
     useEffect(() => {
         const pane = paneRef.current;
         if (!pane || levels.length === 1) return;
-        const clamp = (value: number) => Math.min(max, Math.max(FIT, value));
+        const clamp = (value: number) => Math.min(max, Math.max(FIT_WIDTH, value));
 
         const onTouchStart = (event: TouchEvent) => {
             if (event.touches.length !== 2) return;
             const rect = pane.getBoundingClientRect();
             const mid = midpoint(event.touches);
             const at = anchorAt(pane, mid.x - rect.left, mid.y - rect.top);
-            pinchRef.current = { spread: spread(event.touches), zoom: zoomRef.current, cx: at.cx, cy: at.cy };
+            pinchRef.current = { spread: spread(event.touches), cx: at.cx, cy: at.cy };
         };
 
+        // Each frame moves the zoom by how far the fingers moved since the last
+        // one, so nothing here has to know what the zoom was when the pinch
+        // began — no mirror of the state to keep in step with it.
         const onTouchMove = (event: TouchEvent) => {
             const pinch = pinchRef.current;
-            if (!pinch || event.touches.length !== 2 || pinch.spread === 0) return;
+            if (!pinch || event.touches.length !== 2) return;
+            const gap = spread(event.touches);
+            if (gap === 0 || pinch.spread === 0) return;
             // Non-passive on purpose: without this the browser zooms the page
             // instead, and React's own onTouchMove can't refuse it.
             event.preventDefault();
+            const ratio = gap / pinch.spread;
+            pinch.spread = gap;
             const rect = pane.getBoundingClientRect();
             const mid = midpoint(event.touches);
             // The content point stays the one the pinch started on, but it
             // follows the fingers, so a pinch pans as well as zooms.
             anchorRef.current = { cx: pinch.cx, cy: pinch.cy, vx: mid.x - rect.left, vy: mid.y - rect.top };
-            setZoom(clamp(pinch.zoom * spread(event.touches) / pinch.spread));
+            setZoom(zoomLevel => clamp(zoomLevel * ratio));
         };
 
         const endPinch = () => { pinchRef.current = null; };
 
         // A trackpad's pinch arrives as a wheel with ctrl held; so does a
         // browser's own keyboard zoom over the pane, and taking that one is the
-        // lesser evil next to the board jumping a level per notch. `deltaMode`
-        // has to be read: a wheel that reports lines or pages sends single
-        // digits where a trackpad sends hundreds, and untranslated it would
-        // move the board by a fraction of a percent per notch.
-        const DELTA_TO_PIXELS = [1, 16, 100];
+        // lesser evil next to the board jumping a level per notch.
         const onWheel = (event: WheelEvent) => {
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
             const rect = pane.getBoundingClientRect();
             anchorRef.current = anchorAt(pane, event.clientX - rect.left, event.clientY - rect.top);
-            const delta = event.deltaY * (DELTA_TO_PIXELS[event.deltaMode] ?? 1);
-            setZoom(zoomLevel => clamp(zoomLevel * Math.exp(-delta / 220)));
+            setZoom(zoomLevel => clamp(zoomLevel * wheelZoomFactor(event.deltaY, event.deltaMode)));
         };
 
         pane.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -151,18 +143,16 @@ export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomPr
             pane.removeEventListener('touchcancel', endPinch);
             pane.removeEventListener('wheel', onWheel);
         };
-    }, [anchorAt, levels.length, max]);
+    }, [levels.length, max]);
 
     return (
         <>
+            {/* A stepper, not a toggle, so the label is the whole story: it
+                names what the next press does and there is no `aria-pressed`
+                that would read the same for two different zoom levels. */}
             {levels.length > 1 && (
-                <button
-                    type="button"
-                    className="ag-board-tag ag-board-tag--action"
-                    aria-pressed={zoom > FIT}
-                    onClick={stepZoom}
-                >
-                    {next === FIT ? '➖ Fit map' : next === levels[1] ? '➕ Zoom in' : '➕ Zoom more'}
+                <button type="button" className="ag-board-tag ag-board-tag--action" onClick={stepZoom}>
+                    {next === FIT_WIDTH ? '➖ Fit map' : next === levels[1] ? '➕ Zoom in' : '➕ Zoom more'}
                 </button>
             )}
             <div

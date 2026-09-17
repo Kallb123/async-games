@@ -760,9 +760,13 @@ function edgeOriginClass(tile: EditorTile): string {
     return tile.autoExits ? ' ag-rcedit-edge--auto' : ' ag-rcedit-edge--override';
 }
 
-// A plain scroll-and-zoom frame, deliberately not `BoardZoom`: that toggles
-// between two zoom states on click, which would fight click-to-place. Here zoom
-// is a continuous control and the container just scrolls to pan.
+// A plain scroll-and-zoom frame, deliberately not `BoardZoom`. Not because of
+// how either one zooms — `BoardZoom` is continuous now too — but because this
+// canvas owns the pointer: every press on it places, paints or drags a tile, so
+// it sets `touch-action: none` and cannot hand a gesture to anything else. It
+// also sizes its SVG in pixels against the author's own −/%/+ control rather
+// than stretching to a percentage of a column. The board screen is the one that
+// reuses `BoardZoom`; this is the named exception, and it stays one.
 function EditorCanvas(props: CanvasProps) {
     const { svgRef, state, rows, backdropHref, zoom, mode, marker, activeSectionId, selectedId, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
     const { width, height } = state.viewBox;
