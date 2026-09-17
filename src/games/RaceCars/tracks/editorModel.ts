@@ -42,7 +42,7 @@ export interface EditorSection {
     name: string;
     lanes: 2 | 3;
     /** 0 for a straight; a corner's stop count otherwise. */
-    stops: 0 | 1 | 2;
+    stops: 0 | 1 | 2 | 3;
 }
 
 /**
@@ -172,7 +172,7 @@ function cleanSection(value: unknown): EditorSection | null {
         id: section.id,
         name: typeof section.name === "string" ? section.name : section.id,
         lanes: section.lanes === 2 ? 2 : 3,
-        stops: section.stops === 1 ? 1 : section.stops === 2 ? 2 : 0,
+        stops: section.stops === 1 ? 1 : section.stops === 2 ? 2 : section.stops === 3 ? 3 : 0,
     };
 }
 
@@ -302,7 +302,7 @@ export function toSections(state: EditorState): TrackSection[] {
         id: section.id,
         name: sectionLabel(section),
         lanes: section.lanes,
-        corner: section.stops > 0 ? { stops: section.stops as 1 | 2 } : null,
+        corner: section.stops > 0 ? { stops: section.stops as 1 | 2 | 3 } : null,
         tiles: bySection.get(section.id) ?? [],
     }));
 }

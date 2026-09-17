@@ -92,6 +92,20 @@ const UNEVEN: RaceCarsTrack = testTrack([
 TRACKS[UNEVEN.id] = UNEVEN;
 afterAll(() => { delete TRACKS[UNEVEN.id]; });
 
+// A corner long enough to bank three stops, registered for the same reason
+// TWO_CORNERS and UNEVEN are: proof §10 reads however many stops a corner's
+// own data says it owes, rather than assuming the ceiling stays at two.
+const THREE_STOPS: RaceCarsTrack = testTrack([
+    { id: 'straight', name: 'Straight', length: 4, lanes: 3, corner: null },
+    { id: 'triple', name: 'Triple', length: 8, lanes: 2, corner: { stops: 3 } },
+    { id: 'run', name: 'Run to the Line', length: 10, lanes: 3, corner: null },
+], {
+    id: 'threestops',
+    name: 'Three Stops',
+});
+TRACKS[THREE_STOPS.id] = THREE_STOPS;
+afterAll(() => { delete TRACKS[THREE_STOPS.id]; });
+
 /** Pick a destination, derive the path and resolve it — one driver's whole move. */
 function drive(
     state: IRaceCarsSpecificGameState,
@@ -300,6 +314,25 @@ describe("corner stops (§10)", () => {
     it("resets banked stops the moment the corner is legally left", () => {
         const arrival = drive(race({ a: { row: 14, lane: 1, cornerStops: 2 } }), 'a', 3);
         expect(arrival.cornerStops).toBe(0);
+    });
+
+    it("cannot clear a three-stop corner in fewer than three turn-ends", () => {
+        // Two stops banked, and leaving still costs.
+        const banked = race({ a: { row: 9, lane: 1, cornerStops: 2 } }, { trackId: THREE_STOPS.id });
+        const charged = drive(banked, 'a', 3);
+        expect(charged.tyres).toBe(4);            // 4 tyres, one row past row 11
+        expect(charged.events).toContainEqual({ type: 'overshoot', cornerId: 'triple', spaces: 1, waived: false });
+
+        // Three stops banked, and the same move is free.
+        const paid = race({ a: { row: 11, lane: 1, cornerStops: 3 } }, { trackId: THREE_STOPS.id });
+        const cleared = drive(paid, 'a', 3);
+        expect(cleared.tyres).toBe(5);
+        expect(cleared.events).toContainEqual({ type: 'cornerCleared', cornerId: 'triple' });
+    });
+
+    it("banks a third stop the same way as the first two", () => {
+        const third = drive(race({ a: { row: 9, lane: 1, cornerStops: 2 } }, { trackId: THREE_STOPS.id }), 'a', 2);
+        expect(third).toMatchObject({ row: 11, cornerStops: 3 });
     });
 });
 

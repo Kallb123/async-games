@@ -314,7 +314,7 @@ const SECTIONS: TrackSection[] = [
         id: "section12",
         name: "Corner 6",
         lanes: 3,
-        corner: { stops: 2 },
+        corner: { stops: 3 },
         tiles: [
             { id: "t130_1", lane: 1, x: 682, y: 1127, heading: 162, exits: ["t131_1"] },
             { id: "t131_1", lane: 1, x: 625, y: 1145, heading: 178, exits: ["t132_1", "t133_2"] },

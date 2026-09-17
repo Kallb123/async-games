@@ -1149,10 +1149,11 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                                 </select>
                             </Field>
                             <Field label="Corner stops">
-                                <select className="ag-select" value={section.stops} onChange={e => patch(section.id, { stops: Number(e.target.value) as 0 | 1 | 2 })}>
+                                <select className="ag-select" value={section.stops} onChange={e => patch(section.id, { stops: Number(e.target.value) as 0 | 1 | 2 | 3 })}>
                                     <option value={0}>straight</option>
                                     <option value={1}>1 stop</option>
                                     <option value={2}>2 stops</option>
+                                    <option value={3}>3 stops</option>
                                 </select>
                             </Field>
                         </div>
