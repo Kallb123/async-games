@@ -14,6 +14,7 @@ import { makeState as makeSacState, player as sacPlayer } from "@/games/Settleme
 import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
 import { buildInitialRaceCarsState, gameStateToModel as raceCarsStateToModel } from "@/games/RaceCars/RaceCarsModels";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
@@ -352,31 +353,71 @@ describe("Fires Out's response", () => {
 // - serialising as three different viewers gives three identical strings,
 //   which proves `gameStateToModel` ignores its viewer — and nothing more.
 //   Both leaks this file exists for were identical for every viewer;
-// - the exact key set, top level and one player entry, against §23.4's list.
+// - the exact key set, top level and both player entries, against §23.4's list.
 //   That is the one that fails the day a field arrives that a driver should
 //   not see, which is the mechanism by which the pillar survives PRs 3-9.
+//
+// Both run twice: on the grid, and on a race one driver has got away from
+// (§6a). The grid alone cannot fail either of them — every car is identical and
+// every field is at its default, so an asymmetric field has nothing to be
+// asymmetric about yet and an absent one is dropped by JSON before it is
+// counted.
 
 describe("Race Cars' response", () => {
     const raceCarsState = () => buildInitialRaceCarsState(["u1", "u2"], {
         distance: 'grandPrix', spec: 'balanced', oilSpills: true,
     });
 
-    it("carries exactly §23.4's state and nothing else", () => {
-        const wire = JSON.parse(JSON.stringify(raceCarsStateToModel(raceCarsState(), NAMES, "u1")));
+    const RC_STATE_KEYS = [
+        "laps", "oilSpills", "playerStates", "round", "roundIndex", "roundOrder",
+        "slicks", "spec", "trackId",
+    ];
+    const RC_PLAYER_KEYS = [
+        "brakeSpent", "brakes", "cornerStops", "finishedPosition", "gear", "gearbox",
+        "lane", "lapsCompleted", "phase", "raceNumber", "roll", "row", "skipNextTurn",
+        "startRoll", "tyres", "userId", "username",
+    ];
 
-        expect(Object.keys(wire).sort()).toEqual([
-            "laps", "oilSpills", "playerStates", "round", "roundIndex", "roundOrder",
-            "slicks", "spec", "trackId",
-        ]);
-        expect(Object.keys(wire.playerStates.u1).sort()).toEqual([
-            "brakeSpent", "brakes", "cornerStops", "finishedPosition", "gear", "gearbox",
-            "lane", "lapsCompleted", "phase", "raceNumber", "roll", "row", "skipNextTurn",
-            "tyres", "userId", "username",
-        ]);
+    /**
+     * The grid once one driver has taken §6a's getaway and the other has not:
+     * two cars that no longer match, which is the only state either assertion
+     * below can actually fail in.
+     *
+     * On the grid alone, every car is identical and every field is at its
+     * default — so a field that is `undefined` until a race is running would be
+     * dropped by `JSON.stringify` and pass the key-set assertion, and a
+     * viewer-dependent field cannot show itself while the two entries are
+     * byte-identical anyway. `startRoll` is only caught by the grid because its
+     * default happens to be `null` rather than absent.
+     */
+    const raceCarsUnderway = () => {
+        const state = raceCarsState();
+        const away = mongoMap(state.players).get("u1")!;
+        away.startRoll = 18;
+        away.phase = 'move';
+        away.gear = 1;
+        away.roll = 4;
+        return state;
+    };
+
+    it.each([
+        ["on the grid", raceCarsState],
+        ["once a driver has got away", raceCarsUnderway],
+    ])("carries exactly §23.4's state and nothing else, %s", (_when, build) => {
+        const wire = JSON.parse(JSON.stringify(raceCarsStateToModel(build(), NAMES, "u1")));
+
+        expect(Object.keys(wire).sort()).toEqual(RC_STATE_KEYS);
+        expect(Object.keys(wire.playerStates.u1).sort()).toEqual(RC_PLAYER_KEYS);
+        // The opponent's entry too: a field that only ever appears on the
+        // viewer's own car is exactly the asymmetry this file exists to catch.
+        expect(Object.keys(wire.playerStates.u2).sort()).toEqual(RC_PLAYER_KEYS);
     });
 
-    it("serialises identically for every viewer, including none", () => {
-        const state = raceCarsState();
+    it.each([
+        ["on the grid", raceCarsState],
+        ["once a driver has got away", raceCarsUnderway],
+    ])("serialises identically for every viewer, including none, %s", (_when, build) => {
+        const state = build();
         const asU1 = JSON.stringify(raceCarsStateToModel(state, NAMES, "u1"));
         const asU2 = JSON.stringify(raceCarsStateToModel(state, NAMES, "u2"));
         const asNobody = JSON.stringify(raceCarsStateToModel(state, NAMES, null));

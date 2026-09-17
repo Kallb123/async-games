@@ -34,6 +34,10 @@ import {
     RaceCarsSpecId,
     RaceCarsTrack,
     shiftDownCost,
+    START_DIE_SIDES,
+    START_FLYING_FROM,
+    START_ROUND,
+    START_STALL_FACE,
     SLIPSTREAM_GAP_STEPS,
     SLIPSTREAM_STEPS,
     spaceKey,
@@ -51,7 +55,12 @@ import {
 // Mongoose to say it, and a second copy beside the schema is a copy that can
 // drift from the rules that act on it.
 
-export type RaceCarsPhase = 'shift' | 'move' | 'slipstream';
+/**
+ * Where a turn has got to. `'start'` is §6a's startup round and only ever
+ * round one: one d20 decides how the car gets away, and it stands in for the
+ * shift nobody makes off the line.
+ */
+export type RaceCarsPhase = 'start' | 'shift' | 'move' | 'slipstream';
 
 export interface IRaceCarsSlick {
     row: number;
@@ -82,6 +91,16 @@ export interface IRaceCarsPlayerState {
     roll: number | null;
     /** Brake points spent this turn, for §14's three-or-more slick source. */
     brakeSpent: number;
+    /**
+     * The d20 this car got away on (§6a), or null until it has thrown one.
+     *
+     * Kept for the whole race rather than read and dropped: it is what tells
+     * the turn sheet and the end-of-move reveal that the four spaces in `roll`
+     * are a flying start rather than a number off first gear's die — which
+     * nothing else on the car can say, since a flying start leaves it in first
+     * like every other clean getaway.
+     */
+    startRoll: number | null;
 }
 
 export interface IRaceCarsSpecificGameState {
@@ -123,9 +142,17 @@ export interface RaceCarsGearOption {
 /**
  * Every gear this car may declare, cheapest first by gear number (§8.2).
  *
- * Up is one gear a turn and free, except off a standing start, where gear 0 may
- * launch to 1 *or* 2. Down is free for one gear and steeply priced beyond it,
- * and a gear the gearbox cannot pay for is not offered at all.
+ * Up is one gear a turn and free. Down is free for one gear and steeply priced
+ * beyond it, and a gear the gearbox cannot pay for is not offered at all.
+ *
+ * **Out of neutral there is no exception**: a car in gear 0 takes first and
+ * nothing else. It used to be allowed a standing-start launch straight to
+ * second, and §6a is what replaced that — how well a car gets away off the line
+ * is the startup round's d20 now, not a free ratio, and a car sitting in
+ * neutral afterwards (it bogged down, or it spun) is not in first yet and so
+ * cannot be in second next turn. The one exception is a race that was already
+ * running when §6a shipped; see the branch below for why it cannot simply be
+ * dropped.
  *
  * Gear 0 is never on the list. It is where the grid and a spun car sit, not
  * somewhere a driver may choose to go: §9's "you can never choose to stop"
@@ -135,8 +162,19 @@ export function legalGears(state: IRaceCarsSpecificGameState, userId: string): R
     const ps = requirePlayer(state, userId);
     const maxGear = trackById(state.trackId).maxGear;
 
-    // A standing start is allowed one extra ratio, and it is the only exception.
-    if (ps.gear === 0) {
+    // A race dealt before §6a is the one place the old launch still applies,
+    // and it has to: every `RaceCarsShift` in its recorded log was sent under
+    // that rule, and a command replay refuses is skipped **in silence**
+    // (replay.ts) — which freezes the car on the grid for the rest of that
+    // match's review, drops every later command of that driver's with it
+    // (their move has no roll to spend), and flattens their line on a result
+    // chart computed once and stored. So an old race finishes under the rules
+    // it started under.
+    //
+    // Unreachable in a §6a race, which is what makes this a compatibility
+    // branch rather than a second rule: a car only reaches a shift after its
+    // own launch, and every launch writes `startRoll` — a stall writes 1.
+    if (ps.gear === 0 && ps.startRoll == null) {
         return ([1, 2] as RaceCarsGear[])
             .filter(gear => gear <= maxGear)
             .map(gear => ({ gear, gearboxCost: 0 }));
@@ -163,6 +201,51 @@ export function legalGears(state: IRaceCarsSpecificGameState, userId: string): R
 export function rollFor(gear: RaceCarsGear): number {
     const def = gearDef(gear);
     return def.min + randomInt(def.max - def.min + 1);
+}
+
+// ─── The startup round (§6a) ────────────────────────────────────────────────
+
+/**
+ * What one d20 made of a car's getaway (§6a):
+ *
+ * - `stalled` — a 1. The engine bogs down: no gear, no roll, no movement, and
+ *   the car is still in neutral when the next round reaches it, so first is the
+ *   only gear it can take then.
+ * - `away` — 2 to 16. First gear, and first gear's own die decides the move.
+ * - `flying` — 17 and up. First gear, and a fixed four spaces instead of a roll.
+ */
+export type RaceCarsStartOutcome = 'stalled' | 'away' | 'flying';
+
+/** Which of §6a's three getaways a d20 face is. */
+export function startOutcome(roll: number): RaceCarsStartOutcome {
+    if (roll <= START_STALL_FACE) return 'stalled';
+    return roll >= START_FLYING_FROM ? 'flying' : 'away';
+}
+
+/** The d20 §6a throws. Its own function so the command reads the same way `rollFor` does. */
+export function rollStart(): number {
+    return DiceRoll(START_DIE_SIDES);
+}
+
+/**
+ * The d20 this car is driving a flying start on, or null if the number it is
+ * about to spend came off a gear's die after all — the one reading that
+ * separates §6a's fixed four spaces from a roll, which is what both the turn
+ * sheet and the end-of-move reveal need to name it.
+ *
+ * The face rather than a yes/no, because the one screen that asks draws the die
+ * that was thrown: a boolean would only send it back for `startRoll` behind a
+ * non-null assertion this already proved.
+ *
+ * Round one and nothing else: `startRoll` is kept for the whole race, so the
+ * round is what keeps a 17 thrown on lap one from re-labelling a fourth-gear
+ * four on lap two. Loosely nullish, because a race that was already running
+ * when §6a shipped has cars carrying no `startRoll` at all — those never threw
+ * a d20, so they never took a flying start either.
+ */
+export function flyingStartRoll(state: IRaceCarsSpecificGameState, ps: IRaceCarsPlayerState): number | null {
+    if (state.round !== START_ROUND || ps.startRoll == null) return null;
+    return startOutcome(ps.startRoll) === 'flying' ? ps.startRoll : null;
 }
 
 // ─── Reach (§9) ─────────────────────────────────────────────────────────────
@@ -792,6 +875,7 @@ export function classification(state: IRaceCarsSpecificGameState, winnerId: stri
 // ─── The conservative line (§23.7 PR 6) ─────────────────────────────────────
 
 export type RaceCarsConservativeTurn =
+    | { phase: 'start' }
     | { phase: 'shift'; gear: RaceCarsGear }
     | { phase: 'move'; brake: number; destination: RaceCarsSpace }
     | { phase: 'slipstream'; tow: RaceCarsSpace | null };
@@ -896,7 +980,7 @@ function plannedMoves(
  * maximum cannot overshoot, else drop to the highest gear that cannot" is
  * implemented as **the highest legal gear that cannot overshoot**, which holds
  * and drops exactly as described but also climbs on a clear straight. A line
- * that never climbs never leaves gear 2, and The Mile alone would then take a
+ * that never climbs never leaves first, and The Mile alone would then take a
  * driver eleven turns — which §23.8's turn-count assertion is there to catch.
  */
 /** The highest legal gear whose best roll cannot overshoot down any line — see the note above. */
@@ -908,7 +992,7 @@ function planShift(state: IRaceCarsSpecificGameState, userId: string): RaceCarsC
     });
     const chosen = safe.length > 0 ? safe[safe.length - 1] : options[0];
     // `legalGears` is never empty — holding the current gear is always free, and
-    // gear 0 can always launch — but gear 1 is the answer if it ever became so.
+    // gear 0 can always take first — but gear 1 is the answer if it ever became so.
     return { phase: 'shift', gear: chosen ? chosen.gear : 1 };
 }
 
@@ -964,6 +1048,12 @@ export function conservativeTurn(
     // cron returns before saving, and the abandon ladder never climbs. Declining
     // a tow is the one plan that ends a turn while changing nothing.
     if (!ps) return { phase: 'slipstream', tow: null };
+    // §6a's getaway is a die and nothing else — there is no conservative way to
+    // throw it, and a driver who lets the startup round time out still has to
+    // throw it before anybody can take a turn. Left to the same command every
+    // other driver sends, so a stalled start reached this way is the same
+    // stalled start reached by tapping.
+    if (ps.phase === 'start') return { phase: 'start' };
     if (ps.phase === 'shift') return planShift(state, userId);
     if (ps.phase === 'move') return planMove(state, userId);
     return planTow(state, userId);

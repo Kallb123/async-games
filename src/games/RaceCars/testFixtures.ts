@@ -33,6 +33,7 @@ export function car(overrides: Partial<IRaceCarsPlayerState> = {}): IRaceCarsPla
         phase: 'move',
         roll: null,
         brakeSpent: 0,
+        startRoll: null,
         ...overrides,
     };
 }

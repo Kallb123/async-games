@@ -1,5 +1,5 @@
-// What arriving somewhere *meant*, in the player's language — one home for the
-// wording, read twice.
+// What arriving somewhere — or getting away from the line — *meant*, in the
+// player's language: one home for the wording, read twice.
 //
 // `resolveArrival` reports a move as a list of events (docs/games/race-cars.md
 // §10, §13). The match-history log joins them into one sentence, and the
@@ -8,7 +8,7 @@
 // Gravel Bend by four rows" is how the log and the screen come to disagree
 // about the turn a player just took.
 
-import type { RaceCarsArrivalEvent } from "./rules";
+import type { RaceCarsArrivalEvent, RaceCarsStartOutcome } from "./rules";
 import type { RaceCarsTrack } from "./board";
 import { pluralize } from "@/utils/ui/text";
 
@@ -30,6 +30,62 @@ export interface RaceCarsArrivalSummary {
     row: number;
     spun: boolean;
     finished: boolean;
+}
+
+/**
+ * What a car's getaway was, in the player's language (§6a) — read by the log
+ * line the launch writes and by the start reveal, so the d20 is described once.
+ */
+export interface RaceCarsStartSummary {
+    /** The d20 face (§6a). */
+    roll: number;
+    outcome: RaceCarsStartOutcome;
+    /**
+     * The spaces this start bought — first gear's own roll for a clean getaway,
+     * §6a's fixed four for a flying one, and nought for a stall, which is what
+     * a stall moved rather than a case for the copy below to guard.
+     */
+    spaces: number;
+}
+
+/** The getaway as the match log says it, with the number that decided it. */
+export function startLine(start: RaceCarsStartSummary): RaceCarsArrivalLine {
+    switch (start.outcome) {
+        case 'stalled':
+            return { glyph: '🚦', text: `bogged down off the line (d20: ${start.roll}) — no gear, and the car does not move` };
+        case 'flying':
+            return {
+                glyph: '🚀',
+                text: `made a flying start (d20: ${start.roll}) — first gear and ${pluralize(start.spaces, 'space')}, no roll needed`,
+            };
+        case 'away':
+            return { glyph: '🏁', text: `got away in first (d20: ${start.roll}) and rolled a ${start.spaces}` };
+    }
+}
+
+/**
+ * The headline the start reveal opens with — the same three cases, said large,
+ * under the same glyph `startLine` dots the log row with.
+ */
+export function startHeadline(start: RaceCarsStartSummary): { headline: string; subline: string } {
+    const { glyph } = startLine(start);
+    switch (start.outcome) {
+        case 'stalled':
+            return {
+                headline: `${glyph} Bogged down`,
+                subline: 'The engine died on the line: no gear, no roll, no movement. You are still in neutral, so first is the only gear you can take next round.',
+            };
+        case 'flying':
+            return {
+                headline: `${glyph} Flying start!`,
+                subline: `Away before the lights were out — ${pluralize(start.spaces, 'space')} with no roll at all, and you are in first.`,
+            };
+        case 'away':
+            return {
+                headline: `${glyph} Away cleanly`,
+                subline: `First gear off the line, and the die says ${start.spaces}. You may change gear from next round.`,
+            };
+    }
 }
 
 /** A corner by name, for any line that has an id and wants words. */

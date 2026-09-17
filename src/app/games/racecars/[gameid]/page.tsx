@@ -8,9 +8,10 @@ import type { IRaceCarsGameDataResponse, IRaceCarsSpecificGameStateResponse } fr
 import RaceCarsBoard from "@/games/RaceCars/components/RaceCarsBoard";
 import RaceCarsActions from "@/games/RaceCars/components/RaceCarsActions";
 import RaceCarsEndMoveScreen from "@/games/RaceCars/components/RaceCarsEndMoveScreen";
+import RaceCarsStartScreen from "@/games/RaceCars/components/RaceCarsStartScreen";
 import { MIN_MOVE_STEPS, SLIPSTREAM_STEPS, spaceKey } from "@/games/RaceCars/board";
 import { moveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
-import type { IRaceCarsArrivalOutcome } from "@/games/RaceCars/RaceCarsLogic";
+import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import GameShell from "@/components/ui/GameShell";
 import GameGuideModal from "@/components/ui/GameGuideModal";
@@ -35,6 +36,23 @@ import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
 
+/**
+ * The two things a Race Cars command can hand back worth a screen: §6a's
+ * getaway and §23.7 PR 5's arrival. One `useOutcomeReveal` over both rather than
+ * a second copy of the hook — only one of them can ever be in flight, because
+ * they are two different phases of one turn, and the outcome already says which
+ * by carrying one field or the other.
+ */
+type RaceCarsReveal = Partial<IRaceCarsArrivalOutcome & IRaceCarsStartOutcome>;
+
+/** What the top bar says the driver on turn is being asked for. */
+function turnPrompt(phase: IRaceCarsSpecificGameStateResponse['playerStates'][string]['phase'] | undefined, roll: number | null, towing: boolean): string {
+    if (towing) return 'slipstream — take the tow or wave it away';
+    if (phase === 'start') return 'lights out — roll for the start';
+    if (phase === 'move' && roll !== null) return `rolled ${roll} — pick a space`;
+    return 'pick a gear';
+}
+
 export default function GameRaceCars({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
@@ -48,13 +66,17 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
-    // The end-of-move reveal (§23.7 PR 5): whichever of the two moving commands
-    // just resolved hands back what the corner made of the roll, and whether a
-    // tow is on offer — see IRaceCarsArrivalOutcome. The hook wraps every
-    // submit, so it is caught whether the tap came from the circuit or from the
-    // turn sheet; a shift carries no arrival and falls straight through.
+    // The reveals this game shows over the board, caught by one hook rather than
+    // two: §23.7 PR 5's end-of-move (whichever of the two moving commands just
+    // resolved hands back what the corner made of the roll, and whether a tow is
+    // on offer) and §6a's getaway (the startup round's d20). The hook wraps
+    // every submit, so either is caught whether the tap came from the circuit or
+    // from the turn sheet; a shift carries neither and falls straight through.
     const { submitCommand, reveal, dismiss: dismissReveal } =
-        useOutcomeReveal(rawSubmitCommand, (outcome) => (outcome as IRaceCarsArrivalOutcome).arrival);
+        useOutcomeReveal<RaceCarsReveal>(rawSubmitCommand, (outcome) => {
+            const resolved = outcome as RaceCarsReveal;
+            return resolved.start || resolved.arrival ? resolved : null;
+        });
 
     // Turn review steps back through the match's recorded commands. `canPlan`
     // is false permanently and by design (§23.5): a planner would resolve one
@@ -157,13 +179,13 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         } else if (complete) {
             subtitle = `🏁 ${nameForUserId(gameData, gameData?.winner)} takes the flag`;
         } else if (isMyTurn) {
-            subtitle = towing
-                ? <><span className="ag-hi">Your move</span> · slipstream — take the tow or wave it away</>
-                : me?.phase === 'move' && me.roll !== null
-                    ? <><span className="ag-hi">Your move</span> · rolled {me.roll} — pick a space</>
-                    : <><span className="ag-hi">Your move</span> · pick a gear</>;
+            subtitle = <><span className="ag-hi">Your move</span> · {turnPrompt(me?.phase, me?.roll ?? null, towing)}</>;
         } else {
-            subtitle = <>{currentTurnUsername}&apos;s move · round {gs.round + 1}</>;
+            // `round` is 1-based from the grid (§6a's startup round is round
+            // one), so it is printed as it stands: a screen that added one
+            // would call the start "round 2" while the turn sheet, the log and
+            // the guide all call it the first.
+            subtitle = <>{currentTurnUsername}&apos;s move · round {gs.round}</>;
         }
     }
 
@@ -237,12 +259,17 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         );
     }
 
-    if (reveal && gs && nav.isLive) {
+    if (reveal?.start && gs && nav.isLive) {
+        return <RaceCarsStartScreen start={reveal.start} onDismiss={dismissReveal} />;
+    }
+
+    if (reveal?.arrival && gs && nav.isLive) {
+        const arrival = reveal.arrival;
         return (
             <RaceCarsEndMoveScreen
                 trackId={gs.trackId}
-                roll={reveal.roll}
-                arrival={reveal.towOffered && !towing ? { ...reveal, towOffered: false } : reveal}
+                roll={arrival.roll}
+                arrival={arrival.towOffered && !towing ? { ...arrival, towOffered: false } : arrival}
                 onDismiss={dismissReveal}
             />
         );

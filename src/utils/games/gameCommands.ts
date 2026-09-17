@@ -115,7 +115,10 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     // docs/games/race-cars.md §23.7: PR 2 added RaceCarsGameType and a
     // skeleton RaceCarsShift; PR 3 filled that in and added RaceCarsMove, and
     // PR 5 adds RaceCarsSlipstream — §23.4's three command classes, not nine.
+    // §6a's startup round adds the fourth, RaceCarsLaunch: the one d20 a driver
+    // throws in round one in place of the shift nobody makes off the line.
     RaceCarsGameType: [
+        "RaceCarsLaunch",
         "RaceCarsShift",
         "RaceCarsMove",
         "RaceCarsSlipstream",

@@ -17,22 +17,29 @@ import {
     SLICK_CAP,
     SLICK_LIFETIME_ROUNDS,
     spaceKey,
+    START_FLYING_SPACES,
+    START_GEAR,
+    START_ROUND,
 } from "@/games/RaceCars/board";
 import {
     classification,
     derivePath,
+    flyingStartRoll,
     legalGears,
     moveOptions,
     recomputeRoundOrder,
     resolveArrival,
     rollFor,
+    rollStart,
     slipstreamOffered,
+    startOutcome,
+    RaceCarsStartOutcome,
     IRaceCarsPlayerState,
     IRaceCarsSpecificGameState,
     RaceCarsArrival,
     IRaceCarsSlick,
 } from "@/games/RaceCars/rules";
-import { arrivalClauses, RaceCarsArrivalSummary } from "@/games/RaceCars/narration";
+import { arrivalClauses, RaceCarsArrivalSummary, RaceCarsStartSummary, startLine } from "@/games/RaceCars/narration";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
@@ -44,6 +51,12 @@ import { pluralize } from "@/utils/ui/text";
 // docs/games/race-cars.md §23.7. PR 2 added the game type and a skeleton
 // shift; PR 3 makes the game drivable — §7's first two steps as two commands,
 // and the round bookkeeping that hands the turn on.
+//
+// §6a adds a fourth: `RaceCarsLaunch`, the one d20 a driver throws in round one
+// in place of the shift nobody makes off the line. It is its own command rather
+// than a flag on `RaceCarsShift` because it declares no gear and takes no
+// argument at all — there is nothing about it a client could get right or
+// wrong, which is exactly what a command with no fields should look like.
 //
 // Both commands validate through rules.ts rather than re-deriving reachability
 // or corner state a second time (§23.4): `legalGears` decides a shift,
@@ -86,19 +99,31 @@ export interface IRaceCarsArrivalOutcome extends ICommandOutcome {
         lane: number;
         /**
          * The gear and number this leg was driven on, for the reveal — null on
-         * §12's tow, which is a fixed three rows and no roll at all.
+         * §12's tow, which is a fixed three rows and no roll at all, and a null
+         * `gear` on §6a's flying start, whose four spaces are not off a gear's
+         * die either even though the car is in first.
          *
          * Carried here rather than read off the car afterwards: a spin drops
          * the gear to neutral and being boxed in drops it to first, so by the
          * time the response lands, the car is no longer in the gear its number
          * was rolled in.
          */
-        roll: { gear: RaceCarsGear; value: number } | null;
+        roll: { gear: RaceCarsGear | null; value: number } | null;
         /** Tyres this leg actually cost — totalled from the pool, never from the events (see arrivalClauses). */
         tyresSpent: number;
         /** §12's tow is on offer: the one decision left in this turn. */
         towOffered: boolean;
     };
+}
+
+/**
+ * What §6a's d20 made of one driver's getaway, handed back for the start reveal
+ * — the same ICommandOutcome-extension pattern as `IRaceCarsArrivalOutcome`
+ * above. Nothing here is deserialised from a request body, and replaying the
+ * command recomputes it from `recordedStartRoll`.
+ */
+export interface IRaceCarsStartOutcome extends ICommandOutcome {
+    start: RaceCarsStartSummary;
 }
 
 /**
@@ -239,7 +264,7 @@ function arrivalOutcome(
     ps: IRaceCarsPlayerState,
     senderId: string,
     settled: { arrival: RaceCarsArrival; tyresSpent: number },
-    leg: { roll: { gear: RaceCarsGear; value: number } | null; offerTow: boolean },
+    leg: { roll: { gear: RaceCarsGear | null; value: number } | null; offerTow: boolean },
 ): IRaceCarsArrivalOutcome {
     const { arrival, tyresSpent } = settled;
     // §12: one tow per turn, so only the rolled move can earn one — and a
@@ -339,7 +364,12 @@ export class RaceCarsGameType implements IGameType {
         // shift `RaceCarsShift` would therefore refuse forever.
         const driver = players.get(driverId);
         if (driver) {
-            driver.phase = 'shift';
+            // §6a: the startup round has no shift in it — the d20 is what puts
+            // a car in gear, so a driver whose turn opens in round one opens on
+            // `start` instead. Read off `gs.round`, which the wrap above has
+            // already advanced, so the first turn of round two is a shift even
+            // when the wrap and the hand-off happen in the same pass.
+            driver.phase = gs.round === START_ROUND && startedFromTheLights(players) ? 'start' : 'shift';
             driver.roll = null;
             driver.brakeSpent = 0;
         }
@@ -361,6 +391,136 @@ export class RaceCarsGameType implements IGameType {
      */
     CheckGameOver(gameData: IGameData): boolean {
         return gameData.complete;
+    }
+}
+
+// ─── RaceCarsLaunch (§6a) ───────────────────────────────────────────────────
+
+/**
+ * Whether this race is running under §6a's startup round.
+ *
+ * "Has anybody thrown a d20 yet" rather than a second flag on the state: a race
+ * dealt before §6a carries no getaway anywhere in its field and never will,
+ * which is the same marker `legalGears` reads to leave the old standing start
+ * reachable. By the time this is asked, a §6a race always has one — the field
+ * opens on `phase: 'start'` from the grid, `CheckEndTurn` only runs on a turn
+ * that ended, and in round one a turn only ends after its own launch.
+ *
+ * So a race that was already running when §6a shipped keeps handing its drivers
+ * a shift and finishes under the rules it started under, rather than giving
+ * half a grid a d20 and letting the other half keep the standing start they
+ * have already taken.
+ */
+function startedFromTheLights(players: Map<string, IRaceCarsPlayerState>): boolean {
+    for (const [, ps] of players) {
+        if (ps.startRoll != null) return true;
+    }
+    return false;
+}
+
+/**
+ * The spaces one getaway bought: nought for a stall, §6a's fixed four for a
+ * flying start, and first gear's own die for a clean one — thrown here when
+ * nothing was recorded, which is the only place in this command randomness
+ * comes from.
+ */
+function startSpaces(outcome: RaceCarsStartOutcome, recordedGearRoll: number | undefined): number {
+    if (outcome === 'stalled') return 0;
+    if (outcome === 'flying') return START_FLYING_SPACES;
+    return recordedGearRoll ?? rollFor(START_GEAR);
+}
+
+@serializable
+export class RaceCarsLaunch implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    /**
+     * The d20 that decides the getaway, for replay. Named `recorded…` so
+     * `stripRecordedRandomness` deletes it off a live request — without which a
+     * driver posts `{"recordedStartRoll":20}` and takes a flying start every
+     * time (§23.4).
+     */
+    recordedStartRoll?: number;
+    /**
+     * First gear's own die, for the clean getaway that spends one. Recorded
+     * for the same reason and stripped the same way; a stall and a flying start
+     * never throw it, so it stays undefined on both.
+     */
+    recordedRoll?: number;
+    readonly className = 'RaceCarsLaunch';
+
+    myString() {
+        // Read off the dice it recorded, so the match review titles a stall a
+        // stall — one wording, `narration.ts`'s, shared with the log and the
+        // reveal. Undefined only on a request body, whose recorded fields the
+        // command route has already stripped (§23.4).
+        //
+        // Throws no die of its own: `Execute` records first gear's roll before
+        // the pipeline persists the command, so a recorded clean getaway always
+        // carries the number it spent — which matters because replay calls this
+        // for its step summaries with randomness stubbed to throw.
+        if (this.recordedStartRoll === undefined) return 'threw for the start';
+        const outcome = startOutcome(this.recordedStartRoll);
+        return startLine({
+            roll: this.recordedStartRoll,
+            outcome,
+            spaces: startSpaces(outcome, this.recordedRoll),
+        }).text;
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IRaceCarsGameData;
+        const gs = data.specificGameState;
+        const ps = driverOnTurn(gs, this.senderId);
+        if (!ps) return INVALID;
+
+        // `phase` is the authority and `roll` follows it (§23.4), and both are
+        // checked for the reason `RaceCarsShift` checks both: a clean getaway
+        // returns `turnOver: false`, so `currentTurn` never moves, and without
+        // the `roll === null` half a driver re-sends the same body until the
+        // d20 comes up 17 — every gate on the command route still passing.
+        if (ps.phase !== 'start' || ps.roll !== null) return INVALID;
+
+        const startRoll = this.recordedStartRoll ?? rollStart();
+        this.recordedStartRoll = startRoll;
+        ps.startRoll = startRoll;
+
+        const outcome = startOutcome(startRoll);
+        // The die is thrown here and revealed in the same breath (§23.4).
+        // A stall spends nothing and moves nothing; the other two put the car in
+        // first, and differ only in where the spaces come from — first gear's
+        // own die, or §6a's fixed four.
+        const spaces = startSpaces(outcome, this.recordedRoll);
+        // Recorded only where a die was actually thrown: a stall and a flying
+        // start are both decided by the d20 alone, so recording anything for
+        // them would be recording a number nothing rolled.
+        if (outcome === 'away') this.recordedRoll = spaces;
+
+        if (outcome !== 'stalled') {
+            ps.gear = START_GEAR;
+            ps.roll = spaces;
+            ps.phase = 'move';
+        }
+
+        const start: RaceCarsStartSummary = { roll: startRoll, outcome, spaces };
+        data.gameState.history.unshift(playerHistory(this.senderId, startLine(start).text));
+
+        // A stall is the whole turn: no gear to pick, no number to spend, and
+        // §12's tow is earned by a move rather than owed to a car that made
+        // none. Everything else hands on to §7 step 2 with the number known.
+        const result: IRaceCarsStartOutcome = {
+            validMove: true,
+            turnOver: outcome === 'stalled',
+            start,
+        };
+        return result;
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -503,7 +663,9 @@ export class RaceCarsMove implements IGameCommand {
         const spaces = path.length - 1;
         const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'space')} off the roll` : '';
         // Read before the arrival is applied: a spin drops the gear to neutral.
-        const roll = { gear: ps.gear, value: ps.roll };
+        // A flying start's four spaces came off no gear's die at all (§6a), so
+        // the reveal is told that rather than shown first gear's d4 beside a 4.
+        const roll = { gear: flyingStartRoll(gs, ps) === null ? ps.gear : null, value: ps.roll };
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
             lead: spaces > 0 ? `drove ${pluralize(spaces, 'space')}${landing(track, path)}${braked}` : '',

@@ -224,6 +224,27 @@ export function gearName(gear: RaceCarsGear): string {
     return GEAR_NAMES[gear] ?? GEAR_NAMES[0];
 }
 
+// ─── The startup round (§6a) ────────────────────────────────────────────────
+
+/**
+ * The round the race is started in — one d20 a driver, before anybody shifts.
+ *
+ * A number rather than a flag on the state: the startup round *is* round one,
+ * and a second field saying so is a second field that can disagree with
+ * `round`.
+ */
+export const START_ROUND = 1;
+/** The die every driver throws to get away (§6a). */
+export const START_DIE_SIDES = 20;
+/** A 1 bogs the engine down: no gear, no roll, no movement. */
+export const START_STALL_FACE = 1;
+/** This face and up is a flying start — no roll at all, a fixed run off the line. */
+export const START_FLYING_FROM = 17;
+/** The spaces a flying start is worth, in place of first gear's die. */
+export const START_FLYING_SPACES = 4;
+/** The gear a car that gets away at all takes off the line (§6a). */
+export const START_GEAR: RaceCarsGear = 1;
+
 // ─── Shifting (§8.2) ────────────────────────────────────────────────────────
 
 /**
@@ -236,8 +257,8 @@ export const SHIFT_DOWN_GEARBOX_COST = [0, 0, 1, 3, 6];
 /**
  * What moving from `from` to `to` costs in gearbox, or `null` if no gearbox
  * pool can buy it. Shifting *up* is capped by the caller, not here: §8.2's
- * one-gear limit and the standing-start exception both live in `legalGears`,
- * because both need to know what gear the car is actually in.
+ * one-gear limit lives in `legalGears`, because it needs to know what gear the
+ * car is actually in.
  */
 export function shiftDownCost(from: RaceCarsGear, to: RaceCarsGear): number | null {
     const dropped = from - to;

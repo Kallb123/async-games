@@ -86,6 +86,22 @@ RaceCarsInvitationSchema.methods.CreateGame = async function(
     const track = trackById(specificGameState.trackId);
     const spec = specDef(specificGameState.spec);
 
+    // Oldest line first, like every other `CreateGame` — `startGameFromInvitation`
+    // flips the block once (`asStoredHistory`, utils/games/history.ts).
+    //
+    // The settings are read back off the state rather than off the invitation: a
+    // lobby-created race can arrive holding anything at all, and the log should
+    // say what is actually being raced.
+    history.push({ text: `Setup: ${pluralize(specificGameState.laps, 'lap')} of ${track.name} — ${track.corners.length} corners a lap` });
+    history.push({ text: `Setup: every car runs the ${spec.name} spec — ${spec.tyres} tyres, ${spec.brakes} brakes, ${spec.gearbox} gearbox` });
+    history.push({ text: `Setup: oil spills are ${specificGameState.oilSpills ? 'on' : 'off'}` });
+    history.push({ text: `Setup: the grid is ${turnOrder.map((userId, slot) => `P${slot + 1} ${userToken(userId)}`).join(', ')}` });
+    // §6a closes the block. The roll-off above *is* the grid draw, so the d20
+    // named here is the first thing that happens once the grid is set rather
+    // than a second draw — which is why it reads under those dice and not over
+    // them, where its own line would make them look like the getaways.
+    history.push({ text: 'Setup: round one is the start — every driver throws a d20 to get away' });
+
     const gameData: IRaceCarsGameData = {
         gameId: uuidv4() as uuidString,
         gameType,
@@ -97,16 +113,7 @@ RaceCarsInvitationSchema.methods.CreateGame = async function(
         missedTurnCounts: new Map(),
         gameState: {
             turnOrder,
-            history: [
-                // The settings are read back off the state rather than off the
-                // invitation: a lobby-created race can arrive holding anything
-                // at all, and the log should say what is actually being raced.
-                { text: `Setup: ${pluralize(specificGameState.laps, 'lap')} of ${track.name} — ${track.corners.length} corners a lap` },
-                { text: `Setup: every car runs the ${spec.name} spec — ${spec.tyres} tyres, ${spec.brakes} brakes, ${spec.gearbox} gearbox` },
-                { text: `Setup: oil spills are ${specificGameState.oilSpills ? 'on' : 'off'}` },
-                { text: `Setup: the grid is ${turnOrder.map((userId, slot) => `P${slot + 1} ${userToken(userId)}`).join(', ')}` },
-                ...history,
-            ],
+            history,
             commandHistory: [],
         },
         complete: false,
@@ -145,6 +152,7 @@ function clonePlayerState(ps: IRaceCarsPlayerState): IRaceCarsPlayerState {
         phase: ps.phase,
         roll: ps.roll,
         brakeSpent: ps.brakeSpent,
+        startRoll: ps.startRoll,
     };
 }
 
@@ -180,8 +188,8 @@ export function cloneRaceCarsState(
  *
  * Every car is identical (§5.3) — same spec, same full wear pools, gear 0, no
  * corner stops banked — so the only thing that separates two drivers at the
- * start line is which of §5.2's six staggered spaces they were dealt and who
- * moves first.
+ * start line is which of §5.2's six staggered spaces they were dealt, who moves
+ * first, and what §6a's d20 makes of their getaway once the race begins.
  *
  * The four settings are normalised rather than trusted: `POST /api/lobby`
  * spreads a host's per-game settings into the invitation unchecked, so this is
@@ -220,9 +228,12 @@ export function buildInitialRaceCarsState(
             cornerStops: 0,
             skipNextTurn: false,
             finishedPosition: null,
-            phase: 'shift',
+            // §6a: round one is the startup round, so every car opens on the
+            // d20 rather than on a gear it could not have chosen from the grid.
+            phase: 'start',
             roll: null,
             brakeSpent: 0,
+            startRoll: null,
         });
     });
 
@@ -294,6 +305,7 @@ function makeRaceCarsStateSchemaDef() {
                 phase: String,
                 roll: { type: Number, default: null },
                 brakeSpent: { type: Number, default: 0 },
+                startRoll: { type: Number, default: null },
             },
         },
     };
@@ -376,6 +388,7 @@ export function gameStateToModel(
             phase: ps.phase,
             roll: ps.roll,
             brakeSpent: ps.brakeSpent,
+            startRoll: ps.startRoll,
         };
     }
 

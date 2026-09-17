@@ -42,6 +42,8 @@ export interface IRaceCarsPlayerStateResponse {
     phase: RaceCarsPhase;
     roll: number | null;
     brakeSpent: number;
+    /** The d20 this car got away on (§6a), or null before it has thrown one. */
+    startRoll: number | null;
 }
 
 export interface IRaceCarsSpecificGameStateResponse {
