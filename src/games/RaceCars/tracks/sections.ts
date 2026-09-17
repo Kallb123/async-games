@@ -22,21 +22,6 @@
 import type { RaceCarsCorner, RaceCarsGeometry, RaceCarsSpace, RaceCarsTrackSpace } from "../board";
 
 /**
- * Six staggered spaces on rows 0-2, lanes 1 and 3, so no car starts directly
- * behind another (§5.2) — every track's grid so far starts on a plain
- * three-lane straight the same width as this one, whose first section derives
- * rows 0, 1, 2 in order. P1 first.
- */
-export const STAGGERED_SIX_GRID: RaceCarsSpace[] = [
-    { row: 2, lane: 1 },
-    { row: 2, lane: 3 },
-    { row: 1, lane: 1 },
-    { row: 1, lane: 3 },
-    { row: 0, lane: 1 },
-    { row: 0, lane: 3 },
-];
-
-/**
  * One tile as an author writes it: which lane of its section it is in, where it
  * sits on the art, and — where the road does not simply run on — the tiles it
  * may be driven to.
@@ -120,6 +105,27 @@ export interface DerivedTrack {
     tiles: PlacedTile[];
     /** Where each tile landed, by id — what a grid slot is written in terms of. */
     spaceOf: Map<string, RaceCarsSpace>;
+}
+
+/**
+ * The spaces some named tiles landed on — how a circuit says *which tiles* its
+ * grid slots, its finish line and its oil patches sit on.
+ *
+ * A track file names them by tile id and resolves them here, for the same
+ * reason no row is ever typed: a row is derived from the steps (see the file
+ * comment), so a grid slot written as `{ row: 2, lane: 1 }` is a guess at the
+ * derivation's answer that goes quietly wrong the moment the drawing changes —
+ * which is how Anglet came to deal four of its six cars onto coordinates the
+ * circuit has no space at, where they could not move at all. A tile id cannot
+ * drift, and one that is not on the circuit throws at module load rather than
+ * at the start line.
+ */
+export function spacesOf(derived: DerivedTrack, ids: readonly string[]): RaceCarsSpace[] {
+    return ids.map(id => {
+        const space = derived.spaceOf.get(id);
+        if (!space) throw new Error(`Race Cars: ${id} is not a tile on this circuit`);
+        return space;
+    });
 }
 
 /** The id `length` bands give their tiles: section, lane and place in the run. */

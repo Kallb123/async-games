@@ -14,8 +14,8 @@
 // steps between them; `deriveTrack` works out which row each tile lands on
 // (`sections.ts`). The editor shows those rows back so a skewed corner is
 // visible, and that is the only place a row number enters this file.
-import type { RaceCarsGear, RaceCarsTrack } from "../board";
-import { spaceKey } from "../board";
+import type { RaceCarsGear, RaceCarsSpace, RaceCarsTrack } from "../board";
+import { MAX_PLAYERS, spaceKey } from "../board";
 import {
     bearingTo,
     defaultExitIds,
@@ -24,6 +24,7 @@ import {
     neighbouringLanes,
     plainTileId,
     runsInStep,
+    spacesOf,
     tileGeometry,
     type DerivedTrack,
     type SectionRuns,
@@ -72,6 +73,41 @@ export interface EditorTile {
     autoExits?: boolean;
 }
 
+/**
+ * The three things a tile can be **marked** as, over and above being road: a
+ * slot on the starting grid, a tile the finish line is painted across, and a
+ * tile with oil on it.
+ *
+ * Each one is a field of `EditorState` holding tile ids, which is what lets the
+ * canvas, the picker, the panel and the printer all say `state[kind]` rather
+ * than growing a third copy of the same list handling per mark.
+ */
+export const MARK_KINDS = ["grid", "finish", "oil"] as const;
+export type MarkKind = (typeof MARK_KINDS)[number];
+
+/**
+ * What each mark is called, the glyph it wears on the canvas and in the picker,
+ * and the line the panel explains it with — one table rather than one per thing
+ * a mark has to say about itself, for the same reason the lists are `state[kind]`.
+ */
+export const MARKS: Record<MarkKind, { label: string; glyph: string; note: string }> = {
+    grid: {
+        label: "Starting grid",
+        glyph: "🏎",
+        note: "Every car is dealt onto the tile marked for its slot (§5.2), so a track cannot ship until a full field is seated.",
+    },
+    finish: {
+        label: "Finish line",
+        glyph: "🏁",
+        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own.",
+    },
+    oil: {
+        label: "Oil",
+        glyph: "🛢",
+        note: "Optional, and most circuits have none.",
+    },
+};
+
 /** Everything the editor holds for one circuit — its own save format. */
 export interface EditorState {
     id: string;
@@ -82,6 +118,19 @@ export interface EditorState {
     /** In the order they are driven, starting at the start/finish line. */
     sections: EditorSection[];
     tiles: EditorTile[];
+    /**
+     * The starting grid as tile ids, **P1 first** (§5.2) — the one mark a race
+     * reads today, and the reason marks exist at all: a grid written as rows
+     * and lanes is a guess at what the derivation will make of the drawing, and
+     * a wrong guess deals a car onto a coordinate the circuit has no space at.
+     */
+    grid: string[];
+    /** Tile ids the finish line is painted across, in the order they were marked. */
+    finish: string[];
+    /** Tile ids with oil painted on them — optional, and most circuits have none. */
+    oil: string[];
+    /** §15: the grid is behind the line, so the first crossing doesn't count. */
+    gridBehindFinishLine: boolean;
 }
 
 /** The section every blank circuit opens with, so there is somewhere to draw. */
@@ -102,6 +151,10 @@ export function emptyState(overrides: Partial<EditorState> = {}): EditorState {
         maxGear: 5,
         sections: [{ ...FIRST_SECTION }],
         tiles: [],
+        grid: [],
+        finish: [],
+        oil: [],
+        gridBehindFinishLine: false,
         ...overrides,
     };
 }
@@ -139,6 +192,30 @@ function cleanTile(value: unknown): EditorTile | null {
         }
     }
     return cleaned;
+}
+
+/**
+ * One mark list of an imported draft: the tile ids in it that are really tiles
+ * on this drawing, each one once, in the order they were marked.
+ *
+ * Both filters earn their place, and the first is not only about a corrupt
+ * file. A mark names a tile rather than a coordinate, so a draft saved before
+ * some tiles were deleted names ids that are gone — and a grid slot on a tile
+ * that is not there is exactly the "car dealt onto a space the circuit hasn't
+ * got" this whole model exists to stop. Order is kept because it is the grid's
+ * running order, P1 first.
+ */
+function cleanMarks(value: unknown, tiles: readonly EditorTile[]): string[] {
+    if (!Array.isArray(value)) return [];
+    const known = new Set(tiles.map(tile => tile.id));
+    const marks: string[] = [];
+    const seen = new Set<string>();
+    for (const id of value) {
+        if (typeof id !== "string" || !known.has(id) || seen.has(id)) continue;
+        seen.add(id);
+        marks.push(id);
+    }
+    return marks;
 }
 
 /**
@@ -181,6 +258,10 @@ export function parseDraft(raw: string | null): EditorState {
             // A draft with no readable sections still has to be drawable on.
             sections: sections.length > 0 ? sections : base.sections,
             tiles,
+            grid: cleanMarks(source.grid, tiles),
+            finish: cleanMarks(source.finish, tiles),
+            oil: cleanMarks(source.oil, tiles),
+            gridBehindFinishLine: source.gridBehindFinishLine === true,
         };
     } catch {
         return emptyState();
@@ -514,6 +595,46 @@ export function connectByGeometry(state: EditorState): EditorTile[] {
     return state.tiles.map(tile => results.get(tile.id)!);
 }
 
+// ─── Marks: the grid, the finish line and the oil ────────────────────────────
+
+/**
+ * One tile's mark added or taken away — the click on the canvas while marking.
+ *
+ * Toggling rather than painting, because the grid is an **ordered** list: a
+ * click appends the next slot (P1, P2, …) and a second click on the same tile
+ * takes that slot back out, renumbering the ones behind it. The other two marks
+ * are sets and do not care, but one gesture for all three is one thing for an
+ * author to learn.
+ */
+export function withMarkToggled(state: EditorState, kind: MarkKind, id: string): string[] {
+    const marked = state[kind];
+    return marked.includes(id) ? marked.filter(other => other !== id) : [...marked, id];
+}
+
+/**
+ * Every mark list with one tile taken out of all three — what deleting a tile
+ * has to leave behind, exactly as deleting one scrubs the steps that pointed at
+ * it. A mark naming a tile that is not on the drawing is the dangling reference
+ * the printer refuses, and a grid slot on one is the bug this model is for.
+ */
+export function withTileUnmarked(state: EditorState, id: string): Pick<EditorState, MarkKind> {
+    return {
+        grid: state.grid.filter(other => other !== id),
+        finish: state.finish.filter(other => other !== id),
+        oil: state.oil.filter(other => other !== id),
+    };
+}
+
+/** Which grid slot each marked tile is, 1-based: P1, P2, … — for the canvas badge. */
+export function gridSlots(state: EditorState): Map<string, number> {
+    return new Map(state.grid.map((id, index) => [id, index + 1]));
+}
+
+/** The marks on one tile, in `MARK_KINDS` order — what the canvas rings it with. */
+export function marksOn(state: EditorState, id: string): MarkKind[] {
+    return MARK_KINDS.filter(kind => state[kind].includes(id));
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 export interface EditorValidation {
@@ -528,6 +649,64 @@ export interface EditorValidation {
      * every keystroke and every frame of a drag.
      */
     derived: DerivedTrack | null;
+}
+
+/**
+ * What is wrong with the marks — the half of validation that is about where the
+ * cars start rather than whether the road joins up.
+ *
+ * It exists because a circuit can be perfectly driveable and still unraceable:
+ * Anglet derived, loaded and drew, and four of its six cars were dealt onto
+ * coordinates it has no space at, where every turn could only offer "boxed in".
+ * That is an error here, not a warning — a track must not ship with it.
+ */
+function validateMarks(state: EditorState, errors: string[], warnings: string[]): void {
+    const known = new Set(state.tiles.map(tile => tile.id));
+    for (const kind of MARK_KINDS) {
+        const missing = state[kind].filter(id => !known.has(id));
+        if (missing.length > 0) {
+            errors.push(`${MARKS[kind].label} names ${missing.join(", ")}, which is not a tile on this drawing.`);
+        }
+    }
+
+    if (state.grid.length < MAX_PLAYERS) {
+        errors.push(`The starting grid has ${state.grid.length} of ${MAX_PLAYERS} tiles. Mark the tile each car starts on — a race seats ${MAX_PLAYERS}, and a slot the circuit has no space at is a car that cannot move at all.`);
+    }
+
+    // A grid slot every step out of which is another grid slot: a car walled in
+    // by the field before the flag drops, which no roll and no gear can undo.
+    const exitsById = allEffectiveExits(state);
+    const slots = gridSlots(state);
+    for (const [id, slot] of slots) {
+        const exits = exitsById.get(id) ?? [];
+        if (exits.length > 0 && exits.every(exit => slots.has(exit))) {
+            warnings.push(`P${slot} starts with every step out of it on another grid slot, so it is boxed in until the cars in front move (§5.2 staggers the grid to avoid exactly this).`);
+        }
+    }
+
+    const cornerIds = new Set(state.sections.filter(section => section.stops > 0).map(section => section.id));
+    const sectionOf = new Map(state.tiles.map(tile => [tile.id, tile.section]));
+    const inCorner = [...slots.keys()].filter(id => cornerIds.has(sectionOf.get(id) ?? ""));
+    if (inCorner.length > 0) {
+        warnings.push(`${inCorner.length} starting tile${inCorner.length === 1 ? " sits" : "s sit"} inside a corner, so those cars owe its stop count (§10) from the moment the race starts.`);
+    }
+
+    // A line has to cross the whole road: a lane with no tile on it is a lane a
+    // car laps down without ever passing the flag.
+    if (state.finish.length > 0) {
+        const line = new Set(state.finish);
+        const painted = state.tiles.filter(tile => line.has(tile.id));
+        const lanes = new Set(painted.map(tile => tile.lane));
+        const widest = Math.max(0, ...state.sections
+            .filter(section => painted.some(tile => tile.section === section.id))
+            .map(section => section.lanes));
+        const missing = Array.from({ length: widest }, (_unused, index) => index + 1).filter(lane => !lanes.has(lane));
+        if (missing.length > 0) {
+            warnings.push(`The finish line has no tile in lane ${missing.join(" or ")}, so a car down there never crosses it.`);
+        }
+    } else if (state.gridBehindFinishLine) {
+        warnings.push("The grid is set to sit behind the finish line, but no finish line is painted.");
+    }
 }
 
 /**
@@ -576,6 +755,8 @@ export function validateTrack(state: EditorState): EditorValidation {
         }
     }
 
+    validateMarks(state, errors, warnings);
+
     // The thing rows are *for*: a corner whose inside line is drawn shorter than
     // its outside gets more rows than it has tiles in a lane, which is correct
     // and worth seeing. A section far longer in rows than any of its lanes is
@@ -598,6 +779,20 @@ export function validateTrack(state: EditorState): EditorValidation {
 }
 
 /**
+ * A mark list as spaces on the derived circuit, quietly dropping any tile that
+ * is not on the drawing — `spacesOf`, which throws on one, with the lenience in
+ * front of it rather than a second walk of the same map.
+ *
+ * The lenience is the preview's, not the printer's: this is redrawn on every
+ * keystroke, and a mark left dangling for the keystroke between deleting a tile
+ * and the state settling must not take the whole screen down. A printed track
+ * file keeps the throw, and `validateTrack` reports the dangling mark.
+ */
+function markSpaces(derived: DerivedTrack, ids: readonly string[]): RaceCarsSpace[] {
+    return spacesOf(derived, ids.filter(id => derived.spaceOf.has(id)));
+}
+
+/**
  * The editor's model as one `RaceCarsTrack` — what the preview board draws and
  * what `printTrackFile` reads its geometry off. Throws through `deriveTrack` on
  * a circuit that cannot be driven, so a caller runs `validateTrack` first (the
@@ -611,7 +806,10 @@ export function toTrack(state: EditorState): RaceCarsTrack {
         rows: derived.rows,
         spaces: derived.spaces,
         corners: derived.corners,
-        grid: [],
+        grid: markSpaces(derived, state.grid),
+        finish: markSpaces(derived, state.finish),
+        oil: markSpaces(derived, state.oil),
+        gridBehindFinishLine: state.gridBehindFinishLine,
         maxGear: state.maxGear,
         art: { href: state.artHref, viewBox: state.viewBox },
         geometry: tileGeometry(derived),
@@ -687,6 +885,14 @@ export function fromTrack(track: RaceCarsTrack): EditorState {
         };
     });
 
+    // The marks come back the same way the steps do — by the id the tile was
+    // loaded under. A slot naming a space the circuit hasn't got is dropped
+    // rather than carried: Anglet shipped four of those, and the grid reading
+    // two of six is the editor saying exactly which cars had nowhere to stand.
+    const drawn = new Set(tiles.map(tile => tile.id));
+    const marks = (spaces: RaceCarsSpace[] | undefined) =>
+        (spaces ?? []).map(space => idOf(space.row, space.lane)).filter(id => drawn.has(id));
+
     return {
         id: track.id,
         name: track.name,
@@ -695,6 +901,10 @@ export function fromTrack(track: RaceCarsTrack): EditorState {
         maxGear: track.maxGear,
         sections,
         tiles,
+        grid: marks(track.grid),
+        finish: marks(track.finish),
+        oil: marks(track.oil),
+        gridBehindFinishLine: track.gridBehindFinishLine === true,
     };
 }
 
@@ -710,6 +920,24 @@ function tileLiteral(tile: EditorTile, exits: string[], heading: number): string
     ];
     if (tile.exits) parts.push(`exits: [${exits.map(exit => JSON.stringify(exit)).join(", ")}]`);
     return `{ ${parts.join(", ")} },`;
+}
+
+/** One mark list as the `spacesOf` call a track file resolves it through. */
+function markLiteral(ids: readonly string[]): string {
+    return `spacesOf(DERIVED, [${ids.map(id => JSON.stringify(id)).join(", ")}])`;
+}
+
+/**
+ * The lines a circuit only prints when it has something to say with them: a
+ * painted finish line, a grid drawn behind it, oil on the road. Left out
+ * entirely otherwise, so an ordinary circuit's file is no longer than it was.
+ */
+function optionalMarkLines(state: EditorState): string {
+    const lines: string[] = [];
+    if (state.finish.length > 0) lines.push(`    finish: ${markLiteral(state.finish)},`);
+    if (state.gridBehindFinishLine) lines.push("    gridBehindFinishLine: true,");
+    if (state.oil.length > 0) lines.push(`    oil: ${markLiteral(state.oil)},`);
+    return lines.length > 0 ? `\n${lines.join("\n")}` : "";
 }
 
 /**
@@ -736,7 +964,16 @@ export function printTrackFile(state: EditorState): string {
     // only prints a clean drawing) — it is here so that a caller that forgets
     // gets an error rather than a broken module.
     deriveTrack(toSections(state));
+    // The same guard for the half of a track that is about the race rather than
+    // the road: a circuit with nothing marked as its grid seats nobody, and the
+    // slots it does mark are resolved by `spacesOf`, which throws at module load
+    // on a tile the circuit hasn't got. Whether there are enough of them for a
+    // full field is `validateTrack`'s to say, and the export panel's to refuse.
+    if (state.grid.length === 0) {
+        throw new Error("Race Cars: no starting grid marked — a circuit has to say which tiles its cars start on");
+    }
 
+    const optionalMarks = optionalMarkLines(state);
     const sectionLines = state.sections.map(section => {
         const tiles = tilesIn(state, section.id)
             // Lane by lane, each run in road order: the shape `sections.ts`
@@ -760,8 +997,13 @@ ${tiles}
 // Every tile's centre point and the steps out of it were placed by hand on the
 // art; the rows are derived from those steps at module load (\`sections.ts\`),
 // exactly as they are for the circuits written as plain section lengths.
+//
+// The grid, the finish line and any oil name the **tiles** they sit on and are
+// resolved through \`spacesOf\` — for the same reason no row is printed: a row
+// is the derivation's answer, and one written down here goes quietly wrong the
+// moment the drawing changes.
 import type { RaceCarsTrack } from "../board";
-import { deriveTrack, STAGGERED_SIX_GRID, tileGeometry, type TrackSection } from "./sections";
+import { deriveTrack, spacesOf, tileGeometry, type TrackSection } from "./sections";
 
 const SECTIONS: TrackSection[] = [
 ${sectionLines}
@@ -775,9 +1017,7 @@ export const ${constName}: RaceCarsTrack = {
     rows: DERIVED.rows,
     spaces: DERIVED.spaces,
     corners: DERIVED.corners,
-    // Every track so far shares the staggered six-slot grid; give this one its
-    // own array here if its start line sits somewhere else.
-    grid: STAGGERED_SIX_GRID,
+    grid: ${markLiteral(state.grid)},${optionalMarks}
     maxGear: ${state.maxGear},
     art: {
         href: ${JSON.stringify(state.artHref)},

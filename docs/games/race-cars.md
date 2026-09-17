@@ -1154,7 +1154,16 @@ interface RaceCarsTrack {
   // A corner's row band labels it on screen and places a spun car; §10 charges
   // overshoot in spaces past the corner, read off the path (`cornerExits`).
   corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
+  // The grid, the finish line and any oil are **marked on tiles** in the
+  // authoring model and resolved to spaces at module load (`spacesOf`), for the
+  // same reason no row is typed: a slot written as a row and a lane is a guess
+  // at what the derivation will make of the drawing (see the note below).
   grid: { row: number, lane: number }[],   // P1 first
+  // Painted by the track editor and printed here; authoring data only for now —
+  // §15 still counts a lap at row 0, and §14 still lays its own slicks.
+  finish?: { row: number, lane: number }[],   // the line, which need not be one row
+  gridBehindFinishLine?: boolean,             // first crossing starts lap 1, not ends it
+  oil?: { row: number, lane: number }[],      // a circuit's own greasy patches
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)
   art: { href: string, viewBox: { width: number, height: number } },
   // Where each space is drawn on the art, and which way the car faces there.
@@ -1189,8 +1198,8 @@ sharing an id, steps that loop back on themselves, a band whose lanes run out of
 step without naming their own steps, or a lap of one section — whose wrap back
 to the start line would be held inside the section it is ranked from.
 
-**Three invariants belong on the track data rather than in Ashcombe's geometry,
-and `board.test.ts` asserts all three, against every registered track.** §18
+**Four invariants belong on the track data rather than in Ashcombe's geometry,
+and `board.test.ts` asserts all four, against every registered track.** §18
 rules that a spin searches backwards along its corner for a free space, which is
 only total if **every corner holds at least `MAX_PLAYERS` cars** — true of
 Ashcombe's three corners of 10–12 spaces and of Anglet's seven of 8–10, and
@@ -1199,7 +1208,14 @@ longer than the road alone would draw it, not just narrower. A corner
 whose `from` is row 0 has nothing behind it to search. And **every space can be
 driven off, onto a space that exists, forward** — the graph's own version of
 "no hole in the board", which is what §9 relies on when it reads an empty walk
-as traffic rather than as the end of the map.
+as traffic rather than as the end of the map. Fourth, and the one a circuit
+shipped without: **every car is dealt onto a space the circuit actually has**,
+a full field of them. Anglet took the shared six-slot grid of rows 0-2, lanes 1
+and 3 — a statement about a straight whose lanes sit level, which its do not —
+and four of its six drivers spent the race on coordinates with no road at them,
+where nothing was reachable and every turn could only offer "boxed in". A grid
+slot is a tile id now, resolved through the derivation, which cannot name a
+space that is not there.
 
 `specificGameState`:
 
@@ -1532,9 +1548,12 @@ So the geometry (and the corner merges) are authored interactively instead, in
 the **Race Cars track editor** at `/admin/racecars`
 ([`docs/admin-tools.md`](../admin-tools.md)): an admin drops each tile onto the
 art to fix its centre point, draws the exits that break §5.1's default rule,
-bands the corners, and the editor prints a `tracks/` file — validated through
-the game's own `assembleSpaces`, so a circuit that passes in the editor is one
-that loads in the game. It is a build-time aid, not a runtime dependency:
+cuts the lap into sections (a corner being one), marks the tiles the cars start
+on and the tiles the finish line and any oil are painted across, and the editor
+prints a `tracks/` file — validated through the game's own `assembleSpaces`, so
+a circuit that passes in the editor is one that loads in the game. The marks
+print as tile ids resolved through `spacesOf` at module load, like every step
+and unlike any row. It is a build-time aid, not a runtime dependency:
 nothing in `src/` imports it, and it persists nothing server-side.
 
 ### 23.7 The PRs

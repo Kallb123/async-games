@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import Section from '@/components/ui/Section';
-import { TRACK_LIST, type RaceCarsGear } from '@/games/RaceCars/board';
+import { MAX_PLAYERS, TRACK_LIST, type RaceCarsGear } from '@/games/RaceCars/board';
 import {
     allEffectiveExits,
     connectByGeometry,
@@ -10,6 +11,10 @@ import {
     effectiveExits,
     emptyState,
     fromTrack,
+    gridSlots,
+    MARK_KINDS,
+    MARKS,
+    marksOn,
     nextTileId,
     NO_EXITS,
     parseDraft,
@@ -21,10 +26,13 @@ import {
     tilesIn,
     validateTrack,
     withExitToggled,
+    withMarkToggled,
     withSectionStepsNamed,
+    withTileUnmarked,
     type EditorSection,
     type EditorState,
     type EditorTile,
+    type MarkKind,
 } from '@/games/RaceCars/tracks/editorModel';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 
@@ -60,8 +68,9 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 9;
+const TOOL_VERSION = 10;
 const TOOL_CHANGES = [
+    'v10 — the starting grid, the finish line and any oil are marked on the tiles themselves rather than assumed: a track prints the six tiles its cars are dealt onto (and will not print without them), which is what let a circuit whose lanes never sit level deal four cars onto coordinates it had no road at.',
     'v9 — a tile can be made to name its own steps even where they match §5.1\'s default: click the tile you are drawing from, or name a whole out-of-step section\'s at once from its row, which is what "runs its lanes out of step" was asking for and had no way to answer.',
     'v8 — hot keys for the toolbar: Q/W/E pick the mode, 1–3 the lane, and A/S step back and on through the sections, so placing a lap no longer means a round trip to the buttons between tiles.',
     'v7 — a step auto-connect drew from the geometry is purple on the canvas, telling it apart from both §5.1\'s faint grey default and a terracotta hand-drawn override — so what a re-run will redraw reads at a glance.',
@@ -88,11 +97,26 @@ const PAINT_HIT = TILE_RADIUS * 1.8;
 const MAX_DRAFT_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
-type Mode = 'place' | 'exits' | 'paint';
+type Mode = 'place' | 'exits' | 'paint' | 'mark';
+
+/**
+ * The four things the canvas can be doing, each with the key that picks it and
+ * the button's label — one list, because a mode was three hand-kept copies:
+ * a toolbar button, a `case` in the hot-key handler, and a line of the "Keys:"
+ * hint. `needsTile` is the one fact that differs between them, written once so
+ * the disabled button and the ignored key cannot drift apart.
+ */
+const MODES: { mode: Mode; key: string; label: string; needsTile?: boolean }[] = [
+    { mode: 'place', key: 'q', label: 'Place' },
+    { mode: 'exits', key: 'w', label: 'Draw exits', needsTile: true },
+    { mode: 'paint', key: 'e', label: 'Paint into section' },
+    { mode: 'mark', key: 'r', label: 'Mark' },
+];
 
 interface PointerState {
-    /** 'tile'/'background' are the place & exits gestures; 'paint' drags the brush. */
-    kind: 'tile' | 'background' | 'paint';
+    /** 'tile'/'background' are the place & exits gestures; 'paint' drags the
+     *  brush, and 'mark' is the marking gesture — a click toggles, a drag paints. */
+    kind: 'tile' | 'background' | 'paint' | 'mark';
     id?: string;
     startX: number;
     startY: number;
@@ -160,6 +184,9 @@ export default function RaceCarsTrackEditor() {
     const [backdrop, setBackdrop] = useState<string | null>(null);
 
     const [mode, setMode] = useState<Mode>('place');
+    // Which of the three marks the brush lays — the marking half of the
+    // toolbar, the way the lane picker is the placing half.
+    const [marker, setMarker] = useState<MarkKind>('grid');
     const [activeSectionId, setActiveSectionId] = useState<string>('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [nextLane, setNextLane] = useState(1);
@@ -206,11 +233,22 @@ export default function RaceCarsTrackEditor() {
                 if (next) setActiveSectionId(next.id);
             };
 
-            switch (event.key.toLowerCase()) {
-                case 'q': setMode('place'); break;
+            const key = event.key.toLowerCase();
+            const picked = MODES.find(candidate => candidate.key === key);
+            if (picked) {
                 // Mirrors the toolbar, which can't draw exits from no tile.
-                case 'w': if (!selected) return; setMode('exits'); break;
-                case 'e': setMode('paint'); break;
+                if (picked.needsTile && !selected) return;
+                setMode(picked.mode);
+                event.preventDefault();
+                return;
+            }
+
+            switch (key) {
+                // The marker keys only move the picker, exactly as 1-3 only move
+                // the lane one — a key never does what its own control wouldn't.
+                case 'g': setMarker('grid'); break;
+                case 'f': setMarker('finish'); break;
+                case 'o': setMarker('oil'); break;
                 case 'a': stepSection(-1); break;
                 case 's': stepSection(1); break;
                 case '1':
@@ -275,6 +313,28 @@ export default function RaceCarsTrackEditor() {
         });
     }, [activeSection]);
 
+    // Marking is the paint brush's gesture over a different list: a click on a
+    // tile toggles the mark, a drag lays it down along the stroke. Add-only on
+    // the drag for the same reason `paint` is a no-op in place — a stroke back
+    // over marked tiles must not stringify the draft into storage per frame.
+    const toggleMark = useCallback((id: string) => {
+        setState(prev => ({ ...prev, [marker]: withMarkToggled(prev, marker, id) }));
+    }, [marker]);
+
+    const paintMark = useCallback((id: string) => {
+        // Add-only, and the state itself unchanged for a tile already marked:
+        // a stroke back over painted ground must not stringify the whole draft
+        // into localStorage per frame (the same reason `paint` is a no-op in
+        // place).
+        setState(prev => (prev[marker].includes(id)
+            ? prev
+            : { ...prev, [marker]: withMarkToggled(prev, marker, id) }));
+    }, [marker]);
+
+    const clearMark = useCallback((kind: MarkKind) => {
+        setState(prev => ({ ...prev, [kind]: [] }));
+    }, []);
+
     const tileIdAt = useCallback((at: { x: number; y: number }): string | null => {
         for (const tile of state.tiles) {
             if (Math.hypot(tile.x - at.x, tile.y - at.y) <= PAINT_HIT) return tile.id;
@@ -317,6 +377,10 @@ export default function RaceCarsTrackEditor() {
             // emptied by the scrub falls back to §5.1's default rule.
             return {
                 ...prev,
+                // A mark on the deleted tile goes with it, for the same reason:
+                // a grid slot naming a tile that isn't there is the very thing
+                // the marks exist to stop (`editorModel.ts`).
+                ...withTileUnmarked(prev, id),
                 tiles: survivors.map(tile => {
                     if (!tile.exits) return tile;
                     const kept = tile.exits.filter(exit => exit !== id);
@@ -336,6 +400,12 @@ export default function RaceCarsTrackEditor() {
             pointerRef.current = paintPointer(event);
             return;
         }
+        if (mode === 'mark') {
+            // Nothing laid on the press: a press that doesn't travel is a click,
+            // and a click on a marked tile takes the mark off again.
+            pointerRef.current = { kind: 'mark', id, startX: event.clientX, startY: event.clientY, moved: false };
+            return;
+        }
         pointerRef.current = { kind: 'tile', id, startX: event.clientX, startY: event.clientY, moved: false };
     }, [mode, paint]);
 
@@ -345,6 +415,12 @@ export default function RaceCarsTrackEditor() {
         svg.setPointerCapture(event.pointerId);
         if (mode === 'paint') {
             pointerRef.current = paintPointer(event);
+            return;
+        }
+        if (mode === 'mark') {
+            // A stroke may start on the road between two tiles and still be
+            // meant to paint the line it runs through.
+            pointerRef.current = { kind: 'mark', startX: event.clientX, startY: event.clientY, moved: false };
             return;
         }
         if (mode === 'exits') { pointerRef.current = null; return; }
@@ -382,15 +458,21 @@ export default function RaceCarsTrackEditor() {
         if (pointer.kind === 'tile' && pointer.id && mode === 'place') {
             const at = artPoint(svg, event);
             if (at) patchTile(pointer.id, { x: Math.round(at.x), y: Math.round(at.y) });
+        } else if (pointer.kind === 'mark' && mode === 'mark') {
+            const at = artPoint(svg, event);
+            const id = at && tileIdAt(at);
+            if (id) paintMark(id);
         }
-    }, [mode, paint, tileIdAt, patchTile]);
+    }, [mode, paint, paintMark, tileIdAt, patchTile]);
 
     const onPointerUp = useCallback(() => {
         const pointer = pointerRef.current;
         pointerRef.current = null;
         if (!pointer || pointer.kind === 'paint' || pointer.moved) return;
         // A press that didn't travel is a click.
-        if (pointer.kind === 'tile' && pointer.id) {
+        if (pointer.kind === 'mark') {
+            if (pointer.id) toggleMark(pointer.id);
+        } else if (pointer.kind === 'tile' && pointer.id) {
             if (mode === 'exits' && selectedId && pointer.id !== selectedId) {
                 toggleExit(selectedId, pointer.id);
             } else if (mode === 'exits' && pointer.id === selectedId) {
@@ -403,7 +485,7 @@ export default function RaceCarsTrackEditor() {
         } else if (pointer.kind === 'background' && mode === 'place' && pointer.at) {
             placeTile(pointer.at);
         }
-    }, [mode, selectedId, toggleExit, togglePinnedExits, placeTile]);
+    }, [mode, selectedId, toggleExit, togglePinnedExits, placeTile, toggleMark]);
 
     const autoConnect = useCallback(() => {
         setState(prev => ({ ...prev, tiles: connectByGeometry(prev) }));
@@ -481,15 +563,40 @@ export default function RaceCarsTrackEditor() {
 
     const sectionName = activeSection ? sectionLabel(activeSection) : 'no section';
 
+    /** What this mode's click does, in words — one arm each rather than a
+     *  four-deep ternary in the markup. */
+    const modeHint = (): string => {
+        switch (mode) {
+            case 'place':
+                return `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`;
+            case 'exits':
+                return selected
+                    ? `Click a tile to add or remove a step from ${selected.id}; click ${selected.id} itself to make its steps its own, so they are written down rather than left to §5.1's rule.`
+                    : 'Select a tile first.';
+            case 'paint':
+                return `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`;
+            case 'mark':
+                return `Click a tile to mark it as ${MARKS[marker].label.toLowerCase()}, or drag to paint a run of them — a line across the road is one stroke. Click a marked tile again to take it off.${marker === 'grid' ? ` The grid is ordered: the first tile marked is P1, and a race seats ${MAX_PLAYERS}.` : ''}`;
+        }
+    };
+
     return (
         <div className="ag-rcedit-page">
             <div className="ag-rcedit-canvas-col">
                 <Section label="Canvas" count={state.tiles.length}>
                     <div className="ag-stack">
                         <div className="ag-rcedit-toolbar">
-                            <button type="button" className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('place')}>Place</button>
-                            <button type="button" className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('exits')} disabled={!selected}>Draw exits</button>
-                            <button type="button" className={`ag-btn ${mode === 'paint' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('paint')}>Paint into section</button>
+                            {MODES.map(({ mode: candidate, label, needsTile }) => (
+                                <button
+                                    key={candidate}
+                                    type="button"
+                                    className={`ag-btn ${mode === candidate ? 'ag-btn--dark' : 'ag-btn--light'}`}
+                                    onClick={() => setMode(candidate)}
+                                    disabled={needsTile && !selected}
+                                >
+                                    {label}
+                                </button>
+                            ))}
                             <div className="ag-rcedit-toolbar-zoom">
                                 <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
                                 <span className="ag-hint">{Math.round(zoom * 100)}%</span>
@@ -506,25 +613,27 @@ export default function RaceCarsTrackEditor() {
                             <select id="rcedit-lane" className="ag-select" value={nextLane} onChange={e => setNextLane(Number(e.target.value))}>
                                 <LaneOptions lanes={activeLanes} />
                             </select>
+                            <label className="ag-field-label" htmlFor="rcedit-mark">Marking</label>
+                            <select id="rcedit-mark" className="ag-select" value={marker} onChange={e => setMarker(e.target.value as MarkKind)}>
+                                {MARK_KINDS.map(kind => (
+                                    <option key={kind} value={kind}>{MARKS[kind].glyph} {MARKS[kind].label}</option>
+                                ))}
+                            </select>
                         </div>
 
                         {/* The one place the hot keys are named, rather than a
                             `title` on each control that only a hover finds. */}
                         <p className="ag-hint">
-                            Keys: <strong>Q</strong> place, <strong>W</strong> draw exits, <strong>E</strong> paint —{' '}
-                            <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the lane, and{' '}
-                            <strong>A</strong>/<strong>S</strong> step back and on through the sections.
+                            Keys: {MODES.map(({ key, label }, index) => (
+                                <React.Fragment key={key}>
+                                    {index > 0 ? ', ' : ''}<strong>{key.toUpperCase()}</strong> {label.toLowerCase()}
+                                </React.Fragment>
+                            ))} — <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the lane,{' '}
+                            <strong>G</strong>/<strong>F</strong>/<strong>O</strong> pick the mark (grid, finish, oil),
+                            and <strong>A</strong>/<strong>S</strong> step back and on through the sections.
                         </p>
 
-                        <p className="ag-hint">
-                            {mode === 'place'
-                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
-                                : mode === 'exits'
-                                    ? (selected
-                                        ? `Click a tile to add or remove a step from ${selected.id}; click ${selected.id} itself to make its steps its own, so they are written down rather than left to §5.1's rule.`
-                                        : 'Select a tile first.')
-                                    : `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`}
-                        </p>
+                        <p className="ag-hint">{modeHint()}</p>
 
                         <EditorCanvas
                             svgRef={svgRef}
@@ -533,6 +642,7 @@ export default function RaceCarsTrackEditor() {
                             backdropHref={backdrop ?? state.artHref}
                             zoom={zoom}
                             mode={mode}
+                            marker={marker}
                             activeSectionId={activeSection?.id ?? ''}
                             selectedId={selectedId}
                             onTilePointerDown={onTilePointerDown}
@@ -591,6 +701,15 @@ export default function RaceCarsTrackEditor() {
                     />
                 )}
 
+                <MarksPanel
+                    state={state}
+                    rows={rows}
+                    marker={marker}
+                    onSetMarker={kind => { setMarker(kind); setMode('mark'); }}
+                    onClearMark={clearMark}
+                    onSetGridBehindFinishLine={on => setState(prev => ({ ...prev, gridBehindFinishLine: on }))}
+                />
+
                 <SectionsPanel
                     state={state}
                     rows={rows}
@@ -619,6 +738,8 @@ interface CanvasProps {
     backdropHref: string;
     zoom: number;
     mode: Mode;
+    /** Which mark the brush is laying — the tiles that carry it ring brighter. */
+    marker: MarkKind;
     activeSectionId: string;
     selectedId: string | null;
     onTilePointerDown: (event: React.PointerEvent, id: string) => void;
@@ -643,7 +764,7 @@ function edgeOriginClass(tile: EditorTile): string {
 // between two zoom states on click, which would fight click-to-place. Here zoom
 // is a continuous control and the container just scrolls to pan.
 function EditorCanvas(props: CanvasProps) {
-    const { svgRef, state, rows, backdropHref, zoom, mode, activeSectionId, selectedId, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
+    const { svgRef, state, rows, backdropHref, zoom, mode, marker, activeSectionId, selectedId, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
     const { width, height } = state.viewBox;
 
     // Both lookups built once per render rather than a `.find` per exit: at 214
@@ -655,6 +776,9 @@ function EditorCanvas(props: CanvasProps) {
         () => new Set(state.sections.filter(section => section.stops > 0).map(section => section.id)),
         [state.sections],
     );
+    // P1, P2, … by tile id: the grid is an ordered list, and the order is the
+    // only part of it an author cannot read off the canvas without a badge.
+    const slots = useMemo(() => gridSlots(state), [state]);
 
     return (
         <div className="ag-rcedit-canvas">
@@ -703,14 +827,36 @@ function EditorCanvas(props: CanvasProps) {
                         isTarget ? 'ag-rcedit-tile--target' : '',
                     ].filter(Boolean).join(' ');
                     const row = rows.get(tile.id);
+                    // Every mark the tile carries, ringed outwards so a tile
+                    // that is two things (a finish-line tile with oil on it)
+                    // still reads as both, and badged underneath with the grid
+                    // slot or the mark's glyph.
+                    const marks = marksOn(state, tile.id);
+                    const badge = marks
+                        .map(kind => (kind === 'grid' ? `P${slots.get(tile.id)}` : MARKS[kind].glyph))
+                        .join(' ');
                     return (
                         <g key={tile.id} onPointerDown={event => onTilePointerDown(event, tile.id)}>
+                            {marks.map((kind, index) => (
+                                <circle
+                                    key={kind}
+                                    className={`ag-rcedit-mark ag-rcedit-mark--${kind}${mode === 'mark' && kind === marker ? ' ag-rcedit-mark--live' : ''}`}
+                                    cx={tile.x}
+                                    cy={tile.y}
+                                    r={TILE_RADIUS + 2.5 + index * 2.5}
+                                />
+                            ))}
                             <circle className={className} cx={tile.x} cy={tile.y} r={TILE_RADIUS} />
                             {/* The derived row, not an authored one — this is
                                 where a skewed sync line shows itself. */}
                             <text className="ag-rcedit-tile-label" x={tile.x} y={tile.y - TILE_RADIUS - 2} textAnchor="middle">
                                 {row === undefined ? `·:${tile.lane}` : `${row}:${tile.lane}`}
                             </text>
+                            {badge && (
+                                <text className="ag-rcedit-tile-label" x={tile.x} y={tile.y + TILE_RADIUS + 10} textAnchor="middle">
+                                    {badge}
+                                </text>
+                            )}
                         </g>
                     );
                 })}
@@ -855,6 +1001,72 @@ function SelectedTilePanel({ state, tile, row, onPatch, onTogglePinned, onDelete
                     </button>
                     <button type="button" className="ag-btn ag-btn--danger" onClick={onDelete}>Delete tile</button>
                 </div>
+            </div>
+        </Section>
+    );
+}
+
+function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBehindFinishLine }: {
+    state: EditorState;
+    rows: Map<string, number>;
+    marker: MarkKind;
+    onSetMarker: (kind: MarkKind) => void;
+    onClearMark: (kind: MarkKind) => void;
+    onSetGridBehindFinishLine: (on: boolean) => void;
+}) {
+    /** How many are marked — and, for the grid alone, how many it still wants. */
+    const counted = (kind: MarkKind): string => (kind === 'grid'
+        ? `${state.grid.length} of ${MAX_PLAYERS}, P1 first`
+        : `${state[kind].length} marked`);
+
+    /** A mark's tiles as an author reads them back: the tile, and the row it derived to. */
+    const listed = (kind: MarkKind): string => state[kind]
+        .map((id, index) => {
+            const row = rows.get(id);
+            const at = row === undefined ? id : `${id} (row ${row})`;
+            return kind === 'grid' ? `P${index + 1} ${at}` : at;
+        })
+        .join(', ');
+
+    return (
+        <Section label="Marks">
+            <div className="ag-stack">
+                <p className="ag-hint">
+                    What sits on the road, over and above the road itself. Pick one here or with{' '}
+                    <strong>G</strong>/<strong>F</strong>/<strong>O</strong>, then click tiles on the canvas — a drag
+                    paints a run of them, and clicking a marked tile takes the mark off.
+                </p>
+
+                {MARK_KINDS.map(kind => (
+                    <div key={kind} className={`ag-rcedit-section ag-stack${marker === kind ? ' ag-rcedit-section--active' : ''}`}>
+                        <p className="ag-hint">
+                            <strong>{MARKS[kind].glyph} {MARKS[kind].label}</strong>
+                            {' — '}{counted(kind)}. {MARKS[kind].note}
+                        </p>
+                        <p className="ag-hint">{listed(kind) || 'Nothing marked yet.'}</p>
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetMarker(kind)}>
+                                {marker === kind ? 'Marking this' : 'Mark this'}
+                            </button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onClearMark(kind)} disabled={state[kind].length === 0}>
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                ))}
+
+                <OptionToggleRow
+                    title="The grid sits behind the finish line"
+                    description="For a circuit whose cars line up back down the straight from the line, so the line doubles as the start: the first time across it doesn't count as a lap."
+                    on={state.gridBehindFinishLine}
+                    onToggle={() => onSetGridBehindFinishLine(!state.gridBehindFinishLine)}
+                />
+
+                <p className="ag-hint">
+                    The starting grid is read by a race today. The finish line, the oil and the setting above are printed
+                    into the track file and nothing reads them yet — §15 still counts a lap at the derived row 0, and
+                    §14&apos;s slicks are still laid only by spins and heavy braking.
+                </p>
             </div>
         </Section>
     );
