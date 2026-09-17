@@ -890,7 +890,7 @@ Ordered by what each one buys against what it costs.
 1. **A second circuit — landed.** `tracks/anglet.ts`: **Anglet Chambre
    d'Amour**, a seven-corner street course transcribed off a real board
    (`art-masters/racecars/anglet.png`), two of whose chicanes require more
-   than one stop — one of them three, the game's tightest corner yet. Registered in `TRACKS`, and reachable in play: §6's
+   than one stop. Registered in `TRACKS`, and reachable in play: §6's
    setup screen offers a Circuit picker built from `TRACK_LIST`, and
    `trackId` travels through both creation paths the way `distance` and
    `spec` already did (`readRaceSettings`, `RaceCarsInvitationRequest`, the
