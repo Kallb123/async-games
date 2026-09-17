@@ -845,17 +845,37 @@ The circuit is 78 rows long. Fitted to a 400px column, a row is about five
 pixels, which is fine for *where is everybody* and useless for *where can I go*.
 
 **One surface, and it is the one three other games already use.** The full
-circuit inside `ag-board-frame` with `BoardZoom` over it, at the 220–260% the
-other boards zoom to, with only the legal destinations tappable. Outbreak, World
-Domination and Settlements & Cities all solve "board too big for a phone" that
-way and none of them has ever needed a second cropped copy.
+circuit inside `ag-board-frame` with `BoardZoom` over it, with only the legal
+destinations tappable. Outbreak, World Domination and Settlements & Cities all
+solve "board too big for a phone" that way and none of them has ever needed a
+second cropped copy.
 
-If a playtest proves that 78 rows at 260% still cannot be tapped reliably, the
-answer is **a `window?: { fromRow, toRow }` prop on the same board component**
-that narrows the `viewBox` to the rows around the viewer's car and drops the
-art — same component, same file, same markup, a different rectangle. It is not
-a second component, and it does not get built before a playtest says it is
-needed.
+Playtesting proved that 78 rows at 240% still cannot be tapped reliably, and
+the answer was **to deepen the shared control rather than crop the board**.
+`BoardZoom` now steps fit → 240% → 640% (its `maxWidth` prop, which only this
+board sets — every other board keeps the default second step of twice its
+first), and takes a pinch, or a trackpad's ctrl-wheel, to anything in between.
+Both keep the point the player was looking at under the same spot on screen.
+Panning stays the pane's own scrolling.
+
+Two things on the space layer do the rest of the work, and neither one needs a
+second copy of the board:
+
+- **The lozenges are a veil, not a floor.** Every space is drawn at
+  `--rc-space-veil` of its tarmac tint over the art (26%), so the circuit that
+  was painted underneath reads through the grid instead of being hidden by it.
+  A corner's kerb stroke and the start/finish row stay the marks they were.
+- **The legal destinations pulse.** `.ag-rc-space--valid` breathes its ring
+  (`ag-rc-choose`, stroke width and opacity only — the shared `ag-pulse` fades
+  a whole element, which would take the art back out with it), and those spaces
+  are drawn last so a neighbour never half-paints over the ring. Stilled under
+  `prefers-reduced-motion`.
+
+If even that is not enough, the fallback on the table remains **a
+`window?: { fromRow, toRow }` prop on the same board component** that narrows
+the `viewBox` to the rows around the viewer's car and drops the art — same
+component, same file, same markup, a different rectangle. It is not a second
+component, and it does not get built before a playtest says it is needed.
 
 ---
 

@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Race Cars: get right in on the track",
+                detail: "The circuit is a big board with small spaces, so the zoom pill now goes a step further than it used to — and you can pinch to zoom anywhere in between, on any board that has one. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
+                game: "racecars",
+            },
+            {
                 title: "Banned Islet shows which treasure is running out of island",
                 detail: "The \"Tiles left\" box on the board is now the four treasures, two by two — each showing how many of its two tiles are still above water, and turning red the moment one is down to its last. That is the count that actually ends the game: let both tiles of a treasure you haven't captured go under and the team loses, however much dry land is left over. A treasure already aboard ticks off instead. Your match review still charts the island shrinking, tile by tile, turn by turn.",
                 game: "bannedislet",
@@ -107,11 +112,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The home screen fills a big screen",
                 detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and the two big buttons move into a panel of their own on the right. On a phone it is exactly the screen it was.",
-            },
-            {
-                title: "See what a Settlements & Cities roll paid out",
-                detail: "The dice that used to sit in the corner of the board are now a panel under it, and it says who collected what: \"Rolled 8 — You +2🪵 +1🌾, Bob +1⛏️\". A 7 names the cards it cost each player instead. The same breakdown is in the turn history and in the recap you get when it's your move again, so a roll you weren't there for still tells you who got rich.",
-                game: "settlementsandcities",
             },
         ],
     },

@@ -1605,8 +1605,17 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
 /* Boards wider than the app column scroll inside the frame, at whatever width
-   BoardZoom's toggle has set. */
-.ag-board-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+   BoardZoom's control has set. `touch-action` keeps one finger panning the
+   board while handing the two-finger gesture to BoardZoom, so a pinch zooms the
+   circuit rather than the whole page; `overscroll-behavior` stops a pan that
+   reaches the edge of the board from carrying on into the page behind it. */
+.ag-board-scroll {
+    overflow: auto;
+    border-radius: 12px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior: contain;
+}
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
     position: absolute;
@@ -4542,6 +4551,10 @@ button.ag-tt-ticket { cursor: pointer; }
     --rc-tarmac: oklch(0.44 0.01 250);
     --rc-tarmac-corner: oklch(0.5 0.02 250);
     --rc-kerb: oklch(0.62 0.18 25);
+    /* How much of a space's tarmac tint is painted over the track art beneath
+       it. One number for the whole layer: the lozenges exist to say where a car
+       may stand, not to hide the circuit that was drawn under them. */
+    --rc-space-veil: 26%;
 }
 .ag-game--racecars .ag-game-topbar { background: var(--rc-night); }
 .ag-game--racecars .ag-scorestrip { background: var(--rc-night-2); }
@@ -4571,25 +4584,46 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 
 /* A space is one lozenge, and they are sized to tile into the road — which is
-   why nothing draws a tarmac ribbon under them. Its legal/illegal state is one
-   class on the `<rect>` (§23.1): no ring, no per-space tooltip. */
+   why nothing draws a tarmac ribbon under them, and why the tint they carry is
+   a veil rather than a floor: the track art is what the player is looking at.
+   Its legal/illegal state is one class on the `<rect>` (§23.1) — its own stroke,
+   not a `ClickableMapNode`'s circle round it, and no per-space tooltip. */
 .ag-rc-space {
-    fill: var(--rc-tarmac);
-    stroke: rgba(255, 255, 255, 0.1);
+    fill: color-mix(in oklch, var(--rc-tarmac) var(--rc-space-veil), transparent);
+    stroke: rgba(255, 255, 255, 0.24);
     stroke-width: 0.8;
 }
 /* The corner bands of §10, legible without a legend. The kerb is the corner;
    how many of its stops a car has banked is the pip row beside that car. */
-.ag-rc-space--corner { fill: var(--rc-tarmac-corner); stroke: var(--rc-kerb); stroke-width: 1.4; }
-/* Row 0 — the start/finish line. */
-.ag-rc-space--line { fill: oklch(0.78 0.01 250); }
-.ag-rc-space--valid {
-    fill: color-mix(in oklch, var(--ag-gold) 55%, var(--rc-tarmac));
-    stroke: var(--ag-gold);
-    stroke-width: 2.5;
-    cursor: pointer;
+.ag-rc-space--corner {
+    fill: color-mix(in oklch, var(--rc-tarmac-corner) var(--rc-space-veil), transparent);
+    stroke: color-mix(in oklch, var(--rc-kerb) 85%, transparent);
+    stroke-width: 1.4;
 }
-.ag-rc-space--valid:hover { fill: var(--ag-gold); }
+/* Row 0 — the start/finish line. */
+.ag-rc-space--line { fill: color-mix(in oklch, oklch(0.78 0.01 250) 50%, transparent); }
+
+/* The spaces this move may finish on. The ring breathes rather than sitting
+   still: three lozenges out of 214 are easy to lose on a circuit this size, and
+   a moving edge is what says "pick one of these" without a legend. `ag-pulse`
+   is the app's shared breath, but it fades a whole element — here only the ring
+   may move, because the art the fill now lets through has to stay readable. */
+@keyframes ag-rc-choose {
+    0%, 100% { stroke-width: 2.4; stroke-opacity: 1; }
+    50% { stroke-width: 4.8; stroke-opacity: 0.45; }
+}
+.ag-rc-space--valid {
+    fill: color-mix(in oklch, var(--ag-gold) 40%, transparent);
+    stroke: var(--ag-gold);
+    stroke-width: 2.4;
+    cursor: pointer;
+    animation: ag-rc-choose 1.3s ease-in-out infinite;
+}
+.ag-rc-space--valid:hover { fill: color-mix(in oklch, var(--ag-gold) 72%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-rc-space--valid { animation: none; stroke-width: 3.2; }
+}
 
 /* §19.1's car: the shared silhouette, filled with the driver's own colour and
    turned to the heading of the space it stands on. The stroke is painted under

@@ -931,7 +931,10 @@ description or theme colour is exactly what those two files exist to prevent.
     its heading), `CollapsingSection` (one that grows and shrinks) and
     `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
     placeholders and its empty message). The node-and-edge map boards (World
-    Domination, Outbreak) share a kit here too: `BoardZoom`, `ClickableMapNode`,
+    Domination, Outbreak) share a kit here too: `BoardZoom` (the zoom pill — fit,
+    in, and a deeper step a board may set with `maxWidth` — plus pinch and
+    ctrl-wheel zoom over the scrolling pane, anchored so the part of the board
+    under the fingers stays there), `ClickableMapNode`,
     `MapLabel`, `MapEdges` (the adjacency lines, with cross-map edges drawn
     as labelled stubs off each map edge rather than a line across the board) and
     `MapLabelLayer` (every name a board prints on its art, placed in one pass so

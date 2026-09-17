@@ -71,6 +71,11 @@ out. A second copy is the signal to extract the first one.
   boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
   `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
   as labelled stubs off each edge rather than a line across the whole board).
+  `BoardZoom` is every board's zoom and pan — a pill stepping fit → in → a
+  deeper step a board may set with `maxWidth`, plus pinch and ctrl-wheel zoom,
+  both anchored so the part of the board under the fingers stays put. A board
+  whose pieces are too small to tap asks it for a deeper step; it never grows
+  its own gesture handling or a cropped second copy of itself.
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands
   on another name, on a node, on a marker beside a node, or off the map — tell

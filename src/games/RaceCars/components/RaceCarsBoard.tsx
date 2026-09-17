@@ -84,9 +84,10 @@ interface RaceCarsBoardProps {
  * deliberately no second cropped copy of it for a phone — Outbreak, World
  * Domination and Settlements & Cities all solve "board too big for a column"
  * with `BoardZoom` inside `ag-board-frame` and none of them has needed one.
- * If a playtest proves 78 rows still can't be tapped, §19.2's answer is a
- * `window` prop narrowing *this* component's viewBox, and it is not built
- * until a playtest asks for it.
+ * 78 rows did prove too many to tap at one zoom step, and the answer was to
+ * give the shared `BoardZoom` a second step and a pinch rather than to crop a
+ * phone-only copy of the circuit: every board gets the deeper zoom, and this
+ * one still draws the whole track.
  *
  * The spaces are SVG over the art rather than drawn by it (§23.6), so a space's
  * position and its drawing can never drift apart. They are plain `<rect>`s and
@@ -140,10 +141,22 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
 
     const startLine = anchorOn(0);
 
+    // The tappable spaces drawn last, so the ring pulsing round one is never
+    // half-painted over by the lozenge next to it. Same single loop below —
+    // only the order changes, and only while a move is being picked.
+    const spaces = validSpaces.size === 0
+        ? track.geometry
+        : [...track.geometry].sort((a, b) =>
+            Number(validSpaces.has(spaceKey(a.row, a.lane))) - Number(validSpaces.has(spaceKey(b.row, b.lane))));
+
     return (
         <div className="ag-board-frame ag-racecars-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
-            <BoardZoom zoomWidth="240%">
+            {/* The circuit is 2835 units wide with 23-unit spaces on it, so one
+                zoom step still leaves a space a few pixels across on a phone.
+                The deep step is what makes one tappable; a pinch reaches the
+                same ceiling by hand. */}
+            <BoardZoom zoomWidth="240%" maxWidth="640%">
                 <svg viewBox={`0 0 ${width} ${height}`}>
                     {/* The circuit render of §23.6 — tarmac, kerbs, run-off and
                         the painted corner boundaries. It lands in PR 9; until
@@ -155,7 +168,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                         preserveAspectRatio="xMidYMid slice"
                     />
 
-                    {track.geometry.map(space => {
+                    {spaces.map(space => {
                         const key = spaceKey(space.row, space.lane);
                         const isValid = validSpaces.has(key);
                         const corner = cornerAt(track, space.row, space.lane);
