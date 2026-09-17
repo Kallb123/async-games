@@ -99,7 +99,7 @@ export const MARKS: Record<MarkKind, { label: string; glyph: string; note: strin
     finish: {
         label: "Finish line",
         glyph: "🏁",
-        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own.",
+        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own. §15 counts the lap at the earliest row of them, so every car crosses in the same place.",
     },
     oil: {
         label: "Oil",

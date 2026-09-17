@@ -21,7 +21,7 @@ import { randomInt } from "@/utils/games/random";
 import {
     cornerAt,
     cornerExits,
-    crossesStartLine,
+    crossesFinishLine,
     driveableSteps,
     gearDef,
     MIN_MOVE_STEPS,
@@ -584,13 +584,17 @@ export function resolveArrival(
     for (let step = 1; step <= distance; step++) {
         const to = path[step];
 
-        // The finish line (§15). A lap is complete on crossing from the last
-        // row to row 0, and the race ends the instant a car completes the
-        // distance — distance past the line is not measured, so nothing
-        // further along the path is resolved or charged (§4.1, §18).
-        if (crossesStartLine(track, path[step - 1].row, to.row)) {
+        // The finish line (§15). A lap is complete on crossing it, wherever the
+        // circuit paints it (`lapBoundary`), and the race ends the instant a car
+        // completes the distance — distance past the line is not measured, so
+        // nothing further along the path is resolved or charged (§4.1, §18).
+        if (crossesFinishLine(track, path[step - 1], to)) {
             lapsCompleted += 1;
-            events.push({ type: 'lap', lapsCompleted });
+            // On a circuit whose grid sits behind the line, the field starts a
+            // lap short (`startingLaps`) and this first crossing only brings it
+            // to nought: the race has started rather than a lap been completed,
+            // so there is no lap to announce and none to finish on.
+            if (lapsCompleted >= 1) events.push({ type: 'lap', lapsCompleted });
             if (lapsCompleted >= state.laps) {
                 events.push({ type: 'finish' });
                 const end = path[distance];

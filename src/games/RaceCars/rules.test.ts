@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, TRACKS } from "./board";
+import { lapBoundary, MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, startingLaps, TRACKS } from "./board";
 import {
     classification,
     conservativeTurn,
@@ -113,6 +113,8 @@ function drive(
 }
 
 const key = (space: RaceCarsSpace) => `${space.row}:${space.lane}`;
+/** Steps between two rows of the 14-row fixture below, the way a car drives. */
+const rowsApart = (from: RaceCarsSpace, to: RaceCarsSpace) => ((to.row - from.row) % 14 + 14) % 14;
 
 describe("reach (§9)", () => {
     it("reaches exactly the spaces N steps away, and nothing else", () => {
@@ -475,6 +477,105 @@ describe("laps and the ending (§4.1, §15)", () => {
         const arrival = drive(race({ a: { row: 70, lane: 1 } }, { laps: 1 }), 'a', 25);
         expect(arrival).toMatchObject({ row: 17, finished: true, tyres: 5, spun: false });
         expect(arrival.events.filter(event => event.type === 'overshoot')).toEqual([]);
+    });
+});
+
+// ─── A painted line, and a grid drawn behind it (§15) ────────────────────────
+//
+// Fourteen rows of plain three-lane road, cut so the line can be painted off
+// row 0: rows 0-3 are the grid straight, rows 4-13 the lap. The flag drops on
+// rows 0-2 and the line is painted across row 3, so every car starts **behind**
+// it — the case `gridBehindFinishLine` exists for, where counting the first
+// crossing would credit the whole field a lap three spaces into the race.
+const LINE_SECTIONS = [
+    { id: 'gridstraight', name: 'Grid Straight', length: 4, lanes: 3 as const, corner: null },
+    { id: 'lap', name: 'Lap', length: 10, lanes: 3 as const, corner: null },
+];
+const PAINTED_GRID = Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
+    row: 2 - Math.floor(slot / 2),
+    lane: slot % 2 === 0 ? 1 : 3,
+}));
+const PAINTED_LINE = [1, 2, 3].map(lane => ({ row: 3, lane }));
+
+/** The circuit above, with the line painted and the grid declared behind it. */
+const BEHIND_LINE: RaceCarsTrack = testTrack(LINE_SECTIONS, {
+    id: 'behindline',
+    name: 'Behind The Line',
+    grid: PAINTED_GRID,
+    finish: PAINTED_LINE,
+    gridBehindFinishLine: true,
+});
+/** The same circuit and the same painted line, with the grid in front of it. */
+const AHEAD_OF_LINE: RaceCarsTrack = testTrack(LINE_SECTIONS, {
+    id: 'aheadofline',
+    name: 'Ahead Of The Line',
+    grid: PAINTED_GRID,
+    finish: PAINTED_LINE,
+});
+TRACKS[BEHIND_LINE.id] = BEHIND_LINE;
+TRACKS[AHEAD_OF_LINE.id] = AHEAD_OF_LINE;
+afterAll(() => {
+    delete TRACKS[BEHIND_LINE.id];
+    delete TRACKS[AHEAD_OF_LINE.id];
+});
+
+describe("the painted finish line (§15)", () => {
+    it("counts the lap where the line is painted, not at row 0", () => {
+        expect(lapBoundary(BEHIND_LINE)).toBe(3);
+        // A circuit that paints no line still counts its lap at row 0.
+        expect(lapBoundary(testTrack(LINE_SECTIONS))).toBe(0);
+    });
+
+    it("crosses at the painted row, whichever lane takes the step", () => {
+        const at = (row: number, lane: number) => ({ row, lane });
+        const on = (from: RaceCarsSpace, to: RaceCarsSpace) =>
+            drive(race({ a: from }, { trackId: AHEAD_OF_LINE.id, laps: 9 }), 'a', rowsApart(from, to));
+        // Row 1 to row 4 passes row 3, which is the line.
+        expect(on(at(1, 1), at(4, 1)).lapsCompleted).toBe(1);
+        // Row 0 to row 2 stops short of it.
+        expect(on(at(0, 1), at(2, 1)).lapsCompleted).toBe(0);
+        // Lane 3 banks its lap on the same row as lane 1 does.
+        expect(on(at(1, 3), at(4, 3)).lapsCompleted).toBe(1);
+    });
+
+    it("counts the first crossing for a grid in front of the line", () => {
+        const arrival = drive(race({ a: { row: 1, lane: 1 } }, { trackId: AHEAD_OF_LINE.id, laps: 2 }), 'a', 3);
+        expect(arrival).toMatchObject({ lapsCompleted: 1, finished: false });
+        expect(arrival.events).toContainEqual({ type: 'lap', lapsCompleted: 1 });
+    });
+});
+
+describe("a grid drawn behind the finish line (§15)", () => {
+    it("seats the field a lap short, so the first crossing starts the race", () => {
+        expect(startingLaps(BEHIND_LINE)).toBe(-1);
+        expect(startingLaps(AHEAD_OF_LINE)).toBe(0);
+    });
+
+    it("does not bank a lap on the first pass, and does not announce one", () => {
+        const state = race({ a: { row: 1, lane: 1, lapsCompleted: -1 } },
+            { trackId: BEHIND_LINE.id, laps: 1 });
+        const arrival = drive(state, 'a', 3);
+        expect(arrival).toMatchObject({ row: 4, lapsCompleted: 0, finished: false });
+        expect(arrival.events.filter(event => event.type === 'lap')).toEqual([]);
+    });
+
+    it("banks the lap on the second pass, and ends the race there", () => {
+        // Out of the grid straight and round to the line again: the crossing
+        // that counts, and on a one-lap race the one that takes the flag.
+        const state = race({ a: { row: 4, lane: 1, lapsCompleted: 0 } },
+            { trackId: BEHIND_LINE.id, laps: 1 });
+        const arrival = drive(state, 'a', 13);
+        expect(arrival).toMatchObject({ row: 3, lapsCompleted: 1, finished: true });
+        expect(arrival.events).toContainEqual({ type: 'lap', lapsCompleted: 1 });
+        expect(arrival.events).toContainEqual({ type: 'finish' });
+    });
+
+    it("leaves a car that has not reached the line behind one that has", () => {
+        const state = race({
+            a: { row: 1, lane: 1, lapsCompleted: -1 },
+            b: { row: 5, lane: 1, lapsCompleted: 0 },
+        }, { trackId: BEHIND_LINE.id });
+        expect(recomputeRoundOrder(state)).toEqual(['b', 'a']);
     });
 });
 

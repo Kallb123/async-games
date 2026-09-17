@@ -1063,9 +1063,10 @@ function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBe
                 />
 
                 <p className="ag-hint">
-                    The starting grid is read by a race today. The finish line, the oil and the setting above are printed
-                    into the track file and nothing reads them yet — §15 still counts a lap at the derived row 0, and
-                    §14&apos;s slicks are still laid only by spins and heavy braking.
+                    The grid and the finish line are both read by a race: §15 counts the lap at the earliest row the line
+                    is painted on — one row for the whole circuit, so cars level across the road bank their laps together
+                    — or at the derived row 0 where no line is painted. Oil is still printed and unread; §14&apos;s slicks
+                    are laid only by spins and heavy braking.
                 </p>
             </div>
         </Section>

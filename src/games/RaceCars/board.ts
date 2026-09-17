@@ -116,9 +116,10 @@ export interface RaceCarsTrack {
      * A line is a set of spaces rather than a row because a real one is painted
      * wherever the art puts it: a lane that takes the short way round carries it
      * on a different row from the lane beside it, and a line drawn on the skew
-     * sits on several. **Authoring data only for now** — §15 still counts a lap
-     * at row 0 (`crossesStartLine`), so this is what an author has drawn and not
-     * yet what a race reads.
+     * sits on several. What §15 reads off it is one row — see `lapBoundary` for
+     * which, and why a set of spaces still earns its place. Left out, the lap is
+     * counted at row 0, which is where every circuit drawn before the line could
+     * be painted has it.
      */
     finish?: RaceCarsSpace[];
     /**
@@ -127,14 +128,14 @@ export interface RaceCarsTrack {
      *
      * A circuit whose grid is drawn back down the straight from the line — the
      * line then doubling as the start — would otherwise credit every car a lap
-     * within a few rows of the flag dropping. **Authoring data only for now**,
-     * for the same reason as `finish`.
+     * within a few rows of the flag dropping. Read once, at `startingLaps`,
+     * which seats such a field a lap short of the line rather than on it.
      */
     gridBehindFinishLine?: boolean;
     /**
      * Spaces the circuit paints oil on, if any.
      *
-     * **Authoring data only for now**: §14's slicks are still laid by spins and
+     * **Authoring data only**: §14's slicks are still laid by spins and
      * heavy braking alone, and nothing in a race reads this list. It is here so
      * that a circuit drawn with a permanently greasy patch can say so once, in
      * the file it is drawn into, rather than that being redrawn later.
@@ -406,6 +407,8 @@ interface TrackIndex {
     byKey: Map<string, RaceCarsTrackSpace>;
     byRow: Map<number, RaceCarsTrackSpace[]>;
     byCorner: Map<string, RaceCarsTrackSpace[]>;
+    /** The row §15 counts a lap at — see `lapBoundary`. */
+    lapBoundary: number;
 }
 
 const TRACK_INDEX = new WeakMap<RaceCarsTrack, TrackIndex>();
@@ -433,7 +436,7 @@ function indexOf(track: RaceCarsTrack): TrackIndex {
     // free space to put a spun car back on.
     for (const corner of byCorner.values()) corner.sort((a, b) => b.row - a.row || a.lane - b.lane);
 
-    const built: TrackIndex = { byKey, byRow, byCorner };
+    const built: TrackIndex = { byKey, byRow, byCorner, lapBoundary: boundaryRow(track) };
     TRACK_INDEX.set(track, built);
     return built;
 }
@@ -507,20 +510,76 @@ export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): read
 }
 
 /**
- * Whether a step from `fromRow` to `toRow` carries the car over the start line,
+ * The one row §15 counts a lap at: the **earliest** row the circuit paints its
+ * finish line on, or row 0 where it paints none.
+ *
+ * `track.finish` is a set of spaces because a painted line really does sit on
+ * several rows — a lane taking the short way round a corner carries it on its
+ * own, and a line drawn on the skew crosses the road diagonally. The rule reads
+ * one row off that set all the same, and deliberately the lowest, for two
+ * reasons:
+ *
+ * - **A lap can only be counted once.** Were each lane to complete its lap at
+ *   its own painted row, a car crossing in the lane whose row comes first and
+ *   then changing into one whose row comes later would cross a second time and
+ *   bank a second lap, a few spaces after the first.
+ * - **Every car completes its lap at the same place.** A line that counts per
+ *   lane hands the lanes it reaches first a head start worth the skew of the
+ *   line, every lap, for nothing either driver did.
+ *
+ * Row 0 is the fallback rather than a special case: it is where the lap has
+ * always been counted, and where a circuit that paints no line still has its
+ * first section begin.
+ */
+function boundaryRow(track: RaceCarsTrack): number {
+    if (!track.finish?.length) return 0;
+    return Math.min(...track.finish.map(space => space.row));
+}
+
+/** The row this circuit counts a lap at (§15) — `boundaryRow`, memoised. */
+export function lapBoundary(track: RaceCarsTrack): number {
+    return indexOf(track).lapBoundary;
+}
+
+/**
+ * Whether a step from `from` to `to` carries the car over the finish line,
  * completing a lap (§15).
  *
- * Not `toRow === 0`: a lane with no space on row 0 steps straight over the line
- * from row 77 to row 1, and a lap that only counts when a car lands exactly on
- * it is a lap that circuit can never complete. The start line is a section
- * boundary — a sync line, where every lane is level (`tracks/sections.ts`) — so
- * a step either crosses it or does not, whichever lane takes it.
+ * Not "lands on the boundary row": a lane with no space on that row steps
+ * straight over the line from row 77 to row 1, and a lap that only counts when
+ * a car lands exactly on it is a lap that circuit can never complete. So the
+ * question is asked as "walking forward from where it stood, does it reach the
+ * line at or before it reaches where it stopped".
+ *
+ * Whichever lane takes the step: the boundary is one row for the whole circuit
+ * (`boundaryRow`), so two cars level across the road complete their laps on the
+ * same step rather than a lane at a time.
  */
-export function crossesStartLine(track: RaceCarsTrack, fromRow: number, toRow: number): boolean {
-    // A car standing on row 0 is on the line, not behind it, and one step can
-    // never carry it the whole lap round to it again.
-    if (fromRow === 0) return false;
-    return rowsBetween(track, fromRow, 0) <= rowsBetween(track, fromRow, toRow);
+export function crossesFinishLine(track: RaceCarsTrack, from: RaceCarsSpace, to: RaceCarsSpace): boolean {
+    const boundary = lapBoundary(track);
+    // A car standing on the line is over it already, not behind it, and one
+    // step can never carry it the whole lap round to it again.
+    if (from.row === boundary) return false;
+    return rowsBetween(track, from.row, boundary) <= rowsBetween(track, from.row, to.row);
+}
+
+/**
+ * The laps a car is credited with as it is seated on the grid (§5.2, §15).
+ *
+ * Zero, except on a circuit whose grid is drawn **behind** its finish line,
+ * where the flag drops a few spaces short of the line and the first crossing is
+ * the start of lap 1 rather than the end of it. Such a field starts one lap
+ * short — so the first crossing brings it to nought laps completed, the lap it
+ * then drives is the first that counts, and the race still ends on the crossing
+ * that banks `laps`.
+ *
+ * A lap short rather than a flag on each car, because every number §15 works in
+ * is already this one: track order sorts on it, `rowsCovered` measures progress
+ * with it, and a car yet to reach the line for the first time genuinely is a
+ * lap's worth of progress behind one sitting on it.
+ */
+export function startingLaps(track: RaceCarsTrack): number {
+    return track.gridBehindFinishLine ? -1 : 0;
 }
 
 /**

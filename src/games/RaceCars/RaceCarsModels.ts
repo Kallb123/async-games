@@ -27,6 +27,7 @@ import {
     readRaceSettings,
     spaceKey,
     specDef,
+    startingLaps,
     trackById,
 } from "./board";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
@@ -209,7 +210,9 @@ export function buildInitialRaceCarsState(
             raceNumber: slot + 1,
             row: track.grid[slot].row,
             lane: track.grid[slot].lane,
-            lapsCompleted: 0,
+            // Nought, or a lap short on a circuit that lines its grid up behind
+            // the finish line, where the first crossing starts the race (§15).
+            lapsCompleted: startingLaps(track),
             gear: 0,
             tyres: spec.tyres,
             brakes: spec.brakes,

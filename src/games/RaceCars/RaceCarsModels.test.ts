@@ -17,6 +17,8 @@ import {
     DEFAULT_TRACK_ID,
 } from "./board";
 import { mongoMap } from "@/utils/games/mongoMaps";
+import { testTrack } from "./testFixtures";
+import { TRACKS } from "./board";
 import type { IRaceCarsPlayerState } from "./rules";
 
 const NAMES = { u1: "Alice", u2: "Bob", u3: "Carol" };
@@ -25,6 +27,34 @@ const SPRINT = { trackId: DEFAULT_TRACK_ID, distance: "sprint", spec: "balanced"
 const TRACK = trackById(DEFAULT_TRACK_ID);
 
 describe("buildInitialRaceCarsState — the grid (§6)", () => {
+    it("seats a grid drawn behind the finish line a lap short (§15)", () => {
+        // Rows 0-2 hold the grid, the line is painted across row 3: the field
+        // starts behind it, so its first crossing starts lap 1 rather than
+        // ending it, and `lapsCompleted` counts from a lap short of nought.
+        const behind = testTrack([
+            { id: "gridstraight", name: "Grid Straight", length: 4, lanes: 3, corner: null },
+            { id: "lap", name: "Lap", length: 10, lanes: 3, corner: null },
+        ], {
+            id: "behindlinegrid",
+            grid: Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
+                row: 2 - Math.floor(slot / 2),
+                lane: slot % 2 === 0 ? 1 : 3,
+            })),
+            finish: [1, 2, 3].map(lane => ({ row: 3, lane })),
+            gridBehindFinishLine: true,
+        });
+        TRACKS[behind.id] = behind;
+        try {
+            const state = buildInitialRaceCarsState(TURN_ORDER, { ...SPRINT, trackId: behind.id });
+            for (const userId of TURN_ORDER) {
+                expect(mongoMap(state.players).get(userId)!.lapsCompleted).toBe(-1);
+            }
+        } finally {
+            delete TRACKS[behind.id];
+        }
+    });
+
+
     it("deals the field into §5.2's staggered grid slots, P1 first", () => {
         const state = buildInitialRaceCarsState(TURN_ORDER, SPRINT);
 

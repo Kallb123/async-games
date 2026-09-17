@@ -136,7 +136,9 @@ client-only `isAdmin` dead end the rest of `/admin` uses.
 ### Why it exists
 
 A Race Cars circuit is a graph of tiles (see
-[`race-cars.md`](./games/race-cars.md) §5.1): every tile carries its own
+[`race-cars.md`](./games/race-cars.md) §5.1, and
+[`race-cars-tracks.md`](./games/race-cars-tracks.md) for the whole structure):
+every tile carries its own
 `exits` — the spaces a car may drive to next — and its own `geometry` (the
 centre point and heading it is drawn at). Three things about a real circuit
 can't be typed by hand:
@@ -251,10 +253,14 @@ Two consequences worth keeping in mind while drawing:
    doubles as the start: the first crossing is then the start of lap 1 rather
    than the end of it.
 
-   **Only the grid is read by a race today.** The finish line, the oil and that
-   setting are printed into the track file and nothing reads them yet — §15
-   still counts a lap at the derived row 0, and §14's slicks are still laid only
-   by spins and heavy braking.
+   **The grid and the finish line are both read by a race.** §15 counts the lap
+   at the *earliest* row the line is painted on — one row for the whole circuit,
+   so two cars level across the road bank their laps on the same step and none of
+   them can cross twice by changing lane — or at the derived row 0 where no line
+   is painted. A grid marked as sitting behind the line seats the field a lap
+   short, so its first crossing starts lap 1 rather than ending it. **Oil is
+   still printed and unread**: §14's slicks are laid only by spins and heavy
+   braking.
 8. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
    knowing before placing a few hundred tiles by hand: `Q` *Place*, `W` *Draw
    exits*, `E` *Paint into section*, `R` *Mark*, `1`/`2`/`3` for that lane,
