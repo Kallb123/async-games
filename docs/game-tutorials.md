@@ -345,8 +345,12 @@ rather than be copied:
 - **The route stays.** `/api/gameguides` keeps its URL (a rename would only
   strand the POSTs of clients running cached JS, for no gain) and grows a
   second list: `GET` answers `{ seen, seenTutorials }`, and `POST { game, kind }`
-  writes to the list `kind` names, defaulting to `'guide'`. Its allowlist check
-  becomes "in `GAME_GUIDES` or in `GAME_TUTORIALS`", by kind — that check is
+  writes to the list `kind` names, defaulting to `'guide'`. `kind` arrives from
+  the client, so it is matched against the two literals and used to pick a named
+  key — never to index `privateMetadata`, which the route reads back whole to
+  merge and would otherwise let a caller write arbitrary keys into it. Its
+  allowlist check becomes "in `GAME_GUIDES` or in `GAME_TUTORIALS`", by kind —
+  that check is
   what makes the registry line mandatory, the same way `gameRegistry.test.ts`
   guards the engine's.
 - **The metadata grows a key.** `privateMetadata.seenGameTutorials`, beside
@@ -381,9 +385,10 @@ one tour is a fair thing to spend an existing player's attention on.
 Every board page currently repeats the same five lines of guide plumbing — two
 imports, the hook call, a `{ key: 'guide', label: 'Game guide', icon: '📖' }`
 row, and the `{gameGuide.open && <GameGuideModal …/>}` render. That is eight
-pages of it, nine counting Race Cars' slightly different `guideForGame` lookup.
-Adding a tutorial the same way would make it nine or ten copies of *two*
-features, which is the thing AGENTS.md calls a defect — and `GameShell`'s own
+board screens of it: seven pasting the same lines, and Race Cars a variant that
+looks its guide up with `guideForGame` (and currently finds nothing, because it
+has no entry). Adding a tutorial the same way would make that sixteen copies of
+*two* features, which is the thing AGENTS.md calls a defect — and `GameShell`'s own
 docblock already says why: it owns the turn-history log because that "used to be
 three pasted pieces in each of the eight board screens."
 
@@ -485,56 +490,168 @@ Plus the usual gates before committing: `npm run build`, `npx tsc --noEmit`,
 `npm run lint` (`--max-warnings 0`), and `npm test` because a registry is
 touched.
 
-## 12. Build order
+## 12. Implementation: the PRs and their commits
 
-**Phase 1 — the machinery, and one game.** `gameTutorials.ts`,
-`useTutorialRun.ts`, `GameTutorialOverlay.tsx`, the `.ag-tour-*` CSS,
-`useGameGuide` → `useGameIntro` (with its route and metadata growing the second
-list), `GameShell` taking over both ⋮ rows and both renders, and Dice Cities'
-`tutorial.ts`.
+Four PRs. The first is a refactor with no feature in it, the second is the
+feature, the third is the other games, the fourth may never happen.
 
-This phase touches every board page **once** — not to add the tutorial, but to
-hand the guide wiring to the shell (§8). That is the whole reason Phase 2 is
-cheap, and it leaves the existing feature smaller than it found it.
+| PR | What lands | Player-visible | "What's new" | Reviewers |
+|---|---|---|---|---|
+| **1** | `GameShell` takes over the game guide | No — a no-op refactor | None (internal) | `caveman`, `rulebook` |
+| **2** | The tutorial machinery + Dice Cities' tour | Yes | One line, *Enhancements* | `locksmith`, `gremlin`, `caveman`, `rulebook` |
+| **3** | Tours for the other six games | Yes | Widen PR 2's line, or one new one | `caveman`, `rulebook` |
+| **4** | Tour before a match; per-node board anchors | Yes | One line | `caveman`, `rulebook` |
 
-Dice Cities first because it has a scoreboard, a board, a market, a themed
-vocabulary and a do-it step (the roll) — if the design survives it, it survives.
+The split is not arbitrary. PR 1 touches eight board screens and changes no
+behaviour; PR 2 touches four shared files and changes a lot. Landing them
+together would give a reviewer one diff in which the risky part is invisible
+among the mechanical part, which is the state a review can't help with.
 
-**Phase 2 — the rest of the games that want one.** Settlements & Cities, World
-Domination, Outbreak, Train Time, Fires Out!, Banned Islet. Each is one
-`tutorial.ts`, one registry line, a couple of `data-tour` attributes and **one
-prop** on the shell. No shared code should need to change; if it does, that's
-the signal the shared piece is wrong, not that the game is special.
+### PR 1 — `GameShell` takes over the game guide
 
-**Phase 3 — the seams worth polishing once it's real.** A "Take the tutorial"
-row on the game's setup screen and in `GameLibrary`, so a player can tour a
-game before committing to a match. Per-node board anchoring, via a `BoardZoom`
-that can be asked to centre on a node. Neither is needed to ship.
+No tutorial code at all. It stands on its own merits — it is the §8 duplication
+fix — so if this whole feature were abandoned tomorrow, this is still worth
+having, and that is the test a first PR should pass.
+
+1. **`GameShell` learns the guide.** `guide?: GameGuide` and `intro` props, the
+   📖 row among the rows it already contributes to `options`, and the
+   `GameGuideModal` render. Nothing uses them yet.
+2. **Hand the eight board screens over.** Two imports, the menu row and the
+   render line come out of each; the `useGameGuide` call stays (Outbreak and
+   Banned Islet read `loaded`/`open` for `RoleIntroPopup`, and a second call
+   would mean a second fetch). Race Cars' `guideForGame` lookup moves into the
+   shell, which also quietly fixes that it currently looks up a guide that
+   isn't there.
+
+A no-op by construction: same popup, same trigger, same seen-list write. The
+PR's whole claim is "nothing changed", which is exactly what makes it
+reviewable — and revertable in one commit if it turns out otherwise. No
+"What's new" line, because a player cannot tell.
+
+### PR 2 — the machinery, and Dice Cities' tour
+
+Commit order is chosen so that **the feature becomes visible only at commit 6**.
+Everything before it is inert, so a bisect lands on something meaningful and
+the first commit can ship early if the rest slips.
+
+1. **Remember two first-runs, not one.** `gameGuideProgress` takes the metadata
+   key as an argument; `/api/gameguides` answers `{ seen, seenTutorials }` and
+   accepts `POST { game, kind }`; `useGameGuide` becomes `useGameIntro` with the
+   shape in §7 (one line per board page). Inert on its own: `GAME_TUTORIALS` is
+   empty, so `hasTutorial` is false everywhere and every game still gets its
+   guide exactly as before.
+2. **The shapes, the registry, the anchors and the filtering.**
+   `gameTutorials.ts` — `GameTutorial`, `TutorialStep`, `GAME_TUTORIALS` (empty),
+   `hasTutorial`, `TOUR_ANCHORS`, `anchorSelector`, `tutorialRun`,
+   `applicableSteps` — plus `gameTutorials.test.ts` (§11). Pure, fully tested,
+   nothing calls it.
+3. **`useTutorialRun`.** Find the element, scroll it in, track its rect, watch
+   `advanceOn` (§6).
+4. **`GameTutorialOverlay` and the `.ag-tour-*` CSS.** The scrim, the card
+   modifier and the button row (§6).
+5. **`GameShell` learns the tutorial.** The `tutorial?: TutorialRun` prop, the
+   🎓 row above the 📖 one, the overlay render. Still no game passes it.
+6. **Dice Cities takes the tour.** `buildDiceCitiesTutorial(theme)`, its
+   `data-tour` attributes, its `GAME_TUTORIALS` line and its one prop on the
+   shell. **This is the commit that turns the feature on.**
+7. **The upkeep.** The "What's new" line, the AGENTS.md sentence, the
+   `docs/new-game.md` row, and this doc's status line flipped from plan to
+   shipped.
+
+Who reviews what, and why it isn't all of them:
+
+- **`locksmith` and `gremlin` on commit 1** — it is an API route and a Clerk
+  metadata write. The one thing that must not be got wrong: `kind` arrives from
+  the client, so it is matched against `'guide' | 'tutorial'` and used to pick
+  a named key, never to index `privateMetadata` (§7). A `kind` that reached the
+  metadata path would let any signed-in caller write arbitrary keys into their
+  own private metadata, and the route reads the whole object back to merge it.
+- **`caveman` on commits 3–5** — the shared pieces, where over-engineering
+  would land.
+- **`rulebook` on commits 6–7** — registry line, release note, docs.
+- **`croupier` on none of it**, deliberately: signals are booleans the page
+  derives from state it was already sent, so no new field goes on the wire and
+  no response shape changes. The one croupier-shaped rule lives in the copy
+  review instead — **a step's text may not name anything the viewer can't
+  already see**, which is the sort of thing to get wrong in a game with hidden
+  hands.
+
+### PR 3 — the other six tours
+
+One commit per game, each one `tutorial.ts` + one registry line + a couple of
+`data-tour` attributes + one prop. In this order, easiest board first:
+
+1. Settlements & Cities — closest in shape to Dice Cities.
+2. Fires Out! — a do-it step on action points.
+3. Banned Islet — open hands, so `PlayerHands` anchoring gets its first use.
+4. Outbreak — has its own role welcome to sequence behind (§7).
+5. World Domination — a map board, so §6's "anchor the area, not the node" rule
+   gets its first real test.
+6. Train Time — its own chrome livery and a claim sheet that replaces the ⋮
+   menu, which is the most likely thing to need a shared fix.
+
+**If a game needs shared code changed, stop.** Fix the shared piece in its own
+commit, called out in the PR description — that is the design being wrong, not
+the game being special, and the shared piece named in §3 is the thing to
+fix.
+
+One "What's new" line for the whole PR, not one per game. If PR 3 lands close
+behind PR 2, **widen PR 2's line** ("…on every game") rather than adding a
+second: the group holds ten, and two lines for one feature evicts two shipped
+features a player can still see.
+
+### PR 4 — before the match, and deeper into the board
+
+The seams worth polishing once the feature is real, kept out of the PRs above
+so it ships without them.
+
+1. A "Take the tutorial" row on the game's setup screen and in `GameLibrary`,
+   so a player can tour a game before committing to a match.
+2. `BoardZoom` can be asked to centre and zoom on a node, and the map games get
+   per-node anchors (§6).
+
+Either commit is worth shipping alone, and neither is needed for the feature to
+be good.
+
+### If it has to be one PR
+
+Keep the commits in exactly this order and keep the boundaries — PR 1's two
+commits first, then PR 2's, with commit 1 still the inert one. The review then
+has to be read commit by commit rather than as a diff, which is worse, and is
+the reason for the split.
 
 Files touched, all told:
 
 ```
-new     src/utils/ui/gameTutorials.ts              (shapes, registry, anchors, filtering)
-new     src/utils/ui/gameTutorials.test.ts
-new     src/utils/hooks/useTutorialRun.ts
-new     src/components/ui/GameTutorialOverlay.tsx
-new     src/games/<Game>/tutorial.ts               (one per game)
-rename  src/utils/hooks/useGameGuide.ts          → useGameIntro.ts
-edit    src/utils/users/gameGuideProgress.ts       (key as an argument)
-edit    src/app/api/gameguides/route.ts            (second list, kind)
-edit    src/components/ui/GameShell.tsx            (intro/guide/tutorial props, both ⋮ rows, both renders)
-edit    src/app/ag-theme.css                       (scrim, card modifier, button row)
-edit    src/app/games/<game>/[gameid]/page.tsx     (Phase 1: hand the guide over. Phase 2: one prop)
-edit    src/utils/ui/whatsNew.ts                   (one line, enhancements)
-edit    AGENTS.md, docs/new-game.md                (a tutorial is part of adding a game)
+PR 1  edit    src/components/ui/GameShell.tsx        (guide + intro props, 📖 row, modal render)
+PR 1  edit    src/app/games/*/[gameid]/page.tsx     (8 screens: hand the guide wiring over)
+
+PR 2  rename  src/utils/hooks/useGameGuide.ts     → useGameIntro.ts
+PR 2  edit    src/utils/users/gameGuideProgress.ts  (metadata key as an argument)
+PR 2  edit    src/app/api/gameguides/route.ts       (second list, validated `kind`)
+PR 2  new     src/utils/ui/gameTutorials.ts         (shapes, registry, anchors, filtering)
+PR 2  new     src/utils/ui/gameTutorials.test.ts
+PR 2  new     src/utils/hooks/useTutorialRun.ts
+PR 2  new     src/components/ui/GameTutorialOverlay.tsx
+PR 2  edit    src/app/ag-theme.css                  (scrim, card modifier, button row)
+PR 2  edit    src/components/ui/GameShell.tsx       (tutorial prop, 🎓 row, overlay render)
+PR 2  new     src/games/DiceCities/tutorial.ts
+PR 2  edit    src/app/games/dicecities/[gameid]/page.tsx   (data-tour + one prop)
+PR 2  edit    src/utils/ui/whatsNew.ts              (one line, enhancements)
+PR 2  edit    AGENTS.md, docs/new-game.md           (a tutorial is part of adding a game)
+
+PR 3  new     src/games/<Game>/tutorial.ts          (six games, one commit each)
+PR 3  edit    src/games/<Game>/… , src/app/games/<game>/[gameid]/page.tsx
+PR 3  edit    src/utils/ui/gameTutorials.ts         (six registry lines)
+PR 3  edit    src/utils/ui/whatsNew.ts              (widen PR 2's line)
 ```
 
 ## 13. Upkeep
 
-- **One "What's new" line for the whole branch**, in *Enhancements*, however
-  many games the branch tours: "Guided tutorials — a tour of the board on your
-  first game, pointing at the thing it's talking about." Per-game tours added
-  later don't each get a line.
+- **One "What's new" line per PR that a player can tell landed**, in
+  *Enhancements*: "Guided tutorials — a tour of the board on your first game,
+  pointing at the thing it's talking about." PR 1 gets none (nothing changed for
+  a player), and PR 3 widens that line rather than adding a second (§12).
 - **AGENTS.md** gains a sentence beside the game-guide paragraph: most games
   also want a `tutorial.ts`, registered in `GAME_TUTORIALS` and handed to
   `GameShell`. **`docs/new-game.md`** gains the same as a checklist row beside
