@@ -67,7 +67,7 @@ export interface TrackSection {
     /** How wide the road is here, in lanes — 2 or 3. */
     lanes: 2 | 3;
     /** Corner stop count, or null for a straight. The section's id names it. */
-    corner: { stops: 1 | 2 } | null;
+    corner: { stops: 1 | 2 | 3 } | null;
     /** A plain band: this many tiles in every lane, lanes in step. */
     length?: number;
     /** A traced band: every tile it holds, each lane's run in road order. */

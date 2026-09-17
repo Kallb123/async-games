@@ -73,7 +73,7 @@ export interface RaceCarsCorner {
     name: string;
     from: number;
     to: number;
-    stops: 1 | 2;
+    stops: 1 | 2 | 3;
 }
 
 /**
