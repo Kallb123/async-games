@@ -13,6 +13,7 @@ import {
     distanceDef,
     readRaceSettings,
     specDef,
+    startingLaps,
     trackById,
     TRACKS,
     DEFAULT_TRACK_ID,
@@ -63,7 +64,9 @@ describe("buildInitialRaceCarsState — the grid (§6)", () => {
             expect(ps.gear).toBe(0);
             expect({ tyres: ps.tyres, brakes: ps.brakes, gearbox: ps.gearbox })
                 .toEqual({ tyres: spec.tyres, brakes: spec.brakes, gearbox: spec.gearbox });
-            expect(ps.lapsCompleted).toBe(0);
+            // Whichever circuit DEFAULT_TRACK_ID names: a lap short of nought
+            // if its grid is drawn behind the finish line (§15), nought if not.
+            expect(ps.lapsCompleted).toBe(startingLaps(TRACK));
             expect(ps.cornerStops).toBe(0);
             expect(ps.skipNextTurn).toBe(false);
             expect(ps.finishedPosition).toBeNull();
