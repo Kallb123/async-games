@@ -1607,14 +1607,21 @@ a.ag-list-row, a.ag-list-row-main {
 /* Boards wider than the app column scroll inside the frame, at whatever width
    BoardZoom's control has set. `touch-action` keeps one finger panning the
    board while handing the two-finger gesture to BoardZoom, so a pinch zooms the
-   circuit rather than the whole page; `overscroll-behavior` stops a pan that
-   reaches the edge of the board from carrying on into the page behind it. */
+   circuit rather than the whole page.
+   The containment is on the horizontal axis alone, and deliberately: a pan that
+   runs off the end of the board mustn't carry on into the page behind it, but a
+   board never scrolls vertically at all — its height follows its width, so the
+   pane is always exactly as tall as the board in it — and up and down is
+   therefore the page's to scroll. Containing that axis too left a finger or a
+   wheel that started on the board scrolling nothing, which on a board as tall
+   as a zoomed circuit meant reaching for the margin beside it to get down the
+   page. */
 .ag-board-scroll {
     overflow: auto;
     border-radius: 12px;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x pan-y;
-    overscroll-behavior: contain;
+    overscroll-behavior-x: contain;
 }
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
