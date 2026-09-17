@@ -1188,7 +1188,7 @@ interface RaceCarsTrack {
   spaces: { row: number, lane: number, exits: { row: number, lane: number }[], cornerId?: string }[],
   // A corner's row band labels it on screen and places a spun car; §10 charges
   // overshoot in spaces past the corner, read off the path (`cornerExits`).
-  corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
+  corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 | 3 }[],
   // The grid, the finish line and any oil are **marked on tiles** in the
   // authoring model and resolved to spaces at module load (`spacesOf`), for the
   // same reason no row is typed: a slot written as a row and a lane is a guess
