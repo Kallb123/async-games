@@ -255,7 +255,7 @@ const SECTIONS: TrackSection[] = [
         id: "section10",
         name: "Loews",
         lanes: 3,
-        corner: { stops: 2 },
+        corner: { stops: 3 },
         tiles: [
             { id: "section10.1.0", lane: 1, x: 3093, y: 587, heading: -60, exits: ["section10.1.1"] },
             { id: "section10.1.1", lane: 1, x: 3133, y: 518, heading: -66, exits: ["section10.1.2", "section10.2.4"] },
@@ -688,6 +688,7 @@ export const MONACO: RaceCarsTrack = {
     corners: DERIVED.corners,
     grid: spacesOf(DERIVED, ["section21.1.15", "section21.3.15", "section21.1.12", "section21.3.12", "section21.1.9", "section21.3.9", "section21.1.6", "section21.3.6", "section21.1.3", "section21.3.3"]),
     finish: spacesOf(DERIVED, ["section21.1.16", "section21.2.17", "section21.3.17"]),
+    gridBehindFinishLine: true,
     maxGear: 6,
     art: {
         href: "/art/racecars/monaco.png",
