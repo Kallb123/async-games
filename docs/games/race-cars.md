@@ -330,7 +330,8 @@ be: it is bad luck you race out of, not a race you have lost.
 
 Everything else about the round is ordinary. Turn order is the grid order (§15),
 a move off the line resolves corners, blocking and oil like any other (§9-§14),
-and a car that ends its move one or two spaces behind another is owed §12's tow.
+and a car that ends its move directly behind another, fast enough to draft it,
+is owed §12's tow.
 
 **A race that was already running when this landed finishes under the rules it
 started under.** Every car carries the d20 it got away on, so a car in neutral
@@ -359,11 +360,11 @@ exactly that many spaces, choosing your destination from the ones the roll can
 legally reach (§9). Corner stops, overshoots, blocking and — if it is on — oil
 are all resolved by arriving.
 
-**Step 3 — Slipstream.** If your move ended one or two spaces behind another car
-you are fast enough to draft, you may take a three-space tow (§12), or decline
-it. Declining, or ending the tow with nothing left to draft, ends the turn —
-but a tow that ends the same way in front of a *third* car offers another,
-chained for as long as §12's conditions keep holding.
+**Step 3 — Slipstream.** If your move ended directly behind another car you are
+fast enough to draft, you may take a three-space tow (§12), or decline it.
+Declining, or ending the tow with nothing left to draft, ends the turn — but a
+tow that ends the same way behind a *third* car offers another, chained for as
+long as §12's conditions keep holding.
 
 The shape of the turn matters as much as its content: **the roll happens in
 step 1, and every decision that follows it is made with the number known.**
@@ -600,14 +601,17 @@ that alone changes which spec is correct.
 
 ## 12. Slipstream
 
-If your move ends **one or two spaces behind another car you are fast enough to
-draft — in any lane you could tuck into** — you may take a tow: a second move
-of exactly **3 spaces**, immediately, resolved under every rule a normal move
-follows.
+If your move ends **directly behind another car you are fast enough to
+draft** — one step ahead, in the lane you are already in, and no other — you
+may take a tow: a second move of exactly **3 spaces**, immediately, resolved
+under every rule a normal move follows.
 
-"One or two spaces behind" is a question about the road between the two cars,
-walked the way a car drives it (§5.1): a row is a rank rather than a distance,
-and being one row up and two lanes over is alongside, not in front.
+"Directly behind" is a question about the road between the two cars, walked
+the way a car drives it (§5.1): a row is a rank rather than a distance, so on
+a corner's inside line "one step" can cover two rows, and on a staggered
+stretch being one row up in a different lane is alongside, not in front.
+Shifting lane to find a wake does not count — the draft is only ever there for
+the car that stayed in it.
 
 **Fast enough to draft** is a gear condition on both cars, checked the instant
 the tow is offered:
@@ -636,9 +640,9 @@ and the car(s) it draws level with keep meeting it too.
   is not offered, the same way a destination with no road to it is not
   offered. Towing further into the corner the car is *already* standing in
   costs nothing extra — that corner's stops are already owed.
-- **Chained.** Ending the tow one or two spaces behind a third car offers
-  another, under exactly the same two gear conditions and the same late-braking
-  charge — a fast field can draft its way down a straight in one turn, spending
+- **Chained.** Ending the tow directly behind a third car offers another, under
+  exactly the same two gear conditions and the same late-braking charge — a
+  fast field can draft its way down a straight in one turn, spending
   a brake point at every corner it drafts into along the way. A car that spins
   partway through a chain (§13) ends the turn immediately, the same as any
   other spin; nothing about the chain waives it.
@@ -849,10 +853,11 @@ like a cliff.
 | Boxed in inside a corner owing stops | Staying put ends the turn inside the corner, so it **banks a stop** |
 | On a corner's last row, still owing a stop | No legal move keeps you inside it, so the remaining stops are waived and leaving is free (§10). The one overshoot in the game that costs nothing |
 | A tow with no legally reachable space | Not offered at all (§12), rather than offered and charged — this includes every reachable space being a corner entry with no brakes left to pay for it |
-| A car in third gear or below is one or two spaces behind another | No tow is offered — neither car's gear is a slipstream (§12) unless both are in 4th or higher |
+| A car ends one row up, in a lane other than its own | No tow is offered — that car is alongside, not in the lane the draft is in (§12) |
+| A car in third gear or below is directly behind another | No tow is offered — neither car's gear is a slipstream (§12) unless both are in 4th or higher |
 | The trailing car is in a lower gear than the car it would draft | No tow is offered — it has not caught the wake (§12) |
-| A spun car is 1–2 spaces behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
-| A tow ends one or two spaces behind a third car | Another tow is offered under the same gear conditions — chained rather than "one tow a turn" (§12) |
+| A spun car is directly behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
+| A tow ends directly behind a third car | Another tow is offered under the same gear conditions — chained rather than "one tow a turn" (§12) |
 | Two slicks on one space | Impossible: the second refreshes the first (§14) |
 | A car is lapped | Nothing special happens. A lapped car blocks, tows and corners exactly as any other; §4.2 classifies by laps first, so it is simply behind |
 | The last free lane of a corner is taken when a spin needs it | The spin resolves onto the last *available* space searching backwards along the corner; a corner is never fully occupied by fewer than six cars |
@@ -1046,7 +1051,7 @@ Ordered by what each one buys against what it costs.
 1. **Shift** — up one, or down as many as the gearbox pays for. Roll the gear's die.
 2. **Brake** *(optional)* — 1 point = 1 space less, never below one space.
 3. **Move** — exactly that many spaces. Tap a highlighted space.
-4. **Tow** *(optional, chained)* — 3 more spaces if you ended 1–2 spaces behind
+4. **Tow** *(optional, chained)* — 3 more spaces if you ended directly behind
    a car, both of you in 4th gear or above and yours no lower than theirs.
    Ending the tow the same way behind another car offers another.
 

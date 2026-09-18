@@ -837,14 +837,14 @@ describe("a race that keeps running", () => {
 
 describe("the slipstream hand-off (§12)", () => {
     /**
-     * `a` finishes its move on row 20; `b` sits two rows up the road at 22.
-     * Both in 4th gear — the minimum a draft needs (§12) — so these fixtures
-     * are about position and traffic, not the gear condition.
+     * `a` finishes its move on row 20; `b` sits directly ahead at 21, same
+     * lane. Both in 4th gear — the minimum a draft needs (§12) — so these
+     * fixtures are about position and traffic, not the gear condition.
      */
     function towable(overrides: Record<string, Partial<IRaceCarsPlayerState>> = {}) {
         return makeGame(race({
             a: { row: 16, lane: 1, gear: 4, phase: 'move', roll: 4 },
-            b: { row: 22, lane: 1, gear: 4 },
+            b: { row: 21, lane: 1, gear: 4 },
             ...overrides,
         }));
     }
@@ -860,7 +860,7 @@ describe("the slipstream hand-off (§12)", () => {
         expect(game.specificGameState.roundIndex).toBe(0);
     });
 
-    it("ends the turn when no car is one or two rows ahead", async () => {
+    it("ends the turn when no car is directly ahead", async () => {
         const game = towable({ b: { row: 40, lane: 1 } });
         const { outcome } = await run(game, move({ row: 20, lane: 1 }));
 
@@ -870,7 +870,7 @@ describe("the slipstream hand-off (§12)", () => {
     });
 
     it("ends the turn instead of handing off when neither car is fast enough to draft (§12)", async () => {
-        const game = towable({ a: { row: 16, lane: 1, gear: 3, phase: 'move', roll: 4 }, b: { row: 22, lane: 1, gear: 3 } });
+        const game = towable({ a: { row: 16, lane: 1, gear: 3, phase: 'move', roll: 4 }, b: { row: 21, lane: 1, gear: 3 } });
         const { outcome } = await run(game, move({ row: 20, lane: 1 }));
 
         expect(outcome.turnOver).toBe(true);
@@ -881,10 +881,10 @@ describe("the slipstream hand-off (§12)", () => {
     it("offers no tow to a car that has just spun — the spin ended the turn (§18)", async () => {
         // Driving out of the Hairpin with nothing banked costs two tyres this
         // car does not have, so it spins back onto the corner's last row (§10)
-        // — one row behind `b`, which would otherwise be a tow.
+        // — directly behind `b`, which would otherwise be a tow.
         const game = makeGame(race({
-            a: { row: 13, lane: 1, phase: 'move', roll: 3, tyres: 1 },
-            b: { row: 16, lane: 1 },
+            a: { row: 13, lane: 1, gear: 4, phase: 'move', roll: 3, tyres: 1 },
+            b: { row: 15, lane: 1, gear: 4 },
         }));
         const { outcome } = await run(game, move({ row: 16, lane: 2 }));
 
@@ -909,15 +909,15 @@ describe("the slipstream hand-off (§12)", () => {
 
 describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
     /**
-     * `a` has already moved and is sitting on the tow behind `b`. Both in 4th
-     * gear by default — the minimum a draft needs (§12) — so a test that
-     * overrides `b` (or adds a third car) still needs to say so explicitly if
-     * it wants the draft to hold.
+     * `a` has already moved and is sitting directly behind `b`, at 21, same
+     * lane. Both in 4th gear by default — the minimum a draft needs (§12) —
+     * so a test that overrides `b` (or adds a third car) still needs to say
+     * so explicitly if it wants the draft to hold.
      */
     function towed(driver: Partial<IRaceCarsPlayerState> = {}, others: Record<string, Partial<IRaceCarsPlayerState>> = {}) {
         return makeGame(race({
             a: { row: 20, lane: 1, gear: 4, phase: 'slipstream', roll: 4, ...driver },
-            b: { row: 22, lane: 1, gear: 4 },
+            b: { row: 21, lane: 1, gear: 4 },
             ...others,
         }));
     }
@@ -972,7 +972,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         // Row 14 is the Hairpin's last row with one of its two stops banked. A
         // *move* off it is free (§10: the road allowed nothing slower); a tow
         // off it is a choice, so its three rows are three tyres.
-        const game = towed({ row: 14, lane: 1, cornerStops: 1 }, { b: { row: 16, lane: 1, gear: 4 } });
+        const game = towed({ row: 14, lane: 1, cornerStops: 1 }, { b: { row: 15, lane: 1, gear: 4 } });
         const { outcome } = await run(game, slipstream({ tow: { row: 17, lane: 2 } }));
 
         expect(outcome.validMove).toBe(true);
@@ -982,7 +982,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
     });
 
     it("spins the car when the tow's overshoot cannot be paid (§13)", async () => {
-        const game = towed({ row: 13, lane: 1, cornerStops: 1, tyres: 1 }, { b: { row: 15, lane: 1, gear: 4 } });
+        const game = towed({ row: 13, lane: 1, cornerStops: 1, tyres: 1 }, { b: { row: 14, lane: 1, gear: 4 } });
         const { outcome } = await run(game, slipstream({ tow: { row: 16, lane: 2 } }));
 
         expect(outcome.turnOver).toBe(true);
@@ -998,7 +998,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         // Both lanes of row 23 are taken, so three rows are not reachable and
         // the tow stops on the furthest space that is.
         const game = towed({ row: 20, lane: 1 }, {
-            b: { row: 22, lane: 1, gear: 4 },
+            b: { row: 21, lane: 1, gear: 4 },
             c: { row: 23, lane: 1 },
             d: { row: 23, lane: 2 },
             e: { row: 23, lane: 3 },
@@ -1011,12 +1011,13 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         expect(log(game)).toContain('was blocked and had to lift');
     });
 
-    it("chains into a second tow when it ends behind a third car it is fast enough to draft (§12)", async () => {
-        const game = towed({}, { b: { row: 22, lane: 1, gear: 4 }, c: { row: 25, lane: 1, gear: 4 } });
-        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 2 } }));
+    it("chains into a second tow when it ends directly behind a third car it is fast enough to draft (§12)", async () => {
+        const game = towed({}, { b: { row: 21, lane: 1, gear: 4 }, c: { row: 24, lane: 1, gear: 4 } });
+        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 1 } }));
 
-        // Row 23 is two rows behind c, and both cars are still fast enough to
-        // draft — the gear a tow leaves unchanged — so a fresh offer stands.
+        // The tow lands at row 23, directly behind c at 24, and both cars are
+        // still fast enough to draft — the gear a tow leaves unchanged — so a
+        // fresh offer stands.
         expect(outcome.turnOver).toBe(false);
         expect((outcome as IRaceCarsArrivalOutcome).arrival.towOffered).toBe(true);
         expect(seat(game, 'a').phase).toBe('slipstream');
@@ -1024,8 +1025,8 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
     });
 
     it("ends the turn on the tow when the third car behind it cannot be drafted (§12)", async () => {
-        const game = towed({}, { b: { row: 22, lane: 1, gear: 4 }, c: { row: 25, lane: 1, gear: 3 } });
-        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 2 } }));
+        const game = towed({}, { b: { row: 21, lane: 1, gear: 4 }, c: { row: 24, lane: 1, gear: 3 } });
+        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 1 } }));
 
         expect(outcome.turnOver).toBe(true);
         expect((outcome as IRaceCarsArrivalOutcome).arrival.towOffered).toBe(false);
@@ -1067,7 +1068,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
     });
 
     it("refuses a tow neither car is fast enough to draft, whatever their phase says", async () => {
-        const game = towed({ gear: 3 }, { b: { row: 22, lane: 1, gear: 3 } });
+        const game = towed({ gear: 3 }, { b: { row: 21, lane: 1, gear: 3 } });
         expect((await run(game, slipstream({ tow: { row: 23, lane: 2 } }))).outcome.validMove).toBe(false);
         expect(seat(game, 'a').row).toBe(20);
     });
@@ -1133,7 +1134,7 @@ describe("crossing the line (§4.1, §4.2)", () => {
     it("can be won on the tow (§12)", async () => {
         const game = makeGame(race({
             a: { row: 72, lane: 1, gear: 4, phase: 'move', roll: 3 },
-            b: { row: 77, lane: 1, gear: 4 },
+            b: { row: 76, lane: 1, gear: 4 },
             c: { row: 40, lane: 1 },
         }));
 

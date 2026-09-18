@@ -398,14 +398,6 @@ export const OIL_SPIN_FACE = 1;
 /** A tow is a second move of exactly three steps (§12). */
 export const SLIPSTREAM_STEPS = 3;
 /**
- * A tow is offered to a car this many **steps** behind another, in any lane
- * (§12) — steps along the road the car is actually on, not a difference of row
- * numbers: a row is a rank rather than a distance (§5.1), so two cars a row
- * apart on a staggered stretch are beside each other rather than in each
- * other's wake.
- */
-export const SLIPSTREAM_GAP_STEPS = [1, 2];
-/**
  * A tow needs both cars doing real speed (§12): the trailing car in this gear
  * or above, and never below the gear of the car it is drafting off.
  */

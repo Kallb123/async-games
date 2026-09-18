@@ -684,10 +684,10 @@ export class RaceCarsMove implements IGameCommand {
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // §12: a move that ends one or two rows behind another car is owed a
-        // tow, and the turn is not over until the driver has taken it or
-        // declined it. Everything else — a spin, a crossing, an empty road —
-        // ends the turn here.
+        // §12: a move that ends directly behind another car, fast enough to
+        // draft, is owed a tow, and the turn is not over until the driver has
+        // taken it or declined it. Everything else — a spin, a crossing, an
+        // empty road — ends the turn here.
         return arrivalOutcome(gs, ps, this.senderId, settled, { roll });
     }
 
@@ -793,8 +793,8 @@ export class RaceCarsSlipstream implements IGameCommand {
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // §12: chained. Ending this tow one or two steps behind another car
-        // that is fast enough to draft earns another — `slipstreamOffered` is
+        // §12: chained. Ending this tow directly behind another car that is
+        // fast enough to draft earns another — `slipstreamOffered` is
         // the gate on both legs, so nothing here decides that twice.
         return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null });
     }

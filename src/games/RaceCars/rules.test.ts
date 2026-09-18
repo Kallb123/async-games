@@ -773,19 +773,20 @@ describe("slipstream (§12)", () => {
     // these fixtures are about position and traffic, not the gear condition.
     const DRAFT = { gear: 4 } as const;
 
-    it("is offered one or two spaces behind another car, in any lane it could tuck into", () => {
+    it("is offered directly behind another car — one step ahead, in this car's own lane", () => {
         // Steps of the road rather than a difference of row numbers (§5.1): a
-        // row is a rank, so "in the wake of" is a question about the road
+        // row is a rank, so "directly behind" is a question about the road
         // between the two cars, which is what a walk of the step graph answers.
-        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 21, lane: 2, ...DRAFT } }), 'a')).toBe(true);
-        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 22, lane: 3, ...DRAFT } }), 'a')).toBe(true);
-        // One row up and two lanes over is alongside, not in front: no line
-        // through the road puts this car behind that one.
+        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 21, lane: 1, ...DRAFT } }), 'a')).toBe(true);
+    });
+
+    it("is not offered a lane over, however close — the draft is only for the car that stayed in it", () => {
+        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 21, lane: 2, ...DRAFT } }), 'a')).toBe(false);
         expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 21, lane: 3, ...DRAFT } }), 'a')).toBe(false);
     });
 
-    it("is not offered three spaces behind, or in front", () => {
-        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 23, lane: 1, ...DRAFT } }), 'a')).toBe(false);
+    it("is not offered two spaces behind, or in front", () => {
+        expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 22, lane: 1, ...DRAFT } }), 'a')).toBe(false);
         expect(slipstreamOffered(race({ a: { row: 20, lane: 1, ...DRAFT }, b: { row: 19, lane: 1, ...DRAFT } }), 'a')).toBe(false);
     });
 
@@ -822,15 +823,6 @@ describe("slipstream (§12)", () => {
             expect(slipstreamOffered(race({ a: { row: 20, lane: 1, gear: 6 }, b: { row: 21, lane: 1, gear: 6 } }), 'a')).toBe(true);
         });
 
-        it("takes the best of several cars in range — one qualifying draft is enough", () => {
-            // b fails the gear minimum a row up; c two rows up clears it.
-            const state = race({
-                a: { row: 20, lane: 1, gear: 4 },
-                b: { row: 21, lane: 1, gear: 3 },
-                c: { row: 22, lane: 1, gear: 4 },
-            });
-            expect(slipstreamOffered(state, 'a')).toBe(true);
-        });
     });
 
     describe("late braking into a corner (§12)", () => {
@@ -985,7 +977,7 @@ describe("the conservative line (§23.7)", () => {
     it("takes a tow that costs nothing", () => {
         const state = race({
             a: { row: 20, lane: 1, gear: 4, phase: 'slipstream' },
-            b: { row: 22, lane: 3, gear: 4 },
+            b: { row: 21, lane: 1, gear: 4 },
         });
         const plan = conservativeTurn(state, 'a');
         expect(plan.phase === 'slipstream' && plan.tow).toEqual({ row: 23, lane: 1 });

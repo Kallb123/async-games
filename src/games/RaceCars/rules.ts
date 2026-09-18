@@ -38,13 +38,11 @@ import {
     START_FLYING_FROM,
     START_ROUND,
     START_STALL_FACE,
-    SLIPSTREAM_GAP_STEPS,
     SLIPSTREAM_MIN_GEAR,
     SLIPSTREAM_STEPS,
     spaceKey,
     spacesInCorner,
     stepsFrom,
-    stepsWithin,
     trackById,
     waivedCornerIdAt,
 } from "./board";
@@ -811,16 +809,16 @@ export function slipstreamMoveOptions(state: IRaceCarsSpecificGameState, userId:
 }
 
 /**
- * Whether this car is owed a tow: it ended one or two **steps** behind another
- * car it is fast enough to draft (§12), and has somewhere legal to go.
+ * Whether this car is owed a tow: it ended directly behind another car it is
+ * fast enough to draft (§12), and has somewhere legal to go.
  *
- * Steps rather than rows, and that is the whole of the positioning half of §12
- * now that a row is a rank rather than a distance (§5.1): on a staggered
- * stretch two cars a row apart are drawn side by side, and on a corner's
- * inside line one step covers two rows. "In the wake of the car in front" is a
- * question about the road between them, which is what a walk of the step
- * graph answers — and it answers it in every lane a car could tuck in behind,
- * rather than every lane at all.
+ * "Directly behind" is the one space the road puts one step ahead of this car
+ * **in the lane it is already in** — never a lane it could shift into to find
+ * a car, and never two steps out. A row is a rank rather than a distance
+ * (§5.1), so that one step is a question about the road, not about row
+ * numbers: on a corner's inside line it can cover two rows, and on a
+ * staggered stretch a car a row up in a different lane is beside this one
+ * rather than in front of it.
  *
  * A draft needs real speed on both sides: the trailing car in fourth gear or
  * above, and never below the gear of the car it is drafting — a slower car
@@ -844,11 +842,13 @@ export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: str
     if (ps.skipNextTurn) return false;
 
     const track = trackById(state.trackId);
+    // Every space directly ahead of this car in its own lane — almost always
+    // one, but a fork can offer more than one tile under the same lane number.
     // Traffic ignored: a car in the way is the thing being looked for.
-    const wake = stepsWithin(track, { row: ps.row, lane: ps.lane }, Math.max(...SLIPSTREAM_GAP_STEPS));
+    const directlyAhead = stepsFrom(track, ps.row, ps.lane).filter(next => next.lane === ps.lane);
     const ahead = [...playerStates(state)].some(([otherId, other]) => {
         if (otherId === userId) return false;
-        if (!SLIPSTREAM_GAP_STEPS.includes(wake.get(spaceKey(other.row, other.lane))?.step ?? 0)) return false;
+        if (!directlyAhead.some(next => next.row === other.row && next.lane === other.lane)) return false;
         // The car ahead clears the minimum, and the trailing car is at least as
         // fast — `ps.gear >= other.gear >= SLIPSTREAM_MIN_GEAR` already proves
         // the trailing car clears it too, so there is nothing left to check there.
