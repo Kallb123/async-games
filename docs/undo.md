@@ -29,6 +29,7 @@ and gains nothing until someone opts it in a line at a time.
 13. [Testing](#13-testing)
 14. [What this does not reach](#14-what-this-does-not-reach)
 15. [Definition of done](#15-definition-of-done)
+16. [When this becomes an abstraction](#16-when-this-becomes-an-abstraction)
 
 ---
 
@@ -202,6 +203,10 @@ genuinely identical are `markDirty` (§9) and a two-line push/pop, and a generic
 `undoStack<T>` wrapper over those would be an abstraction with no behaviour in
 it. This is the case AGENTS.md's "a second copy is the signal to extract the
 first one" is *not* about: the pattern repeats, the code doesn't.
+
+Solitaire is not the second copy. The second *multiplayer* game is, and §16 says
+what that one should trigger — because at the five or six games that plausibly
+want undo, a real abstraction does appear, and it isn't this one.
 
 ### Which command can be undone — the anchor
 
@@ -819,12 +824,13 @@ asserting on.
   `SACMaritimeTrade` are both non-random and both one line each once the shape
   has had a game's worth of play: `readonly undoable = true` and a
   `sacPushUndo` call. Deliberately not in the pilot.
-- **Other games.** Nothing here is wired into any other game. Train Time's
-  route claims, World Domination's deployments and Outbreak's actions are all
-  plausible candidates; each needs its own snapshot and its own answer to §6,
-  and none of them needs the engine to change again. The second game to opt in
-  is when `UNDO_WINDOW_MS` moves out of `board.ts`, and when the push/pop pair
-  is worth looking at twice.
+- **Other games.** Nothing here is wired into any other game. Dice Cities' card
+  purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
+  and World Domination's troop movements (not its combat) are all plausible
+  candidates. None of them needs the engine to change again to *work* — but at
+  that many, the six copies stop being a pattern and start being duplication.
+  §16 says what to promote, when, and what the pilot does now so that promotion
+  is mechanical.
 - **Redo.** No.
 - **Undoing across a turn boundary.** Never: once the hand-off has happened the
   next player has been told, and may have opened the board.
@@ -848,3 +854,122 @@ asserting on.
 - No new component, no new module, and no new field on `ICommandOutcome`.
 - `npm run build`, `npx tsc --noEmit`, `npm run lint` and `npm test` are green,
   and the What's new note is one line.
+
+## 16. When this becomes an abstraction
+
+§4 argues against extracting a shared undo with Solitaire, and that argument
+holds for exactly as long as there is one multiplayer game doing this. It does
+not survive the roadmap. If Dice Cities can take back a card purchase, Train
+Time a route claim, Banned Islet and Outbreak an action, and World Domination a
+troop movement (its combat is dice, so never), then there are six, and six
+copies of an ownership check is not a pattern — it is duplication with a
+plausible excuse.
+
+So: what gets promoted, when, and what does the pilot do now so that promotion
+is mechanical rather than a rewrite.
+
+### What six games would actually share
+
+Per game, an undo is seven pieces. Only some of them repeat.
+
+| Piece | At six games |
+|---|---|
+| `clone<Game>State` | **Already exists in seven of eleven games**, with the same `(gs, userIdList)` signature — Banned Islet, Outbreak, Train Time, World Domination, Race Cars, Fires Out and Settlements & Cities all export one, because the replay engine already wanted it. Stays per-game; there is nothing to share that isn't already shared. |
+| `undoStack` / `undoAnchorId` on the state | **Identical six times.** The fields hold opaque state; nothing about them is game-shaped. |
+| The push at the top of each undoable command | **Identical six times** but for the cloner it names. |
+| The undo command | **Identical six times** but for the cloner and the cast. This is the one that matters. |
+| `canUndo` on the response | **One expression, six times.** |
+| Which commands are undoable | **Never shareable.** It is a rules judgement, and the roadmap proves it: movement but not combat, a purchase but not the draw that follows it. |
+| The ten-second hold | **Partly.** Two games auto-end a turn today — Settlements & Cities via `sacFinishTurn`'s follow-up, Dice Cities via `settleRoll`/`noActionsAvailable` returning `turnOver` from three call sites — and they do it in two different shapes. The others may never need it. |
+
+### The one to promote: the undo command
+
+Not because of line count — six hand-written commands are about 150 lines
+against roughly 110 for a generic one plus its registrations, which is a wash.
+Because of **invariant count**. The undo command is where the anchor check, the
+"is this your move" check, the depth cap and the `markModified` live, and those
+four decide whether a player can rewind somebody else's move or a move that
+consumed randomness. Six copies of that is how the fifth one ends up subtly
+different from the first, and nothing fails until somebody notices in a game.
+
+The shape is not a new idea in this repo, which is the point:
+
+```ts
+// src/utils/games/undo.ts — a fourth createAdapterRegistry, beside
+// registerReplayAdapter, registerRecapAdapter and registerTurnTimeoutAdapter.
+export interface IUndoAdapter {
+    className: string;                       // gameType.className
+    /** The game's own whole-state cloner — the one replay already made it write. */
+    cloneState(gameData: IGameData): unknown;
+    /** Assign a popped snapshot back. Almost always Object.assign(gs, restored). */
+    restoreState(gameData: IGameData, snapshot: unknown): void;
+}
+```
+
+…and one `@serializable GameUndo` command that looks its adapter up by
+`gameData.gameType.className`, exactly as `resolveStalledTurn` already looks up
+a turn-timeout adapter. Every game's entry is then three lines: the two state
+fields, one `registerUndoAdapter({...})`, and `undoable = true` on the commands
+that qualify.
+
+`pushUndo(gameData, command)` and the `canUndo` expression ride along in the
+same module, for the same reason.
+
+### Two things that will block it, worth knowing before game #2
+
+Neither is a reason not to do it. Both are reasons not to discover them halfway
+through the PR.
+
+1. **`COMMANDS_BY_GAME_TYPE` forbids a shared command today, on purpose.**
+   `serializableRegistry.test.ts` asserts *"A command listed under two games
+   would let either game run it"* and fails on any `className` listed twice —
+   a guard that exists because every other `Execute` opens by casting the game
+   to its own shape, so a command reaching the wrong game reaches rules written
+   for state it isn't holding. A universal `GameUndo` is the first command for
+   which that rationale genuinely does not apply: it never casts, it looks its
+   game up. But relaxing that guard — a `SHARED_COMMANDS` list, allowed for any
+   game type that registers an undo adapter — is a change to a security
+   boundary, and **it is the locksmith's call, not the caveman's.** Raise it
+   with them when game #2 lands, not in a PR description.
+2. **Dice Cities has no `cloneDiceCitiesState`.** It is the one of the six that
+   never needed one: its replay adapter rebuilds the opening state from the
+   creation parameters (`buildInitialDiceCitiesState(userIdList, enabledDocks,
+   bankTotal, theme)`) rather than cloning a stored snapshot. Undo there starts
+   with writing that cloner — about thirty lines in the shape of the other
+   seven — which is a real cost to budget, not a surprise to hit.
+
+### What stays per-game even at six
+
+- **The cloner.** Already per-game, already written, already tested by replay.
+- **Which commands opt in.** Six different rules answers; the only shared part
+  is the CI guard that no `undoable` command executes into a `recorded` field,
+  which becomes one test over every game instead of six.
+- **The hold.** Two shapes across two games is not enough to know what the
+  abstraction is, and four of the six may never auto-end a turn at all. If it
+  does generalise, the field probably belongs on the base `IGameData` beside
+  `lastTurnTimestamp` rather than in each game's state — the base engine already
+  owns `currentTurn` and the timer — but that is a bigger change than this
+  paragraph should pretend, and it needs a second real example first.
+
+### The trigger, and what the pilot owes it
+
+**Promote at game #2, not at game #6, and not now.** Write the second game's
+undo by hand, deliberately, then diff its `Execute` against `SACUndo`'s. If the
+two differ only in the cloner and the cast, promote in that same PR — the diff
+is mechanical and both call sites are in front of you. If they differ in any
+other way, that difference is the thing the abstraction would have hidden, and
+the wait was worth it.
+
+Three things the pilot does **now** to make that a rename rather than a rewrite,
+none of which costs anything today:
+
+- **Name the fields as the shared helper would**: `undoStack`, `undoAnchorId`.
+  Already the plan.
+- **Keep `SACUndo.Execute` free of Settlements & Cities**, save for the
+  `cloneSACState` call and the cast. No SAC-specific guard, no phase check, no
+  game-specific history line — "took back their last move" is already generic.
+  If the pilot needs a SAC-only rule inside `Execute`, that is the signal the
+  generic command will not work and §16 should be rewritten, not worked around.
+- **Keep `UNDO_WINDOW_MS` a single exported constant** (§7 puts it in
+  `board.ts`), so moving it is one import change per file rather than a hunt for
+  a literal `10_000`.
