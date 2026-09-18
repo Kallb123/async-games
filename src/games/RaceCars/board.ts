@@ -405,6 +405,13 @@ export const SLIPSTREAM_STEPS = 3;
  * other's wake.
  */
 export const SLIPSTREAM_GAP_STEPS = [1, 2];
+/**
+ * A tow needs both cars doing real speed (§12): the trailing car in this gear
+ * or above, and never below the gear of the car it is drafting off.
+ */
+export const SLIPSTREAM_MIN_GEAR: RaceCarsGear = 4;
+/** Late braking (§12): a tow that carries the car into a corner it was not already in costs this. */
+export const SLIPSTREAM_CORNER_ENTRY_BRAKE = 1;
 /** Brakes shorten a roll down to this and no further — a car always moves (§11). */
 export const MIN_MOVE_STEPS = 1;
 
