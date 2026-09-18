@@ -324,6 +324,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                         <RaceCarsBoard
                             gs={gs}
                             userIdList={userIdList}
+                            myUserId={myUserId}
                             validSpaces={validSpaces}
                             unavoidableOilSpaces={unavoidableOilSpaces}
                             onSpaceClick={isMyTurn && !submitting ? chooseDestination : undefined}
