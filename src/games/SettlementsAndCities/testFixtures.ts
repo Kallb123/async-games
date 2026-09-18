@@ -72,6 +72,8 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
             fiveSixPlayerExtension: false,
         },
         victoryTarget: 10,
+        undoStack: [],
+        undoAnchorId: null,
         ...overrides,
     };
 }

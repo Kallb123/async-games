@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
 import { sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -107,6 +107,21 @@ function sacUpdateLargestArmy(sacData: ISettlementsAndCitiesGameData): void {
             }
         }
     }
+}
+
+// ─── Undo (docs/undo.md) ──────────────────────────────────────────────────────
+
+// Pushed by an undoable command (readonly undoable = true, below) before its
+// first mutation. The snapshot is the whole state — cloneSACState already
+// exists for replay, so there is no second, hand-picked list of fields to
+// keep in sync with ISACSpecificGameState. Capped at UNDO_STACK_DEPTH; the
+// anchor is what makes an older entry unreachable the moment anything else is
+// played, so dropping the oldest only ever costs reach, never correctness.
+function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameCommand): void {
+    const gs = sacData.specificGameState;
+    gs.undoStack.push({ by: command.senderId, state: cloneSACState(gs, sacData.userIdList) });
+    if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
+    gs.undoAnchorId = command.id;
 }
 
 // ─── Helper: advance setup turn ──────────────────────────────────────────────
@@ -375,6 +390,9 @@ export class SACPlaceSettlementSetup implements IGameCommand {
     senderUsername: string = 'Unknown';
     vertexId: number = 0;
     readonly className = 'SACPlaceSettlementSetup';
+    // Pure placement, plus starting resources in the second round — both
+    // restorable from a whole-state snapshot (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'placed a settlement (setup)'; }
 
@@ -384,6 +402,8 @@ export class SACPlaceSettlementSetup implements IGameCommand {
 
         if (gs.phase !== 'setup' || gs.pendingRoadSetup) return { validMove: false, turnOver: false };
         if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         gs.vertices[this.vertexId].building = 'settlement';
         gs.vertices[this.vertexId].owner = this.senderId;
@@ -424,6 +444,9 @@ export class SACPlaceRoadSetup implements IGameCommand {
     senderUsername: string = 'Unknown';
     edgeId: number = 0;
     readonly className = 'SACPlaceRoadSetup';
+    // Pure placement (docs/undo.md §6). It ends the setup turn, so it is the
+    // one the ten-second hold (§5, PR 3) applies to.
+    readonly undoable = true;
 
     myString() { return 'placed a road (setup)'; }
 
@@ -436,6 +459,8 @@ export class SACPlaceRoadSetup implements IGameCommand {
         if (!isValidSetupRoadEdge(this.edgeId, gs.lastSetupSettlementVertex, gs.edges)) {
             return { validMove: false, turnOver: false };
         }
+
+        sacPushUndo(sacData, this);
 
         gs.edges[this.edgeId].hasRoad = true;
         gs.edges[this.edgeId].owner = this.senderId;
@@ -707,6 +732,10 @@ export class SACBuildRoad implements IGameCommand {
     senderUsername: string = 'Unknown';
     edgeId: number = 0;
     readonly className = 'SACBuildRoad';
+    // Spends two known resources on a known edge — also covers a free road
+    // from Road Building, whose pendingRoadBuilding count the snapshot
+    // restores with the rest of the state (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'built a road'; }
 
@@ -729,6 +758,8 @@ export class SACBuildRoad implements IGameCommand {
         const ps = gs.playerStates.get(this.senderId);
         if (!ps) return { validMove: false, turnOver: false };
         if (ps.remainingRoads <= 0) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         if (!isFreeRoad) {
             if (ps.resources.brick < 1 || ps.resources.lumber < 1) return { validMove: false, turnOver: false };
@@ -759,6 +790,8 @@ export class SACBuildSettlement implements IGameCommand {
     senderUsername: string = 'Unknown';
     vertexId: number = 0;
     readonly className = 'SACBuildSettlement';
+    // Spends four known resources on a known vertex (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'built a settlement'; }
 
@@ -783,6 +816,8 @@ export class SACBuildSettlement implements IGameCommand {
             ps.resources.wool < 1 || ps.resources.grain < 1) {
             return { validMove: false, turnOver: false };
         }
+
+        sacPushUndo(sacData, this);
 
         ps.resources.brick--;
         ps.resources.lumber--;
@@ -1065,5 +1100,46 @@ export class SACEndTurn implements IGameCommand {
             gs.specialBuildActive ? `finished their special build` : `ended their turn`,
         ));
         return { validMove: true, turnOver: true };
+    }
+}
+
+// ─── Undo ─────────────────────────────────────────────────────────────────────
+
+@serializable
+export class SACUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACUndo';
+
+    myString() { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        // A snapshot is only good for the command directly behind it: refused
+        // once anything else has run since it was pushed, which is what lets
+        // the stack go stale on its own rather than every other command having
+        // to remember to clear it (docs/undo.md §4).
+        const lastCommand = sacData.gameState.commandHistory.at(-1);
+        if (!lastCommand || gs.undoAnchorId !== lastCommand.id) {
+            return { validMove: false, turnOver: false };
+        }
+
+        const entry = (gs.undoStack ?? []).at(-1);
+        if (!entry || entry.by !== this.senderId) {
+            return { validMove: false, turnOver: false };
+        }
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        sacData.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        return { validMove: true, turnOver: false };
     }
 }

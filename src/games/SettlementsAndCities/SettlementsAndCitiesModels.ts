@@ -8,23 +8,22 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import {
     generateBoard,
     createInitialPlayerState,
+    cloneSACState,
+    cloneRollChanges,
     DEV_CARD_DECK,
     calculateVisibleVP,
     calculateLongestRoad,
     BOARD_TOPOLOGY,
-    ISACHex,
     ISACVertex,
     ISACEdge,
-    ISACHarbor,
     ISACPlayerState,
     ISACResources,
     ISACDevCards,
-    ISACRollChange,
     ISACSpecificGameState,
 } from "./board";
 import {
@@ -60,87 +59,16 @@ export interface ISettlementsAndCitiesInvitationDataModel
 // reconstructed from later state (the deck shrinks as cards are drawn), so the
 // starting specificGameState is persisted at creation and deep-cloned to seed
 // replay. See docs/turn-recap-and-planning.md.
-
-function cloneResources(r: ISACResources): ISACResources {
-    return { lumber: r.lumber, wool: r.wool, grain: r.grain, brick: r.brick, ore: r.ore };
-}
-
-function cloneDevCards(d: ISACDevCards): ISACDevCards {
-    return {
-        knight: d.knight,
-        victoryPoint: d.victoryPoint,
-        roadBuilding: d.roadBuilding,
-        yearOfPlenty: d.yearOfPlenty,
-        monopoly: d.monopoly,
-    };
-}
-
-// The last roll's payout, as plain objects. A game whose last roll predates the
-// field has none, and stays that way rather than being given an empty payout —
-// "nothing recorded" and "paid nobody" are different things to the screens that
-// read it.
-function cloneRollChanges(changes: ISACRollChange[] | undefined): ISACRollChange[] | undefined {
-    return changes?.map((change): ISACRollChange => ({
-        userId: change.userId,
-        gained: cloneResources(change.gained),
-        discarded: change.discarded,
-    }));
-}
-
-function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
-    return {
-        resources: cloneResources(ps.resources),
-        devCards: cloneDevCards(ps.devCards),
-        newDevCards: cloneDevCards(ps.newDevCards),
-        knightsPlayed: ps.knightsPlayed,
-        remainingRoads: ps.remainingRoads,
-        remainingSettlements: ps.remainingSettlements,
-        remainingCities: ps.remainingCities,
-        devCardsBought: ps.devCardsBought,
-        resourcesGathered: ps.resourcesGathered,
-        robberUses: ps.robberUses,
-    };
-}
-
-// Deep-clones a SAC game state into independent plain objects. The player map
-// is rebuilt in `userIdList` order (see clonePlayerStates) so replay iteration
-// — the 7-roll discard loop above all — matches the original creation order.
-export function cloneSACState(
-    gs: ISACSpecificGameState,
-    userIdList: string[],
-): ISACSpecificGameState {
-    return {
-        hexes: gs.hexes.map((h): ISACHex => ({ terrain: h.terrain, numberToken: h.numberToken })),
-        vertices: gs.vertices.map((v): ISACVertex => ({ building: v.building, owner: v.owner })),
-        edges: gs.edges.map((e): ISACEdge => ({ hasRoad: e.hasRoad, owner: e.owner })),
-        harbors: gs.harbors.map((h): ISACHarbor => ({ type: h.type, vertices: [h.vertices[0], h.vertices[1]] })),
-        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
-        robberHexIndex: gs.robberHexIndex,
-        phase: gs.phase,
-        setupStep: gs.setupStep,
-        pendingRoadSetup: gs.pendingRoadSetup,
-        lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
-        hasRolled: gs.hasRolled,
-        lastRoll: gs.lastRoll,
-        lastRollDie1: gs.lastRollDie1,
-        lastRollDie2: gs.lastRollDie2,
-        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
-        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
-        lastRollAutoEndedBy: gs.lastRollAutoEndedBy ?? null,
-        pendingRobber: gs.pendingRobber,
-        longestRoadOwner: gs.longestRoadOwner,
-        largestArmyOwner: gs.largestArmyOwner,
-        devCardDeck: [...gs.devCardDeck],
-        pendingRoadBuilding: gs.pendingRoadBuilding,
-        playedDevCard: gs.playedDevCard,
-        specialBuildActive: gs.specialBuildActive ?? false,
-        specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
-        specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
-        randomTiles: gs.randomTiles ?? true,
-        expansions: normaliseExpansions(gs.expansions),
-        victoryTarget: gs.victoryTarget ?? 10,
-    };
-}
+//
+// cloneSACState itself lives in board.ts, not here: it's pure data cloning
+// with nothing Mongoose-shaped about it, and SettlementsAndCitiesLogic.ts
+// needs it too (docs/undo.md §7's sacPushUndo). This file imports mongoose at
+// the top, so a command class importing anything from it — even one function
+// that never touches a Schema — would drag the whole driver into the client
+// bundle through the GameLogic barrel every game screen's command classes are
+// reached through. Re-exported here so this stays the one place a caller
+// outside the game looks for anything SAC-shaped.
+export { cloneSACState } from "./board";
 
 // Seeds the replay engine's starting state by deep-cloning the initial snapshot
 // stored at creation. Games created before recap support lack the snapshot;
@@ -252,6 +180,8 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         randomTiles,
         expansions,
         victoryTarget,
+        undoStack: [],
+        undoAnchorId: null,
     };
 
     const gameData: ISettlementsAndCitiesGameData = {
@@ -371,6 +301,11 @@ function makeSACStateSchemaDef() {
         randomTiles: Boolean,
         expansions: expansionsSubSchema,
         victoryTarget: Number,
+        // A snapshot is a whole ISACSpecificGameState (see cloneSACState), which
+        // Mixed is the only honest way to declare without duplicating this
+        // entire schema definition as its own nested type.
+        undoStack: [{ by: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
     };
 }
 
@@ -469,6 +404,12 @@ export function gameStateToResponse(
     const specialBuildQueue = gs.specialBuildQueue ?? [];
     const specialBuildMainPlayer = gs.specialBuildMainPlayer ?? null;
 
+    // The viewer's own — whether *they* have a move they can still take back.
+    // Absent (`?? []`) for a game that predates the stack, false for anyone
+    // whose move it isn't, and false for a viewerless replay/recap, since no
+    // viewerId can ever equal a stack entry's `by`.
+    const canUndo = (gs.undoStack ?? []).at(-1)?.by === viewerId;
+
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
         vertices,
@@ -503,6 +444,7 @@ export function gameStateToResponse(
         randomTiles: gs.randomTiles ?? true,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
+        canUndo,
     };
 }
 

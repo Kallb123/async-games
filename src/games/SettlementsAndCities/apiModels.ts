@@ -117,6 +117,9 @@ export interface ISACSpecificGameStateResponse {
     // Active expansions and the VP target they imply (design doc §8).
     expansions: SACExpansions;
     victoryTarget: number;
+    // True when the viewer has a move of their own they can still take back
+    // (docs/undo.md). The stack it's computed from never leaves the server.
+    canUndo: boolean;
 }
 
 export interface ISACGameDataResponse extends IGameDataResponse {

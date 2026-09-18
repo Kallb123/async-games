@@ -100,7 +100,7 @@ function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlay
 
 // Deep-clones a World Domination game state into independent plain objects,
 // rebuilding the player map in `userIdList` order (see clonePlayerStates) —
-// mirrors SAC's cloneSACState (see SettlementsAndCitiesModels.ts) for the same
+// mirrors SAC's cloneSACState (see SettlementsAndCities/board.ts) for the same
 // reason: the board (here, the shuffled territory deal + card deck) is
 // randomised at creation and can't be reconstructed later, so turn recap
 // replays from a persisted snapshot instead.
