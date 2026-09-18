@@ -4614,25 +4614,27 @@ button.ag-tt-ticket { cursor: pointer; }
 /* Row 0 — the start/finish line. */
 .ag-rc-space--line { fill: color-mix(in oklch, oklch(0.78 0.01 250) 50%, transparent); }
 
-/* The spaces this move may finish on: a gold wash on the lozenge, and the ring
+/* The spaces this move may finish on: a white wash on the lozenge, and the ring
    round it as its own element. Same trick `ClickableMapNode` plays for a
    highlighted city, and for the same reason — it is what lets the ring reuse
    the app's shared `ag-pulse`, which fades a whole element and would otherwise
    take the track art the fill now lets through out with it. Three lozenges out
    of 214 are easy to lose on a circuit this size; a breathing edge is what says
-   "pick one of these" without a legend. */
+   "pick one of these" without a legend — white rather than a warmer tint so it
+   reads against tarmac, grass and kerb alike, and a deep, brisk pulse so it
+   isn't lost among them. */
 .ag-rc-space--valid {
-    fill: color-mix(in oklch, var(--ag-gold) 40%, transparent);
+    fill: color-mix(in oklch, #fff 40%, transparent);
     cursor: pointer;
 }
-.ag-rc-space--valid:hover { fill: color-mix(in oklch, var(--ag-gold) 72%, transparent); }
+.ag-rc-space--valid:hover { fill: color-mix(in oklch, #fff 78%, transparent); }
 .ag-rc-space-ring {
     fill: none;
-    stroke: var(--ag-gold);
+    stroke: #fff;
     stroke-width: 2.8;
     pointer-events: none;
-    --ag-pulse-min: 0.3;
-    animation: ag-pulse 1.3s ease-in-out infinite;
+    --ag-pulse-min: 0.12;
+    animation: ag-pulse 1.1s ease-in-out infinite;
 }
 
 /* §19.1's car: the shared silhouette, filled with the driver's own colour and
