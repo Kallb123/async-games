@@ -76,8 +76,12 @@ out. A second copy is the signal to extract the first one.
   and ctrl-wheel zoom, both anchored so the part of the board under the fingers
   stays put. A board whose pieces are too small to tap asks it for a deeper
   step; it doesn't grow its own gesture handling or a cropped second copy of
-  itself. (The track editor is the one exception, and says why in its own file:
-  it owns every pointer press on its canvas.)
+  itself. A third way the view can move is unprompted: pass `BoardZoom` a
+  `focus` (a region in the child's own viewBox units, plus a key that changes
+  whenever the focus should reapply) and it smooth-scrolls and zooms in on its
+  own, as Race Cars does the instant a roll hands a driver their car and the
+  spaces it may finish on. (The track editor is the one exception, and says why
+  in its own file: it owns every pointer press on its canvas.)
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands
   on another name, on a node, on a marker beside a node, or off the map — tell
