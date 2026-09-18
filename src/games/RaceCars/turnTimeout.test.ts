@@ -107,8 +107,8 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
     it("resolves a stall in 'slipstream', which nothing else could (§12)", async () => {
         const state = race({
-            a: { row: 20, lane: 1, phase: 'slipstream' },
-            b: { row: 22, lane: 3 },
+            a: { row: 20, lane: 1, gear: 4, phase: 'slipstream' },
+            b: { row: 21, lane: 1, gear: 4 },
         });
         const game = makeGame(state);
 
@@ -126,8 +126,8 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
     it("declines a tow that would push it out of a corner it still owes (§12)", async () => {
         const state = race({
-            a: { row: 13, lane: 1, cornerStops: 1, phase: 'slipstream' },
-            b: { row: 15, lane: 1 },
+            a: { row: 13, lane: 1, gear: 4, cornerStops: 1, phase: 'slipstream' },
+            b: { row: 14, lane: 1, gear: 4 },
         });
         const game = makeGame(state);
 
@@ -264,8 +264,8 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
         // declining costs nothing — so the tow is priced the way §23.7 asks and
         // waved away.
         const state = race({
-            a: { row: 20, lane: 1, phase: 'slipstream' },
-            b: { row: 22, lane: 3 },
+            a: { row: 20, lane: 1, gear: 4, phase: 'slipstream' },
+            b: { row: 21, lane: 1, gear: 4 },
         }, {
             oilSpills: true,
             slicks: [1, 2, 3].map(lane => ({ row: 21, lane, laidOnRound: 1 })),

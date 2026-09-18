@@ -11,6 +11,7 @@ import {
     MIN_MOVE_STEPS,
     RaceCarsGear,
     RaceCarsSpace,
+    SLIPSTREAM_CORNER_ENTRY_BRAKE,
     SLIPSTREAM_STEPS,
     trackById,
     BRAKE_SLICK_THRESHOLD,
@@ -24,6 +25,7 @@ import {
 import {
     classification,
     derivePath,
+    entersNewCorner,
     flyingStartRoll,
     legalGears,
     moveOptions,
@@ -31,6 +33,7 @@ import {
     resolveArrival,
     rollFor,
     rollStart,
+    slipstreamMoveOptions,
     slipstreamOffered,
     startOutcome,
     RaceCarsStartOutcome,
@@ -269,12 +272,14 @@ function arrivalOutcome(
     ps: IRaceCarsPlayerState,
     senderId: string,
     settled: { arrival: RaceCarsArrival; tyresSpent: number },
-    leg: { roll: { gear: RaceCarsGear | null; value: number } | null; offerTow: boolean },
+    leg: { roll: { gear: RaceCarsGear | null; value: number } | null },
 ): IRaceCarsArrivalOutcome {
     const { arrival, tyresSpent } = settled;
-    // §12: one tow per turn, so only the rolled move can earn one — and a
-    // crossing beats even that, because the race has already stopped.
-    const towOffered = leg.offerTow && !arrival.finished && slipstreamOffered(gs, senderId);
+    // §12: chained. The offer is re-derived here after *every* leg — the
+    // rolled move and each tow alike — so a tow that ends fast enough and
+    // close enough behind a further car earns another; a crossing beats it
+    // regardless, because the race has already stopped.
+    const towOffered = !arrival.finished && slipstreamOffered(gs, senderId);
     if (towOffered) ps.phase = 'slipstream';
     return {
         validMove: true,
@@ -679,11 +684,11 @@ export class RaceCarsMove implements IGameCommand {
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // §12: a move that ends one or two rows behind another car is owed a
-        // tow, and the turn is not over until the driver has taken it or
-        // declined it. Everything else — a spin, a crossing, an empty road —
-        // ends the turn here.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll, offerTow: true });
+        // §12: a move that ends directly behind another car, fast enough to
+        // draft, is owed a tow, and the turn is not over until the driver has
+        // taken it or declined it. Everything else — a spin, a crossing, an
+        // empty road — ends the turn here.
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll });
     }
 
     Undo(gameData: IGameData): void {
@@ -750,16 +755,30 @@ export class RaceCarsSlipstream implements IGameCommand {
             return { validMove: true, turnOver: true };
         }
 
-        // Exactly the same reach the first move validated against, with the
-        // distance fixed at three — and the blocked-short set is its own set
-        // here too, so "I would rather stop here" cannot be dressed as a block.
-        const options = moveOptions(gs, this.senderId, SLIPSTREAM_STEPS);
+        // The same reach the first move validated against, with the distance
+        // fixed at three, minus any destination that would carry the car into
+        // a corner it is not already in with no brake left to pay for it
+        // (§12's late braking, `slipstreamMoveOptions`) — the blocked-short set
+        // is its own set here too, so "I would rather stop here" cannot be
+        // dressed as a block.
+        const options = slipstreamMoveOptions(gs, this.senderId);
         if (!options.spaces.some(space => space.row === tow.row && space.lane === tow.lane)) return INVALID;
 
         const path = derivePath(gs, this.senderId, options.distance, { row: tow.row, lane: tow.lane });
         if (path.length === 0) return INVALID;
 
         const track = trackById(gs.trackId);
+
+        // §12: late braking. A tow that carries the car into a corner it was
+        // not already in costs a brake point, charged before `settle` so a run
+        // of these in one turn counts toward §14's 3-brake slick threshold the
+        // same as braking the roll down does.
+        const enteringCorner = entersNewCorner(track, { row: ps.row, lane: ps.lane }, { row: tow.row, lane: tow.lane });
+        if (enteringCorner) {
+            ps.brakes -= SLIPSTREAM_CORNER_ENTRY_BRAKE;
+            ps.brakeSpent += SLIPSTREAM_CORNER_ENTRY_BRAKE;
+        }
+
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
             // §12: a tow can push a car out of a corner it still owes stops to,
@@ -767,15 +786,17 @@ export class RaceCarsSlipstream implements IGameCommand {
             // corner the driver "could not have avoided leaving"; declining
             // this costs nothing, so that reasoning does not reach the tow.
             waiveUnavoidableCorner: false,
-            lead: `took the tow ${pluralize(path.length - 1, 'space')}${landing(track, path)}`,
+            lead: `took the tow ${pluralize(path.length - 1, 'space')}${landing(track, path)}`
+                + (enteringCorner ? ` — ${pluralize(SLIPSTREAM_CORNER_ENTRY_BRAKE, 'brake')} for late braking` : ''),
         });
 
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // §12: one tow per turn. Ending it behind a third car earns nothing, so
-        // no second offer is made and the turn is over either way.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null, offerTow: false });
+        // §12: chained. Ending this tow directly behind another car that is
+        // fast enough to draft earns another — `slipstreamOffered` is
+        // the gate on both legs, so nothing here decides that twice.
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null });
     }
 
     Undo(gameData: IGameData): void {

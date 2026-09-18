@@ -330,7 +330,8 @@ be: it is bad luck you race out of, not a race you have lost.
 
 Everything else about the round is ordinary. Turn order is the grid order (§15),
 a move off the line resolves corners, blocking and oil like any other (§9-§14),
-and a car that ends its move one or two spaces behind another is owed §12's tow.
+and a car that ends its move directly behind another, fast enough to draft it,
+is owed §12's tow.
 
 **A race that was already running when this landed finishes under the rules it
 started under.** Every car carries the d20 it got away on, so a car in neutral
@@ -359,8 +360,11 @@ exactly that many spaces, choosing your destination from the ones the roll can
 legally reach (§9). Corner stops, overshoots, blocking and — if it is on — oil
 are all resolved by arriving.
 
-**Step 3 — Slipstream.** If your move ended one or two spaces behind another car,
-you may take a three-space tow (§12), or decline it. Either way the turn ends.
+**Step 3 — Slipstream.** If your move ended directly behind another car you are
+fast enough to draft, you may take a three-space tow (§12), or decline it.
+Declining, or ending the tow with nothing left to draft, ends the turn — but a
+tow that ends the same way behind a *third* car offers another, chained for as
+long as §12's conditions keep holding.
 
 The shape of the turn matters as much as its content: **the roll happens in
 step 1, and every decision that follows it is made with the number known.**
@@ -576,7 +580,7 @@ choice at setup and everybody races it.
 | Pool | Spent on | Spent when |
 |---|---|---|
 | **Tyres** | Overshooting a corner (1 per space, §10) · being blocked short (1, §9) | Automatically, on arrival |
-| **Brakes** | Shortening this turn's roll by 1 space each | Declared with the move, after the roll |
+| **Brakes** | Shortening this turn's roll by 1 space each · late braking into a corner on a tow (1, §12) | Shortening the roll is declared with the move, after the roll; late braking is automatic, on the tow arriving |
 | **Gearbox** | Dropping more than one gear (§8.2's table) | Declared with the shift, before the roll |
 
 **Braking is the only pool you spend on purpose, with the number in front of
@@ -597,30 +601,65 @@ that alone changes which spec is correct.
 
 ## 12. Slipstream
 
-If your move ends **one or two spaces behind another car — in any lane you could
-tuck into** — you may take a tow: a second move of exactly **3 spaces**,
-immediately, resolved under every rule a normal move follows.
+If your move ends **directly behind another car you are fast enough to
+draft** — one step ahead, in the lane you are already in, and no other — you
+may take a tow: a second move of exactly **3 spaces**, immediately, resolved
+under every rule a normal move follows.
 
-"One or two spaces behind" is a question about the road between the two cars,
-walked the way a car drives it (§5.1): a row is a rank rather than a distance,
-and being one row up and two lanes over is alongside, not in front.
+"Directly behind" is a question about the road between the two cars, walked
+the way a car drives it (§5.1): a row is a rank rather than a distance, so on
+a corner's inside line "one step" can cover two rows, and on a staggered
+stretch being one row up in a different lane is alongside, not in front.
+Shifting lane to find a wake does not count — the draft is only ever there for
+the car that stayed in it.
+
+**Fast enough to draft** is a gear condition on both cars, checked the instant
+the tow is offered:
+
+- **Gear minimum.** Both cars must be in **4th, 5th or 6th** gear. A draft is a
+  wake thrown by real speed — a car crawling out of a hairpin throws none worth
+  tucking into, and neither does the car behind it.
+- **Gear comparison.** The trailing car's gear must be **the same as or higher
+  than** the gear of the car ahead. A car in a higher gear has already left the
+  slower car's wake behind; there is nothing to draft.
+
+Neither condition ever changes what a tow *does* to a car's own gear — a tow is
+a move, and §8's gear ladder only moves on a shift — so a chain of tows stays
+legal for exactly as long as the trailing car's own gear keeps clearing the bar
+and the car(s) it draws level with keep meeting it too.
 
 - You may **decline**. Declining costs nothing.
 - The tow obeys blocking (§9), corners (§10) and oil (§14) exactly as the first
   move did. **A tow can push you out of a corner you still owe stops to**, and
   the overshoot is charged in full.
-- **One tow per turn.** Ending the tow behind a third car does not earn another.
+- **Late braking.** If the tow carries the car into a corner it was not already
+  standing in — from open road, or from a different corner — it costs **1
+  brake point**, on top of whatever §10 charges for what happens once it is
+  there. **With no brake points left, a car may not legally tow into a
+  corner**: any destination that would take it into one it is not already in
+  is not offered, the same way a destination with no road to it is not
+  offered. Towing further into the corner the car is *already* standing in
+  costs nothing extra — that corner's stops are already owed.
+- **Chained.** Ending the tow directly behind a third car offers another, under
+  exactly the same two gear conditions and the same late-braking charge — a
+  fast field can draft its way down a straight in one turn, spending
+  a brake point at every corner it drafts into along the way. A car that spins
+  partway through a chain (§13) ends the turn immediately, the same as any
+  other spin; nothing about the chain waives it.
 - A tow that is blocked short takes the same 1 tyre a blocked move does. A tow
-  with **nothing reachable at all** — both lanes of the Esses occupied one space
-  ahead — is simply **not offered**, rather than offered and then punished. The
-  check belongs in `slipstreamOffered`, not in the command that accepts it: a
-  player should never be able to accept an offer that costs them for accepting
-  it.
+  with **nothing legally reachable at all** — both lanes of the Esses occupied
+  one space ahead, or every reachable space a corner entry with no brakes left
+  to pay for it — is simply **not offered**, rather than offered and then
+  punished. The check belongs in `slipstreamOffered`, not in the command that
+  accepts it: a player should never be able to accept an offer that costs them
+  for accepting it, or one that is illegal to accept at all.
 
 Slipstream is the game's rubber band, and it is pointed the right way round: it
 only ever helps the car behind, it is strongest where the field is closest, and
 it is most dangerous exactly where the field is closest — in the braking zone
-for a corner, where three free spaces are three spaces of overshoot.
+for a corner, where three free spaces are three spaces of overshoot, and even a
+draft that costs nothing in tyres now costs a brake for the risk of running
+that deep into traffic.
 
 ---
 
@@ -804,6 +843,8 @@ like a cliff.
 | Two cars complete the race distance in the same round | The first to cross, in play order, wins — the race ends immediately and the second never gets its turn |
 | A move crosses two corners | Each is resolved in path order and charges its own overshoot (§10). A spin at the first stops the move there |
 | A slipstream tow crosses a corner | Fully resolved, overshoot charged. The tow is a move, not a bonus |
+| A slipstream tow enters a corner it was not already in | 1 brake point, on top of whatever §10 charges once it is there (§12's late braking) |
+| A slipstream tow both leaves a corner it owed stops in *and* enters a different one | Both charges apply: the overshoot in tyres, and 1 brake for entering the new corner |
 | A spin happens on the last row of a corner | The car is already there; it stays, drops to gear 0 and misses its turn |
 | An oil spin inside a corner | The car rests on the slick's space, not the corner's last row. Its banked stops are untouched |
 | Overshoot cost exactly equals tyres remaining | It is payable. Tyres reach 0 and the car continues (§4.3) |
@@ -811,8 +852,12 @@ like a cliff.
 | Blocked short with 0 tyres | The block's scuff is a debt that cannot be paid, and an unpayable *block* does not spin — only an unpayable overshoot does. The car stops and takes nothing |
 | Boxed in inside a corner owing stops | Staying put ends the turn inside the corner, so it **banks a stop** |
 | On a corner's last row, still owing a stop | No legal move keeps you inside it, so the remaining stops are waived and leaving is free (§10). The one overshoot in the game that costs nothing |
-| A tow with no reachable space | Not offered at all (§12), rather than offered and charged |
-| A spun car is 1–2 spaces behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
+| A tow with no legally reachable space | Not offered at all (§12), rather than offered and charged — this includes every reachable space being a corner entry with no brakes left to pay for it |
+| A car ends one row up, in a lane other than its own | No tow is offered — that car is alongside, not in the lane the draft is in (§12) |
+| A car in third gear or below is directly behind another | No tow is offered — neither car's gear is a slipstream (§12) unless both are in 4th or higher |
+| The trailing car is in a lower gear than the car it would draft | No tow is offered — it has not caught the wake (§12) |
+| A spun car is directly behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
+| A tow ends directly behind a third car | Another tow is offered under the same gear conditions — chained rather than "one tow a turn" (§12) |
 | Two slicks on one space | Impossible: the second refreshes the first (§14) |
 | A car is lapped | Nothing special happens. A lapped car blocks, tows and corners exactly as any other; §4.2 classifies by laps first, so it is simply behind |
 | The last free lane of a corner is taken when a spin needs it | The spin resolves onto the last *available* space searching backwards along the corner; a corner is never fully occupied by fewer than six cars |
@@ -989,7 +1034,8 @@ Ordered by what each one buys against what it costs.
 | **Stop** | A turn ended inside a corner. Corners owe 1 or 2 |
 | **Overshoot** | Ending past a corner without its stops banked. Costs 1 tyre a space |
 | **Spin** | The unpayable-overshoot or lost-control result: gear 0 and a missed turn (§13) |
-| **Tow** | The three free spaces a slipstream grants (§12) |
+| **Tow** | The three spaces a slipstream grants — free unless it carries the car into a fresh corner, and chained for as long as the gear conditions hold (§12) |
+| **Draft** | The gear condition a tow needs: both cars in 4th or above, the trailing car's gear the same as or higher than the car ahead's (§12) |
 | **Scuff** | The 1 tyre a blocked-short move costs (§9) |
 | **Spec** | How the field's twelve wear tokens are split (§11) |
 | **Slick** | An oil hazard, module only (§14) |
@@ -1005,7 +1051,9 @@ Ordered by what each one buys against what it costs.
 1. **Shift** — up one, or down as many as the gearbox pays for. Roll the gear's die.
 2. **Brake** *(optional)* — 1 point = 1 space less, never below one space.
 3. **Move** — exactly that many spaces. Tap a highlighted space.
-4. **Tow** *(optional)* — 3 more spaces if you ended 1–2 spaces behind a car.
+4. **Tow** *(optional, chained)* — 3 more spaces if you ended directly behind
+   a car, both of you in 4th gear or above and yours no lower than theirs.
+   Ending the tow the same way behind another car offers another.
 
 **Gears** · 1: 1–2 · 2: 2–4 · 3: 4–8 · 4: 7–12 · 5: 11–20 · 6: 21–30
 
@@ -1013,7 +1061,7 @@ Ordered by what each one buys against what it costs.
 
 **Shifting down** · 2 gears = 1 gearbox · 3 = 3 · 4 = 6 · 5 = illegal
 
-**Costs** · overshoot 1 tyre/space · blocked short 1 tyre · brake 1/space · can't pay an overshoot → spin
+**Costs** · overshoot 1 tyre/space · blocked short 1 tyre · brake 1/space · tow into a new corner 1 brake · can't pay an overshoot → spin
 
 **Ashcombe Park** · Hairpin (10–14) 2 stops · Gravel Bend (47–51) 1 · The Kink (62–65) 1 · fifth gear is the top of this circuit
 
@@ -1420,7 +1468,7 @@ Four command classes, not nine:
 | `RaceCarsLaunch { recordedStartRoll?, recordedRoll? }` | §6a's getaway: throws the d20, and on anything but a 1 puts the car in gear 1 with a distance to spend. `turnOver: true` only on a stall, which moves nothing |
 | `RaceCarsShift { gear, recordedRoll? }` | Validates the shift against §8.2, pays gearbox, rolls the gear's die. `turnOver: false` |
 | `RaceCarsMove { row, lane, brake, recordedOilRolls? }` | Spends brakes, walks the derived path, resolves corners, overshoot, blocking, spins and oil. `turnOver: false` only if a tow is on offer |
-| `RaceCarsSlipstream { tow: { row, lane } \| null, recordedOilRolls? }` | Takes the tow, or declines it with `null`. Always ends the turn |
+| `RaceCarsSlipstream { tow: { row, lane } \| null, recordedOilRolls? }` | Takes the tow, or declines it with `null`. `turnOver: false` only if that tow ends the same way in front of another car and a fresh tow is offered — chained, exactly as `RaceCarsMove`'s own hand-off works |
 
 **`RaceCarsLaunch` carries no fields of its own**, which is the point of it
 being a command rather than a flag on `RaceCarsShift`: §6a's throw declares
@@ -1845,9 +1893,10 @@ this from fatal to one lost turn; the adapter is what removes it.)
   Preference order — hold the gear if its maximum cannot overshoot the next
   corner, else drop to the highest gear that cannot; spend the minimum brakes
   needed to avoid an overshoot, if affordable; take the furthest legal
-  destination that neither overshoots nor crosses oil; decline the tow unless it
-  does neither — and then **fall through to the cheapest overshoot, spinning if
-  it cannot be paid**, because that is a legal outcome of §10 and a spin at
+  destination that neither overshoots nor crosses oil; decline the tow unless
+  it does neither *and* is one of the destinations §12's late-braking gate
+  still allows — and then **fall through to the cheapest overshoot, spinning
+  if it cannot be paid**, because that is a legal outcome of §10 and a spin at
   least ends the turn.
 
   A preference list with no fallthrough is not a style problem here, it is a

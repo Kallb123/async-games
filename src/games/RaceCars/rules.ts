@@ -38,12 +38,11 @@ import {
     START_FLYING_FROM,
     START_ROUND,
     START_STALL_FACE,
-    SLIPSTREAM_GAP_STEPS,
+    SLIPSTREAM_MIN_GEAR,
     SLIPSTREAM_STEPS,
     spaceKey,
     spacesInCorner,
     stepsFrom,
-    stepsWithin,
     trackById,
     waivedCornerIdAt,
 } from "./board";
@@ -780,22 +779,61 @@ export function resolveArrival(
 // ─── Slipstream (§12) ───────────────────────────────────────────────────────
 
 /**
- * Whether this car is owed a tow: it ended one or two **steps** behind another
- * car, and has somewhere to go.
+ * Whether a tow into `to` would carry the car past the corner it stands on at
+ * `from` — the road it is on now — into a different one, or into one from open
+ * road. Standing still inside a corner and towing further into the *same* one
+ * is not entry: the car already owes that corner its stops.
+ */
+export function entersNewCorner(track: RaceCarsTrack, from: RaceCarsSpace, to: RaceCarsSpace): boolean {
+    const destCorner = cornerAt(track, to.row, to.lane);
+    if (!destCorner) return false;
+    return destCorner.id !== cornerAt(track, from.row, from.lane)?.id;
+}
+
+/**
+ * Where a tow may legally finish: the ordinary three-step reach, minus any
+ * destination that would carry the car into a corner it is not already in
+ * while it has no brake point left to pay for the late braking (§12). A tow
+ * is never offered at all when nothing survives this filter —
+ * `slipstreamOffered` is what withholds the offer — so a caller that reaches
+ * for this already knows the result is never empty.
+ */
+export function slipstreamMoveOptions(state: IRaceCarsSpecificGameState, userId: string): RaceCarsMoveOptions {
+    const ps = requirePlayer(state, userId);
+    const options = moveOptions(state, userId, SLIPSTREAM_STEPS);
+    if (ps.brakes > 0) return options;
+
+    const track = trackById(state.trackId);
+    const from = { row: ps.row, lane: ps.lane };
+    return { ...options, spaces: options.spaces.filter(space => !entersNewCorner(track, from, space)) };
+}
+
+/**
+ * Whether this car is owed a tow: it ended directly behind another car it is
+ * fast enough to draft (§12), and has somewhere legal to go.
  *
- * Steps rather than rows, and that is the whole of §12 now that a row is a rank
- * rather than a distance (§5.1): on a staggered stretch two cars a row apart
- * are drawn side by side, and on a corner's inside line one step covers two
- * rows. "In the wake of the car in front" is a question about the road between
- * them, which is what a walk of the step graph answers — and it answers it in
- * every lane a car could tuck in behind, rather than every lane at all.
+ * "Directly behind" is the one space the road puts one step ahead of this car
+ * **in the lane it is already in** — never a lane it could shift into to find
+ * a car, and never two steps out. A row is a rank rather than a distance
+ * (§5.1), so that one step is a question about the road, not about row
+ * numbers: on a corner's inside line it can cover two rows, and on a
+ * staggered stretch a car a row up in a different lane is beside this one
+ * rather than in front of it.
  *
- * The "somewhere to go" half is the point of putting the check here rather than
- * in the command that accepts it. A tow with nothing reachable at all — both
- * lanes of the Esses occupied one row ahead — is not offered, rather than
- * offered and then punished: a player should never be able to accept an offer
- * that costs them for accepting it. A tow that is merely blocked *short* is
- * offered, and takes the same tyre a blocked move does.
+ * A draft needs real speed on both sides: the trailing car in fourth gear or
+ * above, and never below the gear of the car it is drafting — a slower car
+ * throws no wake worth tucking into, and a faster one leaves its draft behind
+ * before the trailing car can use it.
+ *
+ * The "somewhere legal to go" half is the point of putting the check here
+ * rather than in the command that accepts it. A tow with nothing reachable at
+ * all — both lanes of the Esses occupied one row ahead — is not offered,
+ * rather than offered and then punished: a player should never be able to
+ * accept an offer that costs them for accepting it. The same goes for a tow
+ * that reaches only into a corner it is not already in when there is no brake
+ * point left to pay the late-braking charge — see `slipstreamMoveOptions`. A
+ * tow that is merely blocked *short* is offered, and takes the same tyre a
+ * blocked move does.
  */
 export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: string): boolean {
     const ps = requirePlayer(state, userId);
@@ -804,14 +842,22 @@ export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: str
     if (ps.skipNextTurn) return false;
 
     const track = trackById(state.trackId);
+    // Every space directly ahead of this car in its own lane — almost always
+    // one, but a fork can offer more than one tile under the same lane number.
     // Traffic ignored: a car in the way is the thing being looked for.
-    const wake = stepsWithin(track, { row: ps.row, lane: ps.lane }, Math.max(...SLIPSTREAM_GAP_STEPS));
-    const ahead = [...playerStates(state)].some(([otherId, other]) =>
-        otherId !== userId
-        && SLIPSTREAM_GAP_STEPS.includes(wake.get(spaceKey(other.row, other.lane))?.step ?? 0));
+    const directlyAhead = stepsFrom(track, ps.row, ps.lane).filter(next => next.lane === ps.lane);
+    const ahead = [...playerStates(state)].some(([otherId, other]) => {
+        if (otherId === userId) return false;
+        if (!directlyAhead.some(next => next.row === other.row && next.lane === other.lane)) return false;
+        // The car ahead clears the minimum, and the trailing car is at least as
+        // fast — `ps.gear >= other.gear >= SLIPSTREAM_MIN_GEAR` already proves
+        // the trailing car clears it too, so there is nothing left to check there.
+        return other.gear >= SLIPSTREAM_MIN_GEAR && ps.gear >= other.gear;
+    });
     if (!ahead) return false;
 
-    return !moveOptions(state, userId, SLIPSTREAM_STEPS).boxedIn;
+    const options = slipstreamMoveOptions(state, userId);
+    return !options.boxedIn && options.spaces.length > 0;
 }
 
 // ─── Turn order (§15) ───────────────────────────────────────────────────────
@@ -1032,7 +1078,12 @@ function planTow(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCon
     // will price it — otherwise the one board state where the two disagree is
     // the one where the cron takes a free tow into a corner and pays for it.
     const planned = plannedMoves(state, userId, SLIPSTREAM_STEPS, { waiveUnavoidableCorner: false });
-    const free = planned.moves.find(move => move.overshoot === 0 && move.slicks === 0);
+    // Legal destinations only: `slipstreamOffered` proves at least one exists,
+    // but the cheapest overshoot/slicks candidate can still be one that reaches
+    // into a corner with no brake left to pay for it (§12).
+    const legal = new Set(slipstreamMoveOptions(state, userId).spaces.map(space => spaceKey(space.row, space.lane)));
+    const free = planned.moves.find(move =>
+        move.overshoot === 0 && move.slicks === 0 && legal.has(spaceKey(move.destination.row, move.destination.lane)));
     return { phase: 'slipstream', tow: planned.blockedShort || !free ? null : free.destination };
 }
 

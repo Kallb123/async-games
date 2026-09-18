@@ -10,7 +10,7 @@ import RaceCarsActions from "@/games/RaceCars/components/RaceCarsActions";
 import RaceCarsEndMoveScreen from "@/games/RaceCars/components/RaceCarsEndMoveScreen";
 import RaceCarsStartScreen from "@/games/RaceCars/components/RaceCarsStartScreen";
 import { MIN_MOVE_STEPS, SLIPSTREAM_STEPS, spaceKey } from "@/games/RaceCars/board";
-import { moveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
+import { moveOptions, slipstreamMoveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
 import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { cornerStat, positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import GameShell from "@/components/ui/GameShell";
@@ -153,8 +153,13 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // server accepts, and the two can never drift. Worked out once and handed
     // to the turn sheet as well: the board's tappable set and the sheet's "tap
     // one of N" are two readings of this one answer, and computing it twice is
-    // how they come to disagree about a road that traffic has closed.
-    const options = gs && distance !== null ? moveOptions(rulesState(gs), myUserId, distance) : null;
+    // how they come to disagree about a road that traffic has closed. A tow's
+    // reach is `slipstreamMoveOptions` rather than the raw walk: a destination
+    // that carries the car into a corner it is not already in with no brake
+    // left to pay for it is not a space this driver may legally tap (§12).
+    const options = !gs || distance === null ? null
+        : towing ? slipstreamMoveOptions(rulesState(gs), myUserId)
+        : moveOptions(rulesState(gs), myUserId, distance);
     const validSpaces = new Set((options?.spaces ?? []).map(space => spaceKey(space.row, space.lane)));
     const unavoidableOilSpaces = gs && distance !== null ? unavoidableOilDestinations(rulesState(gs), myUserId, distance) : new Set<string>();
 

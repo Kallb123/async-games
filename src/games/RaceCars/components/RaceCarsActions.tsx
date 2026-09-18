@@ -130,6 +130,17 @@ function towPrompt(
         // nothing.
         return `Three spaces — but they push you out of ${here!.name} by ${pluralize(past, 'space')}, charged in full${tyreCost(ps, past, '')}.`;
     }
+
+    // §12: late braking. Landing the tow inside a corner it was not already in
+    // costs a brake point, whether or not the corner holds the car — that is
+    // §10's own charge, settled separately.
+    const next = nextCornerReach(reaches);
+    if (next && next.enter <= SLIPSTREAM_STEPS) {
+        return ps.brakes > 0
+            ? `Three spaces — landing in ${next.corner.name} costs 1 brake for late braking.`
+            : `Three free spaces on the open road — no brakes left to carry you into ${next.corner.name}.`;
+    }
+
     return `Three free spaces. Tap a highlighted space to take the tow.`;
 }
 
