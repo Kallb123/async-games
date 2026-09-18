@@ -682,6 +682,4 @@ export class FiresOutAction implements IGameCommand {
         if (outcome.validMove) markDirty(gameData);
         return outcome;
     }
-
-    Undo(_gameData: IGameData): void {}
 }

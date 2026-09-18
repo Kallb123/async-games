@@ -60,7 +60,6 @@ export interface IGameCommand {
 
     myString: () => string;
     Execute: (gameData: IGameData) => Promise<ICommandOutcome>;
-    Undo: (gameData: IGameData) => void;
 }
 
 export interface IGameType {
@@ -101,6 +100,18 @@ export function stripRecordedRandomness(command: IGameCommand): void {
             delete fields[key];
         }
     }
+}
+
+// Whether an executed command consumed randomness: any own property whose
+// name starts with `recorded`, other than `recordedFollowUpToId` — that one
+// marks a follow-up command, not a random outcome, and its own callers (see
+// above) are the ones who care about it. This is the machine-checked half of
+// "only on non-random actions" (docs/undo.md §1, §6): a command that answers
+// true here must never declare itself undoable, because restoring an older
+// snapshot would silently replay the randomness it consumed a second time.
+export function consumedRandomness(command: IGameCommand): boolean {
+    const fields = command as unknown as Record<string, unknown>;
+    return Object.keys(fields).some(key => key.startsWith("recorded") && key !== RECORDED_FOLLOW_UP_TO_ID);
 }
 
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,

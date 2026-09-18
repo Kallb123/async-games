@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { stripRecordedRandomness } from "../gameCommand";
+import { consumedRandomness, stripRecordedRandomness } from "../gameCommand";
 import { SnakesAndLaddersRequestDiceRoll } from "../GameLogic";
 import { buildInitialSnakesAndLaddersState } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -72,6 +72,30 @@ describe("stripRecordedRandomness", () => {
         await command.Execute(gameData);
 
         expect(command.recordedRoll).toBe(1);
+    });
+});
+
+describe("consumedRandomness", () => {
+    it("is true for a command carrying a recorded RNG field", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        command.recordedRoll = 6;
+
+        expect(consumedRandomness(command)).toBe(true);
+    });
+
+    // recordedFollowUpToId marks a follow-up command, not randomness the
+    // command itself rolled — see the comment beside RECORDED_FOLLOW_UP_TO_ID.
+    it("is false for a command carrying only recordedFollowUpToId", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedFollowUpToId: string }).recordedFollowUpToId = "some-command-id";
+
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it("is false for a plain command with no recorded fields", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+
+        expect(consumedRandomness(command)).toBe(false);
     });
 });
 

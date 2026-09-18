@@ -302,10 +302,6 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
         markDirty(gameData);
         return { validMove: true, turnOver };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Action B — claim a route (§5) ──────────────────────────────────────────
@@ -376,10 +372,6 @@ export class TrainTimeClaimRoute implements IGameCommand {
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Action C — draw Destination Tickets (§5) ───────────────────────────────
@@ -428,10 +420,6 @@ export class TrainTimeDrawTickets implements IGameCommand {
         // The turn isn't over until they say which ones they're keeping.
         markDirty(gameData);
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -507,10 +495,6 @@ export class TrainTimeKeepTickets implements IGameCommand {
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Stalemate escape hatch ─────────────────────────────────────────────────
@@ -551,9 +535,5 @@ export class TrainTimePassTurn implements IGameCommand {
         finishTurn(trainData, this.senderId);
         markDirty(gameData);
         return { validMove: true, turnOver: true };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

@@ -437,7 +437,7 @@ describe("Dice Cities bank supply", () => {
             moneyChanges: Object.fromEntries(roll.moneyChanges),
             coinsEarnedChanges: Object.fromEntries(roll.coinsEarnedChanges),
         });
-        stored.Undo(game);
+        stored.undoPayout(game);
 
         expect(gs.playerStates.get("u1")!.money).toBe(0);
         expect(gs.bankMoney).toBe(10);

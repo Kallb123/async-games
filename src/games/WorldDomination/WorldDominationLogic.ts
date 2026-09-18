@@ -182,10 +182,6 @@ export class WorldDominationDeployArmies implements IGameCommand {
         }
         return { validMove: true, turnOver: false };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Cash in a set of World Domination cards ────────────────────────────────────────────
@@ -236,10 +232,6 @@ export class WorldDominationCashInCards implements IGameCommand {
 
         riskData.gameState.history.unshift(playerHistory(this.senderId, `cashed in a card set for ${value} armies${bonusText}`));
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -368,10 +360,6 @@ export class WorldDominationAttack implements IGameCommand {
         };
         return outcome;
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Occupy a just-conquered territory ──────────────────────────────────────
@@ -405,10 +393,6 @@ export class WorldDominationOccupyTerritory implements IGameCommand {
         riskData.gameState.history.unshift(playerHistory(this.senderId, `moved ${this.armies} armies into ${TERRITORIES[toTerritoryId].name}`));
         return { validMove: true, turnOver: false };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── End the attack phase (move to Fortify) ─────────────────────────────────
@@ -437,10 +421,6 @@ export class WorldDominationEndAttackPhase implements IGameCommand {
         gs.phase = 'fortify';
         riskData.gameState.history.unshift(playerHistory(this.senderId, `ended their attacks`));
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -484,10 +464,6 @@ export class WorldDominationFortify implements IGameCommand {
         ));
         return { validMove: true, turnOver: true };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Skip fortifying ─────────────────────────────────────────────────────────
@@ -511,9 +487,5 @@ export class WorldDominationSkipFortify implements IGameCommand {
 
         riskData.gameState.history.unshift(playerHistory(this.senderId, `skipped fortifying`));
         return { validMove: true, turnOver: true };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

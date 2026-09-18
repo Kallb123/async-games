@@ -130,10 +130,6 @@ export class SolitaireDraw implements IGameCommand {
         markDirty(gameData);
         return { turnOver: false, validMove: true };
     }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
-    }
 }
 
 export interface ISolitaireMoveOutcome extends ICommandOutcome {
@@ -247,10 +243,6 @@ export class SolitaireMoveCard implements IGameCommand {
         markDirty(gameData);
         return { turnOver: false, validMove: true, scoreDelta };
     }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
-    }
 }
 
 @serializable
@@ -290,10 +282,6 @@ export class SolitaireUndo implements IGameCommand {
 
         markDirty(gameData);
         return { turnOver: false, validMove: true };
-    }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
     }
 }
 
@@ -388,9 +376,5 @@ export class SolitaireAutoSolve implements IGameCommand {
         gameData.gameState.history.unshift(playerHistory(this.senderId, summary));
         markDirty(gameData);
         return { turnOver: false, validMove: true };
-    }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
     }
 }
