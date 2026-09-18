@@ -129,6 +129,12 @@ export default function RaceCarsBoard({ gs, userIdList, myUserId, validSpaces, u
     // Keyed on the phase and the roll itself rather than on `validSpaces`
     // (which also moves with the brake stepper) — the scroll is for landing on
     // a roll, not for every point the driver nudges brake against it.
+    //
+    // Outside that moment — opening the board, watching someone else's turn,
+    // waiting to roll — there is still a car worth finding on a 78-row circuit,
+    // so the fallback keeps the viewer's own on screen. Keyed on where it
+    // actually is: it re-centres when the car moves and otherwise leaves a
+    // deliberate pan alone.
     const me = myUserId ? gs.playerStates[myUserId] : undefined;
     const myAt = me && geometry.get(spaceKey(me.row, me.lane));
     const focus: BoardZoomFocus | null = onSpaceClick && me && me.roll !== null && myAt
@@ -139,7 +145,9 @@ export default function RaceCarsBoard({ gs, userIdList, myUserId, validSpaces, u
             ]),
             key: `${me.phase}:${me.roll}`,
         }
-        : null;
+        : me && myAt
+            ? { rect: focusRect([myAt]), key: `car:${me.row}:${me.lane}` }
+            : null;
 
     // Cars, with everything drawn beside them worked out once: used to draw
     // them, and to tell the label layer what the corner names must keep off.
