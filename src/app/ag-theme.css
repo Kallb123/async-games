@@ -68,6 +68,12 @@
        able to watch the board change while you scrub. */
     --ag-review-dock-height: 0px;
 
+    /* The same idea for a game whose own action sheet is pinned to the bottom
+       of the screen — Race Cars' roll and destination picker, which a board
+       zoomed in past one screen would otherwise push out of view entirely
+       rather than just further down the page. */
+    --ag-actions-dock-height: 0px;
+
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
     /* The warm tint the shadows below are mixed from. Kept as a colour of its
        own so code that needs the tint rather than a ready-made shadow can have
@@ -1363,10 +1369,13 @@ a.ag-list-row, a.ag-list-row-main {
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - var(--ag-banner-height));
-    /* Room for the pinned match-review dock, so the board, the log and the chat
-       can all be scrolled clear of it. 0px whenever the player is on the live
-       game and no dock is mounted. */
-    padding-bottom: var(--ag-review-dock-height);
+    /* Room for whichever pinned dock is mounted — the match-review one or a
+       game's own pinned action sheet — so the board, the log and the chat can
+       all be scrolled clear of it. The two are never both mounted at once
+       (Race Cars' sheet is a live-game control; the review dock replaces it
+       the moment a player steps into review), so summing them is just 0px
+       plus whichever one is actually up. */
+    padding-bottom: calc(var(--ag-review-dock-height) + var(--ag-actions-dock-height));
     background-color: var(--ag-bg);
     background-image: radial-gradient(circle at 50% 0%, var(--ag-surface), var(--ag-bg) 62%);
     background-repeat: no-repeat;
@@ -2239,13 +2248,14 @@ button.ag-chat-gif { cursor: pointer; }
    dock from the design: dark panel, brass transport, and a turn track so the
    position in the match reads at a glance. */
 
-/* Pinned to the bottom of the viewport while a review is open, above the
-   bottom banner rather than under it. The board is what the player is stepping
-   through, so the transport has to stay in view while they do — at the end of
-   a tall page it would be off screen exactly when it is being used. Beneath
-   the top bar (z-index 20) is deliberate: the title and back arrow stay
-   reachable. `--ag-review-dock-height` is what holds the board clear of it. */
-.ag-review-dock {
+/* Fixed to the bottom of the viewport, above the bottom banner rather than
+   under it, and beneath the top bar (z-index 20) so the title and back arrow
+   stay reachable — the shared geometry for anything a game screen pins there
+   rather than leaving in the flow, because a page tall enough to need pinning
+   in the first place is a page where the pinned thing would otherwise be off
+   screen exactly when it's in use. `.ag-review-dock` and `.ag-actions-dock`
+   both wear this; only their own background and sizing differ. */
+.ag-dock {
     position: fixed;
     left: 0;
     right: 0;
@@ -2257,12 +2267,32 @@ button.ag-chat-gif { cursor: pointer; }
        bare background. With no banner the dock is the thing resting on the
        screen edge and pays the whole inset itself. */
     padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--ag-banner-height)));
+}
+/* Pinned to the bottom of the viewport while a review is open. The board is
+   what the player is stepping through, so the transport has to stay in view
+   while they do. `--ag-review-dock-height` is what holds the board clear of
+   it. */
+.ag-review-dock {
     background: var(--ag-fade-to-bg);
     /* A long action summary on a short screen scrolls inside the dock instead
        of pushing the transport off the top of it. */
     max-height: 70svh;
     overflow-y: auto;
 }
+/* A game's own live action sheet, pinned the same way — Race Cars' roll and
+   destination picker, which a board zoomed in past one screen would
+   otherwise bury below it rather than merely push further down the page.
+   `--ag-actions-dock-height` is what holds the board clear of it. */
+.ag-actions-dock {
+    background: var(--ag-fade-to-bg);
+    max-height: 70svh;
+    overflow-y: auto;
+}
+/* Same trim the review dock gives its own band (see `.ag-review-dock
+   .ag-actionsheet` below) — nothing follows it inside a pinned dock, so the
+   tail meant to clear mid-page content below is board the sheet would
+   otherwise cover for nothing. */
+.ag-actions-dock .ag-actionsheet { padding: 8px 16px 10px; }
 .ag-review {
     margin: 12px 16px;
     background: var(--ag-dark);
