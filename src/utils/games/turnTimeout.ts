@@ -320,6 +320,20 @@ registerTurnTimeoutAdapter({
             return move;
         }
         if (gs.pendingRoadBuilding > 0) {
+            // legalRoadEdges is purely geometric — it has no idea how many
+            // roads userId has left to place. Checked against the *whole*
+            // pending count, not one at a time: a player one road building
+            // short of a Road Building card's two would otherwise place the
+            // first for real and only then refuse the second, so this call
+            // would report 'stuck' with a road already accepted — which
+            // discards the very placement that just succeeded (turnTimeout.ts's
+            // `unresolved`) and repeats identically forever, since nothing
+            // about remainingRoads or pendingRoadBuilding changed. Declining
+            // before either one is placed keeps the failure a clean, one-time
+            // `declined` that banks against the abandon ladder like any other
+            // shape this game's own rules can't play automatically.
+            const ps = gs.playerStates.get(userId);
+            if (!ps || ps.remainingRoads < gs.pendingRoadBuilding) return null;
             const candidates = legalRoadEdges(userId, gs.vertices, gs.edges);
             if (candidates.length === 0) return null;
             const road = new SACBuildRoad();

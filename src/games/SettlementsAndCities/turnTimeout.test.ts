@@ -155,6 +155,33 @@ describe("Settlements & Cities turn timeout — main phase", () => {
         expect(game.currentTurn).toBe("u2");
     });
 
+    it("declines rather than placing one free road it can't follow with the second", async () => {
+        // Only one road left for two pending free roads. Placing the first for
+        // real and refusing the second would report 'stuck' with a road
+        // already on the board — which discards even that placement and
+        // repeats identically forever, since neither remainingRoads nor
+        // pendingRoadBuilding would have changed. This has to decline before
+        // placing either one.
+        const vertices = emptyVertices();
+        vertices[5] = { building: "settlement", owner: "u1" };
+        const gs = makeState({
+            phase: "main",
+            vertices,
+            edges: emptyEdges(),
+            hasRolled: true,
+            pendingRoadBuilding: 2,
+        });
+        gs.playerStates.set("u1", player({ remainingRoads: 1 }));
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("declined");
+        expect(playedClassNames(game)).toEqual([]);
+        expect(gs.pendingRoadBuilding).toBe(2);
+        expect(gs.edges.some(e => e.owner === "u1")).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+    });
+
     it("ends a Special Build turn straight away rather than deciding what to build", async () => {
         const gs = makeState({
             phase: "main",

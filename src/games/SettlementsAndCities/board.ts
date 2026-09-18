@@ -612,6 +612,11 @@ export function legalRoadEdges(playerId: string, vertices: ISACVertex[], edges: 
     return result;
 }
 
+/** Total resources in a hand — a live 7-discard (sacDiscardHalf) and a live robber move (robberVictimCandidates below) both care about the total rather than which. */
+export function sacResourceCount(resources: ISACResources): number {
+    return resources.lumber + resources.wool + resources.grain + resources.brick + resources.ore;
+}
+
 // ─── Deciding for a player who isn't there (turnTimeout.ts) ──────────────────
 // A stalled setup turn is placed at random rather than declined, so an absent
 // player still leaves the table with a legal starting settlement and road
@@ -633,11 +638,6 @@ export function randomSetupRoadEdge(settlementVertexId: number, edges: ISACEdge[
     const candidates = BOARD_TOPOLOGY.vertexEdges[settlementVertexId]
         .filter(edgeId => isValidSetupRoadEdge(edgeId, settlementVertexId, edges));
     return candidates.length > 0 ? candidates[randomInt(candidates.length)] : null;
-}
-
-/** Total resources in a hand, the one thing the robber (and a 7's discard) cares about rather than which. */
-export function sacResourceCount(resources: ISACResources): number {
-    return resources.lumber + resources.wool + resources.grain + resources.brick + resources.ore;
 }
 
 /** Who a robber move to hexId could steal from: an opponent with a building there and at least one card. Shared by SACMoveRobber and the turn-timeout adapter's random pick, so the two can never disagree about who is eligible. */
