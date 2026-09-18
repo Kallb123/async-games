@@ -272,12 +272,14 @@ function arrivalOutcome(
     ps: IRaceCarsPlayerState,
     senderId: string,
     settled: { arrival: RaceCarsArrival; tyresSpent: number },
-    leg: { roll: { gear: RaceCarsGear | null; value: number } | null; offerTow: boolean },
+    leg: { roll: { gear: RaceCarsGear | null; value: number } | null },
 ): IRaceCarsArrivalOutcome {
     const { arrival, tyresSpent } = settled;
-    // §12: one tow per turn, so only the rolled move can earn one — and a
-    // crossing beats even that, because the race has already stopped.
-    const towOffered = leg.offerTow && !arrival.finished && slipstreamOffered(gs, senderId);
+    // §12: chained. The offer is re-derived here after *every* leg — the
+    // rolled move and each tow alike — so a tow that ends fast enough and
+    // close enough behind a further car earns another; a crossing beats it
+    // regardless, because the race has already stopped.
+    const towOffered = !arrival.finished && slipstreamOffered(gs, senderId);
     if (towOffered) ps.phase = 'slipstream';
     return {
         validMove: true,
@@ -686,7 +688,7 @@ export class RaceCarsMove implements IGameCommand {
         // tow, and the turn is not over until the driver has taken it or
         // declined it. Everything else — a spin, a crossing, an empty road —
         // ends the turn here.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll, offerTow: true });
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll });
     }
 
     Undo(gameData: IGameData): void {
@@ -794,7 +796,7 @@ export class RaceCarsSlipstream implements IGameCommand {
         // §12: chained. Ending this tow one or two steps behind another car
         // that is fast enough to draft earns another — `slipstreamOffered` is
         // the gate on both legs, so nothing here decides that twice.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null, offerTow: true });
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null });
     }
 
     Undo(gameData: IGameData): void {
