@@ -1,6 +1,6 @@
 'use client'
 import React from 'react';
-import BoardZoom from '@/components/ui/BoardZoom';
+import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import MapLabelLayer, { type MapLabelSpec } from '@/components/ui/MapLabelLayer';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { playerColourForId } from '@/utils/ui/playerColours';
@@ -57,6 +57,21 @@ function centredRect(x: number, y: number, width: number, height: number): Rect 
     return { x: x - width / 2, y: y - height / 2, width, height };
 }
 
+/** Padding around a roll's car-and-destinations focus — generous enough to
+ *  clear a space or the car icon whichever way its heading has it rotated. */
+const FOCUS_PAD = SPACE_LENGTH;
+
+/** The tight box around a set of points, grown by `FOCUS_PAD` on every side. */
+function focusRect(points: { x: number; y: number }[]): Rect {
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    const minX = Math.min(...xs) - FOCUS_PAD;
+    const maxX = Math.max(...xs) + FOCUS_PAD;
+    const minY = Math.min(...ys) - FOCUS_PAD;
+    const maxY = Math.max(...ys) + FOCUS_PAD;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 /** The side of the board a corner's name should lean towards — away from the middle. */
 function labelDir(x: number, y: number, track: RaceCarsTrack): MapLabelSpec['dir'] {
     const dx = x - track.art.viewBox.width / 2;
@@ -73,6 +88,11 @@ interface RaceCarsBoardProps {
     gs: IRaceCarsSpecificGameStateResponse;
     /** Player seats in join order — the key `playerColourForId` colours a car by. */
     userIdList: string[];
+    /**
+     * The viewer, so the board knows whose car and whose roll to smooth-scroll
+     * to focus on — nothing else here needs to single a seat out this way.
+     */
+    myUserId?: string;
     /** Spaces this move may finish on, as `spaceKey`s — the tappable ones. */
     validSpaces: Set<string>;
     /** Spaces where the only route crosses oil (unavoidable oil). */
@@ -97,10 +117,29 @@ interface RaceCarsBoardProps {
  * one class, where the shared node would ring each lozenge with a circle and
  * hang a `<title>` off all 214 of them.
  */
-export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidableOilSpaces = new Set(), onSpaceClick, boardTag = null }: RaceCarsBoardProps) {
+export default function RaceCarsBoard({ gs, userIdList, myUserId, validSpaces, unavoidableOilSpaces = new Set(), onSpaceClick, boardTag = null }: RaceCarsBoardProps) {
     const track = trackById(gs.trackId);
     const geometry = geometryFor(track);
     const { width, height } = track.art.viewBox;
+
+    // The moment worth following unprompted: a roll (or a tow offer) just
+    // handed the viewer a car and a set of spaces to choose between —
+    // `onSpaceClick` is only wired up on their own live turn (§23.4's board
+    // page), and `roll` is null in the phases before anything has been rolled.
+    // Keyed on the phase and the roll itself rather than on `validSpaces`
+    // (which also moves with the brake stepper) — the scroll is for landing on
+    // a roll, not for every point the driver nudges brake against it.
+    const me = myUserId ? gs.playerStates[myUserId] : undefined;
+    const myAt = me && geometry.get(spaceKey(me.row, me.lane));
+    const focus: BoardZoomFocus | null = onSpaceClick && me && me.roll !== null && myAt
+        ? {
+            rect: focusRect([
+                myAt,
+                ...Array.from(validSpaces, key => geometry.get(key)).filter((g): g is RaceCarsGeometry => !!g),
+            ]),
+            key: `${me.phase}:${me.roll}`,
+        }
+        : null;
 
     // Cars, with everything drawn beside them worked out once: used to draw
     // them, and to tell the label layer what the corner names must keep off.
@@ -150,7 +189,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                 zoom step still leaves a space a few pixels across on a phone.
                 The deep step is what makes one tappable; a pinch reaches the
                 same ceiling by hand. */}
-            <BoardZoom zoomWidth={240} maxWidth={640}>
+            <BoardZoom zoomWidth={240} maxWidth={640} viewBox={track.art.viewBox} focus={focus}>
                 <svg viewBox={`0 0 ${width} ${height}`}>
                     {/* The circuit render of §23.6 — tarmac, kerbs, run-off and
                         the painted corner boundaries. It lands in PR 9; until

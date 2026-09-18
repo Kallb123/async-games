@@ -1,6 +1,20 @@
 'use client'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FIT_WIDTH, wheelZoomFactor, zoomLevels } from '@/utils/ui/boardZoom';
+import { FIT_WIDTH, focusZoom, wheelZoomFactor, zoomLevels } from '@/utils/ui/boardZoom';
+import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
+import type { Rect } from '@/utils/ui/mapLabels';
+
+/**
+ * A region worth bringing into view on its own, unprompted — a roll landing,
+ * say — rather than left for the player to find by hand. `rect` is in the
+ * child SVG's own viewBox units; `key` is whatever changes each time the
+ * focus should (re)apply, so a board can pass the same rect twice without
+ * re-triggering the scroll (the player may have since panned away on purpose).
+ */
+export interface BoardZoomFocus {
+    rect: Rect;
+    key: string;
+}
 
 interface BoardZoomProps {
     /** Percentage of the column the board is stretched to at the first zoom step, e.g. 260. */
@@ -12,8 +26,33 @@ interface BoardZoomProps {
      * across a 78-row circuit — names its own.
      */
     maxWidth?: number;
+    /** The child SVG's own viewBox size — required only alongside `focus`. */
+    viewBox?: { width: number; height: number };
+    /** A region to smooth-scroll (and zoom) to reveal whenever `focus.key` changes. */
+    focus?: BoardZoomFocus | null;
     /** The board <svg>. */
     children: React.ReactNode;
+}
+
+/** How much breathing room a focused region keeps from the edge of the pane. */
+const FOCUS_MARGIN_PX = 28;
+
+/** The content point a focus should centre, as a fraction of the whole board. */
+interface FocusTarget { cx: number; cy: number; smooth: boolean }
+
+function applyFocusTarget(pane: HTMLDivElement, target: FocusTarget) {
+    const left = target.cx * pane.scrollWidth - pane.clientWidth / 2;
+    pane.scrollTo({
+        left: Math.min(Math.max(left, 0), Math.max(0, pane.scrollWidth - pane.clientWidth)),
+        behavior: target.smooth ? 'smooth' : 'auto',
+    });
+    // The pane never clips vertically (its height follows its content's, so
+    // there is nothing to scroll inside it — see ag-theme.css's note on
+    // `.ag-board-scroll`); bringing a tall board's focus into view up-down is
+    // the page's own scroll to make, not the pane's.
+    const paneTop = pane.getBoundingClientRect().top + window.scrollY;
+    const top = paneTop + target.cy * pane.scrollHeight - window.innerHeight / 2;
+    window.scrollTo({ top: Math.max(0, top), behavior: target.smooth ? 'smooth' : 'auto' });
 }
 
 /**
@@ -56,8 +95,17 @@ function midpoint(touches: TouchList): { x: number; y: number } {
  * at under the same spot on screen rather than snapping back to the corner —
  * on a big board that's the difference between zooming and getting lost.
  * Panning is the pane's own scrolling; nothing here reimplements a drag.
+ *
+ * A third way a board's view moves is `focus`: unprompted, the instant a
+ * roll (or whatever the board calls "something just happened here") hands it
+ * a region to show. That one is a smooth scroll rather than a jump — the
+ * player didn't ask for it, so it reads as the board following the action
+ * rather than teleporting the ground from under them — and it goes looking
+ * for its own zoom level rather than reusing whatever step the player was
+ * last on, since the point is tap targets big enough for what just became
+ * choosable.
  */
-export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomProps) {
+export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
@@ -65,17 +113,54 @@ export default function BoardZoom({ zoomWidth, maxWidth, children }: BoardZoomPr
     const paneRef = useRef<HTMLDivElement>(null);
     const anchorRef = useRef<ZoomAnchor | null>(null);
     const pinchRef = useRef<{ spread: number; cx: number; cy: number } | null>(null);
+    const focusTargetRef = useRef<FocusTarget | null>(null);
 
     // Put the recorded point back under the finger (or back in the middle) once
     // the new width has laid out — before paint, so the board never flashes at
-    // the wrong scroll offset.
+    // the wrong scroll offset. A pending `focus` takes priority over a gesture
+    // anchor — the two can never both be live, since nothing sets one while the
+    // other is pending, but a focus reads as a deliberate "look here" and a
+    // leftover anchor from an earlier pinch never should be.
     useLayoutEffect(() => {
         const pane = paneRef.current;
+        if (!pane) return;
         const anchor = anchorRef.current;
-        if (!pane || !anchor) return;
+        anchorRef.current = null;
+        const focusTarget = focusTargetRef.current;
+        if (focusTarget) {
+            focusTargetRef.current = null;
+            applyFocusTarget(pane, focusTarget);
+            return;
+        }
+        if (!anchor) return;
         pane.scrollLeft = anchor.cx * pane.scrollWidth - anchor.vx;
         pane.scrollTop = anchor.cy * pane.scrollHeight - anchor.vy;
     }, [zoom]);
+
+    // The auto-focus itself: pick the deepest zoom step the region still fits
+    // at, then scroll to it. When the board is already at that step, changing
+    // `zoom` to the same value is a no-op React won't re-render for, so the
+    // scroll happens right here instead of waiting on the layout effect above.
+    useEffect(() => {
+        const pane = paneRef.current;
+        if (!pane || !focus || !viewBox) return;
+        const level = focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
+        const target: FocusTarget = {
+            cx: (focus.rect.x + focus.rect.width / 2) / viewBox.width,
+            cy: (focus.rect.y + focus.rect.height / 2) / viewBox.height,
+            smooth: !prefersReducedMotion(),
+        };
+        if (level === zoom) {
+            applyFocusTarget(pane, target);
+        } else {
+            focusTargetRef.current = target;
+            setZoom(level);
+        }
+        // Only `focus.key` should retrigger this — `zoom` and `levels` are read
+        // for their current value, not watched, and `focus.rect`/`viewBox` are
+        // fresh every render whether or not the key changed.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focus?.key]);
 
     const next = levels.find(level => level > zoom + 1) ?? FIT_WIDTH;
     const stepZoom = () => {

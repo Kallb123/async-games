@@ -944,6 +944,10 @@ description or theme colour is exactly what those two files exist to prevent.
     scrolling pane plus the zoom pill (fit, in, and a deeper step a board may
     name with `maxWidth`), and takes a pinch or a ctrl-wheel to anything in
     between, anchored so the part of the board under the fingers stays there.
+    It also takes an optional `focus` — a region in the child's viewBox units
+    plus a key that changes whenever it should reapply — and smooth-scrolls and
+    zooms to it unprompted, which is how Race Cars brings a driver's car and
+    their landing options into view the instant a roll lands.
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`, `mapEdges.ts` and
     `mapLabels.ts` (the two bits of board geometry the map kit above draws).

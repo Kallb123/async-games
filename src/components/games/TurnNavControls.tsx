@@ -107,7 +107,7 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
                 transport and the way out of the review. The planning sheet above
                 stays in the flow: it is as tall as the game's own action panel,
                 and pinning that would cover the board it is meant to plan on. */}
-            <div className="ag-review-dock" ref={measureDock}>
+            <div className="ag-dock ag-review-dock" ref={measureDock}>
                 <div className="ag-review">
                     <div className="ag-review-head">
                         <div className="ag-review-title">{nav.mode === "planning" ? "🧭 Planning ahead" : "🕐 Match review"}</div>

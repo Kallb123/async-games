@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIT_WIDTH, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { FIT_WIDTH, focusZoom, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -18,6 +18,32 @@ describe('zoomLevels', () => {
         expect(zoomLevels(FIT_WIDTH)).toEqual([FIT_WIDTH]);
         expect(zoomLevels(80)).toEqual([FIT_WIDTH]);
         expect(zoomLevels(Number.NaN)).toEqual([FIT_WIDTH]);
+    });
+});
+
+describe('focusZoom', () => {
+    const levels = zoomLevels(240, 640);
+
+    it('picks the deepest level when the region is small enough for all of them', () => {
+        expect(focusZoom(levels, 100, 2835, 320, 32)).toBe(640);
+    });
+
+    it('stops at the level the region still fits, rather than overshooting', () => {
+        expect(focusZoom(levels, 756, 2835, 320, 32)).toBe(240);
+    });
+
+    it('falls back to fit when even the shallowest step overflows the pane', () => {
+        expect(focusZoom(levels, 3000, 2835, 320, 32)).toBe(FIT_WIDTH);
+    });
+
+    it('falls back to fit once the margin alone consumes the whole pane', () => {
+        expect(focusZoom(levels, 10, 2835, 64, 32)).toBe(FIT_WIDTH);
+    });
+
+    it('falls back to fit on a degenerate size rather than dividing by zero', () => {
+        expect(focusZoom(levels, 0, 2835, 320, 32)).toBe(FIT_WIDTH);
+        expect(focusZoom(levels, 100, 0, 320, 32)).toBe(FIT_WIDTH);
+        expect(focusZoom(levels, 100, 2835, 0, 32)).toBe(FIT_WIDTH);
     });
 });
 

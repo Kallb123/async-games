@@ -25,6 +25,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHeightVar } from "@/utils/hooks/useHeightVar";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
@@ -107,6 +108,13 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // the menu row nor the popup renders and nothing is marked seen.
     const guide = guideForGame('racecars');
     const gameGuide = useGameGuide('racecars');
+
+    // The turn sheet is pinned to the bottom of the screen (§19.2's board is a
+    // 214-space circuit — zoomed in, it's easily taller than the viewport, and
+    // a roll left in the ordinary flow below it would be scrolled out of sight
+    // exactly when a driver needs to read it). `--ag-actions-dock-height` is
+    // what holds the board clear of the pinned sheet's own measured height.
+    const measureActionsDock = useHeightVar("--ag-actions-dock-height");
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -324,6 +332,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                         <RaceCarsBoard
                             gs={gs}
                             userIdList={userIdList}
+                            myUserId={myUserId}
                             validSpaces={validSpaces}
                             unavoidableOilSpaces={unavoidableOilSpaces}
                             onSpaceClick={isMyTurn && !submitting ? chooseDestination : undefined}
@@ -334,16 +343,18 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                     </div>
 
                     {nav.isLive && !complete && (
-                        <RaceCarsActions
-                            gs={gs}
-                            myUserId={myUserId}
-                            brake={appliedBrake}
-                            setBrake={setBrake}
-                            options={options}
-                            submitCommand={submitCommand}
-                            pendingTarget={pendingTarget}
-                            readOnly={!isMyTurn}
-                        />
+                        <div className="ag-dock ag-actions-dock" ref={measureActionsDock}>
+                            <RaceCarsActions
+                                gs={gs}
+                                myUserId={myUserId}
+                                brake={appliedBrake}
+                                setBrake={setBrake}
+                                options={options}
+                                submitCommand={submitCommand}
+                                pendingTarget={pendingTarget}
+                                readOnly={!isMyTurn}
+                            />
+                        </div>
                     )}
 
                     {recapAvailable && (
