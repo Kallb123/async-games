@@ -6,7 +6,7 @@
 // answers, and deriving them in each of the three is how the standings on the
 // scoreboard come to disagree with the gap in the stat row.
 
-import { gearName, trackById, type RaceCarsGear } from './board';
+import { cornerAt, cornerReaches, gearName, nextCornerReach, trackById, type RaceCarsGear } from './board';
 import { recomputeRoundOrder, type IRaceCarsSpecificGameState } from './rules';
 import type { IRaceCarsSpecificGameStateResponse } from './apiModels';
 
@@ -72,4 +72,32 @@ export function rowsBehindLeader(gs: IRaceCarsSpecificGameStateResponse, userId:
  */
 export function wearSummary(gear: RaceCarsGear, tyres: number, brakes: number, gearbox: number): string {
     return `${gearName(gear)} · 🛞${tyres} 🛑${brakes} ⚙️${gearbox}`;
+}
+
+/** What the third stat tile in the top bar reads (§10): banked stops in the
+ * corner a car is standing in, or the spaces to the next one when the road
+ * ahead is open. */
+export interface RaceCarsCornerStat {
+    value: string;
+    label: string;
+}
+
+/**
+ * The corner stat tile's reading — the same corner walk `RaceCarsActions`
+ * takes for the reach band (§23.5), so the header never disagrees with the
+ * turn sheet about where the next corner is or what is owed in the one under
+ * the car.
+ *
+ * Null only when the player isn't seated in this game at all; every circuit
+ * has a corner, so a car anywhere on it always has a stop count or a next
+ * corner to report.
+ */
+export function cornerStat(gs: IRaceCarsSpecificGameStateResponse, userId: string): RaceCarsCornerStat | null {
+    const ps = gs.playerStates[userId];
+    if (!ps) return null;
+    const track = trackById(gs.trackId);
+    const here = cornerAt(track, ps.row, ps.lane);
+    if (here) return { value: `${ps.cornerStops}/${here.stops}`, label: here.name };
+    const next = nextCornerReach(cornerReaches(track, { row: ps.row, lane: ps.lane }, track.rows));
+    return next ? { value: `${next.enter}`, label: `Spaces to ${next.corner.name}` } : null;
 }

@@ -12,7 +12,7 @@ import RaceCarsStartScreen from "@/games/RaceCars/components/RaceCarsStartScreen
 import { MIN_MOVE_STEPS, SLIPSTREAM_STEPS, spaceKey } from "@/games/RaceCars/board";
 import { moveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
 import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "@/games/RaceCars/RaceCarsLogic";
-import { positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
+import { cornerStat, positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import GameShell from "@/components/ui/GameShell";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
@@ -246,6 +246,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     ];
 
     const gap = gs && me ? rowsBehindLeader(gs, myUserId) : 0;
+    const corner = gs && me ? cornerStat(gs, myUserId) : null;
 
     // Shown once, over the board, the instant a move comes back — and never
     // while stepping back through the match, where the timeline is the story.
@@ -307,6 +308,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                         is working on is still the first one. */}
                     <Stat value={`${Math.min(Math.max(me.lapsCompleted, 0) + 1, gs.laps)}/${gs.laps}`} label={gs.laps === 1 ? 'Lap' : 'Laps'} />
                     <Stat value={gap === 0 ? 'Leader' : `−${gap}`} label={gap === 0 ? 'Position' : 'Rows off the lead'} />
+                    {corner && <Stat value={corner.value} label={corner.label} />}
                 </div>
             )}
 
