@@ -69,8 +69,6 @@ class TestBonusAction implements IGameCommand {
         }
         return { validMove: true, turnOver: true };
     }
-
-    Undo() {}
 }
 
 registerReplayAdapter({

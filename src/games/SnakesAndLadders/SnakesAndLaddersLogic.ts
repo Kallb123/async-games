@@ -172,8 +172,4 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
         };
         return outcome;
     }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
-    }
 }

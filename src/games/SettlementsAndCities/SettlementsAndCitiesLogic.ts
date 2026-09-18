@@ -413,10 +413,6 @@ export class SACPlaceSettlementSetup implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `placed a settlement (setup)`));
         return { validMove: true, turnOver: false };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 @serializable
@@ -453,10 +449,6 @@ export class SACPlaceRoadSetup implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `placed a road (setup)`));
         return { validMove: true, turnOver: true };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Play Knight (before or after the roll) ───────────────────────────────────
@@ -492,10 +484,6 @@ export class SACPlayKnight implements IGameCommand {
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played a Knight card`));
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -634,10 +622,6 @@ export class SACRollDice implements IGameCommand {
         gs.hasRolled = true;
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Move robber ──────────────────────────────────────────────────────────────
@@ -710,10 +694,6 @@ export class SACMoveRobber implements IGameCommand {
         gs.pendingRobber = false;
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Build road ───────────────────────────────────────────────────────────────
@@ -766,10 +746,6 @@ export class SACBuildRoad implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a road`));
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Build settlement ─────────────────────────────────────────────────────────
@@ -820,10 +796,6 @@ export class SACBuildSettlement implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a settlement`));
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Build city ───────────────────────────────────────────────────────────────
@@ -866,10 +838,6 @@ export class SACBuildCity implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a city`));
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Buy dev card ─────────────────────────────────────────────────────────────
@@ -909,10 +877,6 @@ export class SACBuyDevCard implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `bought a development card`));
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Play Road Building ───────────────────────────────────────────────────────
@@ -943,10 +907,6 @@ export class SACPlayRoadBuilding implements IGameCommand {
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Road Building`));
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -982,10 +942,6 @@ export class SACPlayYearOfPlenty implements IGameCommand {
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Year of Plenty (+${this.resource1}, +${this.resource2})`));
         return sacFinishTurn(sacData, this.senderId, this);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -1027,10 +983,6 @@ export class SACPlayMonopoly implements IGameCommand {
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Monopoly on ${this.resource} (+${total})`));
         return sacFinishTurn(sacData, this.senderId, this);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── Maritime trade ───────────────────────────────────────────────────────────
@@ -1070,10 +1022,6 @@ export class SACMaritimeTrade implements IGameCommand {
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
         return sacFinishTurn(sacData, this.senderId, this);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -1117,9 +1065,5 @@ export class SACEndTurn implements IGameCommand {
             gs.specialBuildActive ? `finished their special build` : `ended their turn`,
         ));
         return { validMove: true, turnOver: true };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

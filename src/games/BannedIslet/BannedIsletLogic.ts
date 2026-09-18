@@ -345,10 +345,6 @@ export class BannedIsletAction implements IGameCommand {
         // flood deck inside a plan that nothing accounted for (§21.5).
         return { validMove: true, turnOver: false };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -738,10 +734,6 @@ export class BannedIsletEndTurn implements IGameCommand {
         floodLog.push(...resolveFloodPhase(data, shuffleFlood));
         return floodPhaseOutcome(true, floodLog);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── BannedIsletDiscard ─────────────────────────────────────────────────────
@@ -805,10 +797,6 @@ export class BannedIsletDiscard implements IGameCommand {
             orders => { this.recordedFloodShuffles = orders; },
         );
         return maybeFinishFloodPhase(data, ps, shuffleFlood);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -948,9 +936,5 @@ export class BannedIsletPlayCard implements IGameCommand {
             orders => { this.recordedFloodShuffles = orders; },
         );
         return maybeFinishFloodPhase(data, ps, shuffleFlood);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

@@ -31,12 +31,13 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     roll2: number | null,
     moneyChanges: Map<string, number>,
     // Per-player totalCoinsEarned deltas from this roll (bank payouts, steals
-    // received) - unlike moneyChanges this is never negative, so Undo can
-    // subtract it back out when a Radio Tower reroll discards this roll.
+    // received) - unlike moneyChanges this is never negative, so undoPayout
+    // can subtract it back out when a Radio Tower reroll discards this roll.
     coinsEarnedChanges: Map<string, number>,
     // Net change to the bank's balance from this roll: negative by whatever it
-    // paid out (steals only move coins between players). Recorded so Undo can
-    // put those coins back when a Radio Tower reroll discards the roll.
+    // paid out (steals only move coins between players). Recorded so
+    // undoPayout can put those coins back when a Radio Tower reroll discards
+    // the roll.
     bankChange: number,
     // Docks: what the shared tuna dice totalled, when a Tuna Boat activated.
     tunaRoll?: number | null
@@ -172,7 +173,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         return outcome;
     }
 
-    Undo (gameData: IGameData) {
+    undoPayout(gameData: IGameData) {
         undoRollPayout(gameData as IDiceCitiesGameData, this);
         // The discarded roll leaves the log with the coins it moved.
         gameData.gameState.commandHistory.pop();
@@ -255,11 +256,6 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
             validMove: true
         };
     }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
-    }
 }
 
 @serializable
@@ -290,11 +286,6 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             validMove: true
         };
     }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
-    }
 }
 
 @serializable
@@ -312,11 +303,6 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
 
     async Execute(gameData: IGameData) {
         return buildLandmark(gameData, DiceCitiesCardIds.TRAIN_STATION, "doubleUnlocked", this.senderId);
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -336,11 +322,6 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     async Execute(gameData: IGameData) {
         return buildLandmark(gameData, DiceCitiesCardIds.SHOPPING_MALL, "bonusDiningAndStore", this.senderId);
     }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
-    }
 }
 
 @serializable
@@ -359,11 +340,6 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     async Execute(gameData: IGameData) {
         return buildLandmark(gameData, DiceCitiesCardIds.AMUSEMENT_PARK, "rerollDoubles", this.senderId);
     }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
-    }
 }
 
 @serializable
@@ -381,11 +357,6 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
 
     async Execute(gameData: IGameData) {
         return buildLandmark(gameData, DiceCitiesCardIds.RADIO_TOWER, "oneReroll", this.senderId);
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -412,11 +383,6 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
             };
         }
         return buildLandmark(gameData, DiceCitiesCardIds.HARBOUR, "harbourUnlocked", this.senderId);
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -480,7 +446,7 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
         return outcome;
     }
 
-    Undo (gameData: IGameData) {
+    undoPayout(gameData: IGameData) {
         // Leaves itself in the command log on purpose: the roll it settled paid
         // nothing on its own, so the log needs this entry to replay the turn.
         undoRollPayout(gameData as IDiceCitiesGameData, this);
@@ -557,11 +523,6 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
             stolenAmount: amountToSteal
         };
         return outcome;
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -660,11 +621,6 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
         return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, dcGameData.specificGameState.bcSelectedOpponent, dcGameData.specificGameState.bcSelectedOpponentCard, this.selectedCard);
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -767,11 +723,6 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
 
         return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, this.selectedUser, this.selectedCard, dcGameData.specificGameState.bcSelectedOwnCard);
     }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
-    }
 }
 
 @serializable
@@ -782,8 +733,8 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     // The re-roll's own payout, recorded (like DiceCitiesRequestDiceRoll's)
-    // purely for myString() to read back - the re-roll doesn't need it for
-    // its own Undo, which is unimplemented.
+    // purely for myString() to read back - the re-roll is not a
+    // RollPayoutCommand, so nothing ever reverses it.
     moneyChanges: Map<string, number> = new Map;
     // Recorded RNG outcomes for the re-roll, so it can be deterministically replayed.
     recordedRoll1?: number;
@@ -823,7 +774,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         // Persisted history hands back plain objects that need rehydrating, but
         // during replay the entry is already the live command instance - and
         // stringifying that would flatten its recorded moneyChanges Map to {},
-        // leaving Undo nothing to reverse.
+        // leaving undoPayout nothing to reverse.
         const lastPayout = isRollPayoutCommand(lastCommand)
             ? lastCommand
             : deserializeJSON(JSON.stringify(lastCommand));
@@ -839,7 +790,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
 
         // Reverses the discarded roll: every coin it moved goes back where it
         // came from, including to the bank.
-        lastPayout.Undo(dcGameData);
+        lastPayout.undoPayout(dcGameData);
 
         dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
         dcGameData.specificGameState.awaitingBCSelectionOwn = false;
@@ -857,11 +808,6 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         this.moneyChanges = outcome.moneyChanges;
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${formatRoll(outcome.roll1, outcome.roll2)}`));
         return outcome;
-    }
-
-    Undo (gameData: IGameData) {
-        // TODO: Implement Undo
-        console.error("Command Undo not implemented yet")
     }
 }
 

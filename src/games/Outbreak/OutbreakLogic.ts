@@ -527,10 +527,6 @@ export class OutbreakAction implements IGameCommand {
         // next without firing the deck.
         return { validMove: true, turnOver: false };
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── The draw and infect phases (§7 Phase 2-3, §9-10, §21.6 step 6) ────────
@@ -856,10 +852,6 @@ export class OutbreakEndTurn implements IGameCommand {
         infectionLog.push(...resolveInfectPhase(outbreakData));
         return infectionPhaseOutcome(true, infectionLog);
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── OutbreakDiscard ────────────────────────────────────────────────────────
@@ -906,10 +898,6 @@ export class OutbreakDiscard implements IGameCommand {
         // limit does the same job (see maybeFinishDrawPhase).
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
         return infectionPhaseOutcome(turnOver, infectionLog);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -1168,9 +1156,5 @@ export class OutbreakPlayEvent implements IGameCommand {
         outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
         return infectionPhaseOutcome(turnOver, infectionLog);
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

@@ -528,10 +528,6 @@ export class RaceCarsLaunch implements IGameCommand {
         };
         return result;
     }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
-    }
 }
 
 // ─── RaceCarsShift (§7 step 1, §8) ──────────────────────────────────────────
@@ -596,10 +592,6 @@ export class RaceCarsShift implements IGameCommand {
         // §7: the roll happens in step 1 and the destination is chosen with the
         // number known, so the turn is only half over.
         return { validMove: true, turnOver: false };
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -689,10 +681,6 @@ export class RaceCarsMove implements IGameCommand {
         // taken it or declined it. Everything else — a spin, a crossing, an
         // empty road — ends the turn here.
         return arrivalOutcome(gs, ps, this.senderId, settled, { roll });
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }
 
@@ -797,9 +785,5 @@ export class RaceCarsSlipstream implements IGameCommand {
         // fast enough to draft earns another — `slipstreamOffered` is
         // the gate on both legs, so nothing here decides that twice.
         return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null });
-    }
-
-    Undo(gameData: IGameData): void {
-        gameData.gameState.commandHistory.pop();
     }
 }

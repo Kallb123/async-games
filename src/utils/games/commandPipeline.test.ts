@@ -38,7 +38,6 @@ function makeCommand(linesWritten: number, valid = true): IGameCommand {
         senderUsername: "Alice",
         className: "TestCommand",
         myString: () => "test",
-        Undo: () => {},
         Execute: async (gameData: IGameData) => {
             for (let i = 0; i < linesWritten; i++) {
                 gameData.gameState.history.unshift(playerHistory("user_a", `did thing ${i}`));

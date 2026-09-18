@@ -84,10 +84,6 @@ export class SmartthinkSetSecretCode implements IGameCommand {
         stGameData.gameState.history.unshift(playerHistory(this.senderId, `set the secret code`));
         return { turnOver: true, validMove: true };
     }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
-    }
 }
 
 function calculateSmartthinkFeedback(secretCode: number[], guess: number[]) {
@@ -146,9 +142,5 @@ export class SmartthinkSubmitGuess implements IGameCommand {
         stGameData.specificGameState.guessRows.push({ guess: this.guess, black: feedback.black, white: feedback.white });
         stGameData.gameState.history.unshift(playerHistory(this.senderId, `guessed ${this.guess.map(v => v + 1).join('-')} and received ${feedback.black} black, ${feedback.white} white`));
         return { turnOver: true, validMove: true, black: feedback.black, white: feedback.white } as ISmartthinkGuessOutcome;
-    }
-
-    Undo(gameData: IGameData) {
-        console.error("Command Undo not implemented yet");
     }
 }

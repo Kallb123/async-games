@@ -34,7 +34,6 @@ function command(outcome: ICommandOutcome): IGameCommand {
         senderId: 'u1', senderUsername: 'u1', className: 'ScriptedCommand',
         myString: () => 'scripted',
         Execute: async () => outcome,
-        Undo: () => {},
     } as unknown as IGameCommand;
 }
 
