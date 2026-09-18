@@ -335,7 +335,12 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToResponse(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            doc.gameState.commandHistory.at(-1)?.id ?? null,
+        ),
         // Turn recap replays from the stored initial snapshot; only games created
         // after recap support carry it, so the UI gates its controls on this.
         recapAvailable: !!doc.initialSpecificGameState,
@@ -347,6 +352,16 @@ export function gameStateToResponse(
     userIdNameMap: { [key: string]: string },
     // Their hand and dev cards in full; everyone else counts. Null = nobody's.
     viewerId: string | null,
+    // The id of the last command actually recorded (commandHistory's tail), for
+    // canUndo below — not merely the stack's own owner, since that stays stale
+    // (still naming the mover) the moment any non-undoable command runs without
+    // touching the stack: a Knight played right after a build, or the ordinary
+    // hand-off at the end of the turn. Optional so every caller that only cares
+    // about hands and dev cards (most of this file's own tests) needn't supply
+    // it; `null` reads as "nothing behind this state", so a snapshot's own
+    // `undoAnchorId` (also null unless something has been undone) matches it —
+    // canUndo then falls back to `false` correctly rather than `true` by accident.
+    lastCommandId: string | null = null,
 ): ISACSpecificGameStateResponse {
     const total = (cards: ISACResources | ISACDevCards) => Object.values(cards).reduce((sum, n) => sum + n, 0);
 
@@ -408,7 +423,16 @@ export function gameStateToResponse(
     // Absent (`?? []`) for a game that predates the stack, false for anyone
     // whose move it isn't, and false for a viewerless replay/recap, since no
     // viewerId can ever equal a stack entry's `by`.
-    const canUndo = (gs.undoStack ?? []).at(-1)?.by === viewerId;
+    //
+    // The stack's own owner isn't the whole story: it still names the mover
+    // after a non-undoable command runs without touching it — a Knight played
+    // right after a build, or the ordinary hand-off at the end of the turn —
+    // at which point SACUndo.Execute's own anchor check would refuse. Matching
+    // `undoAnchorId` against `lastCommandId` (commandHistory's real tail) is
+    // the same test SACUndo runs on itself, so this can't say yes to a move the
+    // command would actually turn down.
+    const topEntry = (gs.undoStack ?? []).at(-1);
+    const canUndo = topEntry?.by === viewerId && gs.undoAnchorId === lastCommandId;
 
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),

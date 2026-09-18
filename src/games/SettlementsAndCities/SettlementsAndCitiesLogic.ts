@@ -124,6 +124,16 @@ function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameComma
     gs.undoAnchorId = command.id;
 }
 
+// Deliberately *not* cleared on a turn hand-off here: in this PR the setup
+// road is still the command that ends its own turn (PR 3's hold is what makes
+// `SACPlaceRoadSetup` return `turnOver: false` instead), so a hand-off runs in
+// the same breath as the very push a road undo needs to survive — clearing it
+// here would make that placement's own undo unreachable the instant it
+// happened. The anchor already does the correctness work on its own:
+// `commandHistory`'s tail changes on every command, hand-off or not, so
+// SACUndo (and canUndo, in gameStateToResponse) go stale the moment anything
+// else runs, without this needing to know which commands are hand-offs.
+
 // ─── Helper: advance setup turn ──────────────────────────────────────────────
 function sacAdvanceSetup(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;

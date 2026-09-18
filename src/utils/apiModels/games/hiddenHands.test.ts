@@ -245,7 +245,10 @@ describe("Settlements & Cities' response", () => {
         gs.undoAnchorId = "some-command-id";
 
         for (const viewerId of ["u1", "u2", null]) {
-            const wire = JSON.parse(JSON.stringify(sacStateToResponse(gs, NAMES, viewerId)));
+            // The anchor still matches the (fictional) last command here, so
+            // this is the "still your move" case — see undo.test.ts for the
+            // anchor going stale.
+            const wire = JSON.parse(JSON.stringify(sacStateToResponse(gs, NAMES, viewerId, "some-command-id")));
             expect(wire.undoStack).toBeUndefined();
             expect(wire.undoAnchorId).toBeUndefined();
             expect(wire.canUndo).toBe(viewerId === "u1");

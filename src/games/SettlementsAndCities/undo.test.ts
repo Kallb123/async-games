@@ -147,6 +147,20 @@ describe("Settlements & Cities — undoing a setup placement", () => {
 });
 
 describe("Settlements & Cities — the undo anchor", () => {
+    it("reports canUndo true right after the undoable move, and nobody else's", async () => {
+        const { gs, edgeId } = mainBoardWithRoad();
+        const game = makeGame(gs);
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+        await run(game, road);
+
+        const lastId = game.gameState.commandHistory.at(-1)!.id;
+        const NAMES = { u1: "Alice", u2: "Bob" };
+        expect(gameStateToResponse(gs, NAMES, "u1", lastId).canUndo).toBe(true);
+        expect(gameStateToResponse(gs, NAMES, "u2", lastId).canUndo).toBe(false);
+        expect(gameStateToResponse(gs, NAMES, null, lastId).canUndo).toBe(false);
+    });
+
     it("refuses once anything else has been played since the snapshot", async () => {
         const { gs, edgeId } = mainBoardWithRoad();
         const game = makeGame(gs);
@@ -157,6 +171,13 @@ describe("Settlements & Cities — the undo anchor", () => {
         expect(gs.edges[edgeId].hasRoad).toBe(true);
 
         await run(game, cmd(new SACPlayKnight()));
+
+        // The stack's own top entry still names u1 — only the anchor (matched
+        // against the real tail of commandHistory) tells canUndo the Knight
+        // happened in between, so it must go stale here too, not just the
+        // command's own refusal below.
+        const lastId = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, { u1: "Alice", u2: "Bob" }, "u1", lastId).canUndo).toBe(false);
 
         const undone = await run(game, cmd(new SACUndo()));
         expect(undone.outcome.validMove).toBe(false);
@@ -174,6 +195,9 @@ describe("Settlements & Cities — the undo anchor", () => {
         road.edgeId = edgeId;
         await run(game, road);
         await run(game, cmd(new SACEndTurn()));
+
+        const lastId = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, { u1: "Alice", u2: "Bob" }, "u1", lastId).canUndo).toBe(false);
 
         const undone = await run(game, cmd(new SACUndo()));
         expect(undone.outcome.validMove).toBe(false);
