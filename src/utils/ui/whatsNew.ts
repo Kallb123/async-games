@@ -37,7 +37,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Race Cars",
-                detail: "Pick a gear, roll its die, and find out whether the corner will take it. Every gear covers its own band of numbers — 1st crawls along on 1–2, 5th gambles on 11–20 — and the roll lands before you choose where to put the car, so a turn is a bet on a range rather than on a number. Corners owe you stops you have to end a turn inside them to bank: sail past with one still owed and it costs a tyre a space, and a bill your tyres cannot cover spins you into neutral for a turn. Tyres, brakes and gearbox never refill, so the three of them are a budget for the whole race. Three circuits, a Sprint or a two-lap Grand Prix, two to six drivers, optional oil spills, and a slipstream that only ever helps the car behind.",
+                detail: "Pick a gear, roll its die, and find out whether the corner will take it. The roll lands before you choose where to put the car, so a turn is a bet on a range rather than on a number — and tyres, brakes and gearbox never refill, so the three of them are one budget for the whole race. Three circuits, a Sprint or a two-lap Grand Prix, two to six drivers, optional oil spills, and a slipstream that only ever helps the car behind.",
                 game: "racecars",
             },
             {
