@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
 import { sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -51,7 +51,7 @@ export class SACRandomLog {
 // count is public (hand size always is) and the roll's payout records it, where
 // *which* cards went stays hidden.
 function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): number {
-    const total = sacTotalResources(ps);
+    const total = sacResourceCount(ps.resources);
     if (total <= 7) return 0;
     let toDiscard = Math.floor(total / 2);
     const pool: SAC_Resource[] = [];
@@ -67,11 +67,6 @@ function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): number {
         ps.resources[pool[i]]--;
     }
     return toDiscard;
-}
-
-function sacTotalResources(ps: ISACPlayerState): number {
-    return ps.resources.lumber + ps.resources.wool + ps.resources.grain +
-           ps.resources.brick + ps.resources.ore;
 }
 
 // ─── Helper: update longest road / largest army ───────────────────────────────
@@ -682,17 +677,10 @@ export class SACMoveRobber implements IGameCommand {
         if (this.hexId < 0 || this.hexId >= gs.hexes.length) return { validMove: false, turnOver: false };
 
         // Determine eligible players (have settlement/city adjacent, have resources, not self)
-        const adjacentUserIds = new Set<string>();
-        for (const vertexId of BOARD_TOPOLOGY.hexVertices[this.hexId]) {
-            const v = gs.vertices[vertexId];
-            if (v.owner && v.owner !== this.senderId && v.building) {
-                const tps = gs.playerStates.get(v.owner);
-                if (tps && sacTotalResources(tps) > 0) adjacentUserIds.add(v.owner);
-            }
-        }
+        const adjacentUserIds = robberVictimCandidates(this.hexId, gs.vertices, gs.playerStates, this.senderId);
 
         if (this.stealFromUserId !== null) {
-            if (!adjacentUserIds.has(this.stealFromUserId)) return { validMove: false, turnOver: false };
+            if (!adjacentUserIds.includes(this.stealFromUserId)) return { validMove: false, turnOver: false };
             // Steal one random resource
             const victim = gs.playerStates.get(this.stealFromUserId)!;
             const pool: SAC_Resource[] = [];
@@ -711,7 +699,7 @@ export class SACMoveRobber implements IGameCommand {
                 }
                 sacData.gameState.history.unshift(playerHistory(this.senderId, `moved the robber and stole a resource`));
             }
-        } else if (adjacentUserIds.size > 0) {
+        } else if (adjacentUserIds.length > 0) {
             // Must specify someone to steal from
             return { validMove: false, turnOver: false };
         } else {

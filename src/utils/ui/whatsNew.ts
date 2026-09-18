@@ -126,6 +126,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "A missed Settlements & Cities turn no longer breaks the board",
+                detail: "If nobody was around when your turn timer ran out, the game used to just skip straight to whoever was next without actually playing your turn for you — during setup that could scramble the placement order or leave the next player building a road onto your settlement, and on a main turn it skipped the whole table's roll, not just yours. A missed turn now plays itself out: a settlement and road go down somewhere legal during setup, the dice get rolled and the robber gets moved on a main turn, and anything left over is passed rather than lost.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "The match history tells the setup story the right way round",
                 detail: "The setup lines at the start of a game were logged in reverse, so the match history read them backwards. In a game whose opening roll-off had to break a tie, the two re-rolls showed up above the line announcing the tie — which read as the game making two players roll again over numbers that plainly didn't match. Setup now reads in the order it happened, from the roll-off down to the options the host turned on, and a throw made to break a tie says it was a re-roll. Games already under way keep the log they were started with.",
             },
@@ -165,11 +170,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Settlements & Cities' match review speaks plain English",
                 detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history does: \"built a settlement\", \"moved the robber and stole a resource from Bob\", and a roll names who collected what — \"rolled a 9 — Alice +2🪵 +1🌾, Bob +1⛏️\".",
-                game: "settlementsandcities",
-            },
-            {
-                title: "The panel you wait on stops looking tappable",
-                detail: "Settlements & Cities keeps its build list on screen while you wait for your turn, but the rows and the Trade with the bank button looked exactly like the live buttons under them — the same white cards, the same terracotta \"Build\" — so tapping one did nothing and never said why. Everything in a waiting panel now reads as off: flat, dashed and soft-greyed, with the costs still there to plan with. Every game's waiting panel got the same treatment.",
                 game: "settlementsandcities",
             },
         ],
