@@ -849,7 +849,10 @@ export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: str
     const ahead = [...playerStates(state)].some(([otherId, other]) => {
         if (otherId === userId) return false;
         if (!SLIPSTREAM_GAP_STEPS.includes(wake.get(spaceKey(other.row, other.lane))?.step ?? 0)) return false;
-        return ps.gear >= SLIPSTREAM_MIN_GEAR && other.gear >= SLIPSTREAM_MIN_GEAR && ps.gear >= other.gear;
+        // The car ahead clears the minimum, and the trailing car is at least as
+        // fast — `ps.gear >= other.gear >= SLIPSTREAM_MIN_GEAR` already proves
+        // the trailing car clears it too, so there is nothing left to check there.
+        return other.gear >= SLIPSTREAM_MIN_GEAR && ps.gear >= other.gear;
     });
     if (!ahead) return false;
 
