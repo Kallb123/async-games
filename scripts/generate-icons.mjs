@@ -11,19 +11,20 @@
 // Run with `npm run icons`. It goes through `tsx` rather than bare node only
 // so this file can import that TypeScript metadata (and the theme's colours)
 // instead of keeping a second copy of either. `sharp` comes in with Next's
-// install, so there is nothing extra to add to package.json; the cards need
-// Bricolage Grotesque installed as a system font (see WORDMARK_FONT below) and
-// are skipped with a warning when it isn't.
+// install, so there is nothing extra to add to package.json, and the cards are
+// set in the copy of Bricolage Grotesque that ships in `scripts/fonts/` — so
+// they no longer depend on what the machine happens to have installed.
 //
 // `public/icons/icon.svg` is the scalable master this writes, and it is what
 // `src/components/ui/Brand.tsx` puts on screen — so the mark is defined here
 // and nowhere else.
 
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
 
 import { APP_CADENCE, APP_STRAPLINE, APP_TAGLINE_LINES, SHARE_CARD_SIZE } from '../src/utils/app.ts';
 import { GAME_META, HEX_VERTICES, gameShareCard } from '../src/utils/ui/games.ts';
@@ -33,6 +34,45 @@ import { truncate } from '../src/utils/ui/text.ts';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_ICONS = path.join(ROOT, 'public', 'icons');
 const APP = path.join(ROOT, 'src', 'app');
+
+// The wordmark face ships in `scripts/fonts/` (see its README) rather than
+// being asked of the machine. Point fontconfig at it before `sharp` is
+// imported: libvips initialises fontconfig the first time it renders text, and
+// `FONTCONFIG_FILE` is only read at that initialisation — which is why sharp
+// comes in dynamically here and statically everywhere else in the repo.
+//
+// The generated config *adds* a directory rather than replacing the machine's,
+// because the game plates set an emoji glyph and only the system can supply a
+// colour emoji font. Every candidate is `ignore_missing`, so a machine whose
+// fontconfig lives somewhere else loses its emoji rather than failing to draw.
+const FONT_DIR = path.join(ROOT, 'scripts', 'fonts');
+const SYSTEM_FONT_CONFIGS = [
+    '/etc/fonts/fonts.conf',
+    '/usr/local/etc/fonts/fonts.conf',
+    '/opt/homebrew/etc/fonts/fonts.conf',
+];
+
+function configureFontconfig() {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'ag-fontconfig-'));
+    const xml = [
+        '<?xml version="1.0"?>',
+        '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">',
+        '<fontconfig>',
+        `  <dir>${FONT_DIR}</dir>`,
+        `  <cachedir>${path.join(dir, 'cache')}</cachedir>`,
+        ...SYSTEM_FONT_CONFIGS.map(file => `  <include ignore_missing="yes">${file}</include>`),
+        '</fontconfig>',
+        '',
+    ].join('\n');
+    const file = path.join(dir, 'fonts.conf');
+    writeFileSync(file, xml);
+    // Inherited by the `fc-match` child `hasWordmarkFont` runs, so the check and
+    // the render agree about which fonts exist.
+    process.env.FONTCONFIG_FILE = file;
+}
+
+configureFontconfig();
+const { default: sharp } = await import('sharp');
 
 // The `--ag-*` theme tokens, resolved to sRGB hex: SVG rasterisers don't
 // understand the oklch() the stylesheet is written in. `SRGB` and `accentHex`
@@ -382,7 +422,9 @@ async function writeAndroidSplash(write) {
 function hasWordmarkFont() {
     // librsvg silently falls back to some default face for a family it doesn't
     // have, so ask fontconfig first rather than shipping a card set in the
-    // wrong type.
+    // wrong type. With `scripts/fonts/` on the path this should never fail; it
+    // stays because the failure it guards against is invisible in the output,
+    // and because fontconfig itself may be missing on the machine.
     try {
         const matched = execFileSync('fc-match', ['-f', '%{family}', WORDMARK_FONT], { encoding: 'utf8' });
         return matched.toLowerCase().includes(WORDMARK_FONT.toLowerCase());

@@ -140,8 +140,11 @@ They also need a **share card**: the image a link to a game unfurls to in a
 chat app (today a join link, `/join?code=PLUM`). Run `npm run icons` and
 commit the `public/icons/og-game-<slug>.png` it writes. The script draws it
 from the game's own `meta` — name, tagline, accent, art or glyph — so there
-is nothing to design or list, but it needs **Bricolage Grotesque installed as
-a system font** and skips the cards with a warning when it isn't.
+is nothing to design or list. The typeface it sets them in ships in
+[`scripts/fonts/`](./scripts/fonts/README.md), so it no longer matters what is
+installed on the machine: the run is reproducible, and every card other than
+the one you added should come back byte-identical. One that doesn't is a card
+whose game metadata changed without its card being redrawn — commit that too.
 
 Any **hand-drawn art** a game brings — board maps, card faces — arrives from an
 art tool essentially uncompressed, at megabytes a file. Save the export to
