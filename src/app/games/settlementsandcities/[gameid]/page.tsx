@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, calculateLongestRoad, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, calculateLongestRoad, isValidSettlementVertex, isValidSetupRoadEdge, legalRoadEdges } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import { SAC_RANDOM_TILES_PARAM, SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
@@ -140,9 +140,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                 if (v.building === 'settlement' && v.owner === myUserId) validVertices.add(vid);
             }
         } else if (boardMode === 'placeRoad') {
-            for (let eid = 0; eid < BOARD_TOPOLOGY.numEdges; eid++) {
-                if (isValidRoadEdge(eid, myUserId, vertices as any, edges as any)) validEdges.add(eid);
-            }
+            for (const eid of legalRoadEdges(myUserId, vertices as any, edges as any)) validEdges.add(eid);
         } else if (boardMode === 'moveRobber') {
             for (let hid = 0; hid < (gs.hexes?.length ?? 0); hid++) {
                 if (hid !== gs.robberHexIndex) validHexes.add(hid);
