@@ -19,7 +19,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Three steps. Pick the gear you will drive, and its die is rolled straight away, in the open. Then move exactly that many spaces by tapping one of the highlighted spaces on the circuit — spending brake points first if you want the number smaller. Finally, if you finished right behind someone, take the slipstream tow or decline it. You can never choose to stop short: whatever you roll gets driven in full. Round one is the exception — everyone throws a single d20 to get off the line instead of picking a gear, and a 1 bogs the engine down.",
+            body: "Three steps. Pick the gear you will drive, and its die is rolled straight away, in the open. Then move exactly that many spaces by tapping one of the highlighted spaces on the circuit — spending brake points first if you want the number smaller. Finally, if you finished right behind someone, take the slipstream tow or decline it. You can never choose to stop short: whatever you roll gets driven in full. Round one is the exception — everyone throws a single d20 to get off the line instead of picking a gear. A 1 bogs the engine down and you go nowhere, 17 or more is a flying start worth four spaces with no further roll, and anything in between gets away in 1st and rolls that gear's die for the move.",
         },
         {
             heading: "Gears and the dice",
@@ -31,7 +31,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Wear and slipstream",
-            body: "Tyres, brakes and gearbox are three small pools, on a spec the host picks for the whole field, and nothing ever refills them — they are a budget for the entire race, which is why a Grand Prix is not simply twice a Sprint. Brakes are the one pool you spend on purpose: each point shaves a space off a roll you have already seen. Slipstream is the way back at the car in front — end your move directly behind one with both of you in 4th or higher and your gear no lower than theirs, and you get a free three-space tow, chaining again if it drops you behind a third car. Towing into a corner you were not already in costs a brake point. With oil spills switched on, spending three or more brakes in a turn leaves a slick where you stop, and anyone who drives into one rolls a d6 to stay on the road.",
+            body: "Tyres, brakes and gearbox are three small pools, on a spec the host picks for the whole field, and nothing ever refills them — they are a budget for the entire race, which is why a Grand Prix is not simply twice a Sprint. Brakes are the one pool you spend on purpose: each point shaves a space off a roll you have already seen. Tyres mostly go on corners, plus one every time traffic stops you short of your number — the one wear cost you cannot see coming. Slipstream is the way back at the car in front — end your move directly behind one with both of you in 4th or higher and your gear no lower than theirs, and you get a free three-space tow, chaining again if it drops you behind a third car. Towing into a corner you were not already in costs a brake point. With oil spills switched on, spending three or more brakes in a turn leaves a slick where you stop, and anyone who drives into one rolls a d6 to stay on the road.",
         },
     ],
 };

@@ -1274,6 +1274,23 @@ the code.
   a stall rather than one driver spending another's roll. Until PR 6 lands, a
   race wants a turn timer its drivers will beat.
 
+* **PR 9 shipped split: the guide and the release note without the art.** The
+  PR 9 bullets list the circuit render, the generated `geometry`, `npm run
+  icons` and `meta.art` alongside `guide.ts` and the *New games* line. Only the
+  second pair landed. `scripts/generate-icons.mjs` needs Bricolage Grotesque
+  installed as a system font and prints `skipped the share cards` without it
+  (AGENTS.md says so too), and the Ashcombe render is a drawing rather than
+  something a build step produces. So **`public/icons/og-game-racecars.png`,
+  `public/art/racecars/ashcombe.png`, the generated `geometry` and `meta.art`
+  are still owed**, and PR 9 being merged is not evidence they exist. Recorded
+  here rather than left in the PR 9 bullets because a reader checks the plan
+  for what is done and the deviations for what actually happened. Two things
+  ride with it, both pre-existing: `tracks/ashcombe.ts` points at an
+  `ashcombe.png` that is not there, so that circuit draws its space layer over
+  bare board, and `public/art/racecars/race-city.png` (5 MB served, 16 MB
+  master) is referenced from nowhere in `src/` — it wants wiring to a track or
+  deleting with its master, and that is a call for whoever takes the art on.
+
 ### 23.4 State and command surface
 
 The **track is data, not code** — a `RaceCarsTrack` in `tracks/ashcombe.ts`,
