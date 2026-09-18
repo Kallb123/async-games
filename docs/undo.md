@@ -57,8 +57,8 @@ In Settlements & Cities that reads:
 
 Two clauses of the ask are worth pinning down because they decide the design:
 
-- *"only on non-random actions"* — §6. It is enforced by the engine, not by
-  each game remembering.
+- *"only on non-random actions"* — §6. It is enforced by a machine-checked
+  invariant, not by each game remembering.
 - *"unless the turn isn't ready to end"* — a turn mid-sequence has nothing to
   hold. A setup settlement with its road still outstanding, a pending robber
   move, free roads left from a Road Building card: the turn was never about to
@@ -77,12 +77,21 @@ More than it looks like, and one piece of it is a working undo.
   pops one and assigns it back. It goes through `POST /api/game/command` like
   any other move, is recorded on `commandHistory`, writes its own history line,
   and replays deterministically — because the stack it pops from was rebuilt by
-  the same replay. `ISolitaireUndoSnapshot` even documents which fields are
-  deliberately left out of a snapshot and why. Everything below is that shape,
-  applied to a game with opponents.
+  the same replay. Everything below is that shape, applied to a game with
+  opponents. What is *not* proposed is a shared undo abstraction over the two:
+  the pattern repeats, the code doesn't (§4).
+- **Settlements & Cities already has a whole-state deep cloner.**
+  `cloneSACState(gs, userIdList)` (`SettlementsAndCitiesModels.ts:108`) copies
+  an entire `ISACSpecificGameState` into independent plain objects, rebuilding
+  the `playerStates` `Map` in `userIdList` order via `clonePlayerStates` —
+  ordering replay already depends on. It is what seeds
+  `initialSpecificGameState` and the replay engine's starting state, so its
+  round trip through Mongoose is already proven in production. §7 uses it
+  unchanged as the snapshot.
 - **`ICommandOutcome.followUpCommand`** (`src/utils/apiModels/gameCommand.ts`)
   is how Settlements & Cities already ends a turn on the player's behalf. The
-  hold in §5 is a change to *when* that follow-up runs, not to what it is.
+  hold in §5 is a change to *whether* that follow-up is returned, and needs no
+  new field on the outcome and no branch in `commandPipeline.ts`.
 - **`stripRecordedRandomness`** already encodes the convention the undoability
   rule needs: a field whose name starts with `recorded` is randomness a command
   consumed. §6 reuses the prefix rather than inventing a second marker.
@@ -97,28 +106,36 @@ More than it looks like, and one piece of it is a working undo.
 - **`useSubmitCommand`** already serialises one command at a time per client
   and resyncs from the server on any failure, so the undo button needs no
   submit path of its own.
-- **`useNow`** is the shared ticker every live readout on screen already reads
-  from, so the countdown needs no timer of its own either.
+- **`useNow`** is the shared per-second ticker every live readout already reads
+  from, and `formatRemainingUntil(deadline, now)`
+  (`src/utils/games/TurnTimer.ts:216`) is already the deadline-shaped formatter
+  beside it — minute-coarse, so §11 adds one seconds-resolution sibling next to
+  it rather than a component.
+- **`ag-actionsheet`, `ActionButton` and `ag-hint`** are the band, the button
+  and the small print that every game's action panel is already built from.
 
 ## 3. What the engine does not give us yet
 
 - **`IGameCommand.Undo` is a trap, not a feature.** The interface declares
-  `Undo(gameData: IGameData): void` and 58 command classes implement it. **One**
-  of them does anything: `DiceCitiesRequestDiceRoll.Undo` calls
-  `undoRollPayout`, which the re-roll path genuinely uses. The other 57 are
-  `console.error("Command Undo not implemented yet")` or — worse — a bare
-  `gameData.gameState.commandHistory.pop()`, which is not an undo of anything
-  and would corrupt the replay log if it ever ran. A feature called undo must
-  not be built next to a method called Undo that means neither. PR 1 removes
-  the member from the interface and the 57 stubs with it, and leaves Dice
-  Cities' one real inverse as what it always was: a private detail of that
-  game's re-roll.
-- **No way for a command to say "hold the follow-up".** The pipeline runs a
-  `followUpCommand` immediately or not at all.
+  `Undo(gameData: IGameData): void` and **59** command classes implement it,
+  plus three test doubles. **Two** of them do anything, both in Dice Cities and
+  both calling `undoRollPayout` for the re-roll path. The other 57 are
+  `console.error("Command Undo not implemented yet")`, an empty body, or — worse
+  — a bare `gameData.gameState.commandHistory.pop()`, which is not an undo of
+  anything and would corrupt the replay log if it ever ran. A feature called
+  undo must not be built next to a method called Undo that means neither. PR 1
+  removes the member from the interface and the 57 stubs with it, and leaves
+  Dice Cities' two real inverses as what they always were: a private detail of
+  that game's re-roll.
 - **No shared statement of the window.** Ten seconds has to be one constant
   that the server stamps a deadline with and the client counts down to.
-- **No undo affordance in the shared UI.** Solitaire's undo button is local to
-  its own board.
+- **No seconds-resolution countdown label.** Every formatter in `TurnTimer.ts`
+  is minute-coarse, because until now nothing on screen counted in seconds.
+
+Nothing else. In particular the engine needs **no** new `ICommandOutcome` field
+and **no** change to `commandPipeline.ts`: the hold is expressed by a game
+declining to return a follow-up it would otherwise have returned, which the
+pipeline already handles as the ordinary case.
 
 ## 4. The shape of an undo — three options, one chosen
 
@@ -132,7 +149,7 @@ in sync by hope. `SACBuildSettlement.Undo` would have to give back four
 resources, free the vertex, restore `remainingSettlements` *and* recompute
 longest road — and the moment `Execute` grows a line, the inverse silently
 stops matching. 57 stubs is the evidence: nobody has ever managed to write
-these, and the one that exists is for a command with a two-field payout. The
+these, and the two that exist are for commands with a two-field payout. The
 repo's own rule is that a second copy of logic is a defect.
 
 ### Option B — undo by replay
@@ -141,7 +158,7 @@ Drop the last command off `commandHistory` and rebuild `specificGameState` by
 replaying the rest through `buildTimeline`'s engine.
 
 **Rejected, though it is the tempting one.** Three costs, and the third is
-fatal for the pilot:
+fatal:
 
 1. `buildTimeline` returns *response-shaped* snapshots, not the mongo-shaped
    state a document can be saved from. Undo would need a new export of the
@@ -157,17 +174,20 @@ fatal for the pilot:
 
 ### Option C — a snapshot, restored by a command *(chosen)*
 
-Exactly Solitaire's answer. An undoable command pushes a snapshot of the
-mutable parts of `specificGameState` before it mutates them; `SACUndo` is an
-ordinary command that pops one and assigns it back.
-
-Everything falls out of that:
+Exactly Solitaire's answer, and — because Settlements & Cities already owns a
+whole-state cloner — with less new code than Solitaire needed.
 
 - **No engine changes for the undo itself.** No new route, no pipeline branch,
-  no special case in `runCommand`. `SACUndo` is a move like any other: it goes
-  through the existing route, gets its sender and timestamp stamped by the
-  server, is checked against `COMMANDS_BY_GAME_TYPE`, lands on `commandHistory`,
-  and writes a history line.
+  no new outcome field. `SACUndo` is a move like any other: it goes through the
+  existing route, gets its sender and timestamp stamped by the server, is
+  checked against `COMMANDS_BY_GAME_TYPE`, lands on `commandHistory`, and
+  writes a history line.
+- **No new snapshot type, and no include/exclude list to maintain.** The
+  snapshot *is* `cloneSACState(gs, userIdList)`. A field added to
+  `ISACSpecificGameState` later is restored by default, and TypeScript makes the
+  cloner the one place that has to be told about it — omission fails the
+  compiler rather than failing a player. A hand-picked field list would be
+  Option A's drift wearing a different hat.
 - **Replay is free.** Replaying the game re-pushes the same snapshots and
   re-pops them, so the match review reconstructs an undone turn exactly.
 - **`commandHistory` stays append-only.** An undo is a thing that happened, not
@@ -176,8 +196,12 @@ Everything falls out of that:
   their last move". No history surgery, and nothing an opponent could have seen
   is retracted behind their back.
 
-The one thing it costs is bytes: a snapshot is a copy of the mutable state.
-§7 bounds that.
+**Why not extract a shared undo helper with Solitaire.** The two games' pushes,
+pops, snapshot shapes and `canUndo` are all game-shaped; the only lines that are
+genuinely identical are `markDirty` (§9) and a two-line push/pop, and a generic
+`undoStack<T>` wrapper over those would be an abstraction with no behaviour in
+it. This is the case AGENTS.md's "a second copy is the signal to extract the
+first one" is *not* about: the pattern repeats, the code doesn't.
 
 ### Which command can be undone — the anchor
 
@@ -201,6 +225,11 @@ unreachable. Nothing has to be cleared, and a command added later cannot break
 the invariant by omission — it breaks it by existing, which is the safe
 direction.
 
+The anchor also does most of §6's work for it: an undo can only ever reach the
+command directly behind it, and only a command that pushed a snapshot ever sets
+the anchor. That is why the undoability rule below is one declaration plus one
+CI guard, and not a runtime inspection of the command being undone.
+
 ## 5. The ten-second hold
 
 Today a Settlements & Cities turn ends itself in two places:
@@ -221,7 +250,7 @@ build/placement lands
        └─ is the turn ready to end?        no  → no countdown; undo stays
             yes                                  available until the next action
             └─ set gs.autoEndTurnAt = now + UNDO_WINDOW_MS
-               leave currentTurn where it is, run no follow-up
+               return no followUpCommand; leave currentTurn where it is
 ```
 
 The client renders the countdown from `autoEndTurnAt` and, when it reaches
@@ -233,9 +262,9 @@ zero, submits an ordinary `SACEndTurn`. Three things make that safe:
   that — it is server state written by the placement — so `SACEndTurn` still
   cannot be used to skip a setup placement. Its main-phase guards are unchanged,
   where it was already legal.
-- **Undoing clears it.** `autoEndTurnAt` is part of the snapshot, so restoring
-  the snapshot puts it back to `null` and the countdown vanishes from the board
-  in the same response.
+- **Undoing clears it.** `autoEndTurnAt` is part of the cloned state, so
+  restoring a snapshot puts it back to `null` and the countdown vanishes from
+  the board in the same response.
 - **Nothing schedules anything.** There is no server-side timer, no `after()`
   sleeping ten seconds, no new cron branch. The deadline is a value; whoever
   next looks at the game acts on it.
@@ -280,7 +309,7 @@ Two alternatives were considered and dropped:
 | `SACPlaceSettlementSetup` | ✅ | Pure placement. In the second setup round it also grants starting resources, which the snapshot restores. |
 | `SACPlaceRoadSetup` | ✅ | Pure placement; ends the setup turn, so it is the one that needs the hold. |
 | `SACBuildSettlement` | ✅ | Spends four known resources on a known vertex. |
-| `SACBuildRoad` | ✅ | Spends two known resources on a known edge. Also covers a free road from Road Building — `pendingRoadBuilding` is in the snapshot. |
+| `SACBuildRoad` | ✅ | Spends two known resources on a known edge. Also covers a free road from Road Building — `pendingRoadBuilding` is restored with the rest of the state. |
 
 ### And what is not, with the reason in each case
 
@@ -295,21 +324,24 @@ Two alternatives were considered and dropped:
 
 ### The enforcement
 
-Two independent gates, because "the author remembered" is not one:
+- **Declared.** A command opts in with `readonly undoable = true` and a
+  `sacPushUndo` call. Nothing is undoable by default.
+- **Proven in CI.** A guard test (§13) plays every command that declares
+  `undoable` and asserts the executed instance carries no own property whose
+  name starts with `recorded` — the same prefix `stripRecordedRandomness`
+  already keys off, exposed as `consumedRandomness(command)` beside it in
+  `gameCommand.ts`. A command that grows a recorded field later fails the build
+  the moment it does.
 
-1. **Declared.** A command opts in with `readonly undoable = true`. Nothing is
-   undoable by default.
-2. **Proven.** `SACUndo.Execute` refuses if the command it would take back
-   carries any own property whose name starts with `recorded` (other than
-   `recordedFollowUpToId`). That is the same prefix `stripRecordedRandomness`
-   already keys off, lifted into a shared `consumedRandomness(command)` in
-   `src/utils/games/undo.ts` so the convention has one home. A command that
-   grows a recorded field later stops being undoable the moment it runs,
-   whatever its flag still says.
-
-And a guard test (§13) plays every command that declares `undoable` and asserts
-the executed instance carries no recorded fields — so gate 2 fails in CI rather
-than in front of a player.
+There is deliberately **no runtime check** on the command being undone. The
+anchor (§4) means an undo can only reach the command immediately behind it, and
+only a snapshot-pushing command ever sets the anchor — so a runtime gate could
+only fire for a command that both pushes a snapshot *and* consumes randomness,
+which is exactly what the CI guard catches before it ships. Adding it anyway
+would be a third declaration of one fact, and would mean rehydrating the tail of
+`commandHistory` inside `Execute` — the
+`deserializeJSON(JSON.stringify(lastCommand))` dance Dice Cities already needs
+for its own reasons, bought for nothing.
 
 ## 7. State and command surface
 
@@ -319,12 +351,14 @@ than in front of a player.
 // SettlementsAndCities/board.ts — ISACSpecificGameState
 
 /**
- * Snapshots of the mutable state, newest last, pushed by the undoable
- * commands (SACPlaceSettlementSetup, SACPlaceRoadSetup, SACBuildSettlement,
- * SACBuildRoad) before they mutate anything. Capped at UNDO_STACK_DEPTH;
- * the oldest is dropped, which only ever costs reach, never correctness.
+ * Snapshots of the whole state, newest last, pushed by the undoable commands
+ * (SACPlaceSettlementSetup, SACPlaceRoadSetup, SACBuildSettlement,
+ * SACBuildRoad) before they mutate anything. `by` is whose move it was — the
+ * response builder reads it to decide who may be told about an undo (§8).
+ * Capped at UNDO_STACK_DEPTH; the oldest is dropped, which only ever costs
+ * reach, never correctness.
  */
-undoStack: ISACUndoSnapshot[];
+undoStack: { by: string, state: ISACSpecificGameState }[];
 
 /**
  * The id of the last command that pushed or popped a snapshot. SACUndo
@@ -336,51 +370,52 @@ undoAnchorId: string | null;
 
 /**
  * When a turn that is ready to end is being held open so its player can
- * still take their last move back (§5). ISO. Null the rest of the time.
- * `autoEndTurnFor` is who it is being held for — read only by the response
- * builder, which sends the deadline to that player and to nobody else (§8),
- * exactly as lastRollAutoEndedBy already works.
+ * still take their last move back (§5). ISO. Null the rest of the time, and
+ * cleared with the rest of the turn in sacAdvanceMainTurn/sacAdvanceSetup.
  */
 autoEndTurnAt: string | null;
-autoEndTurnFor: string | null;
 ```
+
+### The snapshot is `cloneSACState`
+
+No new interface. `sacPushUndo(sacData, command)` is:
 
 ```ts
-/**
- * Everything the four undoable commands can touch, and deliberately nothing
- * else. Excluded on purpose: hexes, harbors, expansions, victoryTarget and
- * randomTiles (immutable after setup); devCardDeck, lastRoll* and the robber
- * (only a random command moves them, and none of those is undoable — so
- * leaving them out is what stops an undo ever rewinding a roll); and
- * undoStack/undoAnchorId themselves.
- */
-export interface ISACUndoSnapshot {
-    senderId: string;          // whose move this was — the response reads it (§8)
-    vertices: ISACVertex[];
-    edges: ISACEdge[];
-    playerStates: Map<string, ISACPlayerState>;
-    longestRoadOwner: string | null;
-    pendingRoadSetup: boolean;
-    lastSetupSettlementVertex: number | null;
-    pendingRoadBuilding: number;
-    autoEndTurnAt: string | null;
-    autoEndTurnFor: string | null;
-}
+gs.undoStack.push({ by: command.senderId, state: cloneSACState(gs, sacData.userIdList) });
+if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
+gs.undoAnchorId = command.id;
 ```
 
-**Size.** 54 vertices and 72 edges of two fields each, plus up to six player
-states: three to five kilobytes of JSON per snapshot. `UNDO_STACK_DEPTH = 6`
-bounds it at roughly 30 KB on a document that already carries a full
-`commandHistory`, and it is emptied on every turn hand-off (there is nothing
-left to undo once the turn has passed, and `CheckEndTurn` is the one place that
-knows the turn passed). Two is the depth the game actually needs — a setup
-settlement and its road — and six is room for a main-phase build run without
-being a reason to think about it.
+and the restore is:
 
-Whole arrays rather than "just the vertex that changed", for the reason Option
-A was rejected: a targeted snapshot is a per-command inverse wearing a
-different hat, and it drifts the same way. Solitaire copies its whole board
-every move for the same reason.
+```ts
+const entry = gs.undoStack.pop()!;
+const { undoStack: _s, undoAnchorId: _a, ...restored } = entry.state;
+Object.assign(gs, restored);
+gs.undoAnchorId = this.id;
+```
+
+`cloneSACState` gains three lines for the new fields — `undoStack: []`,
+`undoAnchorId: null` (so a snapshot never nests a stack) and
+`autoEndTurnAt: gs.autoEndTurnAt ?? null` (so restoring one clears the
+countdown). Nothing else about it changes, and every existing caller
+— `CreateGame`'s `initialSpecificGameState`, the replay adapter's seed —
+keeps working.
+
+Cloning the *whole* state rather than the parts a placement touches is
+deliberate and is the opposite of a worry: the anchor means only the command
+directly behind you can be undone, and no random command ever pushes a
+snapshot, so `devCardDeck`, `lastRoll*` and the robber are byte-identical
+between the snapshot and now — restoring them is a no-op, and *not* restoring
+them is a hand-maintained list that silently stops covering a field somebody
+adds next year.
+
+**Size and depth.** A cloned state is six to eight kilobytes of JSON.
+`UNDO_STACK_DEPTH = 2` — a setup settlement and its road is the depth the game
+actually needs, and it covers a two-build main-phase run as well. It costs one
+character to raise when somebody hits the wall, and bytes on every save until
+then. The stack is emptied on every turn hand-off, in the two places that
+already know the turn passed.
 
 ### `apiModels.ts` — two new response fields
 
@@ -389,16 +424,15 @@ every move for the same reason.
 canUndo: boolean;
 /**
  * When this viewer's turn will pass on its own unless they take their last
- * move back first (§5). ISO, or null. Only ever set for the player it is
+ * move back first (§5). ISO, or null. Only ever sent to the player it is
  * being held for — see §8.
  */
 autoEndTurnAt: string | null;
 ```
 
-`undoStack`, `undoAnchorId` and `autoEndTurnFor` are not in
-`ISACSpecificGameStateResponse` and never go out. `gameStateToResponse` builds
-its return object field by field, so they are absent by construction rather
-than by being deleted.
+`undoStack` and `undoAnchorId` are not in `ISACSpecificGameStateResponse` and
+never go out. `gameStateToResponse` builds its return object field by field, so
+they are absent by construction rather than by being deleted.
 
 ### The command
 
@@ -409,9 +443,8 @@ export class SACUndo implements IGameCommand {
     myString() { return 'took back their last move'; }
     // Execute:
     //   refuse unless gs.undoAnchorId === last commandHistory entry's id
-    //   refuse unless the stack's top snapshot's senderId === this.senderId
-    //   refuse if consumedRandomness(that last command)
-    //   pop, assign every field back, set undoAnchorId = this.id
+    //   refuse unless gs.undoStack.at(-1)?.by === this.senderId
+    //   pop, Object.assign the restored state back, set undoAnchorId = this.id
     //   history: playerHistory(this.senderId, 'took back their last move')
     //   → { validMove: true, turnOver: false }
 }
@@ -420,40 +453,51 @@ export class SACUndo implements IGameCommand {
 One line in `COMMANDS_BY_GAME_TYPE` under `SettlementsAndCitiesGameType`, which
 `serializableRegistry.test.ts` will demand anyway.
 
-### `src/utils/games/undo.ts` — the shared half
+### Where the two shared pieces go
 
-Small on purpose. Only what is genuinely cross-game lives here; the snapshot
-shape and the restore are the game's own, as Solitaire's are.
+No new module. Each lands beside the thing it belongs to:
 
-```ts
-export const UNDO_WINDOW_MS = 10_000;           // §5, read by server and client
-export const RECORDED_PREFIX = "recorded";      // moved here; gameCommand.ts imports it
-export function consumedRandomness(command: unknown): boolean;
-```
+- `consumedRandomness(command)` and the `recorded` prefix it shares with
+  `stripRecordedRandomness` go in `src/utils/apiModels/gameCommand.ts`, which
+  is where that convention already lives and is documented at length. A
+  game-utils file exporting the engine's own convention back to the engine
+  would be an inverted dependency invented to make a thin file look populated.
+- `UNDO_WINDOW_MS` goes in `src/games/SettlementsAndCities/board.ts`, which is
+  already the file both the server rules and the client screens import this
+  game's constants from (`NO_RESOURCES`, `SAC_RESOURCES`). It moves somewhere
+  shared when a second game opts in — extract on the second use, not the first.
 
 ## 8. Hidden information
 
 The croupier's questions, answered before they are asked.
 
 - **The undo stack never leaves the server.** It is a copy of every player's
-  resources and dev-card counts. It is absent from
+  resources, dev cards and the remaining deck. It is absent from
   `ISACSpecificGameStateResponse`, and `publicGameState.test.ts` already holds
   the shared shape.
 - **`canUndo` is the viewer's own.** Computed as
-  `gs.undoStack.at(-1)?.senderId === viewerId`, so it answers "have *you* got
+  `gs.undoStack.at(-1)?.by === viewerId`, so it answers "have *you* got
   something to take back" and is false for everyone else and for a viewerless
   replay. That it exists at all is not a leak — the move it would undo is a
   settlement or a road, which the whole table can see on the board.
-- **`autoEndTurnAt` is redacted exactly like `lastRollAutoEnded`.** A held turn
-  in the main phase is held because its player can afford nothing, which is
-  precisely what `hideAutoEndedRoll` already keeps from the table. The response
-  sends the deadline only when `autoEndTurnFor === viewerId`, and null
-  otherwise — including for a viewerless recap snapshot, which counts as
-  everybody else for the same reason the roll does.
-- **The setup hold is not redacted, and does not need to be.** In setup the
+- **`autoEndTurnAt` is redacted the same way**, and by the same expression: it
+  is sent only when `gs.undoStack.at(-1)?.by === viewerId`, and null otherwise,
+  including for a viewerless recap snapshot. A held turn in the main phase is
+  held because its player can afford nothing, which is precisely what
+  `hideAutoEndedRoll` already keeps from the table.
+
+  Keyed off the stack's owner rather than off `currentTurn` — which would be
+  the more obvious reading, since the two are equal whenever a hold exists —
+  because `gameStateToResponse(gs, userIdNameMap, viewerId)` and
+  `IReplayAdapter.toResponseState` are handed the state and the viewer and
+  nothing else. Widening both signatures to carry `currentTurn` through every
+  game would be a much bigger change than reusing the expression `canUndo`
+  needs anyway, and it is also why there is no separate `autoEndTurnFor` field:
+  the stack already records who.
+- **The setup hold is not sensitive, and is redacted anyway.** In setup the
   turn always ends after the road; there is no hand to infer. It is still sent
   only to its own player, because there is nothing for anyone else to do with
-  it.
+  it and one rule is easier to keep than two.
 - **What is left, stated plainly.** An `SACEndTurn` that lands ten seconds after
   a build is, in the main phase, weak evidence that the game sent it — which is
   weak evidence about that player's hand. §5 closes it by giving the manual
@@ -499,16 +543,23 @@ The gremlin's questions.
 - **Optimistic concurrency.** `SACUndo` is an ordinary command saved through
   `trySave`, so a losing write is the existing 409 and refresh, not a silent
   overwrite.
-- **Mongoose `Mixed` tracking.** `undoStack` and the restored state are inside
-  `specificGameState`; the command route's existing `markModified` covers
-  `gameState.commandHistory`, and Settlements & Cities' commands already rely
-  on the document's own tracking of `specificGameState` — the restore assigns
-  whole fields (`gs.vertices = snapshot.vertices`), which is top-level
-  reassignment on a tracked path. The `playerStates` `Map` is the one to watch
-  in review: snapshot it as a new `Map` of cloned player states, never as a
-  reference to the live one, or the "snapshot" mutates along with the state it
-  is supposed to remember. **This is the single likeliest bug in the whole
-  feature** and it gets its own test (§13).
+- **The snapshot must be a copy, not a view.** This is the bug a hand-written
+  snapshot invites — a `playerStates` `Map` stored by reference "remembers"
+  whatever the command then does to it — and reusing `cloneSACState` is what
+  retires it: `clonePlayerStates` already rebuilds the map with cloned entries
+  and already has its own test. §13 keeps a regression test anyway, because the
+  day someone "optimises" the clone away is the day it comes back.
+- **Mongoose `Mixed` tracking.** `undoStack` is an array inside
+  `specificGameState` (Solitaire declares its own as `Schema.Types.Mixed`), and
+  the restore assigns whole fields onto a tracked path. Whether Settlements &
+  Cities needs an explicit `markModified('specificGameState')` for either is the
+  one thing to establish before PR 2 lands rather than after — the only
+  `markModified` on the write path today is `gameState.commandHistory` in the
+  command route. **If it does need one, that is the fourth copy of the identical
+  three-line `markDirty` helper** (`FiresOutLogic.ts:62`,
+  `TrainTimeLogic.ts:44`, `SolitaireLogic.ts:60`) and therefore the moment to
+  lift it into `src/utils/games/`, porting the three onto it — not the moment to
+  paste it again.
 - **A game that has never seen this code.** Every new field is optional at the
   read site: `gs.undoStack ?? []`, `gs.undoAnchorId ?? null`,
   `gs.autoEndTurnAt ?? null`. An in-flight game simply has no undo until its
@@ -521,7 +572,7 @@ The gremlin's questions.
   hold changes nothing either: `autoEndTurnAt` is set and cleared by commands
   that replay in order.
 - **One recap event.** `recap.ts`'s `toEvents` gets a `SACUndo` case emitting
-  "took back a settlement"/"took back a road" (from what the snapshot restored),
+  "took back a settlement"/"took back a road" (from what the restore put back),
   because without it a recap would show an opponent building something that is
   not on the board — the build's own event with nothing following it. Glyph
   `↩️`.
@@ -536,26 +587,36 @@ The gremlin's questions.
 
 ## 11. UI surface
 
-Everything goes through pieces that already exist, and one new shared primitive
-that is new because there are two callers for it by the end of PR 4.
+No new component. The pieces already exist, and the only genuinely new code is
+a five-line pure formatter.
 
-- **`src/components/ui/UndoBar.tsx`** *(new)* — the strip that sits under the
-  board while an undo is live: an `ActionButton` for **Undo**, and, when a
-  deadline is passed in, the countdown line and a **Pass now** button beside it.
-  It reads `useNow` rather than owning a ticker, takes
-  `deadline: string | null` and fires `onExpire` once when it passes. It draws
-  with existing `ag-*` classes (`ag-actionsheet`, `ag-build-row`) and adds no
-  new ones beyond one modifier for the countdown's emphasis.
-  Solitaire's board adopts it in PR 4 for its own undo button — which is the
-  point at which it is a shared component rather than a speculative one.
-- **The Settlements & Cities board screen** renders it from
-  `gs.canUndo` / `gs.autoEndTurnAt` and submits through the `submitCommand` it
-  already has. No new hook: the countdown is a deadline plus `useNow`, and the
-  submit is the one every other button on that screen uses.
+- **`secondsUntil(deadline, now)`** *(new)* in
+  `src/utils/games/TurnTimer.ts`, beside `formatRemainingUntil` and
+  `formatRemainingTimeShort`. Every formatter in that file is minute-coarse
+  ("less than a minute"), because until now nothing on screen counted in
+  seconds; this is the sibling that does. Null before hydration, like the rest,
+  fed by `useNow()` — the per-second ticker, where the others take
+  `useNowToTheMinute()`.
+- **The undo bar is the action panel it already sits in.**
+  `SettlementsAndCitiesActions.tsx` already owns the `ag-actionsheet` band and
+  the End-turn `ActionButton` at its foot. Undo is another `ActionButton`
+  (`ag-btn ag-btn--light`, the same skin Solitaire's undo wears), the countdown
+  is a `<p className="ag-hint">`, and *Pass now* is the End-turn button it
+  already renders under a different label. No new file, no new `ag-*` class.
+- **Solitaire's undo button stays where it is.** It is three lines of
+  `ActionButton` in a flex row with Draw and Hint, with no deadline, no
+  countdown and no hand-off — a solo game has none. Building a shared bar around
+  a deadline and then porting Solitaire onto it would mean a component growing a
+  second mode for a caller that exists only to make it shared. If the two ever
+  converge, they converge later, on evidence.
+- **The board screen** renders from `gs.canUndo` / `gs.autoEndTurnAt` and
+  submits through the `submitCommand` it already has. No new hook: the countdown
+  is a deadline plus `useNow`, and the submit is the one every other button on
+  that screen uses.
 - **A manual *End turn* after an undoable move** sets a local deadline of
-  `Date.now() + UNDO_WINDOW_MS` and shows the same bar (§5), rather than
-  sending straight away.
-- **Nothing off-turn.** Off-turn the board is already inert behind
+  `Date.now() + UNDO_WINDOW_MS` and shows the same two controls (§5), rather
+  than sending straight away.
+- **Nothing off-turn.** Off-turn the panel is already inert behind
   `ReadOnlyPanel`, and `canUndo` is false for a viewer who is not the mover.
 
 ## 12. The PRs
@@ -568,31 +629,36 @@ commits. Reviewers named per PR are the crew in `AGENTS.md`.
 
 ### PR 1 — Stop pretending commands can undo themselves
 
-Pure deletion plus one small shared module. No behaviour change, and the
-diff is strongly negative. *Review: caveman.*
+Deletion plus one predicate. Strongly negative diff, no behaviour change.
+*Review: caveman.*
 
 - **`Remove Undo from the command contract`** — drop
   `Undo: (gameData: IGameData) => void` from `IGameCommand`
-  (`src/utils/apiModels/gameCommand.ts`) and delete all 57 stub
+  (`src/utils/apiModels/gameCommand.ts:63`) and delete the 57 stub
   implementations across the eleven `<Game>Logic.ts` files and the three test
-  doubles (`commandPipeline.test.ts`, `turnTimeout.test.ts`,
-  `replay.test.ts`). Every one of them either logs "not implemented yet" or
-  pops `commandHistory`, which is not an undo and would corrupt the replay
-  log. Nothing calls them.
-- **`Keep Dice Cities' one real inverse where it belongs`** — the single
-  exception, `DiceCitiesRequestDiceRoll.Undo` (`DiceCitiesLogic.ts:175`), is
-  genuinely used by the re-roll path. It stays, renamed
-  `undoPayout(gameData)` and no longer claiming to implement an interface
-  member, with its call site at the re-roll updated and its existing test
-  (`DiceCitiesLogic.test.ts:440`) following it. The stray
-  `commandHistory.pop()` inside it goes: the re-roll's caller does not want
-  the roll unrecorded, and nothing else did either.
-- **`Say what "non-random" means in one place`** — add
-  `src/utils/games/undo.ts` with `UNDO_WINDOW_MS`, the `recorded` prefix moved
-  out of `gameCommand.ts` (which now imports it, so `stripRecordedRandomness`
-  and the undo gate cannot disagree), and `consumedRandomness(command)`. Unit
-  tests: a command carrying `recordedRoll1` is randomness, one carrying only
-  `recordedFollowUpToId` is not, a plain command is not.
+  doubles (`commandPipeline.test.ts:41`, `turnTimeout.test.ts:37`,
+  `replay.test.ts:73`). Every one of them either logs "not implemented yet",
+  has an empty body, or pops `commandHistory` — which is not an undo and would
+  corrupt the replay log. `grep "\.Undo("` across `src/` finds one call site,
+  and it is Dice Cities' own, below.
+- **`Keep Dice Cities' two real inverses where they belong`** — the exceptions
+  are `DiceCitiesRequestDiceRoll.Undo` (`DiceCitiesLogic.ts:175`) and
+  `DiceCitiesRequestHarbourBonus.Undo` (`:483`), both genuinely used by the
+  re-roll path, dispatched polymorphically through `isRollPayoutCommand` /
+  `RollPayoutCommand` from the single call site at `:842`. Both are renamed
+  `undoPayout(gameData)` and stop claiming to implement an interface member;
+  the union, the narrowing helper and the call site are untouched, and the
+  existing test at `DiceCitiesLogic.test.ts:440` follows the rename.
+
+  **Both bodies stay byte-identical.** The dice-roll one pops `commandHistory`
+  and the harbour one deliberately does not — the comment at `:484` says why
+  ("the log needs this entry to replay the turn"). That asymmetry is load-bearing
+  for replay, so it is not tidied up inside a PR advertised as pure deletion.
+- **`Say what "non-random" means in one place`** — `consumedRandomness(command)`
+  and the `recorded` prefix it shares with `stripRecordedRandomness`, in
+  `gameCommand.ts` beside them. Unit tests: a command carrying `recordedRoll1`
+  is randomness, one carrying only `recordedFollowUpToId` is not, a plain
+  command is not.
 
 ---
 
@@ -601,14 +667,16 @@ diff is strongly negative. *Review: caveman.*
 Server-side undo, no hold yet. After this PR the four placements are undoable
 whenever the turn is plainly still yours, which is every case except the one
 that ends the turn — so the feature is real and testable before §5 lands.
-*Review: caveman, croupier.*
+*Review: caveman, croupier, gremlin.*
 
-- **`Snapshot what a placement changes`** — `ISACUndoSnapshot` in `board.ts`,
-  `undoStack` / `undoAnchorId` on `ISACSpecificGameState` and the Mongoose
-  sub-schema, seeded in `buildInitialSettlementsAndCitiesState` and in
-  `testFixtures.ts`'s `makeState`. A `sacPushUndo(gs, command)` helper in
-  `SettlementsAndCitiesLogic.ts` that deep-copies vertices, edges and the
-  `playerStates` map — cloned entries, never references — and sets the anchor.
+- **`Snapshot the state with the cloner that already exists`** — `undoStack` /
+  `undoAnchorId` on `ISACSpecificGameState` and the Mongoose sub-schema, seeded
+  in `buildInitialSettlementsAndCitiesState` and in `testFixtures.ts`'s
+  `makeState`; `undoStack: []` and `undoAnchorId: null` added to
+  `cloneSACState`'s literal so a snapshot never nests a stack; `UNDO_WINDOW_MS`
+  and `UNDO_STACK_DEPTH` in `board.ts`; and `sacPushUndo` / the restore of §7.
+  This is the commit that establishes whether `markModified('specificGameState')`
+  is needed — see §9, including what to do if it is.
 - **`Push a snapshot before each of the four placements`** —
   `readonly undoable = true` and one `sacPushUndo` call at the top of
   `SACPlaceSettlementSetup`, `SACPlaceRoadSetup`, `SACBuildSettlement` and
@@ -617,9 +685,10 @@ that ends the turn — so the feature is real and testable before §5 lands.
   `COMMANDS_BY_GAME_TYPE`. `serializableRegistry.test.ts` fails without it.
 - **`Tell the player they can undo, and nobody else`** — `canUndo` on
   `ISACSpecificGameStateResponse` and `gameStateToResponse`, scoped by the top
-  snapshot's `senderId`; nothing else added to the response.
-- **`Test the undo`** — `undo.test.ts` beside `autoEndTurn.test.ts`: the six
-  cases in §13's first block.
+  entry's `by`; nothing else added to the response.
+- **`Test the undo`** — `undo.test.ts` beside `autoEndTurn.test.ts`: §13's
+  first block, plus the CI guard that no command declaring `undoable` executes
+  into a `recorded` field.
 
 ---
 
@@ -628,11 +697,12 @@ that ends the turn — so the feature is real and testable before §5 lands.
 The §5 hold. *Review: caveman, croupier, gremlin.*
 
 - **`Hold the hand-off while there is something to take back`** —
-  `autoEndTurnAt` / `autoEndTurnFor` on the state and the sub-schema, added to
-  `ISACUndoSnapshot`, and cleared in `sacAdvanceMainTurn` /
-  `sacAdvanceSetup` along with the rest of the turn. `sacFinishTurn` sets the
-  deadline and returns no follow-up when `gs.undoStack.length > 0`; when the
-  stack is empty it returns the follow-up exactly as it does today.
+  `autoEndTurnAt` on the state, the sub-schema and `cloneSACState`, cleared in
+  `sacAdvanceMainTurn` / `sacAdvanceSetup` along with the undo stack and the
+  rest of the turn. `sacFinishTurn` sets the deadline and returns no follow-up
+  when `gs.undoStack.length > 0`; when the stack is empty it returns the
+  follow-up exactly as it does today. No change to `ICommandOutcome` and none
+  to `commandPipeline.ts`.
 - **`End a setup turn with the command that ends every other turn`** —
   `SACPlaceRoadSetup` returns `turnOver: false` and sets the deadline (via the
   same `sacFinishTurn`, whose setup guard is lifted for this one case);
@@ -641,9 +711,9 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
   "ended their turn". `CheckEndTurn`'s existing setup branch already does the
   right thing from there.
 - **`Send the deadline to the player it is being held for`** —
-  `autoEndTurnAt` on the response, gated on `autoEndTurnFor === viewerId` in
-  the shape of `hideAutoEndedRoll`, with that function's comment extended to
-  cover both.
+  `autoEndTurnAt` on the response, gated on the same
+  `gs.undoStack.at(-1)?.by === viewerId` that `canUndo` uses, with
+  `hideAutoEndedRoll`'s comment extended to name its new neighbour.
 - **`Test the hold`** — §13's second block, including the assertion that
   `autoEndTurn.test.ts` is untouched.
 
@@ -653,14 +723,14 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
 
 *Review: caveman, rulebook.*
 
-- **`Add the undo bar`** — `src/components/ui/UndoBar.tsx` per §11, and port
-  Solitaire's own undo button onto it in the same commit. If writing it proves
-  the two are different components wearing one hat, keep them apart and say so
-  in the commit message.
-- **`Wire it into the Settlements & Cities board`** — render from
-  `gs.canUndo` / `gs.autoEndTurnAt`, submit `SACUndo` through the existing
-  `submitCommand`, fire `SACEndTurn` on expiry after re-reading the deadline,
-  and route a manual *End turn* through the same bar when there is a snapshot
+- **`Count down in seconds`** — `secondsUntil(deadline, now)` in
+  `TurnTimer.ts` with its unit tests, beside the minute-coarse formatters it
+  joins.
+- **`Wire undo into the Settlements & Cities action panel`** — the Undo
+  `ActionButton`, the `ag-hint` countdown and the *Pass now* relabelling in
+  `SettlementsAndCitiesActions.tsx`; `SACUndo` submitted through the existing
+  `submitCommand`; `SACEndTurn` fired on expiry after re-reading the deadline;
+  a manual *End turn* routed through the same window when there is a snapshot
   to keep.
 - **`Recap reads an undo`** — the `SACUndo` case in `recap.ts`'s `toEvents`
   and its test in `recap.test.ts`.
@@ -673,8 +743,8 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
 
 - **`Document undo`** — this file moved from plan to description (present
   tense, the rejected options kept as the record of why), plus the
-  `ARCHITECTURE.md` §6 paragraph pointing at it and the `AGENTS.md` line under
-  the shared-components inventory for `UndoBar`.
+  `ARCHITECTURE.md` §6 paragraph pointing at it. No `AGENTS.md` component
+  inventory line: §11 adds no component.
 - **`Tell players`** — one line in the **Enhancements** group of
   `src/utils/ui/whatsNew.ts`, `game: "settlementsandcities"`, newest first,
   dropping the oldest if the group runs past ten. One line for the branch, as
@@ -698,42 +768,50 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
    `remainingSettlements` is back, and in the second setup round the starting
    resources are back too.
 2. Undo twice in setup: road, then settlement, both restored — the depth the
-   game actually needs.
+   game actually needs, and the reason `UNDO_STACK_DEPTH` is 2 rather than 1.
 3. **The snapshot is a copy, not a view.** Place a settlement, mutate
    `gs.playerStates` afterwards, undo, and assert the restored player state
-   carries the pre-placement values. This is the §9 `Map`-aliasing bug, and
-   this test is the only thing between it and production.
+   carries the pre-placement values. `clonePlayerStates` already makes this
+   true and already has its own test at `SettlementsAndCitiesModels.test.ts:101`;
+   this is the regression test for the day someone hand-rolls the snapshot
+   again.
 4. Undo is refused after something else has happened: build a road, play a
    Knight, undo → `validMove: false`, board unchanged. (The anchor.)
 5. Undo is refused for a player who is not the mover, and after their turn has
    passed.
-6. A roll cannot be undone: `SACRollDice` pushes no snapshot, and a hand-built
-   `SACUndo` straight after a roll is refused.
-7. A full turn plays and replays byte-for-byte with an undo in the middle of
+6. A roll cannot be undone: `SACRollDice` pushes no snapshot, so a hand-built
+   `SACUndo` straight after a roll finds no matching anchor and is refused.
+7. **The guard.** Every command class declaring `undoable` is executed against a
+   fixture and asserted to carry no `recorded…` own property
+   (`consumedRandomness`). This is §6's whole enforcement, so it fails CI rather
+   than a player.
+8. A full turn plays and replays byte-for-byte with an undo in the middle of
    it — `buildTimeline` over the real `commandHistory`, in the shape
    `autoEndTurn.test.ts` already uses.
 
 **PR 3 — the hold**
 
-8. A build that leaves its player with nothing sets `autoEndTurnAt` and does
-   *not* pass the turn; the follow-up `SACEndTurn` is not on `commandHistory`.
-9. Undoing that build clears `autoEndTurnAt` and the turn is still theirs.
-10. A *roll* that leaves its player with nothing still ends the turn
+9. A build that leaves its player with nothing sets `autoEndTurnAt` and does
+   *not* pass the turn; no `SACEndTurn` is on `commandHistory`.
+10. Undoing that build clears `autoEndTurnAt` and the turn is still theirs.
+11. A *roll* that leaves its player with nothing still ends the turn
     immediately, with no deadline — `autoEndTurn.test.ts` unchanged and green,
     which is the assertion that matters most in this PR.
-11. Setup: the road sets the deadline; `SACEndTurn` is accepted in setup only
+12. Setup: the road sets the deadline; `SACEndTurn` is accepted in setup only
     while it is set, refused before the settlement is placed and refused after
     the turn has passed; `setupStep` advances exactly once.
-12. `gameStateToResponse` sends `autoEndTurnAt` to the held player and `null`
-    to everyone else and to a viewerless replay — beside the existing
-    `hideAutoEndedRoll` cases in `SettlementsAndCitiesModels.test.ts`.
-13. The turn-timer adapter still resolves a held turn:
-    `turnTimeout.test.ts` gains a game left with `autoEndTurnAt` in the past
-    and asserts `resolveStalledTurn` returns `'advanced'`.
+13. `gameStateToResponse` sends `autoEndTurnAt` and `canUndo` to the held
+    player, and `null`/`false` to everyone else and to a viewerless replay —
+    beside the existing `hideAutoEndedRoll` cases in
+    `SettlementsAndCitiesModels.test.ts`.
+14. The turn-timer adapter still resolves a held turn: `turnTimeout.test.ts`
+    gains a game left with `autoEndTurnAt` in the past and asserts
+    `resolveStalledTurn` returns `'advanced'`.
 
-**PR 4** — the countdown is a pure deadline-to-label function tested directly;
-the bar itself is rendered through `react-dom/server` in the house client-hook
-style if it grows any logic worth asserting on, and otherwise is not tested.
+**PR 4** — `secondsUntil` is a pure function tested directly (a future deadline,
+a passed one, a null `now`). The panel changes are rendered through
+`react-dom/server` in the house client-hook style only if they grow logic worth
+asserting on.
 
 ## 14. What this does not reach
 
@@ -743,8 +821,10 @@ style if it grows any logic worth asserting on, and otherwise is not tested.
   `sacPushUndo` call. Deliberately not in the pilot.
 - **Other games.** Nothing here is wired into any other game. Train Time's
   route claims, World Domination's deployments and Outbreak's actions are all
-  plausible candidates; each needs its own snapshot shape and its own answer to
-  §6, and none of them needs the engine to change again.
+  plausible candidates; each needs its own snapshot and its own answer to §6,
+  and none of them needs the engine to change again. The second game to opt in
+  is when `UNDO_WINDOW_MS` moves out of `board.ts`, and when the push/pop pair
+  is worth looking at twice.
 - **Redo.** No.
 - **Undoing across a turn boundary.** Never: once the hand-off has happened the
   next player has been told, and may have opened the board.
@@ -758,12 +838,13 @@ style if it grows any logic worth asserting on, and otherwise is not tested.
 - A roll, a robber move, a dev card and a trade cannot be taken back, and a
   turn ending on one of them behaves exactly as it does today —
   `autoEndTurn.test.ts` passing unchanged is the proof.
-- The undo stack, the anchor and who a held turn is held for never leave the
-  server, and a held deadline reaches only the player it belongs to.
+- The undo stack and the anchor never leave the server, and a held deadline
+  reaches only the player it belongs to.
 - A match with an undo in it replays byte-for-byte in the match review.
 - A player whose browser dies mid-countdown loses nothing but the ten seconds;
   the existing turn-timer adapter finishes the turn with no cron changes.
 - `IGameCommand` no longer declares a method that 57 classes pretend to
-  implement.
+  implement, and Dice Cities' two real inverses behave exactly as before.
+- No new component, no new module, and no new field on `ICommandOutcome`.
 - `npm run build`, `npx tsc --noEmit`, `npm run lint` and `npm test` are green,
   and the What's new note is one line.
