@@ -1247,6 +1247,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/in-game-chat.md`](./docs/in-game-chat.md) — the chat thread in depth: the collections, the routes, the unread marker and the push throttle.
 - [`docs/chat-gifs.md`](./docs/chat-gifs.md) — GIFs in chat: why the client sends a catalogue id and never a URL, and what the picker is and isn't.
+- [`docs/undo.md`](./docs/undo.md) — plan for taking a move back: why an undo is a command restoring a snapshot rather than a per-command inverse or a rewind of `commandHistory`, what makes a move undoable, and the ten-second hold on a turn that is ready to end.
 - [`docs/games/`](./docs/games/) — one design document per game: the rules in full, and for the newer ones an implementation plan broken into PRs.
 - [`docs/admin-tools.md`](./docs/admin-tools.md) — the `/admin` support screen: who counts as an admin, how a guest who lost their resume link is let back in, and a build-time editor for authoring Race Cars circuits onto their art.
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
