@@ -119,7 +119,7 @@ const SECTIONS: TrackSection[] = [
     },
     {
         id: "section4",
-        name: "Casino",
+        name: "Massenet",
         lanes: 3,
         corner: { stops: 1 },
         tiles: [
