@@ -7,6 +7,7 @@ import { trySave } from '@/utils/mongodb/GameData';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { readJsonBody } from '@/utils/api/requestBody';
+import { getTurnTimeoutAdapter } from '@/utils/games/turnTimeout';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
@@ -27,6 +28,26 @@ export async function POST(request: NextRequest) {
 
   if (gameData.currentTurn !== authResponse.userId) {
     return NextResponse.json({}, {status: 401, statusText: "Not your turn"});
+  }
+
+  // This route hands the turn to whoever is next along `gameState.turnOrder`
+  // — the join order — with no idea what game it's advancing. That's only
+  // correct for a game whose own `CheckEndTurn` does the same plain walk. A
+  // game that registers a turn-timeout adapter (turnTimeout.ts) is, by that
+  // same fact, a game whose real turn order lives somewhere else — Race
+  // Cars' `roundOrder`/`roundIndex` (docs/games/race-cars.md §23.2), Fires
+  // Out's `activeFirefighter` — and calling this route on it desyncs
+  // `currentTurn` from that without touching it. Every other driver is then
+  // refused by the command route, and whichever bystander `turnOrder`
+  // happened to land on inherits a stalled turn it can never legitimately
+  // take: the turn-timeout cron's adapter refuses the same command Execute
+  // does (`userId === roundOrder[roundIndex]`), so it comes back `declined`
+  // forever, banking a missed turn against that innocent player every sweep
+  // until the abandon ladder ends the race for everyone. Refusing here,
+  // before any of that, is cheaper than teaching this route every game's
+  // own notion of "next".
+  if (getTurnTimeoutAdapter(gameData.gameType.className)) {
+    return NextResponse.json({}, {status: 400, statusText: "This game manages its own turn order; use /api/game/command instead"});
   }
 
   // They acted within their turn window, so they haven't missed this one —

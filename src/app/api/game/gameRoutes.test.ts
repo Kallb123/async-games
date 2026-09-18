@@ -30,6 +30,7 @@ import {
     signInUnresolvable, SQUARES, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
+import { race } from '@/games/RaceCars/testFixtures';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
@@ -155,6 +156,41 @@ describe('POST /api/game/taketurn', () => {
 
         expect([first.status, second.status].sort()).toEqual([200, 409]);
         expect(storedGame('game_1')!.__v).toBe(1);
+    });
+
+    it("refuses a game whose own turn order differs from turnOrder, rather than desyncing currentTurn", async () => {
+        // Race Cars' real turn order is roundOrder/roundIndex, not
+        // gameState.turnOrder — the join order. A blind advance along
+        // turnOrder here would leave currentTurn naming a driver who isn't
+        // roundOrder[roundIndex], stalling the race until the abandon ladder
+        // ends it for an innocent player (docs/games/race-cars.md §23.2). A
+        // registered turn-timeout adapter is the signal that a game has this
+        // shape, so this route refuses outright rather than guessing.
+        signIn(ANN);
+        seedGame({
+            gameId: 'game_1',
+            gameType: {
+                gameId: 'gametype_1', gameType: 'RaceCars', friendlyName: 'Race Cars',
+                icon: '', url: 'racecars', className: 'RaceCarsGameType'
+            },
+            kind: 'RaceCarsGameData',
+            userIdList: [ANN.id, BOB.id],
+            turnTimer: '1 day',
+            currentTurn: ANN.id,
+            lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
+            timerWarningNotificationSent: true,
+            gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
+            complete: false,
+            winner: '',
+            specificGameState: race({ [ANN.id]: {}, [BOB.id]: {} }),
+        });
+
+        const response = await takeTurn(jsonPost('/api/game/taketurn', { gameId: 'game_1' }));
+
+        expect(response.status).toBe(400);
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(ANN.id);
+        expect(saved.lastTurnTimestamp).toBe('2026-01-01T00:00:00.000Z');
     });
 });
 
