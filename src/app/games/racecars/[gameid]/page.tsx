@@ -103,9 +103,9 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     // The how-to-play popup, shown the first time this account opens a race and
-    // from the ⋮ menu after that. The guide itself lands in PR 8 (§23.7); until
-    // `GAME_GUIDES` has a Race Cars entry there is nothing to show, so neither
-    // the menu row nor the popup renders and nothing is marked seen.
+    // from the ⋮ menu after that. Still looked up rather than imported: a game
+    // with no `GAME_GUIDES` entry has nothing to show, and the guard below keeps
+    // both the menu row and the popup off in that case.
     const guide = guideForGame('racecars');
     const gameGuide = useGameGuide('racecars');
 

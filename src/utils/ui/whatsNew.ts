@@ -36,6 +36,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🎲",
         items: [
             {
+                title: "Race Cars",
+                detail: "Pick a gear, roll its die, and find out whether the corner will take it. Every gear covers its own band of numbers — 1st crawls along on 1–2, 5th gambles on 11–20 — and the roll lands before you choose where to put the car, so a turn is a bet on a range rather than on a number. Corners owe you stops you have to end a turn inside them to bank: sail past with one still owed and it costs a tyre a space, and a bill your tyres cannot cover spins you into neutral for a turn. Tyres, brakes and gearbox never refill, so the three of them are a budget for the whole race. Three circuits, a Sprint or a two-lap Grand Prix, two to six drivers, optional oil spills, and a slipstream that only ever helps the car behind.",
+                game: "racecars",
+            },
+            {
                 title: "Banned Islet",
                 detail: "Team up on a sinking island and lift four relics off it before the sea takes the floor out from under you. Three actions a turn against an island that floods two to six tiles between turns — a flooded tile is a tile with one life left, and a sunk one leaves a hole your route home used to run through. Four difficulties, and an end-of-turn screen that shows you exactly what went under. Six roles, one broken rule each, and an escape you have to hold the card for: with every relic aboard and the whole team on the pier, it still takes a Helicopter Lift to actually leave.",
                 game: "bannedislet",
