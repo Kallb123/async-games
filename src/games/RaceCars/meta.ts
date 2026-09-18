@@ -15,9 +15,10 @@ export const meta: GameMeta = {
     // parkland — is drawn to match it. Picking it afterwards would be picking
     // a colour; picking it now is picking one the art already agrees with.
     accent: "#1b5e3a",
-    // §23.6: gains `art: "/art/racecars/icon.png"` in PR 9, once there is a
-    // crop of the circuit render worth using. §19.1 is explicit that this is
-    // the one place a car may be an emoji — nothing here is carrying identity.
+    // §23.6: gains `art: "/art/racecars/icon.png"` once there is a crop of the
+    // circuit render worth using — still owed, and §23.3 records why PR 9 shipped
+    // the guide without it. §19.1 is explicit that this is the one place a car
+    // may be an emoji — nothing here is carrying identity.
     glyph: "🏎️",
     // On from PR 4, the board screen — which is what makes the game playable
     // by hand rather than only by the test harness, and is the point of turning
@@ -41,8 +42,8 @@ export const meta: GameMeta = {
     //   a missed turn against them every sweep until the abandon ladder ended
     //   the race. `roundOrder[roundIndex]` (§23.4) stays as the guard Race Cars
     //   actually depends on regardless.
-    // - **No replay adapter until PR 8**, so the board's "Review actions"
-    //   scrubber reports that it cannot build the timeline rather than showing
-    //   one. That one is inert: it fails in place and nothing else is touched.
+    // - The replay and recap adapters landed in PR 8, so the board's "Review
+    //   actions" scrubber builds a timeline like every other game's. Kept here
+    //   only because the note above it dates from when neither existed.
     available: true,
 };

@@ -72,8 +72,8 @@ export const ASHCOMBE: RaceCarsTrack = {
     // itself is specified and tested; the permission lives here.
     maxGear: 5,
     art: {
-        // Drawn in PR 8 (§23.6). The board screen falls back to the space layer
-        // alone until the file lands.
+        // Not drawn yet (§23.6, and §23.3 for why it outlived PR 9). The board
+        // screen falls back to the space layer alone until the file lands.
         href: '/art/racecars/ashcombe.png',
         viewBox: {
             width: MARGIN * 2 + TRACK_WIDTH,

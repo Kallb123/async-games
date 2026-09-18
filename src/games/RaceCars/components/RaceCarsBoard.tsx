@@ -200,9 +200,9 @@ export default function RaceCarsBoard({ gs, userIdList, myUserId, validSpaces, u
             <BoardZoom zoomWidth={240} maxWidth={640} viewBox={track.art.viewBox} focus={focus}>
                 <svg viewBox={`0 0 ${width} ${height}`}>
                     {/* The circuit render of §23.6 — tarmac, kerbs, run-off and
-                        the painted corner boundaries. It lands in PR 9; until
-                        the file exists nothing is drawn here and the space
-                        layer below is the board. */}
+                        the painted corner boundaries. A track whose file is not
+                        drawn yet (Ashcombe — §23.3) draws nothing here, and the
+                        space layer below is the board on its own. */}
                     <image
                         href={track.art.href}
                         x={0} y={0} width={width} height={height}
