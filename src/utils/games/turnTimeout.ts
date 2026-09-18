@@ -15,7 +15,11 @@ import { forcedDiscard } from "@/games/BannedIslet/rules";
 import { RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
+import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
+import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { legalRoadEdges, randomSetupRoadEdge, randomSetupSettlementVertex, robberVictimCandidates } from "@/games/SettlementsAndCities/board";
 import { mongoMap } from "./mongoMaps";
+import { randomInt } from "./random";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -252,6 +256,93 @@ registerTurnTimeoutAdapter({
         const slipstream = new RaceCarsSlipstream();
         slipstream.tow = plan.tow;
         return slipstream;
+    },
+});
+
+registerTurnTimeoutAdapter({
+    className: "SettlementsAndCitiesGameType",
+    // Two problems, one fix. The setup snake draft (SettlementsAndCitiesLogic's
+    // sacAdvanceSetup) advances `setupStep` only inside CheckEndTurn, which the
+    // cron's plain advance never calls — so a stalled setup turn desynced
+    // `setupStep` from `currentTurn` for the rest of the phase, and a timeout
+    // caught between a settlement and its road left `pendingRoadSetup` set,
+    // which let the *next* player's own SACPlaceRoadSetup attach a road to the
+    // absent player's settlement instead of refusing. And in the main phase, a
+    // turn that timed out before rolling skipped the roll entirely — for
+    // everyone at the table, not just the stalled player, since a roll pays out
+    // by hex regardless of whose turn it is. Same shape of bug the Outbreak and
+    // Banned Islet adapters above exist for: "the board only deteriorates (or
+    // produces) on the active player's own turn" makes timing out the strongest
+    // play, unless the cron actually plays it.
+    //
+    // Setup has no best move to approximate — every legal vertex is a genuine
+    // choice a real player would weigh — so unlike `conservativeTurn` and
+    // `forcedDiscard` above, this doesn't try to play well on the absent
+    // player's behalf. It places a uniformly random legal settlement and its
+    // road (`randomSetupSettlementVertex`/`randomSetupRoadEdge`, board.ts) so
+    // they leave setup with a normal, if unchosen, starting position rather
+    // than none at all.
+    //
+    // The main phase reuses the player's own commands the same way: roll if
+    // they haven't, move the robber (random hex, random eligible victim) and
+    // place any outstanding free roads from Road Building if either is
+    // pending, and otherwise end the turn — forfeiting whatever they could
+    // still have built or traded, the same "declining is the answer" shape as
+    // every adapter above.
+    buildTimeoutCommand(gameData, userId) {
+        const gs = (gameData as ISettlementsAndCitiesGameData).specificGameState;
+        if (!gs.playerStates.has(userId)) return null;
+
+        if (gs.phase === 'setup') {
+            if (gs.pendingRoadSetup) {
+                if (gs.lastSetupSettlementVertex === null) return null;
+                const edgeId = randomSetupRoadEdge(gs.lastSetupSettlementVertex, gs.edges);
+                if (edgeId === null) return null;
+                const road = new SACPlaceRoadSetup();
+                road.edgeId = edgeId;
+                return road;
+            }
+            const vertexId = randomSetupSettlementVertex(gs.vertices);
+            if (vertexId === null) return null;
+            const settlement = new SACPlaceSettlementSetup();
+            settlement.vertexId = vertexId;
+            return settlement;
+        }
+
+        if (gs.pendingRobber) {
+            const targets = gs.hexes.map((_, hexId) => hexId).filter(hexId => hexId !== gs.robberHexIndex);
+            if (targets.length === 0) return null;
+            const hexId = targets[randomInt(targets.length)];
+            const victims = robberVictimCandidates(hexId, gs.vertices, gs.playerStates, userId);
+            const move = new SACMoveRobber();
+            move.hexId = hexId;
+            move.stealFromUserId = victims.length > 0 ? victims[randomInt(victims.length)] : null;
+            return move;
+        }
+        if (gs.pendingRoadBuilding > 0) {
+            // legalRoadEdges is purely geometric — it has no idea how many
+            // roads userId has left to place. Checked against the *whole*
+            // pending count, not one at a time: a player one road building
+            // short of a Road Building card's two would otherwise place the
+            // first for real and only then refuse the second, so this call
+            // would report 'stuck' with a road already accepted — which
+            // discards the very placement that just succeeded (turnTimeout.ts's
+            // `unresolved`) and repeats identically forever, since nothing
+            // about remainingRoads or pendingRoadBuilding changed. Declining
+            // before either one is placed keeps the failure a clean, one-time
+            // `declined` that banks against the abandon ladder like any other
+            // shape this game's own rules can't play automatically.
+            const ps = gs.playerStates.get(userId);
+            if (!ps || ps.remainingRoads < gs.pendingRoadBuilding) return null;
+            const candidates = legalRoadEdges(userId, gs.vertices, gs.edges);
+            if (candidates.length === 0) return null;
+            const road = new SACBuildRoad();
+            road.edgeId = candidates[randomInt(candidates.length)];
+            return road;
+        }
+        if (gs.specialBuildActive) return new SACEndTurn();
+        if (!gs.hasRolled) return new SACRollDice();
+        return new SACEndTurn();
     },
 });
 

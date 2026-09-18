@@ -1,5 +1,6 @@
 import type { SACExpansions } from './expansions';
 import { shuffle as shuffleArray } from '@/utils/games/shuffle';
+import { randomInt } from '@/utils/games/random';
 
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
@@ -600,4 +601,59 @@ export function isValidSetupRoadEdge(
     if (edges[edgeId].hasRoad) return false;
     const [v1, v2] = BOARD_TOPOLOGY.edges[edgeId];
     return v1 === settlementVertexId || v2 === settlementVertexId;
+}
+
+/** Every edge playerId could legally build a road on right now (not just adjacent to one vertex, unlike the setup version above). */
+export function legalRoadEdges(playerId: string, vertices: ISACVertex[], edges: ISACEdge[]): number[] {
+    const result: number[] = [];
+    for (let edgeId = 0; edgeId < edges.length; edgeId++) {
+        if (isValidRoadEdge(edgeId, playerId, vertices, edges)) result.push(edgeId);
+    }
+    return result;
+}
+
+/** Total resources in a hand — a live 7-discard (sacDiscardHalf) and a live robber move (robberVictimCandidates below) both care about the total rather than which. */
+export function sacResourceCount(resources: ISACResources): number {
+    return resources.lumber + resources.wool + resources.grain + resources.brick + resources.ore;
+}
+
+// ─── Deciding for a player who isn't there (turnTimeout.ts) ──────────────────
+// A stalled setup turn is placed at random rather than declined, so an absent
+// player still leaves the table with a legal starting settlement and road
+// instead of nothing — see turnTimeout.ts for why leaving setup to the cron's
+// old plain advance corrupted the snake order and could misattribute a road to
+// whoever moved next. Both are pure and total over an island that still has
+// room, which setup always does until the loop in sacAdvanceSetup ends it.
+
+/** A uniformly random legal settlement vertex, or `null` if the island is somehow full (never true during setup — there are more vertices than any player count needs). */
+export function randomSetupSettlementVertex(vertices: ISACVertex[]): number | null {
+    const candidates = vertices
+        .map((_, vertexId) => vertexId)
+        .filter(vertexId => isValidSettlementVertex(vertexId, vertices));
+    return candidates.length > 0 ? candidates[randomInt(candidates.length)] : null;
+}
+
+/** A uniformly random legal road edge off the settlement just placed. */
+export function randomSetupRoadEdge(settlementVertexId: number, edges: ISACEdge[]): number | null {
+    const candidates = BOARD_TOPOLOGY.vertexEdges[settlementVertexId]
+        .filter(edgeId => isValidSetupRoadEdge(edgeId, settlementVertexId, edges));
+    return candidates.length > 0 ? candidates[randomInt(candidates.length)] : null;
+}
+
+/** Who a robber move to hexId could steal from: an opponent with a building there and at least one card. Shared by SACMoveRobber and the turn-timeout adapter's random pick, so the two can never disagree about who is eligible. */
+export function robberVictimCandidates(
+    hexId: number,
+    vertices: ISACVertex[],
+    playerStates: Map<string, ISACPlayerState>,
+    selfId: string,
+): string[] {
+    const result = new Set<string>();
+    for (const vertexId of BOARD_TOPOLOGY.hexVertices[hexId]) {
+        const v = vertices[vertexId];
+        if (v.owner && v.owner !== selfId && v.building) {
+            const ps = playerStates.get(v.owner);
+            if (ps && sacResourceCount(ps.resources) > 0) result.add(v.owner);
+        }
+    }
+    return [...result];
 }
