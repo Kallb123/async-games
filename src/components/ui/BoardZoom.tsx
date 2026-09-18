@@ -72,6 +72,14 @@ function anchorAt(pane: HTMLDivElement, vx: number, vy: number): ZoomAnchor {
     };
 }
 
+/** Where a focus rect sits in the child SVG, as a fraction of its viewBox — what both the unprompted auto-focus and a manual zoom tap centre on. */
+function focusCentre(rect: Rect, viewBox: { width: number; height: number }): { cx: number; cy: number } {
+    return {
+        cx: (rect.x + rect.width / 2) / viewBox.width,
+        cy: (rect.y + rect.height / 2) / viewBox.height,
+    };
+}
+
 function spread(touches: TouchList): number {
     return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 }
@@ -91,10 +99,14 @@ function midpoint(touches: TouchList): { x: number; y: number } {
  *
  * Zoom moves two ways, because the two habits are different: the pill steps
  * through fit → in → more → fit, and a pinch (or a trackpad's ctrl-wheel) sets
- * anything in between. Both keep the part of the board the player was looking
- * at under the same spot on screen rather than snapping back to the corner —
- * on a big board that's the difference between zooming and getting lost.
- * Panning is the pane's own scrolling; nothing here reimplements a drag.
+ * anything in between. A pinch keeps the part of the board the player was
+ * looking at under the same spot on screen rather than snapping back to the
+ * corner — on a big board that's the difference between zooming and getting
+ * lost. The pill does the same, unless a `focus` is live: then there is
+ * already a "the part of the board that matters" — the roll just landed, the
+ * car just moved — so the pill steps in on that instead of on wherever the
+ * player was last panned to. Panning is the pane's own scrolling; nothing
+ * here reimplements a drag.
  *
  * A third way a board's view moves is `focus`: unprompted, the instant a
  * roll (or whatever the board calls "something just happened here") hands it
@@ -145,11 +157,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         const pane = paneRef.current;
         if (!pane || !focus || !viewBox) return;
         const level = focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
-        const target: FocusTarget = {
-            cx: (focus.rect.x + focus.rect.width / 2) / viewBox.width,
-            cy: (focus.rect.y + focus.rect.height / 2) / viewBox.height,
-            smooth: !prefersReducedMotion(),
-        };
+        const target: FocusTarget = { ...focusCentre(focus.rect, viewBox), smooth: !prefersReducedMotion() };
         if (level === zoom) {
             applyFocusTarget(pane, target);
         } else {
@@ -165,7 +173,16 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     const next = levels.find(level => level > zoom + 1) ?? FIT_WIDTH;
     const stepZoom = () => {
         const pane = paneRef.current;
-        if (pane) anchorRef.current = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
+        if (!pane) { setZoom(next); return; }
+        // A live focus is what the player is looking at right now — the pill
+        // should zoom in on that, not on wherever they last panned to. Instant
+        // rather than the auto-focus's smooth scroll: this jump is the one the
+        // player just asked for by tapping, not an unprompted one to soften.
+        if (focus && viewBox) {
+            focusTargetRef.current = { ...focusCentre(focus.rect, viewBox), smooth: false };
+        } else {
+            anchorRef.current = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
+        }
         setZoom(next);
     };
 
