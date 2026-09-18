@@ -335,8 +335,9 @@ describe("Settlements & Cities — an undo replays byte-for-byte", () => {
         expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
             .toEqual(["SACRollDice", "SACBuildRoad", "SACUndo", "SACBuildRoad", "SACEndTurn"]);
 
+        const lastId = game.gameState.commandHistory.at(-1)!.id;
         for (const viewerId of ["u1", "u2", null]) {
-            const live = gameStateToResponse(game.specificGameState, NAMES, viewerId);
+            const live = gameStateToResponse(game.specificGameState, NAMES, viewerId, lastId);
             const replayed = (await buildTimeline(game, NAMES, [], undefined, viewerId)).snapshots;
             const replayedFinal = replayed[replayed.length - 1].specificGameState as ISACSpecificGameStateResponse;
             expect(replayedFinal).toEqual(live);
