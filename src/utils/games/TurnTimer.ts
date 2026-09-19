@@ -228,6 +228,19 @@ export function formatElapsedTime(timestamp: string): string {
 }
 
 /**
+ * Seconds left until `deadline`, never negative. Null for a null `now` — pass
+ * `useNow()`, which has no clock reading until hydration, same as the rest of
+ * this file. Unlike every other formatter here this counts in seconds rather
+ * than minutes: it's for the undo hold (docs/undo.md §11), the one countdown
+ * on screen short enough that a minute-coarse label would sit at "0 minutes"
+ * for its entire ten seconds.
+ */
+export function secondsUntil(deadline: string, now: number | null): number | null {
+    if (now === null) return null;
+    return Math.max(0, Math.ceil((new Date(deadline).getTime() - now) / 1000));
+}
+
+/**
  * Short "1h left" style label for game lists. Null for unlimited timers, and for
  * a null `now` — pass `useNowToTheMinute()`, which has no clock reading until
  * hydration, so the badge simply appears with the first client render.

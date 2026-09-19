@@ -1944,6 +1944,37 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-btn--success:hover { color: var(--ag-on-dark); filter: brightness(1.05); }
 .ag-btn--roll { box-shadow: 0 3px 0 var(--ag-terracotta-deep); }
 
+/* The undo hold's "Pass now" button (docs/undo.md §5, §11): a dim version of
+   the success green that fills back in, left to right, as the ten-second
+   window runs out — full brightness lands exactly when the turn is about to
+   pass on its own. A ::before under the button's own content (negative
+   z-index, same trick .ag-btn--pending's inset shadow relies on
+   position:relative for) rather than a second element, so nothing but the
+   fill's own width ever needs to change. --ag-countdown-fill is a percentage
+   set inline, one per second in step with the seconds readout beside it. */
+.ag-btn--countdown.ag-btn--success { background: oklch(0.4 0.04 145); }
+.ag-btn--countdown {
+    position: relative;
+    overflow: hidden;
+    /* Makes the button its own stacking context, so the ::before's negative
+       z-index sandwiches it between this element's own background and its
+       content instead of escaping to whatever stacking context the button
+       itself sits in — without isolate, position:relative alone doesn't open
+       one, and the fill paints behind the button entirely. */
+    isolation: isolate;
+}
+.ag-btn--countdown::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: -1;
+    width: var(--ag-countdown-fill, 0%);
+    background: var(--ag-green);
+    transition: width 1s linear;
+}
+
 /* ---- Themed modal shell (Bootstrap Modal in the design-system skin) ---- */
 /* Modals render in a body-level portal outside .ag-app, so these rules key off
    the .ag-modal dialog class and the :root design tokens rather than .ag-app. */

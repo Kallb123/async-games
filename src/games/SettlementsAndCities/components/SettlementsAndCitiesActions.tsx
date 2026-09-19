@@ -1,9 +1,9 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
-import { NO_RESOURCES, SAC_RESOURCES } from '@/games/SettlementsAndCities/board';
+import { NO_RESOURCES, SAC_RESOURCES, UNDO_WINDOW_MS } from '@/games/SettlementsAndCities/board';
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
@@ -11,9 +11,12 @@ import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
+import { useNow } from '@/utils/hooks/useNow';
+import { secondsUntil } from '@/utils/games/TurnTimer';
 import {
     SACRollDice,
     SACEndTurn,
+    SACUndo,
     SACPlayKnight,
     SACBuyDevCard,
     SACPlayRoadBuilding,
@@ -93,6 +96,33 @@ export default function SettlementsAndCitiesActions({
     useCloseRequest(showMonopolyModal, () => setShowMonopolyModal(false));
     useCloseRequest(showTradeModal, () => setShowTradeModal(false));
 
+    // ── Undo & the ten-second hold (docs/undo.md §5, §11) ───────────────────────
+    // The server holds a turn open by setting `gs.autoEndTurnAt`; a manually
+    // tapped "End turn" after an undoable move holds it the same way, purely
+    // client-side, so both endings land at the same offset (§5 "Why a manual
+    // End turn waits too"). Whichever set it, the countdown and the eventual
+    // SACEndTurn are driven from here the same way. Hooks stay above every
+    // early return in this component, so these run before the `!myState` one
+    // below rather than after it.
+    const [manualHoldDeadline, setManualHoldDeadline] = useState<string | null>(null);
+    const holdDeadline = gs.autoEndTurnAt ?? manualHoldDeadline;
+    const now = useNow(holdDeadline !== null);
+
+    const submit = useCallback((cmd: IGameCommand, target: string) => {
+        submitCommand(cmd, () => { setBoardMode('idle'); setManualHoldDeadline(null); }, target);
+    }, [submitCommand, setBoardMode]);
+
+    // The deadline closing fires the same end turn a tap on "Pass now" would —
+    // re-read immediately before sending, so a last-second Undo (which clears
+    // both `autoEndTurnAt` and this state's own copy) stands it down. Ignored
+    // by submitCommand while another command is already in flight, so a tick
+    // landing mid-request simply tries again next second.
+    useEffect(() => {
+        if (holdDeadline === null || now === null) return;
+        if (now < new Date(holdDeadline).getTime()) return;
+        submit(new SACEndTurn(), 'endTurn');
+    }, [now, holdDeadline, submit]);
+
     const myState = gs.playerStates[myUserId];
     const myDevCards = gs.playerDevCards?.[myUserId];
     if (!myState) return null;
@@ -104,12 +134,66 @@ export default function SettlementsAndCitiesActions({
     const pendingRoadBuilding = gs.pendingRoadBuilding;
     const playedDevCard = gs.playedDevCard;
     const specialBuild = gs.specialBuildActive;
+    const canUndo = gs.canUndo;
+    const countdown = holdDeadline !== null ? secondsUntil(holdDeadline, now) : null;
+    // How much of the ten seconds has run, as a percentage — the same number
+    // the countdown text reads, just filling the Pass-now button's background
+    // left to right instead of printing it.
+    const countdownFillPct = countdown !== null
+        ? Math.round(100 - (countdown / (UNDO_WINDOW_MS / 1000)) * 100)
+        : 0;
 
-    function submit<T extends IGameCommand>(cmd: T, target: string) {
-        submitCommand(cmd, () => { setBoardMode('idle'); }, target);
-    }
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);
+    }
+
+    const undoButton = canUndo ? (
+        <ActionButton
+            className="ag-btn ag-btn--light"
+            pending={pendingTarget === 'undo'}
+            pendingLabel="Undoing…"
+            onClick={() => submit(new SACUndo(), 'undo')}
+        >
+            ↩ Undo
+        </ActionButton>
+    ) : null;
+
+    const countdownHint = holdDeadline !== null && countdown !== null ? (
+        <p className="ag-hint">Turn passes in {countdown}s</p>
+    ) : null;
+
+    // The two blocks with nothing to end a turn on yet (setup mid-placement,
+    // a Road Building free road still outstanding) show Undo alone, on its
+    // own row.
+    const undoRow = undoButton ? <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div> : null;
+
+    // The End-turn / Done-building button, shared by the post-roll and Special
+    // Build sections: relabelled "Pass now" once a hold is open, and arms a
+    // client-side hold itself when tapped with something still to undo.
+    function endTurnControl(label: string, pendingLabel: string) {
+        function onClick() {
+            if (holdDeadline !== null) { submit(new SACEndTurn(), 'endTurn'); return; }
+            if (canUndo) { setManualHoldDeadline(new Date(Date.now() + UNDO_WINDOW_MS).toISOString()); return; }
+            submit(new SACEndTurn(), 'endTurn');
+        }
+        // Always one child of an ag-action-grid row (the other is undoButton,
+        // present or not) — its flex:1 fills the row on its own, same width
+        // ag-btn--block gave the button before it had a row to share.
+        return (
+            <ActionButton
+                className={`ag-btn ag-btn--success${holdDeadline !== null ? ' ag-btn--countdown' : ''}`}
+                style={{
+                    padding: '14px 0',
+                    fontSize: 15,
+                    ...(holdDeadline !== null ? { '--ag-countdown-fill': `${countdownFillPct}%` } : {}),
+                } as React.CSSProperties}
+                pending={pendingTarget === 'endTurn'}
+                pendingLabel={pendingLabel}
+                onClick={onClick}
+            >
+                {holdDeadline !== null ? 'Pass now' : label}
+            </ActionButton>
+        );
     }
 
     // ── Shared build list (settlement / road / city + dev card + bank trade) ────
@@ -480,6 +564,20 @@ export default function SettlementsAndCitiesActions({
 
     // ── Setup mode ────────────────────────────────────────────────────────────
     if (isSetup) {
+        // Once the road lands, setup always holds (sacFinishTurn's setup branch
+        // never returns a bare follow-up) — so a deadline here always means
+        // "finished placing, waiting to pass", never a mid-sequence state.
+        if (holdDeadline !== null) {
+            return (
+                <div className="ag-actionsheet">
+                    <div className="ag-action-grid">
+                        {endTurnControl('Pass now', 'Finishing…')}
+                        {undoButton}
+                    </div>
+                    {countdownHint}
+                </div>
+            );
+        }
         const placing = !gs.pendingRoadSetup;
         const mode: SACBoardMode = placing ? 'placeSettlementSetup' : 'placeRoadSetup';
         const active = boardMode === mode;
@@ -500,6 +598,7 @@ export default function SettlementsAndCitiesActions({
                             ? 'Setup — choose where your settlement goes.'
                             : 'Setup — connect a road to your new settlement.'}
                 </p>
+                {undoRow}
             </div>
         );
     }
@@ -513,15 +612,11 @@ export default function SettlementsAndCitiesActions({
                 <div className="ag-callout" style={{ marginBottom: 10 }}>
                     <b>⚡ Special Build</b> · spend resources to build or trade with the bank, then pass.
                 </div>
-                <ActionButton
-                    className="ag-btn ag-btn--success ag-btn--block"
-                    style={{ marginBottom: 12, padding: '14px 0', fontSize: 15 }}
-                    pending={pendingTarget === 'endTurn'}
-                    pendingLabel="Passing…"
-                    onClick={() => submit(new SACEndTurn(), 'endTurn')}
-                >
-                    ✓ Done building
-                </ActionButton>
+                <div className="ag-action-grid" style={{ marginBottom: 12 }}>
+                    {endTurnControl('✓ Done building', 'Passing…')}
+                    {undoButton}
+                </div>
+                {countdownHint}
                 {buildList}
                 <p className="ag-action-hint">Nothing to build? Just pass — the dice move on once everyone&apos;s had a chance.</p>
                 {tradeModal}
@@ -559,6 +654,7 @@ export default function SettlementsAndCitiesActions({
                     {active ? '↩ Cancel' : `🛤️ Place ${pendingRoadBuilding} free road${pendingRoadBuilding > 1 ? 's' : ''}`}
                 </button>
                 <p className="ag-action-hint">Road Building — free roads from your dev card.</p>
+                {undoRow}
             </div>
         );
     }
@@ -586,15 +682,11 @@ export default function SettlementsAndCitiesActions({
     // ── Post-roll ─────────────────────────────────────────────────────────────
     return (
         <div className="ag-actionsheet">
-            <ActionButton
-                className="ag-btn ag-btn--success ag-btn--block"
-                style={{ marginBottom: 12, padding: '14px 0', fontSize: 15 }}
-                pending={pendingTarget === 'endTurn'}
-                pendingLabel="Ending your turn…"
-                onClick={() => submit(new SACEndTurn(), 'endTurn')}
-            >
-                ✓ End turn
-            </ActionButton>
+            <div className="ag-action-grid" style={{ marginBottom: 12 }}>
+                {endTurnControl('✓ End turn', 'Ending your turn…')}
+                {undoButton}
+            </div>
+            {countdownHint}
 
             {buildList}
 

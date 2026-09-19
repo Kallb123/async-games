@@ -174,6 +174,30 @@ describe("Settlements & Cities recap adapter", () => {
         expect(events[0].detail).toBe("4 VP");
     });
 
+    it("names the settlement an undo took back", () => {
+        const prev = state([player({ userId: "u1", username: "Alice" })], {
+            vertices: [{ building: "settlement", owner: "u1" }],
+        });
+        const next = state([player({ userId: "u1", username: "Alice" })], {
+            vertices: [{ building: null, owner: null }],
+        });
+        const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACUndo" }), OK);
+        expect(events[0].type).toBe("sac_undo");
+        expect(events[0].title).toBe("Alice took back a settlement");
+    });
+
+    it("names the road an undo took back", () => {
+        const prev = state([player({ userId: "u1", username: "Alice" })], {
+            edges: [{ hasRoad: true, owner: "u1" }],
+        });
+        const next = state([player({ userId: "u1", username: "Alice" })], {
+            edges: [{ hasRoad: false, owner: null }],
+        });
+        const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACUndo" }), OK);
+        expect(events[0].type).toBe("sac_undo");
+        expect(events[0].title).toBe("Alice took back a road");
+    });
+
     it("emits a bonus-handover event when longest road changes hands", () => {
         const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u2" });
         const next = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u1" });
