@@ -234,6 +234,26 @@ describe("Settlements & Cities' response", () => {
         expect(response.playerStates.u1.resourceCount).toBe(3);
         expect(response.playerStates.u2.resourceCount).toBe(4);
     });
+
+    // The undo stack (docs/undo.md §8) is a copy of every player's hand, dev
+    // cards and deck — strictly more sensitive than the resources/dev cards
+    // above — so it gets the same three-viewer treatment: the mover, an
+    // opponent, and nobody in particular (a recap/result replay).
+    it("never sends the undo stack, and tells only the mover they have one", () => {
+        const gs = sacState();
+        gs.undoStack = [{ by: "u1", state: sacState() }];
+        gs.undoAnchorId = "some-command-id";
+
+        for (const viewerId of ["u1", "u2", null]) {
+            // The anchor still matches the (fictional) last command here, so
+            // this is the "still your move" case — see undo.test.ts for the
+            // anchor going stale.
+            const wire = JSON.parse(JSON.stringify(sacStateToResponse(gs, NAMES, viewerId, "some-command-id")));
+            expect(wire.undoStack).toBeUndefined();
+            expect(wire.undoAnchorId).toBeUndefined();
+            expect(wire.canUndo).toBe(viewerId === "u1");
+        }
+    });
 });
 
 // ─── Fires Out ────────────────────────────────────────────────────────────

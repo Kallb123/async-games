@@ -1,6 +1,8 @@
 import type { SACExpansions } from './expansions';
+import { normaliseExpansions } from './expansions';
 import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 import { randomInt } from '@/utils/games/random';
+import { clonePlayerStates } from '@/utils/games/mongoMaps';
 
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
@@ -184,6 +186,134 @@ export interface ISACSpecificGameState {
     expansions: SACExpansions;
     // VP needed to win. Base game is 10; expansions can raise it (§7, §8).
     victoryTarget: number;
+    // ─── Undo (docs/undo.md) ───────────────────────────────────────────────
+    /**
+     * Snapshots of the whole state, newest last, pushed by the undoable
+     * commands (SACPlaceSettlementSetup, SACPlaceRoadSetup, SACBuildSettlement,
+     * SACBuildRoad) before they mutate anything. `by` is whose move it was —
+     * the response builder reads it to decide who may be told about an undo
+     * (see `canUndo` in `gameStateToResponse`). Capped at UNDO_STACK_DEPTH; the
+     * oldest is dropped, which only ever costs reach, never correctness.
+     */
+    undoStack: { by: string, state: ISACSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot. `SACUndo`
+     * refuses unless this matches the id of the tail of `commandHistory` —
+     * which is how the stack goes stale the moment anything else is played,
+     * without every other command having to remember to clear it.
+     */
+    undoAnchorId: string | null;
+}
+
+// How long a player has to take an undoable move back, once the turn it would
+// otherwise pass on its own is being held open for them (docs/undo.md §5).
+// Declared here, alongside the state it will apply to, even though nothing
+// reads it until that hold lands — so moving it later is a rename, not a hunt
+// for a literal `10_000`.
+export const UNDO_WINDOW_MS = 10_000;
+
+// How many snapshots the undo stack keeps. A setup settlement and its road is
+// the depth the game actually needs, and it covers a two-build main-phase run
+// as well — raising it costs one character and bytes on every save, so it
+// waits for somebody to actually hit the wall.
+export const UNDO_STACK_DEPTH = 2;
+
+// ─── Cloning (turn recap, undo) ───────────────────────────────────────────────
+// SAC's board and dev-card deck are randomised at creation and can't be
+// reconstructed from later state (the deck shrinks as cards are drawn), so a
+// starting specificGameState is deep-cloned to seed both turn recap
+// (docs/turn-recap-and-planning.md) and, unchanged, the undo snapshot
+// (docs/undo.md §7's sacPushUndo) — the same clone, two callers. Pure and
+// Mongoose-free by construction: SettlementsAndCitiesModels.ts imports
+// mongoose at its top, and a command class reaching anything from it would
+// drag the driver into the client bundle through the GameLogic barrel.
+
+function cloneResources(r: ISACResources): ISACResources {
+    return { lumber: r.lumber, wool: r.wool, grain: r.grain, brick: r.brick, ore: r.ore };
+}
+
+function cloneDevCards(d: ISACDevCards): ISACDevCards {
+    return {
+        knight: d.knight,
+        victoryPoint: d.victoryPoint,
+        roadBuilding: d.roadBuilding,
+        yearOfPlenty: d.yearOfPlenty,
+        monopoly: d.monopoly,
+    };
+}
+
+// The last roll's payout, as plain objects. A game whose last roll predates the
+// field has none, and stays that way rather than being given an empty payout —
+// "nothing recorded" and "paid nobody" are different things to the screens that
+// read it. Exported: gameStateToResponse (SettlementsAndCitiesModels.ts) reuses
+// it to build the redacted response's own copy, field by field off a live
+// Mongoose document.
+export function cloneRollChanges(changes: ISACRollChange[] | undefined): ISACRollChange[] | undefined {
+    return changes?.map((change): ISACRollChange => ({
+        userId: change.userId,
+        gained: cloneResources(change.gained),
+        discarded: change.discarded,
+    }));
+}
+
+function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
+    return {
+        resources: cloneResources(ps.resources),
+        devCards: cloneDevCards(ps.devCards),
+        newDevCards: cloneDevCards(ps.newDevCards),
+        knightsPlayed: ps.knightsPlayed,
+        remainingRoads: ps.remainingRoads,
+        remainingSettlements: ps.remainingSettlements,
+        remainingCities: ps.remainingCities,
+        devCardsBought: ps.devCardsBought,
+        resourcesGathered: ps.resourcesGathered,
+        robberUses: ps.robberUses,
+    };
+}
+
+// Deep-clones a SAC game state into independent plain objects. The player map
+// is rebuilt in `userIdList` order (see clonePlayerStates) so replay iteration
+// — the 7-roll discard loop above all — matches the original creation order.
+export function cloneSACState(
+    gs: ISACSpecificGameState,
+    userIdList: string[],
+): ISACSpecificGameState {
+    return {
+        hexes: gs.hexes.map((h): ISACHex => ({ terrain: h.terrain, numberToken: h.numberToken })),
+        vertices: gs.vertices.map((v): ISACVertex => ({ building: v.building, owner: v.owner })),
+        edges: gs.edges.map((e): ISACEdge => ({ hasRoad: e.hasRoad, owner: e.owner })),
+        harbors: gs.harbors.map((h): ISACHarbor => ({ type: h.type, vertices: [h.vertices[0], h.vertices[1]] })),
+        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
+        robberHexIndex: gs.robberHexIndex,
+        phase: gs.phase,
+        setupStep: gs.setupStep,
+        pendingRoadSetup: gs.pendingRoadSetup,
+        lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
+        hasRolled: gs.hasRolled,
+        lastRoll: gs.lastRoll,
+        lastRollDie1: gs.lastRollDie1,
+        lastRollDie2: gs.lastRollDie2,
+        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
+        lastRollAutoEndedBy: gs.lastRollAutoEndedBy ?? null,
+        pendingRobber: gs.pendingRobber,
+        longestRoadOwner: gs.longestRoadOwner,
+        largestArmyOwner: gs.largestArmyOwner,
+        devCardDeck: [...gs.devCardDeck],
+        pendingRoadBuilding: gs.pendingRoadBuilding,
+        playedDevCard: gs.playedDevCard,
+        specialBuildActive: gs.specialBuildActive ?? false,
+        specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
+        specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
+        randomTiles: gs.randomTiles ?? true,
+        expansions: normaliseExpansions(gs.expansions),
+        victoryTarget: gs.victoryTarget ?? 10,
+        // A snapshot never nests a stack of its own — undo can only ever reach
+        // the command directly behind it (docs/undo.md §4), and a restored
+        // snapshot's `undoAnchorId` is overwritten by SACUndo.Execute anyway.
+        undoStack: [],
+        undoAnchorId: null,
+    };
 }
 
 // ─── Hex positions (axial coordinates) ───────────────────────────────────────
