@@ -15,7 +15,7 @@ import {
     SACUndo,
 } from "./SettlementsAndCitiesLogic";
 import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
-import { BOARD_TOPOLOGY, HEX_POSITIONS } from "./board";
+import { BOARD_TOPOLOGY, HEX_POSITIONS, isValidSettlementVertex } from "./board";
 import type { ISACHex, ISACSpecificGameState } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -326,6 +326,39 @@ describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5
         const tooLate = await run(game, cmd(new SACEndTurn()));
         expect(tooLate.outcome.validMove).toBe(false);
         expect(gs.setupStep).toBe(1);
+    });
+
+    it("refuses a second settlement during the hold — the road resets pendingRoadSetup, but the player isn't offered another placement", async () => {
+        // Gremlin review of PR 3: SACPlaceRoadSetup resets `pendingRoadSetup`
+        // to `false` the moment the hold opens, which is exactly what a fresh
+        // placement's own guard looks for — without also checking
+        // `autoEndTurnAt`, the still-current player could place settlement
+        // after settlement (each one re-arming its own ten-second hold) for
+        // as long as the board had a legal vertex left, gathering a second
+        // round's starting resources on every one of them.
+        const gs = setupBoard(0);
+        const game = makeGame(gs);
+        const settlement = cmd(new SACPlaceSettlementSetup());
+        settlement.vertexId = SETUP_VERTEX;
+        await run(game, settlement);
+
+        const road = cmd(new SACPlaceRoadSetup());
+        road.edgeId = SETUP_EDGE;
+        await run(game, road);
+        expect(gs.pendingRoadSetup).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        const otherVertex = gs.vertices.findIndex((_, id) => isValidSettlementVertex(id, gs.vertices));
+        expect(otherVertex).toBeGreaterThanOrEqual(0);
+
+        const secondSettlement = cmd(new SACPlaceSettlementSetup());
+        secondSettlement.vertexId = otherVertex;
+        const refused = await run(game, secondSettlement);
+
+        expect(refused.outcome.validMove).toBe(false);
+        expect(gs.vertices[otherVertex]).toEqual({ building: null, owner: null });
+        expect(gs.playerStates.get("u1")!.remainingSettlements).toBe(4);
+        expect(gs.setupStep).toBe(0);
     });
 
     it("hides a special-build player's hold from the player queued behind them, even though the hand-off never explicitly clears the stack", async () => {

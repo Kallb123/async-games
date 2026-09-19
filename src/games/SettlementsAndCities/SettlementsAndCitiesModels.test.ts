@@ -198,6 +198,23 @@ describe("Settlements & Cities' held turn on the wire", () => {
         expect(wire.canUndo).toBe(false);
         expect(wire.autoEndTurnAt).toBeNull();
     });
+
+    it("marks itself dirty when the hold is set or cleared, with no markModified to remember", () => {
+        // Same parity check as the roll payout above: autoEndTurnAt is a plain
+        // schema path (like undoAnchorId), not Schema.Types.Mixed, so it needs
+        // no explicit markDirty() the way the Mixed-state games do.
+        const doc = docFor(makeState({ playerStates: new Map([["u1", player()], ["u2", player()]]) }));
+        doc.$isNew = false;
+        doc.unmarkModified("specificGameState");
+
+        doc.specificGameState.autoEndTurnAt = "2026-01-01T00:00:10.000Z";
+        expect(doc.isModified("specificGameState.autoEndTurnAt")).toBe(true);
+
+        // …and so does clearing it, which sacClearUndo does on every hand-off.
+        doc.unmarkModified("specificGameState");
+        doc.specificGameState.autoEndTurnAt = null;
+        expect(doc.isModified("specificGameState.autoEndTurnAt")).toBe(true);
+    });
 });
 
 // A roll's total (2-12) is tallied straight off SACRollDice's own recorded

@@ -444,7 +444,12 @@ export class SACPlaceSettlementSetup implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'setup' || gs.pendingRoadSetup) return { validMove: false, turnOver: false };
+        // `autoEndTurnAt` set means this player's setup turn already finished
+        // and is only being held open for its own undo window (docs/undo.md
+        // §5) — without this, the same still-current player could place
+        // another settlement (and its road) during that window, since
+        // `pendingRoadSetup` resets to `false` the moment the hold opens.
+        if (gs.phase !== 'setup' || gs.pendingRoadSetup || gs.autoEndTurnAt) return { validMove: false, turnOver: false };
         if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
 
         sacPushUndo(sacData, this);
