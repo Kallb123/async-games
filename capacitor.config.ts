@@ -37,6 +37,14 @@ const config: CapacitorConfig = {
         // is that the phone's own Microsoft session isn't shared, so the player
         // types their password.
         //
+        // Adding to this list is not only a navigation decision. Capacitor
+        // feeds it into the bridge's allowed-origin set, so a host here can
+        // also post to the native bridge and reach the registered plugins.
+        // Nothing can exploit that without script execution on the host
+        // itself, but the rule that keeps it that way is: exact hosts that
+        // serve nothing but the identity provider's own pages. Never a
+        // wildcard, never a host that can serve someone else's content.
+        //
         // Google is *not* here, and can't be: its consent screen refuses to
         // load in an embedded WebView at all. That hop doesn't happen in the
         // WebView — `useNativeGoogleSignIn` gets an ID token from the phone's

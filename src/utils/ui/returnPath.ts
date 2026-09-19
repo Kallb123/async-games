@@ -15,18 +15,33 @@
  * ours, signs you in, and lands you on someone else's page asking for the
  * password you just proved you know.
  *
- * "Starts with a slash" isn't enough on its own. `//evil.example` is a
- * protocol-relative URL: it reads like a path and leaves the site. Backslashes
- * are the same trick against parsers that fold `\` into `/`, which browsers
- * do in URLs, so neither character is allowed in the first two positions.
- * Everything that survives is a path, and a path can only be ours.
+ * Deciding that by inspecting characters does not work, and the first version
+ * of this got it wrong. `//evil.example` is the obvious trap — a
+ * protocol-relative URL that reads like a path and leaves the site — but a tab,
+ * carriage return or newline is the one that bites: the URL parser strips
+ * those from anywhere in the input *before* parsing, so `/\t/evil.example`
+ * satisfies any "second character isn't a slash" rule and then resolves to
+ * `https://evil.example/` once the tab disappears. Backslashes fold into
+ * slashes on the way too.
+ *
+ * So the question is handed to the same parser that will resolve it, rather
+ * than to a rule that has to predict it: resolve against this origin, and
+ * accept the result only if it stayed here. That covers the protocol-relative
+ * form, backslashes, control characters, an absolute URL elsewhere and a
+ * `javascript:` URL (whose origin is `null`) without enumerating any of them.
  */
 export function returnPath(): string {
     const requested = new URLSearchParams(window.location.search).get('redirect_url');
     if (!requested) {
         return '/';
     }
-    const [first, second] = requested;
-    const isSeparator = (character: string) => character === '/' || character === '\\';
-    return first === '/' && !isSeparator(second) ? requested : '/';
+    try {
+        const resolved = new URL(requested, window.location.origin);
+        return resolved.origin === window.location.origin
+            ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+            : '/';
+    } catch {
+        // Not a URL at all once resolved. Nowhere to send them but home.
+        return '/';
+    }
 }
