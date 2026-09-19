@@ -488,7 +488,6 @@ interface IGameCommand {
 
     myString(): string;                                   // player-facing summary (match review, logs)
     Execute(gameData: IGameData): Promise<ICommandOutcome>; // validate + mutate state
-    Undo(gameData: IGameData): void;                      // (partially implemented)
 }
 ```
 
@@ -584,6 +583,17 @@ uses it to end a turn whose player can no longer afford anything, which must loo
 exactly like that player tapping "End turn" — otherwise every opponent's match
 review shows the turn ending on the roll command itself, which says plainly that
 the roller was left with nothing.
+
+Settlements & Cities' undo (`SACUndo`, [`docs/undo.md`](./docs/undo.md)) is
+built the same way, out of pieces the engine already had rather than a change
+to it: a command like any other, not a route or a pipeline branch. The
+undoable placements snapshot the whole `specificGameState` before they mutate
+it; `SACUndo.Execute` pops that snapshot back. It goes through steps 1–14
+exactly like a build or a roll — validated, stamped, recorded on
+`commandHistory`, replayed like any other command — rather than rewinding it.
+The ten-second hold before a turn ends reuses `followUpCommand` from the
+paragraph above: the game simply declines to return one it would otherwise
+have returned.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the
@@ -1247,7 +1257,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/in-game-chat.md`](./docs/in-game-chat.md) — the chat thread in depth: the collections, the routes, the unread marker and the push throttle.
 - [`docs/chat-gifs.md`](./docs/chat-gifs.md) — GIFs in chat: why the client sends a catalogue id and never a URL, and what the picker is and isn't.
-- [`docs/undo.md`](./docs/undo.md) — plan for taking a move back: why an undo is a command restoring a snapshot rather than a per-command inverse or a rewind of `commandHistory`, what makes a move undoable, and the ten-second hold on a turn that is ready to end.
+- [`docs/undo.md`](./docs/undo.md) — taking a move back, piloted on Settlements & Cities placements: why an undo is a command restoring a snapshot rather than a per-command inverse or a rewind of `commandHistory`, what makes a move undoable, and the ten-second hold on a turn that is ready to end.
 - [`docs/games/`](./docs/games/) — one design document per game: the rules in full, and for the newer ones an implementation plan broken into PRs.
 - [`docs/admin-tools.md`](./docs/admin-tools.md) — the `/admin` support screen: who counts as an admin, how a guest who lost their resume link is let back in, and a build-time editor for authoring Race Cars circuits onto their art.
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.

@@ -16,7 +16,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Roll the dice — everyone collects resources from hexes matching the roll which they have settlements/cities built on — then trade, build settlements, roads and cities, or buy a development card before passing the turn on.",
+            body: "Roll the dice — everyone collects resources from hexes matching the roll which they have settlements/cities built on — then trade, build settlements, roads and cities, or buy a development card before passing the turn on. Placed a settlement or road somewhere you didn't mean to? Tap Undo to take it back, and if that was your last move, your turn waits ten seconds before it passes so you get the chance.",
         },
         {
             heading: "The robber",

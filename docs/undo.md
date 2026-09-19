@@ -1,12 +1,20 @@
 # Undo
 
-A plan for letting a player take back a move they've just made, and for the
-ten-second hold on the turn hand-off that makes taking it back possible at all.
+How a player takes back a move they've just made, and the ten-second hold on
+the turn hand-off that makes taking it back possible at all.
 
-The pilot is **placing settlements and roads in Settlements & Cities** — all
-four of them: the two setup placements and the two main-phase builds. Every
-other game, and every other Settlements & Cities command, is out of scope here
-and gains nothing until someone opts it in a line at a time.
+**Status: built, piloted on Settlements & Cities.** All five of §12's PRs are
+in — the dead `Undo` interface removed, the snapshot-and-restore engine work,
+the hold, the board's Undo button and countdown, and this documentation. The
+pilot is **placing settlements and roads** — all four of them: the two setup
+placements and the two main-phase builds. Every other game, and every other
+Settlements & Cities command, is out of scope here and gains nothing until
+someone opts it in a line at a time (§14, §16).
+
+So everything below now describes code rather than a plan, and the design
+reasoning — §4's rejected options, §5's rejected server-side holds — is kept
+because it is the reasoning the code is shaped by: the day a snapshot-per-command
+stack looks like the wrong call, this is where to read why it was the call.
 
 > Related: [`ARCHITECTURE.md`](../ARCHITECTURE.md) §6 (the command pipeline) and
 > §9 (replay); [`docs/turn-recap-and-planning.md`](./turn-recap-and-planning.md)
@@ -79,7 +87,7 @@ More than it looks like, and one piece of it is a working undo.
   any other move, is recorded on `commandHistory`, writes its own history line,
   and replays deterministically — because the stack it pops from was rebuilt by
   the same replay. Everything below is that shape, applied to a game with
-  opponents. What is *not* proposed is a shared undo abstraction over the two:
+  opponents. What is *not* built is a shared undo abstraction over the two:
   the pattern repeats, the code doesn't (§4).
 - **Settlements & Cities already has a whole-state deep cloner.**
   `cloneSACState(gs, userIdList)` (`SettlementsAndCitiesModels.ts:108`) copies

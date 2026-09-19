@@ -72,6 +72,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Take it back",
+                detail: "Placed a settlement or a road you didn't mean to in Settlements & Cities? Tap Undo and put it where you meant. And if that was the last thing you could do, your turn now waits ten seconds before it passes, so you get the chance.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Race Cars now starts with a roll off the line",
                 detail: "Round one is the start, and it is one d20 a driver instead of a gear. Roll a 1 and the engine bogs down: no gear, no movement, and you are still in neutral when the race comes back round to you. Roll 2 to 16 and you get away cleanly in first, rolling its die for the move as usual. Roll 17 or more and it is a flying start — four spaces with no roll at all. Everybody who gets away is in first and can change gear from round two, and that is when normal racing begins. Out of neutral there is now one gear to take rather than two, so a car that bogged down — or spun — climbs the ladder from first like everybody else.",
                 game: "racecars",
@@ -113,11 +118,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Settlements & Cities' result page charts how the dice actually fell",
                 detail: "A new bar chart at the bottom of the result page counts every roll of the game by its total, 2 through 12 — so you can see at a glance whether this game's dice ran hot on 7s or cold on the middle numbers, alongside the existing resources-per-round chart above it.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Banned Islet's water level and hands get easier to read",
-                detail: "Tap the water level stat to see what each level means — the same trick Outbreak's infection rate uses — and check how many flood cards land at each one, right down to the skull. Every hand's cards now sit grouped by type instead of draw order, so it's easier to see what everyone's holding at a glance.",
-                game: "bannedislet",
             },
         ],
     },
