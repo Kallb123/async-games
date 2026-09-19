@@ -5,7 +5,7 @@ import type { IRaceCarsGameData } from "./RaceCarsModels";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import { legalGears, moveOptions, slipstreamMoveOptions } from "./rules";
 import { GEARS, gearDef, RaceCarsGear, specDef, START_DIE_SIDES, START_FLYING_SPACES, trackById } from "./board";
-import { car, cars, launch, log, makeGame, move, race, run, seat, shift, slipstream } from "./testFixtures";
+import { car, cars, endTurn, launch, log, makeGame, move, race, run, seat, shift, slipstream } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -216,9 +216,12 @@ describe("RaceCarsShift (§7 step 1, §8)", () => {
 
         expect((await run(legacy, shift({ gear: 2, recordedRoll: 4 }))).outcome.validMove).toBe(true);
         expect(seat(legacy, 'a').gear).toBe(2);
-        // And the hand-off leaves that race on shifts rather than moving it
-        // onto a d20 nobody in it has thrown.
+        // The move holds rather than ending outright (docs/undo.md §5); close
+        // it the way a live client's countdown would before checking that the
+        // hand-off leaves this race on shifts rather than moving it onto a
+        // d20 nobody in it has thrown.
         expect((await run(legacy, move({ row: 4, lane: 1 }))).outcome.validMove).toBe(true);
+        expect((await run(legacy, endTurn())).outcome.validMove).toBe(true);
         expect(seat(legacy, 'b').phase).toBe('shift');
     });
 
@@ -285,7 +288,11 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         const { outcome } = await run(game, move({ row: 27, lane: 1 }));
 
         expect(outcome.validMove).toBe(true);
-        expect(outcome.turnOver).toBe(true);
+        // Held rather than ended outright — this leg is undoable, so it owes
+        // its driver the ten-second window before it hands off (docs/undo.md
+        // §5).
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').row).toBe(27);
         expect(seat(game, 'a').lane).toBe(1);
         expect(log(game)).toContain('drove 7 spaces');
@@ -473,7 +480,12 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
     });
 });
 
-/** A whole turn: shift, then move to `destination`. */
+/**
+ * A whole turn: shift, then move to `destination` — and, if that move is
+ * undoable and left nothing else to do, the RaceCarsEndTurn that closes the
+ * ten-second hold it opens (docs/undo.md §5), so CheckEndTurn's own hand-off
+ * still runs in the same breath a caller of this helper expects it to.
+ */
 async function driveTurn(
     game: IRaceCarsGameData,
     userId: string,
@@ -482,7 +494,9 @@ async function driveTurn(
     destination: { row: number; lane: number },
 ) {
     await run(game, shift({ gear, recordedRoll: roll }, userId));
-    return run(game, move(destination, userId));
+    const moved = await run(game, move(destination, userId));
+    if (game.specificGameState.autoEndTurnAt) await run(game, endTurn(userId));
+    return moved;
 }
 
 describe("CheckEndTurn (§15)", () => {
@@ -705,9 +719,20 @@ describe("a race that keeps running", () => {
         // this pace is well inside the bound, so a loop that runs out of turns
         // is a race that has wedged.
         let turns = 0;
-        while (!game.complete && turns < 60) {
+        while (!game.complete && turns < 120) {
             turns += 1;
             const driver = game.currentTurn;
+
+            // Every undoable leg holds the hand-off open for its own ten-
+            // second window (docs/undo.md §5) rather than ending the turn
+            // outright — closed here exactly as a live client's expired
+            // countdown or "Pass now" would close it, before `ps.phase` (still
+            // whatever the held leg left it at) is read below.
+            if (game.specificGameState.autoEndTurnAt) {
+                expect((await run(game, endTurn(driver))).outcome.validMove).toBe(true);
+                continue;
+            }
+
             const ps = seat(game, driver);
 
             if (ps.phase === 'slipstream') {
@@ -793,18 +818,22 @@ describe("the slipstream hand-off (§12)", () => {
         const game = towable({ b: { row: 40, lane: 1 } });
         const { outcome } = await run(game, move({ row: 20, lane: 1 }));
 
-        expect(outcome.turnOver).toBe(true);
+        // Held rather than ended outright (docs/undo.md §5) — the leg is
+        // undoable, so the hand-off waits for its own ten-second window.
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').phase).toBe('move');
-        expect(game.currentTurn).toBe('b');
+        expect(game.currentTurn).toBe('a');
     });
 
     it("ends the turn instead of handing off when neither car is fast enough to draft (§12)", async () => {
         const game = towable({ a: { row: 16, lane: 1, gear: 3, phase: 'move', roll: 4 }, b: { row: 21, lane: 1, gear: 3 } });
         const { outcome } = await run(game, move({ row: 20, lane: 1 }));
 
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').phase).toBe('move');
-        expect(game.currentTurn).toBe('b');
+        expect(game.currentTurn).toBe('a');
     });
 
     it("offers no tow to a car that has just spun — the spin ended the turn (§18)", async () => {
@@ -819,7 +848,11 @@ describe("the slipstream hand-off (§12)", () => {
 
         expect(seat(game, 'a').row).toBe(14);
         expect(seat(game, 'a').skipNextTurn).toBe(true);
-        expect(outcome.turnOver).toBe(true);
+        // A spin from an unpayable overshoot rolls no dice of its own, so it
+        // is still undoable and still holds (docs/undo.md §5, §6) — only an
+        // oil check's d6 or a finished race would disqualify it.
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').phase).not.toBe('slipstream');
     });
 
@@ -851,15 +884,16 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         }));
     }
 
-    it("takes the tow three rows and ends the turn", async () => {
+    it("takes the tow three rows and holds the turn open for its own undo window", async () => {
         const game = towed();
         const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 2 } }));
 
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').row).toBe(23);
         expect(seat(game, 'a').lane).toBe(2);
         expect(log(game)).toContain('took the tow 3 spaces');
-        expect(game.currentTurn).toBe('b');
+        expect(game.currentTurn).toBe('a');
         expectConserved(game);
     });
 
@@ -867,11 +901,14 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         const game = towed();
         const { outcome } = await run(game, slipstream({ tow: null }));
 
-        expect(outcome.turnOver).toBe(true);
+        // A decline is always undoable (docs/undo.md §6), so it always holds
+        // rather than handing off outright.
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect(seat(game, 'a').row).toBe(20);
         expect(seat(game, 'a').tyres).toBe(5);
         expect(log(game)).toContain('waved the tow away');
-        expect(game.currentTurn).toBe('b');
+        expect(game.currentTurn).toBe('a');
     });
 
     it("refuses a driver who was never offered a tow, whatever their phase says", async () => {
@@ -914,7 +951,10 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         const game = towed({ row: 13, lane: 1, cornerStops: 1, tyres: 1 }, { b: { row: 14, lane: 1, gear: 4 } });
         const { outcome } = await run(game, slipstream({ tow: { row: 16, lane: 2 } }));
 
-        expect(outcome.turnOver).toBe(true);
+        // A deterministic spin rolls no dice, so it's still undoable and
+        // still holds (docs/undo.md §5, §6).
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         // §10: you pay nothing, and the car is placed on the corner's last row.
         expect(seat(game, 'a').tyres).toBe(1);
         expect(seat(game, 'a').row).toBe(14);
@@ -957,9 +997,10 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         const game = towed({}, { b: { row: 21, lane: 1, gear: 4 }, c: { row: 24, lane: 1, gear: 3 } });
         const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 1 } }));
 
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
         expect((outcome as IRaceCarsArrivalOutcome).arrival.towOffered).toBe(false);
-        expect(game.currentTurn).toBe('b');
+        expect(game.currentTurn).toBe('a');
     });
 
     it("charges a brake for late braking into a corner the tow was not already in (§12)", async () => {

@@ -447,12 +447,10 @@ describe('POST /api/game/command', () => {
     });
 
     /**
-     * BOB far enough down the road that ANN's move offers no tow, so it ends
-     * her turn outright and CheckEndTurn hands off to him immediately — the
-     * ordinary case `RaceCarsUndo`'s `ignoresTurnGate` exists for (this
-     * route's own "is it your turn" gate would otherwise refuse ANN's very
-     * next request, since `currentTurn` is already BOB's by the time it could
-     * arrive). `players` is stored flattened to a plain object, same as
+     * BOB far enough down the road that ANN's move offers no tow — so it is
+     * the ordinary ending, and holds rather than handing off outright
+     * (docs/undo.md §5): `currentTurn` stays ANN's, with the ten-second
+     * window open. `players` is stored flattened to a plain object, same as
      * `asStored` (this file's own stand-in for a real Mongoose save) does to
      * every Map — seeding the live Map straight from `race()` would round-trip
      * through this store's own JSON.stringify as `{}`, an empty grid.
@@ -481,7 +479,7 @@ describe('POST /api/game/command', () => {
         });
     }
 
-    it("undoes a move that already handed the turn on, restoring it to the driver who made it", async () => {
+    it("undoes a move that is holding the turn open for its own undo window", async () => {
         signIn(ANN);
         raceCarsGridWithAMoveOffered();
 
@@ -497,8 +495,9 @@ describe('POST /api/game/command', () => {
             brake: 0,
         }));
         expect(moveResponse.status).toBe(200);
-        expect((await moveResponse.json()).outcome.turnOver).toBe(true);
-        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+        expect((await moveResponse.json()).outcome.turnOver).toBe(false);
+        expect(storedGame('game_1')!.currentTurn).toBe(ANN.id);
+        expect((storedGame('game_1')!.specificGameState as { autoEndTurnAt: string | null }).autoEndTurnAt).not.toBeNull();
 
         const undoResponse = await command(jsonPost('/api/game/command', {
             id: '33333333-3333-3333-3333-333333333333',
@@ -512,8 +511,8 @@ describe('POST /api/game/command', () => {
         expect(undoResponse.status).toBe(200);
         expect((await undoResponse.json()).outcome.validMove).toBe(true);
         const saved = storedGame('game_1')!;
-        // Not just specificGameState — the hand-off itself came back too.
         expect(saved.currentTurn).toBe(ANN.id);
+        expect((saved.specificGameState as { autoEndTurnAt: string | null }).autoEndTurnAt).toBeNull();
         expect(commandHistory(saved)).toHaveLength(2);
     });
 
@@ -532,11 +531,14 @@ describe('POST /api/game/command', () => {
             lane: 1,
             brake: 0,
         }));
-        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+        // Held open, not handed off — still ANN's turn (docs/undo.md §5).
+        expect(storedGame('game_1')!.currentTurn).toBe(ANN.id);
 
-        // BOB is legitimately on turn now, but the anchor's own check (not the
-        // gate `ignoresTurnGate` skipped) is what refuses him taking back a
-        // move that isn't his.
+        // BOB is not on turn at all, but `RaceCarsUndo`'s `ignoresTurnGate`
+        // lets his request past this route's own "is it your turn" gate
+        // regardless — it is the anchor's own ownership check inside
+        // `Execute`, not the gate, that refuses him taking back a move that
+        // isn't his.
         signIn(BOB);
         const undoResponse = await command(jsonPost('/api/game/command', {
             id: '44444444-4444-4444-4444-444444444444',
@@ -549,7 +551,7 @@ describe('POST /api/game/command', () => {
 
         expect(undoResponse.status).toBe(401);
         const saved = storedGame('game_1')!;
-        expect(saved.currentTurn).toBe(BOB.id);
+        expect(saved.currentTurn).toBe(ANN.id);
         expect(commandHistory(saved)).toHaveLength(1);
     });
 });

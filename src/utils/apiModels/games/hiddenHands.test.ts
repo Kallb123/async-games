@@ -389,7 +389,7 @@ describe("Race Cars' response", () => {
     });
 
     const RC_STATE_KEYS = [
-        "canUndo", "laps", "oilSpills", "playerStates", "round", "roundIndex", "roundOrder",
+        "autoEndTurnAt", "canUndo", "laps", "oilSpills", "playerStates", "round", "roundIndex", "roundOrder",
         "slicks", "spec", "trackId",
     ];
     const RC_PLAYER_KEYS = [
