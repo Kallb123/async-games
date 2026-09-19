@@ -83,7 +83,7 @@ export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismis
                 glyph: '🌀',
                 text: 'You finished in another car’s tow — three rows, if you want them. Tap a highlighted space on the circuit to take the slipstream, or wave it away.',
             } : null}
-            footer={holdDeadline !== null || canUndo ? (
+            footer={(
                 <RaceCarsUndoHold
                     holdDeadline={holdDeadline}
                     canUndo={canUndo}
@@ -91,7 +91,7 @@ export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismis
                     pendingTarget={pendingTarget}
                     nested
                 />
-            ) : null}
+            )}
             cta={{ label: arrival.towOffered ? 'Choose the tow' : 'Back to the board', onClick: onDismiss }}
         />
     );
