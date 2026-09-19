@@ -74,6 +74,7 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         victoryTarget: 10,
         undoStack: [],
         undoAnchorId: null,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }

@@ -203,6 +203,15 @@ export interface ISACSpecificGameState {
      * without every other command having to remember to clear it.
      */
     undoAnchorId: string | null;
+    /**
+     * When a turn that is ready to end is instead being held open so its
+     * player can still take their last move back (docs/undo.md §5). ISO, or
+     * `null` the rest of the time. Cleared with the rest of the turn in
+     * `sacAdvanceMainTurn`/`sacAdvanceSetup` — undo never crosses a turn
+     * boundary (§14) — and by `SACUndo`, since restoring the snapshot restores
+     * this field along with everything else.
+     */
+    autoEndTurnAt: string | null;
 }
 
 // How long a player has to take an undoable move back, once the turn it would
@@ -313,6 +322,10 @@ export function cloneSACState(
         // snapshot's `undoAnchorId` is overwritten by SACUndo.Execute anyway.
         undoStack: [],
         undoAnchorId: null,
+        // Restoring a snapshot puts the hold back to whatever it was before the
+        // undone command ran — null, since a command that leaves something to
+        // take back is exactly the one that would otherwise have set it.
+        autoEndTurnAt: gs.autoEndTurnAt ?? null,
     };
 }
 

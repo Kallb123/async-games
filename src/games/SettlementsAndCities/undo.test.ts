@@ -15,7 +15,7 @@ import {
     SACUndo,
 } from "./SettlementsAndCitiesLogic";
 import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
-import { BOARD_TOPOLOGY, HEX_POSITIONS } from "./board";
+import { BOARD_TOPOLOGY, HEX_POSITIONS, isValidSettlementVertex } from "./board";
 import type { ISACHex, ISACSpecificGameState } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -71,13 +71,17 @@ const SETUP_VERTEX = BOARD_TOPOLOGY.hexVertices[0][0];
 const SETUP_EDGE = BOARD_TOPOLOGY.vertexEdges[SETUP_VERTEX][0];
 
 // A main-phase board with u1 already holding a settlement (so a road off it is
-// legal) and the resources to build one road twice over.
-function mainBoardWithRoad() {
+// legal) — resources to build one road twice over by default, plus a Knight,
+// which is enough left over that building the one road doesn't leave nothing
+// else to do. Pass `{ resources: { brick: 1, lumber: 1 } }` (and no dev cards)
+// for exactly the opposite — the one road and nothing else — which is what
+// docs/undo.md §5's hold needs to test against.
+function mainBoardWithRoad(overrides: Parameters<typeof player>[0] = { resources: { brick: 2, lumber: 2 }, devCards: { knight: 1 } }) {
     const gs = makeState(emptyBoard());
     const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
     gs.vertices[vertexId] = { building: "settlement", owner: "u1" };
     const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
-    gs.playerStates.set("u1", player({ resources: { brick: 2, lumber: 2 }, devCards: { knight: 1 } }));
+    gs.playerStates.set("u1", player(overrides));
     gs.playerStates.set("u2", player());
     return { gs, edgeId };
 }
@@ -233,6 +237,190 @@ describe("Settlements & Cities — who may undo", () => {
         const undone = await run(game, cmd(new SACUndo(), "u2"));
         expect(undone.outcome.validMove).toBe(false);
         expect(gs.edges[edgeId].hasRoad).toBe(true);
+    });
+});
+
+describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5)", () => {
+    it("holds a main-phase build that leaves nothing else to do, rather than ending the turn", async () => {
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 1, lumber: 1 } });
+        const game = makeGame(gs);
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+
+        const { outcome } = await run(game, road);
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(new Date(gs.autoEndTurnAt!).getTime()).toBeGreaterThan(Date.now());
+        expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
+            .toEqual(["SACBuildRoad"]);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("undoing that build clears the hold and leaves the turn with its player", async () => {
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 1, lumber: 1 } });
+        const game = makeGame(gs);
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+        await run(game, road);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.edges[edgeId].hasRoad).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("still ends a roll-triggered auto-end immediately, with no hold", async () => {
+        // Same shape as autoEndTurn.test.ts: SACRollDice pushes no snapshot, so
+        // there's nothing on the anchor for sacFinishTurn to hold for — a roll
+        // that leaves nothing to do ends the turn exactly as it does today.
+        const gs = makeState({ hasRolled: false, lastRoll: null, ...emptyBoard() });
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        const { outcome } = await run(game, rollOf(5, 3));
+        expect(outcome.turnOver).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(game.currentTurn).toBe("u2");
+    });
+
+    it("holds a setup turn's road, accepting SACEndTurn only while the hold is open", async () => {
+        const gs = setupBoard(0);
+        const game = makeGame(gs);
+
+        // Nothing placed yet: nothing to hold, so End Turn is refused outright.
+        const beforeAnything = await run(game, cmd(new SACEndTurn()));
+        expect(beforeAnything.outcome.validMove).toBe(false);
+
+        const settlement = cmd(new SACPlaceSettlementSetup());
+        settlement.vertexId = SETUP_VERTEX;
+        await run(game, settlement);
+
+        // Mid-sequence — the settlement's road is still outstanding — so still
+        // nothing to hold, and pendingRoadSetup blocks it either way.
+        const midSequence = await run(game, cmd(new SACEndTurn()));
+        expect(midSequence.outcome.validMove).toBe(false);
+        expect(gs.setupStep).toBe(0);
+
+        const road = cmd(new SACPlaceRoadSetup());
+        road.edgeId = SETUP_EDGE;
+        const built = await run(game, road);
+        expect(built.outcome.validMove).toBe(true);
+        expect(built.outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        // The road hasn't handed the turn off yet — the hold is still open.
+        expect(gs.setupStep).toBe(0);
+        expect(game.currentTurn).toBe("u1");
+
+        const ended = await run(game, cmd(new SACEndTurn()));
+        expect(ended.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        // The snake order actually advanced exactly once.
+        expect(gs.setupStep).toBe(1);
+        expect(game.currentTurn).toBe("u2");
+
+        // Refused again now that the turn has passed.
+        const tooLate = await run(game, cmd(new SACEndTurn()));
+        expect(tooLate.outcome.validMove).toBe(false);
+        expect(gs.setupStep).toBe(1);
+    });
+
+    it("refuses a second settlement during the hold — the road resets pendingRoadSetup, but the player isn't offered another placement", async () => {
+        // Gremlin review of PR 3: SACPlaceRoadSetup resets `pendingRoadSetup`
+        // to `false` the moment the hold opens, which is exactly what a fresh
+        // placement's own guard looks for — without also checking
+        // `autoEndTurnAt`, the still-current player could place settlement
+        // after settlement (each one re-arming its own ten-second hold) for
+        // as long as the board had a legal vertex left, gathering a second
+        // round's starting resources on every one of them.
+        const gs = setupBoard(0);
+        const game = makeGame(gs);
+        const settlement = cmd(new SACPlaceSettlementSetup());
+        settlement.vertexId = SETUP_VERTEX;
+        await run(game, settlement);
+
+        const road = cmd(new SACPlaceRoadSetup());
+        road.edgeId = SETUP_EDGE;
+        await run(game, road);
+        expect(gs.pendingRoadSetup).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        const otherVertex = gs.vertices.findIndex((_, id) => isValidSettlementVertex(id, gs.vertices));
+        expect(otherVertex).toBeGreaterThanOrEqual(0);
+
+        const secondSettlement = cmd(new SACPlaceSettlementSetup());
+        secondSettlement.vertexId = otherVertex;
+        const refused = await run(game, secondSettlement);
+
+        expect(refused.outcome.validMove).toBe(false);
+        expect(gs.vertices[otherVertex]).toEqual({ building: null, owner: null });
+        expect(gs.playerStates.get("u1")!.remainingSettlements).toBe(4);
+        expect(gs.setupStep).toBe(0);
+    });
+
+    it("hides a special-build player's hold from the player queued behind them, even though the hand-off never explicitly clears the stack", async () => {
+        // sacAdvanceMainTurn/sacAdvanceSetup clear undoStack/undoAnchorId/
+        // autoEndTurnAt on a hand-off; sacAdvanceSpecialBuild's queue-to-queue
+        // shift (5-6 Player Extension) does not. That's still safe — the
+        // anchor already goes stale the instant the outgoing player's own
+        // SACEndTurn lands on commandHistory, before currentTurn even moves —
+        // but nothing else exercised a special-build hand-off, so this proves
+        // it rather than leaving it safe by accident (croupier review, PR 3).
+        const gs = makeState({
+            ...emptyBoard(),
+            hasRolled: true,
+            expansions: {
+                seasAndSailors: false,
+                knightsAndCommerce: false,
+                tradersAndRaiders: false,
+                explorersAndPirates: false,
+                fiveSixPlayerExtension: true,
+            },
+        });
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        gs.vertices[vertexId] = { building: "settlement", owner: "u2" };
+        const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player({ resources: { brick: 1, lumber: 1 } }));
+        gs.playerStates.set("u3", player());
+        const game = makeGame(gs, {
+            userIdList: ["u1", "u2", "u3"],
+            currentTurn: "u1",
+            gameState: { turnOrder: ["u1", "u2", "u3"], history: [], commandHistory: [] },
+        });
+        const NAMES = { u1: "Alice", u2: "Bob", u3: "Carol" };
+
+        // u1's main turn has nothing left to do either — opens the Special
+        // Build Phase and hands off to u2 first.
+        await run(game, cmd(new SACEndTurn(), "u1"));
+        expect(game.currentTurn).toBe("u2");
+        expect(gs.specialBuildActive).toBe(true);
+
+        // u2's special-build road leaves them nothing else to do — held open
+        // exactly like a main turn would be.
+        const road = cmd(new SACBuildRoad(), "u2");
+        road.edgeId = edgeId;
+        const built = await run(game, road);
+        expect(built.outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        const heldId = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, NAMES, "u2", heldId).canUndo).toBe(true);
+
+        // The hold expires (or u2 taps End turn) and hands the special-build
+        // turn to u3.
+        const ended = await run(game, cmd(new SACEndTurn(), "u2"));
+        expect(ended.outcome.turnOver).toBe(true);
+        expect(game.currentTurn).toBe("u3");
+
+        // Neither u2 (whose hold this was) nor u3 (whose turn it now is) can
+        // see it any more.
+        const afterHandoff = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, NAMES, "u2", afterHandoff).canUndo).toBe(false);
+        expect(gameStateToResponse(gs, NAMES, "u2", afterHandoff).autoEndTurnAt).toBeNull();
+        expect(gameStateToResponse(gs, NAMES, "u3", afterHandoff).canUndo).toBe(false);
     });
 });
 

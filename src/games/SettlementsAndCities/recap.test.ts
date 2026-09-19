@@ -57,6 +57,7 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         expansions: {} as ISACSpecificGameStateResponse["expansions"],
         victoryTarget: 10,
         canUndo: false,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }

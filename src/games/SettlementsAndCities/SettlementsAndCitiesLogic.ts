@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
 import { sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -124,19 +124,27 @@ function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameComma
     gs.undoAnchorId = command.id;
 }
 
-// Deliberately *not* cleared on a turn hand-off here: in this PR the setup
-// road is still the command that ends its own turn (PR 3's hold is what makes
-// `SACPlaceRoadSetup` return `turnOver: false` instead), so a hand-off runs in
-// the same breath as the very push a road undo needs to survive — clearing it
-// here would make that placement's own undo unreachable the instant it
-// happened. The anchor already does the correctness work on its own:
-// `commandHistory`'s tail changes on every command, hand-off or not, so
-// SACUndo (and canUndo, in gameStateToResponse) go stale the moment anything
-// else runs, without this needing to know which commands are hand-offs.
+// Not cleared here, on a turn hand-off: a hand-off runs in the same breath as
+// the very push a placement's own hold needs to survive (see sacFinishTurn's
+// setup branch below), so clearing it here would make that placement's undo
+// unreachable the instant it happened. sacClearUndo (below), called from
+// sacAdvanceMainTurn/sacAdvanceSetup, clears it instead, once the hand-off is
+// actually final.
+
+// The hand-off is final — undo (and the hold it can trigger, §5) never crosses
+// a turn boundary, since the new mover may already have opened the board
+// (docs/undo.md §14). Called from both places currentTurn actually changes to
+// a different player.
+function sacClearUndo(gs: ISettlementsAndCitiesGameData['specificGameState']): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
+    gs.autoEndTurnAt = null;
+}
 
 // ─── Helper: advance setup turn ──────────────────────────────────────────────
 function sacAdvanceSetup(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
+    sacClearUndo(gs);
     const N = sacData.gameState.turnOrder.length;
     gs.setupStep++;
     if (gs.setupStep >= 2 * N) {
@@ -227,13 +235,38 @@ function sacHasAnyAction(gs: ISettlementsAndCitiesGameData['specificGameState'],
 // turn): one still mid-sequence (a pending robber move, free roads yet to
 // place) never auto-ends, since the check only fires once
 // `hasRolled`/`specialBuildActive` holds and both of those have cleared.
-function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, trigger: IGameCommand): ICommandOutcome {
-    const outcome: ICommandOutcome = { validMove: true, turnOver: false };
+function sacFinishTurn(
+    sacData: ISettlementsAndCitiesGameData,
+    userId: string,
+    trigger: IGameCommand,
+    // Setup has no mid-sequence to check and no SACEndTurn to fall back on if
+    // there's nothing to hold — a setup road always ends its turn, so this
+    // skips straight to the hold-or-follow-up decision below. "Guard lifted",
+    // not "guard different": everything after it still applies the same way.
+    opts: { setup?: boolean } = {},
+): ICommandOutcome {
     const gs = sacData.specificGameState;
-    if (gs.phase !== 'main' || gs.pendingRobber || gs.pendingRoadBuilding > 0) return outcome;
-    if (!gs.specialBuildActive && !gs.hasRolled) return outcome;
-    const ps = gs.playerStates.get(userId);
-    if (!ps || sacHasAnyAction(gs, userId, ps)) return outcome;
+    const outcome: ICommandOutcome = { validMove: true, turnOver: false };
+    if (!opts.setup) {
+        if (gs.phase !== 'main' || gs.pendingRobber || gs.pendingRoadBuilding > 0) return outcome;
+        if (!gs.specialBuildActive && !gs.hasRolled) return outcome;
+        const ps = gs.playerStates.get(userId);
+        if (!ps || sacHasAnyAction(gs, userId, ps)) return outcome;
+    }
+
+    // Something to take back right now — hold the hand-off instead of ending
+    // the turn (docs/undo.md §5). Checked against the trigger's own id, not
+    // merely whether the stack has anything in it: a build followed by a
+    // non-undoable action that leaves nothing else to do (a trade, say) must
+    // still end at once, because the trade didn't push and the anchor has
+    // moved on since — the same staleness test SACUndo and canUndo already
+    // run on themselves (§4). For a setup road this is always true, since it
+    // just pushed its own snapshot above.
+    if (gs.undoAnchorId === trigger.id) {
+        gs.autoEndTurnAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
+        return outcome;
+    }
+
     // The ending itself is an ordinary SACEndTurn, run and recorded straight
     // after this command (see ICommandOutcome.followUpCommand) — not a turnOver
     // flag on whatever command was in flight. That is what makes it invisible:
@@ -263,6 +296,7 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, t
 // like the flag itself, only once the next roll lands and overwrites both.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
+    sacClearUndo(gs);
     gs.hasRolled = false;
     if (!gs.lastRollAutoEnded) {
         gs.lastRoll = null;
@@ -410,7 +444,12 @@ export class SACPlaceSettlementSetup implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'setup' || gs.pendingRoadSetup) return { validMove: false, turnOver: false };
+        // `autoEndTurnAt` set means this player's setup turn already finished
+        // and is only being held open for its own undo window (docs/undo.md
+        // §5) — without this, the same still-current player could place
+        // another settlement (and its road) during that window, since
+        // `pendingRoadSetup` resets to `false` the moment the hold opens.
+        if (gs.phase !== 'setup' || gs.pendingRoadSetup || gs.autoEndTurnAt) return { validMove: false, turnOver: false };
         if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
 
         sacPushUndo(sacData, this);
@@ -482,7 +521,9 @@ export class SACPlaceRoadSetup implements IGameCommand {
         gs.lastSetupSettlementVertex = null;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `placed a road (setup)`));
-        return { validMove: true, turnOver: true };
+        // Always holds rather than ending outright — the push above guarantees
+        // there's a snapshot to take back (docs/undo.md §5, §6).
+        return sacFinishTurn(sacData, this.senderId, this, { setup: true });
     }
 }
 
@@ -1087,7 +1128,18 @@ export class SACEndTurn implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        // A setup turn only ever ends here while the road that finished it is
+        // holding it open (docs/undo.md §5): `autoEndTurnAt` set, its road
+        // already placed. Both are server state `SACPlaceRoadSetup` just
+        // wrote — a client can't forge either, so this still can't be used to
+        // skip a setup placement. `CheckEndTurn`'s own setup branch does the
+        // rest once this returns turnOver.
+        if (gs.phase === 'setup') {
+            if (!gs.autoEndTurnAt || gs.pendingRoadSetup) return { validMove: false, turnOver: false };
+            sacData.gameState.history.unshift(playerHistory(this.senderId, `finished placing`));
+            return { validMove: true, turnOver: true };
+        }
+
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
         if (gs.pendingRoadBuilding > 0) return { validMove: false, turnOver: false };
         // Main turn requires a roll first; a special-build turn does not.

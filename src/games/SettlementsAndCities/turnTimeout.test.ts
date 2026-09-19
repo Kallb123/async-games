@@ -46,7 +46,10 @@ describe("Settlements & Cities turn timeout — setup phase", () => {
         const game = makeGame(gs);
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
-        expect(playedClassNames(game)).toEqual(["SACPlaceSettlementSetup", "SACPlaceRoadSetup"]);
+        // The road holds the turn open for its own undo window (docs/undo.md
+        // §5) rather than ending it outright, so the sweep closes it with the
+        // same SACEndTurn a live player's expired countdown would send.
+        expect(playedClassNames(game)).toEqual(["SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACEndTurn"]);
 
         const settlementVertex = gs.vertices.findIndex(v => v.owner === "u1");
         expect(settlementVertex).toBeGreaterThanOrEqual(0);
@@ -81,7 +84,8 @@ describe("Settlements & Cities turn timeout — setup phase", () => {
         const game = makeGame(gs);
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
-        expect(playedClassNames(game)).toEqual(["SACPlaceRoadSetup"]);
+        // Same hold as above — the sweep still has to close it with SACEndTurn.
+        expect(playedClassNames(game)).toEqual(["SACPlaceRoadSetup", "SACEndTurn"]);
 
         const road = gs.edges.findIndex(e => e.owner === "u1");
         expect(road).toBeGreaterThanOrEqual(0);
@@ -240,6 +244,32 @@ describe("Settlements & Cities turn timeout — main phase", () => {
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
         expect(playedClassNames(game)).toEqual(["SACEndTurn"]);
+        expect(game.currentTurn).toBe("u2");
+    });
+
+    it("still resolves a turn left held for its own undo window (docs/undo.md §9)", async () => {
+        // If the client that would have submitted SACEndTurn once the
+        // countdown reached zero never comes back, the ordinary turn timer is
+        // the backstop — the adapter doesn't look at autoEndTurnAt at all, it
+        // just sees nothing pending and ends the turn the same as any other
+        // stalled one, closing the hold along with the rest of it.
+        const gs = makeState({
+            phase: "main",
+            vertices: emptyVertices(),
+            edges: emptyEdges(),
+            hasRolled: true,
+            undoStack: [{ by: "u1", state: makeState() }],
+            undoAnchorId: "some-earlier-command",
+            autoEndTurnAt: new Date(Date.now() - 1000).toISOString(),
+        });
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
+        expect(playedClassNames(game)).toEqual(["SACEndTurn"]);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.undoStack).toEqual([]);
         expect(game.currentTurn).toBe("u2");
     });
 
