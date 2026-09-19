@@ -45,6 +45,7 @@ function state(
         roundOrder: Object.keys(overrides.playerStates),
         roundIndex: 0,
         slicks: [],
+        canUndo: false,
         ...overrides,
     };
 }

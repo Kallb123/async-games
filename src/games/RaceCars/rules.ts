@@ -16,7 +16,7 @@
 // `conservativeTurn`, which the turn-timeout cron depends on being total and
 // which therefore answers even for a driver who has no car (§23.7 PR 6).
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { mongoMap } from "@/utils/games/mongoMaps";
+import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { randomInt } from "@/utils/games/random";
 import {
     cornerAt,
@@ -118,6 +118,26 @@ export interface IRaceCarsSpecificGameState {
      * plain record — `mongoMap` is what lets all three call the same rules.
      */
     players: Map<string, IRaceCarsPlayerState> | Record<string, IRaceCarsPlayerState>;
+    // ─── Undo (docs/undo.md) ────────────────────────────────────────────────
+    /**
+     * Snapshots of the whole state, newest last, pushed by RaceCarsMove and
+     * RaceCarsSlipstream before they mutate anything — except when doing so
+     * would let a driver undo a roll hiding inside them: a leg that crosses one
+     * of §14's slicks rolls for oil partway through, and a leg that crosses the
+     * line ends the race, neither of which docs/undo.md §6 lets an undo reach
+     * back over (see `raceCarsCommitUndo` in RaceCarsLogic.ts). `by` is whose
+     * move it was. Capped at UNDO_STACK_DEPTH; the oldest is dropped, which
+     * only ever costs reach, never correctness.
+     */
+    undoStack: { by: string; state: IRaceCarsSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot. RaceCarsUndo
+     * refuses unless this matches the id of the tail of `commandHistory` —
+     * which is how the stack goes stale the moment anything else is played,
+     * without every other command having to remember to clear it (docs/undo.md
+     * §4).
+     */
+    undoAnchorId: string | null;
 }
 
 function playerStates(state: IRaceCarsSpecificGameState): Map<string, IRaceCarsPlayerState> {
@@ -128,6 +148,64 @@ function requirePlayer(state: IRaceCarsSpecificGameState, userId: string): IRace
     const ps = playerStates(state).get(userId);
     if (!ps) throw new Error(`Race Cars: no car for ${userId}`);
     return ps;
+}
+
+// ─── Cloning (turn recap, undo) ─────────────────────────────────────────────
+// The grid draw of §6 step 5 is randomised at creation and is gone from the
+// live state the moment the first car moves, so — like every other multiplayer
+// game here — turn recap replays from a snapshot of it rather than re-deriving
+// it. docs/undo.md §16's second pilot reuses the same snapshot unchanged,
+// which is why this lives here rather than in RaceCarsModels.ts: RaceCarsLogic.ts
+// (the undo command) needs it too, and this is the one file both it and
+// RaceCarsModels.ts already import without creating a cycle between them.
+
+function clonePlayerState(ps: IRaceCarsPlayerState): IRaceCarsPlayerState {
+    // Every field named rather than spread: a Mongoose subdocument keeps its
+    // fields behind getters, so `{ ...ps }` copies none of them and the
+    // replayed grid would start with `undefined` everywhere (mongoMaps.ts).
+    return {
+        raceNumber: ps.raceNumber,
+        row: ps.row,
+        lane: ps.lane,
+        lapsCompleted: ps.lapsCompleted,
+        gear: ps.gear,
+        tyres: ps.tyres,
+        brakes: ps.brakes,
+        gearbox: ps.gearbox,
+        cornerStops: ps.cornerStops,
+        skipNextTurn: ps.skipNextTurn,
+        finishedPosition: ps.finishedPosition,
+        phase: ps.phase,
+        roll: ps.roll,
+        brakeSpent: ps.brakeSpent,
+        startRoll: ps.startRoll,
+    };
+}
+
+/**
+ * Deep-clones a Race Cars state into independent plain objects, rebuilding the
+ * player map in `userIdList` order (see `clonePlayerStates`). Used to seed
+ * turn recap's starting snapshot and, unchanged, an undo snapshot
+ * (docs/undo.md §7) — `undoStack: []`/`undoAnchorId: null` so a snapshot never
+ * nests a stack of its own.
+ */
+export function cloneRaceCarsState(
+    gs: IRaceCarsSpecificGameState,
+    userIdList: string[],
+): IRaceCarsSpecificGameState {
+    return {
+        trackId: gs.trackId,
+        laps: gs.laps,
+        spec: gs.spec,
+        oilSpills: gs.oilSpills,
+        round: gs.round,
+        roundOrder: [...gs.roundOrder],
+        roundIndex: gs.roundIndex,
+        slicks: gs.slicks.map(slick => ({ row: slick.row, lane: slick.lane, laidOnRound: slick.laidOnRound })),
+        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
+        undoStack: [],
+        undoAnchorId: null,
+    };
 }
 
 // ─── Shifting and the dice (§8.1, §8.2) ─────────────────────────────────────

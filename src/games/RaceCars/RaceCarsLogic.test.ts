@@ -5,83 +5,12 @@ import type { IRaceCarsGameData } from "./RaceCarsModels";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import { legalGears, moveOptions, slipstreamMoveOptions } from "./rules";
 import { GEARS, gearDef, RaceCarsGear, specDef, START_DIE_SIDES, START_FLYING_SPACES, trackById } from "./board";
-import { car, race } from "./testFixtures";
-import { runCommand } from "@/utils/games/commandPipeline";
+import { car, cars, launch, log, makeGame, move, race, run, seat, shift, slipstream } from "./testFixtures";
 
-// ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
-// Race Cars' specificGameState is a fully typed schema (§23.4), so — like
-// Banned Islet and Outbreak — nothing here needs markModified: Mongoose tracks
-// those mutations itself, and a plain object has no such method to call.
-//
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
 //   47-51 Gravel Bend (2, one stop) · 52-61 Esses (2) · 62-65 The Kink (3, one)
 //   66-77 Run to the Line (3)
-
-/**
- * A game around `state`. `turnOrder` is the **join order**, given separately
- * from `roundOrder` on purpose: §23.2's whole point is that the two are
- * different arrays and only one of them is the race order.
- */
-function makeGame(
-    state: IRaceCarsSpecificGameState,
-    turnOrder: string[] = [...state.roundOrder],
-): IRaceCarsGameData {
-    return {
-        gameId: "g",
-        currentTurn: state.roundOrder[state.roundIndex],
-        userIdList: turnOrder,
-        gameState: { turnOrder, history: [], commandHistory: [] },
-        specificGameState: state,
-        complete: false,
-        winner: "",
-    } as unknown as IRaceCarsGameData;
-}
-
-function launch(fields: Partial<RaceCarsLaunch>, senderId = "a"): RaceCarsLaunch {
-    const command = new RaceCarsLaunch();
-    command.senderId = senderId;
-    command.senderUsername = senderId;
-    return Object.assign(command, fields);
-}
-
-function shift(fields: Partial<RaceCarsShift>, senderId = "a"): RaceCarsShift {
-    const command = new RaceCarsShift();
-    command.senderId = senderId;
-    command.senderUsername = senderId;
-    return Object.assign(command, fields);
-}
-
-function move(fields: Partial<RaceCarsMove>, senderId = "a"): RaceCarsMove {
-    const command = new RaceCarsMove();
-    command.senderId = senderId;
-    command.senderUsername = senderId;
-    return Object.assign(command, fields);
-}
-
-function slipstream(fields: Partial<RaceCarsSlipstream>, senderId = "a"): RaceCarsSlipstream {
-    const command = new RaceCarsSlipstream();
-    command.senderId = senderId;
-    command.senderUsername = senderId;
-    return Object.assign(command, fields);
-}
-
-/** One command through the pipeline the command route, replay and the cron all use. */
-function run(game: IRaceCarsGameData, command: RaceCarsLaunch | RaceCarsShift | RaceCarsMove | RaceCarsSlipstream) {
-    return runCommand(game, new RaceCarsGameType(), command);
-}
-
-function cars(game: IRaceCarsGameData): Map<string, IRaceCarsPlayerState> {
-    return game.specificGameState.players as Map<string, IRaceCarsPlayerState>;
-}
-
-function seat(game: IRaceCarsGameData, userId: string): IRaceCarsPlayerState {
-    return cars(game).get(userId)!;
-}
-
-function log(game: IRaceCarsGameData): string {
-    return game.gameState.history[0].text;
-}
 
 /**
  * §23.8's conservation check: every pool inside 0..spec, and no two cars on one

@@ -250,8 +250,11 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "RaceCarsGameType",
     buildInitialSpecificGameState: (gameData) => buildInitialRaceCarsStateFromGameData(gameData as IRaceCarsGameData),
-    toResponseState: (specificGameState, userIdNameMap) =>
-        raceCarsStateToModel(specificGameState as never, userIdNameMap, null),
+    // canUndo needs the anchor to still match the tail of commandHistory, not
+    // just the stack's own owner — see gameStateToModel's lastCommandId
+    // (docs/undo.md §7).
+    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory) =>
+        raceCarsStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null),
     // Out by design, and permanently (docs/games/race-cars.md §23.5) — the
     // second of these, after Smartthink's. A planned shift would resolve one
     // hypothetical roll and show the driver a board they will not get: the

@@ -58,6 +58,12 @@ export interface IRaceCarsSpecificGameStateResponse {
     slicks: IRaceCarsSlickResponse[];
     /** Keyed by the player's stable Clerk userId; each value carries the username for display. */
     playerStates: { [userId: string]: IRaceCarsPlayerStateResponse };
+    /**
+     * True when the viewer has a move of their own they can still take back
+     * (docs/undo.md). Unlike everything else in this file, this one field
+     * really is scoped to the viewer — see `gameStateToModel`.
+     */
+    canUndo: boolean;
 }
 
 export interface IRaceCarsGameDataResponse extends IGameDataResponse {

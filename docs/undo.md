@@ -981,3 +981,52 @@ none of which costs anything today:
 - **Keep `UNDO_WINDOW_MS` a single exported constant** (§7 puts it in
   `board.ts`), so moving it is one import change per file rather than a hunt for
   a literal `10_000`.
+
+### The second game: Race Cars
+
+Written by hand, deliberately, per the trigger above — command adjustments
+only (§4-§8's shape), with no hold (§5) yet. `RaceCarsMove` (picking a
+destination once the roll is known) and `RaceCarsSlipstream` (taking or
+declining a tow) opt in the same way Settlements & Cities' four commands do:
+`readonly undoable = true`, a snapshot before the first mutation, and
+`RaceCarsUndo` reads the same anchor `SACUndo` does. `cloneRaceCarsState`
+already existed (§16's table above), so it moved from `RaceCarsModels.ts` to
+`rules.ts` — the one file both it and the new command already import without
+importing each other — rather than being duplicated.
+
+Diffing `RaceCarsUndo.Execute` against `SACUndo`'s, as the trigger asks, turns
+up two real differences, both because a Race Cars turn carries randomness a
+Settlements & Cities placement never does:
+
+- **The push is conditional, not unconditional.** `RaceCarsMove` and
+  `RaceCarsSlipstream` can themselves roll again mid-command — entering one of
+  §14's slicks rolls a d6 — and can end the race outright by crossing the
+  line, neither of which any of SAC's four commands can do. Both commands
+  clone the pre-move state up front as usual, but only actually push it once
+  the leg is known to have crossed no slick and no finish line
+  (`raceCarsCommitUndo`, called or not, in `RaceCarsLogic.ts`). A command that
+  sometimes rolls and sometimes doesn't cannot answer "did this consume
+  randomness" with one static declaration; the anchor still only ever points
+  at a push that passed the test.
+- **`RaceCarsUndo` restores `data.currentTurn`, which `SACUndo` does not.**
+  Both games' Undo commands restore `specificGameState` — `roundIndex` /
+  `roundOrder` / `round` included — but `currentTurn` lives on `IGameData`,
+  outside the snapshot, and only `CheckEndTurn` writes it. SAC's pilot leaves
+  this stale on the one placement that ends its own turn
+  (`SACPlaceRoadSetup`) until §5's hold lands, because in SAC nothing
+  player-facing reads `currentTurn` instead of the phase/step fields the
+  snapshot already restores. Race Cars is a worse place to leave that gap:
+  *both* undoable commands end the turn in the ordinary case (no tow offered,
+  a tow taken or declined with nothing behind it) rather than SAC's one rare
+  placement, and the board's own turn-sheet visibility reads `currentTurn`
+  directly. So `RaceCarsUndo` sets `data.currentTurn = this.senderId` on a
+  successful restore — safe because the anchor already guarantees at most one
+  hand-off happened since the snapshot, and it was this command's own target
+  that caused it.
+
+Two commands, one genuine behavioural difference (the conditional push) and
+one it exposed that SAC's own pilot was quietly carrying — not the shape §16
+expected a second game to be identical in. That's the signal to keep writing
+the third one by hand too, rather than promoting a `GameUndo` that can't
+express "sometimes I don't push" without becoming the per-game logic it was
+meant to replace.

@@ -118,11 +118,14 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     // PR 5 adds RaceCarsSlipstream — §23.4's three command classes, not nine.
     // §6a's startup round adds the fourth, RaceCarsLaunch: the one d20 a driver
     // throws in round one in place of the shift nobody makes off the line.
+    // docs/undo.md's second pilot adds the fifth, RaceCarsUndo: taking back a
+    // move or a tow that rolled for nothing (§6).
     RaceCarsGameType: [
         "RaceCarsLaunch",
         "RaceCarsShift",
         "RaceCarsMove",
         "RaceCarsSlipstream",
+        "RaceCarsUndo",
     ],
 };
 
