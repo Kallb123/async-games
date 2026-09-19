@@ -15,7 +15,7 @@ import {
 } from "@/utils/apiModels/GameDataApi";
 import { buildTimeline, IReplayStep } from "@/utils/games/replay";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import {
@@ -30,6 +30,7 @@ import {
     startingLaps,
     trackById,
 } from "./board";
+import { cloneRaceCarsState } from "./rules";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import {
     IRaceCarsGameDataResponse,
@@ -133,54 +134,11 @@ export var RaceCarsInvitationModel =
 // rules.ts rather than here, so the schema below, the command classes and the
 // board all read one definition of §23.4's state (see rules.ts).
 
-function clonePlayerState(ps: IRaceCarsPlayerState): IRaceCarsPlayerState {
-    // Every field named rather than spread: a Mongoose subdocument keeps its
-    // fields behind getters, so `{ ...ps }` copies none of them and the
-    // replayed grid would start with `undefined` everywhere (mongoMaps.ts).
-    return {
-        raceNumber: ps.raceNumber,
-        row: ps.row,
-        lane: ps.lane,
-        lapsCompleted: ps.lapsCompleted,
-        gear: ps.gear,
-        tyres: ps.tyres,
-        brakes: ps.brakes,
-        gearbox: ps.gearbox,
-        cornerStops: ps.cornerStops,
-        skipNextTurn: ps.skipNextTurn,
-        finishedPosition: ps.finishedPosition,
-        phase: ps.phase,
-        roll: ps.roll,
-        brakeSpent: ps.brakeSpent,
-        startRoll: ps.startRoll,
-    };
-}
-
-/**
- * Deep-clones a Race Cars state into independent plain objects, rebuilding the
- * player map in `userIdList` order (see `clonePlayerStates`).
- *
- * The grid draw of §6 step 5 is randomised at creation and is gone from the
- * live state the moment the first car moves, so — like every other multiplayer
- * game here — turn recap replays from a snapshot of it rather than re-deriving
- * it (§23.4, "Recorded randomness").
- */
-export function cloneRaceCarsState(
-    gs: IRaceCarsSpecificGameState,
-    userIdList: string[],
-): IRaceCarsSpecificGameState {
-    return {
-        trackId: gs.trackId,
-        laps: gs.laps,
-        spec: gs.spec,
-        oilSpills: gs.oilSpills,
-        round: gs.round,
-        roundOrder: [...gs.roundOrder],
-        roundIndex: gs.roundIndex,
-        slicks: gs.slicks.map(slick => ({ row: slick.row, lane: slick.lane, laidOnRound: slick.laidOnRound })),
-        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
-    };
-}
+// `cloneRaceCarsState` moved to rules.ts (docs/undo.md §16): RaceCarsLogic.ts's
+// undo command needs it too, and rules.ts is the one file both it and this one
+// already import without the two of them importing each other. Re-exported so
+// nothing that already imports it from here has to change.
+export { cloneRaceCarsState };
 
 /**
  * The grid of §6, with `turnOrder` already drawn: P1 first, so the running
@@ -247,6 +205,8 @@ export function buildInitialRaceCarsState(
         roundIndex: 0,
         slicks: [],
         players,
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 
@@ -308,6 +268,9 @@ function makeRaceCarsStateSchemaDef() {
                 startRoll: { type: Number, default: null },
             },
         },
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
     };
 }
 
@@ -343,7 +306,12 @@ RaceCarsGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         // reads the same clause it reads for every other game.
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToModel(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            doc.gameState.commandHistory.at(-1)?.id ?? null,
+        ),
         // Games created before the snapshot existed simply don't offer recap;
         // every board page that offers it gates on this flag, which is why it
         // ships with the snapshot rather than with PR 8's adapter.
@@ -352,22 +320,25 @@ RaceCarsGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
 };
 
 /**
- * §23.4's deliberate non-redaction: every field of the state goes to every
+ * §23.4's deliberate non-redaction: every field of the *board* goes to every
  * viewer, because §2's fourth pillar says the whole game is public — the dice
  * are thrown in the open, the wear pools are printed beside each car, and the
  * turn in progress is exactly what the next driver is watching.
  *
- * `_viewerId` is therefore declared and never read, which is the spelling
- * `publicGameState.test.ts` documents for a game that genuinely ignores its
- * viewer. Threading an argument nobody uses looks like clutter and is not: it
- * is what makes adding a hidden field later a change inside this one function
- * rather than across four signatures, a call site and a replay registration —
- * and the four-place version is the one somebody skips.
+ * `viewerId` is read for exactly one thing docs/undo.md adds that isn't public:
+ * `canUndo`, which answers "have *you* got a move you can still take back" and
+ * is therefore false for everyone else by construction, not by redaction —
+ * the move it would undo is a car on the board, which the whole table can
+ * already see. `lastCommandId` (commandHistory's real tail) is threaded
+ * through for the same reason SAC's `gameStateToResponse` takes one: the
+ * stack's own owner alone would still say yes after a command that ran
+ * without touching the stack (docs/undo.md §7).
  */
 export function gameStateToModel(
     gs: IRaceCarsSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    _viewerId: string | null,
+    viewerId: string | null,
+    lastCommandId: string | null = null,
 ): IRaceCarsSpecificGameStateResponse {
     const playerStates: IRaceCarsSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of mongoMap(gs.players)) {
@@ -392,6 +363,21 @@ export function gameStateToModel(
         };
     }
 
+    // The viewer's own — whether *they* have a move they can still take back
+    // (docs/undo.md §7-§8). Absent (`?? []`) for a game that predates the
+    // stack, false for anyone whose move it isn't, and false for a viewerless
+    // replay/recap, since no viewerId can ever equal a stack entry's `by`.
+    //
+    // The stack's own owner isn't the whole story: it still names the mover
+    // after a non-undoable command runs without touching it — a shift or a
+    // launch played right after a move, or the ordinary hand-off at the end of
+    // the turn. Matching `undoAnchorId` against `lastCommandId`
+    // (commandHistory's real tail) is the same test RaceCarsUndo runs on
+    // itself, so this can't say yes to a move the command would actually
+    // refuse.
+    const topEntry = (gs.undoStack ?? []).at(-1);
+    const canUndo = topEntry?.by === viewerId && gs.undoAnchorId === lastCommandId;
+
     return {
         trackId: gs.trackId,
         laps: gs.laps,
@@ -402,6 +388,7 @@ export function gameStateToModel(
         roundIndex: gs.roundIndex,
         slicks: gs.slicks.map(slick => ({ row: slick.row, lane: slick.lane, laidOnRound: slick.laidOnRound })),
         playerStates,
+        canUndo,
     };
 }
 

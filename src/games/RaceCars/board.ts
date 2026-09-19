@@ -407,6 +407,16 @@ export const SLIPSTREAM_CORNER_ENTRY_BRAKE = 1;
 /** Brakes shorten a roll down to this and no further — a car always moves (§11). */
 export const MIN_MOVE_STEPS = 1;
 
+// ─── Undo (docs/undo.md) ─────────────────────────────────────────────────────
+
+/**
+ * How many snapshots the undo stack keeps. A move that offers a tow and the
+ * tow that follows it is the depth the game actually needs — raising it costs
+ * one character and bytes on every save, so it waits for somebody to actually
+ * hit the wall.
+ */
+export const UNDO_STACK_DEPTH = 2;
+
 // ─── Board geometry (§5.1, §10) ─────────────────────────────────────────────
 
 /** The key a (row, lane) pair is looked up by in an occupancy or slick set. */

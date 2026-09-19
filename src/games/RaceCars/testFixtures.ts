@@ -8,6 +8,9 @@
 import { MAX_PLAYERS, type RaceCarsTrack } from "./board";
 import { deriveTrack, plainTileId, type TrackSection } from "./tracks/sections";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
+import { RaceCarsGameType, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream, RaceCarsUndo } from "./RaceCarsLogic";
+import type { IRaceCarsGameData } from "./RaceCarsModels";
+import { runCommand } from "@/utils/games/commandPipeline";
 
 /**
  * One car on the grid, with §11's Balanced pools and gear 3 — the workhorse
@@ -59,8 +62,92 @@ export function race(
         roundIndex: 0,
         slicks: [],
         players,
+        undoStack: [],
+        undoAnchorId: null,
         ...overrides,
     };
+}
+
+// ─── Command harness (mirrors SolitaireLogic.test.ts) ───────────────────────
+// RaceCarsLogic.test.ts wrote these first and undo.test.ts wants the same
+// ones, and a second copy is the signal to extract the first (AGENTS.md).
+// Race Cars' specificGameState is a fully typed schema (§23.4), so — like
+// Banned Islet and Outbreak — nothing here needs markModified: Mongoose tracks
+// those mutations itself, and a plain object has no such method to call.
+
+/**
+ * A game around `state`. `turnOrder` is the **join order**, given separately
+ * from `roundOrder` on purpose: §23.2's whole point is that the two are
+ * different arrays and only one of them is the race order.
+ */
+export function makeGame(
+    state: IRaceCarsSpecificGameState,
+    turnOrder: string[] = [...state.roundOrder],
+): IRaceCarsGameData {
+    return {
+        gameId: "g",
+        currentTurn: state.roundOrder[state.roundIndex],
+        userIdList: turnOrder,
+        gameState: { turnOrder, history: [], commandHistory: [] },
+        specificGameState: state,
+        complete: false,
+        winner: "",
+    } as unknown as IRaceCarsGameData;
+}
+
+export function launch(fields: Partial<RaceCarsLaunch>, senderId = "a"): RaceCarsLaunch {
+    const command = new RaceCarsLaunch();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
+export function shift(fields: Partial<RaceCarsShift>, senderId = "a"): RaceCarsShift {
+    const command = new RaceCarsShift();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
+export function move(fields: Partial<RaceCarsMove>, senderId = "a"): RaceCarsMove {
+    const command = new RaceCarsMove();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
+export function slipstream(fields: Partial<RaceCarsSlipstream>, senderId = "a"): RaceCarsSlipstream {
+    const command = new RaceCarsSlipstream();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
+export function undo(senderId = "a"): RaceCarsUndo {
+    const command = new RaceCarsUndo();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return command;
+}
+
+/** One command through the pipeline the command route, replay and the cron all use. */
+export function run(
+    game: IRaceCarsGameData,
+    command: RaceCarsLaunch | RaceCarsShift | RaceCarsMove | RaceCarsSlipstream | RaceCarsUndo,
+) {
+    return runCommand(game, new RaceCarsGameType(), command);
+}
+
+export function cars(game: IRaceCarsGameData): Map<string, IRaceCarsPlayerState> {
+    return game.specificGameState.players as Map<string, IRaceCarsPlayerState>;
+}
+
+export function seat(game: IRaceCarsGameData, userId: string): IRaceCarsPlayerState {
+    return cars(game).get(userId)!;
+}
+
+export function log(game: IRaceCarsGameData): string {
+    return game.gameState.history[0].text;
 }
 
 /**

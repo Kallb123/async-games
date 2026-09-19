@@ -31,6 +31,7 @@ import {
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
 import { race } from '@/games/RaceCars/testFixtures';
+import { mongoMap } from '@/utils/games/mongoMaps';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
@@ -443,6 +444,113 @@ describe('POST /api/game/command', () => {
         await runAfterCallbacks();
         expect(recordGameResult).toHaveBeenCalledTimes(1);
         expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+    });
+
+    /**
+     * BOB far enough down the road that ANN's move offers no tow, so it ends
+     * her turn outright and CheckEndTurn hands off to him immediately — the
+     * ordinary case `RaceCarsUndo`'s `ignoresTurnGate` exists for (this
+     * route's own "is it your turn" gate would otherwise refuse ANN's very
+     * next request, since `currentTurn` is already BOB's by the time it could
+     * arrive). `players` is stored flattened to a plain object, same as
+     * `asStored` (this file's own stand-in for a real Mongoose save) does to
+     * every Map — seeding the live Map straight from `race()` would round-trip
+     * through this store's own JSON.stringify as `{}`, an empty grid.
+     */
+    function raceCarsGridWithAMoveOffered() {
+        const grid = race({
+            [ANN.id]: { phase: 'move', roll: 7, row: 20, lane: 2 },
+            [BOB.id]: { row: 70, lane: 1 },
+        });
+        seedGame({
+            gameId: 'game_1',
+            gameType: {
+                gameId: 'gametype_1', gameType: 'RaceCars', friendlyName: 'Race Cars',
+                icon: '', url: 'racecars', className: 'RaceCarsGameType'
+            },
+            kind: 'RaceCarsGameData',
+            userIdList: [ANN.id, BOB.id],
+            turnTimer: '1 day',
+            currentTurn: ANN.id,
+            lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
+            complete: false,
+            winner: '',
+            specificGameState: { ...grid, players: Object.fromEntries(mongoMap(grid.players)) },
+        });
+    }
+
+    it("undoes a move that already handed the turn on, restoring it to the driver who made it", async () => {
+        signIn(ANN);
+        raceCarsGridWithAMoveOffered();
+
+        const moveResponse = await command(jsonPost('/api/game/command', {
+            id: '22222222-2222-2222-2222-222222222222',
+            timestamp: '2026-01-01T00:00:01.000Z',
+            gameId: 'game_1',
+            senderId: ANN.id,
+            senderUsername: 'ann',
+            className: 'RaceCarsMove',
+            row: 27,
+            lane: 1,
+            brake: 0,
+        }));
+        expect(moveResponse.status).toBe(200);
+        expect((await moveResponse.json()).outcome.turnOver).toBe(true);
+        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+
+        const undoResponse = await command(jsonPost('/api/game/command', {
+            id: '33333333-3333-3333-3333-333333333333',
+            timestamp: '2026-01-01T00:00:02.000Z',
+            gameId: 'game_1',
+            senderId: ANN.id,
+            senderUsername: 'ann',
+            className: 'RaceCarsUndo',
+        }));
+
+        expect(undoResponse.status).toBe(200);
+        expect((await undoResponse.json()).outcome.validMove).toBe(true);
+        const saved = storedGame('game_1')!;
+        // Not just specificGameState — the hand-off itself came back too.
+        expect(saved.currentTurn).toBe(ANN.id);
+        expect(commandHistory(saved)).toHaveLength(2);
+    });
+
+    it("still refuses an undo from anyone other than the driver whose move it would take back", async () => {
+        signIn(ANN);
+        raceCarsGridWithAMoveOffered();
+
+        await command(jsonPost('/api/game/command', {
+            id: '22222222-2222-2222-2222-222222222222',
+            timestamp: '2026-01-01T00:00:01.000Z',
+            gameId: 'game_1',
+            senderId: ANN.id,
+            senderUsername: 'ann',
+            className: 'RaceCarsMove',
+            row: 27,
+            lane: 1,
+            brake: 0,
+        }));
+        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+
+        // BOB is legitimately on turn now, but the anchor's own check (not the
+        // gate `ignoresTurnGate` skipped) is what refuses him taking back a
+        // move that isn't his.
+        signIn(BOB);
+        const undoResponse = await command(jsonPost('/api/game/command', {
+            id: '44444444-4444-4444-4444-444444444444',
+            timestamp: '2026-01-01T00:00:02.000Z',
+            gameId: 'game_1',
+            senderId: BOB.id,
+            senderUsername: 'bob',
+            className: 'RaceCarsUndo',
+        }));
+
+        expect(undoResponse.status).toBe(401);
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(BOB.id);
+        expect(commandHistory(saved)).toHaveLength(1);
     });
 });
 

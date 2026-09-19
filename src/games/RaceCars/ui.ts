@@ -22,7 +22,11 @@ import type { IRaceCarsSpecificGameStateResponse } from './apiModels';
  * is a rename and not a conversion.
  */
 export function rulesState(gs: IRaceCarsSpecificGameStateResponse): IRaceCarsSpecificGameState {
-    return { ...gs, players: gs.playerStates };
+    // The response never carries the undo stack (docs/undo.md §8) and nothing
+    // downstream of this conversion reads it — `recomputeRoundOrder` and every
+    // other rules.ts function `rulesState` feeds only look at the board — so
+    // these are a fresh empty pair rather than anything read off the wire.
+    return { ...gs, players: gs.playerStates, undoStack: [], undoAnchorId: null };
 }
 
 /**

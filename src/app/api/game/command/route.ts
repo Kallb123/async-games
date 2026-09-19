@@ -5,7 +5,7 @@ import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { ICommandOutcome, IGameCommand, IGameType, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
+import { ICommandOutcome, IGameCommand, IGameType, ignoresTurnGate, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
 import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
@@ -127,7 +127,12 @@ export async function POST(request: NextRequest) {
   }
   const gameData = found.game;
 
-  if (userId !== gameData.currentTurn) {
+  // A command that opts out (see `ignoresTurnGate`) is trusted to police its
+  // own authority inside `Execute` — docs/undo.md's RaceCarsUndo, whose
+  // ordinary case is a move or tow that already ended the sender's own turn,
+  // and so would fail this gate on every real request before ever reaching
+  // the anchor check that actually decides it.
+  if (userId !== gameData.currentTurn && !ignoresTurnGate(commandRequest)) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
   }
 
