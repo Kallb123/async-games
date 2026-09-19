@@ -13,6 +13,7 @@ import {
     isValidTurnTimer,
     needsSweeping,
     parseTurnTimerMs,
+    secondsUntil,
     warningThresholdMs,
 } from './TurnTimer';
 
@@ -52,6 +53,29 @@ describe('formatRemainingUntil', () => {
 
     it('has nothing to say before hydration', () => {
         expect(formatRemainingUntil(inMs(60 * 60 * 1000), null)).toBeNull();
+    });
+});
+
+describe('secondsUntil', () => {
+    const now = new Date('2026-08-25T12:00:00.000Z').getTime();
+    const inMs = (ms: number) => new Date(now + ms).toISOString();
+
+    it('counts down in whole seconds', () => {
+        expect(secondsUntil(inMs(10_000), now)).toBe(10);
+        expect(secondsUntil(inMs(1_000), now)).toBe(1);
+    });
+
+    it('rounds a partial second up, so the display never flashes 0 early', () => {
+        expect(secondsUntil(inMs(9_400), now)).toBe(10);
+    });
+
+    it('never counts below zero', () => {
+        expect(secondsUntil(inMs(-5_000), now)).toBe(0);
+        expect(secondsUntil(inMs(0), now)).toBe(0);
+    });
+
+    it('has nothing to say before hydration', () => {
+        expect(secondsUntil(inMs(10_000), null)).toBeNull();
     });
 });
 
