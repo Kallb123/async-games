@@ -253,6 +253,30 @@ button {
 .ag-section { padding: 20px 20px 0; }
 .ag-section--center { display: flex; justify-content: center; }
 
+/* The sign-in and sign-up screens (`AuthCardStack`): the app's own Google
+   button stacked over Clerk's card. Composes `.ag-stack` for the column and
+   its gap; all this adds is the width, because Clerk sizes its card at 25rem
+   and the button above it should match the thing it belongs to rather than
+   the whole page column.
+
+   The modifier is set only in the native shell, and hides Clerk's *own* Google
+   button: in the app it can only ever produce an error, since Google won't
+   serve its consent screen to a WebView, so ours replaces it rather than
+   sitting beside it (and a shell too old for ours says so in its place).
+   `cl-socialButtonsBlockButton__google` is Clerk's own class for that button —
+   the same name its `appearance.elements` API uses, which is why
+   `utils/ui/clerkAppearance.ts` names this rule as the one piece of Clerk
+   styling that doesn't live there. That API can't do this job: it's handed to
+   `<ClerkProvider>` on the server, which has no idea which of the two skins it
+   is rendering for. If a Clerk release renames the class the symptom is two
+   Google buttons on this screen, one of which errors. Microsoft's button is
+   untouched — that one works in the app. */
+.ag-auth-stack { width: min(100%, 25rem); }
+.ag-auth-stack--native .cl-socialButtonsBlockButton__google,
+.ag-auth-stack--native .cl-socialButtonsIconButton__google {
+    display: none;
+}
+
 .ag-section-head {
     display: flex;
     align-items: baseline;

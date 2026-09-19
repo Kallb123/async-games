@@ -1,6 +1,7 @@
 'use client'
 
 import AuthScreen from "@/components/ui/AuthScreen";
+import AuthCardStack from "@/components/ui/AuthCardStack";
 import { SignUp } from "@clerk/nextjs";
 
 // Catch-all route, for the same reason as `/login`: sign-up's later steps
@@ -8,7 +9,9 @@ import { SignUp } from "@clerk/nextjs";
 export default function Signup() {
   return (
     <AuthScreen title="Start playing" subtitle="Create an account to join a game.">
-      <SignUp />
+      <AuthCardStack>
+        <SignUp />
+      </AuthCardStack>
     </AuthScreen>
   );
 }

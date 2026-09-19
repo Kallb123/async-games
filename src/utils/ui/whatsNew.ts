@@ -126,8 +126,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Fixed Google sign-in on the Android app",
-                detail: "Picking a Google account on the Android app's sign-in screen showed a Clerk error instead of signing you in — the app's WebView was sending that part of the round trip to your phone's browser instead of keeping it in-app, so it never made it back. Email and password sign-in were unaffected.",
+                title: "Google and Microsoft sign-in work in the Android app",
+                detail: "Signing in to the app with Google or Microsoft dumped you into your phone's browser and left you there on an error instead of signing you in. Google now uses the phone's own account picker — tap the account you're already signed in to and you're in, no password and no browser — and Microsoft stays in the app where it belongs. Email and password were never affected. You'll need the latest version of the app from the Play Store.",
             },
             {
                 title: "The party size line no longer spills past the edge of the setup screen",

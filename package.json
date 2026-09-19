@@ -19,12 +19,12 @@
   "dependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",
-    "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.0",
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
+    "@capgo/capacitor-social-login": "^8.5.10",
     "@clerk/nextjs": "^7",
     "bootstrap": "^5",
     "firebase": "^12",

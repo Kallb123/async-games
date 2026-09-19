@@ -42,6 +42,7 @@ Point two Clerk instances at one database and:
 | Firebase Admin (`FIREBASE_*`) | one project is fine on both sides — device tokens live in Clerk private metadata, so they partition with the instance |
 | `KLIPY_API_KEY` | its own key, so the GIF and meme pickers' quota and analytics are production's | a different key, or unset — with none both pickers report "unavailable" and the rest of chat is unaffected. KLIPY issues a *test* key (a small hourly budget) from the same panel, which is what a preview or a `localhost` should hold |
 | `ANDROID_APP_FINGERPRINT` | the release keystore's SHA-256, so Android opens `asyncgames.com` links in the app | unset, unless you're verifying a debug-signed APK against a preview — then that keystore's SHA-256 |
+| `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` | the web client ID of the Google Cloud project the *production* Clerk instance's Google connection uses, so the app can sign in with Google natively | unset, unless the dev instance has been pointed at custom Google credentials of its own — a Clerk instance on its shared Google credentials has no client ID to give, and the app simply offers no Google button |
 
 Nothing in `src/` is instance- or database-aware. `dbConnect()`
 (`src/utils/mongodb/mongodb.ts`) hands `MONGODB_URI` straight to
