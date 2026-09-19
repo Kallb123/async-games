@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
@@ -108,6 +108,10 @@ export default function SettlementsAndCitiesActions({
     const holdDeadline = gs.autoEndTurnAt ?? manualHoldDeadline;
     const now = useNow(holdDeadline !== null);
 
+    const submit = useCallback((cmd: IGameCommand, target: string) => {
+        submitCommand(cmd, () => { setBoardMode('idle'); setManualHoldDeadline(null); }, target);
+    }, [submitCommand, setBoardMode]);
+
     // The deadline closing fires the same end turn a tap on "Pass now" would —
     // re-read immediately before sending, so a last-second Undo (which clears
     // both `autoEndTurnAt` and this state's own copy) stands it down. Ignored
@@ -116,8 +120,8 @@ export default function SettlementsAndCitiesActions({
     useEffect(() => {
         if (holdDeadline === null || now === null) return;
         if (now < new Date(holdDeadline).getTime()) return;
-        submitCommand(new SACEndTurn(), () => { setBoardMode('idle'); setManualHoldDeadline(null); }, 'endTurn');
-    }, [now, holdDeadline, submitCommand, setBoardMode]);
+        submit(new SACEndTurn(), 'endTurn');
+    }, [now, holdDeadline, submit]);
 
     const myState = gs.playerStates[myUserId];
     const myDevCards = gs.playerDevCards?.[myUserId];
@@ -133,9 +137,6 @@ export default function SettlementsAndCitiesActions({
     const canUndo = gs.canUndo;
     const countdown = holdDeadline !== null ? secondsUntil(holdDeadline, now) : null;
 
-    function submit<T extends IGameCommand>(cmd: T, target: string) {
-        submitCommand(cmd, () => { setBoardMode('idle'); setManualHoldDeadline(null); }, target);
-    }
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);
     }
