@@ -71,27 +71,17 @@ const SETUP_VERTEX = BOARD_TOPOLOGY.hexVertices[0][0];
 const SETUP_EDGE = BOARD_TOPOLOGY.vertexEdges[SETUP_VERTEX][0];
 
 // A main-phase board with u1 already holding a settlement (so a road off it is
-// legal) and the resources to build one road twice over.
-function mainBoardWithRoad() {
+// legal) — resources to build one road twice over by default, plus a Knight,
+// which is enough left over that building the one road doesn't leave nothing
+// else to do. Pass `{ resources: { brick: 1, lumber: 1 } }` (and no dev cards)
+// for exactly the opposite — the one road and nothing else — which is what
+// docs/undo.md §5's hold needs to test against.
+function mainBoardWithRoad(overrides: Parameters<typeof player>[0] = { resources: { brick: 2, lumber: 2 }, devCards: { knight: 1 } }) {
     const gs = makeState(emptyBoard());
     const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
     gs.vertices[vertexId] = { building: "settlement", owner: "u1" };
     const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
-    gs.playerStates.set("u1", player({ resources: { brick: 2, lumber: 2 }, devCards: { knight: 1 } }));
-    gs.playerStates.set("u2", player());
-    return { gs, edgeId };
-}
-
-// Same shape as mainBoardWithRoad, but with exactly enough for the one road
-// and nothing else — no spare resource to trade even at 4:1, no dev card in
-// hand or in the deck — so building it leaves u1 with nothing left to build,
-// buy or trade (docs/undo.md §5's hold).
-function mainBoardReadyToFinish() {
-    const gs = makeState(emptyBoard());
-    const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
-    gs.vertices[vertexId] = { building: "settlement", owner: "u1" };
-    const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
-    gs.playerStates.set("u1", player({ resources: { brick: 1, lumber: 1 } }));
+    gs.playerStates.set("u1", player(overrides));
     gs.playerStates.set("u2", player());
     return { gs, edgeId };
 }
@@ -252,7 +242,7 @@ describe("Settlements & Cities — who may undo", () => {
 
 describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5)", () => {
     it("holds a main-phase build that leaves nothing else to do, rather than ending the turn", async () => {
-        const { gs, edgeId } = mainBoardReadyToFinish();
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 1, lumber: 1 } });
         const game = makeGame(gs);
         const road = cmd(new SACBuildRoad());
         road.edgeId = edgeId;
@@ -268,7 +258,7 @@ describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5
     });
 
     it("undoing that build clears the hold and leaves the turn with its player", async () => {
-        const { gs, edgeId } = mainBoardReadyToFinish();
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 1, lumber: 1 } });
         const game = makeGame(gs);
         const road = cmd(new SACBuildRoad());
         road.edgeId = edgeId;

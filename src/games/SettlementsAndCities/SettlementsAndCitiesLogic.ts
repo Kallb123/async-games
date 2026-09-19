@@ -127,18 +127,24 @@ function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameComma
 // Not cleared here, on a turn hand-off: a hand-off runs in the same breath as
 // the very push a placement's own hold needs to survive (see sacFinishTurn's
 // setup branch below), so clearing it here would make that placement's undo
-// unreachable the instant it happened. `sacAdvanceMainTurn`/`sacAdvanceSetup`
-// clear it instead, once the hand-off is actually final.
+// unreachable the instant it happened. sacClearUndo (below), called from
+// sacAdvanceMainTurn/sacAdvanceSetup, clears it instead, once the hand-off is
+// actually final.
+
+// The hand-off is final — undo (and the hold it can trigger, §5) never crosses
+// a turn boundary, since the new mover may already have opened the board
+// (docs/undo.md §14). Called from both places currentTurn actually changes to
+// a different player.
+function sacClearUndo(gs: ISettlementsAndCitiesGameData['specificGameState']): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
+    gs.autoEndTurnAt = null;
+}
 
 // ─── Helper: advance setup turn ──────────────────────────────────────────────
 function sacAdvanceSetup(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
-    // The hand-off is final now — undo (and the hold it can trigger, §5) never
-    // crosses a turn boundary, since the new mover may already have opened the
-    // board (docs/undo.md §14).
-    gs.undoStack = [];
-    gs.undoAnchorId = null;
-    gs.autoEndTurnAt = null;
+    sacClearUndo(gs);
     const N = sacData.gameState.turnOrder.length;
     gs.setupStep++;
     if (gs.setupStep >= 2 * N) {
@@ -290,12 +296,7 @@ function sacFinishTurn(
 // like the flag itself, only once the next roll lands and overwrites both.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
-    // The hand-off is final now — undo (and the hold it can trigger, §5) never
-    // crosses a turn boundary, since the new mover may already have opened the
-    // board (docs/undo.md §14).
-    gs.undoStack = [];
-    gs.undoAnchorId = null;
-    gs.autoEndTurnAt = null;
+    sacClearUndo(gs);
     gs.hasRolled = false;
     if (!gs.lastRollAutoEnded) {
         gs.lastRoll = null;
