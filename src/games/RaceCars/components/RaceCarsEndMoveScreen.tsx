@@ -5,6 +5,8 @@ import { arrivalHeadline, arrivalLine } from '@/games/RaceCars/narration';
 import { gearDef, gearName, trackById, type RaceCarsGear } from '@/games/RaceCars/board';
 import { meta } from '@/games/RaceCars/meta';
 import { pluralize } from '@/utils/ui/text';
+import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
+import RaceCarsUndoHold from '@/games/RaceCars/components/RaceCarsUndoHold';
 
 interface RaceCarsEndMoveScreenProps {
     trackId: string;
@@ -16,6 +18,16 @@ interface RaceCarsEndMoveScreenProps {
     roll: { gear: RaceCarsGear | null; value: number } | null;
     arrival: IRaceCarsArrivalOutcome['arrival'];
     onDismiss: () => void;
+    /**
+     * `gs.autoEndTurnAt` / `gs.canUndo` (docs/undo.md §5), read live rather
+     * than off this outcome: a driver who leaves this reveal open shouldn't
+     * see it go stale — the hold it names is still counting down underneath,
+     * whether or not they've dismissed back to the board to watch it.
+     */
+    holdDeadline: string | null;
+    canUndo: boolean;
+    submitCommand: SubmitCommand;
+    pendingTarget: string | null;
 }
 
 // Two dots, read alongside the glyph rather than instead of it: the road the
@@ -48,7 +60,7 @@ function legSummary(roll: { gear: RaceCarsGear | null; value: number } | null): 
  * could have taken and is the wrong one here: it reveals *one* number, and a
  * Race Cars move is a sequence.
  */
-export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismiss }: RaceCarsEndMoveScreenProps) {
+export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismiss, holdDeadline, canUndo, submitCommand, pendingTarget }: RaceCarsEndMoveScreenProps) {
     const track = trackById(trackId);
     const events: TurnRecapEvent[] = arrival.events.flatMap((event, index) => {
         const line = arrivalLine(track, event, arrival);
@@ -71,6 +83,15 @@ export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismis
                 glyph: '🌀',
                 text: 'You finished in another car’s tow — three rows, if you want them. Tap a highlighted space on the circuit to take the slipstream, or wave it away.',
             } : null}
+            footer={holdDeadline !== null || canUndo ? (
+                <RaceCarsUndoHold
+                    holdDeadline={holdDeadline}
+                    canUndo={canUndo}
+                    submitCommand={submitCommand}
+                    pendingTarget={pendingTarget}
+                    nested
+                />
+            ) : null}
             cta={{ label: arrival.towOffered ? 'Choose the tow' : 'Back to the board', onClick: onDismiss }}
         />
     );

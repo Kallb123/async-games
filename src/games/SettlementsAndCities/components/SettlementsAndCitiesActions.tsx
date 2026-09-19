@@ -1,5 +1,5 @@
 'use client'
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
@@ -11,8 +11,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
-import { useNow } from '@/utils/hooks/useNow';
-import { countdownFillPercent, secondsUntil } from '@/utils/games/TurnTimer';
+import { useUndoHold } from '@/utils/hooks/useUndoHold';
 import {
     SACRollDice,
     SACEndTurn,
@@ -100,28 +99,21 @@ export default function SettlementsAndCitiesActions({
     // The server holds a turn open by setting `gs.autoEndTurnAt`; a manually
     // tapped "End turn" after an undoable move holds it the same way, purely
     // client-side, so both endings land at the same offset (§5 "Why a manual
-    // End turn waits too"). Whichever set it, the countdown and the eventual
-    // SACEndTurn are driven from here the same way. Hooks stay above every
-    // early return in this component, so these run before the `!myState` one
-    // below rather than after it.
+    // End turn waits too"). Whichever set it, `useUndoHold` drives the
+    // countdown and the eventual SACEndTurn the same way — it re-reads the
+    // deadline every tick, so a last-second Undo (which clears both
+    // `autoEndTurnAt` and this state's own copy) stands the auto-fire down.
+    // Hooks stay above every early return in this component, so these run
+    // before the `!myState` one below rather than after it.
     const [manualHoldDeadline, setManualHoldDeadline] = useState<string | null>(null);
     const holdDeadline = gs.autoEndTurnAt ?? manualHoldDeadline;
-    const now = useNow(holdDeadline !== null);
 
     const submit = useCallback((cmd: IGameCommand, target: string) => {
         submitCommand(cmd, () => { setBoardMode('idle'); setManualHoldDeadline(null); }, target);
     }, [submitCommand, setBoardMode]);
 
-    // The deadline closing fires the same end turn a tap on "Pass now" would —
-    // re-read immediately before sending, so a last-second Undo (which clears
-    // both `autoEndTurnAt` and this state's own copy) stands it down. Ignored
-    // by submitCommand while another command is already in flight, so a tick
-    // landing mid-request simply tries again next second.
-    useEffect(() => {
-        if (holdDeadline === null || now === null) return;
-        if (now < new Date(holdDeadline).getTime()) return;
-        submit(new SACEndTurn(), 'endTurn');
-    }, [now, holdDeadline, submit]);
+    const onHoldExpire = useCallback(() => submit(new SACEndTurn(), 'endTurn'), [submit]);
+    const { countdown, fillPct: countdownFillPct } = useUndoHold(holdDeadline, UNDO_WINDOW_MS, onHoldExpire);
 
     const myState = gs.playerStates[myUserId];
     const myDevCards = gs.playerDevCards?.[myUserId];
@@ -135,8 +127,6 @@ export default function SettlementsAndCitiesActions({
     const playedDevCard = gs.playedDevCard;
     const specialBuild = gs.specialBuildActive;
     const canUndo = gs.canUndo;
-    const countdown = holdDeadline !== null ? secondsUntil(holdDeadline, now) : null;
-    const countdownFillPct = holdDeadline !== null ? countdownFillPercent(holdDeadline, now, UNDO_WINDOW_MS) : 0;
 
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);

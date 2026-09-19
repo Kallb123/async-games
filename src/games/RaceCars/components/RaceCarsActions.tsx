@@ -1,17 +1,15 @@
 'use client'
-import React, { useEffect } from 'react';
-import ActionButton from '@/components/ui/ActionButton';
+import React from 'react';
 import BuildRow from '@/components/ui/BuildRow';
 import PendingTag from '@/components/ui/PendingTag';
 import ReadOnlyPanel from '@/components/ui/ReadOnlyPanel';
 import RollReadout from '@/components/ui/RollReadout';
 import Stepper from '@/components/ui/Stepper';
 import { pluralize } from '@/utils/ui/text';
-import { useNow } from '@/utils/hooks/useNow';
-import { countdownFillPercent, secondsUntil } from '@/utils/games/TurnTimer';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
-import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsShift, RaceCarsSlipstream, RaceCarsUndo } from '@/utils/apiModels/GameLogic';
+import { RaceCarsLaunch, RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
+import RaceCarsUndoHold from '@/games/RaceCars/components/RaceCarsUndoHold';
 import {
     cornerAt,
     cornerReaches,
@@ -25,7 +23,6 @@ import {
     START_FLYING_SPACES,
     START_STALL_FACE,
     trackById,
-    UNDO_WINDOW_MS,
     type RaceCarsCorner,
     type RaceCarsCornerReach,
     type RaceCarsGear,
@@ -204,62 +201,28 @@ interface RaceCarsActionsProps {
  * it, and `disabled` on the fieldset is what takes it out of play.
  */
 export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options, submitCommand, pendingTarget, readOnly }: RaceCarsActionsProps) {
-    // ── Undo & the ten-second hold (docs/undo.md §5) ────────────────────────
-    // The server holds a turn open by setting `gs.autoEndTurnAt` once a leg
-    // that ended the turn turns out to still be undoable (`raceCarsFinishTurn`).
-    // Unlike Settlements & Cities' post-roll build phase, there is no manual
-    // "End turn" to hold client-side here — a Race Cars turn has always ended
-    // itself the instant nothing was left to decide, and the hold is the first
-    // time that stops being immediate, so `RaceCarsEndTurn` only ever closes a
-    // hold the server itself opened. `gs.autoEndTurnAt` is redacted to only the
-    // driver it is held for (docs/undo.md §8, same test as `gs.canUndo`), so
-    // this never fires for anyone reading the board off-turn. Hooks stay above
-    // every early return, same reason as SettlementsAndCitiesActions.
-    const holdDeadline = gs.autoEndTurnAt;
-    const now = useNow(holdDeadline !== null);
-
-    // The deadline closing fires the same end turn a tap on "Pass now" would —
-    // re-read immediately before sending, so a last-second Undo (which clears
-    // `autoEndTurnAt` in the same response) stands it down. Ignored by
-    // submitCommand while another command is already in flight, so a tick
-    // landing mid-request simply tries again next second.
-    useEffect(() => {
-        if (holdDeadline === null || now === null) return;
-        if (now < new Date(holdDeadline).getTime()) return;
-        submitCommand(new RaceCarsEndTurn(), undefined, 'endTurn');
-    }, [now, holdDeadline, submitCommand]);
-
     const ps = gs.playerStates[myUserId];
     if (!ps) return null;
 
-    if (!readOnly && holdDeadline !== null) {
-        const countdown = secondsUntil(holdDeadline, now);
-        const countdownFillPct = countdownFillPercent(holdDeadline, now, UNDO_WINDOW_MS);
+    // ── Undo & the ten-second hold (docs/undo.md §5) ────────────────────────
+    // `RaceCarsUndoHold` owns the countdown, the auto-fire at zero and the
+    // Pass now / Undo controls — shared with the end-of-move reveal
+    // (`RaceCarsEndMoveScreen`) so the hold counts down whichever screen the
+    // driver is actually looking at. Unlike Settlements & Cities' post-roll
+    // build phase, there is no manual "End turn" to hold client-side here — a
+    // Race Cars turn has always ended itself the instant nothing was left to
+    // decide, and the hold is the first time that stops being immediate. A
+    // held turn has nothing else to decide, so it replaces the whole panel;
+    // mid-sequence `canUndo` (the tow decision, below) does not — the driver
+    // still has the tow to answer, and Undo sits alongside it.
+    if (!readOnly && gs.autoEndTurnAt !== null) {
         return (
-            <div className="ag-actionsheet">
-                <div className="ag-action-grid">
-                    <ActionButton
-                        className="ag-btn ag-btn--success ag-btn--countdown"
-                        style={{ padding: '14px 0', fontSize: 15, '--ag-countdown-fill': `${countdownFillPct}%` } as React.CSSProperties}
-                        pending={pendingTarget === 'endTurn'}
-                        pendingLabel="Finishing…"
-                        onClick={() => submitCommand(new RaceCarsEndTurn(), undefined, 'endTurn')}
-                    >
-                        Pass now
-                    </ActionButton>
-                    {gs.canUndo && (
-                        <ActionButton
-                            className="ag-btn ag-btn--light"
-                            pending={pendingTarget === 'undo'}
-                            pendingLabel="Undoing…"
-                            onClick={() => submitCommand(new RaceCarsUndo(), undefined, 'undo')}
-                        >
-                            ↩ Undo
-                        </ActionButton>
-                    )}
-                </div>
-                {countdown !== null && <p className="ag-hint">Turn passes in {countdown}s</p>}
-            </div>
+            <RaceCarsUndoHold
+                holdDeadline={gs.autoEndTurnAt}
+                canUndo={gs.canUndo}
+                submitCommand={submitCommand}
+                pendingTarget={pendingTarget}
+            />
         );
     }
 
@@ -325,18 +288,13 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
                         }}
                     />
                 </div>
-                {gs.canUndo && (
-                    <div className="ag-action-grid" style={{ marginTop: 10 }}>
-                        <ActionButton
-                            className="ag-btn ag-btn--light"
-                            pending={pendingTarget === 'undo'}
-                            pendingLabel="Undoing…"
-                            onClick={() => submitCommand(new RaceCarsUndo(), undefined, 'undo')}
-                        >
-                            ↩ Undo
-                        </ActionButton>
-                    </div>
-                )}
+                <RaceCarsUndoHold
+                    holdDeadline={null}
+                    canUndo={gs.canUndo}
+                    submitCommand={submitCommand}
+                    pendingTarget={pendingTarget}
+                    nested
+                />
             </div>
         );
     }

@@ -295,6 +295,10 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                 roll={arrival.roll}
                 arrival={arrival.towOffered && !towing ? { ...arrival, towOffered: false } : arrival}
                 onDismiss={dismissReveal}
+                holdDeadline={gs.autoEndTurnAt}
+                canUndo={gs.canUndo}
+                submitCommand={submitCommand}
+                pendingTarget={pendingTarget}
             />
         );
     }
