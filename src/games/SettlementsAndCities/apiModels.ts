@@ -120,6 +120,10 @@ export interface ISACSpecificGameStateResponse {
     // True when the viewer has a move of their own they can still take back
     // (docs/undo.md). The stack it's computed from never leaves the server.
     canUndo: boolean;
+    // When this viewer's turn will pass on its own unless they take their last
+    // move back first (docs/undo.md §5). ISO, or null — including for anyone
+    // it isn't held for, same as canUndo.
+    autoEndTurnAt: string | null;
 }
 
 export interface ISACGameDataResponse extends IGameDataResponse {

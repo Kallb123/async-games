@@ -46,7 +46,10 @@ describe("Settlements & Cities turn timeout — setup phase", () => {
         const game = makeGame(gs);
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
-        expect(playedClassNames(game)).toEqual(["SACPlaceSettlementSetup", "SACPlaceRoadSetup"]);
+        // The road holds the turn open for its own undo window (docs/undo.md
+        // §5) rather than ending it outright, so the sweep closes it with the
+        // same SACEndTurn a live player's expired countdown would send.
+        expect(playedClassNames(game)).toEqual(["SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACEndTurn"]);
 
         const settlementVertex = gs.vertices.findIndex(v => v.owner === "u1");
         expect(settlementVertex).toBeGreaterThanOrEqual(0);
@@ -81,7 +84,8 @@ describe("Settlements & Cities turn timeout — setup phase", () => {
         const game = makeGame(gs);
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
-        expect(playedClassNames(game)).toEqual(["SACPlaceRoadSetup"]);
+        // Same hold as above — the sweep still has to close it with SACEndTurn.
+        expect(playedClassNames(game)).toEqual(["SACPlaceRoadSetup", "SACEndTurn"]);
 
         const road = gs.edges.findIndex(e => e.owner === "u1");
         expect(road).toBeGreaterThanOrEqual(0);

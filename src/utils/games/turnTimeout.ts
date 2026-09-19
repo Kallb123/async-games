@@ -302,6 +302,12 @@ registerTurnTimeoutAdapter({
                 road.edgeId = edgeId;
                 return road;
             }
+            // The road just placed is holding the turn open for its own undo
+            // window (docs/undo.md §5) rather than having ended it outright —
+            // an absent player doesn't get to sit through that wait, so the
+            // stalled-turn sweep closes it the same way the client would once
+            // the countdown ran out.
+            if (gs.autoEndTurnAt) return new SACEndTurn();
             const vertexId = randomSetupSettlementVertex(gs.vertices);
             if (vertexId === null) return null;
             const settlement = new SACPlaceSettlementSetup();

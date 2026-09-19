@@ -182,6 +182,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         victoryTarget,
         undoStack: [],
         undoAnchorId: null,
+        autoEndTurnAt: null,
     };
 
     const gameData: ISettlementsAndCitiesGameData = {
@@ -306,6 +307,7 @@ function makeSACStateSchemaDef() {
         // entire schema definition as its own nested type.
         undoStack: [{ by: String, state: Schema.Types.Mixed }],
         undoAnchorId: { type: String, default: null },
+        autoEndTurnAt: { type: String, default: null },
     };
 }
 
@@ -407,7 +409,10 @@ export function gameStateToResponse(
     // so putting it in front of the table says so. Everyone else gets what an
     // ordinary hand-off leaves — no dice, no payout, no flag — and a viewerless
     // response (buildAllEvents) counts as everyone else rather than matching a
-    // `lastRollAutoEndedBy` that has yet to be written.
+    // `lastRollAutoEndedBy` that has yet to be written. `autoEndTurnAt` below is
+    // the same shape of fact for the same reason: a held main-phase turn is held
+    // because its player could afford nothing, which is exactly what this keeps
+    // from the table.
     const hideAutoEndedRoll = gs.lastRollAutoEnded
         && (viewerId === null || gs.lastRollAutoEndedBy !== viewerId);
 
@@ -433,6 +438,11 @@ export function gameStateToResponse(
     // command would actually turn down.
     const topEntry = (gs.undoStack ?? []).at(-1);
     const canUndo = topEntry?.by === viewerId && gs.undoAnchorId === lastCommandId;
+
+    // Gated on exactly the same test as canUndo, not a separate "whose hold is
+    // this" field of its own: the two can never disagree about who it's for,
+    // since it's the same command that sets both (docs/undo.md §5, §8).
+    const autoEndTurnAt = canUndo ? (gs.autoEndTurnAt ?? null) : null;
 
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
@@ -469,6 +479,7 @@ export function gameStateToResponse(
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
         canUndo,
+        autoEndTurnAt,
     };
 }
 
