@@ -327,6 +327,68 @@ describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5
         expect(tooLate.outcome.validMove).toBe(false);
         expect(gs.setupStep).toBe(1);
     });
+
+    it("hides a special-build player's hold from the player queued behind them, even though the hand-off never explicitly clears the stack", async () => {
+        // sacAdvanceMainTurn/sacAdvanceSetup clear undoStack/undoAnchorId/
+        // autoEndTurnAt on a hand-off; sacAdvanceSpecialBuild's queue-to-queue
+        // shift (5-6 Player Extension) does not. That's still safe — the
+        // anchor already goes stale the instant the outgoing player's own
+        // SACEndTurn lands on commandHistory, before currentTurn even moves —
+        // but nothing else exercised a special-build hand-off, so this proves
+        // it rather than leaving it safe by accident (croupier review, PR 3).
+        const gs = makeState({
+            ...emptyBoard(),
+            hasRolled: true,
+            expansions: {
+                seasAndSailors: false,
+                knightsAndCommerce: false,
+                tradersAndRaiders: false,
+                explorersAndPirates: false,
+                fiveSixPlayerExtension: true,
+            },
+        });
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        gs.vertices[vertexId] = { building: "settlement", owner: "u2" };
+        const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player({ resources: { brick: 1, lumber: 1 } }));
+        gs.playerStates.set("u3", player());
+        const game = makeGame(gs, {
+            userIdList: ["u1", "u2", "u3"],
+            currentTurn: "u1",
+            gameState: { turnOrder: ["u1", "u2", "u3"], history: [], commandHistory: [] },
+        });
+        const NAMES = { u1: "Alice", u2: "Bob", u3: "Carol" };
+
+        // u1's main turn has nothing left to do either — opens the Special
+        // Build Phase and hands off to u2 first.
+        await run(game, cmd(new SACEndTurn(), "u1"));
+        expect(game.currentTurn).toBe("u2");
+        expect(gs.specialBuildActive).toBe(true);
+
+        // u2's special-build road leaves them nothing else to do — held open
+        // exactly like a main turn would be.
+        const road = cmd(new SACBuildRoad(), "u2");
+        road.edgeId = edgeId;
+        const built = await run(game, road);
+        expect(built.outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        const heldId = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, NAMES, "u2", heldId).canUndo).toBe(true);
+
+        // The hold expires (or u2 taps End turn) and hands the special-build
+        // turn to u3.
+        const ended = await run(game, cmd(new SACEndTurn(), "u2"));
+        expect(ended.outcome.turnOver).toBe(true);
+        expect(game.currentTurn).toBe("u3");
+
+        // Neither u2 (whose hold this was) nor u3 (whose turn it now is) can
+        // see it any more.
+        const afterHandoff = game.gameState.commandHistory.at(-1)!.id;
+        expect(gameStateToResponse(gs, NAMES, "u2", afterHandoff).canUndo).toBe(false);
+        expect(gameStateToResponse(gs, NAMES, "u2", afterHandoff).autoEndTurnAt).toBeNull();
+        expect(gameStateToResponse(gs, NAMES, "u3", afterHandoff).canUndo).toBe(false);
+    });
 });
 
 describe("Settlements & Cities — the undoable commands never consume randomness", () => {
