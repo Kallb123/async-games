@@ -35,6 +35,14 @@ interface TurnRecapProps {
      *  count) to show nothing. */
     chat?: { count: number; senders: string[] } | null;
     tip?: { glyph: string; text: string } | null;
+    /**
+     * Extra controls between the tip and the CTA — Race Cars' undo/hold pair
+     * is the one caller today (docs/undo.md §5): a leg that ended its
+     * driver's turn holds it open for ten seconds, and this is where that
+     * countdown (and the Undo it goes with) stays visible without making the
+     * driver dismiss back to the board first. Omit for nothing there.
+     */
+    footer?: React.ReactNode;
     cta: { label: string; onClick: () => void };
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
@@ -54,7 +62,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, cta, backHref = '/', viewerId, onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, footer, cta, backHref = '/', viewerId, onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -108,6 +116,8 @@ export default function TurnRecap({ header, since = "Since your last turn", summ
                         <span className="ag-recap-tip-text">{tip.text}</span>
                     </div>
                 )}
+
+                {footer}
 
                 <button className="ag-btn ag-btn--primary ag-btn--block ag-recap-cta" onClick={cta.onClick}>
                     {cta.label}

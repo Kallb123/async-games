@@ -72,6 +72,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Race Cars: take a move or a tow back",
+                detail: "Picked the wrong space, or took a slipstream tow you didn't mean to? Tap Undo and put the car back where it was — everything except the roll itself, which stays exactly as thrown. And if that move ended your turn, it now waits ten seconds before it passes, so you get the chance.",
+                game: "racecars",
+            },
+            {
                 title: "Take it back",
                 detail: "Placed a settlement or a road you didn't mean to in Settlements & Cities? Tap Undo and put it where you meant. And if that was the last thing you could do, your turn now waits ten seconds before it passes, so you get the chance.",
                 game: "settlementsandcities",
@@ -112,11 +117,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Settlements & Cities' player tabs expand for more detail",
                 detail: "Tap the row of player tabs at the top of the board and every seat opens at once: how many cards they're holding, how many knights they've played (tagged Largest Army if they hold it), and their longest stretch of road (tagged Longest Road if it's the longest on the board). Tap again to close them.",
-                game: "settlementsandcities",
-            },
-            {
-                title: "Settlements & Cities' result page charts how the dice actually fell",
-                detail: "A new bar chart at the bottom of the result page counts every roll of the game by its total, 2 through 12 — so you can see at a glance whether this game's dice ran hot on 7s or cold on the middle numbers, alongside the existing resources-per-round chart above it.",
                 game: "settlementsandcities",
             },
         ],

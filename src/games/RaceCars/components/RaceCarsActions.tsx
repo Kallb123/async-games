@@ -9,6 +9,7 @@ import { pluralize } from '@/utils/ui/text';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { RaceCarsLaunch, RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
+import RaceCarsUndoHold from '@/games/RaceCars/components/RaceCarsUndoHold';
 import {
     cornerAt,
     cornerReaches,
@@ -203,6 +204,28 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     const ps = gs.playerStates[myUserId];
     if (!ps) return null;
 
+    // ── Undo & the ten-second hold (docs/undo.md §5) ────────────────────────
+    // `RaceCarsUndoHold` owns the countdown, the auto-fire at zero and the
+    // Pass now / Undo controls — shared with the end-of-move reveal
+    // (`RaceCarsEndMoveScreen`) so the hold counts down whichever screen the
+    // driver is actually looking at. Unlike Settlements & Cities' post-roll
+    // build phase, there is no manual "End turn" to hold client-side here — a
+    // Race Cars turn has always ended itself the instant nothing was left to
+    // decide, and the hold is the first time that stops being immediate. A
+    // held turn has nothing else to decide, so it replaces the whole panel;
+    // mid-sequence `canUndo` (the tow decision, below) does not — the driver
+    // still has the tow to answer, and Undo sits alongside it.
+    if (!readOnly && gs.autoEndTurnAt !== null) {
+        return (
+            <RaceCarsUndoHold
+                holdDeadline={gs.autoEndTurnAt}
+                canUndo={gs.canUndo}
+                submitCommand={submitCommand}
+                pendingTarget={pendingTarget}
+            />
+        );
+    }
+
     const track = trackById(gs.trackId);
     // Where every corner sits from where this car stands, in spaces — one walk
     // of the road per render, read by every gear's band and by the tow prompt.
@@ -265,6 +288,13 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
                         }}
                     />
                 </div>
+                <RaceCarsUndoHold
+                    holdDeadline={null}
+                    canUndo={gs.canUndo}
+                    submitCommand={submitCommand}
+                    pendingTarget={pendingTarget}
+                    nested
+                />
             </div>
         );
     }
