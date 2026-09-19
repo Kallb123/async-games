@@ -129,6 +129,16 @@ export function consumedRandomness(command: IGameCommand): boolean {
 // deliberately left for its own hold (docs/undo.md §5) to close instead, and
 // giving another game's Undo command this exemption for free is a call for
 // whoever builds that game's own pilot, not a default it inherits.
+//
+// Nothing here checks that a command declaring this flag actually carries an
+// equivalent authority check inside its own `Execute` — this gate is the
+// *only* membership-adjacent test most commands get from the route, so an
+// opt-out with no real check behind it would be reachable by anyone in the
+// game, on any turn, for any player's state. `ignoresTurnGate.test.ts`'s
+// source scan is the tripwire: it fails the build the moment a second
+// command's class starts declaring the flag, forcing whoever added it to
+// show their check to a reviewer rather than inheriting this one's trust
+// silently.
 export function ignoresTurnGate(command: IGameCommand): boolean {
     return (command as unknown as Record<string, unknown>).ignoresTurnGate === true;
 }
