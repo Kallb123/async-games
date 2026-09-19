@@ -12,7 +12,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import { useNow } from '@/utils/hooks/useNow';
-import { secondsUntil } from '@/utils/games/TurnTimer';
+import { countdownFillPercent, secondsUntil } from '@/utils/games/TurnTimer';
 import {
     SACRollDice,
     SACEndTurn,
@@ -136,12 +136,7 @@ export default function SettlementsAndCitiesActions({
     const specialBuild = gs.specialBuildActive;
     const canUndo = gs.canUndo;
     const countdown = holdDeadline !== null ? secondsUntil(holdDeadline, now) : null;
-    // How much of the ten seconds has run, as a percentage — the same number
-    // the countdown text reads, just filling the Pass-now button's background
-    // left to right instead of printing it.
-    const countdownFillPct = countdown !== null
-        ? Math.round(100 - (countdown / (UNDO_WINDOW_MS / 1000)) * 100)
-        : 0;
+    const countdownFillPct = holdDeadline !== null ? countdownFillPercent(holdDeadline, now, UNDO_WINDOW_MS) : 0;
 
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);

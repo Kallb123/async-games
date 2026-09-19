@@ -19,7 +19,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Three steps. Pick the gear you will drive, and its die is rolled straight away, in the open. Then move exactly that many spaces by tapping one of the highlighted spaces on the circuit — spending brake points first if you want the number smaller. Finally, if you finished right behind someone, take the slipstream tow or decline it. Round one is the exception — everyone throws a single d20 to get off the line instead of picking a gear. A 1 bogs the engine down and you go nowhere, 17 or more is a flying start worth four spaces with no further roll, and anything in between gets away in 1st and rolls that gear's die for the move.",
+            body: "Three steps. Pick the gear you will drive, and its die is rolled straight away, in the open. Then move exactly that many spaces by tapping one of the highlighted spaces on the circuit — spending brake points first if you want the number smaller. Finally, if you finished right behind someone, take the slipstream tow or decline it. Round one is the exception — everyone throws a single d20 to get off the line instead of picking a gear. A 1 bogs the engine down and you go nowhere, 17 or more is a flying start worth four spaces with no further roll, and anything in between gets away in 1st and rolls that gear's die for the move. Picked the wrong space, or took a tow you didn't mean to? Tap Undo to take it back — everything except the roll itself. And if that move ended your turn, it waits ten seconds before it passes so you get the chance.",
         },
         {
             heading: "Gears and the dice",

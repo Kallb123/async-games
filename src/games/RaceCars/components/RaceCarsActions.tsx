@@ -8,7 +8,7 @@ import RollReadout from '@/components/ui/RollReadout';
 import Stepper from '@/components/ui/Stepper';
 import { pluralize } from '@/utils/ui/text';
 import { useNow } from '@/utils/hooks/useNow';
-import { secondsUntil } from '@/utils/games/TurnTimer';
+import { countdownFillPercent, secondsUntil } from '@/utils/games/TurnTimer';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsShift, RaceCarsSlipstream, RaceCarsUndo } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
@@ -234,12 +234,7 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
 
     if (!readOnly && holdDeadline !== null) {
         const countdown = secondsUntil(holdDeadline, now);
-        // How much of the ten seconds has run, as a percentage — the same
-        // number the countdown text reads, just filling Pass now's background
-        // left to right instead of printing it.
-        const countdownFillPct = countdown !== null
-            ? Math.round(100 - (countdown / (UNDO_WINDOW_MS / 1000)) * 100)
-            : 0;
+        const countdownFillPct = countdownFillPercent(holdDeadline, now, UNDO_WINDOW_MS);
         return (
             <div className="ag-actionsheet">
                 <div className="ag-action-grid">

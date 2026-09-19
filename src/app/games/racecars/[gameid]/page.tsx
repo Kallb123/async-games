@@ -122,9 +122,10 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     // docs/undo.md §5: once a leg that ended the turn is held open for its own
     // undo window, nothing is left to decide until the hold closes — the board
-    // and turn sheet both fall back to the driver's own gear ladder rather than
-    // an option set the server would refuse anyway. `autoEndTurnAt` is only
-    // ever sent to the driver it is held for, so this is never true off-turn.
+    // offers no destination (RaceCarsActions replaces the whole turn sheet
+    // with Pass now / Undo, below) rather than a reachable-space set the
+    // server would refuse anyway. `autoEndTurnAt` is only ever sent to the
+    // driver it is held for, so this is never true off-turn.
     const holdOpen = !!gs?.autoEndTurnAt;
     const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];

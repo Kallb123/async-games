@@ -241,6 +241,18 @@ export function secondsUntil(deadline: string, now: number | null): number | nul
 }
 
 /**
+ * How much of `windowMs` has elapsed as a percentage, for filling a
+ * countdown button's background left to right (docs/undo.md §11 — the same
+ * treatment `secondsUntil`'s label gets, as a fill instead of text). 0 before
+ * hydration, same as `secondsUntil`'s own null case.
+ */
+export function countdownFillPercent(deadline: string, now: number | null, windowMs: number): number {
+    const remaining = secondsUntil(deadline, now);
+    if (remaining === null) return 0;
+    return Math.round(100 - (remaining / (windowMs / 1000)) * 100);
+}
+
+/**
  * Short "1h left" style label for game lists. Null for unlimited timers, and for
  * a null `now` — pass `useNowToTheMinute()`, which has no clock reading until
  * hydration, so the badge simply appears with the first client render.
