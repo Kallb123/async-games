@@ -136,6 +136,12 @@ export default function SettlementsAndCitiesActions({
     const specialBuild = gs.specialBuildActive;
     const canUndo = gs.canUndo;
     const countdown = holdDeadline !== null ? secondsUntil(holdDeadline, now) : null;
+    // How much of the ten seconds has run, as a percentage — the same number
+    // the countdown text reads, just filling the Pass-now button's background
+    // left to right instead of printing it.
+    const countdownFillPct = countdown !== null
+        ? Math.round(100 - (countdown / (UNDO_WINDOW_MS / 1000)) * 100)
+        : 0;
 
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);
@@ -175,8 +181,12 @@ export default function SettlementsAndCitiesActions({
         // ag-btn--block gave the button before it had a row to share.
         return (
             <ActionButton
-                className="ag-btn ag-btn--success"
-                style={{ padding: '14px 0', fontSize: 15 }}
+                className={`ag-btn ag-btn--success${holdDeadline !== null ? ' ag-btn--countdown' : ''}`}
+                style={{
+                    padding: '14px 0',
+                    fontSize: 15,
+                    ...(holdDeadline !== null ? { '--ag-countdown-fill': `${countdownFillPct}%` } : {}),
+                } as React.CSSProperties}
                 pending={pendingTarget === 'endTurn'}
                 pendingLabel={pendingLabel}
                 onClick={onClick}
