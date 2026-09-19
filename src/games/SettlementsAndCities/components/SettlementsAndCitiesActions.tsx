@@ -155,6 +155,11 @@ export default function SettlementsAndCitiesActions({
         <p className="ag-hint">Turn passes in {countdown}s</p>
     ) : null;
 
+    // The two blocks with nothing to end a turn on yet (setup mid-placement,
+    // a Road Building free road still outstanding) show Undo alone, on its
+    // own row.
+    const undoRow = undoButton ? <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div> : null;
+
     // The End-turn / Done-building button, shared by the post-roll and Special
     // Build sections: relabelled "Pass now" once a hold is open, and arms a
     // client-side hold itself when tapped with something still to undo.
@@ -582,7 +587,7 @@ export default function SettlementsAndCitiesActions({
                             ? 'Setup — choose where your settlement goes.'
                             : 'Setup — connect a road to your new settlement.'}
                 </p>
-                {undoButton && <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div>}
+                {undoRow}
             </div>
         );
     }
@@ -638,7 +643,7 @@ export default function SettlementsAndCitiesActions({
                     {active ? '↩ Cancel' : `🛤️ Place ${pendingRoadBuilding} free road${pendingRoadBuilding > 1 ? 's' : ''}`}
                 </button>
                 <p className="ag-action-hint">Road Building — free roads from your dev card.</p>
-                {undoButton && <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div>}
+                {undoRow}
             </div>
         );
     }
