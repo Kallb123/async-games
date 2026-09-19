@@ -99,6 +99,18 @@ describe("Race Cars recap adapter", () => {
         expect(events).toEqual([]);
     });
 
+    it("reports a taken-back move (docs/undo.md §10)", () => {
+        const events = raceCarsRecapAdapter.toEvents(
+            snap(state({ playerStates: { u1: alice({ row: 24 }) } })),
+            snap(state({ playerStates: { u1: alice({ row: 20 }) } })),
+            cmd({ className: "RaceCarsUndo" }),
+            { validMove: true, turnOver: false } as ICommandOutcome,
+        );
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe("rc_undo");
+        expect(events[0].title).toBe("Alice took back their last move");
+    });
+
     it("reports a getaway only when it was not the ordinary one (§6a)", () => {
         const launched = (start: { roll: number; outcome: string; spaces: number }) =>
             raceCarsRecapAdapter.toEvents(

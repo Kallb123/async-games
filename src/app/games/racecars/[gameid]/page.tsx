@@ -120,6 +120,12 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const complete = nav.displayedComplete;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
+    // docs/undo.md §5: once a leg that ended the turn is held open for its own
+    // undo window, nothing is left to decide until the hold closes — the board
+    // and turn sheet both fall back to the driver's own gear ladder rather than
+    // an option set the server would refuse anyway. `autoEndTurnAt` is only
+    // ever sent to the driver it is held for, so this is never true off-turn.
+    const holdOpen = !!gs?.autoEndTurnAt;
     const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
@@ -143,7 +149,10 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // move less the brakes dialled in, or §12's fixed three-space tow. Null
     // whenever this driver is not choosing a destination at all.
     const towing = !!me && isMyTurn && me.phase === 'slipstream';
-    const distance = !gs || !me || !isMyTurn ? null
+    // docs/undo.md §5: a held turn has nothing left to decide until the hold
+    // closes, so it reaches no destination at all — same as not being this
+    // driver's turn.
+    const distance = !gs || !me || !isMyTurn || holdOpen ? null
         : towing ? SLIPSTREAM_STEPS
         : me.phase === 'move' && me.roll !== null ? me.roll - appliedBrake
         : null;
@@ -167,7 +176,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // move and is chosen the same way, so the board learns nothing new about
     // the phase and this is the one place that branches on it.
     function chooseDestination(row: number, lane: number) {
-        if (!isMyTurn || submitting) return;
+        if (!isMyTurn || submitting || holdOpen) return;
         if (towing) {
             const tow = new RaceCarsSlipstream();
             tow.tow = { row, lane };
