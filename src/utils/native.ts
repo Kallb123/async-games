@@ -17,3 +17,25 @@ import { Capacitor } from '@capacitor/core';
 export function isNativeShell(): boolean {
     return Capacitor.isNativePlatform();
 }
+
+/**
+ * Whether the shell the app is running in actually carries a given Capacitor
+ * plugin.
+ *
+ * Not the same question as `isNativeShell()`, and the difference bites: the APK
+ * loads the live site, so today's code runs inside whatever shell the player
+ * last installed. A plugin added to the bundle after they installed is
+ * *registered* in the JavaScript but has no native half to call, and Capacitor
+ * quietly falls through to the plugin's web implementation instead of failing —
+ * which, for a plugin that exists precisely because the WebView can't do the
+ * job, is the one outcome guaranteed not to work.
+ *
+ * So ask this before calling a plugin an older shell won't have, and tell the
+ * player to update rather than showing them a control that can't do anything.
+ * (`shareOrCopyLink` predates this and reads the `UNIMPLEMENTED` rejection
+ * instead — it can, because `@capacitor/share` registers no web fallback to be
+ * swallowed by.)
+ */
+export function hasNativePlugin(name: string): boolean {
+    return isNativeShell() && Capacitor.isPluginAvailable(name);
+}

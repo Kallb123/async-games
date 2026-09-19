@@ -102,8 +102,11 @@ export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: bool
                 // Carry where they were through Clerk, so someone who followed
                 // a join link comes back to it — code still in the box — rather
                 // than to an empty home page having done everything right.
-                // `<SignIn>` already honours `redirect_url` from the query, so
-                // /login needs nothing of its own.
+                // `<SignIn>` already honours `redirect_url` from the query.
+                // The one thing on /login that isn't Clerk's — the native
+                // shell's Google button — reads it back through `returnPath`
+                // (`utils/ui/returnPath.ts`), which also bounds it to a path
+                // on this site before following it.
                 //
                 // Read from `window.location` rather than `useSearchParams()`:
                 // every authenticated screen mounts this guard, and pulling

@@ -10,6 +10,13 @@
  * in the root layout, so every Clerk surface (sign-in, user profile, modals we
  * add later) inherits it without any per-screen restyling.
  *
+ * One exception, and only one: `.ag-auth-stack--native` in `ag-theme.css`
+ * reaches in to hide Clerk's Google button in the native Android shell, where
+ * it can only produce an error. That can't live here, because this object is
+ * handed to a provider the server renders, and the server has no idea whether
+ * it is rendering for the app or a browser. If Clerk's Google button ever goes
+ * missing somewhere it shouldn't, that rule is where to look.
+ *
  * See https://clerk.com/docs/nextjs/guides/customizing-clerk/appearance-prop/variables
  * for the variable list.
  */

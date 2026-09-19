@@ -1054,6 +1054,40 @@ is *not* a browser:
 - **It has no Web Share API**, so `shareOrCopyLink` (`src/utils/ui/share.ts`)
   uses the Capacitor share sheet there and `navigator.share` elsewhere.
 
+**Signing in** is the third, and the most involved. Everything the WebView is
+allowed to navigate to itself is listed in `server.allowNavigation`
+(`capacitor.config.ts`) — Clerk's Frontend API, and the Microsoft hosts its
+Microsoft connection hops through. Anything not listed is handed to the system
+browser, which has no way back into the app, and that is fatal rather than
+merely ugly: Clerk binds a sign-in attempt to the Client that created it, so a
+round trip that starts in the WebView's cookie jar and finishes in the
+browser's comes back as an auth error, not a session.
+
+Google cannot be fixed by listing it, because Google refuses to serve its
+consent screen to an embedded WebView at all. So the app doesn't navigate for
+Google: `useNativeGoogleSignIn` asks Android's Credential Manager for an ID
+token — the account picker over the app, using the accounts already on the
+phone — and hands it to Clerk's One Tap strategy, which creates the session in
+the WebView's own jar with no redirect anywhere. `AuthCardStack` is what puts
+that button on `/login` and `/signup`, and hiding Clerk's own Google button
+where ours renders is `.ag-auth-stack--native`'s job — the one piece of Clerk
+styling that doesn't live in `utils/ui/clerkAppearance.ts`, because that object
+is handed to a provider the server renders and the server can't tell the two
+skins apart. Microsoft needs none of it, and
+could not use it anyway: Clerk's native-token strategies are Google and Apple
+only.
+
+Two knock-on facts. The token is audienced to
+`NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the *web* client of the Google Cloud
+project Clerk's Google connection uses, not the Android one), and an Android
+OAuth client for `com.asyncgames.app` has to exist in that project against the
+signing certificate's SHA-1 — the same keystore `ANDROID_APP_FINGERPRINT`
+describes to App Links, a different hash of it. And because the APK loads the
+live site, a shell older than the plugin runs this code with no native half to
+call; `hasNativePlugin` (`src/utils/native.ts`) is how that is detected, since
+Capacitor otherwise falls through to a web implementation that cannot work
+here either.
+
 The system bars are **core Capacitor 8**, not a plugin: it insets the WebView
 under an edge-to-edge window and publishes `--safe-area-inset-*` on `<html>`.
 `plugins.SystemBars` in the config pins the bar icons dark, because the app is
@@ -1150,8 +1184,10 @@ one-liner fails with a message naming the exact file and line to add.
   (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, injected via the Clerk
   Vercel integration); Firebase Admin (`FIREBASE_PROJECT_ID`,
   `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`); `CRON_SECRET`; optional
-  `ACCESS_PASSWORD`; and optional `ANDROID_APP_FINGERPRINT` (the signing
-  certificate the Android app is verified by — see the APK bullet below). The Firebase **client** config (in
+  `ACCESS_PASSWORD`; optional `ANDROID_APP_FINGERPRINT` (the signing
+  certificate the Android app is verified by — see the APK bullet below); and
+  optional `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (without it the Android app
+  offers no Google button — see §11's "Signing in"). The Firebase **client** config (in
   `src/utils/firebase/firebase.ts` and the service worker) is public by design.
 - **Environments:** production and preview/local each get their own **Clerk
   instance** *and* their own **MongoDB database**, and the two must split

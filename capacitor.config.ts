@@ -16,15 +16,45 @@ const config: CapacitorConfig = {
         // Override for a preview/staging build: CAPACITOR_SERVER_URL=https://<preview>.vercel.app npx cap sync android
         url: process.env.CAPACITOR_SERVER_URL ?? 'https://asyncgames.com',
         androidScheme: 'https',
-        // Clerk's production instance does a top-level redirect through its
-        // Frontend API domain on first load (and back) to set a first-party
-        // session cookie. Without this, Capacitor's WebViewClient treats that
-        // navigation as an external link and hands it to the system browser,
-        // which then has no way back into the app — a black screen followed
-        // by getting stranded on clerk.asyncgames.com. Add the dev instance's
-        // own Frontend API host here too if building a preview APK against
+        // Every host the WebView is allowed to navigate to itself. Anything
+        // not listed here Capacitor hands to the system browser, which has no
+        // way back into the app — a black screen, then a stranded tab.
+        //
+        // `clerk.asyncgames.com` is Clerk's production Frontend API: it does a
+        // top-level redirect through its own domain on first load (and back) to
+        // set a first-party session cookie. Add the dev instance's own Frontend
+        // API host here too if building a preview APK against
         // CAPACITOR_SERVER_URL with pk_test_ keys.
-        allowNavigation: ['clerk.asyncgames.com'],
+        //
+        // The Microsoft hosts are the sign-in hop for Clerk's Microsoft social
+        // connection — `login.microsoftonline.com` for the authorize request,
+        // `login.live.com` for the personal-account screens it hands off to.
+        // They have to stay in the WebView for the same reason the whole flow
+        // does: Clerk binds the sign-in attempt to the Client that started it,
+        // so a round trip that finishes in another cookie jar comes back as an
+        // auth error rather than a session. Microsoft, unlike Google, renders
+        // happily in a WebView, so keeping it here is all it needs — the cost
+        // is that the phone's own Microsoft session isn't shared, so the player
+        // types their password.
+        //
+        // Adding to this list is not only a navigation decision. Capacitor
+        // feeds it into the bridge's allowed-origin set, so a host here can
+        // also post to the native bridge and reach the registered plugins.
+        // Nothing can exploit that without script execution on the host
+        // itself, but the rule that keeps it that way is: exact hosts that
+        // serve nothing but the identity provider's own pages. Never a
+        // wildcard, never a host that can serve someone else's content.
+        //
+        // Google is *not* here, and can't be: its consent screen refuses to
+        // load in an embedded WebView at all. That hop doesn't happen in the
+        // WebView — `useNativeGoogleSignIn` gets an ID token from the phone's
+        // own account picker and hands it straight to Clerk, with no navigation
+        // anywhere. See that hook for the full story.
+        allowNavigation: [
+            'clerk.asyncgames.com',
+            'login.microsoftonline.com',
+            'login.live.com',
+        ],
     },
     plugins: {
         // Without this plugin the native cold-start theme (see
@@ -69,6 +99,20 @@ const config: CapacitorConfig = {
         LocalNotifications: {
             smallIcon: 'ic_stat_notify',
             iconColor: '#b74b21', // ag_notification (android/app/.../ag_colors.xml)
+        },
+        // Google sign-in in the app doesn't go through the WebView at all —
+        // `useNativeGoogleSignIn` asks the phone for an ID token and hands it
+        // to Clerk. This plugin is the native half of that. It ships providers
+        // for Facebook, Apple and Twitter too; `providers` keeps their SDKs
+        // out of the APK, since the app offers none of them and a Facebook SDK
+        // nobody calls is still a Facebook SDK in the bundle.
+        SocialLogin: {
+            providers: {
+                google: true,
+                facebook: false,
+                apple: false,
+                twitter: false,
+            },
         },
     },
 };
