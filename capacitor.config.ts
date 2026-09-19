@@ -25,20 +25,13 @@ const config: CapacitorConfig = {
         // own Frontend API host here too if building a preview APK against
         // CAPACITOR_SERVER_URL with pk_test_ keys.
         //
-        // accounts.google.com is the same problem one hop further in: tapping
-        // Google on the SignIn card sends the WebView to clerk.asyncgames.com
-        // (allowed above) which redirects on to Google's consent screen. Without
-        // that host listed too, the WebView hands *that* redirect to the system
-        // browser — the consent screen renders fine there, so picking an account
-        // looks like it's working, but Google's redirect back to Clerk's own
-        // callback lands in the browser's cookie jar rather than the WebView's,
-        // which doesn't hold the state Clerk's client set when the flow started.
-        // Clerk can't match them up and answers `authorization_invalid`,
-        // stranding the player mid-sign-in in the system browser exactly like
-        // the bare Frontend API case above. Keeping the whole round trip
-        // (WebView → clerk.asyncgames.com → accounts.google.com → back) inside
-        // one WebView keeps it one cookie jar throughout.
-        allowNavigation: ['clerk.asyncgames.com', 'accounts.google.com'],
+        // Google's own OAuth hop (tapping Google on the SignIn card) is *not*
+        // handled here — MainActivity installs OAuthCustomTabsWebViewClient,
+        // which routes that hop to a Chrome Custom Tab instead of the WebView,
+        // because Google's consent screen doesn't recognise a sign-in already
+        // sitting in the phone's actual Chrome when it's shown inside a plain
+        // embedded WebView. See that class for the full explanation.
+        allowNavigation: ['clerk.asyncgames.com'],
     },
     plugins: {
         // Without this plugin the native cold-start theme (see
