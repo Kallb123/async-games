@@ -18,7 +18,10 @@ import { useNativeGoogleSignIn } from "@/utils/hooks/useNativeGoogleSignIn";
 export default function AuthCardStack({ children }: { children: ReactNode }) {
     const { status, error, signIn } = useNativeGoogleSignIn();
     // Every status but `absent` means the app, and in the app Clerk's Google
-    // button is hidden whether or not this shell can offer a replacement.
+    // button is hidden whether or not this shell can offer a replacement —
+    // `unavailable` and `outdated` are exactly the cases where it can't, and
+    // where leaving Clerk's in place would strand the player in the system
+    // browser (`capacitor.config.ts` keeps Google off `allowNavigation`).
     const native = status !== 'absent';
 
     return (

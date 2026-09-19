@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { SocialLogin } from '@capgo/capacitor-social-login';
 import { hasNativePlugin, isNativeShell } from '@/utils/native';
 import { returnPath } from '@/utils/ui/returnPath';
+import { withTimeout } from '@/utils/withTimeout';
 
 /**
  * Signing in with Google inside the native Android shell, without a browser.
@@ -51,9 +51,25 @@ import { returnPath } from '@/utils/ui/returnPath';
  */
 const WEB_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
+/**
+ * How long Clerk gets to turn a Google token into an active session before the
+ * button gives up and says so.
+ *
+ * It needs one: `useClerk()` hands back the isomorphic wrapper, whose calls
+ * queue on a promise that settles when clerk-js finishes loading and *never*
+ * rejects or expires. This button paints before clerk-js is ready by design
+ * (see `resolveStatus`), so tapping it mid-load is the ordinary case — and in
+ * the shell there is no address bar and no pull-to-refresh, so a hang is a
+ * force-quit. Generous, because the phone has already shown a picker and the
+ * player has already chosen: finishing slowly beats failing.
+ */
+const CLERK_EXCHANGE_TIMEOUT_MS = 30_000;
+
 export type NativeGoogleStatus =
-    /** Not the app, or the app with nothing configured: show nothing. */
+    /** A browser. Clerk's own button is the right one; show nothing. */
     | 'absent'
+    /** The app, with no client ID configured: nothing to offer, and nothing to say. */
+    | 'unavailable'
     /** The app, in a shell built before the plugin existed: offer an update. */
     | 'outdated'
     /** Ready to be tapped. */
@@ -68,22 +84,49 @@ export interface NativeGoogleSignInState {
     signIn: () => void;
 }
 
-/**
- * Handing the client ID to the plugin, once per app rather than once per
- * screen — it configures a native singleton, so a second call would be a
- * second round trip saying the same thing. Kept as the promise rather than a
- * boolean so a tap that lands mid-flight waits for it instead of racing it.
- */
-let configured: Promise<void> | null = null;
+type SocialLoginPlugin = (typeof import('@capgo/capacitor-social-login'))['SocialLogin'];
 
-function configure(): Promise<void> {
+/**
+ * The configured plugin, fetched and handed its client ID once per app rather
+ * than once per screen — it configures a native singleton, so a second call
+ * would be a second round trip saying the same thing. Held as the promise
+ * rather than a boolean so a tap that lands mid-flight waits for it instead of
+ * racing it.
+ */
+let configured: Promise<SocialLoginPlugin> | null = null;
+
+/**
+ * The import is deliberately dynamic, and this is the only place it happens.
+ * The plugin's entry module runs an OAuth-popup handler on import that reads
+ * `localStorage` with no try/catch — which *throws* in a browser with site
+ * data blocked, during module evaluation of the sign-in screen's chunk, where
+ * nothing here could catch it. A player who has never opened the app would
+ * lose /login and /signup entirely. Nothing is lost by waiting: the browser
+ * and old-shell cases are decided by `hasNativePlugin`, which answers from the
+ * native bridge's plugin headers rather than from this module, so neither ever
+ * fetches a byte of it.
+ */
+function configure(): Promise<SocialLoginPlugin> {
     if (!WEB_CLIENT_ID) {
-        // Unreachable from a tap: `resolveStatus` answers `absent` with no
+        // Unreachable from a tap: `resolveStatus` answers `unavailable` with no
         // client ID, so no button is drawn to tap. Here so the caller doesn't
         // need a non-null assertion to say the same thing.
         return Promise.reject(new Error('NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID is unset'));
     }
-    configured ??= SocialLogin.initialize({ google: { webClientId: WEB_CLIENT_ID } });
+    configured ??= import('@capgo/capacitor-social-login')
+        .then(async ({ SocialLogin }) => {
+            await SocialLogin.initialize({ google: { webClientId: WEB_CLIENT_ID } });
+            return SocialLogin;
+        })
+        .catch((error: unknown) => {
+            // Memoise the success, never the failure. Android's credential
+            // provider can be mid-update when the sign-in screen mounts and
+            // fine a minute later, and the WebView is never reloaded — so a
+            // cached rejection would make "Try again" a promise this code
+            // couldn't keep for the rest of the app's life.
+            configured = null;
+            throw error;
+        });
     return configured;
 }
 
@@ -92,28 +135,45 @@ function configure(): Promise<void> {
  * in a microtask rather than synchronously inside the effect, which is what
  * `react-hooks/set-state-in-effect` asks for.
  *
- * Deliberately doesn't wait for `configure()`: the button's job is to be there
- * from the moment we know we're in the app, because the modifier class it
- * carries is also what hides Clerk's own Google button, and a screen that had
- * to wait for a bridge round trip first could paint Clerk's for a frame. The
- * tap awaits it instead, so a configure that failed surfaces as an error the
- * player can retry rather than as a button that silently never appeared.
+ * **It must not await anything before answering `ready`**, and that is
+ * load-bearing rather than tidiness. The status it returns is also what tells
+ * `AuthCardStack` to hide Clerk's own Google button, and Clerk's card only
+ * appears once clerk-js has been fetched — a whole network round trip away.
+ * Answering within a few microtasks means the rule is in place before there is
+ * anything to hide. Await `configure()` here — the obvious temptation — and
+ * that becomes a bridge round trip, and Clerk's button, which in the app can
+ * only produce an error, becomes briefly tappable.
  */
 async function resolveStatus(): Promise<NativeGoogleStatus> {
+    if (!isNativeShell()) {
+        return 'absent';
+    }
     if (!hasNativePlugin('SocialLogin')) {
-        return isNativeShell() ? 'outdated' : 'absent';
+        return 'outdated';
     }
     if (!WEB_CLIENT_ID) {
         // A deployment misconfiguration rather than a player's problem: say so
-        // where a developer will see it, and show them nothing.
+        // where a developer will see it, and show them nothing. Still a native
+        // status, so Clerk's broken button stays hidden — a preview APK built
+        // without the var is exactly where it would otherwise come back, and
+        // `capacitor.config.ts` deliberately keeps Google off `allowNavigation`,
+        // so tapping it would strand them in the system browser.
         console.error('NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID is unset — Google sign-in is off in the app');
-        return 'absent';
+        return 'unavailable';
     }
     void configure().catch(() => {
         // Reported at the tap, where someone is actually waiting on it.
     });
     return 'ready';
 }
+
+/**
+ * Whether a sign-in is already in flight — module-level, because the flow
+ * outlives the screen that starts it. Clerk's card carries a "Sign up" link,
+ * so tapping that mid-exchange remounts this hook on /signup with a fresh
+ * state and a second account picker one tap away.
+ */
+let signingIn = false;
 
 export function useNativeGoogleSignIn(): NativeGoogleSignInState {
     const clerk = useClerk();
@@ -139,30 +199,54 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
     }, []);
 
     const signIn = useCallback(() => {
+        if (signingIn) {
+            return;
+        }
+        signingIn = true;
         setStatus('busy');
         setError(null);
         void (async () => {
             try {
-                await configure();
+                const SocialLogin = await configure();
                 const { result } = await SocialLogin.login({ provider: 'google', options: {} });
                 // `offline` mode returns a server auth code and no token; the
-                // plugin is initialised in `online` mode above, so this is the
+                // plugin is configured in `online` mode, so this is the
                 // narrowing rather than a case that happens.
                 const idToken = 'idToken' in result ? result.idToken : null;
                 if (!idToken) {
                     throw new Error('Google signed in but returned no ID token');
                 }
-                const signInOrUp = await clerk.authenticateWithGoogleOneTap({ token: idToken });
-                const fallback = returnPath();
-                // Finishes whichever of the two Clerk started — an existing
-                // account signs in, a new one is created — and navigates. The
-                // custom navigate keeps that inside the Next router rather than
-                // reloading the whole site in the WebView.
-                await clerk.handleGoogleOneTapCallback(
-                    signInOrUp,
-                    { signInFallbackRedirectUrl: fallback, signUpFallbackRedirectUrl: fallback },
-                    async (to) => router.push(to),
+
+                // Deliberately *not* `handleGoogleOneTapCallback`, which looks
+                // like the method for this and isn't: the isomorphic wrapper
+                // `useClerk()` returns fires it and swallows both its result
+                // and any rejection, so an `await` on it comes back before the
+                // work is done and a failure never reaches this `catch` —
+                // leaving the button reading "Signing in…" for ever. It drops
+                // the custom-navigate argument its own types declare, too.
+                // `setActive` answers honestly, and this is then the same
+                // three-step Clerk dance a guest's ticket sign-in does
+                // (`completeTicketSignIn`, app/join/JoinForm.tsx).
+                const signedIn = await withTimeout(
+                    async () => {
+                        const attempt = await clerk.authenticateWithGoogleOneTap({ token: idToken });
+                        if (attempt.status !== 'complete' || !attempt.createdSessionId) {
+                            // A sign-up Clerk wants more than Google gave it,
+                            // or an attempt it didn't finish. Nothing here can
+                            // supply the rest.
+                            return false;
+                        }
+                        await clerk.setActive({ session: attempt.createdSessionId });
+                        return true;
+                    },
+                    CLERK_EXCHANGE_TIMEOUT_MS,
+                    false,
+                    'Signing in with the Google token',
                 );
+                if (!signedIn) {
+                    throw new Error('Clerk did not finish the Google sign-in');
+                }
+                router.push(returnPath());
                 // Left `busy` on purpose: the navigation is already under way,
                 // and a button that springs back to life first invites a second
                 // tap on a sign-in that has already happened.
@@ -174,6 +258,8 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 }
                 console.error('Google sign-in failed', signInError);
                 setError('Google sign-in didn’t work. Try again, or use your email and password.');
+            } finally {
+                signingIn = false;
             }
         })();
     }, [clerk, router]);
