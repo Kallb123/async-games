@@ -8,7 +8,7 @@
 import { MAX_PLAYERS, type RaceCarsTrack } from "./board";
 import { deriveTrack, plainTileId, type TrackSection } from "./tracks/sections";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
-import { RaceCarsGameType, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream, RaceCarsUndo } from "./RaceCarsLogic";
+import { RaceCarsEndTurn, RaceCarsGameType, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream, RaceCarsUndo } from "./RaceCarsLogic";
 import type { IRaceCarsGameData } from "./RaceCarsModels";
 import { runCommand } from "@/utils/games/commandPipeline";
 
@@ -64,6 +64,7 @@ export function race(
         players,
         undoStack: [],
         undoAnchorId: null,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }
@@ -130,10 +131,17 @@ export function undo(senderId = "a"): RaceCarsUndo {
     return command;
 }
 
+export function endTurn(senderId = "a"): RaceCarsEndTurn {
+    const command = new RaceCarsEndTurn();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return command;
+}
+
 /** One command through the pipeline the command route, replay and the cron all use. */
 export function run(
     game: IRaceCarsGameData,
-    command: RaceCarsLaunch | RaceCarsShift | RaceCarsMove | RaceCarsSlipstream | RaceCarsUndo,
+    command: RaceCarsLaunch | RaceCarsShift | RaceCarsMove | RaceCarsSlipstream | RaceCarsUndo | RaceCarsEndTurn,
 ) {
     return runCommand(game, new RaceCarsGameType(), command);
 }

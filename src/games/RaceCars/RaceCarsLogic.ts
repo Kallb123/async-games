@@ -22,6 +22,7 @@ import {
     START_GEAR,
     START_ROUND,
     UNDO_STACK_DEPTH,
+    UNDO_WINDOW_MS,
 } from "@/games/RaceCars/board";
 import {
     classification,
@@ -317,6 +318,14 @@ export class RaceCarsGameType implements IGameType {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IRaceCarsGameData;
         const gs = data.specificGameState;
+        // `raceCarsFinishTurn` (below) only ever lets `turnOver` reach here
+        // true once a hand-off is actually final — a leg that is still held
+        // becomes `autoEndTurnAt` with `turnOver: false` instead — so every
+        // arrival here closes whatever hold was open (docs/undo.md §5).
+        // `RaceCarsMove`/`RaceCarsSlipstream` refuse outright while
+        // `gs.autoEndTurnAt` is set, so leaving it behind would lock the next
+        // driver's first move.
+        gs.autoEndTurnAt = null;
         if (gs.roundOrder.length === 0) return;
         const players = mongoMap(gs.players);
 
@@ -644,6 +653,33 @@ function raceCarsCommitUndo(
     gs.undoAnchorId = command.id;
 }
 
+/**
+ * Holds a turn that is about to end open long enough for its driver to take
+ * the leg that just ran it back (docs/undo.md §5) — the same shape as
+ * Settlements & Cities' `sacFinishTurn`, at the one call each of
+ * `RaceCarsMove` and `RaceCarsSlipstream` makes on its way out.
+ *
+ * Checked against the trigger's own id, the same staleness test
+ * `RaceCarsUndo` runs on itself (§4): `raceCarsCommitUndo` only moves the
+ * anchor to `trigger.id` when the leg it was called for turned out to be
+ * undoable, so a leg that rolled for oil or crossed the line — where the
+ * anchor is left wherever it already was — never matches here either, and
+ * ends the turn immediately exactly as it always has. `outcome` is handed
+ * back unchanged whenever it isn't already ending the turn, so a leg that
+ * earns another tow (`towOffered`) is untouched.
+ */
+function raceCarsFinishTurn<T extends ICommandOutcome>(
+    data: IRaceCarsGameData,
+    trigger: IGameCommand,
+    outcome: T,
+): T {
+    if (!outcome.turnOver) return outcome;
+    const gs = data.specificGameState;
+    if (gs.undoAnchorId !== trigger.id) return outcome;
+    gs.autoEndTurnAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
+    return { ...outcome, turnOver: false };
+}
+
 // ─── RaceCarsMove (§7 step 2, §9-§11) ───────────────────────────────────────
 
 @serializable
@@ -681,6 +717,12 @@ export class RaceCarsMove implements IGameCommand {
         const gs = data.specificGameState;
         const ps = driverOnTurn(gs, this.senderId);
         if (!ps) return INVALID;
+        // A hold open on this driver's last leg (docs/undo.md §5): `phase` and
+        // `roll` are both still whatever that leg left them at — nothing here
+        // resets either until the hold closes — so without this a driver could
+        // drive a second leg on the same roll for as long as the window stayed
+        // open. `RaceCarsEndTurn` (below) is the only way out of it.
+        if (gs.autoEndTurnAt) return INVALID;
         if (ps.phase !== 'move' || ps.roll === null) return INVALID;
 
         // §11's brake spend, bounded in all three directions: a negative brake
@@ -741,8 +783,10 @@ export class RaceCarsMove implements IGameCommand {
         // §12: a move that ends directly behind another car, fast enough to
         // draft, is owed a tow, and the turn is not over until the driver has
         // taken it or declined it. Everything else — a spin, a crossing, an
-        // empty road — ends the turn here.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll });
+        // empty road — would end the turn here outright; `raceCarsFinishTurn`
+        // holds it open instead whenever the leg that just ran is still
+        // undoable (docs/undo.md §5).
+        return raceCarsFinishTurn(data, this, arrivalOutcome(gs, ps, this.senderId, settled, { roll }));
     }
 }
 
@@ -789,6 +833,10 @@ export class RaceCarsSlipstream implements IGameCommand {
         const gs = data.specificGameState;
         const ps = driverOnTurn(gs, this.senderId);
         if (!ps) return INVALID;
+        // Same hold guard as RaceCarsMove, and the same reason: `phase` stays
+        // 'slipstream' until the hold closes, so without this a driver could
+        // take or decline a second tow for as long as the window stayed open.
+        if (gs.autoEndTurnAt) return INVALID;
         if (ps.phase !== 'slipstream') return INVALID;
 
         // The offer is the gate in both directions (§23.4). Re-derived here
@@ -812,7 +860,11 @@ export class RaceCarsSlipstream implements IGameCommand {
             // place that reset lives (§23.7 PR 3).
             data.gameState.history.unshift(playerHistory(this.senderId, 'waved the tow away'));
             raceCarsCommitUndo(data, this, preUndoState, null);
-            return { validMove: true, turnOver: true };
+            // A decline is always undoable (§6 above), so this always holds
+            // rather than ending the turn outright (docs/undo.md §5) — the
+            // same shape as SAC's setup road, the one placement of its four
+            // that always ends its own turn.
+            return raceCarsFinishTurn(data, this, { validMove: true, turnOver: true });
         }
 
         // The same reach the first move validated against, with the distance
@@ -859,8 +911,46 @@ export class RaceCarsSlipstream implements IGameCommand {
 
         // §12: chained. Ending this tow directly behind another car that is
         // fast enough to draft earns another — `slipstreamOffered` is
-        // the gate on both legs, so nothing here decides that twice.
-        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null });
+        // the gate on both legs, so nothing here decides that twice. Whatever
+        // does end the turn holds first, same as RaceCarsMove (docs/undo.md §5).
+        return raceCarsFinishTurn(data, this, arrivalOutcome(gs, ps, this.senderId, settled, { roll: null }));
+    }
+}
+
+// ─── RaceCarsEndTurn (docs/undo.md §5) ──────────────────────────────────────
+//
+// Race Cars has no manual "End turn" of its own — a turn has always ended by
+// itself, the instant a leg leaves nothing more to decide. The hold (above)
+// is the first time that stops being true, so this is the one command that
+// closes it: the board's own "Pass now" and the client's own deadline timer
+// both submit it, exactly the shape SACEndTurn's setup branch closes
+// Settlements & Cities' placement hold with. Nothing else it could be sent
+// for — a hold is the only reason a Race Cars turn is ever still open with
+// nothing left for its driver to decide.
+
+@serializable
+export class RaceCarsEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'RaceCarsEndTurn';
+
+    myString() { return 'ended their turn'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IRaceCarsGameData;
+        const gs = data.specificGameState;
+        const ps = driverOnTurn(gs, this.senderId);
+        if (!ps) return INVALID;
+        // `autoEndTurnAt` is server state the hold itself wrote — a client
+        // can't forge it — so this can only ever close a hold that is
+        // actually open, never a turn with a leg still to run.
+        if (!gs.autoEndTurnAt) return INVALID;
+
+        data.gameState.history.unshift(playerHistory(this.senderId, 'ended their turn'));
+        return { validMove: true, turnOver: true };
     }
 }
 
@@ -874,10 +964,15 @@ export class RaceCarsUndo implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'RaceCarsUndo';
-    // See `ignoresTurnGate` (gameCommand.ts): without this, the ordinary case
-    // — a move or tow that ended the sender's own turn — could never reach
-    // `Execute` at all, because CheckEndTurn has already advanced
-    // `currentTurn` by the time this command's own request could arrive.
+    // See `ignoresTurnGate` (gameCommand.ts). The hold (docs/undo.md §5,
+    // `raceCarsFinishTurn`) means `currentTurn` no longer moves for the
+    // ordinary case this was written for — a move or tow that ends its
+    // driver's own turn now holds instead — but the one case it never
+    // covered is still real: a leg that rolled for oil or crossed the line
+    // ends the turn outright, with no hold, and `CheckEndTurn` has already
+    // advanced `currentTurn` by the time an undo of it could arrive. Left in
+    // place rather than removed, since `Execute`'s own anchor check refuses
+    // that case anyway (§6) — the gate would only ever save it the trip.
     readonly ignoresTurnGate = true;
 
     myString() { return 'took back their last move'; }

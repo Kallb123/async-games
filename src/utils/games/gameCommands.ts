@@ -119,13 +119,16 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     // §6a's startup round adds the fourth, RaceCarsLaunch: the one d20 a driver
     // throws in round one in place of the shift nobody makes off the line.
     // docs/undo.md's second pilot adds the fifth, RaceCarsUndo: taking back a
-    // move or a tow that rolled for nothing (§6).
+    // move or a tow that rolled for nothing (§6). §5's hold adds the sixth,
+    // RaceCarsEndTurn: the one way to close a hold once it's open, since
+    // nothing else here ever ends a turn manually.
     RaceCarsGameType: [
         "RaceCarsLaunch",
         "RaceCarsShift",
         "RaceCarsMove",
         "RaceCarsSlipstream",
         "RaceCarsUndo",
+        "RaceCarsEndTurn",
     ],
 };
 

@@ -6,7 +6,7 @@ import { RaceCarsGameType } from "./RaceCarsLogic";
 import { gameStateToModel, cloneRaceCarsState } from "./RaceCarsModels";
 import { consumedRandomness } from "@/utils/apiModels/gameCommand";
 import { buildTimeline } from "@/utils/games/replay";
-import { log, makeGame, move, race, run, seat, shift, slipstream, undo } from "./testFixtures";
+import { endTurn, log, makeGame, move, race, run, seat, shift, slipstream, undo } from "./testFixtures";
 
 // docs/undo.md §16's second pilot. RaceCarsMove (picking a destination after a
 // roll) and RaceCarsSlipstream (taking or declining a tow) are the two
@@ -51,9 +51,10 @@ describe("Race Cars — undoing a move", () => {
         expect(seat(game, "a").tyres).toBe(5);
     });
 
-    it("puts the hand-off back too, not just the board — the one thing outside specificGameState", async () => {
-        // b is far enough away that the move offers no tow, so it ends the
-        // turn outright and CheckEndTurn advances currentTurn to b.
+    it("holds the hand-off open rather than ending the turn outright, and undo clears the hold", async () => {
+        // b is far enough away that the move offers no tow, so this is the
+        // ordinary "nothing left to decide" ending — held for its own undo
+        // window instead of handing off outright (docs/undo.md §5).
         const gs = race({
             a: { phase: "move", roll: 7, row: 20, lane: 2 },
             b: { row: 70, lane: 1 },
@@ -61,15 +62,14 @@ describe("Race Cars — undoing a move", () => {
         const game = makeGame(gs);
 
         const { outcome } = await run(game, move({ row: 27, lane: 1 }));
-        expect(outcome.turnOver).toBe(true);
-        expect(game.currentTurn).toBe("b");
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(game.currentTurn).toBe("a");
 
         const undone = await run(game, undo());
         expect(undone.outcome.validMove).toBe(true);
-        // The board's own turn order came back with everything else...
         expect(gs.roundIndex).toBe(0);
-        // ...and so does the field CheckEndTurn moved outside specificGameState,
-        // which is the one thing a plain Object.assign(gs, restored) can't reach.
+        expect(gs.autoEndTurnAt).toBeNull();
         expect(game.currentTurn).toBe("a");
     });
 });
@@ -95,10 +95,14 @@ describe("Race Cars — canUndo and the anchor", () => {
         const game = makeGame(gs);
 
         await run(game, move({ row: 27, lane: 1 }));
+        expect(game.currentTurn).toBe("a"); // held, not handed off yet
+        // Closing the hold is "anything else" — the anchor only ever reaches
+        // back to the command directly behind it (docs/undo.md §4).
+        await run(game, endTurn());
         expect(game.currentTurn).toBe("b");
-        // b's own shift is "anything else" — CheckEndTurn already reset b's
-        // phase to 'shift' on the hand-off, so this is an ordinary move for b,
-        // not a contrivance.
+        // b's own shift is a second "anything else" on top of that —
+        // CheckEndTurn already reset b's phase to 'shift' on the hand-off, so
+        // this is an ordinary move for b, not a contrivance.
         await run(game, shift({ gear: 3, recordedRoll: 5 }, "b"));
 
         const undone = await run(game, undo());
@@ -150,10 +154,14 @@ describe("Race Cars — a leg that rolled for oil, or finished the race, can't b
         const game = makeGame(gs);
 
         const command = move({ row: 21, lane: 2 });
-        await run(game, command);
+        const { outcome } = await run(game, command);
         expect(consumedRandomness(command)).toBe(true);
         expect(gs.undoStack).toHaveLength(0);
         expect(gs.undoAnchorId).toBeNull();
+        // Not undoable, so not held either (docs/undo.md §5) — it ends the
+        // turn exactly as it always has.
+        expect(outcome.turnOver).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
 
         const undone = await run(game, undo());
         expect(undone.outcome.validMove).toBe(false);
@@ -182,6 +190,8 @@ describe("Race Cars — a leg that rolled for oil, or finished the race, can't b
         expect(consumedRandomness(tow)).toBe(true);
         expect(gs.undoStack).toHaveLength(0);
         expect(gs.undoAnchorId).toBeNull();
+        expect(towed.outcome.turnOver).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
 
         const undone = await run(game, undo());
         expect(undone.outcome.validMove).toBe(false);
@@ -201,6 +211,60 @@ describe("Race Cars — a leg that rolled for oil, or finished the race, can't b
     });
 });
 
+describe("Race Cars — the hold before a turn ends (docs/undo.md §5)", () => {
+    /** b is far enough away that a's move offers no tow, so it holds instead of ending outright. */
+    function heldAfterMove() {
+        const gs = race({
+            a: { phase: "move", roll: 7, row: 20, lane: 2 },
+            b: { row: 70, lane: 1 },
+        });
+        return { gs, game: makeGame(gs) };
+    }
+
+    it("refuses a second move during the hold — phase and roll alone don't stop it", async () => {
+        const { gs, game } = heldAfterMove();
+        await run(game, move({ row: 27, lane: 1 }));
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        // Nothing else resets `phase`/`roll` while the hold is open, so
+        // without the guard this would read as an ordinary second move on
+        // the same roll rather than a driver replaying their turn.
+        const second = await run(game, move({ row: 30, lane: 1 }));
+        expect(second.outcome.validMove).toBe(false);
+        expect(seat(game, "a").row).toBe(27);
+    });
+
+    it("RaceCarsEndTurn is refused before a hold opens, accepted while it's open, and refused again once the turn has passed", async () => {
+        const { gs, game } = heldAfterMove();
+
+        const tooSoon = await run(game, endTurn());
+        expect(tooSoon.outcome.validMove).toBe(false);
+
+        await run(game, move({ row: 27, lane: 1 }));
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(game.currentTurn).toBe("a");
+
+        const ended = await run(game, endTurn());
+        expect(ended.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(game.currentTurn).toBe("b");
+
+        const tooLate = await run(game, endTurn());
+        expect(tooLate.outcome.validMove).toBe(false);
+    });
+
+    it("sends autoEndTurnAt only to the driver it's held for, the same test canUndo runs on itself", async () => {
+        const { gs, game } = heldAfterMove();
+        await run(game, move({ row: 27, lane: 1 }));
+
+        const lastId = game.gameState.commandHistory.at(-1)!.id;
+        const NAMES = { a: "Alice", b: "Bob" };
+        expect(gameStateToModel(gs, NAMES, "a", lastId).autoEndTurnAt).not.toBeNull();
+        expect(gameStateToModel(gs, NAMES, "b", lastId).autoEndTurnAt).toBeNull();
+        expect(gameStateToModel(gs, NAMES, null, lastId).autoEndTurnAt).toBeNull();
+    });
+});
+
 describe("Race Cars — declining a tow is undoable, and costs nothing to restore", () => {
     it("takes back a decline, putting the driver back in the slipstream phase", async () => {
         const gs = race({
@@ -210,14 +274,18 @@ describe("Race Cars — declining a tow is undoable, and costs nothing to restor
         const game = makeGame(gs);
 
         const declined = await run(game, slipstream({ tow: null }));
-        expect(declined.outcome.turnOver).toBe(true);
+        // Always undoable (docs/undo.md §6), so it always holds rather than
+        // ending the turn outright (§5).
+        expect(declined.outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
         expect(log(game)).toContain("waved the tow away");
-        expect(game.currentTurn).toBe("b");
+        expect(game.currentTurn).toBe("a");
 
         const undone = await run(game, undo());
         expect(undone.outcome.validMove).toBe(true);
         expect(seat(game, "a").phase).toBe("slipstream");
         expect(seat(game, "a").row).toBe(20);
+        expect(gs.autoEndTurnAt).toBeNull();
         expect(game.currentTurn).toBe("a");
     });
 });
@@ -257,9 +325,15 @@ describe("Race Cars — an undo replays byte-for-byte", () => {
         await run(game, move({ row: 27, lane: 1 }));
         await run(game, undo());
         await run(game, move({ row: 27, lane: 1 }));
+        // Closes the hold the rebuild opens (docs/undo.md §5) before the
+        // live/replayed comparison below: `autoEndTurnAt` is stamped fresh
+        // off `Date.now()` each time a command runs, so a still-open hold
+        // would compare two independently-computed deadlines against each
+        // other rather than the same one twice.
+        await run(game, endTurn());
 
         expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
-            .toEqual(["RaceCarsMove", "RaceCarsUndo", "RaceCarsMove"]);
+            .toEqual(["RaceCarsMove", "RaceCarsUndo", "RaceCarsMove", "RaceCarsEndTurn"]);
 
         const lastId = game.gameState.commandHistory.at(-1)!.id;
         for (const viewerId of ["a", "b", null]) {

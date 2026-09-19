@@ -64,6 +64,13 @@ export interface IRaceCarsSpecificGameStateResponse {
      * really is scoped to the viewer — see `gameStateToModel`.
      */
     canUndo: boolean;
+    /**
+     * When this viewer's turn will pass on its own unless they take their last
+     * move or tow back first (docs/undo.md §5). ISO, or null. Gated on the
+     * same test as `canUndo` and only ever sent to the driver it is being
+     * held for — see `gameStateToModel`.
+     */
+    autoEndTurnAt: string | null;
 }
 
 export interface IRaceCarsGameDataResponse extends IGameDataResponse {

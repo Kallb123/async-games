@@ -60,10 +60,10 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
-        // Both halves of §7 run: the plain advance moved currentTurn and left
-        // the car where it was, which is how timing out became a way to
-        // conserve wear.
-        expect(playedClassNames(game)).toEqual(['RaceCarsShift', 'RaceCarsMove']);
+        // Both halves of §7 run, plus the RaceCarsEndTurn that closes the
+        // hold this move opens (docs/undo.md §5) — an absent driver doesn't
+        // get to sit through the undo window either.
+        expect(playedClassNames(game)).toEqual(['RaceCarsShift', 'RaceCarsMove', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.gear).toBe(3);                       // climbs on a clear straight
         expect(car.row).toBe(20 + car.roll!);
@@ -94,8 +94,9 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         // A blind RaceCarsShift here would re-roll a die already thrown — which
         // is the reason this adapter branches on the driver's phase instead of
-        // handing back a fixed three-command sequence.
-        expect(playedClassNames(game)).toEqual(['RaceCarsMove']);
+        // handing back a fixed three-command sequence. RaceCarsEndTurn closes
+        // the hold this move opens (docs/undo.md §5).
+        expect(playedClassNames(game)).toEqual(['RaceCarsMove', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.gear).toBe(5);
         expect(car.row).toBe(51);
@@ -119,7 +120,8 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
         // it the moment currentTurn moves past — after which every other
         // driver's shift is refused against a phase that is not theirs, and the
         // game ends as an abandonment blamed on whoever happened to be current.
-        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream']);
+        // RaceCarsEndTurn closes the hold the tow opens (docs/undo.md §5).
+        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream', 'RaceCarsEndTurn']);
         expect(seat(state, "a").row).toBe(23);
         expect(game.currentTurn).toBe("b");
     });
@@ -133,7 +135,9 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
-        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream']);
+        // A decline is always undoable (docs/undo.md §6), so it always holds
+        // first — RaceCarsEndTurn is what closes it.
+        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.row).toBe(13);                       // §12's tow gets no waiver, so it stays put
         expect(car.tyres).toBe(5);
@@ -154,6 +158,7 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
+        expect(playedClassNames(game)).toEqual(['RaceCarsMove', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.row).toBe(56);
         expect(car.tyres).toBe(5);
@@ -175,7 +180,7 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
-        expect(playedClassNames(game)).toEqual(['RaceCarsMove']);
+        expect(playedClassNames(game)).toEqual(['RaceCarsMove', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.row).toBe(51);                       // §13: placed back on the corner's last row
         expect(car.gear).toBe(0);
@@ -195,7 +200,7 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
-        expect(playedClassNames(game)).toEqual(['RaceCarsShift', 'RaceCarsMove']);
+        expect(playedClassNames(game)).toEqual(['RaceCarsShift', 'RaceCarsMove', 'RaceCarsEndTurn']);
         const car = seat(state, "a");
         expect(car.gear).toBe(1);                       // first, and first only, out of neutral (§6a, §8.2)
         expect(car.row).toBe(5 + car.roll!);
@@ -274,8 +279,33 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
-        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream']);
+        expect(playedClassNames(game)).toEqual(['RaceCarsSlipstream', 'RaceCarsEndTurn']);
         expect(seat(state, "a").row).toBe(20);
+        expect(game.currentTurn).toBe("b");
+    });
+
+    it("closes a hold left open by its own undo window (docs/undo.md §5, §9)", async () => {
+        // If the client that would have submitted RaceCarsEndTurn once the
+        // countdown reached zero never comes back, the ordinary turn timer is
+        // the backstop — `phase`/`roll` are still whatever the held move left
+        // them at, so the adapter has to check `autoEndTurnAt` before it ever
+        // asks `conservativeTurn` for a plan, or it would try to drive the
+        // same leg a second time and be refused by the hold's own guard.
+        const state = race({
+            a: { row: 27, lane: 1, gear: 4, phase: 'move', roll: 7 },
+            b: { row: 70, lane: 1 },
+        }, {
+            undoStack: [{ by: "a", state: race({ a: { row: 20, lane: 1, gear: 4, phase: 'move', roll: 7 } }) }],
+            undoAnchorId: "some-earlier-command",
+            autoEndTurnAt: new Date(Date.now() - 1000).toISOString(),
+        });
+        const game = makeGame(state);
+
+        expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
+
+        expect(playedClassNames(game)).toEqual(['RaceCarsEndTurn']);
+        expect(state.autoEndTurnAt).toBeNull();
+        expect(seat(state, "a").row).toBe(27);          // the held move itself is untouched
         expect(game.currentTurn).toBe("b");
     });
 

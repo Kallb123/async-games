@@ -1048,3 +1048,72 @@ first live-route test proved the second one actually needs — not the shape
 writing the third one by hand too, rather than promoting a `GameUndo` that
 can't express "sometimes I don't push" or "this one polices its own turn"
 without becoming the per-game logic it was meant to replace.
+
+### §5's hold, on Race Cars
+
+Race Cars asks for a move or a tow every ordinary turn (§7), never a rare
+placement, so unlike SAC's pilot — where only its one setup road ever ends
+its own turn — *both* `RaceCarsMove` and `RaceCarsSlipstream` end their turn
+in the common case: no tow offered, a tow taken with nothing further behind
+it, or a decline. §5's hold therefore applies far more often here than it
+does in SAC, and that difference is the whole story below.
+
+- **One helper, not `sacFinishTurn`'s "is there anything left to do" check.**
+  Race Cars has no such check — whether a leg ends the turn is already
+  decided (`towOffered`, or a decline's unconditional `turnOver: true`), so
+  `raceCarsFinishTurn(data, trigger, outcome)` only asks the anchor's own
+  staleness test: if `outcome.turnOver` is true and `gs.undoAnchorId ===
+  trigger.id` (this leg is the one `raceCarsCommitUndo` just made reachable),
+  it holds — `gs.autoEndTurnAt = now + UNDO_WINDOW_MS`, `turnOver: false` —
+  otherwise the outcome passes through unchanged. A leg that rolled for oil or
+  crossed the line never matches (§6, `raceCarsCommitUndo` never moved the
+  anchor for it), so it still ends the turn immediately, exactly as before
+  this PR. Both `RaceCarsMove` and `RaceCarsSlipstream` route their one
+  turn-ending return through it; `RaceCarsSlipstream`'s decline is always
+  undoable; so it always holds first too.
+- **`RaceCarsEndTurn` — the one command Race Cars gained no other way to
+  reach.** The game has never had a manual "End turn": a turn has always
+  ended itself the instant nothing was left to decide. The hold changes that
+  for the first time, so it needed a command to close one — valid only while
+  `gs.autoEndTurnAt` is set, checked against `driverOnTurn` like every other
+  command (no `ignoresTurnGate`: the held driver is still `currentTurn`,
+  since holding is precisely *not* advancing it). It is the board's own
+  "Pass now" and the client's expired countdown alike, and the stalled-turn
+  sweep's own way of closing a hold nobody came back to finish (§9, below).
+- **A guard SAC's placements didn't need.** `RaceCarsMove` and
+  `RaceCarsSlipstream` leave `phase`/`roll` exactly where the held leg left
+  them — nothing resets either until the hold closes — so the ordinary
+  "is this the right phase" check alone would let the same driver drive a
+  second leg on the same roll for as long as the window stayed open. Both
+  commands' `Execute` now refuse outright while `gs.autoEndTurnAt` is set,
+  before that check ever runs. `RaceCarsGameType.CheckEndTurn` clears the
+  field unconditionally whenever it runs with `turnOver: true` — which,
+  thanks to `raceCarsFinishTurn`, only ever happens once a hold is genuinely
+  closing — so nothing is left behind to lock the next driver's first move.
+- **The turn-timer backstop needs one branch SAC's doesn't.** SAC's adapter
+  never inspects `autoEndTurnAt`: its main-phase "nothing left to decide"
+  test just comes out true a second time and reaches the same `SACEndTurn`
+  by the path it already had. Race Cars has no such test — `phase`/`roll`
+  don't change during a hold — so its adapter checks `gs.autoEndTurnAt`
+  before it ever asks `conservativeTurn` for a plan, and returns
+  `RaceCarsEndTurn` directly when a hold is open, the same way SAC's own
+  setup branch does.
+- **Redacted the same way `canUndo` is, for the same reason.** Nothing in
+  Race Cars is hidden (§2's fourth pillar), so `autoEndTurnAt` isn't closing
+  a leak the way it is in SAC — but there is still nothing for anyone but the
+  held driver to do with it, gated on the identical `topEntry?.by ===
+  viewerId && gs.undoAnchorId === lastCommandId` test `canUndo` already runs,
+  so the two can never disagree about who a hold belongs to.
+- **What replay does *not* reproduce exactly, inherited from SAC.**
+  `gs.autoEndTurnAt` is stamped from `Date.now()` inside `Execute`, same as
+  SAC's, so a recap or match-review step built by replaying a hold-opening
+  command gets a deadline ten seconds from *whenever that replay ran* rather
+  than the one the live table actually saw. `canUndo` doesn't share the
+  problem — it is reconstructed from command ids, which replay reproduces
+  exactly — so only the timestamp's value is off, never whether a hold reads
+  as open. Real, and already true of SAC's own recap today; not fixed here
+  because doing so would mean recording the deadline on the triggering
+  command the way a die roll is recorded, and that field would itself read as
+  consumed randomness to `consumedRandomness` — a change to the shared
+  convention, not a one-game fix, and worth raising with whoever builds
+  Race Cars' own hold-countdown UI before it is built on top of this gap.

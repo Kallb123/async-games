@@ -138,6 +138,16 @@ export interface IRaceCarsSpecificGameState {
      * §4).
      */
     undoAnchorId: string | null;
+    /**
+     * When a turn that is ready to end is being held open so its driver can
+     * still take their last move or tow back (docs/undo.md §5). ISO, or null
+     * the rest of the time. Set only when the leg that would have ended the
+     * turn is the one directly behind the undo anchor — a leg that rolled for
+     * oil or crossed the line ends the turn immediately instead, exactly as it
+     * always has — and cleared by `RaceCarsGameType.CheckEndTurn` once the
+     * hand-off it was holding open is actually final.
+     */
+    autoEndTurnAt: string | null;
 }
 
 function playerStates(state: IRaceCarsSpecificGameState): Map<string, IRaceCarsPlayerState> {
@@ -187,7 +197,12 @@ function clonePlayerState(ps: IRaceCarsPlayerState): IRaceCarsPlayerState {
  * player map in `userIdList` order (see `clonePlayerStates`). Used to seed
  * turn recap's starting snapshot and, unchanged, an undo snapshot
  * (docs/undo.md §7) — `undoStack: []`/`undoAnchorId: null` so a snapshot never
- * nests a stack of its own.
+ * nests a stack of its own, and `autoEndTurnAt` copied through (not forced
+ * null) so restoring an undo snapshot puts the hold back exactly where it
+ * was — which for the pre-move snapshot §5's hold is taken from is always
+ * null, since `raceCarsCommitUndo` never pushes one while a hold is already
+ * open (see the `gs.autoEndTurnAt` guard on `RaceCarsMove`/`RaceCarsSlipstream`
+ * in RaceCarsLogic.ts).
  */
 export function cloneRaceCarsState(
     gs: IRaceCarsSpecificGameState,
@@ -205,6 +220,7 @@ export function cloneRaceCarsState(
         players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
         undoStack: [],
         undoAnchorId: null,
+        autoEndTurnAt: gs.autoEndTurnAt ?? null,
     };
 }
 

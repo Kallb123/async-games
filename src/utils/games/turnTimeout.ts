@@ -12,7 +12,7 @@ import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from "@/gam
 import { IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { HAND_LIMIT as BANNED_ISLET_HAND_LIMIT } from "@/games/BannedIslet/board";
 import { forcedDiscard } from "@/games/BannedIslet/rules";
-import { RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
+import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
@@ -235,6 +235,15 @@ registerTurnTimeoutAdapter({
         // keeps that outcome a decision rather than a refusal reached by
         // accident — which is what `unresolved` below is written against.
         if (!mongoMap(gs.players).has(userId)) return null;
+
+        // The leg that just ran is holding the turn open for its own undo
+        // window (docs/undo.md §5) rather than having ended it outright — an
+        // absent driver doesn't get to sit through that wait, so the stalled-
+        // turn sweep closes it the same way the client would once the
+        // countdown ran out. `phase`/`roll` are unchanged from that leg (the
+        // hold is what stops `conservativeTurn` from being asked at all), so
+        // this has to be checked before it, not folded into one of its cases.
+        if (gs.autoEndTurnAt) return new RaceCarsEndTurn();
 
         const plan = conservativeTurn(gs, userId);
         // §6a: the startup round's d20 is the one command with nothing to

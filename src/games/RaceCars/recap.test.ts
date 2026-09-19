@@ -46,6 +46,7 @@ function state(
         roundIndex: 0,
         slicks: [],
         canUndo: false,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }

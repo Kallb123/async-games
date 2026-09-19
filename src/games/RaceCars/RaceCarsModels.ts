@@ -207,6 +207,7 @@ export function buildInitialRaceCarsState(
         players,
         undoStack: [],
         undoAnchorId: null,
+        autoEndTurnAt: null,
     };
 }
 
@@ -271,6 +272,7 @@ function makeRaceCarsStateSchemaDef() {
         // ─── Undo (docs/undo.md) ────────────────────────────────────────────
         undoStack: [{ by: String, state: Schema.Types.Mixed }],
         undoAnchorId: { type: String, default: null },
+        autoEndTurnAt: { type: String, default: null },
     };
 }
 
@@ -378,6 +380,15 @@ export function gameStateToModel(
     const topEntry = (gs.undoStack ?? []).at(-1);
     const canUndo = topEntry?.by === viewerId && gs.undoAnchorId === lastCommandId;
 
+    // Gated on exactly the same test as canUndo, not a separate "whose hold
+    // is this" field of its own: the two can never disagree about who it's
+    // for, since it's the same command that sets both (docs/undo.md §5, §8).
+    // Not sensitive here the way it is for Settlements & Cities — Race Cars
+    // has nothing hidden to give away (§2's fourth pillar) — but there is
+    // still nothing for anyone but the held driver to do with it, and one
+    // rule is easier to keep than two.
+    const autoEndTurnAt = canUndo ? (gs.autoEndTurnAt ?? null) : null;
+
     return {
         trackId: gs.trackId,
         laps: gs.laps,
@@ -389,6 +400,7 @@ export function gameStateToModel(
         slicks: gs.slicks.map(slick => ({ row: slick.row, lane: slick.lane, laidOnRound: slick.laidOnRound })),
         playerStates,
         canUndo,
+        autoEndTurnAt,
     };
 }
 

@@ -417,6 +417,15 @@ export const MIN_MOVE_STEPS = 1;
  */
 export const UNDO_STACK_DEPTH = 2;
 
+/**
+ * How long a turn that is ready to end is held open for its own undo window
+ * (docs/undo.md §5) before `RaceCarsEndTurn` closes it on its own — the same
+ * ten seconds Settlements & Cities holds a placement for, and the same
+ * constant so moving it later is one import change per file rather than a
+ * hunt for a literal `10_000` (docs/undo.md §16).
+ */
+export const UNDO_WINDOW_MS = 10_000;
+
 // ─── Board geometry (§5.1, §10) ─────────────────────────────────────────────
 
 /** The key a (row, lane) pair is looked up by in an occupancy or slick set. */
