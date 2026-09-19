@@ -158,6 +158,48 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
     });
 });
 
+// The hold on a turn ready to end (docs/undo.md §5), and who is allowed to
+// see it — the same redaction shape as the auto-ended roll above, and for the
+// same reason: a held main-phase turn is held because its player could
+// afford nothing.
+describe("Settlements & Cities' held turn on the wire", () => {
+    function heldState(): ISACSpecificGameState {
+        return makeState({
+            playerStates: new Map([["u1", player()], ["u2", player()]]),
+            undoStack: [{ by: "u1", state: makeState() }],
+            undoAnchorId: "cmd-1",
+            autoEndTurnAt: "2026-01-01T00:00:10.000Z",
+        });
+    }
+
+    it("sends the deadline, and canUndo, only to the player it's held for", () => {
+        const wire = gameStateToResponse(heldState(), NAMES, "u1", "cmd-1");
+
+        expect(wire.canUndo).toBe(true);
+        expect(wire.autoEndTurnAt).toBe("2026-01-01T00:00:10.000Z");
+    });
+
+    it.each([["an opponent", "u2"], ["a spectator", null]] as const)(
+        "hides both from %s",
+        (_who, viewerId) => {
+            const wire = gameStateToResponse(heldState(), NAMES, viewerId, "cmd-1");
+
+            expect(wire.canUndo).toBe(false);
+            expect(wire.autoEndTurnAt).toBeNull();
+        },
+    );
+
+    it("hides the deadline once the anchor has gone stale, even though the stack still names the mover", () => {
+        // The same staleness test canUndo runs on itself: a non-undoable
+        // command played after the hold was set moves commandHistory's tail
+        // on without touching the stack, so lastCommandId no longer matches.
+        const wire = gameStateToResponse(heldState(), NAMES, "u1", "cmd-2");
+
+        expect(wire.canUndo).toBe(false);
+        expect(wire.autoEndTurnAt).toBeNull();
+    });
+});
+
 // A roll's total (2-12) is tallied straight off SACRollDice's own recorded
 // dice in commandHistory, not replayed - see computeSACRollFrequency. These
 // prove the tally against the shape commandHistory actually stores rolls in,

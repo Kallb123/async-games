@@ -82,6 +82,20 @@ function mainBoardWithRoad() {
     return { gs, edgeId };
 }
 
+// Same shape as mainBoardWithRoad, but with exactly enough for the one road
+// and nothing else — no spare resource to trade even at 4:1, no dev card in
+// hand or in the deck — so building it leaves u1 with nothing left to build,
+// buy or trade (docs/undo.md §5's hold).
+function mainBoardReadyToFinish() {
+    const gs = makeState(emptyBoard());
+    const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+    gs.vertices[vertexId] = { building: "settlement", owner: "u1" };
+    const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
+    gs.playerStates.set("u1", player({ resources: { brick: 1, lumber: 1 } }));
+    gs.playerStates.set("u2", player());
+    return { gs, edgeId };
+}
+
 describe("Settlements & Cities — undoing a setup placement", () => {
     it("takes back a settlement, restoring the vertex, the piece count and the resources it granted", async () => {
         const gs = setupBoard(2); // second round: this placement also gathers.
@@ -233,6 +247,95 @@ describe("Settlements & Cities — who may undo", () => {
         const undone = await run(game, cmd(new SACUndo(), "u2"));
         expect(undone.outcome.validMove).toBe(false);
         expect(gs.edges[edgeId].hasRoad).toBe(true);
+    });
+});
+
+describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5)", () => {
+    it("holds a main-phase build that leaves nothing else to do, rather than ending the turn", async () => {
+        const { gs, edgeId } = mainBoardReadyToFinish();
+        const game = makeGame(gs);
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+
+        const { outcome } = await run(game, road);
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(new Date(gs.autoEndTurnAt!).getTime()).toBeGreaterThan(Date.now());
+        expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
+            .toEqual(["SACBuildRoad"]);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("undoing that build clears the hold and leaves the turn with its player", async () => {
+        const { gs, edgeId } = mainBoardReadyToFinish();
+        const game = makeGame(gs);
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+        await run(game, road);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.edges[edgeId].hasRoad).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("still ends a roll-triggered auto-end immediately, with no hold", async () => {
+        // Same shape as autoEndTurn.test.ts: SACRollDice pushes no snapshot, so
+        // there's nothing on the anchor for sacFinishTurn to hold for — a roll
+        // that leaves nothing to do ends the turn exactly as it does today.
+        const gs = makeState({ hasRolled: false, lastRoll: null, ...emptyBoard() });
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        const { outcome } = await run(game, rollOf(5, 3));
+        expect(outcome.turnOver).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(game.currentTurn).toBe("u2");
+    });
+
+    it("holds a setup turn's road, accepting SACEndTurn only while the hold is open", async () => {
+        const gs = setupBoard(0);
+        const game = makeGame(gs);
+
+        // Nothing placed yet: nothing to hold, so End Turn is refused outright.
+        const beforeAnything = await run(game, cmd(new SACEndTurn()));
+        expect(beforeAnything.outcome.validMove).toBe(false);
+
+        const settlement = cmd(new SACPlaceSettlementSetup());
+        settlement.vertexId = SETUP_VERTEX;
+        await run(game, settlement);
+
+        // Mid-sequence — the settlement's road is still outstanding — so still
+        // nothing to hold, and pendingRoadSetup blocks it either way.
+        const midSequence = await run(game, cmd(new SACEndTurn()));
+        expect(midSequence.outcome.validMove).toBe(false);
+        expect(gs.setupStep).toBe(0);
+
+        const road = cmd(new SACPlaceRoadSetup());
+        road.edgeId = SETUP_EDGE;
+        const built = await run(game, road);
+        expect(built.outcome.validMove).toBe(true);
+        expect(built.outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        // The road hasn't handed the turn off yet — the hold is still open.
+        expect(gs.setupStep).toBe(0);
+        expect(game.currentTurn).toBe("u1");
+
+        const ended = await run(game, cmd(new SACEndTurn()));
+        expect(ended.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        // The snake order actually advanced exactly once.
+        expect(gs.setupStep).toBe(1);
+        expect(game.currentTurn).toBe("u2");
+
+        // Refused again now that the turn has passed.
+        const tooLate = await run(game, cmd(new SACEndTurn()));
+        expect(tooLate.outcome.validMove).toBe(false);
+        expect(gs.setupStep).toBe(1);
     });
 });
 

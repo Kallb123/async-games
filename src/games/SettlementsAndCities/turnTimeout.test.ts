@@ -247,6 +247,32 @@ describe("Settlements & Cities turn timeout — main phase", () => {
         expect(game.currentTurn).toBe("u2");
     });
 
+    it("still resolves a turn left held for its own undo window (docs/undo.md §9)", async () => {
+        // If the client that would have submitted SACEndTurn once the
+        // countdown reached zero never comes back, the ordinary turn timer is
+        // the backstop — the adapter doesn't look at autoEndTurnAt at all, it
+        // just sees nothing pending and ends the turn the same as any other
+        // stalled one, closing the hold along with the rest of it.
+        const gs = makeState({
+            phase: "main",
+            vertices: emptyVertices(),
+            edges: emptyEdges(),
+            hasRolled: true,
+            undoStack: [{ by: "u1", state: makeState() }],
+            undoAnchorId: "some-earlier-command",
+            autoEndTurnAt: new Date(Date.now() - 1000).toISOString(),
+        });
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        expect(await resolveStalledTurn(game, "u1", "Alice")).toBe("advanced");
+        expect(playedClassNames(game)).toEqual(["SACEndTurn"]);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.undoStack).toEqual([]);
+        expect(game.currentTurn).toBe("u2");
+    });
+
     it("declines a turn for a seat the game doesn't hold, rather than looping on it", async () => {
         const gs = makeState({ phase: "main", vertices: emptyVertices(), edges: emptyEdges(), hasRolled: true });
         gs.playerStates.set("u1", player());
