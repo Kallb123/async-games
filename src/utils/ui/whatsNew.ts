@@ -126,6 +126,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The party size line no longer spills past the edge of the setup screen",
+                detail: "On a game's setup screen, the \"Party size N · supports X–Y players\" line sat flush against the left and right edges of the phone instead of lining up with the seats and turn-timer rows above it. It now sits inside the same margin as the rest of the page.",
+            },
+            {
                 title: "A missed Settlements & Cities turn no longer breaks the board",
                 detail: "If nobody was around when your turn timer ran out, the game used to just skip straight to whoever was next without actually playing your turn for you — during setup that could scramble the placement order or leave the next player building a road onto your settlement, and on a main turn it skipped the whole table's roll, not just yours. A missed turn now plays itself out: a settlement and road go down somewhere legal during setup, the dice get rolled and the robber gets moved on a main turn, and anything left over is passed rather than lost.",
                 game: "settlementsandcities",
@@ -166,11 +170,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Train Time's match review speaks plain English",
                 detail: "Stepping back through a Train Time match used to label every action with internal gibberish — \"Train Time ClaimRoute route=3 cards=blue,blue,blue,blue\" — instead of what happened. Each step now reads the way the turn history does: \"drew from the deck\", \"took the face-up red\", \"claimed Seattle – Vancouver (1 track, +1)\", \"kept 2 of 3 destination tickets\".",
                 game: "traintime",
-            },
-            {
-                title: "Settlements & Cities' match review speaks plain English",
-                detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history does: \"built a settlement\", \"moved the robber and stole a resource from Bob\", and a roll names who collected what — \"rolled a 9 — Alice +2🪵 +1🌾, Bob +1⛏️\".",
-                game: "settlementsandcities",
             },
         ],
     },

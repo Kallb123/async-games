@@ -233,7 +233,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
                 {starting ? 'Starting…' : 'Start now'}
               </button>
               {startError && meta
-                ? <PartySizeHint meta={meta} total={partySize} />
+                ? <PartySizeHint meta={meta} total={partySize} bare />
                 : <p className="ag-hint ag-hint--center">Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
             </div>
           )}
