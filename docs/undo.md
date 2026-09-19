@@ -1104,3 +1104,16 @@ does in SAC, and that difference is the whole story below.
   held driver to do with it, gated on the identical `topEntry?.by ===
   viewerId && gs.undoAnchorId === lastCommandId` test `canUndo` already runs,
   so the two can never disagree about who a hold belongs to.
+- **What replay does *not* reproduce exactly, inherited from SAC.**
+  `gs.autoEndTurnAt` is stamped from `Date.now()` inside `Execute`, same as
+  SAC's, so a recap or match-review step built by replaying a hold-opening
+  command gets a deadline ten seconds from *whenever that replay ran* rather
+  than the one the live table actually saw. `canUndo` doesn't share the
+  problem — it is reconstructed from command ids, which replay reproduces
+  exactly — so only the timestamp's value is off, never whether a hold reads
+  as open. Real, and already true of SAC's own recap today; not fixed here
+  because doing so would mean recording the deadline on the triggering
+  command the way a die roll is recorded, and that field would itself read as
+  consumed randomness to `consumedRandomness` — a change to the shared
+  convention, not a one-game fix, and worth raising with whoever builds
+  Race Cars' own hold-countdown UI before it is built on top of this gap.
