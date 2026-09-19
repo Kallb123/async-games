@@ -1023,10 +1023,28 @@ Settlements & Cities placement never does:
   successful restore — safe because the anchor already guarantees at most one
   hand-off happened since the snapshot, and it was this command's own target
   that caused it.
+- **`RaceCarsUndo` is exempt from `/api/game/command`'s own "is it your turn"
+  gate; `SACUndo` is not.** That gate runs *before* any command's `Execute`,
+  against whatever the previous request already saved — so the instant a move
+  ends its own turn, `currentTurn` is the next driver by the time the sender's
+  own follow-up request could physically arrive, and the gate refuses it
+  before `RaceCarsUndo` (or the `data.currentTurn` restore two bullets up)
+  ever runs. This is the same gap named above, one layer further out: SAC's
+  pilot leaves it in place for its one rare placement, planning to close it
+  with §5's hold instead. Race Cars can't wait for that hold — the gap would
+  swallow the ordinary case for *both* undoable commands, not one rare one —
+  so `RaceCarsUndo` declares `readonly ignoresTurnGate = true`
+  (`gameCommand.ts`'s `ignoresTurnGate`, checked nowhere else) and the route
+  lets it through, trusting `Execute`'s own anchor-and-ownership check —
+  itself strictly narrower than "is it your turn" — to police who may
+  actually run it. `SACUndo` does not opt in, on purpose: its one gap stays
+  exactly as open as it always was, closed by the hold when that lands rather
+  than by a gate every game's Undo would otherwise inherit for free.
 
-Two commands, one genuine behavioural difference (the conditional push) and
-one it exposed that SAC's own pilot was quietly carrying — not the shape §16
-expected a second game to be identical in. That's the signal to keep writing
-the third one by hand too, rather than promoting a `GameUndo` that can't
-express "sometimes I don't push" without becoming the per-game logic it was
-meant to replace.
+Three commands' worth of real behavioural difference from `SACUndo` — the
+conditional push, the `currentTurn` restore, and the turn-gate exemption the
+first live-route test proved the second one actually needs — not the shape
+§16 expected a second game to be identical in. That's the signal to keep
+writing the third one by hand too, rather than promoting a `GameUndo` that
+can't express "sometimes I don't push" or "this one polices its own turn"
+without becoming the per-game logic it was meant to replace.

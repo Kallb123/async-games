@@ -114,6 +114,25 @@ export function consumedRandomness(command: IGameCommand): boolean {
     return Object.keys(fields).some(key => key.startsWith("recorded") && key !== RECORDED_FOLLOW_UP_TO_ID);
 }
 
+// An explicit opt-in (`readonly ignoresTurnGate = true`), the same
+// per-class-marker shape `undoable` uses below, checked in exactly one place:
+// /api/game/command's own "is it your turn" gate. Every command answers that
+// gate by default; a command that opts out is not acting on the live turn at
+// all and is trusted to police its own authority inside `Execute` instead.
+//
+// docs/undo.md's RaceCarsUndo is the first: its authority is the undo anchor,
+// which `CheckEndTurn` advancing `currentTurn` to the next driver does not
+// invalidate, so without this a driver could never reach `RaceCarsUndo.Execute`
+// at all for the ordinary case — a move or tow that ended their own turn —
+// because the very next request they send already fails the gate. Settlements
+// & Cities' own `SACUndo` does not opt in: its one turn-ending placement is
+// deliberately left for its own hold (docs/undo.md §5) to close instead, and
+// giving another game's Undo command this exemption for free is a call for
+// whoever builds that game's own pilot, not a default it inherits.
+export function ignoresTurnGate(command: IGameCommand): boolean {
+    return (command as unknown as Record<string, unknown>).ignoresTurnGate === true;
+}
+
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,
 // keyed by userId) can't survive `NextResponse.json`: a Map has no own
 // enumerable properties, so plain JSON.stringify sends it over as `{}`. Every

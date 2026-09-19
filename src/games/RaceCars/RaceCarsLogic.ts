@@ -621,13 +621,23 @@ function raceCarsUndoSnapshot(data: IRaceCarsGameData): IRaceCarsSpecificGameSta
 }
 
 /**
- * Commits a snapshot `raceCarsUndoSnapshot` already took, once the leg it was
- * taken before is known to qualify. Mirrors SAC's `sacPushUndo`: capped at
+ * Commits a snapshot `raceCarsUndoSnapshot` already took — unless `arrival`
+ * says the leg it was taken before rolled for oil (§14) or crossed the line,
+ * the one eligibility test both undoable commands share, kept in this one
+ * place so a later change to it can't update one call site and miss the
+ * other. `arrival` is `null` for a decline, which has neither and is always
+ * eligible. Mirrors SAC's `sacPushUndo` otherwise: capped at
  * UNDO_STACK_DEPTH, and the anchor is what makes an older entry unreachable
  * the moment anything else is played, so dropping the oldest only ever costs
  * reach, never correctness.
  */
-function raceCarsCommitUndo(data: IRaceCarsGameData, command: IGameCommand, preState: IRaceCarsSpecificGameState): void {
+function raceCarsCommitUndo(
+    data: IRaceCarsGameData,
+    command: IGameCommand,
+    preState: IRaceCarsSpecificGameState,
+    arrival: RaceCarsArrival | null,
+): void {
+    if (arrival && (arrival.oilRolls.length > 0 || arrival.finished)) return;
     const gs = data.specificGameState;
     gs.undoStack.push({ by: command.senderId, state: preState });
     if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
@@ -722,14 +732,11 @@ export class RaceCarsMove implements IGameCommand {
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // docs/undo.md §6: a leg that rolled for oil consumed randomness this
-        // turn, and one that crossed the line ended the race outright — either
-        // disqualifies this move from being taken back, so the pre-move
-        // snapshot above is simply left uncommitted, exactly like a command
-        // that never pushed one at all.
-        if (settled.arrival.oilRolls.length === 0 && !settled.arrival.finished) {
-            raceCarsCommitUndo(data, this, preUndoState);
-        }
+        // docs/undo.md §6: `raceCarsCommitUndo` leaves the pre-move snapshot
+        // uncommitted, exactly like a command that never pushed one at all,
+        // once `settled.arrival` says this leg rolled for oil or crossed the
+        // line — either disqualifies it from being taken back.
+        raceCarsCommitUndo(data, this, preUndoState, settled.arrival);
 
         // §12: a move that ends directly behind another car, fast enough to
         // draft, is owed a tow, and the turn is not over until the driver has
@@ -804,7 +811,7 @@ export class RaceCarsSlipstream implements IGameCommand {
             // when the round comes back round to this driver, which is the one
             // place that reset lives (§23.7 PR 3).
             data.gameState.history.unshift(playerHistory(this.senderId, 'waved the tow away'));
-            raceCarsCommitUndo(data, this, preUndoState);
+            raceCarsCommitUndo(data, this, preUndoState, null);
             return { validMove: true, turnOver: true };
         }
 
@@ -846,11 +853,9 @@ export class RaceCarsSlipstream implements IGameCommand {
         // Store the oil rolls back into the command for replay (§23.4).
         this.recordedOilRolls = settled.arrival.oilRolls;
 
-        // docs/undo.md §6: same test as RaceCarsMove — a tow that rolled for
-        // oil or crossed the line cannot be taken back.
-        if (settled.arrival.oilRolls.length === 0 && !settled.arrival.finished) {
-            raceCarsCommitUndo(data, this, preUndoState);
-        }
+        // docs/undo.md §6: same test as RaceCarsMove, via the same helper — a
+        // tow that rolled for oil or crossed the line cannot be taken back.
+        raceCarsCommitUndo(data, this, preUndoState, settled.arrival);
 
         // §12: chained. Ending this tow directly behind another car that is
         // fast enough to draft earns another — `slipstreamOffered` is
@@ -869,6 +874,11 @@ export class RaceCarsUndo implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'RaceCarsUndo';
+    // See `ignoresTurnGate` (gameCommand.ts): without this, the ordinary case
+    // — a move or tow that ended the sender's own turn — could never reach
+    // `Execute` at all, because CheckEndTurn has already advanced
+    // `currentTurn` by the time this command's own request could arrive.
+    readonly ignoresTurnGate = true;
 
     myString() { return 'took back their last move'; }
 
