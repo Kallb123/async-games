@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useNativeGoogleSignIn } from "@/utils/hooks/useNativeGoogleSignIn";
+import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 
 /**
  * A Clerk card (`<SignIn />`, `<SignUp />`) with the app's own Google button
@@ -23,6 +24,7 @@ export default function AuthCardStack({ children }: { children: ReactNode }) {
     // where leaving Clerk's in place would strand the player in the system
     // browser (`capacitor.config.ts` keeps Google off `allowNavigation`).
     const native = status !== 'absent';
+    const busy = status === 'busy';
 
     return (
         <div className={`ag-stack ag-auth-stack${native ? ' ag-auth-stack--native' : ''}`}>
@@ -41,15 +43,27 @@ export default function AuthCardStack({ children }: { children: ReactNode }) {
                         type="button"
                         className="ag-btn ag-btn--light ag-btn--block"
                         onClick={signIn}
-                        disabled={status === 'busy'}
+                        disabled={busy}
                     >
                         <GoogleMark />
-                        {status === 'busy' ? 'Signing in…' : 'Continue with Google'}
+                        {busy ? 'Signing in…' : 'Continue with Google'}
                     </button>
                     {error && <p className="ag-hint ag-hint--center">{error}</p>}
                 </>
             )}
-            {children}
+            {/* The handshake and our own ticket exchange both run before Clerk's
+                card hears anything about it, so without this it stays tappable
+                for the whole wait — a stray tap on its submit or "use another
+                method" would fight the sign-in already underway. Same bar the
+                game top bar shows while a screen waits on the network. */}
+            {busy && (
+                <div className="ag-auth-loading">
+                    <span className="ag-pending-bar" role="progressbar" aria-label="Signing in with Google" />
+                </div>
+            )}
+            <ReadOnlyPanel readOnly={busy}>
+                {children}
+            </ReadOnlyPanel>
         </div>
     );
 }
