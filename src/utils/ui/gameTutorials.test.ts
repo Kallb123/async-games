@@ -75,9 +75,9 @@ describe("GAME_TUTORIALS anchors", () => {
 });
 
 describe("hasTutorial", () => {
-    it("is false for every game while GAME_TUTORIALS is empty", () => {
-        expect(GAME_TUTORIALS).toEqual({});
-        for (const gameUrl of ["dicecities", "outbreak", "worlddomination", "not-a-real-game"]) {
+    it("is true only for a game registered in GAME_TUTORIALS", () => {
+        expect(hasTutorial("dicecities")).toBe(true);
+        for (const gameUrl of ["outbreak", "worlddomination", "not-a-real-game"]) {
             expect(hasTutorial(gameUrl)).toBe(false);
         }
     });

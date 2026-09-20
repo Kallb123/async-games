@@ -10,6 +10,8 @@
 // Adding a new game's tour means one import + one line in GAME_TUTORIALS,
 // not editing a shared object literal.
 
+import { tutorial as diceCitiesTutorial } from "@/games/DiceCities/tutorial";
+
 /**
  * A single step of a tour: a spotlight on `anchor` plus one message, or —
  * with no anchor at all — a centred card with no spotlight, for the opening
@@ -42,11 +44,13 @@ export interface GameTutorial<S extends string = string> {
     steps: TutorialStep<S>[];
 }
 
-// Keyed by the same url slug as GAME_META / GAME_GUIDES. Empty until a game
-// adds a tutorial.ts and registers it here — /api/gameguides validates a
-// "seen" write against this allowlist by kind, the same way GAME_GUIDES
-// already guards the "seen guide" list.
-export const GAME_TUTORIALS: Record<string, GameTutorial> = {};
+// Keyed by the same url slug as GAME_META / GAME_GUIDES. A game adds a
+// tutorial.ts and registers it here — /api/gameguides validates a "seen"
+// write against this allowlist by kind, the same way GAME_GUIDES already
+// guards the "seen guide" list.
+export const GAME_TUTORIALS: Record<string, GameTutorial> = {
+    dicecities: diceCitiesTutorial,
+};
 
 /** Whether this game has a tour at all. */
 export function hasTutorial(gameUrl: string): boolean {

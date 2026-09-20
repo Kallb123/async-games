@@ -414,7 +414,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const canDouble = myState.doubleUnlocked;
         const effectiveDice = canDouble ? diceCount : 1;
         return (
-            <div className="ag-dc-bank ag-pending-group">
+            <div className="ag-dc-bank ag-pending-group" data-tour="dc-roll">
                 <div className="ag-dc-bank-head">
                     <CoinPill amount={myState.money} label={words.coins} />
                     <CoinPill amount={gameState.bankMoney} label={`in ${words.bank}`} pill />
@@ -463,7 +463,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                 <div className="ag-callout ag-dc-callout">🎉 Doubles! You&apos;ll take another turn after this one.</div>
             )}
 
-            <div className="ag-actionsheet ag-dc-market">
+            <div className="ag-actionsheet ag-dc-market" data-tour="dc-market">
                 {marketSheet}
 
                 {canReroll && (
