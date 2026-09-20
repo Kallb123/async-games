@@ -1,8 +1,11 @@
 # Interactive game tutorials
 
-**Status: plan, not yet built.** This is the design for the feature and the
-order to build it in. Nothing described here exists yet; the pieces it reuses
-do, and are linked as they come up.
+**Status: built, live on Dice Cities and Settlements & Cities.** PRs 1 and 2
+of §12 are in: `GameShell` owns the game guide, the tutorial machinery
+(`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`) exists, and both
+games have their own `tutorial.ts`. PR 3 carries the tour to the other six
+games; PR 4 (a tour from the setup screen, per-node board anchors) stays a
+follow-up, not required for the feature to be complete.
 
 A tutorial is a guided tour of a game's real screen: it points at a thing,
 says what the thing is, and moves on — and where the thing is something the

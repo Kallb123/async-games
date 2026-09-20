@@ -124,10 +124,17 @@ new" notes (see Working practices below).
 Most also want a **game guide**: a `guide.ts` beside the game's `meta.ts`
 exporting a `GameGuide`, wired into `GAME_GUIDES` in
 `src/utils/ui/gameGuides.ts` and shown by the board screen through
-`useGameGuide`. It's the how-to-play popup a player gets on their first match
+`useGameIntro`. It's the how-to-play popup a player gets on their first match
 and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`,
 in the player's language — match the existing guides rather than restating the
 GDD.
+
+Most also want a **guided tutorial**: a `tutorial.ts` beside it, exporting a
+`GameTutorial`, registered in `GAME_TUTORIALS` in
+`src/utils/ui/gameTutorials.ts` and handed to `GameShell`'s `tutorial` prop.
+It's the spotlight-and-card tour of the live board a player gets in place of
+the guide's auto-show on their first match — see
+[`docs/game-tutorials.md`](./docs/game-tutorials.md) for the full design.
 
 A game can also offer **themes** — alternative dressings picked on the setup
 screen, changing every name, every piece of copy and the art while changing no

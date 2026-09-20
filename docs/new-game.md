@@ -154,11 +154,19 @@ none fit, it's a single source of truth other UI derives from), `players`,
   multiplayer games) `useTurnNavigation`/`TurnNavControls`/`useTurnRecap`
   (§7).
 - `src/games/<Game>/guide.ts` *(optional)* — a `GameGuide` (a title plus a
-  handful of `{heading, body}` sections) for the how-to-play popup. The board
-  screen shows it with `useGameGuide('<game>')`, a `key: 'guide'` row in its
-  `GameOption`s, and `{gameGuide.open && <GameGuideModal guide={…} …/>}` — the
-  same six lines on every board that has one. Keep it to five sections, `Goal`
-  first, then `Your turn`, matching the existing guides.
+  handful of `{heading, body}` sections) for the how-to-play popup, registered
+  in `GAME_GUIDES`. The board screen's `useGameIntro('<game>')` call and its
+  `guide`/`intro` props on `GameShell` do the rest — no per-page modal or menu
+  row to write. Keep it to five sections, `Goal` first, then `Your turn`,
+  matching the existing guides.
+- `src/games/<Game>/tutorial.ts` *(optional)* — a `GameTutorial`: an ordered
+  list of steps spotlighting the game's own board, shown once in place of the
+  guide's auto-show. Registered in `GAME_TUTORIALS` in
+  `src/utils/ui/gameTutorials.ts` and passed to `GameShell`'s `tutorial` prop,
+  the same idiom as the guide. See
+  [`game-tutorials.md`](./game-tutorials.md) for the anchor and signal
+  conventions — Dice Cities and Settlements & Cities are the reference
+  implementations.
 - `src/games/<Game>/themes.ts` *(optional)* — the dressings the game can be
   played in, if it has more than one: same rules and numbers, different names
   and art, picked by the host on the setup screen with `<ThemeSelect>`. See
@@ -182,6 +190,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
 | `src/utils/ui/gameGuides.ts` | *(only if you added a `guide.ts`)* import it and add it to `GAME_GUIDES` — the popup can't record itself as seen without this, so it re-shows every visit |
+| `src/utils/ui/gameTutorials.ts` | *(only if you added a `tutorial.ts`)* import it and add it to `GAME_TUTORIALS` — `/api/gameguides` checks a "seen tutorial" write against this allowlist, so an unregistered tour can't record itself as seen either |
 | `src/utils/ui/gameThemes.ts` | *(only if you added a `themes.ts`)* import the list and add it to `GAME_THEMES` — without it the game plays in its default theme and silently offers no picker, so the other dressings are unreachable |
 
 ### 7. Turn recap & planning
