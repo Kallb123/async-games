@@ -96,6 +96,7 @@ export async function resetApiRouteStubs() {
     clerkUsers = [];
     metadataWrites.length = 0;
     mintedSignInTokens.length = 0;
+    createdUsers.length = 0;
     games.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
@@ -132,7 +133,10 @@ export async function resetApiRouteStubs() {
  * The metadata writes routes made this test, oldest first — for asserting what
  * a route stored without reaching back into the stubbed user.
  */
-export const metadataWrites: { userId: string, publicMetadata?: Record<string, unknown> }[] = [];
+export const metadataWrites: { userId: string, publicMetadata?: Record<string, unknown>, privateMetadata?: Record<string, unknown> }[] = [];
+
+/** Every account a route asked Clerk to create, in order. */
+export const createdUsers: Record<string, unknown>[] = [];
 
 /**
  * The Clerk sign-in tokens routes minted this test, oldest first — a ticket is
@@ -151,12 +155,17 @@ export function clerkStub() {
                 // The real thing's filter behaviour, which utils/users/clerk.ts
                 // is written around: a filter selects, and paging is the
                 // caller's job (see usersByFilter).
-                getUserList: async ({ userId, username, limit = 10, offset = 0 }: {
-                    userId?: string[], username?: string[], limit?: number, offset?: number
+                getUserList: async ({ userId, username, emailAddress, limit = 10, offset = 0 }: {
+                    userId?: string[], username?: string[], emailAddress?: string[], limit?: number, offset?: number
                 }) => {
                     const selected = clerkUsers.filter(user =>
                         (!userId || userId.includes(user.id)) &&
-                        (!username || (!!user.username && username.includes(user.username))));
+                        (!username || (!!user.username && username.includes(user.username))) &&
+                        // Clerk matches an address case-insensitively, and the
+                        // Google route lower-cases before asking — a stub that
+                        // compared exactly would pass a route that didn't.
+                        (!emailAddress || (user.emailAddresses ?? []).some(entry =>
+                            emailAddress.some(wanted => wanted.toLowerCase() === entry.emailAddress.toLowerCase()))));
                     // Sliced to the limit, because the bug in finding 1 was a
                     // caller not passing one — a stub that answers with more
                     // than Clerk would is wrong in the direction that hides it.
@@ -168,10 +177,39 @@ export function clerkStub() {
                 // replaced the whole bag would let through. Clerk itself merges
                 // at every depth, so a route that ever writes a nested object
                 // needs more than this before its test means anything.
-                updateUserMetadata: async (userId: string, params: { publicMetadata?: Record<string, unknown> }) => {
+                // Accounts a route created, in the order it created them, so a
+                // test can assert what it asked Clerk to make rather than only
+                // that it didn't throw. The id is positional and opaque, the
+                // same as the real thing's is to a caller.
+                createUser: async (params: Record<string, unknown>) => {
+                    const created = {
+                        id: `user_created_${createdUsers.length + 1}`,
+                        username: params.username as string | undefined,
+                        publicMetadata: (params.publicMetadata ?? {}) as Record<string, unknown>,
+                        privateMetadata: (params.privateMetadata ?? {}) as Record<string, unknown>,
+                        emailAddresses: ((params.emailAddress ?? []) as string[]).map(address => ({
+                            emailAddress: address,
+                            // Clerk stamps `admin` on an address the Backend
+                            // API asserts — which is exactly what the Google
+                            // route refuses to sign in as, so the stub has to
+                            // record it honestly.
+                            verification: { status: 'verified', strategy: 'admin' },
+                        })),
+                    };
+                    createdUsers.push({ ...params });
+                    clerkUsers.push(created as unknown as User);
+                    return created;
+                },
+                updateUserMetadata: async (userId: string, params: { publicMetadata?: Record<string, unknown>, privateMetadata?: Record<string, unknown> }) => {
                     const user = clerkUsers.find(known => known.id === userId);
                     if (!user) throw new Error(`updateUserMetadata: no such user ${userId}`);
                     metadataWrites.push({ userId, ...params });
+                    if (params.privateMetadata) {
+                        (user as { privateMetadata?: Record<string, unknown> }).privateMetadata = {
+                            ...user.privateMetadata,
+                            ...params.privateMetadata,
+                        };
+                    }
                     if (params.publicMetadata) {
                         const merged: Record<string, unknown> = { ...user.publicMetadata };
                         for (const [key, value] of Object.entries(params.publicMetadata)) {

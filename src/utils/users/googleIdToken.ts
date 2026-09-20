@@ -34,6 +34,24 @@ const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
  */
 const WEB_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
+/**
+ * The Android OAuth client allowed to have asked for the token, if the
+ * deployment names one.
+ *
+ * `aud` says the token was minted *for* our web client; `azp` says which
+ * client asked. They differ here by design — that difference is the whole
+ * reason Clerk refuses these tokens — but "differs" shouldn't mean
+ * "anything". Any client registered in the same Google Cloud project can name
+ * our web client as its `serverClientId` and get a token we would otherwise
+ * accept, so naming the one client that should be doing it closes that down.
+ *
+ * Optional, and a deployment that leaves it unset still works: the audience
+ * check alone already bounds tokens to clients inside our own project, which
+ * is a set we control. Set it anyway — it costs one environment variable and
+ * turns "some client of ours" into "the app".
+ */
+const ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID;
+
 export interface GoogleIdentity {
     /** Google's stable account id (`sub`). Never reused, never changes. */
     googleId: string;
@@ -91,6 +109,15 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdenti
 
         if (typeof payload.sub !== 'string' || !payload.sub) {
             console.error('Google ID token carried no subject');
+            return null;
+        }
+
+        // Which client asked Google for this token. Absent on some tokens,
+        // and equal to `aud` on one minted for the web client itself; both
+        // are our own client asking, so both pass.
+        const authorizedParty = typeof payload.azp === 'string' ? payload.azp : undefined;
+        if (ANDROID_CLIENT_ID && authorizedParty && authorizedParty !== WEB_CLIENT_ID && authorizedParty !== ANDROID_CLIENT_ID) {
+            console.error('Google ID token was requested by an unexpected client', authorizedParty);
             return null;
         }
 

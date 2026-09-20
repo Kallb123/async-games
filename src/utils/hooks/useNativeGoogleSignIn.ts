@@ -109,47 +109,19 @@ type SocialLoginPlugin = (typeof import('@capgo/capacitor-social-login'))['Socia
  * A release APK can't be attached to a debugger: `chrome://inspect` won't
  * list it (Capacitor only enables WebView debugging for a debuggable build)
  * and Capacitor's console-to-logcat forwarding is off in release too. So a
- * failure here is invisible without rebuilding the shell, which is the one
- * thing we're trying to avoid doing repeatedly.
+ * failure here is invisible without rebuilding the shell.
  *
- * This prints, under the button, the three facts that separate the remaining
- * causes apart: the audience Google actually stamped on the token, the client
- * ID this deployment asked for, and what rejected it. Compare the first two —
- * if they agree, the token is right and the mismatch is Clerk's configured
- * client ID, which is a dashboard fix rather than a code one.
+ * It used to decode the token and print its claims, which is how we learned
+ * that Clerk was refusing a perfectly good audience. That question is settled
+ * and the decoding is gone with it — a line away from putting somebody's
+ * Google subject and address on a screen that gets screenshotted. What's left
+ * is the reason the exchange failed, which is all that's useful now.
  * ------------------------------------------------------------------------ */
 
-/** A JWT's payload, or null if it isn't one. No verification — this is for reading. */
-function claimsOf(idToken: string): Record<string, unknown> | null {
-    try {
-        const payload = idToken.split('.')[1];
-        if (!payload) {
-            return null;
-        }
-        // base64url, and `atob` wants base64 with its padding.
-        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-        return JSON.parse(atob(padded));
-    } catch {
-        return null;
-    }
-}
-
-function describeFailure(idToken: string | null, cause: unknown): string {
-    const lines: string[] = [];
-    if (idToken) {
-        const claims = claimsOf(idToken);
-        lines.push(`token aud: ${String(claims?.aud ?? '—')}`);
-        lines.push(`token azp: ${String(claims?.azp ?? '—')}`);
-        lines.push(`app asked for: ${WEB_CLIENT_ID ?? '—'}`);
-        lines.push(`email verified: ${String(claims?.email_verified ?? '—')}`);
-    } else {
-        lines.push('no token — failed before Google returned one');
-    }
+function describeFailure(cause: unknown): string {
     const message = cause instanceof Error ? cause.message : String(cause);
     const code = (cause as { code?: string })?.code;
-    lines.push(`cause: ${code ? `[${code}] ` : ''}${message}`);
-    return lines.join('\n');
+    return `cause: ${code ? `[${code}] ` : ''}${message}`;
 }
 
 /**
@@ -275,9 +247,6 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
         setError(null);
         setDetail(null);
         void (async () => {
-            // TEMPORARY, with `describeFailure`: held out here so the catch can
-            // report which audience Google stamped on the token it failed with.
-            let issuedToken: string | null = null;
             // TEMPORARY, with `describeFailure`: `withTimeout` logs and
             // swallows, so the real reason is kept here to report on screen.
             let exchangeRefused: unknown = null;
@@ -291,7 +260,6 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 if (!idToken) {
                     throw new Error('Google signed in but returned no ID token');
                 }
-                issuedToken = idToken;
 
                 // Our own server, not Clerk: see the note at the top of
                 // this file for why Clerk won't take this token directly.
@@ -335,7 +303,7 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 console.error('Google sign-in failed', signInError);
                 setError('Google sign-in didn’t work. Try again, or use your email and password.');
                 // TEMPORARY, with `describeFailure`.
-                setDetail(describeFailure(issuedToken, signInError));
+                setDetail(describeFailure(signInError));
             } finally {
                 signingIn = false;
             }

@@ -1088,12 +1088,29 @@ through the shared `completeTicketSignIn`. The session lands in the WebView's
 own cookie jar either way; only the route to it differs.
 
 That route mints a credential for an unauthenticated caller, which nothing
-else here does, so two properties hold it up: `email_verified` must be `true`
-(an address Google hasn't attested is one anyone could type into a Google
-account, and matching a Clerk user on it would hand over that account), and the
-token's audience must be our own web client (without it, any Android app's
-valid Google token would be believed). `googleIdToken.test.ts` signs real
-RS256 tokens to prove both.
+else here does, so several properties hold it up. `email_verified` must be
+`true`, and the token's audience must be our own web client — without the
+first, an address anyone could type into a Google account would match a Clerk
+user; without the second, any Android app's valid Google token would be
+believed. `googleIdToken.test.ts` signs real RS256 tokens to prove both.
+
+The *other* direction matters just as much and is easier to miss: the Clerk
+account it matches must have **proved** the address itself. "Verified" in Clerk
+means two things, and only one of them is evidence — an address written through
+the Backend API with `verified: true` is an assertion nobody tested, and
+`api/user/claim` makes exactly those (a guest names an email with no inbox to
+prove yet). Without that check the two compose into an account takeover: claim
+a guest account onto someone else's address with a password of your choosing,
+wait for them to tap Google in the app, and they are handed a ticket into your
+account. `provedTheirAddress` refuses Clerk's `admin` strategy for that reason,
+and `googleNativeRoute.test.ts` walks the whole attack.
+
+Two further notes for whoever changes settings rather than code. The route
+creates users through the Backend API, so a **sign-up restriction added in the
+Clerk dashboard would not apply to an app sign-up**, and would not fail loudly;
+there are none today and `isUnlockedUser` still gates everything worth doing.
+And `GOOGLE_ANDROID_CLIENT_ID`, when set, pins which client may have asked
+Google for the token.
 
 Microsoft needs none of this, and could not use it anyway: Clerk's
 native-token strategies are Google and Apple only.
