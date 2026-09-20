@@ -272,6 +272,17 @@ button {
    Google buttons on this screen, one of which errors. Microsoft's button is
    untouched — that one works in the app. */
 .ag-auth-stack { width: min(100%, 25rem); }
+/* TEMPORARY, with `describeFailure` (utils/hooks/useNativeGoogleSignIn.ts):
+   the on-screen failure detail, which is long identifiers that must wrap
+   rather than run off a phone. Goes when that does. */
+.ag-auth-detail {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-align: left;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    margin: 0;
+}
+
 .ag-auth-stack--native .cl-socialButtonsBlockButton__google,
 .ag-auth-stack--native .cl-socialButtonsIconButton__google {
     display: none;

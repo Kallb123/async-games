@@ -81,10 +81,65 @@ export interface NativeGoogleSignInState {
     status: NativeGoogleStatus;
     /** Something went wrong and the player should see it. Cancelling isn't one. */
     error: string | null;
+    /**
+     * TEMPORARY (see `describeFailure`): the technical detail behind `error`,
+     * for a shell that can't be attached to a debugger. Remove with the
+     * function that fills it.
+     */
+    detail: string | null;
     signIn: () => void;
 }
 
 type SocialLoginPlugin = (typeof import('@capgo/capacitor-social-login'))['SocialLogin'];
+
+/* ------------------------------------------------------------------------ *
+ * TEMPORARY DIAGNOSTIC — remove once Google sign-in is confirmed working.
+ *
+ * A release APK can't be attached to a debugger: `chrome://inspect` won't
+ * list it (Capacitor only enables WebView debugging for a debuggable build)
+ * and Capacitor's console-to-logcat forwarding is off in release too. So a
+ * failure here is invisible without rebuilding the shell, which is the one
+ * thing we're trying to avoid doing repeatedly.
+ *
+ * This prints, under the button, the three facts that separate the remaining
+ * causes apart: the audience Google actually stamped on the token, the client
+ * ID this deployment asked for, and what rejected it. Compare the first two —
+ * if they agree, the token is right and the mismatch is Clerk's configured
+ * client ID, which is a dashboard fix rather than a code one.
+ * ------------------------------------------------------------------------ */
+
+/** A JWT's payload, or null if it isn't one. No verification — this is for reading. */
+function claimsOf(idToken: string): Record<string, unknown> | null {
+    try {
+        const payload = idToken.split('.')[1];
+        if (!payload) {
+            return null;
+        }
+        // base64url, and `atob` wants base64 with its padding.
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        return JSON.parse(atob(padded));
+    } catch {
+        return null;
+    }
+}
+
+function describeFailure(idToken: string | null, cause: unknown): string {
+    const lines: string[] = [];
+    if (idToken) {
+        const claims = claimsOf(idToken);
+        lines.push(`token aud: ${String(claims?.aud ?? '—')}`);
+        lines.push(`token azp: ${String(claims?.azp ?? '—')}`);
+        lines.push(`app asked for: ${WEB_CLIENT_ID ?? '—'}`);
+        lines.push(`email verified: ${String(claims?.email_verified ?? '—')}`);
+    } else {
+        lines.push('no token — failed before Google returned one');
+    }
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const code = (cause as { code?: string })?.code;
+    lines.push(`cause: ${code ? `[${code}] ` : ''}${message}`);
+    return lines.join('\n');
+}
 
 /**
  * The configured plugin, fetched and handed its client ID once per app rather
@@ -180,6 +235,8 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
     const router = useRouter();
     const [status, setStatus] = useState<NativeGoogleStatus>('absent');
     const [error, setError] = useState<string | null>(null);
+    // TEMPORARY, with `describeFailure`.
+    const [detail, setDetail] = useState<string | null>(null);
 
     // Deliberately starts at `absent` and only ever moves in an effect, so the
     // server and the browser's first render agree: the server has no idea which
@@ -205,7 +262,11 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
         signingIn = true;
         setStatus('busy');
         setError(null);
+        setDetail(null);
         void (async () => {
+            // TEMPORARY, with `describeFailure`: held out here so the catch can
+            // report which audience Google stamped on the token it failed with.
+            let issuedToken: string | null = null;
             try {
                 const SocialLogin = await configure();
                 const { result } = await SocialLogin.login({ provider: 'google', options: {} });
@@ -216,6 +277,7 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 if (!idToken) {
                     throw new Error('Google signed in but returned no ID token');
                 }
+                issuedToken = idToken;
 
                 // Deliberately *not* `handleGoogleOneTapCallback`, which looks
                 // like the method for this and isn't: the isomorphic wrapper
@@ -227,9 +289,13 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 // `setActive` answers honestly, and this is then the same
                 // three-step Clerk dance a guest's ticket sign-in does
                 // (`completeTicketSignIn`, app/join/JoinForm.tsx).
+                // TEMPORARY, with `describeFailure`: `withTimeout` logs and
+                // swallows, so Clerk's own error is kept here to report.
+                let clerkRefused: unknown = null;
                 const signedIn = await withTimeout(
                     async () => {
-                        const attempt = await clerk.authenticateWithGoogleOneTap({ token: idToken });
+                        const attempt = await clerk.authenticateWithGoogleOneTap({ token: idToken })
+                            .catch((clerkError: unknown) => { clerkRefused = clerkError; throw clerkError; });
                         if (attempt.status !== 'complete' || !attempt.createdSessionId) {
                             // A sign-up Clerk wants more than Google gave it,
                             // or an attempt it didn't finish. Nothing here can
@@ -244,7 +310,7 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                     'Signing in with the Google token',
                 );
                 if (!signedIn) {
-                    throw new Error('Clerk did not finish the Google sign-in');
+                    throw clerkRefused ?? new Error('Clerk did not finish the Google sign-in');
                 }
                 router.push(returnPath());
                 // Left `busy` on purpose: the navigation is already under way,
@@ -258,11 +324,13 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 }
                 console.error('Google sign-in failed', signInError);
                 setError('Google sign-in didn’t work. Try again, or use your email and password.');
+                // TEMPORARY, with `describeFailure`.
+                setDetail(describeFailure(issuedToken, signInError));
             } finally {
                 signingIn = false;
             }
         })();
     }, [clerk, router]);
 
-    return { status, error, signIn };
+    return { status, error, detail, signIn };
 }
