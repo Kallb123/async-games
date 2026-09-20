@@ -58,7 +58,22 @@ export function useTurnRecap<T extends IGameDataResponse>(gameId: string, { view
             // leave whatever recap is already showing alone rather than wiping
             // it, matching the original "swallow and stop loading" behaviour.
             if (res) {
-                const data: IRecapResponse | null = res.ok ? await res.json() : null;
+                // A 200 that isn't JSON (a proxy's error page, a truncated body)
+                // is as transient as a network error — treated the same way
+                // useRefreshableData treats one, rather than left to throw out of
+                // this whole async function and strand `loadedFor` (and so
+                // `loading`) at its previous game forever. FiresOut's board now
+                // waits on `loading` to clear before it will render at all
+                // (page.tsx's `showBoard`), so a stuck `loading` here would blank
+                // that board permanently rather than merely hide its recap intro.
+                let data: IRecapResponse | null = null;
+                if (res.ok) {
+                    try {
+                        data = await res.json();
+                    } catch (error) {
+                        console.error(`Failed to parse recap for ${gameId}`, error);
+                    }
+                }
                 setRecap(data);
                 // Re-show only when the refetch surfaced turns the player hasn't
                 // already dismissed; unchanged content stays hidden.
