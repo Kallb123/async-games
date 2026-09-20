@@ -34,7 +34,7 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
             {
                 anchor: "board",
                 title: "Reading a card",
-                body: `The number at the top is the roll it pays out on. What it costs to build, in ${words.coins}, sits bottom left. Everything else explains what it does.`,
+                body: `The roll it pays out on is printed at the top, its cost in ${words.coins} bottom left, and what it does underneath.`,
             },
             {
                 title: words.market,
