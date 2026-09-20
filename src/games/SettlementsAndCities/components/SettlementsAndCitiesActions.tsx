@@ -9,6 +9,7 @@ import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
+import ReadOnlyPanel from '@/components/ui/ReadOnlyPanel';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import { useUndoHold } from '@/utils/hooks/useUndoHold';
@@ -66,6 +67,14 @@ interface SettlementsAndCitiesActionsProps {
      * costs live. `ReadOnlyPanel` makes it inert.
      */
     readOnly?: boolean;
+    /**
+     * True while the tutorial is open on this player's own setup turn — where
+     * there's normally nothing to look at but the placement button. Shows an
+     * inert preview of the build list underneath it, so the tutorial has
+     * something real to point its "your turn" step at before the real thing
+     * exists yet (docs/game-tutorials.md's setup/canRoll split).
+     */
+    tutorialPreview?: boolean;
 }
 
 export default function SettlementsAndCitiesActions({
@@ -76,6 +85,7 @@ export default function SettlementsAndCitiesActions({
     submitCommand,
     pendingTarget,
     readOnly = false,
+    tutorialPreview = false,
 }: SettlementsAndCitiesActionsProps) {
     const [showYopModal, setShowYopModal] = useState(false);
     const [yopR1, setYopR1] = useState<SAC_Resource>('lumber');
@@ -585,6 +595,12 @@ export default function SettlementsAndCitiesActions({
                             : 'Setup — connect a road to your new settlement.'}
                 </p>
                 {undoRow}
+                {tutorialPreview && (
+                    <div style={{ marginTop: 12 }}>
+                        <p className="ag-action-hint">Once setup&apos;s done, here&apos;s what a turn looks like:</p>
+                        <ReadOnlyPanel readOnly>{buildList}</ReadOnlyPanel>
+                    </div>
+                )}
             </div>
         );
     }

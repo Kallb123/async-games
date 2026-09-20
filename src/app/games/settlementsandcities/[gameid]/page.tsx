@@ -114,6 +114,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         canBuild: isMyTurn && ((gs?.hasRolled ?? false) || (gs?.specialBuildActive ?? false)),
     }, { active: nav.isLive && !complete });
 
+    // While the tour is up on this player's own setup turn, the actions
+    // panel shows an inert preview of the build list under the placement
+    // button — normally there's nothing there yet for the "your turn" step
+    // to point at.
+    const tutorialPreview = isMyTurn && gs?.phase === 'setup' && gameIntro.tutorialOpen;
+
     // owner userId → colour, following the persistent userIdList ordering.
     // playerColourForId already answers a null/unknown owner with the neutral
     // ink token, so no local grey fallback is needed.
@@ -430,7 +436,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     )}
 
                     {myState && !complete && (
-                        <div className="ag-hand">
+                        <div className="ag-hand" data-tour="sac-hand">
                             <div className="ag-hand-head">
                                 <span className="ag-hand-title">Your hand · {myHandTotal} card{myHandTotal !== 1 ? 's' : ''}</span>
                                 {myDevCount > 0 && (
@@ -481,6 +487,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                 submitCommand={submitCommand}
                                 pendingTarget={pendingTarget}
                                 readOnly={!isMyTurn}
+                                tutorialPreview={tutorialPreview}
                             />
                         </ReadOnlyPanel>
                     )}

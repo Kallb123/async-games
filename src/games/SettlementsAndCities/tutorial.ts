@@ -9,7 +9,13 @@ import type { GameTutorial } from "@/utils/ui/gameTutorials";
 // setup phase (everyone places two settlements and two roads before the
 // real turns begin), so `canRoll`/`setupPlacing` split what Dice Cities
 // covers with a single `myTurn` — the roll button doesn't exist yet during
-// setup, and a step naming it would point at nothing.
+// setup, and a step naming it would point at nothing. The build list is in
+// the same spot: `sac-build` doesn't render on a setup turn either, so the
+// "your turn" step is its own `setupPlacing`-gated preview (an inert copy
+// of the same list, shown only while the tour is open — see
+// SettlementsAndCitiesActions' `tutorialPreview` prop) rather than the real
+// do-it step below it, which only becomes applicable once there's a real
+// turn to take.
 export type SettlementsAndCitiesSignal = "setupPlacing" | "canRoll" | "hasRolled" | "canBuild";
 
 export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
@@ -32,6 +38,17 @@ export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
             anchor: "sac-setup",
             title: "Setup",
             body: "Every game starts here — each player places two settlements and two roads before the real turns begin. Tap where you'd like yours, then Next when you're ready to carry on.",
+            when: "setupPlacing",
+        },
+        {
+            anchor: "sac-hand",
+            title: "Your resources",
+            body: "This is what a hex pays you — wool, ore, brick and the rest. Spend them to build on the island or buy a development card.",
+        },
+        {
+            anchor: "sac-build",
+            title: "Your turn",
+            body: "Once setup's done, this is what a turn looks like: a road, a settlement, a city, a development card — as many as you can afford before you pass to the next player.",
             when: "setupPlacing",
         },
         {
