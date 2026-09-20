@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const updated: IInvitationDataDocument | null = await InvitationModel.findOneAndUpdate(
         { inviteId, senderId: userId, ...notExpired },
         { $pull: { userIdList: { userId: OPEN_SEAT_ID } } },
-        { new: true }
+        { returnDocument: 'after' }
     ).exec();
     if (!updated) {
         return NextResponse.json({}, { status: 404, statusText: "Lobby not found" });
