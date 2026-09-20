@@ -1,6 +1,16 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react';
 
+/** What `useGameGuide` hands back — the shape `GameShell`'s `intro` prop
+ *  takes, so it can drive the 📖 row and the guide popup from the object the
+ *  page already has, rather than fetching a second copy of it. */
+export interface GameGuideIntro {
+    open: boolean;
+    loaded: boolean;
+    openGuide: () => void;
+    closeGuide: () => void;
+}
+
 /**
  * Drives a game's guide popup: fetches which games' guides this account has
  * already been auto-shown (once, on mount), derives whether it should be open
@@ -23,7 +33,7 @@ import { useCallback, useEffect, useState } from 'react';
  * Dismissing only marks the guide seen the first time — reopening it from the
  * menu afterwards is just a look, not a fresh "first visit" to record.
  */
-export function useGameGuide(gameUrl: string) {
+export function useGameGuide(gameUrl: string): GameGuideIntro {
     const [manualOpen, setManualOpen] = useState(false);
     const [autoShowDismissed, setAutoShowDismissed] = useState(false);
     const [seen, setSeen] = useState<string[] | null>(null);

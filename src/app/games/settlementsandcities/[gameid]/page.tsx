@@ -14,7 +14,6 @@ import GameShell from "@/components/ui/GameShell";
 import RollReadout from "@/components/ui/RollReadout";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities/guide";
@@ -336,12 +335,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -366,10 +359,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} intro={gameGuide}>
             <FcmTokenComp />
-
-            {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

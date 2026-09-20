@@ -15,7 +15,6 @@ import RoleIntroPopup from "@/components/ui/RoleIntroPopup";
 import { guide as outbreakGuide } from "@/games/Outbreak/guide";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
@@ -281,12 +280,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -322,7 +315,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak" guide={outbreakGuide} intro={gameGuide}>
             <FcmTokenComp />
 
             {/* Game guide before role guide — a player needs to know the game
@@ -330,7 +323,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                 docs), so the role welcome waits for this one to have
                 answered and to not be showing. */}
             {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="outbreak" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
-            {gameGuide.open && <GameGuideModal guide={outbreakGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

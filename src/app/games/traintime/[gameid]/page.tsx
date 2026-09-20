@@ -24,7 +24,6 @@ import TrainTimeScoreSheet, { TrainTimeScoreRow } from "@/games/TrainTime/compon
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
@@ -243,12 +242,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -360,10 +353,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--traintime"
+            guide={trainTimeGuide}
+            intro={gameGuide}
         >
             <FcmTokenComp />
-
-            {gameGuide.open && <GameGuideModal guide={trainTimeGuide} onClose={gameGuide.closeGuide} />}
 
             {/* The claim sheet is a screen of its own (design 14b): its dark
                 route header runs straight off the top bar, with the standings
