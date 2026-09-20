@@ -1067,19 +1067,42 @@ Google cannot be fixed by listing it, because Google refuses to serve its
 consent screen to an embedded WebView at all. So the app doesn't navigate for
 Google: `useNativeGoogleSignIn` asks Android's Credential Manager for an ID
 token — the account picker over the app, using the accounts already on the
-phone — and hands it to Clerk's One Tap strategy, which creates the session in
-the WebView's own jar with no redirect anywhere. `AuthCardStack` is what puts
-that button on `/login` and `/signup`, and hiding Clerk's own Google button
-where ours renders is `.ag-auth-stack--native`'s job — the one piece of Clerk
-styling that doesn't live in `utils/ui/clerkAppearance.ts`, because that object
-is handed to a provider the server renders and the server can't tell the two
-skins apart. Microsoft needs none of it, and
-could not use it anyway: Clerk's native-token strategies are Google and Apple
-only.
+phone — with no redirect anywhere. `AuthCardStack` is what puts that button on
+`/login` and `/signup`, and hiding Clerk's own Google button where ours renders
+is `.ag-auth-stack--native`'s job — the one piece of Clerk styling that doesn't
+live in `utils/ui/clerkAppearance.ts`, because that object is handed to a
+provider the server renders and the server can't tell the two skins apart.
+
+**That token cannot go to Clerk directly**, which is worth knowing before
+anyone tries to simplify this. clerk-js offers exactly one native-token
+strategy for Google — One Tap — and it refuses a token Credential Manager
+minted: the audience is correct, but `azp` names the *Android* OAuth client
+rather than the web one, and Clerk answers `authorization_invalid`. Credential
+Manager cannot mint a token without that `azp`, and clerk-js has no
+`oauth_token_google` to fall back to (it has `oauth_token_apple`, and no Google
+equivalent). So the token goes to `api/auth/googlenative`, which verifies it
+against Google's own published keys (`utils/users/googleIdToken.ts`), finds or
+creates the Clerk user its verified email names, and mints a **sign-in ticket**
+— the same `strategy: 'ticket'` round trip a guest's join uses, redeemed
+through the shared `completeTicketSignIn`. The session lands in the WebView's
+own cookie jar either way; only the route to it differs.
+
+That route mints a credential for an unauthenticated caller, which nothing
+else here does, so two properties hold it up: `email_verified` must be `true`
+(an address Google hasn't attested is one anyone could type into a Google
+account, and matching a Clerk user on it would hand over that account), and the
+token's audience must be our own web client (without it, any Android app's
+valid Google token would be believed). `googleIdToken.test.ts` signs real
+RS256 tokens to prove both.
+
+Microsoft needs none of this, and could not use it anyway: Clerk's
+native-token strategies are Google and Apple only.
 
 Two knock-on facts. The token is audienced to
 `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the *web* client of the Google Cloud
-project Clerk's Google connection uses, not the Android one), and an Android
+project Clerk's Google connection uses, not the Android one) — the app asks
+Credential Manager for that audience and the route accepts only that audience,
+from the same variable, so the two cannot drift apart. An Android
 OAuth client for `com.asyncgames.app` has to exist in that project against the
 signing certificate's SHA-1 — the same keystore `ANDROID_APP_FINGERPRINT`
 describes to App Links, a different hash of it. And because the APK loads the

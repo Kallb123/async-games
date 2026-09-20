@@ -30,6 +30,7 @@
     "firebase": "^12",
     "firebase-admin": "^13",
     "framer-motion": "^12",
+    "jose": "^6.2.12",
     "moment": "^2",
     "mongodb": "^7",
     "mongoose": "^9",
