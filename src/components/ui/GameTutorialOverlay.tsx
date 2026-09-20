@@ -47,9 +47,12 @@ export default function GameTutorialOverlay({ run, onClose }: GameTutorialOverla
     // A do-it step shows its hint instead of "Next ›" while the player could
     // still act on it — and reverts to a real "Next ›" the moment its `when`
     // signal stops holding, so a turn ending or an opponent moving can't trap
-    // the run on a control that's no longer there to tap (§9).
+    // the run on a control that's no longer there to tap (§9). The last step
+    // in the run says "End tutorial" instead, so tapping it reads as finishing
+    // rather than moving on to a step that isn't there.
     const waitingOnPlayer = !!step.advanceOn && (!step.when || run.signals[step.when]);
-    const nextLabel = waitingOnPlayer && step.hint ? step.hint : 'Next ›';
+    const isLastStep = index === total - 1;
+    const nextLabel = waitingOnPlayer && step.hint ? step.hint : (isLastStep ? 'End tutorial' : 'Next ›');
 
     return (
         <>

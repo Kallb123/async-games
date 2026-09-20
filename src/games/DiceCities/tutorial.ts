@@ -24,12 +24,21 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
             {
                 anchor: "scoreboard",
                 title: "The scoreboard",
-                body: "How close everyone is to winning. Tap it open for the detail.",
+                body: `How close everyone is to winning, and how many ${words.coins} each player has on hand to spend on their next ${words.establishment} or ${words.landmark}.`,
             },
             {
                 anchor: "board",
                 title: `Your ${words.city}`,
                 body: `Every ${words.establishment} you've built, and what each one pays out.`,
+            },
+            {
+                anchor: "board",
+                title: "Reading a card",
+                body: `The number at the top is the roll it pays out on. What it costs to build, in ${words.coins}, sits bottom left. Everything else explains what it does.`,
+            },
+            {
+                title: words.market,
+                body: `You buy cards and ${words.landmarks} from the shared ${words.market.toLowerCase()}, but only after you've rolled for your turn.`,
             },
             {
                 anchor: "dc-roll",
@@ -41,7 +50,7 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
             },
             {
                 anchor: "dc-market",
-                title: words.market,
+                title: "Build something",
                 body: `Spend what the roll just paid you on one card or ${words.landmark} a turn. It's shared, so grab what you need before someone else does.`,
                 when: "canBuild",
             },
