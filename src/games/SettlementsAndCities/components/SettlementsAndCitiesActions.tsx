@@ -209,7 +209,7 @@ export default function SettlementsAndCitiesActions({
     const buyingDevCard = pendingTarget === 'buyDevCard';
 
     const buildList = (
-        <div className="ag-build-list">
+        <div className="ag-build-list" data-tour="sac-build">
             {builds.map(b => {
                 const short = shortfall(b.cost, res);
                 const noPieces = b.piecesLeft <= 0;
@@ -654,6 +654,7 @@ export default function SettlementsAndCitiesActions({
                     pending={pendingTarget === 'roll'}
                     pendingLabel="Rolling…"
                     onClick={() => submit(new SACRollDice(), 'roll')}
+                    data-tour="sac-roll"
                 >
                     🎲 Roll the dice
                 </ActionButton>

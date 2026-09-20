@@ -11,6 +11,7 @@
 // not editing a shared object literal.
 
 import { tutorial as diceCitiesTutorial } from "@/games/DiceCities/tutorial";
+import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
 
 /**
  * A single step of a tour: a spotlight on `anchor` plus one message, or —
@@ -65,6 +66,7 @@ export interface GameTutorial<S extends string = string> {
 // guards the "seen guide" list.
 export const GAME_TUTORIALS: Record<string, GameTutorial> = {
     dicecities: diceCitiesTutorial,
+    settlementsandcities: settlementsAndCitiesTutorial,
 };
 
 /** Whether this game has a tour at all. */

@@ -17,6 +17,8 @@ import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities/guide";
+import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
+import { tutorialRun } from "@/utils/ui/gameTutorials";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -96,6 +98,15 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = isPlayersTurn(nav.isLive, user, gameData?.currentTurn);
     const myUserId = user?.id ?? '';
+
+    // The first-match tour: gated to a live, unfinished board (a finished or
+    // turn-by-turn-reviewed one gets no tour) and driven by the same booleans
+    // this page already computes for its own subtitle below.
+    const tutorial = tutorialRun(settlementsAndCitiesTutorial, {
+        myTurn: isMyTurn,
+        hasRolled: gs?.hasRolled ?? false,
+        canBuild: isMyTurn && (gs?.hasRolled ?? false),
+    }, { active: nav.isLive && !complete });
 
     // owner userId → colour, following the persistent userIdList ordering.
     // playerColourForId already answers a null/unknown owner with the neutral
@@ -359,7 +370,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} intro={gameIntro}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} tutorial={tutorial} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
