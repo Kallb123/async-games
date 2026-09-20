@@ -28,7 +28,7 @@ interface RoleIntroPopupProps {
  * A game should render this only once the game id and the viewer's own seat
  * are known, so the storage key is stable from the first mount and the "seen"
  * flag reads correctly — and after its game guide has had the floor, because
- * you need to know the game before your role in it (see useGameGuide).
+ * you need to know the game before your role in it (see useGameIntro).
  */
 export default function RoleIntroPopup({ gameUrl, gameId, myUserId, role }: RoleIntroPopupProps) {
     const { dismissed, dismiss } = useDismissibleBanner(`${gameUrl}-role-intro:${gameId}:${myUserId}`);

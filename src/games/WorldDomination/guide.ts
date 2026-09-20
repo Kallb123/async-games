@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a World Domination match (see
-// useGameGuide).
+// useGameIntro).
 export const guide: GameGuide = {
     title: "How to play World Domination",
     sections: [

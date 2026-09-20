@@ -5,7 +5,7 @@ import { capitalise } from "@/utils/ui/text";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a Dice Cities match (see
-// useGameGuide).
+// useGameIntro).
 //
 // Built from the game's theme rather than written out, because a themed game
 // whose guide still talks about the Train Station and coins is a guide for a

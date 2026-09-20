@@ -21,7 +21,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
@@ -61,7 +61,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a World Domination match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('worlddomination');
+    const gameIntro = useGameIntro('worlddomination');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -272,7 +272,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={worldDominationGuide} intro={gameGuide}>
+        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={worldDominationGuide} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

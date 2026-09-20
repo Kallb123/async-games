@@ -81,7 +81,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await clerkUserId(one);
 
   // Both players are on this board for the first time, so the how-to-play
-  // guide auto-shows (useGameGuide) until each account has seen it once —
+  // guide auto-shows (useGameIntro) until each account has seen it once —
   // and its modal backdrop would swallow every board click below. Settle the
   // fetch that decides, then close it if it opened.
   await Promise.all([oneGuideReady, twoGuideReady]);

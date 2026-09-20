@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a Banned Islet match (see
-// useGameGuide). Role-specific ability text lives in the shared RoleInfoPopup,
+// useGameIntro). Role-specific ability text lives in the shared RoleInfoPopup,
 // which every seat's role name in the hands panel opens — so this only covers
 // what the whole team needs whoever they were dealt
 // (docs/games/banned-islet.md §4, §7, §8, §9, §11, §12).

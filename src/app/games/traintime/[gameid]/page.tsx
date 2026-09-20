@@ -33,7 +33,7 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
@@ -84,7 +84,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Train Time match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('traintime');
+    const gameIntro = useGameIntro('traintime');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -354,7 +354,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--traintime"
             guide={trainTimeGuide}
-            intro={gameGuide}
+            intro={gameIntro}
         >
             <FcmTokenComp />
 

@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a Race Cars match (see
-// useGameGuide).
+// useGameIntro).
 //
 // Deliberately circuit-agnostic: the host picks from `TRACK_LIST` at setup, so
 // a guide that named Ashcombe's hairpin would be wrong for two of the three

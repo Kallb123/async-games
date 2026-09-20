@@ -19,7 +19,7 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
@@ -224,7 +224,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Fires Out! match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('firesout');
+    const gameIntro = useGameIntro('firesout');
 
     function handleEndTurn() {
         const command = new FiresOutAction();
@@ -339,7 +339,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"
             guide={firesOutGuide}
-            intro={gameGuide}
+            intro={gameIntro}
         >
             <FcmTokenComp />
 

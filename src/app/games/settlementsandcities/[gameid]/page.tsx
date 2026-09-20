@@ -24,7 +24,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -89,7 +89,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Settlements & Cities match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('settlementsandcities');
+    const gameIntro = useGameIntro('settlementsandcities');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -359,7 +359,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} intro={gameGuide}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

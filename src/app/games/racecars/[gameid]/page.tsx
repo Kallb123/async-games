@@ -24,7 +24,7 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHeightVar } from "@/utils/hooks/useHeightVar";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
@@ -103,7 +103,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
     // The how-to-play popup, shown the first time this account opens a race and
     // from the ⋮ menu after that (see GameShell's `guide`/`intro` props).
-    const gameGuide = useGameGuide('racecars');
+    const gameIntro = useGameIntro('racecars');
 
     // The turn sheet is pinned to the bottom of the screen (§19.2's board is a
     // 214-space circuit — zoomed in, it's easily taller than the viewport, and
@@ -303,7 +303,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--racecars"
             guide={raceCarsGuide}
-            intro={gameGuide}
+            intro={gameIntro}
         >
             <FcmTokenComp />
 
