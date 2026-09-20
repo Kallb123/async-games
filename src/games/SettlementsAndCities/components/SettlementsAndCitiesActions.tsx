@@ -9,6 +9,7 @@ import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
+import ReadOnlyPanel from '@/components/ui/ReadOnlyPanel';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import { useUndoHold } from '@/utils/hooks/useUndoHold';
@@ -66,6 +67,14 @@ interface SettlementsAndCitiesActionsProps {
      * costs live. `ReadOnlyPanel` makes it inert.
      */
     readOnly?: boolean;
+    /**
+     * True while the tutorial is open on this player's own setup turn — where
+     * there's normally nothing to look at but the placement button. Shows an
+     * inert preview of the build list underneath it, so the tutorial has
+     * something real to point its "your turn" step at before the real thing
+     * exists yet (docs/game-tutorials.md's setup/canRoll split).
+     */
+    tutorialPreview?: boolean;
 }
 
 export default function SettlementsAndCitiesActions({
@@ -76,6 +85,7 @@ export default function SettlementsAndCitiesActions({
     submitCommand,
     pendingTarget,
     readOnly = false,
+    tutorialPreview = false,
 }: SettlementsAndCitiesActionsProps) {
     const [showYopModal, setShowYopModal] = useState(false);
     const [yopR1, setYopR1] = useState<SAC_Resource>('lumber');
@@ -209,7 +219,7 @@ export default function SettlementsAndCitiesActions({
     const buyingDevCard = pendingTarget === 'buyDevCard';
 
     const buildList = (
-        <div className="ag-build-list">
+        <div className="ag-build-list" data-tour="sac-build">
             {builds.map(b => {
                 const short = shortfall(b.cost, res);
                 const noPieces = b.piecesLeft <= 0;
@@ -571,6 +581,7 @@ export default function SettlementsAndCitiesActions({
                 <button
                     className={`ag-btn ${active ? 'ag-btn--dark' : 'ag-btn--primary'} ag-btn--block`}
                     onClick={() => toggleMode(mode)}
+                    data-tour="sac-setup"
                 >
                     {active
                         ? '↩ Cancel'
@@ -584,6 +595,16 @@ export default function SettlementsAndCitiesActions({
                             : 'Setup — connect a road to your new settlement.'}
                 </p>
                 {undoRow}
+                {tutorialPreview && (
+                    // No `tradeModal` here, unlike the off-turn and Special
+                    // Build branches below — the panel is inert and setup has
+                    // no trade to make, so there's nothing for its button to
+                    // open even if the fieldset weren't already blocking it.
+                    <div style={{ marginTop: 12 }}>
+                        <p className="ag-action-hint">Costs to plan with — nothing here can be tapped until setup&apos;s done.</p>
+                        <ReadOnlyPanel readOnly>{buildList}</ReadOnlyPanel>
+                    </div>
+                )}
             </div>
         );
     }
@@ -654,6 +675,7 @@ export default function SettlementsAndCitiesActions({
                     pending={pendingTarget === 'roll'}
                     pendingLabel="Rolling…"
                     onClick={() => submit(new SACRollDice(), 'roll')}
+                    data-tour="sac-roll"
                 >
                     🎲 Roll the dice
                 </ActionButton>

@@ -442,6 +442,26 @@ sandbox would have let us skip.
 | A step names a signal the page doesn't pass | A build error (§5). |
 | The account's seen-list write fails | Logged and swallowed, as the guide's already is. The worst case is a tour offered twice. |
 
+### Previewing a control that isn't there yet
+
+A step's anchor doesn't have to be something the *player* put on screen —
+it's fine for the game to render it itself, but only under two conditions:
+gated on the tour actually being open (never shown to a player who isn't
+touring), and wrapped in the existing `ReadOnlyPanel`, so it's genuinely
+inert rather than a second, editable copy of a real control. This is not
+a second game state (§1 still holds — nothing here is faked, it's the
+game's own real markup, just shown a little early) and it is not a
+substitute for §9's silent-skip: reach for it only when a step needs to
+narrate a control that a large fraction of first runs would otherwise
+never see at all (a game's opening phase gating out its own main actions,
+say), not for an ordinary "the panel the player closed" gap, which skip
+already handles for free. Settlements & Cities' `tutorialPreview` prop
+(`SettlementsAndCitiesActions.tsx`) is the first of these: while the tour
+is open on a player's own setup turn — a phase with no build list at all
+— it renders the same build list a waiting opponent already sees, inside
+`ReadOnlyPanel`, so the tour's general "here's what a turn looks like"
+step has something real to point at before there's a real turn to take.
+
 ## 10. Accessibility
 
 - The card is a `role="dialog"` with `aria-modal="false"` — deliberately not

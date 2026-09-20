@@ -17,6 +17,8 @@ import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities/guide";
+import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
+import { tutorialRun } from "@/utils/ui/gameTutorials";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -96,6 +98,42 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = isPlayersTurn(nav.isLive, user, gameData?.currentTurn);
     const myUserId = user?.id ?? '';
+
+    // The first-match tour: gated to a live, unfinished board (a finished or
+    // turn-by-turn-reviewed one gets no tour) and driven by the same booleans
+    // this page already computes for its own subtitle below. Setup and the
+    // main turn are split rather than folded into one "myTurn" (as Dice
+    // Cities, which has no setup phase, can do): the roll button doesn't
+    // exist during setup, so a step gated on turn ownership alone would
+    // point at nothing there. Special Build lets a player build without
+    // having rolled, so it counts toward `canBuild` the same way a roll does.
+    const tutorialSetupPlacing = isMyTurn && gs?.phase === 'setup';
+    const tutorialCanRoll = isMyTurn && gs?.phase !== 'setup';
+    const tutorialCanBuild = isMyTurn && ((gs?.hasRolled ?? false) || (gs?.specialBuildActive ?? false));
+    const tutorial = tutorialRun(settlementsAndCitiesTutorial, {
+        setupPlacing: tutorialSetupPlacing,
+        canRoll: tutorialCanRoll,
+        hasRolled: gs?.hasRolled ?? false,
+        canBuild: tutorialCanBuild,
+        // Neither the roll nor the build do-it step applies: either it isn't
+        // your turn at all, or it is and you're still in setup. Either way
+        // there's a real build list already on screen to point a general
+        // "here's what a turn looks like" step at instead — the off-turn
+        // preview every waiting player already gets, or this player's own
+        // setup-turn preview below.
+        turnOverview: !tutorialCanRoll && !tutorialCanBuild,
+    }, { active: nav.isLive && !complete });
+
+    // While the tour is up on this player's own setup turn, the actions
+    // panel shows an inert preview of the build list under the placement
+    // button — normally there's nothing there yet for the "Your turn" step
+    // to point at. Gated on `gameIntro.tutorialOpen` rather than the tour's
+    // *current* step (not observable from here — that lives inside
+    // useTutorialRun, owned by GameShell): coarser than ideal, so the
+    // preview is already on screen a few steps before "Your turn" explains
+    // it, but cheaper than piping the current step back out of the shell
+    // for one game's sake.
+    const tutorialPreview = tutorial.active && gameIntro.tutorialOpen && tutorialSetupPlacing;
 
     // owner userId → colour, following the persistent userIdList ordering.
     // playerColourForId already answers a null/unknown owner with the neutral
@@ -359,7 +397,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} intro={gameIntro}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={settlementsAndCitiesGuide} tutorial={tutorial} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -413,7 +451,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     )}
 
                     {myState && !complete && (
-                        <div className="ag-hand">
+                        <div className="ag-hand" data-tour="sac-hand">
                             <div className="ag-hand-head">
                                 <span className="ag-hand-title">Your hand · {myHandTotal} card{myHandTotal !== 1 ? 's' : ''}</span>
                                 {myDevCount > 0 && (
@@ -464,6 +502,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                 submitCommand={submitCommand}
                                 pendingTarget={pendingTarget}
                                 readOnly={!isMyTurn}
+                                tutorialPreview={tutorialPreview}
                             />
                         </ReadOnlyPanel>
                     )}
