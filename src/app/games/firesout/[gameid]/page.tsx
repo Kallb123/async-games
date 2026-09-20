@@ -288,6 +288,17 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             };
         });
 
+    // Held back until the recap has answered, not just while `gs` is missing:
+    // useTurnRecap's own fetch races the game-data fetch on mount, and whoever
+    // answers first used to decide what got painted. A board that won that
+    // race was live and clickable — and then, the moment the slower recap
+    // request came back with something to show, this component's early
+    // `recap.show` return replaced it (and any payoff screen an action on it
+    // had just produced) out from under the player. Waiting for `recap`'s own
+    // verdict before ever showing the board closes that window instead of
+    // just outracing it.
+    const showBoard = !!gs && !recap.loading;
+
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
 
     let subtitle: React.ReactNode = 'Loading…';
@@ -334,7 +345,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             title="Fires Out!"
             subtitle={subtitle}
             options={gameData ? menuOptions : undefined}
-            busy={submitting || loadingGame || nav.loading}
+            busy={submitting || loadingGame || nav.loading || recap.loading}
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"
@@ -343,7 +354,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         >
             <FcmTokenComp />
 
-            {gs && (
+            {showBoard && (
                 <>
                     <GameScoreboard entries={scoreEntries} />
 

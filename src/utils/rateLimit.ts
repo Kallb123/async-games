@@ -39,7 +39,7 @@ export async function consumeRateLimit(
     const key = `${scope}:${identifier}:${windowStart}`;
     const update = { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(windowStart + windowMs) } };
     try {
-        const doc = await RateLimitModel.findOneAndUpdate({ key }, update, { upsert: true, new: true }).exec();
+        const doc = await RateLimitModel.findOneAndUpdate({ key }, update, { upsert: true, returnDocument: 'after' }).exec();
         return doc.count <= limit;
     } catch (err: any) {
         // Two requests racing to open the same brand-new window both hit the
@@ -49,7 +49,7 @@ export async function consumeRateLimit(
         if (!isDuplicateKeyError(err)) {
             throw err;
         }
-        const doc = await RateLimitModel.findOneAndUpdate({ key }, { $inc: { count: 1 } }, { new: true }).exec();
+        const doc = await RateLimitModel.findOneAndUpdate({ key }, { $inc: { count: 1 } }, { returnDocument: 'after' }).exec();
         return doc!.count <= limit;
     }
 }

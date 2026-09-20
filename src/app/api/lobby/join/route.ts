@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
             ...notSeatedFilter(claimantId),
         },
         { $set: { "userIdList.$.userId": claimantId } },
-        { new: true }
+        { returnDocument: 'after' }
     ).exec();
 
     if (!userId) {

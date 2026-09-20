@@ -262,7 +262,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         const row = await GifCatalogueModel.findOneAndUpdate(
             filter,
             { $set: { expiresAt: new Date(Date.now() + GIF_CATALOGUE_TTL_MS) } },
-            { new: true }
+            { returnDocument: 'after' }
         ).exec();
         attachment = row ? normaliseAttachment(row) ?? undefined : undefined;
         if (!attachment) {

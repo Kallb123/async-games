@@ -141,7 +141,7 @@ export async function acceptSeat(
     const current: IInvitationDataDocument | null = await InvitationModel.findOneAndUpdate(
         { inviteId: invite.inviteId },
         { $set: { "userIdList.$[seat].inviteAccepted": true } },
-        { arrayFilters: [{ "seat.userId": actorId }], new: true }
+        { arrayFilters: [{ "seat.userId": actorId }], returnDocument: 'after' }
     ).exec();
     if (!current) {
         // Gone between the caller reading it and this update: cancelled, or
