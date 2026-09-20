@@ -1,11 +1,13 @@
 # Interactive game tutorials
 
 **Status: built, live on Dice Cities and Settlements & Cities.** PRs 1 and 2
-of §12 are in: `GameShell` owns the game guide, the tutorial machinery
-(`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`) exists, and both
-games have their own `tutorial.ts`. PR 3 carries the tour to the other six
-games; PR 4 (a tour from the setup screen, per-node board anchors) stays a
-follow-up, not required for the feature to be complete.
+of §12 are in: `GameShell` owns the game guide, and the tutorial machinery
+(`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`) exists, wired up
+for Dice Cities. Settlements & Cities' tour has already landed too, as PR 3's
+first commit. PR 3 carries the tour to the five games still left — Fires Out!,
+Banned Islet, Outbreak, World Domination and Train Time; PR 4 (a tour from the
+setup screen, per-node board anchors) stays a follow-up, not required for the
+feature to be complete.
 
 A tutorial is a guided tour of a game's real screen: it points at a thing,
 says what the thing is, and moves on — and where the thing is something the
