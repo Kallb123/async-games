@@ -36,6 +36,10 @@
     --ag-veil: rgba(255, 255, 255, 0.08);
     --ag-veil-line: rgba(255, 255, 255, 0.16);
     --ag-danger: #c0392b;
+    /* The tutorial spotlight's dim, everywhere but the spotlit element
+       (ag-tour-spot below). Its own token rather than an inline rgba, same as
+       every other colour this file hands out. */
+    --ag-tour-scrim: rgba(0, 0, 0, 0.55);
 
     /* Width of the centred app column. Anything that has to line up with
        it — the fixed install banner, which renders outside `.ag-app` —
@@ -990,6 +994,55 @@ a.ag-list-row, a.ag-list-row-main {
     cursor: pointer;
 }
 .ag-banner-dismiss:hover { opacity: 1; }
+
+/* ---- Guided tutorial overlay ---- */
+/* The spotlight: one absolutely-positioned box, sized to the current step's
+   anchor rect by GameTutorialOverlay/useTutorialRun. A single box-shadow
+   supplies both the dim (spread wide enough to cover any viewport) and the
+   ring, animates between steps for free via the position transition, and —
+   because the box itself takes no pointer events — never blocks the board
+   underneath (docs/game-tutorials.md §6). One rung under the banner (1030),
+   so the card below it reads at full contrast. */
+.ag-tour-spot {
+    position: fixed;
+    z-index: 1020;
+    border-radius: 12px;
+    pointer-events: none;
+    box-shadow: 0 0 0 100vmax var(--ag-tour-scrim),
+                0 0 0 3px var(--ag-terracotta);
+    transition: top .28s ease, left .28s ease, width .28s ease, height .28s ease;
+    scroll-margin-block: 96px;
+    --ag-pulse-min: 0.82;
+    animation: ag-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-tour-spot { animation: none; transition: none; }
+}
+
+/* The card is `.ag-banner` + `.ag-cta--dark` (both above) — this modifier is
+   the one thing being a *second* fixed bottom card needs: stacking above
+   BottomBanner's own offer using the height variable `.ag-toast-container`
+   already reads for the same reason, rather than suppressing it (§6). */
+.ag-tour-card { bottom: var(--ag-banner-height, 0); }
+
+.ag-tour-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+}
+.ag-tour-actions-nav { display: flex; gap: 8px; }
+.ag-tour-skip, .ag-tour-back {
+    background: transparent;
+    border: 0;
+    padding: 8px 2px;
+    font: 700 13px var(--ag-font);
+    color: var(--ag-on-dark);
+    opacity: 0.7;
+    cursor: pointer;
+}
+.ag-tour-skip:hover, .ag-tour-back:hover { opacity: 1; }
 
 /* ---- Toast notifications ---- */
 /* Fixed to the viewport rather than scrolling with the page. Positioned above
