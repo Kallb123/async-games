@@ -92,37 +92,10 @@ export interface NativeGoogleSignInState {
     status: NativeGoogleStatus;
     /** Something went wrong and the player should see it. Cancelling isn't one. */
     error: string | null;
-    /**
-     * TEMPORARY (see `describeFailure`): the technical detail behind `error`,
-     * for a shell that can't be attached to a debugger. Remove with the
-     * function that fills it.
-     */
-    detail: string | null;
     signIn: () => void;
 }
 
 type SocialLoginPlugin = (typeof import('@capgo/capacitor-social-login'))['SocialLogin'];
-
-/* ------------------------------------------------------------------------ *
- * TEMPORARY DIAGNOSTIC — remove once Google sign-in is confirmed working.
- *
- * A release APK can't be attached to a debugger: `chrome://inspect` won't
- * list it (Capacitor only enables WebView debugging for a debuggable build)
- * and Capacitor's console-to-logcat forwarding is off in release too. So a
- * failure here is invisible without rebuilding the shell.
- *
- * It used to decode the token and print its claims, which is how we learned
- * that Clerk was refusing a perfectly good audience. That question is settled
- * and the decoding is gone with it — a line away from putting somebody's
- * Google subject and address on a screen that gets screenshotted. What's left
- * is the reason the exchange failed, which is all that's useful now.
- * ------------------------------------------------------------------------ */
-
-function describeFailure(cause: unknown): string {
-    const message = cause instanceof Error ? cause.message : String(cause);
-    const code = (cause as { code?: string })?.code;
-    return `cause: ${code ? `[${code}] ` : ''}${message}`;
-}
 
 /**
  * The configured plugin, fetched and handed its client ID once per app rather
@@ -218,8 +191,6 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
     const router = useRouter();
     const [status, setStatus] = useState<NativeGoogleStatus>('absent');
     const [error, setError] = useState<string | null>(null);
-    // TEMPORARY, with `describeFailure`.
-    const [detail, setDetail] = useState<string | null>(null);
 
     // Deliberately starts at `absent` and only ever moves in an effect, so the
     // server and the browser's first render agree: the server has no idea which
@@ -245,10 +216,11 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
         signingIn = true;
         setStatus('busy');
         setError(null);
-        setDetail(null);
         void (async () => {
-            // TEMPORARY, with `describeFailure`: `withTimeout` logs and
-            // swallows, so the real reason is kept here to report on screen.
+            // `withTimeout` logs and swallows, so the real reason is held
+            // here and re-thrown: without it the catch below would report
+            // "did not finish" for a failure that had a perfectly good
+            // explanation a moment earlier.
             let exchangeRefused: unknown = null;
             try {
                 const SocialLogin = await configure();
@@ -302,13 +274,11 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 }
                 console.error('Google sign-in failed', signInError);
                 setError('Google sign-in didn’t work. Try again, or use your email and password.');
-                // TEMPORARY, with `describeFailure`.
-                setDetail(describeFailure(signInError));
             } finally {
                 signingIn = false;
             }
         })();
     }, [clerkSignIn, setActive, router]);
 
-    return { status, error, detail, signIn };
+    return { status, error, signIn };
 }
