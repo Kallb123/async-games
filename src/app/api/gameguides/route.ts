@@ -5,6 +5,14 @@ import { GAME_GUIDES } from '@/utils/ui/gameGuides';
 import { GAME_TUTORIALS } from '@/utils/ui/gameTutorials';
 import { SeenListKey, getSeen, withSeen } from '@/utils/users/gameGuideProgress';
 
+/** Whether `game` is a real, registered slug in `allowlist` — `Object.hasOwn`
+ *  rather than `in`, so a client can't pass an `Object.prototype` name
+ *  (`"constructor"`, `"toString"`, …) and have it read as present on an
+ *  allowlist that otherwise has no own keys at all. */
+function isAllowed(game: string, allowlist: Record<string, unknown>): boolean {
+    return Object.hasOwn(allowlist, game);
+}
+
 /** The two first-runs this route tracks, and what each is validated against
  *  and stored under. `kind` arrives from the client as a bare string, so it
  *  is matched against these two literals and used only to pick one of these
@@ -48,17 +56,21 @@ export async function POST(request: NextRequest) {
     const body = await readJsonBody<{ game: string; kind?: string }>(request);
     const kind = body.kind === 'tutorial' ? 'tutorial' : 'guide';
     const list = SEEN_LISTS[kind];
-    if (!body.game || typeof body.game !== 'string' || !(body.game in list.allowlist)) {
+    if (!body.game || typeof body.game !== 'string' || !isAllowed(body.game, list.allowlist)) {
         return NextResponse.json({}, { status: 400, statusText: 'Missing game' });
     }
 
-    const currentUserData = await currentUser();
-    if (!currentUserData) {
-        return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
-    }
+    // Re-read right before the write, the same reason registerDevice/
+    // removeDevices do (src/utils/firebase/deviceTokens.ts): the whole
+    // metadata object is written back as one blob, and a "seen" write for
+    // the *other* list — another tab dismissing the guide while this one
+    // dismisses the tutorial, say — landing in between would otherwise be
+    // erased by this write rather than merged with it.
+    const client = await clerkClient();
+    const currentUserData = await client.users.getUser(userId);
 
     const seen = withSeen(currentUserData, list.key, body.game);
-    await (await clerkClient()).users.updateUserMetadata(userId, {
+    await client.users.updateUserMetadata(userId, {
         privateMetadata: {
             ...currentUserData.privateMetadata,
             [list.key]: seen,

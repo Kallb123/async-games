@@ -68,9 +68,14 @@ export function useGameIntro(gameUrl: string): GameIntro {
         fetch('/api/gameguides')
             .then(response => response.json())
             .then(data => {
-                if (cancelled || !data) return;
-                if (Array.isArray(data.seen)) setSeen(data.seen);
-                if (Array.isArray(data.seenTutorials)) setSeenTutorials(data.seenTutorials);
+                if (cancelled) return;
+                // Default a missing/malformed field to [] rather than leaving
+                // it at null: `loaded` waits on *both* fields, so a response
+                // missing just one of them (a stale cache during a rolling
+                // deploy, say) would otherwise block `loaded` — and the
+                // popups it gates — forever, with nothing to retry it.
+                setSeen(Array.isArray(data?.seen) ? data.seen : []);
+                setSeenTutorials(Array.isArray(data?.seenTutorials) ? data.seenTutorials : []);
             })
             .catch(error => console.error('Failed to load game guide progress', error));
         return () => { cancelled = true; };
