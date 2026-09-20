@@ -101,11 +101,17 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // The first-match tour: gated to a live, unfinished board (a finished or
     // turn-by-turn-reviewed one gets no tour) and driven by the same booleans
-    // this page already computes for its own subtitle below.
+    // this page already computes for its own subtitle below. Setup and the
+    // main turn are split rather than folded into one "myTurn" (as Dice
+    // Cities, which has no setup phase, can do): the roll button doesn't
+    // exist during setup, so a step gated on turn ownership alone would
+    // point at nothing there. Special Build lets a player build without
+    // having rolled, so it counts toward `canBuild` the same way a roll does.
     const tutorial = tutorialRun(settlementsAndCitiesTutorial, {
-        myTurn: isMyTurn,
+        setupPlacing: isMyTurn && gs?.phase === 'setup',
+        canRoll: isMyTurn && gs?.phase !== 'setup',
         hasRolled: gs?.hasRolled ?? false,
-        canBuild: isMyTurn && (gs?.hasRolled ?? false),
+        canBuild: isMyTurn && ((gs?.hasRolled ?? false) || (gs?.specialBuildActive ?? false)),
     }, { active: nav.isLive && !complete });
 
     // owner userId → colour, following the persistent userIdList ordering.

@@ -5,8 +5,12 @@ import type { GameTutorial } from "@/utils/ui/gameTutorials";
 // docs/game-tutorials.md). One step asks something of the player (roll);
 // everything else is a narration step pointing at a real piece of the board.
 // Closest in shape to Dice Cities' tour, minus the card-detail steps — this
-// game has no card to tap and inspect.
-export type SettlementsAndCitiesSignal = "myTurn" | "hasRolled" | "canBuild";
+// game has no card to tap and inspect. Unlike Dice Cities it opens on a
+// setup phase (everyone places two settlements and two roads before the
+// real turns begin), so `canRoll`/`setupPlacing` split what Dice Cities
+// covers with a single `myTurn` — the roll button doesn't exist yet during
+// setup, and a step naming it would point at nothing.
+export type SettlementsAndCitiesSignal = "setupPlacing" | "canRoll" | "hasRolled" | "canBuild";
 
 export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
     steps: [
@@ -17,7 +21,7 @@ export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
         {
             anchor: "scoreboard",
             title: "The scoreboard",
-            body: "How close everyone is to winning, plus who's holding Longest Road and Largest Army. Tap it open for the detail.",
+            body: "How close everyone is to winning: their card count, and the 🛣️ and ⚔️ marks for Longest Road and Largest Army. Tap it open for the detail.",
         },
         {
             anchor: "board",
@@ -25,17 +29,23 @@ export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
             body: "Each hex pays out its resource when its number comes up on the roll. Build a settlement or city next to the hexes you want.",
         },
         {
+            anchor: "sac-setup",
+            title: "Setup",
+            body: "Every game starts here — each player places two settlements and two roads before the real turns begin. Tap where you'd like yours, then Next when you're ready to carry on.",
+            when: "setupPlacing",
+        },
+        {
             anchor: "sac-roll",
             title: "Your roll",
             body: "Roll two dice — every hex with a matching number pays out to whoever's built next to it, you included.",
-            when: "myTurn",
+            when: "canRoll",
             advanceOn: "hasRolled",
             hint: "Tap Roll the dice",
         },
         {
             anchor: "sac-build",
             title: "Build something",
-            body: "Spend what the roll just paid you on a road, settlement or city — or a development card. It's your board to build on; nobody else can build on your roads.",
+            body: "Spend what the roll just paid you on a road, settlement or city — or a development card. New roads and settlements have to connect to one you've already got.",
             when: "canBuild",
         },
         {

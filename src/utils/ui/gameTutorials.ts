@@ -86,7 +86,6 @@ export function hasTutorial(gameUrl: string): boolean {
 export const TOUR_ANCHORS = {
     scoreboard: '.ag-scorestrip',
     board: '.ag-board-area',
-    turnSheet: '.ag-actionsheet',
     menu: '.ag-gom',
 } as const;
 

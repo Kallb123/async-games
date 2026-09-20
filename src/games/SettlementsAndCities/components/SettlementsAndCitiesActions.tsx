@@ -571,6 +571,7 @@ export default function SettlementsAndCitiesActions({
                 <button
                     className={`ag-btn ${active ? 'ag-btn--dark' : 'ag-btn--primary'} ag-btn--block`}
                     onClick={() => toggleMode(mode)}
+                    data-tour="sac-setup"
                 >
                     {active
                         ? '↩ Cancel'
