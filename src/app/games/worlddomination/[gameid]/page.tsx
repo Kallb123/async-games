@@ -11,7 +11,6 @@ import WorldDominationActions from "@/games/WorldDomination/components/WorldDomi
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import { guide as worldDominationGuide } from "@/games/WorldDomination/guide";
@@ -220,12 +219,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -279,10 +272,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={worldDominationGuide} intro={gameGuide}>
             <FcmTokenComp />
-
-            {gameGuide.open && <GameGuideModal guide={worldDominationGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

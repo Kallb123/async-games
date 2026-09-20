@@ -13,8 +13,8 @@ import { MIN_MOVE_STEPS, SLIPSTREAM_STEPS, spaceKey } from "@/games/RaceCars/boa
 import { moveOptions, slipstreamMoveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
 import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { cornerStat, positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
+import { guide as raceCarsGuide } from "@/games/RaceCars/guide";
 import GameShell from "@/components/ui/GameShell";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -32,7 +32,6 @@ import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
@@ -103,10 +102,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     // The how-to-play popup, shown the first time this account opens a race and
-    // from the ⋮ menu after that. Still looked up rather than imported: a game
-    // with no `GAME_GUIDES` entry has nothing to show, and the guard below keeps
-    // both the menu row and the popup off in that case.
-    const guide = guideForGame('racecars');
+    // from the ⋮ menu after that (see GameShell's `guide`/`intro` props).
     const gameGuide = useGameGuide('racecars');
 
     // The turn sheet is pinned to the bottom of the screen (§19.2's board is a
@@ -245,12 +241,6 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        ...(guide ? [{
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        }] : []),
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -312,10 +302,10 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--racecars"
+            guide={raceCarsGuide}
+            intro={gameGuide}
         >
             <FcmTokenComp />
-
-            {guide && gameGuide.open && <GameGuideModal guide={guide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

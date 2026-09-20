@@ -15,7 +15,6 @@ import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIslet
 import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import RoleIntroPopup from "@/components/ui/RoleIntroPopup";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -299,12 +298,6 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -351,6 +344,8 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--bannedislet"
+            guide={bannedIsletGuide}
+            intro={gameGuide}
         >
             <FcmTokenComp />
 
@@ -359,7 +354,6 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                 docs), so the role welcome waits for this one to have answered
                 and to not be showing. */}
             {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="bannedislet" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
-            {gameGuide.open && <GameGuideModal guide={bannedIsletGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

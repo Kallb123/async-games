@@ -6,9 +6,12 @@ import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
 import DevGameMenu from '@/components/ui/DevGameMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
 import GameChat from '@/components/games/GameChat';
+import GameGuideModal from '@/components/ui/GameGuideModal';
 import PanelToggleRow from '@/components/ui/PanelToggleRow';
 import { useGameChat } from '@/utils/hooks/useGameChat';
+import { GameGuideIntro } from '@/utils/hooks/useGameGuide';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
+import { GameGuide } from '@/utils/ui/gameGuides';
 
 /** What a game hands `GameShell`'s `chat` prop: the game and its roster. The
  *  roster pair (parallel arrays, seat order) is how a message gets a name and a
@@ -40,6 +43,16 @@ interface GameShellProps {
     /** The game's match-history log, behind the shell's own toggle. Omitted
      *  renders neither the toggle nor the panel. */
     log?: MatchHistoryProps;
+    /** The game's how-to-play guide. Omitted renders neither the 📖 row nor
+     *  the popup. Paired with `intro` — a game builds this from its own
+     *  theme (Dice Cities) or imports it as-is, the same either way. */
+    guide?: GameGuide;
+    /** The `useGameGuide` result driving `guide`'s popup. The hook call stays
+     *  in the page rather than moving here: Outbreak and Banned Islet read
+     *  `loaded`/`open` themselves to hold their own role-welcome popup back
+     *  until this one has had the floor, and a second call here would mean a
+     *  second fetch. One fetch, one source of truth, handed down. */
+    intro?: GameGuideIntro;
     /** The game's chat thread. Omitted — or a single-seat game, where the roster
      *  has fewer than two players — renders no 💬 button and no panel, which is
      *  how Solitaire gets no chat without being named here. */
@@ -80,8 +93,14 @@ interface GameShellProps {
  * the page instead of nothing — the top-bar toggle still opens it, but a
  * player scrolled past a tall board has a title to tap down there too, not
  * just a control back at the top they've already scrolled away from.
+ *
+ * It owns the game guide too: a game passes its `guide` and the `intro`
+ * object `useGameGuide` gave it, and gets the 📖 row and the popup — this used
+ * to be two imports, a menu row and a render line pasted into each of the
+ * eight board screens. The hook call itself stays in the page (see `intro`
+ * below) rather than moving in here as well.
  */
-export default function GameShell({ title, subtitle, backHref = '/', options, right, busy = false, log, chat, className = '', children }: GameShellProps) {
+export default function GameShell({ title, subtitle, backHref = '/', options, right, busy = false, log, guide, intro, chat, className = '', children }: GameShellProps) {
     const [showLog, setShowLog] = useState(false);
     const [showChat, setShowChat] = useState(false);
 
@@ -97,13 +116,21 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
     const chatPanelRef = useScrollIntoViewOnOpen(showChat && hasChat);
     const logPanelRef = useScrollIntoViewOnOpen(showLog && !!log);
 
-    const shellOptions: GameOption[] = log ? [{
-        key: 'history',
-        label: 'Turn history',
-        icon: '📜',
-        active: showLog,
-        onClick: () => setShowLog(v => !v),
-    }] : [];
+    const shellOptions: GameOption[] = [
+        ...(log ? [{
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        }] : []),
+        ...(guide && intro ? [{
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: intro.openGuide,
+        }] : []),
+    ];
 
     return (
         <div className={`ag-game${className ? ` ${className}` : ''}`}>
@@ -143,6 +170,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                     pressed button swaps to its pending verb (layer 1). */}
                 {busy && <span className="ag-pending-bar ag-pending-bar--topbar" role="progressbar" aria-label="Loading" />}
             </div>
+            {guide && intro?.open && <GameGuideModal guide={guide} onClose={intro.closeGuide} />}
             {children}
             {log && (showLog ? (
                 <div ref={logPanelRef}>

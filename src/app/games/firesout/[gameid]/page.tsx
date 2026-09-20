@@ -10,7 +10,6 @@ import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/
 import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
-import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
@@ -307,12 +306,6 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'guide',
-            label: 'Game guide',
-            icon: '📖',
-            onClick: gameGuide.openGuide,
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -345,10 +338,10 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"
+            guide={firesOutGuide}
+            intro={gameGuide}
         >
             <FcmTokenComp />
-
-            {gameGuide.open && <GameGuideModal guide={firesOutGuide} onClose={gameGuide.closeGuide} />}
 
             {gs && (
                 <>
