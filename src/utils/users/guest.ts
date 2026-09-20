@@ -1,6 +1,7 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import { readableName } from "@/utils/ui/players";
+import { mintSignInToken } from "@/utils/users/signInTokens";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -19,16 +20,6 @@ export interface GuestTicket {
     userId: string;
     ticket: string;
     resumeTicket: string;
-}
-
-// The one place a sign-in token is minted, so the immediate ticket, the resume
-// link handed out at sign-up and the replacement an admin mints later
-// (docs/admin-tools.md) are the same mechanism with three lifetimes rather
-// than three copies of the same Clerk call.
-async function mintSignInToken(userId: string, expiresInSeconds: number): Promise<string> {
-    const client = await clerkClient();
-    const { token } = await client.signInTokens.createSignInToken({ userId, expiresInSeconds });
-    return token;
 }
 
 /**

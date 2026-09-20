@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useClerk } from '@clerk/nextjs';
+import { useSignIn } from '@clerk/nextjs/legacy';
+import { completeTicketSignIn } from '@/utils/users/ticketSignIn';
 import { hasNativePlugin, isNativeShell } from '@/utils/native';
 import { returnPath } from '@/utils/ui/returnPath';
 import { withTimeout } from '@/utils/withTimeout';
@@ -26,11 +27,20 @@ import { withTimeout } from '@/utils/withTimeout';
  *
  * So the app doesn't navigate anywhere. Android's Credential Manager shows the
  * account picker over the app — the accounts already on the phone, no browser,
- * no typing — and hands back a Google ID token, which goes straight to Clerk
- * through the One Tap strategy. Clerk verifies it against the same Google
- * client the web flow uses and creates the session in the WebView's own cookie
- * jar, which is where the rest of the app (and the SSR middleware) reads it
- * from.
+ * no typing — and hands back a Google ID token.
+ *
+ * That token goes to our own server (`api/auth/googlenative`) rather than
+ * straight to Clerk, and that detour is not a preference. Clerk's One Tap
+ * strategy is the only native-token route clerk-js offers for Google (it has
+ * `oauth_token_apple` and no Google equivalent), and it refuses a token minted
+ * for an Android client: the audience is right, but `azp` names the Android
+ * OAuth client rather than the web one, and Clerk answers
+ * `authorization_invalid`. Credential Manager cannot mint a token without that
+ * `azp`, so there is no client-side way round it. The route verifies the token
+ * against Google's own keys and hands back a Clerk sign-in ticket, which is
+ * redeemed here — the same `strategy: 'ticket'` round trip a guest's join
+ * does. The session then lands in the WebView's own cookie jar, which is where
+ * the rest of the app and the SSR middleware read it from.
  *
  * Microsoft needs none of this: it renders happily in a WebView, so its hop
  * stays in the WebView and is covered by `allowNavigation` in
@@ -52,16 +62,17 @@ import { withTimeout } from '@/utils/withTimeout';
 const WEB_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 /**
- * How long Clerk gets to turn a Google token into an active session before the
- * button gives up and says so.
+ * How long the token has to become an active session before the button gives
+ * up and says so.
  *
- * It needs one: `useClerk()` hands back the isomorphic wrapper, whose calls
- * queue on a promise that settles when clerk-js finishes loading and *never*
- * rejects or expires. This button paints before clerk-js is ready by design
- * (see `resolveStatus`), so tapping it mid-load is the ordinary case — and in
- * the shell there is no address bar and no pull-to-refresh, so a hang is a
- * force-quit. Generous, because the phone has already shown a picker and the
- * player has already chosen: finishing slowly beats failing.
+ * It needs one: the exchange is a round trip to our own server and then a
+ * Clerk call, and Clerk's isomorphic wrapper queues calls on a promise that
+ * settles when clerk-js finishes loading and *never* rejects or expires. This
+ * button paints before clerk-js is ready by design (see `resolveStatus`), so
+ * tapping it mid-load is the ordinary case — and in the shell there is no
+ * address bar and no pull-to-refresh, so a hang is a force-quit. Generous,
+ * because the phone has already shown a picker and the player has already
+ * chosen: finishing slowly beats failing.
  */
 const CLERK_EXCHANGE_TIMEOUT_MS = 30_000;
 
@@ -98,47 +109,19 @@ type SocialLoginPlugin = (typeof import('@capgo/capacitor-social-login'))['Socia
  * A release APK can't be attached to a debugger: `chrome://inspect` won't
  * list it (Capacitor only enables WebView debugging for a debuggable build)
  * and Capacitor's console-to-logcat forwarding is off in release too. So a
- * failure here is invisible without rebuilding the shell, which is the one
- * thing we're trying to avoid doing repeatedly.
+ * failure here is invisible without rebuilding the shell.
  *
- * This prints, under the button, the three facts that separate the remaining
- * causes apart: the audience Google actually stamped on the token, the client
- * ID this deployment asked for, and what rejected it. Compare the first two —
- * if they agree, the token is right and the mismatch is Clerk's configured
- * client ID, which is a dashboard fix rather than a code one.
+ * It used to decode the token and print its claims, which is how we learned
+ * that Clerk was refusing a perfectly good audience. That question is settled
+ * and the decoding is gone with it — a line away from putting somebody's
+ * Google subject and address on a screen that gets screenshotted. What's left
+ * is the reason the exchange failed, which is all that's useful now.
  * ------------------------------------------------------------------------ */
 
-/** A JWT's payload, or null if it isn't one. No verification — this is for reading. */
-function claimsOf(idToken: string): Record<string, unknown> | null {
-    try {
-        const payload = idToken.split('.')[1];
-        if (!payload) {
-            return null;
-        }
-        // base64url, and `atob` wants base64 with its padding.
-        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-        return JSON.parse(atob(padded));
-    } catch {
-        return null;
-    }
-}
-
-function describeFailure(idToken: string | null, cause: unknown): string {
-    const lines: string[] = [];
-    if (idToken) {
-        const claims = claimsOf(idToken);
-        lines.push(`token aud: ${String(claims?.aud ?? '—')}`);
-        lines.push(`token azp: ${String(claims?.azp ?? '—')}`);
-        lines.push(`app asked for: ${WEB_CLIENT_ID ?? '—'}`);
-        lines.push(`email verified: ${String(claims?.email_verified ?? '—')}`);
-    } else {
-        lines.push('no token — failed before Google returned one');
-    }
+function describeFailure(cause: unknown): string {
     const message = cause instanceof Error ? cause.message : String(cause);
     const code = (cause as { code?: string })?.code;
-    lines.push(`cause: ${code ? `[${code}] ` : ''}${message}`);
-    return lines.join('\n');
+    return `cause: ${code ? `[${code}] ` : ''}${message}`;
 }
 
 /**
@@ -231,7 +214,7 @@ async function resolveStatus(): Promise<NativeGoogleStatus> {
 let signingIn = false;
 
 export function useNativeGoogleSignIn(): NativeGoogleSignInState {
-    const clerk = useClerk();
+    const { signIn: clerkSignIn, setActive } = useSignIn();
     const router = useRouter();
     const [status, setStatus] = useState<NativeGoogleStatus>('absent');
     const [error, setError] = useState<string | null>(null);
@@ -264,9 +247,9 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
         setError(null);
         setDetail(null);
         void (async () => {
-            // TEMPORARY, with `describeFailure`: held out here so the catch can
-            // report which audience Google stamped on the token it failed with.
-            let issuedToken: string | null = null;
+            // TEMPORARY, with `describeFailure`: `withTimeout` logs and
+            // swallows, so the real reason is kept here to report on screen.
+            let exchangeRefused: unknown = null;
             try {
                 const SocialLogin = await configure();
                 const { result } = await SocialLogin.login({ provider: 'google', options: {} });
@@ -277,40 +260,35 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 if (!idToken) {
                     throw new Error('Google signed in but returned no ID token');
                 }
-                issuedToken = idToken;
 
-                // Deliberately *not* `handleGoogleOneTapCallback`, which looks
-                // like the method for this and isn't: the isomorphic wrapper
-                // `useClerk()` returns fires it and swallows both its result
-                // and any rejection, so an `await` on it comes back before the
-                // work is done and a failure never reaches this `catch` —
-                // leaving the button reading "Signing in…" for ever. It drops
-                // the custom-navigate argument its own types declare, too.
-                // `setActive` answers honestly, and this is then the same
-                // three-step Clerk dance a guest's ticket sign-in does
-                // (`completeTicketSignIn`, app/join/JoinForm.tsx).
-                // TEMPORARY, with `describeFailure`: `withTimeout` logs and
-                // swallows, so Clerk's own error is kept here to report.
-                let clerkRefused: unknown = null;
+                // Our own server, not Clerk: see the note at the top of
+                // this file for why Clerk won't take this token directly.
+                // It answers with a sign-in ticket, which is redeemed the
+                // same way a guest's join redeems theirs.
                 const signedIn = await withTimeout(
                     async () => {
-                        const attempt = await clerk.authenticateWithGoogleOneTap({ token: idToken })
-                            .catch((clerkError: unknown) => { clerkRefused = clerkError; throw clerkError; });
-                        if (attempt.status !== 'complete' || !attempt.createdSessionId) {
-                            // A sign-up Clerk wants more than Google gave it,
-                            // or an attempt it didn't finish. Nothing here can
-                            // supply the rest.
-                            return false;
+                        const response = await fetch('/api/auth/googlenative', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ idToken }),
+                        });
+                        if (!response.ok) {
+                            exchangeRefused = new Error(`The server refused the Google token (${response.status})`);
+                            throw exchangeRefused;
                         }
-                        await clerk.setActive({ session: attempt.createdSessionId });
-                        return true;
+                        const { ticket } = await response.json() as { ticket?: string };
+                        if (!ticket || !clerkSignIn || !setActive) {
+                            exchangeRefused = new Error('No ticket to sign in with');
+                            throw exchangeRefused;
+                        }
+                        return completeTicketSignIn(clerkSignIn, setActive, ticket);
                     },
                     CLERK_EXCHANGE_TIMEOUT_MS,
                     false,
                     'Signing in with the Google token',
                 );
                 if (!signedIn) {
-                    throw clerkRefused ?? new Error('Clerk did not finish the Google sign-in');
+                    throw exchangeRefused ?? new Error('Clerk did not finish the Google sign-in');
                 }
                 router.push(returnPath());
                 // Left `busy` on purpose: the navigation is already under way,
@@ -325,12 +303,12 @@ export function useNativeGoogleSignIn(): NativeGoogleSignInState {
                 console.error('Google sign-in failed', signInError);
                 setError('Google sign-in didn’t work. Try again, or use your email and password.');
                 // TEMPORARY, with `describeFailure`.
-                setDetail(describeFailure(issuedToken, signInError));
+                setDetail(describeFailure(signInError));
             } finally {
                 signingIn = false;
             }
         })();
-    }, [clerk, router]);
+    }, [clerkSignIn, setActive, router]);
 
     return { status, error, detail, signIn };
 }

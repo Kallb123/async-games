@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // in the app is the declarative <SignIn/>/<SignUp/> component, so there's no
 // existing custom-flow convention this needs to match either way.
 import { useSignIn } from "@clerk/nextjs/legacy";
+import { completeTicketSignIn } from "@/utils/users/ticketSignIn";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
@@ -56,26 +57,6 @@ function JoinButton({ joining, disabled }: { joining: boolean; disabled: boolean
       {joining ? 'Joining…' : 'Join game'}
     </button>
   );
-}
-
-type SignInHook = ReturnType<typeof useSignIn>;
-
-// Turns a Clerk sign-in ticket into a session on this device — the three-line
-// Clerk dance both ticket flows on this screen need: a guest's own join
-// (`ticket`) and a returning guest's resume link (`resumeTicket`, §2/§15).
-// Each keeps its own follow-up and its own error handling; this is only the
-// part that's identical.
-async function completeTicketSignIn(
-  signIn: NonNullable<SignInHook['signIn']>,
-  setActive: NonNullable<SignInHook['setActive']>,
-  ticket: string,
-): Promise<boolean> {
-  const attempt = await signIn.create({ strategy: 'ticket', ticket });
-  if (attempt.status !== 'complete' || !attempt.createdSessionId) {
-    return false;
-  }
-  await setActive({ session: attempt.createdSessionId });
-  return true;
 }
 
 interface JoinResult {
