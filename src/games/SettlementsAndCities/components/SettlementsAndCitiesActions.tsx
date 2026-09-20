@@ -596,8 +596,12 @@ export default function SettlementsAndCitiesActions({
                 </p>
                 {undoRow}
                 {tutorialPreview && (
+                    // No `tradeModal` here, unlike the off-turn and Special
+                    // Build branches below — the panel is inert and setup has
+                    // no trade to make, so there's nothing for its button to
+                    // open even if the fieldset weren't already blocking it.
                     <div style={{ marginTop: 12 }}>
-                        <p className="ag-action-hint">Once setup&apos;s done, here&apos;s what a turn looks like:</p>
+                        <p className="ag-action-hint">Costs to plan with — nothing here can be tapped until setup&apos;s done.</p>
                         <ReadOnlyPanel readOnly>{buildList}</ReadOnlyPanel>
                     </div>
                 )}

@@ -9,14 +9,19 @@ import type { GameTutorial } from "@/utils/ui/gameTutorials";
 // setup phase (everyone places two settlements and two roads before the
 // real turns begin), so `canRoll`/`setupPlacing` split what Dice Cities
 // covers with a single `myTurn` — the roll button doesn't exist yet during
-// setup, and a step naming it would point at nothing. The build list is in
-// the same spot: `sac-build` doesn't render on a setup turn either, so the
-// "your turn" step is its own `setupPlacing`-gated preview (an inert copy
-// of the same list, shown only while the tour is open — see
-// SettlementsAndCitiesActions' `tutorialPreview` prop) rather than the real
-// do-it step below it, which only becomes applicable once there's a real
-// turn to take.
-export type SettlementsAndCitiesSignal = "setupPlacing" | "canRoll" | "hasRolled" | "canBuild";
+// setup, and a step naming it would point at nothing.
+//
+// `turnOverview` covers the rest: whoever's tour this is, if it isn't their
+// turn to roll and it isn't their turn to build, there's a real build list
+// on screen already (the off-turn preview every waiting player gets, or
+// this player's own setup-turn preview — see SettlementsAndCitiesActions'
+// `tutorialPreview` prop) worth a general "here's what a turn looks like"
+// step, distinct from the later do-it steps that only apply once there's a
+// real turn to take. It's defined as `!canRoll && !canBuild` (page.tsx), so
+// it can never hold at the same time as either of them — the three
+// `when`s below are mutually exclusive by construction, not by an
+// invariant borrowed from two files away.
+export type SettlementsAndCitiesSignal = "setupPlacing" | "canRoll" | "hasRolled" | "canBuild" | "turnOverview";
 
 export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
     steps: [
@@ -48,8 +53,8 @@ export const tutorial: GameTutorial<SettlementsAndCitiesSignal> = {
         {
             anchor: "sac-build",
             title: "Your turn",
-            body: "Once setup's done, this is what a turn looks like: a road, a settlement, a city, a development card — as many as you can afford before you pass to the next player.",
-            when: "setupPlacing",
+            body: "Each turn starts with a roll, then you spend what you've collected: a road, a settlement, a city or a development card, as many as you can afford, before you pass to the next player.",
+            when: "turnOverview",
         },
         {
             anchor: "sac-roll",

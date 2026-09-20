@@ -107,18 +107,33 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // exist during setup, so a step gated on turn ownership alone would
     // point at nothing there. Special Build lets a player build without
     // having rolled, so it counts toward `canBuild` the same way a roll does.
+    const tutorialSetupPlacing = isMyTurn && gs?.phase === 'setup';
+    const tutorialCanRoll = isMyTurn && gs?.phase !== 'setup';
+    const tutorialCanBuild = isMyTurn && ((gs?.hasRolled ?? false) || (gs?.specialBuildActive ?? false));
     const tutorial = tutorialRun(settlementsAndCitiesTutorial, {
-        setupPlacing: isMyTurn && gs?.phase === 'setup',
-        canRoll: isMyTurn && gs?.phase !== 'setup',
+        setupPlacing: tutorialSetupPlacing,
+        canRoll: tutorialCanRoll,
         hasRolled: gs?.hasRolled ?? false,
-        canBuild: isMyTurn && ((gs?.hasRolled ?? false) || (gs?.specialBuildActive ?? false)),
+        canBuild: tutorialCanBuild,
+        // Neither the roll nor the build do-it step applies: either it isn't
+        // your turn at all, or it is and you're still in setup. Either way
+        // there's a real build list already on screen to point a general
+        // "here's what a turn looks like" step at instead — the off-turn
+        // preview every waiting player already gets, or this player's own
+        // setup-turn preview below.
+        turnOverview: !tutorialCanRoll && !tutorialCanBuild,
     }, { active: nav.isLive && !complete });
 
     // While the tour is up on this player's own setup turn, the actions
     // panel shows an inert preview of the build list under the placement
-    // button — normally there's nothing there yet for the "your turn" step
-    // to point at.
-    const tutorialPreview = isMyTurn && gs?.phase === 'setup' && gameIntro.tutorialOpen;
+    // button — normally there's nothing there yet for the "Your turn" step
+    // to point at. Gated on `gameIntro.tutorialOpen` rather than the tour's
+    // *current* step (not observable from here — that lives inside
+    // useTutorialRun, owned by GameShell): coarser than ideal, so the
+    // preview is already on screen a few steps before "Your turn" explains
+    // it, but cheaper than piping the current step back out of the shell
+    // for one game's sake.
+    const tutorialPreview = tutorial.active && gameIntro.tutorialOpen && tutorialSetupPlacing;
 
     // owner userId → colour, following the persistent userIdList ordering.
     // playerColourForId already answers a null/unknown owner with the neutral
