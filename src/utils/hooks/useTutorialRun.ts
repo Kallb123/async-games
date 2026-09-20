@@ -44,11 +44,15 @@ export function useTutorialRun(run: TutorialRun): UseTutorialRunResult {
     // `closeAnchor` dismisses a popup the current step opened — clicking its
     // own close control rather than tracking a second piece of state for it,
     // so leaving the step (however the player does it) can't strand one open.
-    const goNext = useCallback(() => {
+    // `goBack` needs this too: a step with `advanceOnVisible` watching for the
+    // very thing `closeAnchor` would close (a card's own detail popup) would
+    // otherwise find it still open and immediately re-advance, turning "Back"
+    // into a no-op.
+    const closeStep = useCallback(() => {
         if (step?.closeAnchor) document.querySelector<HTMLElement>(anchorSelector(step.closeAnchor))?.click();
-        setIndex(i => i + 1);
     }, [step]);
-    const goBack = useCallback(() => setIndex(i => Math.max(i - 1, 0)), []);
+    const goNext = useCallback(() => { closeStep(); setIndex(i => i + 1); }, [closeStep]);
+    const goBack = useCallback(() => { closeStep(); setIndex(i => Math.max(i - 1, 0)); }, [closeStep]);
 
     // The self-advance watch (§5), done during render rather than as a
     // synchronous setState inside an effect (react-hooks/set-state-in-effect,
