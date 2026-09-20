@@ -37,6 +37,7 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
                 body: `The roll it pays out on is printed at the top, its cost in ${words.coins} bottom left, and what it does underneath.`,
             },
             {
+                anchor: "dc-market",
                 title: words.market,
                 body: `You buy cards and ${words.landmarks} from the shared ${words.market.toLowerCase()}, but only after you've rolled for your turn.`,
             },

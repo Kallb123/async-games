@@ -274,7 +274,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     // result ever reaches the screen.
     if (readOnly) {
         return (
-            <div className="ag-actionsheet ag-dc-market">
+            <div className="ag-actionsheet ag-dc-market" data-tour="dc-market">
                 {roll?.turnJustEnded && rollReadout("nothing left to do, so your turn ended")}
                 {marketSheet}
             </div>
