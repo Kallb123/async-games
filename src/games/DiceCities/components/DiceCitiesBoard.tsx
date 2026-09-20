@@ -62,7 +62,7 @@ export default function DiceCitiesBoard({ playerState, isViewer, theme }: DiceCi
 
     const grid = (
         <div className="ag-dc-grid">
-            {establishments.map((cc) => {
+            {establishments.map((cc, i) => {
                 const card = theme.cards[cc.card];
                 const color = ACTIVATION_META[activationFor(card)].color;
                 return (
@@ -73,7 +73,12 @@ export default function DiceCitiesBoard({ playerState, isViewer, theme }: DiceCi
                     >
                         <span className="ag-dc-est-roll">{rollLabel(card)}</span>
                         {cc.amount > 1 && <span className="ag-dc-est-count">×{cc.amount}</span>}
-                        <ZoomableCardArt card={card} theme={theme} className="ag-dc-est-icon" />
+                        <ZoomableCardArt
+                            card={card}
+                            theme={theme}
+                            className="ag-dc-est-icon"
+                            dataTour={isViewer && i === 0 ? "dc-first-card" : undefined}
+                        />
                         <div className="ag-dc-est-name">{card.title}</div>
                         <div className="ag-dc-est-yield">{yieldLabel(card)}</div>
                     </div>

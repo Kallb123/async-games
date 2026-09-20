@@ -52,7 +52,10 @@ interface GameShellProps {
     /** The game's interactive tour, built by the page's own call to
      *  `tutorialRun` against its board state. Omitted renders neither the 🎓
      *  row nor the overlay — every game today, until one passes it. Paired
-     *  with `intro`, the same way `guide` is. */
+     *  with `intro`, the same way `guide` is. `tutorial.active` gates both:
+     *  a finished, abandoned or turn-by-turn-reviewed board is the wrong
+     *  thing to tour (docs/game-tutorials.md §9), so neither the row nor the
+     *  overlay appears there even if the account hasn't seen the tour yet. */
     tutorial?: TutorialRun;
     /** The `useGameIntro` result driving `guide`'s popup (and `tutorial`'s).
      *  The hook call stays in the page rather than moving here: Outbreak and
@@ -134,7 +137,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             active: showLog,
             onClick: () => setShowLog(v => !v),
         }] : []),
-        ...(tutorial && intro ? [{
+        ...(tutorial?.active && intro ? [{
             key: 'tutorial',
             label: 'Take the tutorial',
             icon: '🎓',
@@ -187,7 +190,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 {busy && <span className="ag-pending-bar ag-pending-bar--topbar" role="progressbar" aria-label="Loading" />}
             </div>
             {guide && intro?.guideOpen && <GameGuideModal guide={guide} onClose={intro.close} />}
-            {tutorial && intro?.tutorialOpen && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
+            {tutorial?.active && intro?.tutorialOpen && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
             {children}
             {log && (showLog ? (
                 <div ref={logPanelRef}>

@@ -128,6 +128,27 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every game's interactive tutorial into GAME_TUTORIALS", () => {
+        // Same opt-in shape as guide.ts above: a src/games/<Game>/tutorial.ts
+        // exporting a GameTutorial. A game that ships one but isn't added to
+        // GAME_TUTORIALS fails silently in the same two ways a missing guide
+        // does — the board can still import it and pass it to GameShell
+        // directly, while /api/gameguides validates with
+        // `body.game in GAME_TUTORIALS` and so rejects the "seen" write,
+        // leaving the tour auto-showing on every single visit.
+        const tutorials = read("src/utils/ui/gameTutorials.ts");
+        const withTutorial = gameNames.filter((name) =>
+            existsSync(path.join(gamesRoot, name, "tutorial.ts")),
+        );
+        const missing = withTutorial.filter((name) => !tutorials.includes(`@/games/${name}/tutorial`));
+        expect(
+            missing,
+            `These games have a tutorial.ts that isn't imported by ` +
+                `src/utils/ui/gameTutorials.ts, so their tour is missing from GAME_TUTORIALS. Add:\n` +
+                missing.map((n) => `  import { tutorial as ${n[0].toLowerCase()}${n.slice(1)}Tutorial } from "@/games/${n}/tutorial";`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("wires every themed game's themes into GAME_THEMES", () => {
         // Themes are opt-in per game via a src/games/<Game>/themes.ts exporting
         // the game's list — same opt-in shape as guide.ts above. A game that

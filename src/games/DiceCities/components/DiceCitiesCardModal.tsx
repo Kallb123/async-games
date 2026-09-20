@@ -24,6 +24,11 @@ interface DiceCitiesCardModalProps {
  *
  * The rules text is repeated under the art because the source images are only
  * 162px wide: blown up they read, but not crisply.
+ *
+ * `data-tour="dc-card-detail"`/`"dc-card-detail-close"` are the tutorial's:
+ * its "reading a card" step rings this body while it's open (`aboveModal`,
+ * since a Bootstrap modal otherwise sits above the tour) and clicks the close
+ * button for the player when they move on.
  */
 export default function DiceCitiesCardModal({ card, theme, onClose }: DiceCitiesCardModalProps) {
     useCloseRequest(true, onClose);
@@ -35,7 +40,7 @@ export default function DiceCitiesCardModal({ card, theme, onClose }: DiceCities
             <Modal.Header closeButton>
                 <Modal.Title>{card.title}</Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body data-tour="dc-card-detail">
                 <CardArt card={card} className="ag-dc-card-big" />
                 <div className="ag-dc-card-facts">
                     {rolls && <span className="ag-dc-card-fact">🎲 {rolls}</span>}
@@ -52,7 +57,7 @@ export default function DiceCitiesCardModal({ card, theme, onClose }: DiceCities
                 <p className="ag-hint ag-hint--tight">{card.text}</p>
             </Modal.Body>
             <Modal.Footer>
-                <button type="button" className="ag-btn ag-btn--primary" onClick={onClose}>Close</button>
+                <button type="button" className="ag-btn ag-btn--primary" onClick={onClose} data-tour="dc-card-detail-close">Close</button>
             </Modal.Footer>
         </Modal>
     );

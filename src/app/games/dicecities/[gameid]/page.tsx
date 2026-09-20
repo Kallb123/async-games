@@ -13,7 +13,9 @@ import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesLandmarkTrack from "@/games/DiceCities/components/DiceCitiesLandmarkTrack";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
 import { buildDiceCitiesGuide } from "@/games/DiceCities/guide";
+import { buildDiceCitiesTutorial } from "@/games/DiceCities/tutorial";
 import { diceCitiesTheme } from "@/games/DiceCities/themes";
+import { tutorialRun } from "@/utils/ui/gameTutorials";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -107,6 +109,15 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // themes reads back as the game it shipped as.
     const theme = diceCitiesTheme(displayed?.theme);
 
+    // The first-match tour: gated to a live, unfinished board (a finished or
+    // turn-by-turn-reviewed one gets no tour) and driven by the same booleans
+    // this page already computes for its own subtitle above.
+    const tutorial = tutorialRun(buildDiceCitiesTutorial(theme), {
+        myTurn: isMyTurn,
+        hasRolled,
+        canBuild: isMyTurn && hasRolled,
+    }, { active: nav.isLive && !complete });
+
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (displayed) {
@@ -189,7 +200,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={buildDiceCitiesGuide(theme)} intro={gameIntro}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={buildDiceCitiesGuide(theme)} tutorial={tutorial} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

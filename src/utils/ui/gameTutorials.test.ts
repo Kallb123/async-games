@@ -32,6 +32,17 @@ const componentFiles = sourceFiles.filter((f) => f.endsWith(".tsx"));
 const sourceText = sourceFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 const componentText = componentFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 
+// A handful of games' own anchors sit on a component instantiated from more
+// than one call site (Dice Cities' ZoomableCardArt draws a card in the city,
+// the market and the landmark track alike), so the one call site that needs
+// tagging threads the value through a `dataTour` prop instead of writing the
+// attribute literally. This matches that shape too — `dataTour={…"name"…}` —
+// so a prop-forwarded anchor isn't reported as missing just because its
+// value doesn't sit next to a literal `data-tour=`.
+function escapeForRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("GAME_TUTORIALS anchors", () => {
     it("resolves every registered step's anchor to a TOUR_ANCHORS name or a data-tour attribute", () => {
         const missing: string[] = [];
@@ -39,7 +50,8 @@ describe("GAME_TUTORIALS anchors", () => {
             for (const step of tutorial.steps) {
                 if (!step.anchor) continue;
                 const isNamedAnchor = step.anchor in TOUR_ANCHORS;
-                const isDataTour = sourceText.includes(`data-tour="${step.anchor}"`);
+                const isDataTour = sourceText.includes(`data-tour="${step.anchor}"`)
+                    || new RegExp(`dataTour=\\{[^}]*["'\`]${escapeForRegExp(step.anchor)}["'\`]`).test(sourceText);
                 if (!isNamedAnchor && !isDataTour) {
                     missing.push(`${gameUrl}: "${step.anchor}"`);
                 }
@@ -48,7 +60,8 @@ describe("GAME_TUTORIALS anchors", () => {
         expect(
             missing,
             `These tutorial steps name an anchor that is neither a TOUR_ANCHORS ` +
-                `key nor a data-tour="…" attribute anywhere under src/:\n` +
+                `key, a data-tour="…" attribute, nor a dataTour prop set to it, ` +
+                `anywhere under src/:\n` +
                 missing.map((m) => `  - ${m}`).join("\n"),
         ).toEqual([]);
     });
@@ -75,9 +88,9 @@ describe("GAME_TUTORIALS anchors", () => {
 });
 
 describe("hasTutorial", () => {
-    it("is false for every game while GAME_TUTORIALS is empty", () => {
-        expect(GAME_TUTORIALS).toEqual({});
-        for (const gameUrl of ["dicecities", "outbreak", "worlddomination", "not-a-real-game"]) {
+    it("is true only for a game registered in GAME_TUTORIALS", () => {
+        expect(hasTutorial("dicecities")).toBe(true);
+        for (const gameUrl of ["outbreak", "worlddomination", "not-a-real-game"]) {
             expect(hasTutorial(gameUrl)).toBe(false);
         }
     });

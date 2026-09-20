@@ -47,20 +47,26 @@ export default function GameTutorialOverlay({ run, onClose }: GameTutorialOverla
     // A do-it step shows its hint instead of "Next ›" while the player could
     // still act on it — and reverts to a real "Next ›" the moment its `when`
     // signal stops holding, so a turn ending or an opponent moving can't trap
-    // the run on a control that's no longer there to tap (§9).
-    const waitingOnPlayer = !!step.advanceOn && (!step.when || run.signals[step.when]);
-    const nextLabel = waitingOnPlayer && step.hint ? step.hint : 'Next ›';
+    // the run on a control that's no longer there to tap (§9). A step waiting
+    // on `advanceOnVisible` has no `when` of its own to revert on — it's
+    // watching for a game element to appear, not app state that can go stale
+    // — so it stays "waiting" for as long as it's shown. The last step in the
+    // run says "End tutorial" instead, so tapping it reads as finishing rather
+    // than moving on to a step that isn't there.
+    const waitingOnPlayer = !!step.advanceOnVisible || (!!step.advanceOn && (!step.when || run.signals[step.when]));
+    const isLastStep = index === total - 1;
+    const nextLabel = waitingOnPlayer && step.hint ? step.hint : (isLastStep ? 'End tutorial' : 'Next ›');
 
     return (
         <>
             {rect && (
                 <div
-                    className="ag-tour-spot"
+                    className={`ag-tour-spot${step.aboveModal ? ' ag-tour-spot--above-modal' : ''}`}
                     style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
                     aria-hidden="true"
                 />
             )}
-            <div className="ag-banner ag-tour-card">
+            <div className={`ag-banner ag-tour-card${step.aboveModal ? ' ag-tour-card--above-modal' : ''}`}>
                 <div className="ag-banner-inner ag-cta ag-cta--dark" role="dialog" aria-modal="false" aria-label={`Tutorial, step ${index + 1} of ${total}`}>
                     <div className="ag-cta-main">
                         <div className="ag-cta-title" tabIndex={-1} ref={headingRef}>{step.title}</div>
