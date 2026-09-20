@@ -22,7 +22,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -63,7 +63,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Dice Cities match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('dicecities');
+    const gameIntro = useGameIntro('dicecities');
 
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -189,7 +189,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={buildDiceCitiesGuide(theme)} intro={gameGuide}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} guide={buildDiceCitiesGuide(theme)} intro={gameIntro}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

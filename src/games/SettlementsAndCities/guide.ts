@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a Settlements & Cities match
-// (see useGameGuide).
+// (see useGameIntro).
 export const guide: GameGuide = {
     title: "How to play Settlements & Cities",
     sections: [

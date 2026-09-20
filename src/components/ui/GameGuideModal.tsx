@@ -10,7 +10,7 @@ interface GameGuideModalProps {
 
 /**
  * The how-to-play popup shared by every game: a title plus a handful of
- * headed sections. Driven by `useGameGuide`, which opens this automatically
+ * headed sections. Driven by `useGameIntro`, which opens this automatically
  * the first time a game not yet in the account's seen list is entered, and
  * on demand from the game-options menu's "Game guide" row.
  *

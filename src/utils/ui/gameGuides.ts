@@ -1,6 +1,6 @@
 // Shared shape for a game's "game guide" — the how-to-play popup shown from
 // the in-game options menu and, once per account, the first time a player
-// opens a match of that game type (see useGameGuide).
+// opens a match of that game type (see useGameIntro).
 //
 // Same aggregation idiom as GameMeta in games.ts: each game owns its own
 // content as a `guide` export next to its meta, and this file only declares

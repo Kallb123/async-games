@@ -23,7 +23,7 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
@@ -98,10 +98,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // we were away.
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
-    // The "how to play" popup: shown automatically the first time this
-    // account opens an Outbreak match, and on demand from the game-options
-    // menu — see useGameGuide.
-    const gameGuide = useGameGuide('outbreak');
+    // The "how to play" popup (or, once Outbreak has one, its tutorial):
+    // shown automatically the first time this account opens an Outbreak
+    // match, and on demand from the game-options menu — see useGameIntro.
+    const gameIntro = useGameIntro('outbreak');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -315,14 +315,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak" guide={outbreakGuide} intro={gameGuide}>
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak" guide={outbreakGuide} intro={gameIntro}>
             <FcmTokenComp />
 
-            {/* Game guide before role guide — a player needs to know the game
-                before their role in it (see useGameGuide's `loaded`/`open`
-                docs), so the role welcome waits for this one to have
-                answered and to not be showing. */}
-            {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="outbreak" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
+            {/* Game intro before role guide — a player needs to know the game
+                before their role in it (see useGameIntro's `loaded`/
+                `tutorialOpen`/`guideOpen` docs), so the role welcome waits
+                for this one to have answered and to not be showing. */}
+            {me && gameIntro.loaded && !gameIntro.tutorialOpen && !gameIntro.guideOpen && <RoleIntroPopup gameUrl="outbreak" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

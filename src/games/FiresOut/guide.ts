@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens a Fires Out! match (see
-// useGameGuide). Covers the Family game first, since that's the setup
+// useGameIntro). Covers the Family game first, since that's the setup
 // screen's default, and keeps the Experienced extras — the difficulty tiers,
 // specialists, hazmats, hot spots — to the last section so a Family crew can
 // stop reading after four (docs/games/fires-out-gdd.md §5, §7, §8, §9, §10,

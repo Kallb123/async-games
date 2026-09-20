@@ -7,11 +7,13 @@ import DevGameMenu from '@/components/ui/DevGameMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
 import GameChat from '@/components/games/GameChat';
 import GameGuideModal from '@/components/ui/GameGuideModal';
+import GameTutorialOverlay from '@/components/ui/GameTutorialOverlay';
 import PanelToggleRow from '@/components/ui/PanelToggleRow';
 import { useGameChat } from '@/utils/hooks/useGameChat';
-import { GameGuideIntro } from '@/utils/hooks/useGameGuide';
+import { GameIntro } from '@/utils/hooks/useGameIntro';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
 import { GameGuide } from '@/utils/ui/gameGuides';
+import { TutorialRun } from '@/utils/ui/gameTutorials';
 
 /** What a game hands `GameShell`'s `chat` prop: the game and its roster. The
  *  roster pair (parallel arrays, seat order) is how a message gets a name and a
@@ -47,12 +49,18 @@ interface GameShellProps {
      *  the popup. Paired with `intro` — a game builds this from its own
      *  theme (Dice Cities) or imports it as-is, the same either way. */
     guide?: GameGuide;
-    /** The `useGameGuide` result driving `guide`'s popup. The hook call stays
-     *  in the page rather than moving here: Outbreak and Banned Islet read
-     *  `loaded`/`open` themselves to hold their own role-welcome popup back
-     *  until this one has had the floor, and a second call here would mean a
-     *  second fetch. One fetch, one source of truth, handed down. */
-    intro?: GameGuideIntro;
+    /** The game's interactive tour, built by the page's own call to
+     *  `tutorialRun` against its board state. Omitted renders neither the 🎓
+     *  row nor the overlay — every game today, until one passes it. Paired
+     *  with `intro`, the same way `guide` is. */
+    tutorial?: TutorialRun;
+    /** The `useGameIntro` result driving `guide`'s popup (and `tutorial`'s).
+     *  The hook call stays in the page rather than moving here: Outbreak and
+     *  Banned Islet read `loaded`/`tutorialOpen`/`guideOpen` themselves to
+     *  hold their own role-welcome popup back until this one has had the
+     *  floor, and a second call here would mean a second fetch. One fetch,
+     *  one source of truth, handed down. */
+    intro?: GameIntro;
     /** The game's chat thread. Omitted — or a single-seat game, where the roster
      *  has fewer than two players — renders no 💬 button and no panel, which is
      *  how Solitaire gets no chat without being named here. */
@@ -95,12 +103,14 @@ interface GameShellProps {
  * just a control back at the top they've already scrolled away from.
  *
  * It owns the game guide too: a game passes its `guide` and the `intro`
- * object `useGameGuide` gave it, and gets the 📖 row and the popup — this used
+ * object `useGameIntro` gave it, and gets the 📖 row and the popup — this used
  * to be two imports, a menu row and a render line pasted into each of the
  * eight board screens. The hook call itself stays in the page (see `intro`
- * below) rather than moving in here as well.
+ * below) rather than moving in here as well. It owns the tutorial the same
+ * way, one prop over: a game passes its `tutorial` and gets the 🎓 row above
+ * the guide's and the spotlight overlay.
  */
-export default function GameShell({ title, subtitle, backHref = '/', options, right, busy = false, log, guide, intro, chat, className = '', children }: GameShellProps) {
+export default function GameShell({ title, subtitle, backHref = '/', options, right, busy = false, log, guide, tutorial, intro, chat, className = '', children }: GameShellProps) {
     const [showLog, setShowLog] = useState(false);
     const [showChat, setShowChat] = useState(false);
 
@@ -123,6 +133,12 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             icon: '📜',
             active: showLog,
             onClick: () => setShowLog(v => !v),
+        }] : []),
+        ...(tutorial && intro ? [{
+            key: 'tutorial',
+            label: 'Take the tutorial',
+            icon: '🎓',
+            onClick: intro.startTutorial,
         }] : []),
         ...(guide && intro ? [{
             key: 'guide',
@@ -170,7 +186,8 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                     pressed button swaps to its pending verb (layer 1). */}
                 {busy && <span className="ag-pending-bar ag-pending-bar--topbar" role="progressbar" aria-label="Loading" />}
             </div>
-            {guide && intro?.open && <GameGuideModal guide={guide} onClose={intro.closeGuide} />}
+            {guide && intro?.guideOpen && <GameGuideModal guide={guide} onClose={intro.close} />}
+            {tutorial && intro?.tutorialOpen && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
             {children}
             {log && (showLog ? (
                 <div ref={logPanelRef}>

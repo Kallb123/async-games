@@ -25,7 +25,7 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
@@ -115,7 +115,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Banned Islet match, and on demand from the game-options menu.
-    const gameGuide = useGameGuide('bannedislet');
+    const gameIntro = useGameIntro('bannedislet');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -345,15 +345,15 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--bannedislet"
             guide={bannedIsletGuide}
-            intro={gameGuide}
+            intro={gameIntro}
         >
             <FcmTokenComp />
 
-            {/* Game guide before role guide — a player needs to know the game
-                before their role in it (see useGameGuide's `loaded`/`open`
-                docs), so the role welcome waits for this one to have answered
-                and to not be showing. */}
-            {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="bannedislet" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
+            {/* Game intro before role guide — a player needs to know the game
+                before their role in it (see useGameIntro's `loaded`/
+                `tutorialOpen`/`guideOpen` docs), so the role welcome waits
+                for this one to have answered and to not be showing. */}
+            {me && gameIntro.loaded && !gameIntro.tutorialOpen && !gameIntro.guideOpen && <RoleIntroPopup gameUrl="bannedislet" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
