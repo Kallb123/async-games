@@ -41,7 +41,13 @@ export function useTutorialRun(run: TutorialRun): UseTutorialRunResult {
     const [index, setIndex] = useState(0);
     const step = steps[index] ?? null;
 
-    const goNext = useCallback(() => setIndex(i => i + 1), []);
+    // `closeAnchor` dismisses a popup the current step opened — clicking its
+    // own close control rather than tracking a second piece of state for it,
+    // so leaving the step (however the player does it) can't strand one open.
+    const goNext = useCallback(() => {
+        if (step?.closeAnchor) document.querySelector<HTMLElement>(anchorSelector(step.closeAnchor))?.click();
+        setIndex(i => i + 1);
+    }, [step]);
     const goBack = useCallback(() => setIndex(i => Math.max(i - 1, 0)), []);
 
     // The self-advance watch (§5), done during render rather than as a
@@ -55,6 +61,30 @@ export function useTutorialRun(run: TutorialRun): UseTutorialRunResult {
     if (step?.advanceOn && run.signals[step.advanceOn]) {
         setIndex(i => i + 1);
     }
+
+    // Same idea for `advanceOnVisible`, but watched rather than read off a
+    // signal: the thing that ends the step is a game element appearing on
+    // screen (a card's own detail popup), which needs a DOM watch rather than
+    // app state. Polled per frame like the anchor-finding effect below, but
+    // with no retry cap — this one waits on the player, however long that
+    // takes, rather than giving up on an anchor that never shows. The check
+    // itself is deferred into the callback rather than run synchronously in
+    // the effect body (react-hooks/set-state-in-effect), the same reason
+    // `useResettingState` exists.
+    useEffect(() => {
+        if (!step?.advanceOnVisible) return;
+        const selector = anchorSelector(step.advanceOnVisible);
+        let frame = 0;
+        const check = () => {
+            if (document.querySelector(selector)) {
+                setIndex(i => i + 1);
+                return;
+            }
+            frame = requestAnimationFrame(check);
+        };
+        frame = requestAnimationFrame(check);
+        return () => cancelAnimationFrame(frame);
+    }, [step]);
 
     // The spotlight rect resets whenever the step (or its anchor) changes —
     // `useResettingState` gets that "for free during the render that already

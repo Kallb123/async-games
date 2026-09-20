@@ -13,6 +13,9 @@ interface ZoomableCardArtProps {
     theme: DiceCitiesTheme;
     /** The ag-* class that sizes the slot this art sits in. */
     className: string;
+    /** Tags this card's tappable art for the tutorial to spotlight — set on
+     *  the first card a player owns, for its "tap a card" step. */
+    dataTour?: string;
 }
 
 /**
@@ -29,7 +32,7 @@ interface ZoomableCardArtProps {
  * track. Owning the popup here rather than at each of those callsites is what
  * keeps the state and the wiring out of the board and the turn sheet.
  */
-export default function ZoomableCardArt({ card, theme, className }: ZoomableCardArtProps) {
+export default function ZoomableCardArt({ card, theme, className, dataTour }: ZoomableCardArtProps) {
     const [zoomed, setZoomed] = useState(false);
 
     return (
@@ -47,6 +50,7 @@ export default function ZoomableCardArt({ card, theme, className }: ZoomableCard
                 aria-label={`Enlarge ${card.title}`}
                 onClick={() => setZoomed(true)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setZoomed(true); }}
+                data-tour={dataTour}
             >
                 <span className="ag-dc-cardzoom-art">
                     <CardArt card={card} className="ag-dc-cardzoom-img" />

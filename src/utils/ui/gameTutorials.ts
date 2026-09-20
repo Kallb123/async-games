@@ -32,8 +32,23 @@ export interface TutorialStep<S extends string = string> {
      *  "tap Roll the dice" is the wrong thing to show a player who already
      *  rolled. */
     advanceOn?: S;
-    /** Shown in place of "Next ›" while a do-it step (one with `advanceOn`)
-     *  is waiting on the player to act. */
+    /** Same job as `advanceOn`, for a do-it step whose "did it happen" is a
+     *  game element appearing on screen — a card's own detail popup, say —
+     *  rather than app state the board page already tracks. Names an anchor;
+     *  the step advances the instant it's found in the DOM, waiting
+     *  indefinitely like `advanceOn` does. Not tied to `S`, since it never
+     *  reads `signals`. */
+    advanceOnVisible?: string;
+    /** An anchor to click when the player leaves this step (`Next`/`Back`),
+     *  so a popup the step opened doesn't outlive it. */
+    closeAnchor?: string;
+    /** Rings and reads above a same-page Bootstrap modal instead of under it
+     *  — the one deliberate exception to the rule the tour normally sits
+     *  under one (`.ag-tour-spot`/`.ag-tour-card` in ag-theme.css), for a
+     *  step whose anchor is inside a modal the player just opened. */
+    aboveModal?: boolean;
+    /** Shown in place of "Next ›" while a do-it step (one with `advanceOn`
+     *  or `advanceOnVisible`) is waiting on the player to act. */
     hint?: string;
 }
 

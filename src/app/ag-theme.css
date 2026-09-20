@@ -1025,6 +1025,15 @@ a.ag-list-row, a.ag-list-row-main {
    already reads for the same reason, rather than suppressing it (§6). */
 .ag-tour-card { bottom: var(--ag-banner-height, 0); }
 
+/* The one deliberate exception to "the tour stays under modals" above: a
+   step whose anchor sits inside a same-page Bootstrap modal (a card's own
+   detail popup) needs to ring and read above it rather than be hidden
+   underneath its backdrop — still below the toast layer (1100), which
+   nothing in a tutorial run needs to outrank. Opt-in per step
+   (`TutorialStep.aboveModal`), so every other step keeps the normal rule. */
+.ag-tour-spot--above-modal,
+.ag-tour-card--above-modal { z-index: 1060; }
+
 .ag-tour-actions {
     display: flex;
     align-items: center;

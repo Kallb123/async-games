@@ -4,8 +4,8 @@ import { DEFAULT_DICE_CITIES_THEME, type DiceCitiesTheme } from "./themes";
 
 // The two-minute guided tour of a first Dice Cities match — shown once per
 // account in place of the guide's auto-show (see docs/game-tutorials.md).
-// Only the roll step asks anything of the player; everything else is a
-// narration step pointing at a real piece of the board.
+// Two steps ask something of the player (tap a card, then roll); everything
+// else is a narration step pointing at a real piece of the board.
 export type DiceCitiesSignal = "myTurn" | "hasRolled" | "canBuild";
 
 // Built from the theme, same reason as buildDiceCitiesGuide: a tour of the
@@ -32,7 +32,16 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
                 body: `Every ${words.establishment} you've built, and what each one pays out.`,
             },
             {
-                anchor: "board",
+                anchor: "dc-first-card",
+                title: "Tap on a card",
+                body: "Tap on a card to see more details.",
+                advanceOnVisible: "dc-card-detail",
+                hint: "Tap a card",
+            },
+            {
+                anchor: "dc-card-detail",
+                aboveModal: true,
+                closeAnchor: "dc-card-detail-close",
                 title: "Reading a card",
                 body: `The roll it pays out on is printed at the top, its cost in ${words.coins} bottom left, and what it does underneath.`,
             },
