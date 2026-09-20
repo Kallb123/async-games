@@ -16,7 +16,7 @@ import { useNativeGoogleSignIn } from "@/utils/hooks/useNativeGoogleSignIn";
  * place. See `useNativeGoogleSignIn` for why the WebView can't use Clerk's.
  */
 export default function AuthCardStack({ children }: { children: ReactNode }) {
-    const { status, error, detail, signIn } = useNativeGoogleSignIn();
+    const { status, error, signIn } = useNativeGoogleSignIn();
     // Every status but `absent` means the app, and in the app Clerk's Google
     // button is hidden whether or not this shell can offer a replacement —
     // `unavailable` and `outdated` are exactly the cases where it can't, and
@@ -47,11 +47,6 @@ export default function AuthCardStack({ children }: { children: ReactNode }) {
                         {status === 'busy' ? 'Signing in…' : 'Continue with Google'}
                     </button>
                     {error && <p className="ag-hint ag-hint--center">{error}</p>}
-                    {/* TEMPORARY, with `describeFailure` in the hook: a release
-                        APK can't be attached to a debugger, so the one failure
-                        we're still chasing has to say what it was on screen.
-                        Goes when Google sign-in is confirmed working. */}
-                    {detail && <pre className="ag-hint ag-auth-detail">{detail}</pre>}
                 </>
             )}
             {children}
