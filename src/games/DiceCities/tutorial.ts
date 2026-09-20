@@ -37,7 +37,7 @@ export function buildDiceCitiesTutorial(theme: DiceCitiesTheme): GameTutorial<Di
                 body: `Roll one die (two once you've built the ${trainStation}). Every matching ${words.establishment} in every ${words.city} pays out before you build.`,
                 when: "myTurn",
                 advanceOn: "hasRolled",
-                hint: "Tap Roll the dice",
+                hint: "Tap Roll",
             },
             {
                 anchor: "dc-market",
