@@ -126,6 +126,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Signing in with Google no longer leaves the form tappable underneath",
+                detail: "In the app, tapping Continue with Google could sit for a moment while your account was checked and our side of the handshake finished — and until now the sign-in card underneath stayed fully clickable the whole time, so a stray tap could fight the sign-in already under way. It's now covered by a pulsing loading bar and locked until the check is done.",
+            },
+            {
                 title: "Google and Microsoft sign-in work in the Android app",
                 detail: "Signing in to the app with Google or Microsoft dumped you into your phone's browser and left you there on an error instead of signing you in. Google now uses the phone's own account picker — tap the account you're already signed in to and you're in, no password and no browser — and Microsoft stays in the app where it belongs. Email and password were never affected. You'll need the latest version of the app from the Play Store.",
             },
@@ -163,11 +167,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The dice roll chart's tallest bars are the right height again",
                 detail: "On a Settlements & Cities result page, every bar near the top of the roll frequency chart was drawn at the same height — a 7 rolled sixteen times looked no more common than a 5 rolled thirteen times, so the shape the chart exists to show was flattened out. The bars are back in proportion, with the count still sitting on top of each one.",
-                game: "settlementsandcities",
-            },
-            {
-                title: "Settlements & Cities shows the roll that ended your turn",
-                detail: "When a roll left you nothing to build, buy or trade, your turn ended itself before you ever saw what you rolled — the dice vanished in the same instant the turn moved on. Your roll and its payout now stay on screen for you, with a note that there was nothing left to do, until your next roll — without making it look to whoever plays next like they'd already rolled.",
                 game: "settlementsandcities",
             },
         ],

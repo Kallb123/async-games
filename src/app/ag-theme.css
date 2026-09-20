@@ -277,6 +277,13 @@ button {
     display: none;
 }
 
+/* The Google handshake's own row in the stack, sized to hold nothing but the
+   shared `.ag-pending-bar` while it's busy — the bar is itself always
+   absolutely positioned (it's dropped into the game top bar too, at a
+   different height entirely), so it needs a positioned parent exactly its own
+   3px tall rather than a taller box it would sit inside awkwardly. */
+.ag-auth-loading { position: relative; height: 3px; }
+
 .ag-section-head {
     display: flex;
     align-items: baseline;
