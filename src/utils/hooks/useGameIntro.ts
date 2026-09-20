@@ -93,9 +93,10 @@ export function useGameIntro(gameUrl: string): GameIntro {
     const autoShowGuide = loaded && !gameHasTutorial && !alreadySeenGuide && !guideAutoDismissed;
 
     const tutorialOpen = manualTutorialOpen || autoShowTutorial;
-    // Never both: the tutorial wins over a guide that would otherwise also
-    // want the floor (a game can offer both, opened on demand, but not both
-    // auto-shown at once).
+    // Never both at once — `startTutorial`/`openGuide` below each dismiss the
+    // other before opening themselves, so this only has to arbitrate the one
+    // case neither of them causes: both auto-show conditions landing true on
+    // the same render (loaded flipping true is the only such moment).
     const guideOpen = !tutorialOpen && (manualGuideOpen || autoShowGuide);
 
     const markGuideSeen = useCallback(() => {
@@ -118,8 +119,24 @@ export function useGameIntro(gameUrl: string): GameIntro {
         }).catch(error => console.error('Failed to save game tutorial progress', error));
     }, [alreadySeenTutorial, gameUrl]);
 
-    const startTutorial = useCallback(() => setManualTutorialOpen(true), []);
-    const openGuide = useCallback(() => setManualGuideOpen(true), []);
+    // Opening one explicitly always wins over whatever's currently on screen
+    // — including an auto-shown tutorial the player hasn't dismissed yet.
+    // Without this, tapping "Game guide" while the tutorial's auto-show still
+    // has the floor would silently do nothing: `guideOpen` stays false as
+    // long as `tutorialOpen` is true, so the tap would look like a dead
+    // button. This only hides the tutorial for the rest of this visit
+    // (`tutorialAutoDismissed`, the same flag `close` sets) rather than
+    // marking it seen, so it can still auto-show on a later one.
+    const startTutorial = useCallback(() => {
+        setManualGuideOpen(false);
+        setGuideAutoDismissed(true);
+        setManualTutorialOpen(true);
+    }, []);
+    const openGuide = useCallback(() => {
+        setManualTutorialOpen(false);
+        setTutorialAutoDismissed(true);
+        setManualGuideOpen(true);
+    }, []);
     const close = useCallback(() => {
         if (tutorialOpen) {
             setManualTutorialOpen(false);
