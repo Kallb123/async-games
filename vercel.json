@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/staleguests",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/kingdombuilder-tick",
-      "schedule": "0 * * * *"
     }
   ],
   "git": {
