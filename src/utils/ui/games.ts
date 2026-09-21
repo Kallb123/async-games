@@ -39,6 +39,9 @@ export interface GameMeta {
     // Thumb shape override. Defaults to a rounded square; "hexagon" clips
     // the thumb to a hex badge for games where that fits the theme.
     shape?: "hexagon";
+    // Prototypes that persist outside the shared GameData/invitation engine.
+    // They still use the library metadata, but have no discriminator models.
+    engine?: "standalone";
     available: boolean;
 }
 
@@ -54,6 +57,7 @@ import { meta as outbreakMeta } from "@/games/Outbreak/meta";
 import { meta as firesOutMeta } from "@/games/FiresOut/meta";
 import { meta as bannedIsletMeta } from "@/games/BannedIslet/meta";
 import { meta as raceCarsMeta } from "@/games/RaceCars/meta";
+import { meta as kingdomBuilderMeta } from "@/games/KingdomBuilder/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -67,6 +71,7 @@ export const GAME_META: Record<string, GameMeta> = {
     firesout: firesOutMeta,
     bannedislet: bannedIsletMeta,
     racecars: raceCarsMeta,
+    kingdombuilder: kingdomBuilderMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.
@@ -127,6 +132,7 @@ const NAME_TO_URL: Record<string, string> = {
     "fires out!": "firesout",
     "banned islet": "bannedislet",
     "race cars": "racecars",
+    "kingdom builder": "kingdombuilder",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

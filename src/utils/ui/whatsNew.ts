@@ -36,6 +36,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🎲",
         items: [
             {
+                title: "Kingdom Builder prototype",
+                detail: "Found your first settlement, watch wood, stone and iron arrive each hour, and queue new resource buildings as your 3×3 town grows.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Race Cars",
                 detail: "Pick a gear, roll its die, and find out whether the corner will take it. The roll lands before you choose where to put the car, so a turn is a bet on a range rather than on a number — and tyres, brakes and gearbox never refill, so the three of them are one budget for the whole race. Three circuits, a Sprint or a two-lap Grand Prix, two to six drivers, optional oil spills, and a slipstream that only ever helps the car behind.",
                 game: "racecars",
