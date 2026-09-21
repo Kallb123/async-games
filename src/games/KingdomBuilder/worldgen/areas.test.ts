@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { AREAS, areaForCode, areaWeightForCode, windowAreaFor } from "./areas";
+import {
+    AREAS,
+    BEACH_CODE,
+    FIELDS_CODE,
+    GRASS_CODE,
+    LAND_WINDOW_CODES,
+    OCEAN_CODE,
+    PROVISIONAL_WATER_CODE,
+    RIVER_CODE,
+    areaForCode,
+    areaWeightForCode,
+    windowAreaFor,
+} from "./areas";
 
 describe("the area registry", () => {
     it("gives every area a unique, single-character code", () => {
@@ -29,6 +41,22 @@ describe("the area registry", () => {
             expect(area.fallbackColour).toMatch(/^#[0-9a-f]{6}$/i);
             expect(area.weight === "impassable" || area.weight > 0).toBe(true);
         }
+    });
+});
+
+describe("the pass codes terrainField.ts reads and writes", () => {
+    it("resolve to the matching registry entry's own code — one export each, not a second listing", () => {
+        expect(AREAS.find(area => area.code === PROVISIONAL_WATER_CODE)?.name).toBe("Lake");
+        expect(AREAS.find(area => area.code === GRASS_CODE)?.name).toBe("Grass");
+        expect(AREAS.find(area => area.code === OCEAN_CODE)?.name).toBe("Ocean");
+        expect(AREAS.find(area => area.code === RIVER_CODE)?.name).toBe("River");
+        expect(AREAS.find(area => area.code === BEACH_CODE)?.name).toBe("Beach");
+        expect(AREAS.find(area => area.code === FIELDS_CODE)?.name).toBe("Fields");
+    });
+
+    it("lists exactly the window-placed areas as land-window codes", () => {
+        const windowCodes = AREAS.filter(area => area.placement.kind === "window").map(area => area.code).sort();
+        expect([...LAND_WINDOW_CODES].sort()).toEqual(windowCodes);
     });
 });
 

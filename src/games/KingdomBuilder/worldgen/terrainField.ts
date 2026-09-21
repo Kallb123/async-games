@@ -11,7 +11,7 @@
 
 import { coherentNoiseGrid, isLand, landValueAt, pointDistance, type Landmass, type Point } from "./landmass";
 import type { RandomSource } from "./random";
-import { GRASS_CODE, PROVISIONAL_WATER_CODE, windowAreaFor } from "./areas";
+import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, LAND_WINDOW_CODES, OCEAN_CODE, PROVISIONAL_WATER_CODE, RIVER_CODE, windowAreaFor } from "./areas";
 
 /** A world tile is 2×2 world units of ground, and never changes (§3.5.5). */
 export const TERRAIN_FIELD_TILE_SIZE = 2;
@@ -24,12 +24,7 @@ export interface TerrainField {
     codes: string;
 }
 
-const LAND_WINDOW_CODES = new Set(["g", "w", "h", "m", "s"]);
 const BEACH_ELIGIBLE_CODES = new Set(["g", "w", "s"]);
-const OCEAN_CODE = "o";
-const RIVER_CODE = "r";
-const BEACH_CODE = "b";
-const FIELDS_CODE = "f";
 
 const gridColumns = (width: number): number => Math.round(width / TERRAIN_FIELD_TILE_SIZE);
 const gridRows = (height: number): number => Math.round(height / TERRAIN_FIELD_TILE_SIZE);

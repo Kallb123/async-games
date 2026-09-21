@@ -156,9 +156,22 @@ export const AREA_WINDOWS: readonly AreaDefinition[] = [
     AREA_BY_CODE.get("g")!,
 ];
 
-/** The provisional code every water tile is given before the water-split pass tells ocean from lake. */
-export const PROVISIONAL_WATER_CODE = "l";
-export const GRASS_CODE = "g";
+function codeOf(name: string): string {
+    const area = AREAS.find(candidate => candidate.name === name);
+    if (!area) throw new Error(`Kingdom Builder: area "${name}" is missing from AREAS`);
+    return area.code;
+}
+
+/** The provisional code every water tile is given before the water-split pass tells ocean from lake — Lake's own code, since an enclosed tile simply stays it. */
+export const PROVISIONAL_WATER_CODE = codeOf("Lake");
+export const GRASS_CODE = codeOf("Grass");
+/** The codes terrainField.ts's passes read or write directly, kept as one export each so a registry change can't silently desync a pass from it. */
+export const OCEAN_CODE = codeOf("Ocean");
+export const RIVER_CODE = codeOf("River");
+export const BEACH_CODE = codeOf("Beach");
+export const FIELDS_CODE = codeOf("Fields");
+/** The land elevation windows' own codes — what a "land window" tile can be, for anything (like smoothing) that needs to recognise one without re-listing them. */
+export const LAND_WINDOW_CODES: ReadonlySet<string> = new Set(AREA_WINDOWS.map(area => area.code));
 
 let loggedUnknownAreaCode = false;
 

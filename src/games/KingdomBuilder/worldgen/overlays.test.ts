@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { AREA_BY_CODE } from "./areas";
 import { OVERLAYS, overlayForCode, overlaysCrossing } from "./overlays";
 
 describe("the overlay registry", () => {
     it("gives every overlay a unique code, distinct from any area code", () => {
         const codes = OVERLAYS.map(overlay => overlay.code);
         expect(new Set(codes).size).toBe(codes.length);
+        for (const code of codes) expect(AREA_BY_CODE.has(code), `overlay code "${code}" collides with an area code`).toBe(false);
     });
 
     it("carries only derived, load-bearing entries at this point", () => {
