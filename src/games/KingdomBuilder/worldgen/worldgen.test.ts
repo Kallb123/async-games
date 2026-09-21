@@ -55,6 +55,13 @@ describe("Kingdom Builder world generation", () => {
         expect(result.cost).toBeCloseTo(8 * 1.5, 6);
     });
 
+    it("never throws on an unrecognised area code — a rolling deploy can read a world a newer instance generated", () => {
+        const field = fieldOf(5, 1, "gg?gg");
+        expect(() => edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 })).not.toThrow();
+        // An unknown code renders at grass weight, so the route is unaffected.
+        expect(edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 })).toMatchObject({ terrain: "plains", passable: true, cost: 8 });
+    });
+
     it("crosses a river only through a bridge it writes on the crossing tile", () => {
         const nodes: SettlementNode[] = [
             { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
