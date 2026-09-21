@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 
 import BoardZoom from "@/components/ui/BoardZoom";
@@ -11,7 +11,8 @@ import MapLabelLayer from "@/components/ui/MapLabelLayer";
 import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
-import type { SettlementNode, TerrainNode } from "@/games/KingdomBuilder/worldgen";
+import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
+import { AREAS, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -22,6 +23,11 @@ import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 import styles from "./page.module.css";
 
 const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
+// Smaller than World Domination or Outbreak's own node radii because Kingdom
+// Builder's world is a much tighter 100×70 viewBox for many more nodes — the
+// original sizes overlapped each other and read as an oversized graph.
+const TERRAIN_RADIUS = 1.15;
+const SETTLEMENT_RADIUS = 1.6;
 
 function landPath(view: KingdomBuilderWorldView): string {
     const { resolution, width, height, values, landThreshold } = view.landmass;
@@ -41,6 +47,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const router = useRouter();
     const endpoint = `/api/kingdombuilder/${worldId}`;
     const { data, setData, isLoading, status } = useRefreshableData<KingdomBuilderWorldView>(endpoint, []);
+    const terrain = useTerrainImage(data ?? {});
     const [selectedSite, setSelectedSite] = useState<string | null>(null);
     const { submit, isPending: founding, message } = useJsonMutation<KingdomBuilderWorldView>(endpoint, "That site could not be claimed.");
 
@@ -87,11 +94,13 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={240} maxWidth={360}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
-                                        <path className={styles.land} d={map.path} />
+                                        {terrain.href
+                                            ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />
+                                            : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <g key={node.id}>
-                                                <circle className={`${styles.terrain} ${styles[node.terrain]}`} cx={node.x} cy={node.y} r={1.7} />
+                                                <circle className={`${styles.terrain} ${styles[node.terrain]}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
                                                 <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN_MARKS[node.terrain]}</text>
                                             </g>
                                         ))}
@@ -99,16 +108,16 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
                                             const isOpen = node.siteType === "expansion" && !settlement;
-                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={2.3} isValid={isOpen || isMine} isSelected={selectedSite === node.id}
+                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={isOpen || isMine} isSelected={selectedSite === node.id}
                                                 onClick={isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? "Claimed settlement" : isOpen ? "Open settlement site" : "Starting site"}>
-                                                <circle className={`${styles.site} ${isMine ? styles.mine : settlement ? styles.occupied : ""}`} cx={node.x} cy={node.y} r={2.3} />
+                                                <circle className={`${styles.site} ${isMine ? styles.mine : settlement ? styles.occupied : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
                                                 {settlement && <text className={styles.keep} x={node.x} y={node.y}>♜</text>}
                                             </ClickableMapNode>;
                                         })}
-                                        <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={4} fontSize={2.2}
+                                        <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8}
                                             labels={data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => ({
-                                                key: node.id, x: node.x, y: node.y, radius: 2.3,
+                                                key: node.id, x: node.x, y: node.y, radius: SETTLEMENT_RADIUS,
                                                 text: occupiedByNode.get(node.id)?.isMine ? "Your town" : occupiedByNode.has(node.id) ? "Claimed" : node.siteType === "expansion" ? "Open site" : "Start",
                                             }))} />
                                     </svg>
@@ -118,6 +127,13 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                 <span className={styles.legendMine}>Your settlement</span><span className={styles.legendOpen}>Open site</span>
                                 <span className={styles.legendTaken}>Claimed</span><span className={styles.legendTerrain}>Resource terrain</span>
                             </div>
+                            {terrain.href && (
+                                <div className={styles.legend} aria-label="Ground legend">
+                                    {AREAS.map(area => (
+                                        <span key={area.code} className={styles.legendGround} style={{ "--legend-colour": area.fallbackColour } as CSSProperties}>{area.name}</span>
+                                    ))}
+                                </div>
+                            )}
                         </>
                     )}
                 </Section>

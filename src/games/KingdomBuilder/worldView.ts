@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
-import type { Landmass, WorldEdge, WorldNode } from "./worldgen";
+import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
 import { completedBuildLevels } from "./worldSummaryTypes";
 
 export interface KingdomBuilderWorldView {
@@ -11,6 +11,10 @@ export interface KingdomBuilderWorldView {
     currentTick: number;
     completedBuildLevels: number;
     landmass: Landmass;
+    /** The generated ground (§3.5.2) — absent on a world generated before it landed, which keeps drawing today's flat silhouette instead (§3.5.6). */
+    terrainField?: TerrainField;
+    /** The derived, load-bearing overlays (bridges, fords) on that ground (§3.5.3). */
+    overlays?: OverlayPlacement[];
     nodes: WorldNode[];
     edges: WorldEdge[];
     settlements: Array<{
@@ -36,7 +40,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     }
 
     const world = await KingdomBuilderWorldModel.findById(worldId)
-        .select({ currentTick: 1, landmass: 1, nodes: 1, edges: 1 })
+        .select({ currentTick: 1, landmass: 1, terrainField: 1, overlays: 1, nodes: 1, edges: 1 })
         .lean();
     if (!world) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
 
@@ -47,6 +51,8 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .filter(settlement => settlement.ownerId === userId)
             .reduce((total, settlement) => total + completedBuildLevels(settlement.tiles ?? []), 0),
         landmass: world.landmass,
+        terrainField: world.terrainField,
+        overlays: world.overlays,
         nodes: world.nodes,
         edges: world.edges,
         settlements: settlements.map(settlement => ({
