@@ -8,6 +8,7 @@ import {
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { completedBuildLevels } from "./worldSummaryTypes";
 
 export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
@@ -19,6 +20,7 @@ export interface KingdomBuilderSettlementView {
     nodeId: string;
     currentTick: number;
     nextTickAt: string;
+    completedBuildLevels: number;
     resources: { wood: number; stone: number; iron: number };
     tiles: Array<{
         position: number;
@@ -51,6 +53,9 @@ export async function settlementView(worldId: string, settlementId: string, user
 
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1 }).lean();
     if (!world) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
+    const ownerSettlements = await KingdomBuilderSettlementModel.find({ worldId, ownerId: userId })
+        .select({ tiles: 1 })
+        .lean();
 
     return {
         worldId,
@@ -58,6 +63,10 @@ export async function settlementView(worldId: string, settlementId: string, user
         nodeId: settlement.nodeId,
         currentTick: world.currentTick,
         nextTickAt: world.nextTickAt.toISOString(),
+        completedBuildLevels: ownerSettlements.reduce(
+            (total, ownerSettlement) => total + completedBuildLevels(ownerSettlement.tiles ?? []),
+            0,
+        ),
         resources: settlement.resources,
         tiles: settlement.tiles.map((tile: KingdomBuilderTile) => ({
             position: tile.position,

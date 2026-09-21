@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 import BuildRow from "@/components/ui/BuildRow";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
@@ -11,6 +11,8 @@ import type { KingdomBuilderPrototypeBuilding, KingdomBuilderSettlementView } fr
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { worldBuildsStorageKey } from "@/games/KingdomBuilder/worldSummaryTypes";
+import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
 import styles from "./page.module.css";
 
@@ -38,6 +40,10 @@ export default function KingdomBuilderSettlementPage({
     const [selectedTile, setSelectedTile] = useState<number | null>(null);
     const [pending, setPending] = useState<KingdomBuilderPrototypeBuilding | null>(null);
     const { submit, isPending, message } = useJsonMutation<KingdomBuilderSettlementView>(endpoint, "That building could not be queued. Try again.");
+
+    useEffect(() => {
+        if (data) writeStoredValue(worldBuildsStorageKey(worldId), String(data.completedBuildLevels));
+    }, [data, worldId]);
 
     const queueBuilding = async (buildingType: KingdomBuilderPrototypeBuilding) => {
         if (selectedTile === null) return;

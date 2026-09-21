@@ -4,3 +4,5 @@ export * from "./persistence";
 export * from "./prototype";
 export * from "./tick";
 export * from "./worldView";
+export * from "./worldSummaries";
+export * from "./worldSummaryTypes";

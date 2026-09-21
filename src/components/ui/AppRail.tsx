@@ -8,14 +8,19 @@ import GameThumb from "@/components/ui/GameThumb";
 import type { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { profileImageUrl } from "@/utils/ui/avatar";
-import { gamePath, metaForGame } from "@/utils/ui/games";
+import { GAME_META, gamePath, metaForGame } from "@/utils/ui/games";
 import { personalName } from "@/utils/ui/players";
+import { worldBuildsStorageKey, type KingdomBuilderWorldSummary } from "@/games/KingdomBuilder/worldSummaryTypes";
+import type { ReactNode } from "react";
+import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
 interface AppRailProps {
     /** Games it is the viewer's move in — the rail marks these with a live dot. */
     myTurn?: IGameResponse[];
     /** Games someone else is holding up. */
     theirTurn?: IGameResponse[];
+    /** Persistent Kingdom Builder worlds have no turn owner, but are still in play. */
+    worlds?: KingdomBuilderWorldSummary[];
 }
 
 // Where the rail can take you that isn't a game. Deliberately short: the
@@ -26,6 +31,21 @@ const NAV = [
     { href: "/profile", label: "Friends", glyph: "👥" },
     { href: "/games/completed", label: "Finished", glyph: "🏁" },
 ];
+
+function RailGameLink({ href, name, thumb, status, isYours = false, onClick }: {
+    href: string;
+    name: string;
+    thumb: ReactNode;
+    status?: ReactNode;
+    isYours?: boolean;
+    onClick?: () => void;
+}) {
+    return <Link href={href} onClick={onClick} className={`ag-rail-game${isYours ? " ag-rail-game--yours" : ""}`}>
+        {thumb}
+        <span className="ag-rail-game-name">{name}</span>
+        {isYours ? <span className="ag-rail-game-dot" aria-label="Your move" /> : status}
+    </Link>;
+}
 
 /**
  * The platform chrome: the app's own name, where you can go, and every game
@@ -45,7 +65,7 @@ const NAV = [
  * you and the ones waiting on somebody else — so a player who has scrolled to
  * the bottom of a long dashboard is still one click from any board.
  */
-export default function AppRail({ myTurn = [], theirTurn = [] }: AppRailProps) {
+export default function AppRail({ myTurn = [], theirTurn = [], worlds = [] }: AppRailProps) {
     const pathname = usePathname();
     const { user } = useIsAuthorised();
 
@@ -93,7 +113,7 @@ export default function AppRail({ myTurn = [], theirTurn = [] }: AppRailProps) {
                     })}
                 </nav>
 
-                {games.length > 0 && (
+                {(games.length > 0 || worlds.length > 0) && (
                     <div className="ag-rail-games">
                         <h2 className="ag-rail-label">In play</h2>
                         {/* Scrolls rather than stopping at some number of rows: a
@@ -103,22 +123,25 @@ export default function AppRail({ myTurn = [], theirTurn = [] }: AppRailProps) {
                             {games.map(({ game, isYours }) => {
                                 const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
                                 return (
-                                    <Link
+                                    <RailGameLink
                                         key={game.gameId}
                                         href={gamePath(game.url, game.gameId)}
-                                        className={`ag-rail-game${isYours ? " ag-rail-game--yours" : ""}`}
-                                    >
-                                        {meta
+                                        name={game.friendlyName}
+                                        isYours={isYours}
+                                        thumb={meta
                                             ? <GameThumb meta={meta} size={22} radius={6} />
                                             : <span className="ag-rail-game-blank" />}
-                                        <span className="ag-rail-game-name">{game.friendlyName}</span>
-                                        {isYours && <span className="ag-rail-game-dot" aria-label="Your move" />}
-                                        {!isYours && game.currentTurnUsername && (
-                                            <span className="ag-rail-game-who">{game.currentTurnUsername}</span>
-                                        )}
-                                    </Link>
+                                        status={game.currentTurnUsername && <span className="ag-rail-game-who">{game.currentTurnUsername}</span>}
+                                    />
                                 );
                             })}
+                            {worlds.map(world => (
+                                <RailGameLink key={world.worldId} href={`/kingdombuilder/${world.worldId}`}
+                                    name={GAME_META.kingdombuilder.name}
+                                    thumb={<GameThumb meta={GAME_META.kingdombuilder} size={22} radius={6} />}
+                                    onClick={() => writeStoredValue(worldBuildsStorageKey(world.worldId), String(world.completedBuildLevels))}
+                                    status={<span className="ag-rail-game-who">Tick {world.currentTick}</span>} />
+                            ))}
                         </div>
                     </div>
                 )}

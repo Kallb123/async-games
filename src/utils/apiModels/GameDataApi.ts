@@ -342,9 +342,10 @@ export interface ICompletedGame {
     endedAt: string;
 }
 
-// The whole home screen in one response — see `buildDashboard` for why its five
-// lists are served together rather than fetched one per component.
+// The whole home screen in one response — see `buildDashboard` for why its
+// turn, invitation, result and persistent-world lists share one endpoint.
 export interface IDashboardResponse {
+    worlds: import("@/games/KingdomBuilder/worldSummaryTypes").KingdomBuilderWorldSummary[];
     myTurn: IGameResponse[];
     theirTurn: IGameResponse[];
     incoming: IInvitationResponse[];

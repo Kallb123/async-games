@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Your Kingdom Builder worlds are always within reach",
+                detail: "Return to every world from your home dashboard or the game switcher, with its current tick and your settlement count shown at a glance.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Guided tutorials for Dice Cities and Settlements & Cities",
                 detail: "First game in either one now opens with a two-minute guided tour of your own board instead of a wall of rules: a spotlight finds the thing being talked about, waits for you to roll or build where a step asks for it, and never blocks the board underneath. Skip ahead any time, or take it again later from the ⋮ menu, where the how-to-play guide still lives too.",
             },
@@ -117,11 +122,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Add or change your password from Settings",
                 detail: "Signed in with Google or Microsoft? You can now add a password too, so you're never locked out if that account changes. Already have one? Change it from the same place — under Settings › Password.",
-            },
-            {
-                title: "Settlements & Cities ends your turn for you when there's nothing left to do",
-                detail: "Once you can't afford a settlement, road or city, can't buy or play a development card, and don't have enough of any resource to trade with the bank, your turn ends on its own instead of waiting for you to tap End turn. The End turn (and Special Build's Done building) button also moved to the top of the list, above the build options, so it's the first thing you see.",
-                game: "settlementsandcities",
             },
         ],
     },

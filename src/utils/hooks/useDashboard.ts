@@ -7,7 +7,7 @@ import { useRefreshableData } from "./useRefreshableData";
 // built per render: `games` and `invites` are props, and a fresh [] every
 // render would restart the card animations (see useAnimatedList).
 const NOTHING_YET: IDashboardResponse = {
-    myTurn: [], theirTurn: [], incoming: [], outgoing: [], completed: []
+    worlds: [], myTurn: [], theirTurn: [], incoming: [], outgoing: [], completed: []
 };
 
 /**
