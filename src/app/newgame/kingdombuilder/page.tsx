@@ -32,7 +32,7 @@ export default function NewKingdomBuilder() {
             });
             if (!response.ok) throw new Error("The settlement could not be founded.");
             const result = await response.json() as NewKingdomBuilderResponse;
-            router.push(`/kingdombuilder/${result.worldId}/${result.settlementId}`);
+            router.push(`/kingdombuilder/${result.worldId}`);
         } catch (cause) {
             console.error("Failed to start Kingdom Builder", cause);
             setError("Your world could not be created. Check your connection and try again.");

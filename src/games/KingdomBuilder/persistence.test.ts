@@ -12,6 +12,7 @@ function mockWorldNodes(nodes: WorldNode[]) {
     const lean = vi.fn().mockResolvedValue({ nodes });
     const select = vi.fn().mockReturnValue({ lean });
     vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({ select } as never);
+    vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue(null);
 }
 
 describe("Kingdom Builder persistence", () => {
@@ -47,6 +48,7 @@ describe("Kingdom Builder persistence", () => {
 
         const settlement = create.mock.calls[0][0];
         expect(settlement.ownerId).toBe("user-1");
+        expect(settlement.settlementNumber).toBe(0);
         expect(settlement.tiles).toHaveLength(KINGDOM_BUILDER_GRID_SIZE);
         expect(settlement.tiles[KINGDOM_BUILDER_TOWN_CENTRE_INDEX]).toEqual({
             position: KINGDOM_BUILDER_TOWN_CENTRE_INDEX,
@@ -62,5 +64,15 @@ describe("Kingdom Builder persistence", () => {
         await expect(foundSettlement(worldId, "user-1", "future-site")).rejects.toEqual(
             expect.objectContaining<Partial<KingdomBuilderPersistenceError>>({ code: "SITE_NOT_AVAILABLE" }),
         );
+    });
+
+    it("allows an owner to found more than one settlement at expansion sites", async () => {
+        const worldId = new Types.ObjectId().toString();
+        mockWorldNodes([{ id: "expansion-1", x: 10, y: 10, kind: "settlement", siteType: "expansion" }]);
+        const create = vi.spyOn(KingdomBuilderSettlementModel, "create").mockImplementation(async (value) => value as never);
+
+        await foundSettlement(worldId, "user-1", "expansion-1", undefined, "expansion");
+
+        expect(create.mock.calls[0][0]).toMatchObject({ ownerId: "user-1", nodeId: "expansion-1", settlementNumber: 1 });
     });
 });

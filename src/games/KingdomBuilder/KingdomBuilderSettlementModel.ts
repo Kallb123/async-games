@@ -31,6 +31,8 @@ export interface IKingdomBuilderSettlement {
     worldId: Types.ObjectId;
     ownerId: string;
     nodeId: string;
+    /** Absent on Milestone A documents; Mongoose's default reads those as the first slot. */
+    settlementNumber?: number;
     tiles: KingdomBuilderTile[];
     resources: KingdomBuilderResources;
     construction?: KingdomBuilderConstruction;
@@ -75,6 +77,7 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     ownerId: { type: String, required: true },
     nodeId: { type: String, required: true },
+    settlementNumber: { type: Number, required: true, min: 0, max: 1, default: 0 },
     tiles: {
         type: [TileSchema],
         required: true,
@@ -84,8 +87,24 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     construction: ConstructionSchema,
 }, { timestamps: true });
 
-KingdomBuilderSettlementSchema.index({ worldId: 1, ownerId: 1 }, { unique: true });
+KingdomBuilderSettlementSchema.index({ ownerId: 1, worldId: 1 });
 KingdomBuilderSettlementSchema.index({ worldId: 1, nodeId: 1 }, { unique: true });
+KingdomBuilderSettlementSchema.index({ worldId: 1, ownerId: 1, settlementNumber: 1 }, { unique: true });
 
 export const KingdomBuilderSettlementModel = models.KingdomBuilderSettlement
     || model<IKingdomBuilderSettlementDocument, IKingdomBuilderSettlementModel>("KingdomBuilderSettlement", KingdomBuilderSettlementSchema);
+
+let multipleSettlementsIndexReady: Promise<void> | undefined;
+
+/** Removes Milestone A's one-settlement-per-owner index once per process. */
+export function prepareMultipleSettlementsIndex(): Promise<void> {
+    multipleSettlementsIndexReady ??= KingdomBuilderSettlementModel.collection
+        .dropIndex("worldId_1_ownerId_1")
+        .then(() => undefined)
+        .catch((error: unknown) => {
+            if (typeof error === "object" && error !== null && "codeName" in error && error.codeName === "IndexNotFound") return;
+            multipleSettlementsIndexReady = undefined;
+            throw error;
+        });
+    return multipleSettlementsIndexReady;
+}

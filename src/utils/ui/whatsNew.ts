@@ -37,7 +37,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Kingdom Builder prototype",
-                detail: "Found your first settlement, watch wood, stone and iron arrive each hour, and queue new resource buildings as your 3×3 town grows.",
+                detail: "Explore your generated world map, found more settlements at open sites, and move between your towns as wood, stone and iron arrive each hour.",
                 game: "kingdombuilder",
             },
             {
