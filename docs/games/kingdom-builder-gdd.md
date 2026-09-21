@@ -1,17 +1,20 @@
 # Kingdom Builder — Game Design Document
 
-**Status:** Concept / exploration — not yet scheduled for implementation.
+**Status:** Concept, with time model (§5.5) and combat model (§7.6) decided —
+not yet scheduled for implementation.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
 repeatedly, not a single sitting
 
-This document lays out the concept and works through the two open design
+This document lays out the concept and works through the two design
 questions that most affect everything downstream of them: how time passes
-(turns vs. a real-time tick), and how combat is resolved. Both sections weigh
-several concrete approaches rather than picking one immediately, per the brief
-that started this doc — a recommendation is given at the end of each, but the
-trade-offs are the point.
+(turns vs. a real-time tick), and how combat is resolved. Both sections still
+weigh several concrete approaches, because the trade-offs are what justify the
+choice, but both are now **decided**: a fixed real-time tick (§5.5) and
+deterministic multi-round combat with unit counters (§7.6). Later sections —
+sieges, barbarian villages, terrain movement cost, and fog of war on army
+movement — build on those two decisions rather than re-opening them.
 
 ---
 
@@ -23,6 +26,7 @@ trade-offs are the point.
    - 3.1 [Representation](#31-representation)
    - 3.2 [Procedural generation](#32-procedural-generation)
    - 3.3 [Balance constraints](#33-balance-constraints)
+   - 3.4 [Barbarian villages](#34-barbarian-villages)
 4. [Settlements](#4-settlements)
    - 4.1 [Layout](#41-layout)
    - 4.2 [Buildings](#42-buildings)
@@ -33,18 +37,19 @@ trade-offs are the point.
    - 5.2 [Option B — simultaneous ("WEGO") turns](#52-option-b--simultaneous-wego-turns)
    - 5.3 [Option C — fixed real-time ticks](#53-option-c--fixed-real-time-ticks)
    - 5.4 [Comparison](#54-comparison)
-   - 5.5 [Recommendation](#55-recommendation)
+   - 5.5 [Decision](#55-decision)
 6. [Armies and movement](#6-armies-and-movement)
    - 6.1 [Unit types](#61-unit-types)
    - 6.2 [Dispatch and travel time](#62-dispatch-and-travel-time)
-   - 6.3 [Arrival: siege or attack](#63-arrival-siege-or-attack)
+   - 6.3 [Visibility and scouting](#63-visibility-and-scouting)
+   - 6.4 [Arrival: siege begins automatically](#64-arrival-siege-begins-automatically)
 7. [Combat resolution](#7-combat-resolution)
    - 7.1 [Option 1 — deterministic power comparison](#71-option-1--deterministic-power-comparison)
    - 7.2 [Option 2 — randomised dice/CRT resolution](#72-option-2--randomised-dicecrt-resolution)
    - 7.3 [Option 3 — multi-round attrition with unit counters](#73-option-3--multi-round-attrition-with-unit-counters)
    - 7.4 [Option 4 — deterministic core with bounded variance](#74-option-4--deterministic-core-with-bounded-variance)
    - 7.5 [Comparison](#75-comparison)
-   - 7.6 [Recommendation](#76-recommendation)
+   - 7.6 [Decision, and future scope](#76-decision-and-future-scope)
 8. [Sieges in detail](#8-sieges-in-detail)
 9. [Victory, seasons, and catch-up](#9-victory-seasons-and-catch-up)
 10. [Fit with the existing engine](#10-fit-with-the-existing-engine)
@@ -80,8 +85,9 @@ theirs.*
 | Pillar | Description | How it manifests |
 |---|---|---|
 | **Nobody blocks anybody** | No player's turn should require another player to act first. | No sequential turn order; every player can queue actions independently at any time |
-| **Distance is the defence** | A settlement's safety comes from where it sits, not from a die roll. | Travel time scales with map distance; scouting and forward bases matter more than raw army size |
-| **Losing is visible, not sudden** | A player should see a threat coming and have time to respond, even offline. | Siege as a distinct, non-lethal opening move; push notifications on army departure/arrival |
+| **Distance is the defence** | A settlement's safety comes from where it sits, not from a die roll. | Travel time scales with map distance and terrain (§6.2); scouting and forward bases matter more than raw army size |
+| **You don't see it coming — you see it arrive** | Enemy armies march unseen; the siege they open with is the signal, not their departure. | Fog of war on troop movement (§6.3); a scout unit/upgrade is the only way to see further |
+| **Losing is visible, not sudden** | A player should see a threat coming and have time to respond, even offline. | Siege begins automatically and does no damage on its own (§8); push notifications on siege onset |
 | **The map made the terms, not the players** | Starting position should feel fair even though it's procedurally rolled. | Balance constraints on generation (§3.3), not hand-authored symmetric maps |
 | **Depth from composition, not from bookkeeping** | Strategic choices should live in what you build and send, not in remembering to log in every hour | Resource/build queues run unattended; ticks/turns process automatically |
 
@@ -94,8 +100,10 @@ theirs.*
 A **node-and-edge graph**, not a hex or square grid: each settlement site and
 each notable terrain feature (a forest, a mountain pass, a river crossing) is
 a node, and travel routes between them are edges with an associated
-distance/time cost. This is a deliberate departure from a uniform grid for
-two reasons:
+**movement cost**, not just a fixed distance — an edge crossing a mountain
+pass costs far more travel time than one across open plains, independent of
+how many edges separate two points (§6.2 has the concrete multipliers). This
+is a deliberate departure from a uniform grid for two reasons:
 
 - It lets the generator place resource-rich terrain unevenly (a "wood belt,"
   an isolated mountain rich in iron) without those irregularities also
@@ -131,12 +139,18 @@ A world is generated once, before any player joins, in roughly this order:
 3. **Place settlement sites.** Reserve a fixed number of sites (more than
    the player cap, so a world doesn't look emptied-out with fewer than ten
    joiners) far enough apart that a full world doesn't crowd anyone's
-   starting radius, per the constraints below.
+   starting radius, per the constraints below. Sites are typed at this
+   point: **player start** (the ones the fairness band in §3.3 qualifies),
+   **open expansion** (unclaimed, for §4.4 settlers), and **barbarian**
+   (§3.4) — pre-populated with an NPC garrison from the moment the world is
+   generated.
 4. **Connect the graph.** Run a routine that guarantees connectivity (a
    minimum spanning tree first, so nothing is an island) and then adds extra
    edges for redundancy and chokepoints, echoing the "topological chokepoint"
    design already used in World Domination — a mountain pass or river
    crossing that funnels an army is more interesting than an open field.
+   Assign each edge a **terrain type** (plains, forest, hill, mountain,
+   river crossing), which §6.2 turns into its movement-cost multiplier.
 5. **Assign starting sites to players** at world-join time (not at
    generation time), by the fairness rule in §3.3.
 
@@ -169,6 +183,44 @@ spawns in a resource desert. Concrete constraints:
 - **A deterministic seed per world**, stored, so a generated map can be
   regenerated for debugging or verified for fairness after the fact without
   re-deriving it from RNG state.
+- **Parity is on total value, not on flavour.** A settlement site's adjacent
+  terrain also decides *which* resource it's naturally good at (§4.2) — one
+  site sits in the wood belt, another borders a mountain rich in iron. The
+  resource-parity radius above only constrains the *total* reachable yield,
+  not its composition, so two starting sites can be equally strong while
+  pushing their players toward different early buildings. That's a feature —
+  it gives ten simultaneous starts some texture — but it's also why the
+  parity check has to be measured on aggregate value, never on a specific
+  resource type, or "fair" quietly collapses into "identical."
+
+### 3.4 Barbarian villages
+
+Scattered across the map alongside player and expansion sites are
+**barbarian villages**: NPC-held settlements that exist from world
+generation, each with a fixed garrison that never queues buildings, trains
+no reinforcements, and doesn't retaliate beyond defending itself. They exist
+to give the map something worth fighting over before players are fighting
+each other:
+
+- **A softer path to a second settlement.** Conquering a barbarian village is
+  an alternative to founding one via a settler (§4.4) — faster (no travel
+  time spent walking a settler to open ground, just marching an army to a
+  known, fixed location) but not free, since it costs an army instead of
+  resources and settler time.
+- **No siege phase.** A barbarian garrison doesn't get scared into
+  surrendering and doesn't have production worth debuffing, so an army
+  arriving at a barbarian village resolves combat (§7) immediately rather
+  than opening a siege per §8 — that distinction only makes sense between
+  players. Winning converts the village to the attacker's settlement,
+  garrison and terrain bonus intact.
+- **Garrison scales with distance from the map centre** (or with a village
+  "age" if the world reseeds them over time), so the villages ringing the
+  starting sites are a viable early target while ones deeper in
+  contested/late-game territory are a real commitment — they're a graduated
+  on-ramp to combat, not a single difficulty tier.
+- **They inherit the same terrain-bonus rule as any other site** (see above),
+  so a captured village is never just "another settlement" — it's a
+  specific, scouted reason to go there.
 
 ---
 
@@ -202,6 +254,13 @@ training queue run at a time per settlement at low town-centre levels, with
 higher town-centre levels unlocking parallel queues — this is the main
 lever for making the town centre feel like progress rather than a plaque.
 
+A settlement's site also grants a **terrain bonus** to whichever production
+building matches its neighbouring terrain — a lumber camp built next to a
+forest node outproduces the same-level lumber camp in a settlement with no
+forest nearby. This is what makes §3.3's "parity on total value, not on
+flavour" rule matter in practice: no site is simply better, but a wood-heavy
+site and an iron-heavy site call for different opening builds.
+
 ### 4.3 The economy loop
 
 Resource buildings generate income every turn/tick (§5 decides what a
@@ -231,15 +290,22 @@ ten static dots — expansion, not just defence, drives players toward each
 other, and a second settlement is also a second thing an attacker can pick
 off, which matters for §9's catch-up design.
 
+Conquering a barbarian village (§3.4) is the other way to a second
+settlement, and the two are meant to pull a player in different directions:
+a settler is slower to arrange but risk-free beyond the settler itself,
+while a barbarian conquest is faster and immediately productive but costs an
+army and forecloses that army from anything else in the meantime.
+
 ---
 
 ## 5. Time model: turns vs. ticks
 
-This is the question the brief asked to have weighed rather than decided
-outright, because it shapes nearly everything else — how travel time is
-expressed, how combat can be simultaneous or not, how offline players are
-protected, and how much this reuses vs. departs from the app's existing
-turn/command engine (see §10).
+**Decided: Option C, a fixed real-time tick.** This section keeps all three
+options and the comparison table, because the reasoning is what makes the
+decision worth trusting rather than just asserting — it shapes nearly
+everything else downstream: how travel time is expressed, how combat can be
+simultaneous or not, how offline players are protected, and how much this
+reuses vs. departs from the app's existing turn/command engine (see §10).
 
 ### 5.1 Option A — strict sequential turns
 
@@ -347,22 +413,23 @@ future tick) or at the next sweep, depending on the action.
 | Genre fit | Poor | Partial | Strong |
 | Infra cost | None | Low–medium | Medium (recurring sweep) |
 
-### 5.5 Recommendation
+### 5.5 Decision
 
-**Timer-gated WEGO, in other words a fixed real-time tick that is also
-numbered and recorded like a turn.** Concretely: the world advances every
-fixed interval (an hour is a reasonable starting point — long enough that a
-sweep across many worlds is cheap, short enough that "wait for the next
-tick" never feels like the main activity). Every sweep is assigned a
-monotonic turn number and is driven by an ordered command log exactly like
-this app's other games, so turn recap and "since you were last here" work
-unmodified in spirit — the log just happens to be appended to by a cron
-sweep instead of by "end turn," and a "turn" is a fixed span of wall-clock
-time instead of a player's discretion. This gets the fairness and
-genre-correctness of Option C without abandoning the app's existing
-turn/command/recap vocabulary, at the cost of the real infrastructure trade
-Option C's cons describe honestly — that cost doesn't go away, it's just
-worth paying for the ten-player, weeks-long shape this game actually has.
+**Timer-gated WEGO — a fixed real-time tick that is also numbered and
+recorded like a turn.** Concretely: the world advances every fixed interval
+(an hour is a reasonable starting point — long enough that a sweep across
+many worlds is cheap, short enough that "wait for the next tick" never feels
+like the main activity; the exact length is still open, §11). Every sweep is
+assigned a monotonic turn number and is driven by an ordered command log
+exactly like this app's other games, so turn recap and "since you were last
+here" work unmodified in spirit — the log just happens to be appended to by
+a cron sweep instead of by "end turn," and a "turn" is a fixed span of
+wall-clock time instead of a player's discretion. This gets the predictable,
+stable-income fairness and genre-correctness of Option C without abandoning
+the app's existing turn/command/recap vocabulary, at the cost of the real
+infrastructure trade Option C's cons describe honestly — that cost doesn't
+go away, it's accepted as worth paying for the ten-player, weeks-long shape
+this game actually has. Everything from §6 onward assumes this model.
 
 ---
 
@@ -383,44 +450,100 @@ exercise:
 
 ### 6.2 Dispatch and travel time
 
-An army's travel time is the graph distance (§3.1's edge weights) divided by
-the **speed of its slowest unit** — mixing a scout into a siege train doesn't
+An army's base travel time is the graph distance (in edges) divided by the
+**speed of its slowest unit** — mixing a scout into a siege train doesn't
 make the siege train faster, so composition is a real trade-off between
-striking power and response time. Distance is measured in edges/ticks, so
-under the recommended time model (§5.5) an ETA is a concrete number of
-ticks, and therefore a concrete number of hours, which a player can plan an
-attack (or a defence) around.
+striking power and response time.
+
+Each edge also carries a **terrain movement-cost multiplier**, assigned at
+generation (§3.2), applied on top of distance rather than instead of it:
+
+| Terrain | Multiplier | Notes |
+|---|---|---|
+| Plains | ×1 | The baseline; most edges near the map's centre |
+| Forest | ×1.5 | Common near wood-belt sites |
+| Hill | ×2 | |
+| Mountain pass | ×3–4 | The chokepoints called out in §3.2's generation step — a short-looking route on the map that is anything but fast |
+| River crossing | Impassable without a bridge, or ×2+ at a bridge node | Forces routing through a specific node rather than a straight line |
+
+An edge's cost is fixed and known to every player who can see the map, so
+"three hops" is never a reliable proxy for "three hours" — a defender's real
+safety margin is the *time-weighted* distance along the route an attacker
+would actually take, mountains and rivers included, not the node count.
+Under the tick model (§5.5) this resolves to a concrete number of ticks, and
+therefore a concrete number of hours, an ETA a player can plan an attack (or
+a defence) around.
 
 Dispatching an army removes it from the settlement's garrison for the round
 trip — there's no telefragging reinforcement, only "did I leave enough
 behind to still be defended."
 
-### 6.3 Arrival: siege or attack
+### 6.3 Visibility and scouting
 
-When an army reaches a hostile settlement, the sender chooses one of two
-postures (or is locked into whichever they queued from further away, if the
-design prefers commitment at dispatch time over a choice at arrival — see
-§11):
+An army in transit is **hidden** by default — an opponent cannot see that it
+has been dispatched, its route, its composition, or its size. This is
+deliberate, not an oversight to patch later: it's what makes siege (§8) the
+game's actual warning system instead of a redundant one. Without it, a
+defender would see an incoming army the moment it left and the siege's
+grace period would just be double warning; with it, an unrevealed march is
+the norm and the siege opening is usually the first anyone but the sender
+knows about it.
 
-- **Siege** — no combat. Debuffs the target settlement (§8) for as long as
-  the besieging army remains. This is the "visible, not sudden" pillar in
-  practice: it gives the defender a window to react, reinforce, or
-  counter-march before anything is destroyed.
-- **Attack** — immediate combat resolution (§7) against the settlement's
-  garrison and defences. If the settlement was already under siege, this is
-  how a siege is converted into an actual assault.
+- **The scout unit** (§6.1), sent ahead of or independently from a strike
+  force, reveals a target settlement's current garrison and defences at the
+  moment it arrives — a snapshot, not a live feed, so a scouted target can
+  still reinforce afterward.
+- **Upgrades at higher town-centre or barracks levels** can grant passive
+  detection — e.g. spotting armies passing through a settlement's own
+  adjacent edges — giving a developed settlement some warning of a march
+  aimed at it without relying on a dedicated scout being sent reactively.
+- Without either, the *only* information a defender has about an incoming
+  attack is what a siege's onset (§8) tells them: that something arrived, and
+  how strong the debuff feels, not what's actually in the besieging stack.
+  Deciding whether to sally out or wait it out is therefore a real read on
+  imperfect information, not a lookup.
+
+This is exactly the kind of hidden-state question this app already has a
+review discipline for (see `croupier` in §10) — an army's position, route
+and composition are hidden information the server must not hand an opponent
+just because their client happens to be able to compute where an edge leads.
+
+### 6.4 Arrival: siege begins automatically
+
+An army that reaches a hostile settlement does not choose whether to fight —
+**it automatically begins a siege.** There is no direct-attack-on-arrival
+option; siege is the only door in, and what happens next is a matter of
+timing rather than a choice made at dispatch:
+
+- **The attacker decides when, if ever, to push the attack** (§8) — they
+  might do it the instant the grace period ends, or hold off to let a second
+  army converge on the same target first, all while the siege's debuffs are
+  already in effect.
+- **The defender decides whether to sally out** (§8) — send their own
+  garrison out to fight the besieging army in the open — rather than sit
+  and wait for the attacker to make the first combat move.
+
+Because armies march unseen (§6.3), the siege's onset is ordinarily the
+first concrete signal either the defender or their allies get that this
+particular attack is happening at all — which is exactly the "losing is
+visible, not sudden" pillar in practice: the visibility arrives at siege,
+not before, but it does arrive before anything is destroyed.
 
 ---
 
 ## 7. Combat resolution
 
-Four candidate approaches, in increasing order of how much they lean on
-randomness, followed by a comparison and a recommendation. The asynchronous
-setting matters a lot here: attacker and defender are essentially never both
-watching when a battle resolves (it happens on a tick, possibly hours after
-either side last logged in), so anything that depends on a live audience —
-watching dice fall, reacting mid-fight — buys nothing. The report both sides
-read afterward is the only thing that has to be satisfying.
+**Decided: Option 3, deterministic multi-round attrition with unit
+counters**, with Option 4's small bounded randomness scoped in as a planned
+future addition rather than an open alternative (§7.6). The four candidates
+below are kept in full, in increasing order of how much they lean on
+randomness, because the comparison is the reasoning the decision rests on.
+The asynchronous setting matters a lot here: attacker and defender are
+essentially never both watching when a battle resolves (it happens on a
+tick, possibly hours after either side last logged in), so anything that
+depends on a live audience — watching dice fall, reacting mid-fight — buys
+nothing. The report both sides read afterward is the only thing that has to
+be satisfying.
 
 ### 7.1 Option 1 — deterministic power comparison
 
@@ -508,44 +631,87 @@ steps.
 | Snowball resistance | Poor | Good (variance) | Good (counters reward smaller smart plays) | Medium |
 | Needs recorded randomness | No | Yes | No | Yes (small amount) |
 
-### 7.6 Recommendation
+### 7.6 Decision, and future scope
 
 **Option 3 — deterministic multi-round attrition with unit type counters —
-as the combat model, reporting results as a round-by-round log** (which
-also gives the combat report something worth reading, addressing Option 1's
+is the combat model**, reporting results as a round-by-round log (which also
+gives the combat report something worth reading, addressing Option 1's
 flattest weakness without importing Option 2's async-fairness problem).
-Depth should come from scouting and composition, which a patient, less
+Depth comes from scouting and composition, which a patient, less
 numerically-dominant player can act on, rather than from a die roll neither
-side is present to see. If playtesting finds fights still too predictable
-once compositions are known, add Option 4's small bounded modifier on top
-rather than starting with live randomness — it's much easier to add a little
-noise to a working deterministic model than to remove unwanted swinginess
-from a randomised one after players have calibrated their trust around it.
+side is present to see — and §6.3's fog of war is what makes that depth real
+rather than academic: without a scout, a defender's composition is
+unknown to the attacker (and vice versa) until the siege report shows what
+actually landed on either side, so guessing the counter matchup correctly is
+itself a skill test, not just arithmetic once the numbers are visible.
+
+**Option 4's small bounded randomness (±10% on effective power) is
+in-scope as a future addition**, not a fallback held in reserve — the goal
+is specifically to make **close** fights risky, the ones a pure power/counter
+comparison would otherwise resolve with total confidence, without touching
+lopsided ones. It's deliberately sequenced after the deterministic model
+ships and is played, rather than built alongside it, because it's much
+easier to add a little noise to a working deterministic model once real
+fights show which match-ups feel too safe than to remove unwanted
+swinginess from a randomised one after players have calibrated their trust
+around it.
 
 ---
 
 ## 8. Sieges in detail
 
-A siege is deliberately the *opening* move, not a lesser attack:
+A siege is deliberately the *opening* move, not a lesser attack, and — per
+§6.4 — not a choice: any army that reaches a hostile player settlement opens
+one automatically. What follows is two independent clocks, one per side,
+both ticking from the moment siege begins:
 
-- On arrival, a besieging army applies debuffs to the target settlement —
+**The attacker's clock — when to push.**
+
+- On arrival, the besieging army applies debuffs to the target settlement —
   e.g. reduced resource production, construction/training queues paused or
-  slowed, walls stop passively regenerating — for as long as it remains.
-- **No garrison losses occur under siege alone.** This is what makes it a
-  warning rather than a surprise: a defender who logs in mid-siege still has
-  their full army and can react (reinforce, sue for peace, sally out against
-  the besiegers, or evacuate the settler-founding path in §4.4).
+  slowed, walls stop passively regenerating — for as long as it remains,
+  win or lose nothing yet.
 - A short **grace period** after siege begins, before debuffs ramp to full
   strength, prevents a siege from being a near-instant knockout against a
   player who happens to be offline at exactly the wrong tick.
-- A besieging army is itself vulnerable: a relief force (the defender's own
-  returning army, or an ally's) can attack the besiegers directly, resolved
-  as ordinary combat (§7) in the open rather than against the settlement's
-  walls — sieging is a commitment, not a free debuff.
-- Converting a siege into an **attack** is a separate action the besieger
-  takes when ready (or forced into, if a relief force is inbound and staying
-  passive is worse) — this is what finally triggers §7's combat resolution
-  against the garrison and any remaining wall bonus.
+- The attacker chooses, at any point after arrival, to **push the attack** —
+  the action that finally triggers §7's combat resolution against the
+  garrison and any remaining wall bonus. There's no forced timer on this
+  beyond the strategic cost of waiting: every extra tick under siege is
+  another tick of debuff extracted for free, but it's also another tick the
+  defender has to reinforce, and another tick a relief force has to arrive.
+  A common reason to hold off rather than push immediately is massing a
+  second army to arrive and push together, since the attacker fully
+  controls the timing.
+
+**The defender's clock — whether to sally out.**
+
+- **No garrison losses occur under siege alone.** This is what makes it a
+  warning rather than a surprise: a defender who logs in mid-siege still has
+  their full garrison and every option below still open.
+- The defender can **sally out**: send the settlement's garrison out to
+  fight the besieging army directly, resolved as ordinary field combat (§7)
+  rather than a defence against the settlement's walls. This trades the
+  wall/terrain bonus a defending garrison would otherwise get for striking
+  first, before the attacker chooses to push — worthwhile against a
+  besieging force the defender's garrison can beat in the open but might
+  not survive taking the attacker's chosen moment to fight behind walls
+  against, particularly once siege engines are involved.
+- Alternatively, the defender can **reinforce** from another settlement,
+  **wait** and out-defend a push when it comes, or **evacuate** a settler
+  (§4.4) to protect the line of succession if the settlement looks lost
+  either way.
+- A besieging army is vulnerable to more than a sally-out: a **relief
+  force** (an ally's army, marching in from elsewhere) can attack it the
+  same way, in the open — sieging a settlement is a commitment for the
+  attacker, not a free, risk-free debuff.
+
+Because armies march unseen (§6.3), neither side's clock runs on full
+information: the attacker doesn't know if a relief force is already inbound
+when they decide whether to wait, and the defender doesn't know the
+besieging army's exact composition unless they scouted it — sallying out is
+a bet on a garrison the defender can currently see against an army they
+mostly can't.
 
 ---
 
@@ -557,10 +723,13 @@ position from being a foregone conclusion for the rest of the season:
 - **Seasoned, not eliminated.** Rather than "last kingdom standing," a world
   runs for a fixed real-world duration (e.g. two to four weeks) and is
   scored at the end — total settlement levels, army value, and territory
-  held are reasonable inputs. This matters specifically because losing a
-  single settlement early (a real risk given §5.3's offline-vulnerability
-  cost) shouldn't mean a player has nothing left to play for; a scored
-  season gives them a comeback to chase instead of a dead account.
+  held (including barbarian villages conquered, §3.4, which is deliberately
+  counted the same as a player-taken settlement — the map doesn't care who
+  used to hold it) are reasonable inputs. This matters specifically because
+  losing a single settlement early (a real risk given §5.3's
+  offline-vulnerability cost) shouldn't mean a player has nothing left to
+  play for; a scored season gives them a comeback to chase instead of a
+  dead account.
 - **New-player protection.** A freshly-founded settlement (including a
   second one via §4.4) is unattackable for a short fixed window after
   founding — long enough to build a first layer of defence, short enough
@@ -593,7 +762,7 @@ game-design ones:
   player leaving mid-season means, how `GameResult` and its stats map onto a
   season rather than a single win/loss — needs its own design pass before
   implementation, not assumed from the single-match model.
-- **The scheduler.** §5.5's recommended tick needs a recurring sweep across
+- **The scheduler.** §5.5's chosen tick model needs a recurring sweep across
   every active world, in the spirit of this app's existing cron-sweep
   patterns (see the `gremlin` reviewer's brief in AGENTS.md) but running
   continuously for the life of a world rather than as an occasional
@@ -603,12 +772,14 @@ game-design ones:
   game, not a game-design decision.
 
 Everything else — the node/edge map renderer, `BoardZoom`, push
-notifications for siege/attack/completion events, `Dice`/`RollReadout` if
-Option 4's bounded variance is ever added, the reviewer crew (`rulebook` for
-wiring, `croupier` for making sure a player can't see an enemy garrison a
-scout hasn't revealed, `gremlin` for the sweep's failure modes, `locksmith`
-for the dispatch/siege/attack API surface) — is a good match for what this
-app already has and already does.
+notifications for siege/attack/completion events, `Dice`/`RollReadout` when
+Option 4's bounded variance is added, the reviewer crew (`rulebook` for
+wiring, `croupier` for making sure a player can't see an enemy army in
+transit or a garrison a scout hasn't revealed — §6.3's fog of war is exactly
+the hidden-state contract that reviewer exists to check, not a new one this
+game invents — `gremlin` for the sweep's failure modes, `locksmith` for the
+dispatch/siege/attack API surface) — is a good match for what this app
+already has and already does.
 
 ---
 
@@ -619,9 +790,16 @@ guessed at here:
 
 - Tick length: is an hour right, or does a faster (e.g. 15-minute) or slower
   (e.g. 4-hour) cadence suit the target session shape better?
-- Does a player commit to siege-or-attack at dispatch time, or choose on
-  arrival? Choosing on arrival is more flexible for the attacker but removes
-  the defender's ability to infer intent from what's inbound.
+- Exact terrain movement-cost multipliers (§6.2) and exact scout/detection
+  parameters (§6.3) — range, reliability, whether detection is guaranteed or
+  itself a chance — need numbers, not just relative ordering.
+- Barbarian village specifics (§3.4): does a conquered site ever respawn a
+  new one elsewhere so the map doesn't run out of soft targets over a
+  multi-week season, and does garrison strength scale continuously with
+  distance from the centre or in discrete tiers?
+- Does a sallying garrison forfeit the settlement's wall/terrain defence
+  bonus entirely (§8), or keep some fraction of it? Zero is the simpler rule
+  but may make sallying out a trap rather than a real choice.
 - Alliances/diplomacy: nothing above assumes them, but a ten-player map
   without any is likely to converge on one dominant player unless the
   catch-up mechanics in §9 turn out to be strong enough alone — worth a
