@@ -53,7 +53,12 @@ movement — build on those two decisions rather than re-opening them.
 8. [Sieges in detail](#8-sieges-in-detail)
 9. [Victory, seasons, and catch-up](#9-victory-seasons-and-catch-up)
 10. [Fit with the existing engine](#10-fit-with-the-existing-engine)
-11. [Open questions](#11-open-questions)
+11. [Implementation plan](#11-implementation-plan)
+    - 11.1 [Principles](#111-principles)
+    - 11.2 [Milestone A — a working prototype](#112-milestone-a--a-working-prototype)
+    - 11.3 [Milestone B — expanding functionality](#113-milestone-b--expanding-functionality)
+    - 11.4 [Ordering constraints](#114-ordering-constraints)
+12. [Open questions](#12-open-questions)
 
 ---
 
@@ -419,7 +424,7 @@ future tick) or at the next sweep, depending on the action.
 recorded like a turn.** Concretely: the world advances every fixed interval
 (an hour is a reasonable starting point — long enough that a sweep across
 many worlds is cheap, short enough that "wait for the next tick" never feels
-like the main activity; the exact length is still open, §11). Every sweep is
+like the main activity; the exact length is still open, §12). Every sweep is
 assigned a monotonic turn number and is driven by an ordered command log
 exactly like this app's other games, so turn recap and "since you were last
 here" work unmodified in spirit — the log just happens to be appended to by
@@ -783,7 +788,190 @@ already has and already does.
 
 ---
 
-## 11. Open questions
+## 11. Implementation plan
+
+### 11.1 Principles
+
+Two milestones: **A** gets a working prototype in front of a player —
+found a settlement, watch resources tick, queue one building — and **B**
+expands it into the full game described above. Every PR in both is scoped
+so it can merge to `main` without disrupting anything already shipped:
+
+- **New code stays unreferenced until it's ready to be used.** A PR that
+  adds a schema, a pure function, or a route that nothing else calls yet
+  cannot regress an existing feature, by construction — there's nothing for
+  it to conflict with. Kingdom Builder's own files live entirely under
+  `src/games/KingdomBuilder/` plus a small number of new API routes, so nearly
+  every PR touches only new files.
+- **Shared, must-stay-consistent files are touched by exactly one PR per
+  milestone.** `src/utils/ui/games.ts` (the game picker), the `GameLogic`
+  barrel the serializable-registry test (`npm test`) checks every game
+  against, and any home-page/nav component are all left alone until the PR
+  that's explicitly "turn it on" (§11.2, PR 5) — so no earlier PR can be the
+  one that breaks that test or half-registers a game the picker can already
+  see but can't yet run.
+- **The cron sweep follows the existing cron pattern exactly**, including
+  the part where adding the route and turning it on are two different
+  steps: the tick route is gated by `isAuthorisedCron` like `turntimer`,
+  `staledevices` and `staleguests` already are, but it isn't added to
+  `vercel.json`'s `crons` list until it's been exercised manually — so
+  merging the route can never itself start an unattended schedule running
+  against real data.
+- **Every PR still passes the repo's existing gates** — `npm run build`,
+  `npx tsc --noEmit`, `npm run lint --max-warnings 0`, and `npm test` for
+  anything touching the game engine — and gets the relevant reviewers from
+  the crew in AGENTS.md before merging (`locksmith`+`gremlin` on any new
+  route or cron, `croupier` the moment any response carries hidden state,
+  `caveman` on any UI, `rulebook` on anything that changes shared
+  metadata or wiring).
+- **Commits within a PR are ordered so the PR still builds at every commit**,
+  the same discipline as the PR sequence itself, just one level down —
+  reviewers should be able to check out any commit in a PR and get a green
+  build, not just the final one.
+
+### 11.2 Milestone A — a working prototype
+
+**Goal:** one player can create a world, get a starting settlement, watch
+wood/stone/iron tick up on their own, and queue one building — reachable
+only via a direct URL, not yet linked from the app's navigation or game
+library.
+
+**PR 1 — World generator (pure functions, no persistence, no UI)**
+Entirely new files under `src/games/KingdomBuilder/worldgen/`; nothing else
+in the repo imports this package yet, so the PR cannot regress anything and
+review is just the generator's own correctness and its unit tests.
+1. `landmass.ts` — noise-based land/water field and the `WorldNode`/
+   `WorldEdge` types.
+2. `terrainNodes.ts` — Poisson-disc terrain node placement (forest, quarry,
+   ore) per §3.2.
+3. `settlementSites.ts` — site placement plus the §3.3 fairness scoring
+   (resource-parity radius, minimum separation, no-cornering).
+4. `graphConnectivity.ts` — spanning-tree plus chokepoint edges, each typed
+   with the §6.2 terrain movement-cost multiplier.
+5. `generateWorld.ts` — one seeded entry point orchestrating the above,
+   including §3.3's reject-and-retry loop.
+6. Unit tests per step, plus one "generate 20 worlds, assert every one
+   passes the fairness checks" test.
+
+**PR 2 — Persistence layer (schemas only, no routes)**
+Adds `KingdomBuilderWorldModel` (the generated graph plus the current tick
+number) and `KingdomBuilderSettlementModel` (owner, node id, 3×3 tile
+state) under `src/games/KingdomBuilder/`. New collections only — nothing
+here touches `GameData` or any existing schema.
+1. `World` schema and indexes.
+2. `Settlement` schema (tile array, resource counters, building levels).
+3. `createWorld(seed)`, persisting one generator run.
+4. `foundSettlement(worldId, userId, siteId)` for a player's first
+   settlement.
+
+**PR 3 — Tick engine and a dormant cron route**
+1. `applyTick(world)` — a pure function: add production, advance one step
+   of in-flight construction. No movement or combat yet, since nothing can
+   move or fight in Milestone A.
+2. `POST /api/cron/kingdombuilder-tick`, gated by `isAuthorisedCron`
+   exactly like the existing cron routes, but **not yet in `vercel.json`**
+   — callable for manual/test exercising only.
+3. A route test exercising the auth gate the same way `turntimer`'s does.
+
+**PR 4 — Minimal prototype UI**
+1. A settlement screen at a direct, unlinked route (e.g.
+   `/kingdombuilder/[worldId]/[settlementId]`) rendering the 3×3 grid and
+   resource counts, built from `Section` and `ag-*` classes per AGENTS.md
+   rather than bespoke markup.
+2. A "queue building" API route with its own ownership check (only the
+   settlement's owner may queue on it — a `locksmith` concern from day one).
+3. Wire the UI to refetch after a tick so a completed queue item shows up.
+
+**PR 5 — Turn it on**
+The one PR in Milestone A allowed to touch shared files, because it's the
+PR that makes the prototype real:
+1. Add the tick route to `vercel.json`'s `crons`.
+2. Register Kingdom Builder in `src/utils/ui/games.ts` and the `GameLogic`
+   barrel per `new-game.md`, satisfying the serializable-registry test.
+3. One `whatsNew.ts` entry, once — per AGENTS.md's one-line-per-branch rule
+   — since this is the point the game becomes genuinely player-visible.
+4. Full reviewer pass before merging: `rulebook` (wiring), `locksmith` +
+   `gremlin` (the new route and cron), `caveman` (the UI) — this PR earns
+   all of them, unlike PRs 1–4 which mostly don't touch anything reviewable
+   in those terms yet.
+
+That closes the prototype: build → queue → tick → watch it complete, for
+one player, no map, no armies.
+
+### 11.3 Milestone B — expanding functionality
+
+Each PR below is additive on top of the shipped prototype — new fields, new
+routes, new commands — so the same non-disruption property holds: none of
+them changes what Milestone A already does for a settlement sitting alone.
+
+- **PR 6 — World map view and multiple settlements.** Render the generated
+  graph and let a second settlement be founded elsewhere on it. No armies
+  yet — a pure map-rendering and multi-tenancy PR, reusing
+  `ClickableMapNode`/`MapEdges`/`BoardZoom` per §3.1.
+- **PR 7 — Barracks and units.** Unit types/levels (§6.1) and a training
+  queue on the barracks tile. Units accumulate in a garrison; nothing can
+  leave it yet.
+- **PR 8 — Army dispatch and movement.** A command to send a garrison (or
+  part of it) toward another node, and a movement step in the tick engine
+  using §6.2's terrain multipliers. Arrival does nothing special yet — this
+  PR is purely "can an army cross the generated graph."
+- **PR 9 — Fog of war.** Redact in-transit armies from
+  `CreateDataResponse(viewerId)` for everyone but the owner — a `croupier`
+  concern, verified with the `trace-hidden-state` skill — plus the scout
+  unit and detection upgrade as the two reveal paths from §6.3.
+- **PR 10 — Automatic siege on arrival.** Arrival at a hostile settlement
+  opens a siege (§6.4/§8): debuffs, the grace period, and the two new
+  player actions, "push the attack" and "sally out" — both stubbed to a
+  placeholder resolution for now.
+- **PR 11 — Combat resolution.** The deterministic multi-round attrition
+  engine with unit-type counters (§7.3/§7.6) as a pure function with its own
+  matchup-table test suite, then wired into the two actions PR 10 stubbed.
+- **PR 12 — Barbarian villages.** Generator gains barbarian site placement
+  (§3.4); combat resolution from PR 11 applies directly on arrival, no
+  siege phase, per §3.4's rule.
+- **PR 13 — Settlers and a second settlement.** The settler unit and a
+  "found here" command on open expansion sites (§4.4) — mostly a new unit
+  type once PRs 6–8's map/movement/dispatch already exist.
+- **PR 14 — Market and trade.** Resource conversion and player-to-player
+  trade offers (§4.3) — a pure economy addition with no combat interaction.
+- **PR 15 — Victory, seasons, catch-up.** Season length, scoring, new-player
+  protection, diminishing returns, leaderboard (§9) — the systemic layer
+  that turns the sandbox into a game with an end.
+- **PR 16 — Push notifications.** Siege-onset, attack-resolved and
+  construction-complete pushes over the app's existing FCM plumbing (§10).
+  Held deliberately until last, since it's the one PR reaching into shared
+  notification infrastructure, and it benefits from every event type above
+  already existing to notify about.
+- **PR 17 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
+  the `og-game-kingdombuilder.png` share card, and a final full five-reviewer
+  pass — the "most games also want a guide/tutorial" convention in
+  AGENTS.md, deliberately last rather than first since it documents
+  mechanics that were still moving through PRs 6–16.
+
+### 11.4 Ordering constraints
+
+Most of Milestone B can be resequenced to fit priorities without breaking
+anything — trade (PR 14) and seasons (PR 15) don't depend on each other, for
+instance, and either could move earlier or later freely. Three orderings
+are not negotiable, because each is a hard dependency rather than a
+priority call:
+
+- **PR 5 cannot move earlier than PR 1–4.** It's the wiring step; there's
+  nothing to turn on before the prototype exists, and it's also the last
+  point at which every PR before it was, by construction, invisible to a
+  player.
+- **PR 9 (fog of war) must land before or alongside PR 10 (siege).** Siege
+  is only the game's warning system per §6.4 if armies were already hidden
+  before it — shipping siege first would briefly make army movement visible
+  by omission, which is a hidden-information regression even if temporary.
+- **PR 11 (combat resolution) must land before or alongside PR 12
+  (barbarians).** A barbarian village resolves combat immediately on
+  arrival with no siege phase (§3.4), so it has nothing to call until the
+  combat engine exists.
+
+---
+
+## 12. Open questions
 
 Left open deliberately, for playtesting or a follow-up doc rather than
 guessed at here:
