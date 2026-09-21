@@ -99,7 +99,6 @@ describe("runFieldsPass", () => {
 describe("runSmoothingPass", () => {
     it("flips a lone stray tile surrounded by a different land window", () => {
         const columns = 3, rows = 3;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const codes = ["g", "g", "g", "g", "m", "g", "g", "g", "g"];
         runSmoothingPass(codes, columns, rows, 1);
         expect(codes[4]).toBe("g");

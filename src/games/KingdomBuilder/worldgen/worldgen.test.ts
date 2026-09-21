@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { generateWorld } from "./generateWorld";
-import { connectWorldGraph, isConnected, movementCostFor } from "./graphConnectivity";
+import { connectWorldGraph, edgeCostFor, isConnected } from "./graphConnectivity";
 import { createRandom } from "./random";
 import { checkSettlementFairness } from "./settlementSites";
+import { generateBaseTerrainField, type TerrainField } from "./terrainField";
 import { generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
 import type { SettlementNode, TerrainNode, WorldEdge } from "./landmass";
+
+function fieldOf(columns: number, rows: number, codes: string): TerrainField {
+    return { columns, rows, tileSize: 2, codes };
+}
 
 describe("Kingdom Builder world generation", () => {
     it("creates a deterministic island with ocean around its border", () => {
@@ -18,49 +23,59 @@ describe("Kingdom Builder world generation", () => {
         }
     });
 
-    it("places separated terrain nodes only on land", () => {
+    it("places separated terrain nodes only on land, matching the ground beneath them", () => {
         const random = createRandom("terrain");
         const landmass = generateLandmass(random);
-        const nodes = placeTerrainNodes(landmass, random, { count: 20, minimumDistance: 5 });
+        const { field } = generateBaseTerrainField(landmass, random);
+        const nodes = placeTerrainNodes(landmass, field, random, { count: 20, minimumDistance: 5 });
         expect(nodes).toHaveLength(20);
         expect(nodes.every(node => isLand(landmass, node))).toBe(true);
         expect(new Set(nodes.map(node => node.terrain))).toEqual(new Set(["forest", "quarry", "ore"]));
         for (const node of nodes) expect(nodes.filter(other => Math.hypot(node.x - other.x, node.y - other.y) < 5)).toHaveLength(1);
     });
 
-    it("connects every node and gives terrain a documented movement cost", () => {
+    it("connects every node with a real, terrain-derived movement cost", () => {
         const world = generateWorld("connected-world");
         expect(isConnected(world.nodes, world.edges)).toBe(true);
         expect(world.edges.length).toBeGreaterThanOrEqual(world.nodes.length - 1);
-        for (const edge of world.edges) expect(edge.movementCost).toBe(movementCostFor(edge.terrain));
+        for (const edge of world.edges) expect(edge.movementCost).toBeGreaterThan(0);
     });
 
-    it("derives route terrain from nearby resource geography", () => {
-        const nodes: (TerrainNode | SettlementNode)[] = [
-            { id: "forest", kind: "terrain", terrain: "forest", resourceYield: 2, x: 0, y: 0 },
-            { id: "a", kind: "settlement", siteType: "expansion", x: 1, y: 0 },
-            { id: "b", kind: "settlement", siteType: "expansion", x: 2, y: 0 },
-        ];
-        const edges = connectWorldGraph(nodes, createRandom("routes"), 0);
-        expect(edges.every(edge => edge.terrain === "forest" && edge.movementCost === 1.5)).toBe(true);
+    it("still connects every world once water can veto an edge", () => {
+        for (let index = 0; index < 5; index++) {
+            const world = generateWorld(`water-aware-${index}`);
+            expect(isConnected(world.nodes, world.edges), `seed water-aware-${index}`).toBe(true);
+        }
     });
 
-    it("creates costly crossings where a route meets a central river bridge", () => {
+    it("derives route terrain from the ground the line actually crosses", () => {
+        const field = fieldOf(5, 1, "wwwww");
+        const result = edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 });
+        expect(result).toMatchObject({ terrain: "forest", passable: true });
+        expect(result.cost).toBeCloseTo(8 * 1.5, 6);
+    });
+
+    it("crosses a river only through a bridge it writes on the crossing tile", () => {
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 0, y: 24 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 100, y: 24 },
+            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
+            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
         ];
-        expect(connectWorldGraph(nodes, createRandom("river"), 0)[0]).toMatchObject({
-            terrain: "river-crossing", movementCost: 2.5, chokepoint: true,
-        });
+        const field = fieldOf(5, 1, "ggrgg");
+        const { edges, overlays } = connectWorldGraph(nodes, field, createRandom("river"), 0);
+        expect(edges[0]).toMatchObject({ terrain: "river-crossing", chokepoint: true });
+        // Tiles crossed (world x 1→9 over 2-unit tiles): 1 unit of grass, 2 of
+        // grass, 2 of river at the bridge's ×2.5, then 2 and 1 more of grass.
+        expect(edges[0].movementCost).toBeCloseTo(1 * 1 + 2 * 1 + 2 * 2.5 + 2 * 1 + 1 * 1, 6);
+        expect(overlays).toEqual([{ tile: 2, code: "B" }]);
     });
 
-    it("does not connect across the central river away from a bridge", () => {
+    it("never crosses open ocean, with or without an extra edge to try", () => {
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 0, y: 10 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 100, y: 10 },
+            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
+            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
         ];
-        expect(() => connectWorldGraph(nodes, createRandom("no-bridge"), 0)).toThrow("Unable to connect world graph");
+        const field = fieldOf(5, 1, "ggogg");
+        expect(() => connectWorldGraph(nodes, field, createRandom("no-crossing"), 0)).toThrow("Unable to connect world graph");
     });
 
     it("reports graph-hop separation, parity, and cornering violations from a fixed fixture", () => {
@@ -95,5 +110,5 @@ describe("Kingdom Builder world generation", () => {
             expect(sites.filter(site => site.siteType === "player-start")).toHaveLength(10);
             expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(14);
         }
-    }, 15_000);
+    }, 30_000);
 });

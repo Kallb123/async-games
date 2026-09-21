@@ -1,5 +1,6 @@
-import { isLand, landValueAt, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
+import { isLand, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
 import type { RandomSource } from "./random";
+import { areaCodeAt, type TerrainField } from "./terrainField";
 
 export interface TerrainNodeOptions {
     count?: number;
@@ -7,24 +8,30 @@ export interface TerrainNodeOptions {
     maximumAttempts?: number;
 }
 
-function terrainFor(random: RandomSource, elevation: number, yRatio: number): TerrainNodeType {
-    const roll = random.next();
-    if (elevation > 0.66 || roll < 0.18) return "ore";
-    if (yRatio > 0.58 ? roll < 0.6 : roll < 0.38) return "forest";
-    return "quarry";
-}
+/**
+ * Which node type belongs on which ground (§3.5.4): a forest node on
+ * woodland, a quarry on hills, ore on mountains — read off the generated
+ * field instead of an elevation-and-a-die-roll, which could previously put a
+ * forest on bare grass.
+ */
+const TERRAIN_TYPE_BY_AREA_CODE: Partial<Record<string, TerrainNodeType>> = {
+    w: "forest",
+    h: "quarry",
+    m: "ore",
+};
 
-/** Poisson-disc-style rejection sampling over the generated land. */
-export function placeTerrainNodes(landmass: Landmass, random: RandomSource, options: TerrainNodeOptions = {}): TerrainNode[] {
+/** Poisson-disc-style rejection sampling over the generated land, one node per matching patch of ground. */
+export function placeTerrainNodes(landmass: Landmass, field: TerrainField, random: RandomSource, options: TerrainNodeOptions = {}): TerrainNode[] {
     const count = options.count ?? 32;
     const minimumDistance = options.minimumDistance ?? 5.5;
-    const maximumAttempts = options.maximumAttempts ?? count * 500;
+    const maximumAttempts = options.maximumAttempts ?? count * 2000;
     const nodes: TerrainNode[] = [];
 
     for (let attempt = 0; attempt < maximumAttempts && nodes.length < count; attempt++) {
         const point = { x: random.between(3, landmass.width - 3), y: random.between(3, landmass.height - 3) };
         if (!isLand(landmass, point) || nodes.some(node => pointDistance(node, point) < minimumDistance)) continue;
-        const terrain = terrainFor(random, landValueAt(landmass, point), point.y / landmass.height);
+        const terrain = TERRAIN_TYPE_BY_AREA_CODE[areaCodeAt(field, point)];
+        if (!terrain) continue;
         nodes.push({
             id: `terrain-${nodes.length}`,
             kind: "terrain",

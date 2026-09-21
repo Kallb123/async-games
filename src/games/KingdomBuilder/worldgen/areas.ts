@@ -173,7 +173,6 @@ export function areaForCode(code: string): AreaDefinition {
     if (area) return area;
     if (!loggedUnknownAreaCode) {
         loggedUnknownAreaCode = true;
-        // eslint-disable-next-line no-console
         console.warn(`Kingdom Builder: unknown terrain area code "${code}" — rendering as grass.`);
     }
     return AREA_BY_CODE.get(GRASS_CODE)!;
