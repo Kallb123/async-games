@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import type { ClientSession } from "mongoose";
 
 import { createWorld, foundSettlement } from "@/games/KingdomBuilder";
 import type { WorldNode } from "@/games/KingdomBuilder/worldgen/landmass";
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
     if ("error" in host) return host.error;
 
     const database = await dbConnect();
-    const created = await database.connection.transaction(async session => {
+    const created = await database.connection.transaction(async (session: ClientSession) => {
         const world = await createWorld(randomUUID(), session);
         const startingSite = world.nodes.find((node: WorldNode) => node.kind === "settlement" && node.siteType === "player-start");
         if (!startingSite) throw new Error("Generated Kingdom Builder world has no starting settlement");
