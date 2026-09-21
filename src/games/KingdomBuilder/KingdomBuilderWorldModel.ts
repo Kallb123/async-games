@@ -11,6 +11,7 @@ export interface IKingdomBuilderWorld {
     edges: WorldEdge[];
     fairness: FairnessReport;
     currentTick: number;
+    nextTickAt: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -59,10 +60,11 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     edges: { type: [WorldEdgeSchema], required: true },
     fairness: { type: FairnessSchema, required: true },
     currentTick: { type: Number, required: true, min: 0, default: 0 },
+    nextTickAt: { type: Date, required: true, default: Date.now },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });
-KingdomBuilderWorldSchema.index({ currentTick: 1, updatedAt: 1 });
+KingdomBuilderWorldSchema.index({ nextTickAt: 1, currentTick: 1 });
 
 export const KingdomBuilderWorldModel = models.KingdomBuilderWorld
     || model<IKingdomBuilderWorldDocument, IKingdomBuilderWorldModel>("KingdomBuilderWorld", KingdomBuilderWorldSchema);
