@@ -12,6 +12,8 @@ export class KingdomBuilderPersistenceError extends Error {
     }
 }
 
+export type KingdomBuilderSettlementKind = "first" | "expansion";
+
 export async function createWorld(seed: string, session?: ClientSession) {
     const normalisedSeed = seed.trim();
     if (!normalisedSeed) {
@@ -35,10 +37,17 @@ function createStartingTiles(): KingdomBuilderTile[] {
 }
 
 /**
- * Claims one generated player-start site. The unique world/owner and
- * world/node indexes are the final arbiter when concurrent claims race.
+ * Claims either a player's starting slot or their one expansion slot. Unique
+ * world/node and world/owner/settlement-number indexes arbitrate concurrent
+ * claims, so neither a site nor a player's second-settlement slot can race.
  */
-export async function foundSettlement(worldId: string, userId: string, siteId: string, session?: ClientSession) {
+export async function foundSettlement(
+    worldId: string,
+    userId: string,
+    siteId: string,
+    session?: ClientSession,
+    kind: KingdomBuilderSettlementKind = "first",
+) {
     if (!Types.ObjectId.isValid(worldId) || !userId.trim() || !siteId.trim()) {
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
     }
@@ -53,14 +62,22 @@ export async function foundSettlement(worldId: string, userId: string, siteId: s
     if (!site || site.kind !== "settlement") {
         throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement site not found in this world");
     }
-    if (site.siteType !== "player-start") {
-        throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "The site is not available for a first settlement");
+    const requiredSiteType = kind === "first" ? "player-start" : "expansion";
+    if (site.siteType !== requiredSiteType) {
+        throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", `The site is not available for ${kind === "first" ? "a first" : "an expansion"} settlement`);
+    }
+
+    if (kind === "first") {
+        const ownerQuery = KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId.trim() });
+        const existing = await (session ? ownerQuery.session(session) : ownerQuery);
+        if (existing) throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "This player already has a settlement in the world");
     }
 
     const values = {
         worldId: new Types.ObjectId(worldId),
         ownerId: userId.trim(),
         nodeId: siteId,
+        settlementNumber: kind === "first" ? 0 : 1,
         tiles: createStartingTiles(),
         resources: { wood: 0, stone: 0, iron: 0 },
     };

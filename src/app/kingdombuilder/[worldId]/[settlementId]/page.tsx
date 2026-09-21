@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useRef, useState } from "react";
+import { use, useState } from "react";
 
 import BuildRow from "@/components/ui/BuildRow";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
@@ -8,8 +8,8 @@ import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import Stat from "@/components/ui/Stat";
 import type { KingdomBuilderPrototypeBuilding, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
-import { REQUEST_TIMEOUT_MS } from "@/utils/hooks/fetchWithSessionRetry";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 
 import styles from "./page.module.css";
@@ -37,35 +37,17 @@ export default function KingdomBuilderSettlementPage({
     );
     const [selectedTile, setSelectedTile] = useState<number | null>(null);
     const [pending, setPending] = useState<KingdomBuilderPrototypeBuilding | null>(null);
-    const [message, setMessage] = useState<string | null>(null);
-    const submittingRef = useRef(false);
+    const { submit, isPending, message } = useJsonMutation<KingdomBuilderSettlementView>(endpoint, "That building could not be queued. Try again.");
 
     const queueBuilding = async (buildingType: KingdomBuilderPrototypeBuilding) => {
-        if (selectedTile === null || submittingRef.current) return;
-        submittingRef.current = true;
+        if (selectedTile === null) return;
         setPending(buildingType);
-        setMessage(null);
-        try {
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ tilePosition: selectedTile, buildingType }),
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            });
-            if (response.ok) {
-                setData(await response.json() as KingdomBuilderSettlementView);
-                setSelectedTile(null);
-            } else {
-                const body = await response.json().catch(() => ({})) as { error?: string };
-                setMessage(body.error ?? "That building could not be queued. Try again.");
-            }
-        } catch (error) {
-            console.error("Failed to queue a Kingdom Builder building", error);
-            setMessage("That building could not be queued. Check your connection and try again.");
-        } finally {
-            submittingRef.current = false;
-            setPending(null);
+        const body = await submit({ tilePosition: selectedTile, buildingType });
+        if (body) {
+            setData(body);
+            setSelectedTile(null);
         }
+        setPending(null);
     };
 
     const unavailable = status === 403 || status === 404;
@@ -74,7 +56,7 @@ export default function KingdomBuilderSettlementPage({
 
     return (
         <main>
-            <GameIdentityHeader backHref="/" backLabel="Back to my games" title="Kingdom Builder" subtitle="Your settlement" />
+            <GameIdentityHeader backHref={`/kingdombuilder/${worldId}`} backLabel="Back to world map" title="Kingdom Builder" subtitle="Your settlement" />
 
             {unavailable ? (
                 <Section>
@@ -139,7 +121,7 @@ export default function KingdomBuilderSettlementPage({
                                             name={BUILDING_DETAILS[buildingType].name}
                                             cost={BUILDING_DETAILS[buildingType].resource}
                                             tag={pending === buildingType ? "Queuing…" : "Build"}
-                                            disabled={selectedTile === null || pending !== null}
+                                            disabled={selectedTile === null || isPending}
                                             pending={pending === buildingType}
                                             onClick={() => queueBuilding(buildingType)}
                                         />
