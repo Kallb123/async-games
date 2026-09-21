@@ -48,6 +48,13 @@ describe("Kingdom Builder world generation", () => {
         }
     });
 
+    it("fails fast on a spent wall-clock budget rather than only on the attempt cap", () => {
+        // A generator that now rejects more edges per attempt needs a deadline,
+        // not just a count, or an unlucky seed can run long enough to outlive
+        // its caller's request — see the route's own maxDuration.
+        expect(() => generateWorld("budget-exhausted", { budgetMs: 0 })).toThrow(/timed out after 0 attempts/);
+    });
+
     it("derives route terrain from the ground the line actually crosses", () => {
         const field = fieldOf(5, 1, "wwwww");
         const result = edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 });

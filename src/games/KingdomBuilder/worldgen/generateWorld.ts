@@ -19,9 +19,14 @@ export interface GeneratedWorld {
 
 export interface GenerateWorldOptions {
     maximumAttempts?: number;
+    /** A wall-clock budget in milliseconds, on top of the attempt cap — real terrain rejects more edges than a nearest-node guess did, so a slow, unlucky run needs a deadline the way the tick sweeps do, not just a count. */
+    budgetMs?: number;
     terrain?: TerrainNodeOptions;
     settlements?: SettlementOptions;
 }
+
+/** Leaves headroom under `/api/newgame/kingdombuilder`'s own `maxDuration` for the rest of its transaction (founding the host's settlement). */
+const DEFAULT_GENERATION_BUDGET_MS = 45_000;
 
 /**
  * Generates the complete immutable world map. Failed layouts are retried with
@@ -35,9 +40,15 @@ export interface GenerateWorldOptions {
  */
 export function generateWorld(seed: string, options: GenerateWorldOptions = {}): GeneratedWorld {
     const maximumAttempts = options.maximumAttempts ?? 80;
+    const deadline = Date.now() + (options.budgetMs ?? DEFAULT_GENERATION_BUDGET_MS);
     let lastFailure = "no attempts made";
+    let attempt = 0;
 
-    for (let attempt = 0; attempt < maximumAttempts; attempt++) {
+    for (; attempt < maximumAttempts; attempt++) {
+        if (Date.now() >= deadline) {
+            lastFailure = `timed out after ${attempt} attempts`;
+            break;
+        }
         try {
             const random = createRandom(`${seed}:${attempt}`);
             const landmass = generateLandmass(random);
@@ -72,5 +83,5 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
         }
     }
 
-    throw new Error(`Unable to generate a fair world from seed "${seed}" after ${maximumAttempts} attempts: ${lastFailure}`);
+    throw new Error(`Unable to generate a fair world from seed "${seed}" after ${attempt} of up to ${maximumAttempts} attempts: ${lastFailure}`);
 }
