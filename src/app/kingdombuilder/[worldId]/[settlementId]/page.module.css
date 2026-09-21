@@ -1,0 +1,30 @@
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.tile {
+    aspect-ratio: 1;
+    min-width: 0;
+    border: 1.5px solid var(--ag-line);
+    border-radius: 14px;
+    background: var(--ag-surface);
+    color: var(--ag-ink);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+    font-family: var(--ag-font);
+}
+
+button.tile { cursor: pointer; }
+.selected { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
+.constructing { background: color-mix(in oklch, var(--ag-gold) 16%, var(--ag-surface)); }
+.mark { font-size: 24px; line-height: 1; }
+.name { font-size: 11px; line-height: 1.15; font-weight: 800; }
+.note { font-size: 9px; line-height: 1.15; font-weight: 600; color: var(--ag-ink-soft); }
+.status { margin: 0 0 10px; font: 600 12px/1.4 var(--ag-font); color: var(--ag-ink-soft); }
