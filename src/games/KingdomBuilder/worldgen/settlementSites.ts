@@ -1,6 +1,6 @@
 import { isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
-import { graphDistances } from "./graphConnectivity";
+import { graphDistances, weightedGraphDistances } from "./graphConnectivity";
 
 export interface SettlementOptions {
     playerStarts?: number;
@@ -43,10 +43,15 @@ export function placeSettlementSites(
     }));
 }
 
-function resourceScore(distances: ReadonlyMap<string, number>, terrainNodes: readonly TerrainNode[], resourceHops: number): number {
+/**
+ * Total yield reachable within a travel-cost budget (§3.3/§3.5.4) — measured
+ * in the same weighted cost §6.2's travel time resolves to, not hop count,
+ * now that an edge's cost comes from the ground it actually crosses.
+ */
+function resourceScore(costDistances: ReadonlyMap<string, number>, terrainNodes: readonly TerrainNode[], resourceReach: number): number {
     return terrainNodes.reduce((total, node) => {
-        const hops = distances.get(node.id);
-        return total + (hops !== undefined && hops <= resourceHops ? node.resourceYield : 0);
+        const cost = costDistances.get(node.id);
+        return total + (cost !== undefined && cost <= resourceReach ? node.resourceYield : 0);
     }, 0);
 }
 
@@ -57,11 +62,13 @@ export function checkSettlementFairness(
     options: Pick<SettlementOptions, "minimumStartHops" | "resourceHops" | "parityTolerance"> = {},
 ): FairnessReport {
     const minimumHops = options.minimumStartHops ?? 3;
-    const resourceHops = options.resourceHops ?? 3;
+    const resourceReach = options.resourceHops ?? 3;
     const parityTolerance = options.parityTolerance ?? 0.35;
     const starts = sites.filter(site => site.siteType === "player-start");
+    // Separation and cornering are topology (how many edges apart), so they stay hop-based; only the resource score is time-weighted.
     const hopMaps = new Map(starts.map(site => [site.id, graphDistances(site.id, edges)]));
-    const scores = Object.fromEntries(starts.map(site => [site.id, resourceScore(hopMaps.get(site.id)!, terrainNodes, resourceHops)]));
+    const costMaps = new Map(starts.map(site => [site.id, weightedGraphDistances(site.id, edges)]));
+    const scores = Object.fromEntries(starts.map(site => [site.id, resourceScore(costMaps.get(site.id)!, terrainNodes, resourceReach)]));
     const ordered = Object.values(scores).sort((a, b) => a - b);
     const median = ordered[Math.floor(ordered.length / 2)] ?? 0;
     const reasons: string[] = [];
@@ -88,11 +95,12 @@ export function assignFairStartingSites(
     playerStarts = 10,
     options: Pick<SettlementOptions, "minimumStartHops" | "resourceHops" | "parityTolerance"> = {},
 ): { sites: SettlementNode[]; fairness: FairnessReport } | undefined {
-    const resourceHops = options.resourceHops ?? 3;
+    const resourceReach = options.resourceHops ?? 3;
     const tolerance = options.parityTolerance ?? 0.35;
     const minimumHops = options.minimumStartHops ?? 3;
     const distances = new Map(sites.map(site => [site.id, graphDistances(site.id, edges)]));
-    const candidateScores = new Map(sites.map(site => [site.id, resourceScore(distances.get(site.id)!, terrainNodes, resourceHops)]));
+    const costDistances = new Map(sites.map(site => [site.id, weightedGraphDistances(site.id, edges)]));
+    const candidateScores = new Map(sites.map(site => [site.id, resourceScore(costDistances.get(site.id)!, terrainNodes, resourceReach)]));
     const orderedScores = [...candidateScores.values()].sort((a, b) => a - b);
     const median = orderedScores[Math.floor(orderedScores.length / 2)] ?? 0;
     const eligible = sites.filter(site => median === 0 || Math.abs(candidateScores.get(site.id)! - median) / median <= tolerance);

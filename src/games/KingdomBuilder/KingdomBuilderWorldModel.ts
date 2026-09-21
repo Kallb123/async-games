@@ -2,11 +2,21 @@ import { Document, Model, Schema, model, models } from "mongoose";
 
 import type { FairnessReport } from "./worldgen/settlementSites";
 import type { Landmass, WorldEdge, WorldNode } from "./worldgen/landmass";
+import type { OverlayPlacement } from "./worldgen/overlays";
+import type { TerrainField } from "./worldgen/terrainField";
 
 export interface IKingdomBuilderWorld {
     seed: string;
     generationAttempt: number;
     landmass: Landmass;
+    /**
+     * The generated ground (§3.5.2), written once at generation and never
+     * updated afterwards — a world generated before this landed simply has
+     * none, and is deliberately not backfilled (§3.5.6).
+     */
+    terrainField?: TerrainField;
+    /** The derived, load-bearing overlays (bridges, fords) the connectivity pass wrote (§3.5.3). */
+    overlays?: OverlayPlacement[];
     nodes: WorldNode[];
     edges: WorldEdge[];
     fairness: FairnessReport;
@@ -52,10 +62,25 @@ const FairnessSchema = new Schema<FairnessReport>({
     reasons: { type: [String], required: true },
 }, { _id: false });
 
+const TerrainFieldSchema = new Schema<TerrainField>({
+    columns: { type: Number, required: true },
+    rows: { type: Number, required: true },
+    tileSize: { type: Number, required: true },
+    codes: { type: String, required: true },
+}, { _id: false });
+
+const OverlayPlacementSchema = new Schema<OverlayPlacement>({
+    tile: { type: Number, required: true },
+    code: { type: String, required: true },
+    orientation: String,
+}, { _id: false });
+
 export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument>({
     seed: { type: String, required: true },
     generationAttempt: { type: Number, required: true, min: 0 },
     landmass: { type: LandmassSchema, required: true },
+    terrainField: { type: TerrainFieldSchema, required: false },
+    overlays: { type: [OverlayPlacementSchema], required: false, default: undefined },
     nodes: { type: [WorldNodeSchema], required: true },
     edges: { type: [WorldEdgeSchema], required: true },
     fairness: { type: FairnessSchema, required: true },

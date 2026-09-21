@@ -1,13 +1,17 @@
 import { connectWorldGraph, isConnected } from "./graphConnectivity";
 import { generateLandmass, type Landmass, type WorldEdge, type WorldNode } from "./landmass";
+import type { OverlayPlacement } from "./overlays";
 import { createRandom } from "./random";
 import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
+import { applySitesToTerrainField, generateBaseTerrainField, type TerrainField } from "./terrainField";
 import { placeTerrainNodes, type TerrainNodeOptions } from "./terrainNodes";
 
 export interface GeneratedWorld {
     seed: string;
     generationAttempt: number;
     landmass: Landmass;
+    terrainField: TerrainField;
+    overlays: OverlayPlacement[];
     nodes: WorldNode[];
     edges: WorldEdge[];
     fairness: FairnessReport;
@@ -15,27 +19,46 @@ export interface GeneratedWorld {
 
 export interface GenerateWorldOptions {
     maximumAttempts?: number;
+    /** A wall-clock budget in milliseconds, on top of the attempt cap — real terrain rejects more edges than a nearest-node guess did, so a slow, unlucky run needs a deadline the way the tick sweeps do, not just a count. */
+    budgetMs?: number;
     terrain?: TerrainNodeOptions;
     settlements?: SettlementOptions;
 }
 
+/** Leaves headroom under `/api/newgame/kingdombuilder`'s own `maxDuration` for the rest of its transaction (founding the host's settlement). */
+const DEFAULT_GENERATION_BUDGET_MS = 45_000;
+
 /**
  * Generates the complete immutable world map. Failed layouts are retried with
  * derived seeds, keeping the result reproducible from the stored root seed.
+ *
+ * Generation order (§3.5.2): the landmass and its ground come first — windows,
+ * then the water/river/beach passes — so terrain nodes can be placed on
+ * matching ground (§3.5.4) before settlement sites are chosen. Only once
+ * sites exist can the fields pass and the closing smoothing run, and only
+ * once the ground is final can the graph be connected over it.
  */
 export function generateWorld(seed: string, options: GenerateWorldOptions = {}): GeneratedWorld {
     const maximumAttempts = options.maximumAttempts ?? 80;
+    const deadline = Date.now() + (options.budgetMs ?? DEFAULT_GENERATION_BUDGET_MS);
     let lastFailure = "no attempts made";
+    let attempt = 0;
 
-    for (let attempt = 0; attempt < maximumAttempts; attempt++) {
+    for (; attempt < maximumAttempts; attempt++) {
+        if (Date.now() >= deadline) {
+            lastFailure = `timed out after ${attempt} attempts`;
+            break;
+        }
         try {
             const random = createRandom(`${seed}:${attempt}`);
             const landmass = generateLandmass(random);
-            const terrainNodes = placeTerrainNodes(landmass, random, options.terrain);
+            const { field: baseField } = generateBaseTerrainField(landmass, random);
+            const terrainNodes = placeTerrainNodes(landmass, baseField, random, options.terrain);
             const requestedStarts = options.settlements?.playerStarts ?? 10;
             const settlementSites = placeSettlementSites(landmass, terrainNodes, random, options.settlements);
+            const terrainField = applySitesToTerrainField(baseField, settlementSites);
             const nodes = [...terrainNodes, ...settlementSites];
-            const edges = connectWorldGraph(nodes, random);
+            const { edges, overlays } = connectWorldGraph(nodes, terrainField, random);
             if (!isConnected(nodes, edges)) {
                 lastFailure = "graph was disconnected";
                 continue;
@@ -45,11 +68,20 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
                 lastFailure = "no starting-site assignment passed the fairness constraints";
                 continue;
             }
-            return { seed, generationAttempt: attempt, landmass, nodes: [...terrainNodes, ...assignment.sites], edges, fairness: assignment.fairness };
+            return {
+                seed,
+                generationAttempt: attempt,
+                landmass,
+                terrainField,
+                overlays,
+                nodes: [...terrainNodes, ...assignment.sites],
+                edges,
+                fairness: assignment.fairness,
+            };
         } catch (error) {
             lastFailure = error instanceof Error ? error.message : String(error);
         }
     }
 
-    throw new Error(`Unable to generate a fair world from seed "${seed}" after ${maximumAttempts} attempts: ${lastFailure}`);
+    throw new Error(`Unable to generate a fair world from seed "${seed}" after ${attempt} of up to ${maximumAttempts} attempts: ${lastFailure}`);
 }

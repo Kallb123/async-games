@@ -7,6 +7,12 @@ import type { WorldNode } from "@/games/KingdomBuilder/worldgen/landmass";
 import { requireGameHost } from "@/utils/api/gameSetupRequest";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
+// World generation retries under its own wall-clock budget (see
+// generateWorld's DEFAULT_GENERATION_BUDGET_MS) before it ever gives up, so
+// this route needs more than the platform's unconfigured default to let that
+// budget actually run rather than being killed mid-transaction.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const host = await requireGameHost();

@@ -57,31 +57,47 @@ function interpolate(a: number, b: number, amount: number): number {
     return a + (b - a) * eased;
 }
 
-/** Builds a coherent value-noise island, with ocean forced around every edge. */
-export function generateLandmass(random: RandomSource, options: LandmassOptions = {}): Landmass {
-    const width = options.width ?? 100;
-    const height = options.height ?? 70;
-    const resolution = options.resolution ?? 48;
-    const landThreshold = options.landThreshold ?? 0.31;
-    const coarseSize = 9;
+/**
+ * A coherent value-noise grid: a coarse random lattice, bilinearly
+ * interpolated up to `columns` × `rows`. Shared by the landmass's own
+ * elevation field and terrainField.ts's moisture field, so both terrain
+ * inputs are the same kind of noise rather than two hand-rolled generators.
+ */
+export function coherentNoiseGrid(random: RandomSource, columns: number, rows: number, coarseSize = 9): number[] {
     const coarse = Array.from({ length: coarseSize * coarseSize }, () => random.next());
     const values: number[] = [];
 
-    for (let row = 0; row < resolution; row++) {
-        for (let column = 0; column < resolution; column++) {
-            const gx = (column / (resolution - 1)) * (coarseSize - 1);
-            const gy = (row / (resolution - 1)) * (coarseSize - 1);
+    for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+            const gx = (column / (columns - 1)) * (coarseSize - 1);
+            const gy = (row / (rows - 1)) * (coarseSize - 1);
             const x0 = Math.min(Math.floor(gx), coarseSize - 2);
             const y0 = Math.min(Math.floor(gy), coarseSize - 2);
             const tx = gx - x0;
             const ty = gy - y0;
             const top = interpolate(coarse[y0 * coarseSize + x0], coarse[y0 * coarseSize + x0 + 1], tx);
             const bottom = interpolate(coarse[(y0 + 1) * coarseSize + x0], coarse[(y0 + 1) * coarseSize + x0 + 1], tx);
-            const noise = interpolate(top, bottom, ty);
+            values.push(interpolate(top, bottom, ty));
+        }
+    }
+    return values;
+}
+
+/** Builds a coherent value-noise island, with ocean forced around every edge. */
+export function generateLandmass(random: RandomSource, options: LandmassOptions = {}): Landmass {
+    const width = options.width ?? 100;
+    const height = options.height ?? 70;
+    const resolution = options.resolution ?? 48;
+    const landThreshold = options.landThreshold ?? 0.31;
+    const noise = coherentNoiseGrid(random, resolution, resolution);
+    const values: number[] = [];
+
+    for (let row = 0; row < resolution; row++) {
+        for (let column = 0; column < resolution; column++) {
             const nx = (column / (resolution - 1)) * 2 - 1;
             const ny = (row / (resolution - 1)) * 2 - 1;
             const islandFalloff = Math.max(0, 1 - Math.pow(Math.hypot(nx, ny * 1.15), 1.7));
-            values.push(islandFalloff * (0.58 + noise * 0.42));
+            values.push(islandFalloff * (0.58 + noise[row * resolution + column] * 0.42));
         }
     }
 

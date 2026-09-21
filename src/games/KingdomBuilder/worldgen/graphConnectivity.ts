@@ -1,83 +1,138 @@
-import { pointDistance, type EdgeTerrain, type Point, type TerrainNode, type WorldEdge, type WorldNode } from "./landmass";
+import { pointDistance, type EdgeTerrain, type Point, type WorldEdge, type WorldNode } from "./landmass";
 import type { RandomSource } from "./random";
+import { areaWeightForCode } from "./areas";
+import { overlaysCrossing, type OverlayPlacement } from "./overlays";
+import { tileIndex, walkTileLine, type TerrainField } from "./terrainField";
 
 const edgeKey = (a: string, b: string): string => [a, b].sort().join("|");
 
-function riverCrossing(from: Point, to: Point, centreX: number): { crosses: boolean; atBridge: boolean } {
-    const crosses = (from.x - centreX) * (to.x - centreX) < 0;
-    const midpointY = (from.y + to.y) / 2;
-    return { crosses, atBridge: (midpointY >= 20 && midpointY <= 28) || (midpointY >= 43 && midpointY <= 51) };
+export interface EdgeCostResult {
+    cost: number;
+    terrain: EdgeTerrain;
+    passable: boolean;
+    /** Impassable tiles this edge crosses that only an overlay makes crossable — a bridge over river, a ford over lake. */
+    crossings: { tile: number; overlayCode: string }[];
 }
 
-function edgeTerrain(from: Point, to: Point, terrainNodes: readonly TerrainNode[], centreX: number): EdgeTerrain {
-    const midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-    // The landmass has one broad central river; its two bridge bands turn a
-    // crossing into a known, costly route rather than an arbitrary label.
-    const crossing = riverCrossing(from, to, centreX);
-    if (crossing.crosses && crossing.atBridge) return "river-crossing";
-    const nearest = [...terrainNodes].sort((a, b) => pointDistance(a, midpoint) - pointDistance(b, midpoint))[0];
-    if (!nearest || pointDistance(nearest, midpoint) > 10) return "plains";
-    if (nearest.terrain === "ore") return "mountain-pass";
-    if (nearest.terrain === "quarry") return "hill";
-    if (nearest.terrain === "forest") return "forest";
-    return "plains";
+/** §6.2's bands, read off the weight a tile actually carries rather than which area it is by name. */
+function edgeTerrainForWeight(weight: number): EdgeTerrain {
+    if (weight <= 1) return "plains";
+    if (weight <= 1.75) return "forest";
+    if (weight <= 3) return "hill";
+    return "mountain-pass";
 }
 
-export const movementCostFor = (terrain: EdgeTerrain): number => ({
-    plains: 1,
-    forest: 1.5,
-    hill: 2,
-    "mountain-pass": 3.5,
-    "river-crossing": 2.5,
-})[terrain];
+/**
+ * §3.5.4: an edge's cost is a walk of the tiles its straight line crosses,
+ * weighted by each tile's area (or the overlay overriding it), summed by the
+ * length of line inside each — a short edge over mountains can cost more
+ * than a long one over grass. A tile that is impassable with nothing able to
+ * cross it (ocean; a river or lake tile with no bridge/ford yet) makes the
+ * whole edge impassable, which is what keeps connectivity honestly
+ * water-aware rather than a label applied after the fact.
+ */
+export function edgeCostFor(field: TerrainField, from: Point, to: Point): EdgeCostResult {
+    const segments = walkTileLine(field, from, to);
+    const lengthByWeight = new Map<number, number>();
+    const crossings: EdgeCostResult["crossings"] = [];
+    let cost = 0;
 
-export function connectWorldGraph(nodes: readonly WorldNode[], random: RandomSource, extraEdgeRatio = 0.3): WorldEdge[] {
-    if (nodes.length < 2) return [];
+    for (const segment of segments) {
+        const tile = tileIndex(field, segment.col, segment.row);
+        const code = field.codes[tile];
+        const weight = areaWeightForCode(code);
+        if (weight === "impassable") {
+            const [overlay] = overlaysCrossing(code);
+            if (!overlay || overlay.movement.kind !== "passable") {
+                return { cost: Infinity, terrain: "plains", passable: false, crossings: [] };
+            }
+            cost += overlay.movement.multiplier * segment.length;
+            crossings.push({ tile, overlayCode: overlay.code });
+            continue;
+        }
+        cost += weight * segment.length;
+        lengthByWeight.set(weight, (lengthByWeight.get(weight) ?? 0) + segment.length);
+    }
+
+    if (crossings.length > 0) return { cost, terrain: "river-crossing", passable: true, crossings };
+
+    const entries = [...lengthByWeight.entries()];
+    if (entries.length === 0) return { cost, terrain: "plains", passable: true, crossings: [] };
+    const totalLength = entries.reduce((sum, [, length]) => sum + length, 0);
+    const meaningful = entries.filter(([, length]) => length / totalLength >= 0.2);
+    const dominant = meaningful.length > 0
+        ? meaningful.reduce((best, entry) => (entry[0] > best[0] ? entry : best))
+        : entries.reduce((best, entry) => (entry[1] > best[1] ? entry : best));
+    return { cost, terrain: edgeTerrainForWeight(dominant[0]), passable: true, crossings: [] };
+}
+
+export interface ConnectedGraph {
+    edges: WorldEdge[];
+    /** The bridge/ford this pass wrote on every crossing it used — §3.5.3's derived overlays are not a second source of truth. */
+    overlays: OverlayPlacement[];
+}
+
+/**
+ * Builds the world graph over the generated ground: a minimum spanning tree
+ * first (so nothing is an island), then extra edges for redundancy and
+ * chokepoints, exactly as before — the only change is that "can this edge
+ * exist at all, and what does it cost" now comes from walking real terrain
+ * (§3.5.4) instead of a nearest-node guess and a hard-coded river band.
+ */
+export function connectWorldGraph(nodes: readonly WorldNode[], field: TerrainField, random: RandomSource, extraEdgeRatio = 0.3): ConnectedGraph {
+    if (nodes.length < 2) return { edges: [], overlays: [] };
     const connected = new Set<string>([nodes[0].id]);
     const edges: WorldEdge[] = [];
     const keys = new Set<string>();
-    const terrainNodes = nodes.filter((node): node is TerrainNode => node.kind === "terrain");
-    const centreX = nodes.reduce((sum, node) => sum + node.x, 0) / nodes.length;
+    const overlaysByTile = new Map<number, OverlayPlacement>();
 
-    const addEdge = (from: WorldNode, to: WorldNode): void => {
-        const terrain = edgeTerrain(from, to, terrainNodes, centreX);
-        const key = edgeKey(from.id, to.id);
-        keys.add(key);
-        edges.push({ id: `edge-${edges.length}`, from: from.id, to: to.id, terrain, movementCost: movementCostFor(terrain), chokepoint: terrain === "mountain-pass" || terrain === "river-crossing" });
+    const addEdge = (from: WorldNode, to: WorldNode, result: EdgeCostResult): void => {
+        keys.add(edgeKey(from.id, to.id));
+        for (const crossing of result.crossings) {
+            if (!overlaysByTile.has(crossing.tile)) overlaysByTile.set(crossing.tile, { tile: crossing.tile, code: crossing.overlayCode });
+        }
+        edges.push({
+            id: `edge-${edges.length}`,
+            from: from.id,
+            to: to.id,
+            terrain: result.terrain,
+            movementCost: result.cost,
+            chokepoint: result.terrain === "mountain-pass" || result.terrain === "river-crossing",
+        });
     };
 
     // Prim's algorithm gives the shortest available bridge into the connected component.
     while (connected.size < nodes.length) {
-        let best: { from: WorldNode; to: WorldNode; distance: number } | undefined;
+        let best: { from: WorldNode; to: WorldNode; distance: number; result: EdgeCostResult } | undefined;
         for (const from of nodes) {
             if (!connected.has(from.id)) continue;
             for (const to of nodes) {
                 if (connected.has(to.id)) continue;
-                const crossing = riverCrossing(from, to, centreX);
-                if (crossing.crosses && !crossing.atBridge) continue;
+                const result = edgeCostFor(field, from, to);
+                if (!result.passable) continue;
                 const candidateDistance = pointDistance(from, to);
-                if (!best || candidateDistance < best.distance) best = { from, to, distance: candidateDistance };
+                if (!best || candidateDistance < best.distance) best = { from, to, distance: candidateDistance, result };
             }
         }
         if (!best) throw new Error("Unable to connect world graph");
-        addEdge(best.from, best.to);
+        addEdge(best.from, best.to, best.result);
         connected.add(best.to.id);
     }
 
-    const candidates: { from: WorldNode; to: WorldNode; distance: number }[] = [];
+    const candidates: { from: WorldNode; to: WorldNode; distance: number; result: EdgeCostResult }[] = [];
     for (let first = 0; first < nodes.length; first++) {
         for (let second = first + 1; second < nodes.length; second++) {
-            const crossing = riverCrossing(nodes[first], nodes[second], centreX);
-            if (!keys.has(edgeKey(nodes[first].id, nodes[second].id)) && (!crossing.crosses || crossing.atBridge)) {
-                candidates.push({ from: nodes[first], to: nodes[second], distance: pointDistance(nodes[first], nodes[second]) });
-            }
+            if (keys.has(edgeKey(nodes[first].id, nodes[second].id))) continue;
+            const result = edgeCostFor(field, nodes[first], nodes[second]);
+            if (!result.passable) continue;
+            candidates.push({ from: nodes[first], to: nodes[second], distance: pointDistance(nodes[first], nodes[second]), result });
         }
     }
     const extras = Math.round((nodes.length - 1) * extraEdgeRatio);
     for (const candidate of random.shuffle(candidates.sort((a, b) => a.distance - b.distance).slice(0, extras * 4)).slice(0, extras)) {
-        addEdge(candidate.from, candidate.to);
+        addEdge(candidate.from, candidate.to, candidate.result);
     }
-    return edges;
+    return { edges, overlays: [...overlaysByTile.values()] };
 }
 
 export function graphDistances(origin: string, edges: readonly WorldEdge[]): Map<string, number> {
@@ -91,6 +146,38 @@ export function graphDistances(origin: string, edges: readonly WorldEdge[]): Map
                 distances.set(neighbour, distances.get(current)! + 1);
                 queue.push(neighbour);
             }
+        }
+    }
+    return distances;
+}
+
+/**
+ * Same shape as graphDistances, but in travel cost rather than hop count —
+ * what §3.3's resource-parity scoring needs now that an edge's cost is
+ * observed off the ground it crosses (§3.5.4) rather than a flat "one hop".
+ */
+export function weightedGraphDistances(origin: string, edges: readonly WorldEdge[]): Map<string, number> {
+    const adjacency = new Map<string, { neighbour: string; cost: number }[]>();
+    for (const edge of edges) {
+        if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+        if (!adjacency.has(edge.to)) adjacency.set(edge.to, []);
+        adjacency.get(edge.from)!.push({ neighbour: edge.to, cost: edge.movementCost });
+        adjacency.get(edge.to)!.push({ neighbour: edge.from, cost: edge.movementCost });
+    }
+
+    const distances = new Map<string, number>([[origin, 0]]);
+    const visited = new Set<string>();
+    while (true) {
+        let currentId: string | undefined;
+        let currentDistance = Infinity;
+        for (const [id, distance] of distances) {
+            if (!visited.has(id) && distance < currentDistance) { currentId = id; currentDistance = distance; }
+        }
+        if (currentId === undefined) break;
+        visited.add(currentId);
+        for (const { neighbour, cost } of adjacency.get(currentId) ?? []) {
+            const candidate = currentDistance + cost;
+            if (candidate < (distances.get(neighbour) ?? Infinity)) distances.set(neighbour, candidate);
         }
     }
     return distances;

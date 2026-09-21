@@ -1,7 +1,9 @@
 # Kingdom Builder — Game Design Document
 
 **Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
-Milestone A's prototype and the world map that follows it are shipped, and
+Milestone A's prototype (PRs 1–5), the world map and multiple settlements
+(PR 6), worlds on the dashboard (PR 7), and the area registry and generated
+ground (PR 9) are shipped. PR 8 (more than one player in a world) is next;
 §11.3 is the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
@@ -1219,7 +1221,7 @@ wood/stone/iron tick up on their own, and queue one building — reachable
 only via a direct URL, not yet linked from the app's navigation or game
 library.
 
-**PR 1 — World generator (pure functions, no persistence, no UI)**
+**PR 1 — World generator (pure functions, no persistence, no UI)** — Shipped.
 Entirely new files under `src/games/KingdomBuilder/worldgen/`; nothing else
 in the repo imports this package yet, so the PR cannot regress anything and
 review is just the generator's own correctness and its unit tests.
@@ -1236,7 +1238,7 @@ review is just the generator's own correctness and its unit tests.
 6. Unit tests per step, plus one "generate 20 worlds, assert every one
    passes the fairness checks" test.
 
-**PR 2 — Persistence layer (schemas only, no routes)**
+**PR 2 — Persistence layer (schemas only, no routes)** — Shipped.
 Adds `KingdomBuilderWorldModel` (the generated graph plus the current tick
 number) and `KingdomBuilderSettlementModel` (owner, node id, 3×3 tile
 state) under `src/games/KingdomBuilder/`. New collections only — nothing
@@ -1247,7 +1249,7 @@ here touches `GameData` or any existing schema.
 4. `foundSettlement(worldId, userId, siteId)` for a player's first
    settlement.
 
-**PR 3 — Tick engine and a dormant cron route**
+**PR 3 — Tick engine and a dormant cron route** — Shipped.
 1. `applyTick(world)` — a pure function: add production, advance one step
    of in-flight construction. No movement or combat yet, since nothing can
    move or fight in Milestone A.
@@ -1256,7 +1258,7 @@ here touches `GameData` or any existing schema.
    — callable for manual/test exercising only.
 3. A route test exercising the auth gate the same way `turntimer`'s does.
 
-**PR 4 — Minimal prototype UI**
+**PR 4 — Minimal prototype UI** — Shipped.
 1. A settlement screen at a direct, unlinked route (e.g.
    `/kingdombuilder/[worldId]/[settlementId]`) rendering the 3×3 grid and
    resource counts, built from `Section` and `ag-*` classes per AGENTS.md
@@ -1265,7 +1267,7 @@ here touches `GameData` or any existing schema.
    settlement's owner may queue on it — a `locksmith` concern from day one).
 3. Wire the UI to refetch after a tick so a completed queue item shows up.
 
-**PR 5 — Turn it on**
+**PR 5 — Turn it on** — Shipped.
 The one PR in Milestone A allowed to touch shared files, because it's the
 PR that makes the prototype real:
 1. Add the tick route to `vercel.json`'s `crons`.
@@ -1293,13 +1295,13 @@ and **PR 22** the push-notification plumbing. Everything else stays inside
 `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 23's
 one-line entries in the guide and tutorial registries.
 
-- **PR 6 — World map view and multiple settlements.** Render the generated
-  graph and let a second settlement be founded elsewhere on it. No armies
+- **PR 6 — World map view and multiple settlements.** Shipped. Render the
+  generated graph and let a second settlement be founded elsewhere on it. No armies
   yet — a pure map-rendering PR, reusing
   `ClickableMapNode`/`MapEdges`/`BoardZoom` per §3.1. "Multiple settlements"
   here means a second settlement for the *same* player; the second *player*
   arrives in PR 8.
-- **PR 7 — Worlds on the dashboard.** Milestone A left a world reachable only
+- **PR 7 — Worlds on the dashboard.** Shipped. Milestone A left a world reachable only
   by its URL, and PR 5 registered Kingdom Builder in the game library — which
   is only the half that starts a *new* world. Nothing lists the worlds a
   player is already in, so closing the tab loses the world. This PR is the
@@ -1369,9 +1371,9 @@ one-line entries in the guide and tutorial registries.
      like every other setup screen).
   7. One `whatsNew.ts` line.
 
-- **PR 9 — The area registry and the generated ground.** §3.5.2 and §3.5.4,
-  with no art and no new pixels on screen: the world gains a ground truth, and
-  movement cost starts coming from it.
+- **PR 9 — The area registry and the generated ground.** Shipped. §3.5.2 and
+  §3.5.4, with no art and no new pixels on screen: the world gains a ground
+  truth, and movement cost starts coming from it.
   1. `areas.ts` — the `AREAS` registry itself, with the launch set's codes,
      weights, priorities, fallback colours and `placement` entries, and its
      guard test (unique codes, reserved retirements, every entry reachable by
