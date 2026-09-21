@@ -1,7 +1,8 @@
 # Kingdom Builder — Game Design Document
 
-**Status:** Concept, with time model (§5.5) and combat model (§7.6) decided —
-not yet scheduled for implementation.
+**Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
+Milestone A's prototype and the world map that follows it are shipped, and
+§11.3 is the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -766,7 +767,11 @@ game-design ones:
   foundation, but the *lifecycle* — who "owns" the game record, what a
   player leaving mid-season means, how `GameResult` and its stats map onto a
   season rather than a single win/loss — needs its own design pass before
-  implementation, not assumed from the single-match model.
+  implementation, not assumed from the single-match model. §11.3's PR 7 and
+  PR 8 are where that pass lands, and both answers keep the distinction: a
+  world is listed *beside* the turn lists rather than becoming a `GameData`,
+  and its seats fill over the life of the season rather than all at once at a
+  lobby's start.
 - **The scheduler.** §5.5's chosen tick model needs a recurring sweep across
   every active world, in the spirit of this app's existing cron-sweep
   patterns (see the `gremlin` reviewer's brief in AGENTS.md) but running
@@ -903,56 +908,133 @@ one player, no map, no armies.
 Each PR below is additive on top of the shipped prototype — new fields, new
 routes, new commands — so the same non-disruption property holds: none of
 them changes what Milestone A already does for a settlement sitting alone.
+Two of them reach into shared, cross-game surfaces, and they are deliberately
+the only two that do so mid-milestone: **PR 7** touches the home dashboard and
+the app rail, **PR 18** the push-notification plumbing. Everything else stays
+inside `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR
+19's one-line entries in the guide and tutorial registries.
 
 - **PR 6 — World map view and multiple settlements.** Render the generated
   graph and let a second settlement be founded elsewhere on it. No armies
-  yet — a pure map-rendering and multi-tenancy PR, reusing
-  `ClickableMapNode`/`MapEdges`/`BoardZoom` per §3.1.
-- **PR 7 — Barracks and units.** Unit types/levels (§6.1) and a training
+  yet — a pure map-rendering PR, reusing
+  `ClickableMapNode`/`MapEdges`/`BoardZoom` per §3.1. "Multiple settlements"
+  here means a second settlement for the *same* player; the second *player*
+  arrives in PR 8.
+- **PR 7 — Worlds on the dashboard.** Milestone A left a world reachable only
+  by its URL, and PR 5 registered Kingdom Builder in the game library — which
+  is only the half that starts a *new* world. Nothing lists the worlds a
+  player is already in, so closing the tab loses the world. This PR is the
+  missing half, and it leads the rest of Milestone B because every PR after
+  it is playtested by coming back to a world days later.
+  1. `worldSummaries(userId)` in the Kingdom Builder package: the player's
+     settlements read by `ownerId`, collapsed to one row per world. The
+     `{ ownerId: 1, worldId: 1 }` index it needs already exists from PR 2.
+  2. A `worlds` array on `IDashboardResponse`, filled in `buildDashboard`.
+     It is a read of its own rather than a fourth member of that function's
+     `Promise.all`, and it swallows its own failure to an empty list exactly
+     as `unreadChatCounts` does: a hiccup in Kingdom Builder's collections
+     must cost a Kingdom Builder row, not everybody's turn lists.
+  3. A `ListSection` of world rows on the dashboard, and the world in
+     `AppRail`'s game switcher — that switcher is "every game in play", so a
+     world missing from it is the same bug one layer up. Deliberately *not*
+     `MyTurnList`: a world has no `currentTurn` and never will (§5.5), so the
+     row's signal is the tick clock, the settlement count and what has
+     finished building since the last visit, not "your turn".
+  4. Reviewers: `rulebook` (shared dashboard shape and the response
+     contract), `gremlin` (an extra read on the most-hit route in the app,
+     plus the failure isolation above), `caveman` (reuse `ListSection` and
+     the `ag-*` list classes rather than growing a second turn list).
+  5. One `whatsNew.ts` line — the first player-visible change since the
+     prototype's own note.
+
+  Worth saying plainly what this isn't: a world does not become a `GameData`
+  document here, and no code learns to pretend it is one. The dashboard grows
+  a list served from Kingdom Builder's own collections, which is §10's
+  cardinality problem answered by shape rather than by squeezing a persistent
+  world into the single-match model.
+
+- **PR 8 — More than one player in a world.** The generator has placed ten
+  fair `player-start` sites since PR 1 (§3.3) and `foundSettlement` has taken
+  a `userId` since PR 2, but only ever one is claimed:
+  `/api/newgame/kingdombuilder` founds the host's settlement and the other
+  nine sites sit empty. Everything from PR 11 on is about doing something to
+  somebody, so this is the PR that supplies the somebody.
+  1. A roster on the world document — a seat per player, with the site they
+     claimed and when they joined — plus the join code and the `expiresAt`
+     reaping the existing lobby already models. Ten seats, per §1.
+  2. The setup screen gains `usePlayerList`/`UserInviteList` and a world
+     size, like every other game's setup screen, so a host can invite named
+     friends and not only share a code.
+  3. Joining claims a free `player-start` site and founds that player's first
+     settlement through the existing `foundSettlement(…, "first")` — whose
+     unique `{ worldId, nodeId }` and `{ worldId, ownerId, settlementNumber }`
+     indexes already arbitrate two players reaching for the same site in the
+     same second. The race is designed for, not new here.
+  4. A world stays open after it starts. Joining mid-season is the whole point
+     of §9's new-player protection, so a seat filling on day three is the
+     normal case rather than an edge one — which is why the existing
+     accept-then-start invitation flow is reused for the code, the invite rows
+     and the share link, but not for its "everyone has accepted, now begin"
+     gate or its `CreateGame` (that mints a `GameData`, and a world isn't
+     one — see PR 7).
+  5. The PR 7 dashboard row gains the seat count, and PR 6's world map shows
+     who owns which settlement.
+  6. Reviewers: `locksmith` (the join path is a signed-in stranger asking for
+     a seat in a world nobody offered them — the code, the seat cap and
+     one-settlement-per-owner are security boundaries now, not just data
+     rules), `croupier` (the moment a world holds two players, the map
+     response has to decide what each may see of the other; the fog-of-war
+     contract of PR 11 effectively starts here, before any army exists to
+     hide), `gremlin` (ten players claiming sites at once, and a seat filling
+     while a tick is mid-sweep), `rulebook` (the setup screen should now look
+     like every other setup screen).
+  7. One `whatsNew.ts` line.
+
+- **PR 9 — Barracks and units.** Unit types/levels (§6.1) and a training
   queue on the barracks tile. Units accumulate in a garrison; nothing can
   leave it yet.
-- **PR 8 — Army dispatch and movement.** A command to send a garrison (or
+- **PR 10 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, and a movement step in the tick engine
   using §6.2's terrain multipliers. Arrival does nothing special yet — this
   PR is purely "can an army cross the generated graph."
-- **PR 9 — Fog of war.** Redact in-transit armies from
+- **PR 11 — Fog of war.** Redact in-transit armies from
   `CreateDataResponse(viewerId)` for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
-- **PR 10 — Automatic siege on arrival.** Arrival at a hostile settlement
+- **PR 12 — Automatic siege on arrival.** Arrival at a hostile settlement
   opens a siege (§6.4/§8): debuffs, the grace period, and the two new
   player actions, "push the attack" and "sally out" — both stubbed to a
   placeholder resolution for now.
-- **PR 11 — Combat resolution.** The deterministic multi-round attrition
+- **PR 13 — Combat resolution.** The deterministic multi-round attrition
   engine with unit-type counters (§7.3/§7.6) as a pure function with its own
-  matchup-table test suite, then wired into the two actions PR 10 stubbed.
-- **PR 12 — Barbarian villages.** Generator gains barbarian site placement
-  (§3.4); combat resolution from PR 11 applies directly on arrival, no
+  matchup-table test suite, then wired into the two actions PR 12 stubbed.
+- **PR 14 — Barbarian villages.** Generator gains barbarian site placement
+  (§3.4); combat resolution from PR 13 applies directly on arrival, no
   siege phase, per §3.4's rule.
-- **PR 13 — Settlers and a second settlement.** The settler unit and a
+- **PR 15 — Settlers and a second settlement.** The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
-  type once PRs 6–8's map/movement/dispatch already exist.
-- **PR 14 — Market and trade.** Resource conversion and player-to-player
+  type once PRs 6–10's map/movement/dispatch already exist.
+- **PR 16 — Market and trade.** Resource conversion and player-to-player
   trade offers (§4.3) — a pure economy addition with no combat interaction.
-- **PR 15 — Victory, seasons, catch-up.** Season length, scoring, new-player
+- **PR 17 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
-- **PR 16 — Push notifications.** Siege-onset, attack-resolved and
+- **PR 18 — Push notifications.** Siege-onset, attack-resolved and
   construction-complete pushes over the app's existing FCM plumbing (§10).
   Held deliberately until last, since it's the one PR reaching into shared
   notification infrastructure, and it benefits from every event type above
   already existing to notify about.
-- **PR 17 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
+- **PR 19 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
   the `og-game-kingdombuilder.png` share card, and a final full five-reviewer
   pass — the "most games also want a guide/tutorial" convention in
   AGENTS.md, deliberately last rather than first since it documents
-  mechanics that were still moving through PRs 6–16.
+  mechanics that were still moving through PRs 6–18.
 
 ### 11.4 Ordering constraints
 
 Most of Milestone B can be resequenced to fit priorities without breaking
-anything — trade (PR 14) and seasons (PR 15) don't depend on each other, for
-instance, and either could move earlier or later freely. Three orderings
+anything — trade (PR 16) and seasons (PR 17) don't depend on each other, for
+instance, and either could move earlier or later freely. Four orderings
 are not negotiable, because each is a hard dependency rather than a
 priority call:
 
@@ -960,14 +1042,28 @@ priority call:
   nothing to turn on before the prototype exists, and it's also the last
   point at which every PR before it was, by construction, invisible to a
   player.
-- **PR 9 (fog of war) must land before or alongside PR 10 (siege).** Siege
+- **PR 8 (more than one player) must land before or alongside PR 11 (fog of
+  war), PR 12 (siege) and PR 17 (seasons).** An army cannot be hidden from
+  nobody, a player cannot lay siege to their own town, and scoring,
+  new-player protection and a leaderboard are all comparisons between
+  players — each of the three is untestable, not merely unexciting, in a
+  world of one. The PRs either side of them are genuinely fine solo: a
+  barracks trains and an army marches on an empty site without an opponent
+  (PRs 9–10), and PR 14's barbarians are neutral rather than player-owned, so
+  none of those forces the ordering on its own.
+- **PR 11 (fog of war) must land before or alongside PR 12 (siege).** Siege
   is only the game's warning system per §6.4 if armies were already hidden
   before it — shipping siege first would briefly make army movement visible
   by omission, which is a hidden-information regression even if temporary.
-- **PR 11 (combat resolution) must land before or alongside PR 12
+- **PR 13 (combat resolution) must land before or alongside PR 14
   (barbarians).** A barbarian village resolves combat immediately on
   arrival with no siege phase (§3.4), so it has nothing to call until the
   combat engine exists.
+
+PR 7 is the one with no hard dependency at all — it could sit anywhere in
+Milestone B, or could have sat alongside Milestone A. It leads the remaining
+work because it is what makes everything after it testable by a real player
+over real days, rather than by whoever still has the URL in their history.
 
 ---
 
