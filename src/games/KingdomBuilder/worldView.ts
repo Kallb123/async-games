@@ -4,10 +4,12 @@ import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex } from "
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, WorldEdge, WorldNode } from "./worldgen";
+import { completedBuildLevels } from "./worldSummaryTypes";
 
 export interface KingdomBuilderWorldView {
     worldId: string;
     currentTick: number;
+    completedBuildLevels: number;
     landmass: Landmass;
     nodes: WorldNode[];
     edges: WorldEdge[];
@@ -27,7 +29,7 @@ function validateWorldId(worldId: string) {
 export async function worldView(worldId: string, userId: string): Promise<KingdomBuilderWorldView> {
     validateWorldId(worldId);
     const settlements = await KingdomBuilderSettlementModel.find({ worldId })
-        .select({ ownerId: 1, nodeId: 1 })
+        .select({ ownerId: 1, nodeId: 1, tiles: 1 })
         .lean();
     if (!settlements.some(settlement => settlement.ownerId === userId)) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
@@ -41,6 +43,9 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     return {
         worldId,
         currentTick: world.currentTick,
+        completedBuildLevels: settlements
+            .filter(settlement => settlement.ownerId === userId)
+            .reduce((total, settlement) => total + completedBuildLevels(settlement.tiles ?? []), 0),
         landmass: world.landmass,
         nodes: world.nodes,
         edges: world.edges,

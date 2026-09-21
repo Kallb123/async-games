@@ -10,6 +10,7 @@ import { useDashboard } from "@/utils/hooks/useDashboard";
 import AppRail from "@/components/ui/AppRail";
 import WhatsNew from "@/components/ui/WhatsNew";
 import Link from "next/link";
+import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
 
 /**
  * The signed-in home screen. `HomeScreen` decides who gets this and who gets
@@ -41,12 +42,13 @@ export default function Dashboard() {
         <main className="ag-desk">
             <FcmTokenComp />
 
-            <AppRail myTurn={dashboard.myTurn} theirTurn={dashboard.theirTurn} />
+            <AppRail myTurn={dashboard.myTurn} theirTurn={dashboard.theirTurn} worlds={dashboard.worlds} />
 
             <div className="ag-desk-col ag-desk-col--main">
                 <MyTurnList games={dashboard.myTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
                 <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
                 <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
+                <KingdomBuilderWorldList worlds={dashboard.worlds} isLoading={isLoading} isRefreshing={isRefreshing} />
             </div>
 
             <aside className="ag-desk-col ag-desk-col--side">

@@ -16,6 +16,7 @@ vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/ap
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { InvitationModel } from '@/utils/mongodb/InvitationData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
+import { KingdomBuilderSettlementModel } from '@/games/KingdomBuilder';
 import {
     ANN, BOB, resetApiRouteStubs, seedChatMessage, seedChatReadMarker, seedSnakesAndLadders, stubClerkUsers,
 } from '@/utils/testing/apiRoute';
@@ -35,6 +36,9 @@ beforeEach(async () => {
     stubClerkUsers(ANN, BOB);
     vi.spyOn(InvitationModel, 'find').mockReturnValue({ exec: async () => [] } as never);
     vi.spyOn(GameResultModel, 'find').mockReturnValue({ sort: () => ({ exec: async () => [] }) } as never);
+    vi.spyOn(KingdomBuilderSettlementModel, 'find').mockReturnValue({
+        select: () => ({ lean: async () => [] }),
+    } as never);
 });
 
 describe('buildDashboard unread chat counts', () => {
@@ -89,5 +93,18 @@ describe('buildDashboard unread chat counts', () => {
         // with no count rather than a thrown request.
         expect(dashboard.myTurn).toHaveLength(1);
         expect(unreadCounts(dashboard).game_1).toBe(0);
+    });
+
+    it('still answers the turn lists when the Kingdom Builder read fails', async () => {
+        seedSnakesAndLadders({ gameId: 'game_1' });
+        vi.mocked(KingdomBuilderSettlementModel.find).mockImplementation(() => {
+            throw new Error('Kingdom Builder Mongo hiccup');
+        });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const dashboard = await buildDashboard(ANN.id);
+
+        expect(dashboard.myTurn).toHaveLength(1);
+        expect(dashboard.worlds).toEqual([]);
     });
 });

@@ -7,6 +7,7 @@ import { invitationToResponse, invitationUserIds } from '@/utils/games/invitatio
 import { buildUserDirectory, UserDirectory } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
 import type { ICompletedGame, IDashboardResponse, IGameResponse } from '@/utils/apiModels/GameDataApi';
+import { worldSummaries } from '@/games/KingdomBuilder';
 
 /**
  * Everything the home screen shows, read as one snapshot.
@@ -92,6 +93,15 @@ async function unreadChatCounts(userId: string, games: IGameDataDocument[]): Pro
     }
 }
 
+async function kingdomBuilderWorlds(userId: string) {
+    try {
+        return await worldSummaries(userId);
+    } catch (error) {
+        console.error(`Failed to read Kingdom Builder worlds for user ${userId}`, error);
+        return [];
+    }
+}
+
 function withUnreadChat(response: IGameResponse, counts: Map<string, number>): IGameResponse {
     return { ...response, unreadChatCount: counts.get(response.gameId) ?? 0 };
 }
@@ -125,9 +135,13 @@ export async function buildDashboard(userId: string): Promise<IDashboardResponse
     // Read separately from the Promise.all above, deliberately: a failure
     // here must not cost the turn lists and invitations that read just fine
     // (see unreadChatCounts).
-    const unreadCounts = await unreadChatCounts(userId, games);
+    const [unreadCounts, worlds] = await Promise.all([
+        unreadChatCounts(userId, games),
+        kingdomBuilderWorlds(userId),
+    ]);
 
     return {
+        worlds,
         myTurn: games.filter(game => game.currentTurn === userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
         theirTurn: games.filter(game => game.currentTurn !== userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
         incoming: invitations.filter(({ invite }) => invite.senderId !== userId).map(({ response }) => response),

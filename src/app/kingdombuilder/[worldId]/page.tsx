@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BoardZoom from "@/components/ui/BoardZoom";
@@ -16,6 +16,8 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { GAME_META } from "@/utils/ui/games";
+import { worldBuildsStorageKey } from "@/games/KingdomBuilder/worldSummaryTypes";
+import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
 import styles from "./page.module.css";
 
@@ -41,6 +43,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const { data, setData, isLoading, status } = useRefreshableData<KingdomBuilderWorldView>(endpoint, []);
     const [selectedSite, setSelectedSite] = useState<string | null>(null);
     const { submit, isPending: founding, message } = useJsonMutation<KingdomBuilderWorldView>(endpoint, "That site could not be claimed.");
+
+    useEffect(() => {
+        if (data) writeStoredValue(worldBuildsStorageKey(worldId), String(data.completedBuildLevels));
+    }, [data, worldId]);
 
     const map = useMemo(() => {
         if (!data) return null;

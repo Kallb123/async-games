@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode } from "react";
+import Link from "next/link";
 
 interface ListRowProps {
     /** Leads the row. A string is treated as a glyph and boxed in an
@@ -17,6 +18,9 @@ interface ListRowProps {
      *  tail of a long list, where the older rows are still worth listing but
      *  no longer worth a paragraph each. */
     compact?: boolean;
+    /** Makes the complete row a link without asking callers to duplicate its markup. */
+    href?: string;
+    onClick?: () => void;
 }
 
 /**
@@ -27,9 +31,8 @@ interface ListRowProps {
  * their classes live here once rather than in each caller. The `ag-list` card
  * around the rows belongs to `ListSection`.
  */
-export default function ListRow({ icon, title, sub, action, compact = false }: ListRowProps) {
-    return (
-        <div className={`ag-list-row${compact ? " ag-list-row--compact" : ""}`}>
+export default function ListRow({ icon, title, sub, action, compact = false, href, onClick }: ListRowProps) {
+    const content = <>
             {!compact && (typeof icon === "string"
                 ? <span className="ag-icon-box" aria-hidden>{icon}</span>
                 : icon)}
@@ -38,6 +41,9 @@ export default function ListRow({ icon, title, sub, action, compact = false }: L
                 {!compact && sub !== undefined && <div className="ag-list-row-sub">{sub}</div>}
             </div>
             {action}
-        </div>
-    );
+        </>;
+    const className = `ag-list-row${compact ? " ag-list-row--compact" : ""}`;
+    return href
+        ? <Link className={className} href={href} onClick={onClick}>{content}</Link>
+        : <div className={className}>{content}</div>;
 }

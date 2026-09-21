@@ -52,6 +52,9 @@ describe("Kingdom Builder prototype construction", () => {
         vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({
             select: vi.fn().mockReturnValue({ lean: worldLean }),
         } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({
+            select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([{ tiles }]) }),
+        } as never);
 
         const view = await queuePrototypeBuilding(worldId, settlementId, "owner", 0, "mine");
 
@@ -61,5 +64,6 @@ describe("Kingdom Builder prototype construction", () => {
             { new: true },
         );
         expect(view.tiles[0].construction).toEqual({ buildingType: "mine", ticksRemaining: 2 });
+        expect(view.completedBuildLevels).toBe(1);
     });
 });
