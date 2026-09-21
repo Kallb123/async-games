@@ -28,7 +28,7 @@ movement — build on those two decisions rather than re-opening them.
    - 3.2 [Procedural generation](#32-procedural-generation)
    - 3.3 [Balance constraints](#33-balance-constraints)
    - 3.4 [Barbarian villages](#34-barbarian-villages)
-   - 3.5 [Terrain areas and the tiled map](#35-terrain-areas-and-the-tiled-map)
+   - 3.5 [Terrain areas, overlays and the tiled map](#35-terrain-areas-overlays-and-the-tiled-map)
 4. [Settlements](#4-settlements)
    - 4.1 [Layout](#41-layout)
    - 4.2 [Buildings](#42-buildings)
@@ -143,7 +143,7 @@ A world is generated once, before any player joins, in roughly this order:
 2. **Place terrain nodes.** Scatter forest, quarry, and ore nodes using
    Poisson-disc sampling (even-ish spacing, no two nodes on top of each
    other), each on ground of its own kind — a forest node in woodland, a
-   quarry in hills, ore in mountains, read off the terrain field per §3.5.3.
+   quarry in hills, ore in mountains, read off the terrain field per §3.5.4.
 3. **Place settlement sites.** Reserve a fixed number of sites (more than
    the player cap, so a world doesn't look emptied-out with fewer than ten
    joiners) far enough apart that a full world doesn't crowd anyone's
@@ -158,7 +158,7 @@ A world is generated once, before any player joins, in roughly this order:
    design already used in World Domination — a mountain pass or river
    crossing that funnels an army is more interesting than an open field.
    Assign each edge a **terrain type** (plains, forest, hill, mountain,
-   river crossing) from the ground it actually crosses (§3.5.3), which §6.2
+   river crossing) from the ground it actually crosses (§3.5.4), which §6.2
    turns into its movement-cost multiplier.
 5. **Assign starting sites to players** at world-join time (not at
    generation time), by the fairness rule in §3.3.
@@ -231,13 +231,20 @@ each other:
   so a captured village is never just "another settlement" — it's a
   specific, scouted reason to go there.
 
-### 3.5 Terrain areas and the tiled map
+### 3.5 Terrain areas, overlays and the tiled map
 
 §3.1 settles what the *strategic* layer is — nodes and edges — and says nothing
 about what the ground between them looks like. This section is the ground: the
-generated **areas** (grass, woodland, hills, mountains, lakes, ocean) that the
-graph is drawn on top of, where their movement costs come from, and how they
-are painted from a hand-drawn tileset.
+generated **areas** the graph is drawn on top of (grass, fields, woodland,
+hills, mountains, water — an open list, not a fixed one), the **overlays** that
+sit on them (bridges, piers, roads, the landmarks that make a map feel like a
+place), where their movement costs come from, and how the whole lot is painted
+from hand-drawn tilesheets.
+
+Both lists are registries rather than enums, because an overworld map is never
+finished: the thing this section is most concerned with is that the tenth area
+and the twentieth landmark cost one entry each, not a pass through the
+generator, the cost walk, the renderer and the legend.
 
 #### 3.5.1 What exists today, and what's missing
 
@@ -271,53 +278,152 @@ is doing. Two consequences, and the second is the one that matters:
   that "an edge's cost is fixed and known to every player who can see the map";
   today the map is not enough to know it from.
 
-#### 3.5.2 The terrain field
+#### 3.5.2 Areas: an open registry
 
-One **area type per tile**, on a square grid over the same 100×70 coordinate
-space the map already uses. Square matters: the existing 48×48 field has cells
-2.08 × 1.46 world units, and art drawn for a square tile stretches visibly on
-those. A tile of 2 × 2 world units gives a 50 × 35 grid — 1,750 tiles, which is
-both a sane amount of art to author against and a small amount of data to ship.
+An **area** is the ground itself: exactly one per tile, mutually exclusive,
+tiling and autotiling, carrying a movement weight. The grid is square, over the
+same 100×70 coordinate space the map already uses — square matters, because the
+existing 48×48 field has cells 2.08 × 1.46 world units and art drawn for a
+square tile stretches visibly on those. A tile of 2 × 2 world units gives a
+50 × 35 grid: 1,750 tiles, a sane amount of art to author against and a small
+amount of data to ship.
 
-Six areas, which is the list in the brief plus the sea:
+The set of areas is **a registry, not a fixed list**. This is the part to get
+right, because a fantasy overworld accretes ground types forever — a desert
+arrives, then snow, then a blighted waste around whatever the late game turns
+out to be — and each one should be an entry, not an edit to the generator, the
+cost walk, the renderer and the legend.
 
-| Area | Movement | Notes |
+One entry per area, in `AREAS`:
+
+| Field | What it's for |
+|---|---|
+| `code` | One character. This is the persisted format — see the storage rule below |
+| `name` | What the legend calls it |
+| `weight` | Its §6.2 movement multiplier, or `impassable` |
+| `priority` | Paint order, which is also border-overlay order (§3.5.5) |
+| `fallbackColour` | The flat fill used when there is no art yet, or the sheet fails |
+| `placement` | How the generator decides a tile is this area (below) |
+
+**Nothing outside the registry may branch on an area by name.** The generator
+walks `placement`, the cost walk reads `weight`, the renderer reads `priority`
+and the manifest, and the legend lists the whole registry. That is what makes
+"add a desert" one entry plus one block of art, and it is the rule a reviewer
+should fail a PR over — a `switch` on area is how this ends up back where it
+started.
+
+The launch set, which is the brief's list plus what a map needs to make it
+read as a place:
+
+| Area | Weight | Placement |
 |---|---|---|
-| Ocean | Impassable | Water connected to the map border |
-| Lake | Impassable except at a crossing | Interior water; the source of §6.2's river crossings |
-| Grass | ×1 | The baseline, and what most of the middle of the map is |
-| Woodland | ×1.5 | Where forest nodes belong |
-| Hills | ×2 | Where quarry nodes belong |
-| Mountains | ×3.5 | Where ore nodes belong, and where chokepoints come from |
+| Ocean | Impassable | Water (below the land threshold) connected to the map border |
+| Lake | Impassable except at a crossing | Water not connected to the border |
+| River | Impassable except at a crossing | Traced downhill from high ground to the sea, one tile wide |
+| Beach | ×1 | The land band where the map meets ocean — derived, not noise |
+| Grass | ×1 | The baseline: middling elevation, middling moisture |
+| Fields | ×1 | Grass within a short radius of an occupied or barbarian site |
+| Woodland | ×1.5 | Middling elevation, high moisture |
+| Hills | ×2 | Upper-middle elevation |
+| Mountains | ×3.5 | High elevation |
+| Marsh | ×2.5 | Low elevation, very high moisture, near water |
 
-Generated from the same seeded run, so a world is still reproducible from its
-stored seed alone:
+Later, each one entry and one block of art: desert and dunes, tundra and snow,
+orchard, jungle, volcanic waste, whatever a season's theme wants. Nothing below
+this line needs to know they arrived.
 
-1. **Elevation** is the existing noise field, kept as-is — nothing about
-   land/water or the current fairness behaviour needs to move.
-2. **Moisture** is a second, independently-seeded field at the same resolution,
-   which is what separates woodland from grass at the same elevation.
-3. **Area per tile** is a lookup on the pair: below the land threshold is
-   water; then high elevation is mountains, upper-middle is hills, and the rest
-   is woodland or grass on moisture. The thresholds are one table in one file,
-   because they are the whole feel of the map and will be tuned by looking at
-   generated worlds rather than reasoned about here.
-4. **Ocean and lake are the same water, told apart by a flood fill** from the
-   map border: water reachable from the edge of the world is ocean, water that
-   isn't is a lake. That is also what makes lakes *placeable* rather than
-   incidental — a basin the noise produces anywhere inland becomes one.
-5. **A smoothing pass** (a couple of rounds of majority-of-neighbours) removes
-   single stray tiles, because one mountain tile alone in a field is noise
-   rather than terrain, and because every stray tile is also a tile the border
-   art has to make sense of.
+`placement` covers the two shapes those rules come in, which is the whole
+reason it is a field rather than one big lookup:
 
-The grid is stored on the world document as **one character per tile in a
-single string** (`"gggwwhh…"`, row-major, 1,750 characters) rather than an
-array of 1,750 numbers: it is smaller on the wire, it compresses well, and it
-is legible in a shell when a generated world looks wrong. It is written once at
-generation and never updated, so nothing has to reason about a partial write.
+- **A window on the noise** — an elevation range and a moisture range. Ocean,
+  grass, woodland, hills, mountains, marsh are all this, and a new area of this
+  kind is genuinely one entry.
+- **A pass** — a small function run after the windows, for the areas that are
+  about *relationships* rather than values: the border flood fill that tells
+  ocean from lake, the downhill trace that carves rivers, the shore band that
+  lays beach where land meets ocean, and the radius that paints fields around
+  inhabited sites. Each is a named function the registry points at, tested on
+  its own.
 
-#### 3.5.3 Areas decide movement cost
+So generation order gains a step: noise → windows → passes → smoothing, and
+**fields run after settlement sites are placed**, because "someone farms here"
+is a fact about the sites, not about the noise. A couple of rounds of
+majority-of-neighbours smoothing finishes, since one stray mountain tile in a
+field is noise rather than terrain, and every stray tile is also a tile the
+border art has to make sense of.
+
+**Storage, and the one rule that matters.** The grid is stored on the world
+document as one character per tile in a single string (`"gggwwhh…"`, row-major,
+1,750 characters) — smaller on the wire than 1,750 numbers, compresses well,
+and legible in a shell when a generated world looks wrong. Which makes those
+codes a persisted wire format, so:
+
+- **Codes are append-only. Never reused, never renamed.** Reusing a retired
+  area's letter silently rewrites the ground under every world already stored.
+  A retired area keeps its code reserved in the registry with a note.
+- **An unknown code must never throw.** During a rolling deploy an older
+  instance can read a world a newer one generated, so an unrecognised character
+  renders as neutral ground at grass weight and logs once. A map that draws
+  something slightly wrong for a minute beats a map that 500s.
+- Single characters cap the registry at the printable ASCII range, which is far
+  more areas than this game will ever have. If it were ever reached the format
+  would go to two characters per tile, which is a migration — which is the real
+  reason for the append-only discipline.
+
+#### 3.5.3 The overlay layer: what sits on the ground
+
+Bridges and piers are not areas. A bridge is *over* a river, a pier sticks out
+*into* a lake, and a road runs *along* grass — each one is a thing on top of
+ground that still exists underneath it, and forcing them into the area grid
+would mean an area per combination ("river with a bridge", "grass with a road
+and a signpost") which is the combinatorial mess §3.5.5 avoids for borders.
+
+So there is a second, **sparse overlay layer**: a list of
+`{ tile, code, orientation? }`, not a full grid, because overlays are rare —
+tens of entries against 1,750 tiles. It has its own registry, `OVERLAYS`, with
+the same "nothing branches on it by name" rule, and two things an area entry
+doesn't have:
+
+- **A movement effect, stated explicitly**: `passable` (a bridge makes an
+  impassable tile crossable at a stated weight), `weight` (a road is faster
+  than the ground it runs on), or `none`. Most overlays are `none`, and saying
+  so in the entry is the point — a decorative ruin that quietly changed a
+  travel time would be a genuinely nasty bug to find.
+- **A placement source**, because overlays arrive two ways: *derived*, from
+  something the generator already worked out, or *scattered*, by a seeded pass
+  with rules.
+
+The launch vocabulary:
+
+| Overlay | Movement | Where it comes from |
+|---|---|---|
+| Bridge | Makes river/lake tiles passable at ×2.5 | Derived: the crossing tiles §3.5.4's connectivity pass already found |
+| Ford | Passable at ×2 | Derived: a crossing at a shallow, narrow point instead of a bridge |
+| Pier | None — it is a landmark, not a route | Derived: a shore tile beside a settlement site on the coast |
+| Road | ×1 whatever the ground beneath it, and never more than that ground alone would cost | Derived: the tiles under an edge between two occupied settlements |
+| Ruins | None | Scattered: grass or woodland, away from sites |
+| Standing stones | None | Scattered: hills, away from fields |
+| Shipwreck | None | Scattered: ocean tiles near the shore |
+| Signpost | None | Derived: a tile where three or more edges meet |
+| Watchtower | None | Scattered: a high tile with a wide view |
+
+Later, the same way: windmills, farmsteads beside fields, a lighthouse on a
+headland, mine heads at ore nodes, a wizard's tower where the season's theme
+wants one. Each is one registry entry, one art entry, and — if it is scattered
+rather than derived — one small placement rule.
+
+Two properties worth stating because they are what keep this layer honest:
+
+- **Derived overlays are not a second source of truth.** A bridge exists
+  *because* connectivity made a river crossing there; it is written in the same
+  generation pass, from the same decision, so the map cannot show a bridge
+  where an army cannot cross, or a crossing with no bridge drawn.
+- **Overlays are generated once and stored, not recomputed per render.** The
+  client draws what it is given. If player-built roads or bridges ever arrive
+  (§4.4's expansion is the obvious hook), they are new entries appended to this
+  same list, which is why it is a list and not a derived function.
+
+#### 3.5.4 Areas and overlays decide movement cost
 
 This is the point of the field, not a side effect of drawing it. §6.2's
 multipliers stop being a label on an edge and become **weights on the ground
@@ -325,20 +431,22 @@ the edge crosses**:
 
 - An edge's cost is a walk of the tiles its straight line passes through
   (a supercover line, so no diagonal slips between two tiles), summing each
-  tile's multiplier weighted by the length of line inside it. A short edge over
-  mountains can cost more than a long one over grass, which is exactly the
-  "three hops is never three hours" claim §6.2 makes.
+  tile's weight — the area's, or the overlay's where one overrides it — by the
+  length of line inside the tile. A short edge over mountains can cost more
+  than a long one over grass, which is exactly the "three hops is never three
+  hours" claim §6.2 makes.
 - `EdgeTerrain` survives as a **derived label** — the most expensive area the
   edge crosses a meaningful share of — so `MapEdges`, the edge's UI copy and
   `chokepoint` all keep working unchanged, and a "mountain pass" edge is now
   one the player can see crossing mountains.
 - **Water is impassable, and that is where crossings come from.** An edge whose
   walk touches ocean is rejected outright during connectivity; an edge clipping
-  one or two lake tiles at a narrow point becomes a `river-crossing`, keeping
-  its higher multiplier and its `chokepoint` flag. The synthetic centre-line
-  river and its two hard-coded bridge bands go away entirely — the funnels
-  become real water in a real place, drawn on the map, rather than an invisible
-  rule.
+  a river or a lake at a narrow point becomes a `river-crossing`, keeping its
+  higher multiplier and its `chokepoint` flag, and gets a bridge or ford
+  overlay written on those tiles in the same pass (§3.5.3). The synthetic
+  centre-line river and its two hard-coded bridge bands go away entirely — the
+  funnels become real water in a real place, with something drawn across it,
+  rather than an invisible rule.
 - **Terrain nodes sit on matching ground.** A forest node is placed on a
   woodland tile, a quarry on hills, ore on mountains — read off the field
   instead of `terrainFor`'s elevation-and-a-die-roll, which today can put a
@@ -352,59 +460,100 @@ the map is information — but it means §3.3's parity band is doing more work, 
 the fairness test that generates 20 worlds needs to assert on *time-weighted*
 reachability once cost comes from terrain, not just on hop-count reachability.
 
-#### 3.5.4 The tileset and its manifest
+#### 3.5.5 The tilesheets and their manifest
 
-The art is a **single tilesheet PNG**: a grid of equal squares, one file for
-all six areas and their borders. It lives at
-`art-masters/kingdombuilder/terrain-tiles.png` with the served copy at
-`public/art/kingdombuilder/terrain-tiles.png`, per the art pipeline in
-AGENTS.md — save both, run `npm run optimise-art`, commit what it writes.
+Art is **a list of sheets, not one sheet.** Each is a grid of equal tiles, and
+each declares its own tile size, because art arrives in batches over months and
+the batch that brings a desert has no reason to match the pixel grid of the
+batch that brought the sea. Sheets live at
+`art-masters/kingdombuilder/<name>.png` with the served copy at
+`public/art/kingdombuilder/<name>.png`, per the art pipeline in AGENTS.md —
+save both, run `npm run optimise-art`, commit what it writes.
 
 **Borders are autotiled, not authored per pair.** Each tile asks which of its
 four neighbours are the *same* area as itself; those four yes/nos are a 4-bit
 mask, 0–15, and the mask picks which of that area's 16 variants to draw. The
 alternative — a bespoke transition strip for every pair of areas that can meet
-— is fifteen pairs of sets for six areas, and is how a hand-drawn tileset turns
-into a month of work. Instead each area draws its own edge, over the top of the
-area beneath it, in a fixed priority order: ocean, lake, grass, woodland,
-hills, mountains. Sixteen tiles per area, plus a couple of extra plain-fill
-variants so a big field of grass doesn't visibly repeat (picked by a seeded hash
-of the tile's coordinates, so it is stable across renders and across players).
+— is 45 pairs for ten areas and grows as the square of the registry, which is
+how a hand-drawn tileset turns into a year of work. Instead each area draws its
+own edge over the area beneath it, in the registry's `priority` order, so a new
+area costs 16 tiles and no new pairings at all.
 
-**Which square is which is declared, not guessed.** A manifest —
-`tileset.ts`, beside the game's `meta.ts` — is the single source of truth:
+**Which square is which is declared, not guessed.** The manifest —
+`tileset.ts`, beside the game's `meta.ts` — is the single source of truth, and
+has two halves:
 
-- the sheet's path, its tile size in pixels, and its columns and rows;
-- per area: the 16 mask variants, as either an origin plus a declared order
-  (for a sheet laid out in a conventional 4×4 block) or an explicit list of
-  sheet indexes (for a sheet laid out however the artist found natural);
-- per area: any extra fill variants, and a **flat fallback colour**;
-- nothing else. No behaviour, no rule, no cost — the manifest is where the art
-  is described and the terrain table (§3.5.2) is where the game is.
+- **The sheets.** Per sheet: its path, its **tile width and height in pixels**,
+  and its `margin` and `spacing` (the outer border and inter-tile gutter that
+  real tilesheets usually have). Columns and rows are derived from the image's
+  own dimensions, so they cannot disagree with the file.
+- **The tiles each registry entry uses**, as `{ sheet, index }` references. The
+  shape of that reference is one of four **layouts**, and the same four serve
+  areas and overlays both:
+  - `mask16` — sixteen variants picked by the neighbour mask. Areas use this,
+    and so does anything that connects to itself, like roads.
+  - `orientation` — variants picked by the direction of the thing the tile sits
+    on: a bridge across a river runs the way the crossing runs.
+  - `variants` — a handful of interchangeable tiles, picked by a seeded hash of
+    the tile's coordinates, so a big field of grass doesn't visibly repeat and
+    the pick is stable across renders and across players.
+  - `single` — one tile, for a landmark that only looks one way.
 
-That means the art can be laid out any way at all, which is the right trade
-when the art arrives from outside the codebase. The cost is that somebody has
-to write down 96-odd sheet coordinates, which nobody should do by counting
-squares in an image viewer. So the manifest is authored with a **tileset
-mapper** at `/admin/kingdombuilder-tiles`, in exactly the spirit of the Race
-Cars track editor (`docs/admin-tools.md`): it loads the sheet, overlays the tile
-grid with indexes, and lets you click a square, say which area and which mask
-role it is, and copy out the finished `tileset.ts`. Like the track editor it is
-a build-time authoring aid behind `AdminPage`'s client-only gate — it persists
-nothing, there is no `/api/admin` route behind it, and what it produces is a
-file a human commits.
+Nothing else goes in the manifest: no weight, no placement rule, no cost. The
+manifest describes the art; the registries (§3.5.2, §3.5.3) are the game. An
+area with no manifest entry yet is drawn in its fallback colour, which is what
+lets a registry entry land before its art does.
 
-A guard test keeps the manifest honest: every area declares all 16 mask
-variants, every declared index lands inside the sheet's bounds, and every area
-in the terrain table appears in the manifest. That is the same
-"registry-and-its-test" shape the repo already uses for game guides and themes.
+**The mapper.** Writing down a few hundred sheet coordinates by counting
+squares in an image viewer is not a job for a human, so the manifest is
+authored at `/admin/kingdombuilder-tiles`, in the spirit of the Race Cars track
+editor (`docs/admin-tools.md`):
 
-#### 3.5.5 Rendering beneath the node graph
+- **Load a sheet**, either from `public/art` if it is already committed or
+  straight off the disk with a file picker, so a sheet can be mapped the
+  minute it arrives and before anything is committed anywhere.
+- **Pick the tile size in pixels** — width and height independently, plus
+  margin and spacing — with the grid overlay redrawing live so misalignment is
+  obvious rather than discovered later. It offers the sizes that divide the
+  image evenly in the usual range as one-tap suggestions, warns when the
+  current numbers leave a partial row or column (the classic sign that the
+  sheet has a gutter you haven't told it about), and remembers the last values
+  through `useStoredValue` so a second sheet from the same artist starts where
+  the first left off.
+- **Assign squares**: click a tile, say which registry entry it belongs to and
+  which role it plays in that entry's layout (which mask index, which
+  orientation, or "another variant").
+- **Copy out the finished `tileset.ts`.** Like the track editor it is a
+  build-time authoring aid behind `AdminPage`'s client-only gate — it persists
+  nothing, there is no `/api/admin` route behind it, and what it produces is a
+  file a human commits.
+
+Worth separating two things that both call themselves a tile size: a **world
+tile** is 2 × 2 world units of ground (§3.5.2) and never changes; a **sheet
+tile** is however many pixels of art the artist drew, per sheet. The pixel size
+decides only how the sheet is cut and how large the composite is drawn — art at
+16px and art at 64px describe the same patch of ground. Where sheets disagree,
+the composite is rendered at the largest declared tile size, so a later, more
+detailed sheet is never downsampled to match the first one that arrived.
+
+A guard test keeps the manifest honest: every referenced sheet exists, every
+index lands inside the sheet's derived bounds, every `mask16` entry declares all
+sixteen, every registry code is unique and every retired code stays reserved.
+That is the same "registry-and-its-test" shape the repo already uses for game
+guides and themes.
+
+
+#### 3.5.6 Rendering beneath the node graph
 
 The interactive layer does not change. `MapEdges`, `ClickableMapNode`,
 `MapLabelLayer` and `BoardZoom` stay exactly as they are, and the tiles go
-*under* them — "beneath the node graph" both visually and in the DOM. Three
-ways to draw 1,750 tiles:
+*under* them — "beneath the node graph" both visually and in the DOM.
+
+The draw is three passes over one surface, in this order: every area's fill in
+`priority` order, then every area's border-overlay tiles in that same order,
+then the sparse overlay list (§3.5.3). All three iterate the registries, so an
+area or an overlay added later is drawn without this code being touched. Three
+ways to put the result on screen:
 
 | Approach | Verdict |
 |---|---|
@@ -413,7 +562,7 @@ ways to draw 1,750 tiles:
 | Composite the tiles into an offscreen `<canvas>` once, and place the result in the `<svg>` as a single `<image>` | One raster, one DOM node, and the tile loop runs once per world rather than once per paint |
 
 **Decision: the third.** An offscreen canvas is the compositor, not a layer on
-screen: the tile loop draws into it once, and what goes into the map is one
+screen: the three passes draw into it once, and what goes into the map is one
 `<image href={…} width={100} height={70}>` as the first child of the existing
 `<svg>`, before `MapEdges`. That is the same single-`<image>` board World
 Domination and Outbreak already draw, which matters more than it sounds:
@@ -432,11 +581,13 @@ it.
 
 Two fallbacks, both mandatory rather than nice-to-have:
 
-- **No sheet, or a sheet that failed to load** → fill each tile with its
-  manifest fallback colour, in the same canvas pass. This is what makes the
-  areas shippable before any art exists at all, and it is also the honest
-  answer to a 404 on a phone with a bad connection: a coarse but correct map,
-  not an empty frame.
+- **No sheet, an entry with no art yet, or a sheet that failed to load** →
+  fill those tiles with the registry's fallback colour, in the same pass. This
+  is what makes the areas shippable before any art exists at all, what lets a
+  new area land ahead of its tiles, and the honest answer to a 404 on a phone
+  with a bad connection: a coarse but correct map, not an empty frame. An
+  overlay with no art draws nothing rather than a coloured square — a missing
+  bridge should read as "not drawn yet", not as a mystery block on the river.
 - **A world with no terrain field** — every world generated before this lands —
   → keep drawing today's flat silhouette from `landmass.values`. The field is
   written at generation, so old worlds simply don't have one, and they are
@@ -448,8 +599,10 @@ Two fallbacks, both mandatory rather than nice-to-have:
 
 The map's own accessibility doesn't change: the `<svg>` keeps its `role="img"`
 and label, and the tiles are decoration under it — a screen reader has never
-been reading the silhouette. The legend gains the six areas, because a colour
-that means something to a sighted player should be named somewhere.
+been reading the silhouette. The legend is generated from the registry rather
+than hand-written, because a colour that means something to a sighted player
+should be named somewhere, and a hand-written legend is the first thing to go
+stale the next time an area is added.
 
 ---
 
@@ -686,7 +839,7 @@ striking power and response time.
 
 Each edge also carries a **terrain movement-cost multiplier**, applied on top
 of distance rather than instead of it. The figures below are per-tile weights:
-an edge's multiplier is the walk of the terrain tiles its line crosses (§3.5.3),
+an edge's multiplier is the walk of the terrain tiles its line crosses (§3.5.4),
 so they describe ground the player can see rather than a label on a line:
 
 | Terrain | Multiplier | Notes |
@@ -1136,8 +1289,8 @@ them changes what Milestone A already does for a settlement sitting alone.
 Three of them reach outside Kingdom Builder's own files, and they are
 deliberately the only three: **PR 7** touches the home dashboard and the app
 rail, **PR 11** adds a page to `/admin` and its entry in the admin-tools doc,
-and **PR 21** the push-notification plumbing. Everything else stays inside
-`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 22's
+and **PR 22** the push-notification plumbing. Everything else stays inside
+`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 23's
 one-line entries in the guide and tutorial registries.
 
 - **PR 6 — World map view and multiple settlements.** Render the generated
@@ -1183,7 +1336,7 @@ one-line entries in the guide and tutorial registries.
   fair `player-start` sites since PR 1 (§3.3) and `foundSettlement` has taken
   a `userId` since PR 2, but only ever one is claimed:
   `/api/newgame/kingdombuilder` founds the host's settlement and the other
-  nine sites sit empty. Everything from PR 13 on is about doing something to
+  nine sites sit empty. Everything from PR 14 on is about doing something to
   somebody, so this is the PR that supplies the somebody.
   1. A roster on the world document — a seat per player, with the site they
      claimed and when they joined — plus the join code and the `expiresAt`
@@ -1210,120 +1363,160 @@ one-line entries in the guide and tutorial registries.
      one-settlement-per-owner are security boundaries now, not just data
      rules), `croupier` (the moment a world holds two players, the map
      response has to decide what each may see of the other; the fog-of-war
-     contract of PR 14 effectively starts here, before any army exists to
+     contract of PR 15 effectively starts here, before any army exists to
      hide), `gremlin` (ten players claiming sites at once, and a seat filling
      while a tick is mid-sweep), `rulebook` (the setup screen should now look
      like every other setup screen).
   7. One `whatsNew.ts` line.
 
-- **PR 9 — Terrain areas in the generator.** §3.5.2 and §3.5.3, with no art
-  and no new pixels on screen: the world gains a ground truth, and movement
-  cost starts coming from it.
-  1. `terrainField.ts` in `worldgen/` — the moisture field, the
-     elevation × moisture area lookup, the border flood fill that tells a lake
-     from the ocean, and the smoothing pass. Pure functions, seeded, unit
-     tested per step like every other generator file.
-  2. The field on the world document as the one-character-per-tile string of
-     §3.5.2, written by `createWorld` and never updated afterwards.
-  3. `edgeCostFor(field, from, to)` — the supercover tile walk and the weighted
-     sum — replacing `edgeTerrain`'s nearest-node guess and deleting the
-     synthetic centre-line river and its two hard-coded bridge bands.
-     `EdgeTerrain` stays as the derived label, so nothing downstream of it
-     changes shape.
-  4. Connectivity becomes water-aware: an edge whose walk touches ocean is
-     never offered to Prim's, and one clipping a lake at a pinch is a
+- **PR 9 — The area registry and the generated ground.** §3.5.2 and §3.5.4,
+  with no art and no new pixels on screen: the world gains a ground truth, and
+  movement cost starts coming from it.
+  1. `areas.ts` — the `AREAS` registry itself, with the launch set's codes,
+     weights, priorities, fallback colours and `placement` entries, and its
+     guard test (unique codes, reserved retirements, every entry reachable by
+     the generator). This file is the extension point, so it lands first and
+     alone.
+  2. `terrainField.ts` in `worldgen/` — the moisture field, the window lookup
+     driven by the registry, and the smoothing pass. Then the named placement
+     passes: the border flood fill that tells lake from ocean, the downhill
+     river trace, the shore band for beach, the radius that paints fields
+     around sites. Pure, seeded, unit tested per pass like every other
+     generator file.
+  3. The field on the world document as the one-character-per-tile string of
+     §3.5.2, written by `createWorld` and never updated afterwards — plus the
+     read path's unknown-code rule, which is a test of its own because a
+     rolling deploy is exactly when nobody is watching.
+  4. `edgeCostFor(field, overlays, from, to)` — the supercover tile walk and
+     the weighted sum — replacing `edgeTerrain`'s nearest-node guess and
+     deleting the synthetic centre-line river and its two hard-coded bridge
+     bands. `EdgeTerrain` stays as the derived label, so nothing downstream of
+     it changes shape.
+  5. Connectivity becomes water-aware: an edge whose walk touches ocean is
+     never offered to Prim's, and one clipping a river or lake at a pinch is a
      `river-crossing`. The existing "generate 20 worlds" fairness test gains
      the assertion that every world is still connected once water can veto an
-     edge — the reject-and-retry loop of §3.3 is what absorbs the ones that
-     aren't.
-  5. Terrain nodes placed on matching ground, per §3.5.3.
-  6. The fairness test's reachability assertions move from hop count to
-     time-weighted cost, per §3.5.3's closing note.
-  7. Reviewers: `gremlin` (a generator that can now fail to connect a world is
-     a generator that can loop — the retry cap and what happens when it is
-     hit), `rulebook` (new files in `worldgen/`, one new schema field).
+     edge — §3.3's reject-and-retry loop is what absorbs the ones that aren't.
+  6. The `OVERLAYS` registry and the sparse overlay list on the world document
+     (§3.5.3), carrying **only the derived, load-bearing entries** at this
+     point: the bridge or ford on every crossing the pass above just found.
+     The shape lands here so PR 12 is additive; the vocabulary does not.
+  7. Terrain nodes placed on matching ground, and the fairness test's
+     reachability assertions moved from hop count to time-weighted cost, per
+     §3.5.4.
+  8. Reviewers: `gremlin` (a generator that can now fail to connect a world is
+     a generator that can loop — the retry cap, what happens when it is hit,
+     and the unknown-code path), `rulebook` (two new registries with their
+     tests, new files in `worldgen/`, new schema fields).
      No `whatsNew.ts` line: nothing here is visible yet.
-- **PR 10 — Draw the areas beneath the graph.** §3.5.5's composited layer, in
+- **PR 10 — Draw the ground beneath the graph.** §3.5.6's composited layer, in
   flat colours, before any art exists.
-  1. The `tileset.ts` manifest with its six areas and their fallback colours
-     only — no sheet, no mask variants yet — plus its guard test.
-  2. `useTerrainImage(field)`: the offscreen canvas pass, the `toBlob` object
-     URL and its revoke, returning the one `href` the map draws as its first
-     `<svg>` child, before `MapEdges`.
-  3. `worldView` serves the field; a world without one keeps today's
-     silhouette from `landmass.values`, which is also the no-sheet fallback
-     path arriving early.
-  4. The legend gains the six areas.
+  1. The `tileset.ts` manifest with its sheet list empty and nothing but each
+     registry entry's fallback colour resolved — plus the guard test in its
+     lenient form (what is declared must be valid; nothing need be declared
+     yet).
+  2. `useTerrainImage(world)`: the three registry-driven passes of §3.5.6 onto
+     an offscreen canvas, the `toBlob` object URL and its revoke, returning the
+     one `href` the map draws as its first `<svg>` child, before `MapEdges`.
+  3. `worldView` serves the field and the overlay list; a world without them
+     keeps today's silhouette from `landmass.values`, which is also the
+     no-sheet fallback path arriving early.
+  4. The legend, generated from the registry rather than written out.
   5. Reviewers: `caveman` (the map already draws a single `<image>` board in
      two other games — this should look like those, not like a new way of
      drawing a map), `gremlin` (a canvas context the browser can refuse, a
      `toBlob` that can hand back `null`, a field whose length disagrees with
-     the grid, and an object URL that must not leak on every refetch — draw
-     the fallback, never throw inside a board).
+     the grid, an unknown area code, and an object URL that must not leak on
+     every refetch — draw the fallback, never throw inside a board).
   6. One `whatsNew.ts` line: the world map now reads as terrain.
-- **PR 11 — The tilesheet, the mapper and the borders.** The art landing, and
-  the only PR of the three that needs the art to exist.
-  1. The tileset mapper at `/admin/kingdombuilder-tiles` per §3.5.4 — grid
-     overlay, click a square, assign area and mask role, copy out a
-     `tileset.ts`. Behind `AdminPage`, persisting nothing, documented in
+- **PR 11 — The sheets, the mapper and the borders.** The art landing, and the
+  first PR here that needs art to exist.
+  1. The tileset mapper at `/admin/kingdombuilder-tiles` per §3.5.5: the
+     **pixel tile-size picker** (width and height, margin and spacing, live
+     grid overlay, even-divisor suggestions, the partial-row warning, last
+     values remembered through `useStoredValue`), then click-to-assign against
+     a registry entry and its layout role, then copy out the `tileset.ts`.
+     Behind `AdminPage`, persisting nothing, documented in
      `docs/admin-tools.md` beside the track editor it is modelled on.
-  2. The sheet itself into `art-masters/kingdombuilder/` and
+  2. The first sheet into `art-masters/kingdombuilder/` and
      `public/art/kingdombuilder/`, through `npm run optimise-art`.
-  3. The manifest filled in with all 16 mask variants per area plus fill
-     variants, and the guard test tightened to require them.
-  4. The canvas pass gains the autotile mask, the priority-ordered overlay
-     draw and the seeded fill-variant pick, keeping the flat-colour path as the
-     fallback for a sheet that hasn't loaded.
+  3. The manifest's four layouts (`mask16`, `orientation`, `variants`,
+     `single`) and the sheet list with per-sheet pixel sizes; the guard test
+     tightened to require all sixteen variants of every `mask16` entry that
+     declares any.
+  4. The canvas passes gain the autotile mask, the priority-ordered border
+     draw and the seeded variant pick, keeping the flat-colour path per entry
+     so an area whose art hasn't arrived still draws.
   5. Reviewers: `caveman` (the mapper is a second canvas editor in this repo —
      whatever the track editor already solved should not be solved again),
-     `rulebook` (art pipeline, the admin-tools doc, the manifest as a
-     registry with a test).
+     `rulebook` (art pipeline, the admin-tools doc, the manifest as a registry
+     with a test).
   6. One `whatsNew.ts` line — and if PR 10's line has not shipped to players
      yet, this widens that line rather than adding a second, per AGENTS.md.
-- **PR 12 — Barracks and units.** Unit types/levels (§6.1) and a training
+- **PR 12 — The overlay vocabulary.** The rest of §3.5.3 — piers, roads,
+  landmarks — and the first real test of whether the registries extend as
+  promised. If any of this needs a change outside `AREAS`, `OVERLAYS`, the
+  manifest and one placement pass each, PRs 9–11 got the shape wrong and this
+  is where that shows.
+  1. The derived overlays that aren't load-bearing: piers on coastal sites,
+     roads under the edges between occupied settlements, signposts at
+     junctions.
+  2. The scattered pass and its rules: ruins, standing stones, shipwrecks,
+     watchtowers — seeded, so a world's landmarks are the same for everyone
+     who loads it.
+  3. Their art and manifest entries, through the mapper and the pipeline.
+  4. Roads are the one entry here with a movement effect, so the cost walk
+     gains the road rule (§3.5.3) and a test that a road never makes a tile
+     cost more than the bare ground would — a road through a marsh has to be
+     an improvement, not a trap.
+  5. Reviewers: `caveman` (the extension claim, honestly assessed), `gremlin`
+     (an overlay list that can grow unbounded if a placement rule misfires —
+     a cap, and what a tile with two overlays draws).
+  6. One `whatsNew.ts` line: the map gains bridges, roads and ruins.
+- **PR 13 — Barracks and units.** Unit types/levels (§6.1) and a training
   queue on the barracks tile. Units accumulate in a garrison; nothing can
   leave it yet.
-- **PR 13 — Army dispatch and movement.** A command to send a garrison (or
+- **PR 14 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, and a movement step in the tick engine
   using §6.2's terrain multipliers. Arrival does nothing special yet — this
   PR is purely "can an army cross the generated graph."
-- **PR 14 — Fog of war.** Redact in-transit armies from
+- **PR 15 — Fog of war.** Redact in-transit armies from
   `CreateDataResponse(viewerId)` for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
-- **PR 15 — Automatic siege on arrival.** Arrival at a hostile settlement
+- **PR 16 — Automatic siege on arrival.** Arrival at a hostile settlement
   opens a siege (§6.4/§8): debuffs, the grace period, and the two new
   player actions, "push the attack" and "sally out" — both stubbed to a
   placeholder resolution for now.
-- **PR 16 — Combat resolution.** The deterministic multi-round attrition
+- **PR 17 — Combat resolution.** The deterministic multi-round attrition
   engine with unit-type counters (§7.3/§7.6) as a pure function with its own
-  matchup-table test suite, then wired into the two actions PR 15 stubbed.
-- **PR 17 — Barbarian villages.** Generator gains barbarian site placement
-  (§3.4); combat resolution from PR 16 applies directly on arrival, no
+  matchup-table test suite, then wired into the two actions PR 16 stubbed.
+- **PR 18 — Barbarian villages.** Generator gains barbarian site placement
+  (§3.4); combat resolution from PR 17 applies directly on arrival, no
   siege phase, per §3.4's rule.
-- **PR 18 — Settlers and a second settlement.** The settler unit and a
+- **PR 19 — Settlers and a second settlement.** The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
-  type once PRs 6–13's map/movement/dispatch already exist.
-- **PR 19 — Market and trade.** Resource conversion and player-to-player
+  type once PRs 6–14's map/movement/dispatch already exist.
+- **PR 20 — Market and trade.** Resource conversion and player-to-player
   trade offers (§4.3) — a pure economy addition with no combat interaction.
-- **PR 20 — Victory, seasons, catch-up.** Season length, scoring, new-player
+- **PR 21 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
-- **PR 21 — Push notifications.** Siege-onset, attack-resolved and
+- **PR 22 — Push notifications.** Siege-onset, attack-resolved and
   construction-complete pushes over the app's existing FCM plumbing (§10).
   Held deliberately until last, since it's the one PR reaching into shared
   notification infrastructure, and it benefits from every event type above
   already existing to notify about.
-- **PR 22 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
+- **PR 23 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
   the `og-game-kingdombuilder.png` share card, and a final full five-reviewer
   pass — the "most games also want a guide/tutorial" convention in
   AGENTS.md, deliberately last rather than first since it documents
-  mechanics that were still moving through PRs 6–21.
+  mechanics that were still moving through PRs 6–22.
 
 ### 11.4 Ordering constraints
 
 Most of Milestone B can be resequenced to fit priorities without breaking
-anything — trade (PR 19) and seasons (PR 20) don't depend on each other, for
+anything — trade (PR 20) and seasons (PR 21) don't depend on each other, for
 instance, and either could move earlier or later freely. Five orderings
 are not negotiable, because each is a hard dependency rather than a
 priority call:
@@ -1332,29 +1525,32 @@ priority call:
   nothing to turn on before the prototype exists, and it's also the last
   point at which every PR before it was, by construction, invisible to a
   player.
-- **PR 8 (more than one player) must land before or alongside PR 14 (fog of
-  war), PR 15 (siege) and PR 20 (seasons).** An army cannot be hidden from
+- **PR 8 (more than one player) must land before or alongside PR 15 (fog of
+  war), PR 16 (siege) and PR 21 (seasons).** An army cannot be hidden from
   nobody, a player cannot lay siege to their own town, and scoring,
   new-player protection and a leaderboard are all comparisons between
   players — each of the three is untestable, not merely unexciting, in a
   world of one. The PRs either side of them are genuinely fine solo: a
   barracks trains and an army marches on an empty site without an opponent
-  (PRs 12–13), and PR 17's barbarians are neutral rather than player-owned, so
+  (PRs 13–14), and PR 18's barbarians are neutral rather than player-owned, so
   none of those forces the ordering on its own.
-- **PR 9 (terrain areas) must land before PR 13 (dispatch and movement).**
-  PR 9 is where an edge's cost stops being a guess at the nearest node and
-  starts being the ground it crosses (§3.5.3), and PR 13 is the first thing to
-  *spend* those costs. Shipping movement first means shipping travel times
-  that are about to change, and then changing them under players who have
-  learned them. PRs 10 and 11 — drawing the areas, then painting them from the
-  sheet — are presentation on top of PR 9 and can follow at any point; PR 11
-  additionally waits on the art existing, which is why the flat-colour map of
-  PR 10 is a separate, shippable step rather than the first half of PR 11.
-- **PR 14 (fog of war) must land before or alongside PR 15 (siege).** Siege
+- **PR 9 (the area registry) and PR 12's roads must land before PR 14
+  (dispatch and movement).** PR 9 is where an edge's cost stops being a guess
+  at the nearest node and starts being the ground it crosses (§3.5.4), and
+  PR 14 is the first thing to *spend* those costs. Shipping movement first
+  means shipping travel times that are about to change, and then changing them
+  under players who have learned them — and roads are the one overlay that
+  moves a cost, so they belong on the same side of that line. PRs 10 and 11 —
+  drawing the ground, then painting it from the sheets — are presentation on
+  top of PR 9 and can follow at any point; PR 11 additionally waits on the art
+  existing, which is why the flat-colour map of PR 10 is a separate, shippable
+  step rather than the first half of PR 11. PR 12's landmarks have no ordering
+  constraint at all beyond needing the mapper from PR 11 to author their art.
+- **PR 15 (fog of war) must land before or alongside PR 16 (siege).** Siege
   is only the game's warning system per §6.4 if armies were already hidden
   before it — shipping siege first would briefly make army movement visible
   by omission, which is a hidden-information regression even if temporary.
-- **PR 16 (combat resolution) must land before or alongside PR 17
+- **PR 17 (combat resolution) must land before or alongside PR 18
   (barbarians).** A barbarian village resolves combat immediately on
   arrival with no siege phase (§3.4), so it has nothing to call until the
   combat engine exists.
@@ -1387,12 +1583,14 @@ guessed at here:
   without any is likely to converge on one dominant player unless the
   catch-up mechanics in §9 turn out to be strong enough alone — worth a
   dedicated exploration if playtesting bears that out.
-- Terrain-area tuning (§3.5.2): the elevation/moisture thresholds that decide
-  how much of a map is mountain versus hill versus open grass, and whether a
-  2 × 2 tile is the right grain — both are "generate worlds and look at them"
-  questions, not ones to settle on paper. Whether a lake is ever crossable by
-  anything but a river crossing (a boat, a winter freeze) is a rules question
-  left with them.
+- Terrain tuning (§3.5.2): the elevation/moisture windows that decide how much
+  of a map is mountain versus hill versus open grass, how wide a fields radius
+  around a site should be, and whether a 2 × 2 tile is the right grain — all
+  "generate worlds and look at them" questions rather than ones to settle on
+  paper. Which areas the launch set should actually ship with is the same kind
+  of question, and cheap to change late by design. Whether a lake is ever
+  crossable by anything but a bridge or ford (a boat, a winter freeze) is a
+  rules question left with them.
 - Exact resource/time cost curves for buildings and units — deliberately
   left as "increases with level" above; needs a numbers pass once the
   above structural questions are settled, not before.
