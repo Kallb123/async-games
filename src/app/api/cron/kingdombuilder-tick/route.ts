@@ -9,6 +9,7 @@ export const maxDuration = 60;
 export const KINGDOM_BUILDER_TICK_INTERVAL_MS = 60 * 60 * 1000;
 const SWEEP_BUDGET_MS = (maxDuration - 10) * 1000;
 const SWEEP_CANDIDATE_LIMIT = 100;
+const MAX_CATCH_UP_TICKS = 24 * 365;
 
 async function tickWorld(worldId: string, now: Date, session: ClientSession): Promise<boolean> {
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1 }).session(session).lean();
@@ -16,10 +17,15 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     if (world.nextTickAt > now) return false;
 
     const settlements = await KingdomBuilderSettlementModel.find({ worldId }).session(session).lean();
-    const ticked = applyTick({ currentTick: world.currentTick, settlements });
-
     const scheduledTick = world.nextTickAt;
-    const nextTickAt = new Date(scheduledTick.getTime() + KINGDOM_BUILDER_TICK_INTERVAL_MS);
+    const elapsedTicks = Math.min(
+        MAX_CATCH_UP_TICKS,
+        Math.floor((now.getTime() - scheduledTick.getTime()) / KINGDOM_BUILDER_TICK_INTERVAL_MS) + 1,
+    );
+    let ticked = { currentTick: world.currentTick, settlements };
+    for (let tick = 0; tick < elapsedTicks; tick++) ticked = applyTick(ticked);
+
+    const nextTickAt = new Date(scheduledTick.getTime() + elapsedTicks * KINGDOM_BUILDER_TICK_INTERVAL_MS);
     const claimed = await KingdomBuilderWorldModel.updateOne(
         { _id: worldId, currentTick: world.currentTick, nextTickAt: scheduledTick },
         { $set: { currentTick: ticked.currentTick, nextTickAt } },
@@ -47,8 +53,8 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     return true;
 }
 
-export async function POST(request: NextRequest) {
-    console.log(`POST ${request.nextUrl.pathname}`);
+async function runTick(request: NextRequest) {
+    console.log(`${request.method} ${request.nextUrl.pathname}`);
     if (!isAuthorisedCron(request)) {
         return NextResponse.json({}, { status: 401, statusText: "Unauthorized" });
     }
@@ -87,3 +93,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ scanned: worlds.length - Math.max(0, unswept - (capped ? 1 : 0)), ticked, skipped, failed, unswept, capped });
 }
+
+// Vercel invokes configured crons with GET; POST remains available for the
+// manual exercising used while the prototype route was dormant.
+export const GET = runTick;
+export const POST = runTick;

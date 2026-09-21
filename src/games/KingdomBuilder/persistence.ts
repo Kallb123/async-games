@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { Types, type ClientSession } from "mongoose";
 
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
@@ -12,14 +12,17 @@ export class KingdomBuilderPersistenceError extends Error {
     }
 }
 
-export async function createWorld(seed: string) {
+export async function createWorld(seed: string, session?: ClientSession) {
     const normalisedSeed = seed.trim();
     if (!normalisedSeed) {
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A world seed is required");
     }
 
     const generated = generateWorld(normalisedSeed);
-    return KingdomBuilderWorldModel.create({ ...generated, currentTick: 0 });
+    const values = { ...generated, currentTick: 0 };
+    if (!session) return KingdomBuilderWorldModel.create(values);
+    const [world] = await KingdomBuilderWorldModel.create([values], { session });
+    return world;
 }
 
 function createStartingTiles(): KingdomBuilderTile[] {
@@ -35,12 +38,13 @@ function createStartingTiles(): KingdomBuilderTile[] {
  * Claims one generated player-start site. The unique world/owner and
  * world/node indexes are the final arbiter when concurrent claims race.
  */
-export async function foundSettlement(worldId: string, userId: string, siteId: string) {
+export async function foundSettlement(worldId: string, userId: string, siteId: string, session?: ClientSession) {
     if (!Types.ObjectId.isValid(worldId) || !userId.trim() || !siteId.trim()) {
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
     }
 
-    const world = await KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1 }).lean();
+    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1 });
+    const world = await (session ? query.session(session) : query).lean();
     if (!world) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
     }
@@ -53,11 +57,14 @@ export async function foundSettlement(worldId: string, userId: string, siteId: s
         throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "The site is not available for a first settlement");
     }
 
-    return KingdomBuilderSettlementModel.create({
+    const values = {
         worldId: new Types.ObjectId(worldId),
         ownerId: userId.trim(),
         nodeId: siteId,
         tiles: createStartingTiles(),
         resources: { wood: 0, stone: 0, iron: 0 },
-    });
+    };
+    if (!session) return KingdomBuilderSettlementModel.create(values);
+    const [settlement] = await KingdomBuilderSettlementModel.create([values], { session });
+    return settlement;
 }
