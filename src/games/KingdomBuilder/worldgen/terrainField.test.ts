@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateLandmass } from "./landmass";
+import { WORLD_HEIGHT, WORLD_WIDTH, generateLandmass } from "./landmass";
 import { createRandom } from "./random";
 import {
     applySitesToTerrainField,
@@ -23,10 +23,10 @@ describe("generateBaseTerrainField", () => {
         const first = generateBaseTerrainField(landmass, createRandom("ground-field"));
         const second = generateBaseTerrainField(landmass, createRandom("ground-field"));
         expect(first).toEqual(second);
-        expect(first.field.columns).toBe(50);
-        expect(first.field.rows).toBe(35);
-        expect(first.field.codes).toHaveLength(50 * 35);
-        expect(first.elevations).toHaveLength(50 * 35);
+        expect(first.field.columns).toBe(WORLD_WIDTH / 2);
+        expect(first.field.rows).toBe(WORLD_HEIGHT / 2);
+        expect(first.field.codes).toHaveLength((WORLD_WIDTH / 2) * (WORLD_HEIGHT / 2));
+        expect(first.elevations).toHaveLength((WORLD_WIDTH / 2) * (WORLD_HEIGHT / 2));
     });
 
     it("keeps the map's border in the sea, same as the landmass itself", () => {

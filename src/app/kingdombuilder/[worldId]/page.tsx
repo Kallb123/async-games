@@ -24,8 +24,9 @@ import styles from "./page.module.css";
 
 const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
 // Smaller than World Domination or Outbreak's own node radii because Kingdom
-// Builder's world is a much tighter 100×70 viewBox for many more nodes — the
-// original sizes overlapped each other and read as an oversized graph.
+// Builder's world packs many more nodes into its viewBox (200×140 for a new
+// world, 100×70 for one generated before it grew) — the original sizes
+// overlapped each other and read as an oversized graph.
 const TERRAIN_RADIUS = 1.15;
 // A settlement's own filled circle sits on top of the composited ground
 // (PR 11's tileset art), not a flat silhouette, so it has to stay small
@@ -85,6 +86,9 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     };
 
     const unavailable = status === 404;
+    // The zoom steps were tuned on a 100-unit-wide world; a wider one needs
+    // proportionally deeper steps to put its pieces at the same size on screen.
+    const zoomWidth = 240 * Math.max(1, (data?.landmass.width ?? 100) / 100);
     const occupiedByNode = new Map(data?.settlements.map(settlement => [settlement.nodeId, settlement]) ?? []);
     const openSites = data?.nodes.filter((node): node is SettlementNode => node.kind === "settlement" && node.siteType === "expansion" && !occupiedByNode.has(node.id)) ?? [];
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
@@ -98,7 +102,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         <>
                             <p className={styles.hint}>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</p>
                             <div className="ag-board-frame">
-                                <BoardZoom zoomWidth={240} maxWidth={360}>
+                                <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
                                         {terrain.href
                                             ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />

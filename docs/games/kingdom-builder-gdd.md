@@ -31,6 +31,7 @@ movement — build on those two decisions rather than re-opening them.
    - 3.3 [Balance constraints](#33-balance-constraints)
    - 3.4 [Barbarian villages](#34-barbarian-villages)
    - 3.5 [Terrain areas, overlays and the tiled map](#35-terrain-areas-overlays-and-the-tiled-map)
+   - 3.6 [World size](#36-world-size)
 4. [Settlements](#4-settlements)
    - 4.1 [Layout](#41-layout)
    - 4.2 [Buildings](#42-buildings)
@@ -288,7 +289,8 @@ same 100×70 coordinate space the map already uses — square matters, because t
 existing 48×48 field has cells 2.08 × 1.46 world units and art drawn for a
 square tile stretches visibly on those. A tile of 2 × 2 world units gives a
 50 × 35 grid: 1,750 tiles, a sane amount of art to author against and a small
-amount of data to ship.
+amount of data to ship. (The world has since grown to 200×140 — see §3.6 — so
+a new world's grid is 100 × 70, 7,000 tiles, at the same 2 × 2 tile.)
 
 The set of areas is **a registry, not a fixed list**. This is the part to get
 right, because a fantasy overworld accretes ground types forever — a desert
@@ -674,6 +676,22 @@ been reading the silhouette. The legend is generated from the registry rather
 than hand-written, because a colour that means something to a sighted player
 should be named somewhere, and a hand-written legend is the first thing to go
 stale the next time an area is added.
+
+### 3.6 World size
+
+A world is **200 × 140 world units** — doubled in both directions from the
+100 × 70 the generator first used, so four times the ground for the same ten
+seats. Everything that fills the map scales with its area rather than staying
+fixed: four times the terrain nodes (128), four times the expansion sites (56,
+still beside exactly ten player starts), a river per original map's worth of
+ground, and four times the scattered landmarks. The noise lattices scale with
+the width too, so a hill range or a wet patch is the same size in world units
+as before rather than the old map magnified — a bigger world, not a zoomed-in
+one. Spacing rules (minimum node and site separation, the fields radius, the
+fairness reach) are unchanged, which is what keeps the density the same.
+
+Worlds generated before the change keep their stored 100 × 70 dimensions; the
+map screen reads its viewBox off the stored landmass, so both sizes draw.
 
 ---
 

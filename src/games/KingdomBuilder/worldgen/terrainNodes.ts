@@ -1,4 +1,4 @@
-import { isLand, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
+import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
 import type { RandomSource } from "./random";
 import { areaCodeAt, type TerrainField } from "./terrainField";
 
@@ -22,7 +22,7 @@ const TERRAIN_TYPE_BY_AREA_CODE: Partial<Record<string, TerrainNodeType>> = {
 
 /** Poisson-disc-style rejection sampling over the generated land, one node per matching patch of ground. */
 export function placeTerrainNodes(landmass: Landmass, field: TerrainField, random: RandomSource, options: TerrainNodeOptions = {}): TerrainNode[] {
-    const count = options.count ?? 32;
+    const count = options.count ?? 32 * WORLD_AREA_SCALE;
     const minimumDistance = options.minimumDistance ?? 5.5;
     const maximumAttempts = options.maximumAttempts ?? count * 2000;
     const nodes: TerrainNode[] = [];
