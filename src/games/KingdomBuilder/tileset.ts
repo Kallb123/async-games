@@ -96,19 +96,28 @@ export function sheetTilePixels(): number {
  * margin and spacing and the image's real pixel width — the same maths the
  * mapper and the compositor both need, so a sheet's grid is derived once.
  */
-export function sheetColumns(sheet: SheetDefinition, imageWidth: number): number {
+type SheetGeometry = Pick<SheetDefinition, "tileWidth" | "tileHeight" | "margin" | "spacing">;
+
+export function sheetColumns(sheet: SheetGeometry, imageWidth: number): number {
     return Math.floor((imageWidth - 2 * sheet.margin + sheet.spacing) / (sheet.tileWidth + sheet.spacing));
 }
 
-export function sheetRows(sheet: SheetDefinition, imageHeight: number): number {
+export function sheetRows(sheet: SheetGeometry, imageHeight: number): number {
     return Math.floor((imageHeight - 2 * sheet.margin + sheet.spacing) / (sheet.tileHeight + sheet.spacing));
+}
+
+/** A tile index's own column/row on a sheet's grid, row-major — the one indexing formula every consumer of a flat `TileRef.index` needs, so the mapper (picking an index from a click) and the compositor (picking pixels from an index) read it off the same place. */
+export function indexToCell(index: number, columns: number): { col: number; row: number } {
+    return columns > 0 ? { col: index % columns, row: Math.floor(index / columns) } : { col: 0, row: 0 };
+}
+
+export function cellToIndex(col: number, row: number, columns: number): number {
+    return row * columns + col;
 }
 
 /** The source rectangle a tile index resolves to on its sheet's own image, for `drawImage`'s source args. */
 export function sheetSourceRect(sheet: SheetDefinition, imageWidth: number, index: number): { sx: number; sy: number; sw: number; sh: number } {
-    const columns = Math.max(1, sheetColumns(sheet, imageWidth));
-    const col = index % columns;
-    const row = Math.floor(index / columns);
+    const { col, row } = indexToCell(index, Math.max(1, sheetColumns(sheet, imageWidth)));
     return {
         sx: sheet.margin + col * (sheet.tileWidth + sheet.spacing),
         sy: sheet.margin + row * (sheet.tileHeight + sheet.spacing),

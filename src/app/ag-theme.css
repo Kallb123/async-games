@@ -4960,6 +4960,14 @@ button.ag-tt-ticket { cursor: pointer; }
     .ag-rcedit-page .ag-rcedit-canvas { max-height: 80vh; }
 }
 
+/* The Kingdom Builder tile mapper's own grid overlay (§3.5.5,
+   docs/admin-tools.md): one cell per square of the loaded sheet, drawn over
+   it in an SVG the same way the track editor draws its tiles — tokens, never
+   an inline literal, so the mark reads consistently in both themes. */
+.ag-tilemap-cell { fill: transparent; stroke: var(--ag-line); stroke-width: 0.5; }
+.ag-tilemap-cell--assigned { fill: color-mix(in oklch, var(--ag-green) 35%, transparent); }
+.ag-tilemap-cell-label { fill: var(--ag-ink); font: 700 1em var(--ag-font); pointer-events: none; }
+
 /* ============================================================= *
  *  Desktop expansion — design §16.
  *

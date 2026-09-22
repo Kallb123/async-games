@@ -4,7 +4,7 @@
 // owns pointer handling and the panels; this owns the grid maths, the tile
 // size suggestions and the printed `tileset.ts` source.
 
-import type { SheetDefinition, TileArt, TileRef } from "./tileset";
+import { sheetColumns, sheetRows, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
 
 /** A sheet whose grid divides its image evenly on both axes, in the range a real tilesheet's tile size is likely to sit in. Sorted smallest first, so the UI can offer them as "did you mean" chips without the author counting squares themselves. */
 export function suggestedTileSizes(imageWidth: number, imageHeight: number, margin: number, spacing: number, min = 8, max = 128): number[] {
@@ -27,31 +27,20 @@ export interface GridFit {
     leftoverY: number;
 }
 
+/** Wraps `sheetColumns`/`sheetRows` — the same grid derivation the compositor uses — with the mapper's own extra concern: how many pixels are left over past the last full tile on each axis, the classic sign of an undeclared gutter. */
 export function gridFit(imageWidth: number, imageHeight: number, sheet: Pick<SheetDefinition, "tileWidth" | "tileHeight" | "margin" | "spacing">): GridFit {
-    const usableW = Math.max(0, imageWidth - 2 * sheet.margin + sheet.spacing);
-    const usableH = Math.max(0, imageHeight - 2 * sheet.margin + sheet.spacing);
+    const columns = sheetColumns(sheet, imageWidth);
+    const rows = sheetRows(sheet, imageHeight);
     const stepX = sheet.tileWidth + sheet.spacing;
     const stepY = sheet.tileHeight + sheet.spacing;
+    const usableW = Math.max(0, imageWidth - 2 * sheet.margin + sheet.spacing);
+    const usableH = Math.max(0, imageHeight - 2 * sheet.margin + sheet.spacing);
     return {
-        columns: stepX > 0 ? Math.floor(usableW / stepX) : 0,
-        rows: stepY > 0 ? Math.floor(usableH / stepY) : 0,
+        columns: Math.max(0, columns),
+        rows: Math.max(0, rows),
         leftoverX: stepX > 0 ? usableW % stepX : 0,
         leftoverY: stepY > 0 ? usableH % stepY : 0,
     };
-}
-
-/** A tile index's own column/row on its sheet, given that sheet's fitted column count. */
-export function indexToCell(index: number, columns: number): { col: number; row: number } {
-    return columns > 0 ? { col: index % columns, row: Math.floor(index / columns) } : { col: 0, row: 0 };
-}
-
-export function cellToIndex(col: number, row: number, columns: number): number {
-    return row * columns + col;
-}
-
-/** Which of the four sides a mask16 index (§3.5.5's bit order) counts as matching, for the role picker's own label. */
-export function maskSides(mask: number): { north: boolean; east: boolean; south: boolean; west: boolean } {
-    return { north: (mask & 1) !== 0, east: (mask & 2) !== 0, south: (mask & 4) !== 0, west: (mask & 8) !== 0 };
 }
 
 export function maskFromSides(sides: { north: boolean; east: boolean; south: boolean; west: boolean }): number {

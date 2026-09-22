@@ -20,20 +20,18 @@ import Section from "@/components/ui/Section";
 import { AREAS } from "@/games/KingdomBuilder/worldgen/areas";
 import { OVERLAYS } from "@/games/KingdomBuilder/worldgen/overlays";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
+import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
-    cellToIndex,
     gridFit,
-    indexToCell,
     mask16Remaining,
     maskFromSides,
     printTilesetDeclarations,
     suggestedTileSizes,
     type DraftTileArt,
 } from "../tileMapperModel";
-import type { SheetDefinition, TileRef } from "../tileset";
+import { cellToIndex, indexToCell, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const DISPLAY_WIDTH = 640;
 
 type EntryKind = "area" | "overlay";
@@ -95,10 +93,10 @@ function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: Ti
 }
 
 const SIDES = [
-    { key: "north" as const, bit: 1, label: "North" },
-    { key: "east" as const, bit: 2, label: "East" },
-    { key: "south" as const, bit: 4, label: "South" },
-    { key: "west" as const, bit: 8, label: "West" },
+    { key: "north" as const, label: "North" },
+    { key: "east" as const, label: "East" },
+    { key: "south" as const, label: "South" },
+    { key: "west" as const, label: "West" },
 ];
 
 export default function KingdomBuilderTileMapper() {
@@ -131,7 +129,7 @@ export default function KingdomBuilderTileMapper() {
 
     const onFileChosen = (file: File | undefined) => {
         if (!file) return;
-        if (file.size > MAX_IMAGE_BYTES) {
+        if (file.size > MAX_LOCAL_IMAGE_BYTES) {
             setImageError("That file is bigger than this screen will load — save it under public/art first.");
             return;
         }
@@ -322,8 +320,8 @@ export default function KingdomBuilderTileMapper() {
                                 const owner = assignedIndices.get(index);
                                 return (
                                     <g key={index}>
-                                        <rect x={x} y={y} width={draft.tileWidth} height={draft.tileHeight} fill={owner ? "rgba(90,180,110,0.35)" : "transparent"} stroke="rgba(0,0,0,0.35)" strokeWidth={0.5} />
-                                        {owner && <text x={x + draft.tileWidth / 2} y={y + draft.tileHeight / 2} fontSize={Math.max(6, draft.tileWidth / 4)} textAnchor="middle" dominantBaseline="central" fill="#1a1a1a">{owner}</text>}
+                                        <rect className={`ag-tilemap-cell ${owner ? "ag-tilemap-cell--assigned" : ""}`} x={x} y={y} width={draft.tileWidth} height={draft.tileHeight} />
+                                        {owner && <text className="ag-tilemap-cell-label" x={x + draft.tileWidth / 2} y={y + draft.tileHeight / 2} fontSize={Math.max(6, draft.tileWidth / 4)} textAnchor="middle" dominantBaseline="central">{owner}</text>}
                                     </g>
                                 );
                             })}

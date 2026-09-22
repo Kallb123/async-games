@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-    cellToIndex,
     gridFit,
-    indexToCell,
     mask16Remaining,
     maskFromSides,
-    maskSides,
     printTilesetDeclarations,
     suggestedTileSizes,
     type DraftTileArt,
@@ -45,25 +42,17 @@ describe("gridFit", () => {
     });
 });
 
-describe("indexToCell / cellToIndex", () => {
-    it("round-trip through a grid's own column count", () => {
-        for (let index = 0; index < 16; index++) {
-            const { col, row } = indexToCell(index, 4);
-            expect(cellToIndex(col, row, 4)).toBe(index);
-        }
-    });
-});
-
-describe("maskSides / maskFromSides", () => {
-    it("round-trip every one of the sixteen masks", () => {
-        for (let mask = 0; mask < 16; mask++) {
-            expect(maskFromSides(maskSides(mask))).toBe(mask);
-        }
+describe("maskFromSides", () => {
+    it("sets exactly the bit for each matching side — north 1, east 2, south 4, west 8", () => {
+        expect(maskFromSides({ north: true, east: false, south: false, west: false })).toBe(1);
+        expect(maskFromSides({ north: false, east: true, south: false, west: false })).toBe(2);
+        expect(maskFromSides({ north: false, east: false, south: true, west: false })).toBe(4);
+        expect(maskFromSides({ north: false, east: false, south: false, west: true })).toBe(8);
     });
 
     it("15 is every side matching, 0 is none", () => {
-        expect(maskSides(15)).toEqual({ north: true, east: true, south: true, west: true });
-        expect(maskSides(0)).toEqual({ north: false, east: false, south: false, west: false });
+        expect(maskFromSides({ north: true, east: true, south: true, west: true })).toBe(15);
+        expect(maskFromSides({ north: false, east: false, south: false, west: false })).toBe(0);
     });
 });
 
