@@ -22,14 +22,19 @@ import { OVERLAYS } from "@/games/KingdomBuilder/worldgen/overlays";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
+    diagonalApplies,
     gridFit,
-    mask16Remaining,
+    isDraftMaskArt,
+    mask16FromNineSlice,
+    mask8FromSides,
     maskFromSides,
+    maskRemaining,
     printTilesetDeclarations,
     suggestedTileSizes,
     type DraftTileArt,
+    type NeighbourSides,
 } from "../tileMapperModel";
-import { cellToIndex, indexToCell, type SheetDefinition, type TileRef } from "../tileset";
+import { blobIndexOf, cellToIndex, indexToCell, MASK_LAYOUT_SIZES, tileRefSize, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
 const DISPLAY_WIDTH = 640;
@@ -75,13 +80,13 @@ function layoutOf(art: DraftTileArt | undefined): Layout | null {
     return art?.layout ?? null;
 }
 
-/** A mask16 entry's slots stay real holes (`undefined`) until each one is actually clicked — `mask16Remaining`'s "N left" count, and the guard the export panel warns about, both depend on an unclicked mask never quietly reading as done. */
+/** A mask entry's slots stay real holes (`undefined`) until each one is actually clicked — `maskRemaining`'s "N left" count, and the guard the export panel warns about, both depend on an unclicked slot never quietly reading as done. */
 function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: TileRef, role: string): DraftTileArt {
-    if (layout === "mask16") {
-        const mask = Number(role);
-        const tiles = art?.layout === "mask16" ? [...art.tiles] : new Array<TileRef | undefined>(16).fill(undefined);
-        tiles[mask] = ref;
-        return { layout: "mask16", tiles };
+    if (layout === "mask16" || layout === "mask47") {
+        const slot = Number(role);
+        const tiles = art && isDraftMaskArt(art) && art.layout === layout ? [...art.tiles] : new Array<TileRef | undefined>(MASK_LAYOUT_SIZES[layout]).fill(undefined);
+        tiles[slot] = ref;
+        return { layout, tiles };
     }
     if (layout === "orientation") {
         const tiles = art?.layout === "orientation" ? { ...art.tiles } : {};
@@ -99,6 +104,42 @@ const SIDES = [
     { key: "west" as const, label: "West" },
 ];
 
+/** The four diagonals a `mask47` role adds to the four sides, each named with the two sides that have to match before it can change the picture. */
+const DIAGONALS = [
+    { key: "northEast" as const, label: "NE" },
+    { key: "southEast" as const, label: "SE" },
+    { key: "southWest" as const, label: "SW" },
+    { key: "northWest" as const, label: "NW" },
+];
+
+/** Every neighbour matching: the fully-interior tile, which is where a mask entry is most naturally started. */
+const ALL_NEIGHBOURS_MATCH: NeighbourSides = { north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true };
+
+/** A piece bigger than one square, as the panel holds it while it's being typed. One square is the default, and the anchor defaults to the bottom-left the same way a printed ref's does. */
+interface PieceDraft {
+    width: number;
+    height: number;
+    anchorX: number;
+    anchorY: number;
+}
+
+const ONE_SQUARE: PieceDraft = { width: 1, height: 1, anchorX: 0, anchorY: 0 };
+
+function clampToPiece(value: number, extent: number): number {
+    return Math.min(extent - 1, Math.max(0, Math.floor(value) || 0));
+}
+
+/** Resizing a piece drags its anchor back inside it, so narrowing a 3-wide piece to 1 can't leave the anchor pointing at a column that no longer exists. */
+function resizedPiece(piece: PieceDraft, width: number, height: number): PieceDraft {
+    return { width, height, anchorX: clampToPiece(piece.anchorX, width), anchorY: clampToPiece(piece.anchorY, height) };
+}
+
+/** Folds the piece panel's numbers into a ref, leaving a one-square piece as the bare `{ sheet, index }` every existing entry already is. */
+function withPiece(ref: TileRef, piece: PieceDraft, allowed: boolean): TileRef {
+    if (!allowed || (piece.width <= 1 && piece.height <= 1)) return ref;
+    return { ...ref, width: piece.width, height: piece.height, anchorX: piece.anchorX, anchorY: piece.anchorY };
+}
+
 export default function KingdomBuilderTileMapper() {
     const [stored, setStored] = useStoredValue(STORAGE_KEY);
     const draft = useMemo(() => parseDraft(stored), [stored]);
@@ -114,8 +155,13 @@ export default function KingdomBuilderTileMapper() {
     const [entryKind, setEntryKind] = useState<EntryKind>("area");
     const [entryCode, setEntryCode] = useState<string>("");
     const [layout, setLayout] = useState<Layout>("mask16");
-    const [maskSideState, setMaskSideState] = useState({ north: true, east: true, south: true, west: true });
+    const [maskSideState, setMaskSideState] = useState<NeighbourSides>(ALL_NEIGHBOURS_MATCH);
     const [orientationKey, setOrientationKey] = useState("ns");
+    const [piece, setPiece] = useState<PieceDraft>(ONE_SQUARE);
+    // A nine-slice import claims sixteen slots from one click rather than one,
+    // so it is a mode you turn on deliberately and which turns itself off
+    // again after the click that used it.
+    const [nineSliceArmed, setNineSliceArmed] = useState(false);
     const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
     const fileRef = useRef<HTMLInputElement>(null);
@@ -137,10 +183,18 @@ export default function KingdomBuilderTileMapper() {
         setImageError(null);
     };
 
+    // Only an overlay's non-mask art may be a piece: an area fills the grid one
+    // square at a time, and so does a mask tile whoever declares it. Same rule
+    // the guard enforces, asked here so the panel simply doesn't offer it.
+    const piecesAllowed = entryKind === "overlay" && activeLayout !== "mask16" && activeLayout !== "mask47";
+
     const assignTile = (index: number) => {
         if (!entryCode) return;
-        const ref: TileRef = { sheet: draft.sheetName, index };
-        const role = activeLayout === "mask16" ? String(maskFromSides(maskSideState)) : activeLayout === "orientation" ? orientationKey.trim() : "";
+        const ref = withPiece({ sheet: draft.sheetName, index }, piece, piecesAllowed);
+        const role =
+            activeLayout === "mask16" ? String(maskFromSides(maskSideState)) :
+            activeLayout === "mask47" ? String(blobIndexOf(mask8FromSides(maskSideState))) :
+            activeLayout === "orientation" ? orientationKey.trim() : "";
         if (activeLayout === "orientation" && !role) return;
         setDraft(current => {
             const art = entryKind === "area" ? current.areaArt[entryCode] : current.overlayArt[entryCode];
@@ -157,6 +211,29 @@ export default function KingdomBuilderTileMapper() {
         });
     };
 
+    /**
+     * Fills all sixteen masks from the 3×3 block whose top-left square was
+     * clicked — the shape most hand-drawn tilesheets actually come in, where
+     * clicking sixteen times would mean entering the same nine squares over
+     * and over and hand-aliasing the seven a nine-slice never drew.
+     */
+    const importNineSlice = (index: number) => {
+        if (!entryCode || !fit) return;
+        const tiles = mask16FromNineSlice(draft.sheetName, index, fit.columns, fit.rows);
+        if (!tiles) {
+            setImageError("A 3×3 block starting there would run off the sheet — click the block's top-left square, at least three squares in from the right and bottom edges.");
+            return;
+        }
+        setImageError(null);
+        setNineSliceArmed(false);
+        setDraft(current => ({
+            ...current,
+            areaArt: entryKind === "area" ? { ...current.areaArt, [entryCode]: { layout: "mask16", tiles } } : current.areaArt,
+            overlayArt: entryKind === "overlay" ? { ...current.overlayArt, [entryCode]: { layout: "mask16", tiles } } : current.overlayArt,
+            sheets: { ...current.sheets, [current.sheetName]: { path: current.artPath, tileWidth: current.tileWidth, tileHeight: current.tileHeight, margin: current.margin, spacing: current.spacing } },
+        }));
+    };
+
     // Every tile index already assigned to *any* entry on this sheet, for the
     // grid overlay's own "already used" mark — a role can be reassigned, but
     // it should never look like a blank square once something has claimed it.
@@ -165,13 +242,22 @@ export default function KingdomBuilderTileMapper() {
         const record = (byCode: Record<string, DraftTileArt>) => {
             for (const [code, art] of Object.entries(byCode)) {
                 const refs = art.layout === "single" ? [art.tile] : art.layout === "orientation" ? Object.values(art.tiles) : art.tiles;
-                for (const ref of refs) if (ref && ref.sheet === draft.sheetName) map.set(ref.index, code);
+                for (const ref of refs) {
+                    if (!ref || ref.sheet !== draft.sheetName) continue;
+                    // A piece claims every square it covers, so the preview
+                    // marks the whole rectangle rather than only its corner.
+                    const { width, height } = tileRefSize(ref);
+                    const origin = indexToCell(ref.index, Math.max(1, fit?.columns ?? 1));
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) map.set(cellToIndex(origin.col + x, origin.row + y, Math.max(1, fit?.columns ?? 1)), code);
+                    }
+                }
             }
         };
         record(draft.areaArt);
         record(draft.overlayArt);
         return map;
-    }, [draft.areaArt, draft.overlayArt, draft.sheetName]);
+    }, [draft.areaArt, draft.overlayArt, draft.sheetName, fit?.columns]);
 
     const printed = useMemo(() => printTilesetDeclarations(draft.sheets, draft.areaArt, draft.overlayArt), [draft.sheets, draft.areaArt, draft.overlayArt]);
 
@@ -259,6 +345,7 @@ export default function KingdomBuilderTileMapper() {
                         <span className="ag-field-label">Layout</span>
                         <select className="ag-select" value={activeLayout} onChange={event => setLayout(event.target.value as Layout)} disabled={layoutOf(currentArt) !== null}>
                             <option value="mask16">mask16 — sixteen, by neighbour</option>
+                            <option value="mask47">mask47 — forty-seven, with inner corners</option>
                             <option value="orientation">orientation — by direction</option>
                             <option value="variants">variants — a handful, seeded</option>
                             <option value="single">single — one tile</option>
@@ -266,17 +353,36 @@ export default function KingdomBuilderTileMapper() {
                     </label>
                 </div>
 
-                {activeLayout === "mask16" && (
-                    <div className="ag-btn-row ag-btn-row--wrap">
-                        {SIDES.map(side => (
-                            <label key={side.key} className="ag-editor-field ag-editor-field--inline">
-                                <input type="checkbox" checked={maskSideState[side.key]} onChange={event => setMaskSideState({ ...maskSideState, [side.key]: event.target.checked })} />
-                                <span className="ag-field-label">{side.label} matches</span>
-                            </label>
-                        ))}
-                        <span className="ag-tag">mask {maskFromSides(maskSideState)}</span>
-                        {currentArt?.layout === "mask16" && <span className="ag-tag">{mask16Remaining(currentArt.tiles)} of 16 left</span>}
-                    </div>
+                {(activeLayout === "mask16" || activeLayout === "mask47") && (
+                    <>
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            {SIDES.map(side => (
+                                <label key={side.key} className="ag-editor-field ag-editor-field--inline">
+                                    <input type="checkbox" checked={maskSideState[side.key]} onChange={event => setMaskSideState({ ...maskSideState, [side.key]: event.target.checked })} />
+                                    <span className="ag-field-label">{side.label} matches</span>
+                                </label>
+                            ))}
+                            {activeLayout === "mask47" && DIAGONALS.map(diagonal => (
+                                <label key={diagonal.key} className="ag-editor-field ag-editor-field--inline">
+                                    {/* A diagonal only changes the picture where both the sides beside it match, so the ones that can't are disabled rather than silently ignored — otherwise two different tickings would enter the same slot. */}
+                                    <input type="checkbox" disabled={!diagonalApplies(maskSideState, diagonal.key)} checked={diagonalApplies(maskSideState, diagonal.key) && maskSideState[diagonal.key]} onChange={event => setMaskSideState({ ...maskSideState, [diagonal.key]: event.target.checked })} />
+                                    <span className="ag-field-label">{diagonal.label} matches</span>
+                                </label>
+                            ))}
+                            <span className="ag-tag">
+                                {activeLayout === "mask16" ? `mask ${maskFromSides(maskSideState)}` : `slot ${blobIndexOf(mask8FromSides(maskSideState))} of 47`}
+                            </span>
+                            {currentArt && isDraftMaskArt(currentArt) && <span className="ag-tag">{maskRemaining(currentArt.layout, currentArt.tiles)} of {MASK_LAYOUT_SIZES[currentArt.layout]} left</span>}
+                        </div>
+                        {activeLayout === "mask16" && (
+                            <div className="ag-btn-row ag-btn-row--wrap">
+                                <button type="button" className={nineSliceArmed ? "ag-btn ag-btn--primary" : "ag-btn ag-btn--light"} onClick={() => setNineSliceArmed(!nineSliceArmed)} disabled={!entryCode}>
+                                    {nineSliceArmed ? "Click the block's top-left square…" : "Import a 3×3 nine-slice"}
+                                </button>
+                                <span className="ag-hint">Fills all sixteen from one 3×3 block: nine come from the block, the seven a nine-slice never draws are aliased onto the closest it has.</span>
+                            </div>
+                        )}
+                    </>
                 )}
                 {activeLayout === "orientation" && (
                     <label className="ag-editor-field">
@@ -288,8 +394,27 @@ export default function KingdomBuilderTileMapper() {
                     <p className="ag-hint">{currentArt.tiles.length} variant(s) so far — click another square to add one.</p>
                 )}
 
+                {piecesAllowed && (
+                    <>
+                        <div className="ag-editor-grid">
+                            <label className="ag-editor-field"><span className="ag-field-label">Piece width (squares)</span><input className="ag-input" type="number" min={1} value={piece.width} onChange={event => setPiece(resizedPiece(piece, Math.max(1, Number(event.target.value) || 1), piece.height))} /></label>
+                            <label className="ag-editor-field"><span className="ag-field-label">Piece height (squares)</span><input className="ag-input" type="number" min={1} value={piece.height} onChange={event => setPiece(resizedPiece(piece, piece.width, Math.max(1, Number(event.target.value) || 1)))} /></label>
+                            {/* Clamped as it's typed rather than on the way out: an anchor outside its own piece is something the guard rejects, and the mapper shouldn't be able to print one in the first place. */}
+                            <label className="ag-editor-field"><span className="ag-field-label">Anchor across</span><input className="ag-input" type="number" min={0} max={piece.width - 1} value={piece.anchorX} onChange={event => setPiece({ ...piece, anchorX: clampToPiece(Number(event.target.value), piece.width) })} /></label>
+                            <label className="ag-editor-field"><span className="ag-field-label">Anchor down</span><input className="ag-input" type="number" min={0} max={piece.height - 1} value={piece.anchorY} onChange={event => setPiece({ ...piece, anchorY: clampToPiece(Number(event.target.value), piece.height) })} /></label>
+                        </div>
+                        <p className="ag-hint">
+                            A piece taller or wider than one square is anchored on the square it&apos;s placed on — a church stands on its doorstep and rises over the ground behind it. Leave the anchor at the bottom-left (0, {Math.max(0, piece.height - 1)}) unless the art wants otherwise, and click the piece&apos;s <strong>top-left</strong> square on the sheet.
+                        </p>
+                    </>
+                )}
+
                 {entryCode && (
-                    <p className="ag-hint">Click a square below to assign it to <strong>{entryCode}</strong>{activeLayout === "mask16" ? ` — mask ${maskFromSides(maskSideState)}` : ""}.</p>
+                    <p className="ag-hint">
+                        {nineSliceArmed
+                            ? <>Click the <strong>top-left</strong> square of a 3×3 block to fill all sixteen of <strong>{entryCode}</strong>&apos;s masks from it.</>
+                            : <>Click a square below to assign it to <strong>{entryCode}</strong>{activeLayout === "mask16" ? ` — mask ${maskFromSides(maskSideState)}` : activeLayout === "mask47" ? ` — slot ${blobIndexOf(mask8FromSides(maskSideState))}` : ""}.</>}
+                    </p>
                 )}
                 {!entryCode && <p className="ag-hint">Choose a registry entry above before clicking the sheet.</p>}
             </Section>
@@ -310,7 +435,8 @@ export default function KingdomBuilderTileMapper() {
                                 const col = Math.floor((x - draft.margin) / (draft.tileWidth + draft.spacing));
                                 const row = Math.floor((y - draft.margin) / (draft.tileHeight + draft.spacing));
                                 if (col < 0 || row < 0 || col >= fit.columns || row >= fit.rows) return;
-                                assignTile(cellToIndex(col, row, fit.columns));
+                                const index = cellToIndex(col, row, fit.columns);
+                                if (nineSliceArmed) importNineSlice(index); else assignTile(index);
                             }}
                         >
                             {Array.from({ length: fit.columns * fit.rows }, (_, index) => {

@@ -481,6 +481,21 @@ how a hand-drawn tileset turns into a year of work. Instead each area draws its
 own edge over the area beneath it, in the registry's `priority` order, so a new
 area costs 16 tiles and no new pairings at all.
 
+**Where the art has inner corners, it can ask about eight neighbours instead
+of four.** A 4-bit mask cannot describe the square where two arms of woodland
+close around one square of grass: all four sides match, so it is mask 15, the
+plain interior tile, and the grass sits in it as a hard square. Asking about
+the four diagonals as well fixes that. It does not cost 256 tiles: a diagonal
+only changes what a square looks like where *both* the sides beside it already
+match — with a side open, that corner of the tile is drawn as an edge and what
+lies past it is hidden — which collapses the 256 raw combinations onto 47
+distinct tiles, the shape a "blob" tilesheet is drawn in. So there are two mask
+layouts and the art decides between them: a 3×3 nine-slice, which is what most
+hand-drawn sheets arrive as, fills a `mask16` (nine real squares and seven
+aliases, see the mapper below); a sheet drawn with its inner corners fills a
+`mask47`. Neither is the "right" one — `mask47` looks strictly better and costs
+strictly more drawing.
+
 **Which square is which is declared, not guessed.** The manifest —
 `tileset.ts`, beside the game's `meta.ts` — is the single source of truth, and
 has two halves:
@@ -492,14 +507,35 @@ has two halves:
 - **The tiles each registry entry uses**, as `{ sheet, index }` references. The
   shape of that reference is one of four **layouts**, and the same four serve
   areas and overlays both:
-  - `mask16` — sixteen variants picked by the neighbour mask. Areas use this,
-    and so does anything that connects to itself, like roads.
+  - `mask16` — sixteen variants picked by the 4-bit neighbour mask. Areas use
+    this, and so does anything that connects to itself, like roads — an
+    overlay masks against the other overlays around it, not against the ground
+    under it, so a road reads its own run and not the grass it crosses.
+  - `mask47` — the same, asking about all eight neighbours, for art drawn with
+    inner corners.
   - `orientation` — variants picked by the direction of the thing the tile sits
     on: a bridge across a river runs the way the crossing runs.
   - `variants` — a handful of interchangeable tiles, picked by a seeded hash of
     the tile's coordinates, so a big field of grass doesn't visibly repeat and
     the pick is stable across renders and across players.
   - `single` — one tile, for a landmark that only looks one way.
+
+**A reference may be a piece several squares across.** A walled town, a church,
+a two-square cliff face: art that no single square of ground can hold. So a
+`{ sheet, index }` may also carry a `width` and `height` in sheet squares, with
+`index` as the piece's top-left, and an anchor saying which square *of the
+piece* sits on the square of map it was placed on. The anchor is what makes the
+common case work: a building stands on one square of ground and rises over the
+squares behind it, so it defaults to the piece's bottom-left corner and the art
+hangs above and to the right of the placement. A piece is drawn one square at a
+time rather than as one blit, so a sheet with a gutter between its squares can
+hold pieces at all.
+
+Only an overlay may be a piece, and only on its non-mask layouts. An area is a
+ground fill — exactly one square of art per square of map — and a mask tile is
+picked per square whoever declares it, so a road that autotiles is still laid
+one square at a time. The guard says all of this rather than leaving it to be
+remembered.
 
 Nothing else goes in the manifest: no weight, no placement rule, no cost. The
 manifest describes the art; the registries (§3.5.2, §3.5.3) are the game. An
@@ -524,7 +560,21 @@ editor (`docs/admin-tools.md`):
   the first left off.
 - **Assign squares**: click a tile, say which registry entry it belongs to and
   which role it plays in that entry's layout (which mask index, which
-  orientation, or "another variant").
+  orientation, or "another variant"). A `mask47` role is the same four "matches"
+  checkboxes plus the four diagonals, each greyed out unless both the sides
+  beside it are ticked, so a role no square of map could ever ask for can't be
+  entered. A piece states its size in squares and where its anchor sits, on the
+  layouts allowed to be one.
+- **Import a nine-slice**: most hand-drawn sheets come as 3×3 blocks — corner,
+  edge, centre — which is nine of the sixteen neighbourhoods a `mask16` wants.
+  One click on the block's top-left square fills all sixteen: the nine it has
+  from the block, and the seven a nine-slice never draws (an isolated square,
+  the end of a peninsula, a one-square-wide strip) aliased onto the closest it
+  does have. "Closest" weighs the two ways a substitute is wrong differently —
+  art showing open ground where there should be an edge is a hard seam and
+  costs double; art drawing an edge where the patch continues is a stray line
+  that reads as texture. Ties break low, so re-importing the same block prints
+  the same file.
 - **Copy out the finished `tileset.ts`.** Like the track editor it is a
   build-time authoring aid behind `AdminPage`'s client-only gate — it persists
   nothing, there is no `/api/admin` route behind it, and what it produces is a
@@ -536,11 +586,17 @@ tile** is however many pixels of art the artist drew, per sheet. The pixel size
 decides only how the sheet is cut and how large the composite is drawn — art at
 16px and art at 64px describe the same patch of ground. Where sheets disagree,
 the composite is rendered at the largest declared tile size, so a later, more
-detailed sheet is never downsampled to match the first one that arrived.
+detailed sheet is never downsampled to match the first one that arrived — and
+the smaller sheet is upscaled with smoothing off, because this is pixel art and
+a bilinear blur is the one thing it must never be put through.
 
 A guard test keeps the manifest honest: every referenced sheet exists, every
-index lands inside the sheet's derived bounds, every `mask16` entry declares all
-sixteen, every registry code is unique and every retired code stays reserved.
+piece lands wholly inside the sheet's derived bounds (a 3-wide piece two squares
+from the right edge would otherwise wrap onto the next row and quietly draw
+someone else's art), every `mask16` entry declares all sixteen and every
+`mask47` all forty-seven, no area or mask entry declares a piece, no anchor sits
+outside its own piece, every registry code is unique and every retired code
+stays reserved.
 That is the same "registry-and-its-test" shape the repo already uses for game
 guides and themes.
 

@@ -4,9 +4,9 @@
 // (§3.5.6) — so this file only declared the sheet list and the pixel tile size
 // the compositor draws at.
 //
-// PR 11 is the first PR to add a sheet, through the tileset mapper at
+// PR 11 added the first sheet through the tileset mapper at
 // `/admin/kingdombuilder-tiles`, and with it the other half of §3.5.5: which
-// registry entry uses which tile, as one of four layouts:
+// registry entry uses which tile, as one of these layouts:
 //
 // - `mask16` — sixteen tiles, picked by a tile's own 4-bit neighbour mask
 //   (§3.5.5's autotiling): bit 0 = north matches, bit 1 = east, bit 2 = south,
@@ -14,12 +14,30 @@
 //   entry". Index 15 is the fully-interior tile; index 0 is an isolated one
 //   with a border on every side. Off the edge of the grid never counts as a
 //   match, so the map's own border always reads as a border.
+// - `mask47` — the same idea asking about all eight neighbours instead of
+//   four, so an area can draw the *inner* corner a `mask16` set cannot
+//   describe: the square where two arms of woodland close around one square
+//   of grass. Four sides and four diagonals are 256 raw combinations, but a
+//   diagonal only changes the picture where both its adjacent sides already
+//   match, which collapses them to the 47 distinct tiles a "blob" tilesheet
+//   is drawn as. It looks strictly better than `mask16` and costs strictly
+//   more art — a 3×3 nine-slice fills a `mask16` with aliases, a `mask47`
+//   wants 47 drawn squares — so both layouts stay and the art decides.
 // - `orientation` — a handful of tiles keyed by whatever orientation string
 //   the placement carries (a bridge's `OverlayPlacement.orientation`).
 // - `variants` — a handful of interchangeable tiles, picked by a seeded hash
 //   of the tile's own coordinates, so a big field of grass doesn't visibly
 //   repeat and the pick is stable across renders and across players.
 // - `single` — one tile, for a landmark that only looks one way.
+//
+// A `TileRef` is one square by default and may instead describe a **piece**
+// several squares across: the walled town, the church, the two-square cliff
+// face no single ground tile can hold. A piece states where its own anchor
+// sits, because a building stands on one square of ground and rises over the
+// squares behind it — "which square was this placed on" and "which squares
+// does it cover" are different questions, and only the first is a placement.
+// Only an overlay may declare a piece: an area is a ground fill, exactly one
+// square per square of map, and the guard says so.
 //
 // Nothing else goes here: no weight, no placement rule, no cost. This file
 // describes the art; AREAS and OVERLAYS (worldgen/areas.ts, worldgen/overlays.ts)
@@ -28,10 +46,10 @@
 // of any art at all and is what still keeps a later, art-less registry entry
 // shippable today.
 //
-// tileset.test.ts is the guard, tightened from PR 10's lenient form: every
-// referenced sheet must exist, every index must land inside that sheet's
-// derived bounds, and every `mask16` entry that declares any tile must declare
-// all sixteen — see tilesetGuard.ts, which does the actual disk read and is
+// tileset.test.ts is the guard: every referenced sheet must exist, every piece
+// must land wholly inside that sheet's derived bounds, every `mask16` entry
+// that declares any tile must declare all sixteen and every `mask47` all
+// forty-seven — see tilesetGuard.ts, which does the actual disk read and is
 // kept out of this file on purpose (this one is imported by useTerrainImage.ts,
 // a client component, and a `node:fs` import in its module graph would break
 // the browser bundle).
@@ -52,17 +70,50 @@ export interface TilesetManifest {
     sheets: Readonly<Record<string, SheetDefinition>>;
 }
 
-/** One square of one sheet, addressed the way the mapper hands them out: a flat, row-major index into that sheet's own grid. */
+/**
+ * One piece of one sheet, addressed the way the mapper hands them out: a flat,
+ * row-major index into that sheet's own grid. A bare `{ sheet, index }` is one
+ * square, which is what every area tile and most overlays are; `width`/`height`
+ * make it a rectangle of squares with `index` as its top-left.
+ */
 export interface TileRef {
     sheet: string;
     index: number;
+    /** Size of the piece in sheet squares, `index` being its top-left. Both default to 1, so a plain `{ sheet, index }` is one square and every existing entry keeps meaning exactly what it did. */
+    width?: number;
+    height?: number;
+    /**
+     * Which square *of the piece* sits on the map square it was placed on, as
+     * a column/row offset from the piece's own top-left. Defaults to the
+     * bottom-left corner — a building stands on its base and rises over the
+     * ground behind it, so the placement names the square it occupies and the
+     * rest of the art hangs above and to the right of it. A one-square piece
+     * has only (0, 0) either way, so the default changes nothing for one.
+     */
+    anchorX?: number;
+    anchorY?: number;
 }
 
 export type TileArt =
     | { layout: "mask16"; tiles: readonly TileRef[] }
+    | { layout: "mask47"; tiles: readonly TileRef[] }
     | { layout: "orientation"; tiles: Readonly<Record<string, TileRef>> }
     | { layout: "variants"; tiles: readonly TileRef[] }
     | { layout: "single"; tile: TileRef };
+
+/** How many tiles a mask layout must declare — the length its `tiles` array is guarded at, and the number of slots the mapper counts down from. */
+export const MASK_LAYOUT_SIZES = { mask16: 16, mask47: 47 } as const;
+
+export type MaskLayout = keyof typeof MASK_LAYOUT_SIZES;
+
+export function isMaskLayout(layout: string): layout is MaskLayout {
+    return layout in MASK_LAYOUT_SIZES;
+}
+
+/** True for the layouts picked per square of map by a neighbour mask, as opposed to by a placement's own direction or a seeded hash. */
+export function isMaskArt(art: TileArt): art is Extract<TileArt, { layout: MaskLayout }> {
+    return isMaskLayout(art.layout);
+}
 
 /** No sheet had landed as of PR 10 — PR 11 adds the first. */
 export const TILESET: TilesetManifest = {
@@ -124,6 +175,108 @@ export function sheetSourceRect(sheet: SheetDefinition, imageWidth: number, inde
         sw: sheet.tileWidth,
         sh: sheet.tileHeight,
     };
+}
+
+/** A ref's size in sheet squares, defaulted — one square unless it says otherwise. */
+export function tileRefSize(ref: TileRef): { width: number; height: number } {
+    return { width: Math.max(1, Math.floor(ref.width ?? 1)), height: Math.max(1, Math.floor(ref.height ?? 1)) };
+}
+
+/** The square of a piece that lands on the map square it was placed on — its declared anchor, or the bottom-left corner (see `TileRef.anchorX`). */
+export function tileRefAnchor(ref: TileRef): { x: number; y: number } {
+    const { width, height } = tileRefSize(ref);
+    return {
+        x: Math.min(width - 1, Math.max(0, Math.floor(ref.anchorX ?? 0))),
+        y: Math.min(height - 1, Math.max(0, Math.floor(ref.anchorY ?? height - 1))),
+    };
+}
+
+/** True for a ref that is exactly one square — what an area's art always is, and what the guard holds `AREA_ART` to. */
+export function isSingleSquare(ref: TileRef): boolean {
+    const { width, height } = tileRefSize(ref);
+    return width === 1 && height === 1;
+}
+
+/** One square of a drawn piece: which sheet index it comes from, and where it goes relative to the map square the piece was placed on. */
+export interface TilePiecePart {
+    index: number;
+    offsetX: number;
+    offsetY: number;
+}
+
+/**
+ * The squares a piece is drawn from, one per sheet square it covers. Drawing a
+ * multi-square piece a square at a time rather than as one big `drawImage` is
+ * what lets a sheet with a `spacing` gutter hold pieces at all: blitting the
+ * whole rectangle in one call would drag the gutter pixels along with it.
+ */
+export function tilePieceParts(ref: TileRef, columns: number): TilePiecePart[] {
+    const { width, height } = tileRefSize(ref);
+    const anchor = tileRefAnchor(ref);
+    const origin = indexToCell(ref.index, columns);
+    const parts: TilePiecePart[] = [];
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            parts.push({ index: cellToIndex(origin.col + x, origin.row + y, columns), offsetX: x - anchor.x, offsetY: y - anchor.y });
+        }
+    }
+    return parts;
+}
+
+/**
+ * The eight neighbour bits a `mask47` tile is picked by. The four sides carry
+ * the same meaning (and deliberately not the same values) as `mask16`'s bits;
+ * a diagonal sits between the two sides it touches, so the byte reads
+ * clockwise from north.
+ */
+export const NEIGHBOUR_BITS = {
+    north: 1,
+    northEast: 2,
+    east: 4,
+    southEast: 8,
+    south: 16,
+    southWest: 32,
+    west: 64,
+    northWest: 128,
+} as const;
+
+const SIDE_BITS = NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.east | NEIGHBOUR_BITS.south | NEIGHBOUR_BITS.west;
+
+/** Each diagonal and the two sides that have to match before it can change the picture at all. */
+const CORNER_BITS: readonly { corner: number; sides: number }[] = [
+    { corner: NEIGHBOUR_BITS.northEast, sides: NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.east },
+    { corner: NEIGHBOUR_BITS.southEast, sides: NEIGHBOUR_BITS.south | NEIGHBOUR_BITS.east },
+    { corner: NEIGHBOUR_BITS.southWest, sides: NEIGHBOUR_BITS.south | NEIGHBOUR_BITS.west },
+    { corner: NEIGHBOUR_BITS.northWest, sides: NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.west },
+];
+
+/**
+ * Collapses a raw 8-bit neighbour mask onto the tile it actually needs. A
+ * diagonal neighbour only changes what a tile looks like where both the sides
+ * beside it already match: with a side open, that corner of the tile is
+ * already drawn as an edge and what lies past it is hidden. Dropping the
+ * diagonals that can't matter is what turns 256 combinations into 47.
+ */
+export function blobKey(mask8: number): number {
+    let key = mask8 & SIDE_BITS;
+    for (const { corner, sides } of CORNER_BITS) {
+        if ((mask8 & sides) === sides && (mask8 & corner) !== 0) key |= corner;
+    }
+    return key;
+}
+
+/** Every distinct `blobKey`, ascending — the canonical order a `mask47` entry's 47 tiles are declared in, so slot N always means the same neighbourhood. */
+export const BLOB_47_KEYS: readonly number[] = (() => {
+    const keys = new Set<number>();
+    for (let mask = 0; mask < 256; mask++) keys.add(blobKey(mask));
+    return [...keys].sort((a, b) => a - b);
+})();
+
+const BLOB_INDEX_BY_KEY: ReadonlyMap<number, number> = new Map(BLOB_47_KEYS.map((key, index) => [key, index]));
+
+/** Which of a `mask47` entry's 47 slots a raw 8-bit neighbour mask draws. */
+export function blobIndexOf(mask8: number): number {
+    return BLOB_INDEX_BY_KEY.get(blobKey(mask8)) ?? 0;
 }
 
 /** Every `TileRef` a `TileArt` entry can hand out, for validating each one lands in bounds without a caller re-deriving the shape per layout. */

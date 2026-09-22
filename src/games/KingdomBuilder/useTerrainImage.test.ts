@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { neighbourMask, overlaysKey, seededVariantIndex, terrainFieldMatchesGrid } from "./useTerrainImage";
+import { neighbourMask, neighbourMask8, overlaysKey, seededVariantIndex, terrainFieldMatchesGrid } from "./useTerrainImage";
+import { NINE_SLICE_MASKS } from "./tileMapperModel";
+import { blobIndexOf, NEIGHBOUR_BITS } from "./tileset";
 import type { TerrainField } from "./worldgen/terrainField";
 
 const FIELD: TerrainField = { columns: 2, rows: 2, tileSize: 2, codes: "gggg" };
@@ -57,6 +59,66 @@ describe("neighbourMask", () => {
         expect(neighbourMask({ columns: 2, rows: 1, tileSize: 2, codes: "gg" }, 0, 0)).toBe(2); // only an east neighbour, and it matches
         expect(neighbourMask({ columns: 1, rows: 2, tileSize: 2, codes: "gg" }, 0, 0)).toBe(4); // only a south neighbour, and it matches
         expect(neighbourMask({ columns: 2, rows: 1, tileSize: 2, codes: "gg" }, 1, 0)).toBe(8); // only a west neighbour, and it matches
+    });
+});
+
+describe("the nine-slice masks the mapper imports under", () => {
+    it("are exactly what a real 3×3 patch of map asks for, square by square", () => {
+        // A 3×3 patch of woodland in a sea of grass. Each square of the patch
+        // is one square of a nine-slice block, so the mask the compositor
+        // computes for it has to be the mask `mask16FromNineSlice` filed that
+        // block's square under — otherwise every imported sheet is rotated or
+        // mirrored and nobody finds out until the art looks wrong.
+        const field: TerrainField = { columns: 5, rows: 5, tileSize: 2, codes: "ggggg" + "gwwwg" + "gwwwg" + "gwwwg" + "ggggg" };
+        for (let slot = 0; slot < 9; slot++) {
+            const col = 1 + (slot % 3);
+            const row = 1 + Math.floor(slot / 3);
+            expect(neighbourMask(field, col, row)).toBe(NINE_SLICE_MASKS[slot]);
+        }
+    });
+});
+
+describe("neighbourMask8", () => {
+    it("is every bit set in the middle of a field of one code", () => {
+        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "ggggggggg" };
+        expect(neighbourMask8(field, 1, 1)).toBe(255);
+    });
+
+    it("never treats off-grid as a match, diagonals included", () => {
+        const field: TerrainField = { columns: 2, rows: 2, tileSize: 2, codes: "gggg" };
+        // From the top-left square only east, south and south-east exist.
+        expect(neighbourMask8(field, 0, 0)).toBe(NEIGHBOUR_BITS.east | NEIGHBOUR_BITS.south | NEIGHBOUR_BITS.southEast);
+    });
+
+    it("sets exactly the bit for each neighbour, clockwise from north", () => {
+        // A 3×3 of one code with a single different square in each position.
+        const around: [number, number, number][] = [
+            [1, 0, NEIGHBOUR_BITS.north], [2, 0, NEIGHBOUR_BITS.northEast], [2, 1, NEIGHBOUR_BITS.east], [2, 2, NEIGHBOUR_BITS.southEast],
+            [1, 2, NEIGHBOUR_BITS.south], [0, 2, NEIGHBOUR_BITS.southWest], [0, 1, NEIGHBOUR_BITS.west], [0, 0, NEIGHBOUR_BITS.northWest],
+        ];
+        for (const [col, row, bit] of around) {
+            const codes = [..."ggggggggg"];
+            codes[row * 3 + col] = "h";
+            expect(neighbourMask8({ columns: 3, rows: 3, tileSize: 2, codes: codes.join("") }, 1, 1)).toBe(255 & ~bit);
+        }
+    });
+
+    it("tells an inner corner from the plain interior tile — the whole reason mask47 exists", () => {
+        // Woodland everywhere but the north-east diagonal, which is grass. All
+        // four sides still match, so mask16 calls this 15 — the fully-interior
+        // tile — and draws no corner at all.
+        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wwgwwwwww" };
+        expect(neighbourMask(field, 1, 1)).toBe(15);
+        expect(blobIndexOf(neighbourMask8(field, 1, 1))).not.toBe(blobIndexOf(255));
+    });
+
+    it("ignores a diagonal whose sides are already open, so the same tile isn't drawn two ways", () => {
+        // The north side is grass, so what sits beyond the north-east corner
+        // can't be seen from this square: woodland or grass up there, this
+        // tile is drawn the same. Only the north-east square differs.
+        const openCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wgwwwwwww" };
+        const closedCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wggwwwwww" };
+        expect(blobIndexOf(neighbourMask8(openCorner, 1, 1))).toBe(blobIndexOf(neighbourMask8(closedCorner, 1, 1)));
     });
 });
 
