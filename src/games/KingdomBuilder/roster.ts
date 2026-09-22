@@ -2,10 +2,11 @@ import { Types } from "mongoose";
 
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
+import { meta } from "./meta";
 import { foundSettlement, freePlayerStarts, KingdomBuilderPersistenceError } from "./persistence";
 
-/** §1: a world seats ten players at most. */
-export const KINGDOM_BUILDER_MAX_SEATS = 10;
+/** §1: a world seats ten players at most — the same bound the setup screen and the party-size check read. */
+export const KINGDOM_BUILDER_MAX_SEATS = meta.maxPlayers;
 
 /**
  * How many times a join re-reads the world after losing a race for a start
