@@ -870,9 +870,9 @@ future tick) or at the next sweep, depending on the action.
 
 **Timer-gated WEGO — a fixed real-time tick that is also numbered and
 recorded like a turn.** Concretely: the world advances every fixed interval
-(an hour is a reasonable starting point — long enough that a sweep across
-many worlds is cheap, short enough that "wait for the next tick" never feels
-like the main activity; the exact length is still open, §12). Every sweep is
+(15 minutes, shortened from the hour this document first proposed once
+playtesting showed an hour made "wait for the next tick" the main activity —
+still coarse enough that a sweep across many worlds is cheap; §12). Every sweep is
 assigned a monotonic turn number and is driven by an ordered command log
 exactly like this app's other games, so turn recap and "since you were last
 here" work unmodified in spirit — the log just happens to be appended to by
@@ -1643,8 +1643,10 @@ over real days, rather than by whoever still has the URL in their history.
 Left open deliberately, for playtesting or a follow-up doc rather than
 guessed at here:
 
-- Tick length: is an hour right, or does a faster (e.g. 15-minute) or slower
-  (e.g. 4-hour) cadence suit the target session shape better?
+- Tick length: settled at 15 minutes (§5.5), down from the hour first
+  proposed. Whether build and travel times should be retuned to match — a
+  two-tick building now finishes in half an hour — is part of the numbers
+  pass below.
 - Exact terrain movement-cost multipliers (§6.2) and exact scout/detection
   parameters (§6.3) — range, reliability, whether detection is guaranteed or
   itself a chance — need numbers, not just relative ordering.

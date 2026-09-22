@@ -48,7 +48,7 @@ export default function NewKingdomBuilder() {
             actionDisabled={starting}
         >
             <Section label="Prototype world">
-                <p>Start with a town centre and an empty 3×3 settlement. Resources arrive every hour, ready for you to build lumber camps, quarries and mines.</p>
+                <p>Start with a town centre and an empty 3×3 settlement. Resources arrive every 15 minutes, ready for you to build lumber camps, quarries and mines.</p>
                 {error && <div className="ag-callout" role="alert">{error}</div>}
             </Section>
         </GameSetupLayout>
