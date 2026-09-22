@@ -116,45 +116,93 @@ export function diagonalApplies(sides: NeighbourSides, diagonal: DiagonalName): 
     return (blobKey(rawMask8(sides) | bit) & bit) !== 0;
 }
 
-/**
- * How each of the eight neighbour cells in the mapper's own "3×3 preview"
- * should read, from the same checkboxes `assignTile` reads the active slot
- * from: "match" draws the entry's own fully-interior tile there (more of the
- * same terrain), "differ" draws a plain "something else" placeholder, and
- * "irrelevant" — the four diagonals of a `mask16` entry only — draws neither,
- * because a `mask16` tile is picked from its four sides alone and a corner
- * tick there can never change its picture. A `mask47` diagonal is "irrelevant"
- * too wherever `diagonalApplies` says it can't matter, for the same reason the
- * checkbox itself is disabled there — the preview and the checkbox can't come
- * to disagree about what a tick means.
- */
-export type MaskPreviewFill = "match" | "differ" | "irrelevant";
+/** The slot one neighbourhood picks for either mask layout — mask16's plain 4-bit value, or mask47's blob-collapsed one — asked once here so the mapper's several "test scene" previews below (and `islandMaskSlots`) never derive it twice. */
+function maskSlotFor(layout: MaskLayout, sides: NeighbourSides): number {
+    return layout === "mask16" ? maskFromSides(sides) : blobIndexOf(mask8FromSides(sides));
+}
 
-export function maskPreviewFill(layout: MaskLayout, sides: NeighbourSides): Record<keyof NeighbourSides, MaskPreviewFill> {
-    const corner = (key: DiagonalName): MaskPreviewFill => {
-        if (layout !== "mask47" || !diagonalApplies(sides, key)) return "irrelevant";
-        return sides[key] ? "match" : "differ";
-    };
+/**
+ * The four sides' "matches" for one square of a self-contained 3×3 "island"
+ * of one entry, purely from its own (row, col) inside the block — the same
+ * fixed patch `NINE_SLICE_MASKS` already lists by hand for `mask16`, asked
+ * generically instead so the mapper's own preview can ask it of `mask47` too.
+ * A neighbour outside the 3×3 never matches, the same rule a real map's edge
+ * follows — an island square's neighbours are entirely decided by where it
+ * sits in the block, never by anything an author has to tick.
+ */
+export function islandNeighbourSides(row: number, col: number): NeighbourSides {
+    const onIsland = (r: number, c: number) => r >= 0 && r < 3 && c >= 0 && c < 3;
     return {
-        north: sides.north ? "match" : "differ",
-        east: sides.east ? "match" : "differ",
-        south: sides.south ? "match" : "differ",
-        west: sides.west ? "match" : "differ",
-        northEast: corner("northEast"),
-        southEast: corner("southEast"),
-        southWest: corner("southWest"),
-        northWest: corner("northWest"),
+        north: onIsland(row - 1, col),
+        northEast: onIsland(row - 1, col + 1),
+        east: onIsland(row, col + 1),
+        southEast: onIsland(row + 1, col + 1),
+        south: onIsland(row + 1, col),
+        southWest: onIsland(row + 1, col - 1),
+        west: onIsland(row, col - 1),
+        northWest: onIsland(row - 1, col - 1),
     };
 }
 
 /**
- * The slot a mask entry's fully-interior tile sits at — every neighbour
- * matching — which is what the preview's "match" cells draw as "more of this
- * terrain". `mask16`'s is the plain top bit; `mask47`'s is whichever of its 47
- * slots the all-eight-bits mask collapses onto.
+ * The nine slots a self-contained 3×3 island of one entry draws from, row
+ * by row — the mapper's own "3×3 preview": every square of the block is
+ * really this entry, so every one of the nine is a real, already-meaningful
+ * slot (the centre is the fully-interior one) rather than a stand-in for a
+ * neighbour the mapper doesn't actually know. Matches `NINE_SLICE_MASKS`
+ * exactly for `mask16` — same fixed patch, read off the position instead of
+ * listed by hand — and extends the idea to `mask47`, whose extra diagonals a
+ * 3×3 block also fully decides (every neighbour of every island square, on or
+ * off the island, is itself one of the nine or off the edge).
  */
-export function interiorMaskSlot(layout: MaskLayout): number {
-    return layout === "mask16" ? 15 : blobIndexOf(0xff);
+export function islandMaskSlots(layout: MaskLayout): readonly number[] {
+    const slots: number[] = [];
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            slots.push(maskSlotFor(layout, islandNeighbourSides(row, col)));
+        }
+    }
+    return slots;
+}
+
+/**
+ * The isolated tile and the four peninsula tips, laid out as a cross so the
+ * shape reads at a glance — five of the seven exotic neighbourhoods
+ * `nearestDeclaredMask`'s own comment names as what a nine-slice block never
+ * draws (an isolated square, and the end of a peninsula, one per direction;
+ * the two one-square-wide *strips* are the two it leaves out). The centre is
+ * a square of this terrain with nothing touching it anywhere; each arm is the
+ * far tip of a thin strand reaching out from a body in that direction, so it
+ * only matches on the one side that leads back toward the middle. Works for
+ * either mask layout — none of these five ever has two adjacent sides both
+ * matching, so no diagonal can ever apply to one of them (`diagonalApplies`),
+ * and mask16 and mask47 read the same neighbourhood identically.
+ */
+export function crossMaskSlots(layout: MaskLayout): { centre: number; north: number; east: number; south: number; west: number } {
+    const none: NeighbourSides = { north: false, northEast: false, east: false, southEast: false, south: false, southWest: false, west: false, northWest: false };
+    const slot = (sides: Partial<NeighbourSides>) => maskSlotFor(layout, { ...none, ...sides });
+    return {
+        centre: slot({}),
+        north: slot({ south: true }), // the arm above the centre only touches the body below it
+        east: slot({ west: true }),
+        south: slot({ north: true }),
+        west: slot({ east: true }),
+    };
+}
+
+/**
+ * The four inner corners, `mask47`'s own answer to "two arms close around one
+ * square of something else" (tileset.ts's header comment) — the picture a
+ * `mask16` tile can never draw, because it has no diagonal to ask about at
+ * all. Each is otherwise the fully-interior neighbourhood — every side and
+ * every other diagonal matching — with only the one corner being shown left
+ * open, so the difference from "surrounded on every side" is exactly that one
+ * corner. `mask47`-only concept, so this doesn't take a layout.
+ */
+export function innerCornerMaskSlots(): { northWest: number; northEast: number; southWest: number; southEast: number } {
+    const allMatch: NeighbourSides = { north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true };
+    const slot = (corner: DiagonalName) => blobIndexOf(mask8FromSides({ ...allMatch, [corner]: false }));
+    return { northWest: slot("northWest"), northEast: slot("northEast"), southWest: slot("southWest"), southEast: slot("southEast") };
 }
 
 /** One mask slot's own preview tile: its first variant, for a slot declaring several — the preview shows one concrete picture rather than the whole rotation. `undefined` for a slot never clicked. */
@@ -169,9 +217,12 @@ export function previewRefOf(slot: MaskSlotArt | undefined): TileRef | undefined
  * A nine-slice is a *picture of a patch*, so each square's mask is the
  * neighbourhood that square has within the patch — the top-left corner of a
  * patch has neighbours to its east and south, and nothing to its north or
- * west, which is mask 6.
+ * west, which is mask 6. `islandMaskSlots` computes exactly this same patch
+ * from each square's own position rather than listing it by hand — asked for
+ * `mask16` here so this stays the one array both the importer and a test
+ * (which pins the two together) actually read.
  */
-export const NINE_SLICE_MASKS: readonly number[] = [6, 14, 12, 7, 15, 13, 3, 11, 9];
+export const NINE_SLICE_MASKS: readonly number[] = islandMaskSlots("mask16");
 
 /**
  * The declared mask that stands in best for one a 3×3 block never drew.
@@ -240,6 +291,34 @@ export type DraftTileArt =
 /** `tileset.ts`'s `isMaskArt` for the mapper's own in-progress shape — the same question asked of a draft that may still have holes in it. */
 export function isDraftMaskArt(art: DraftTileArt): art is Extract<DraftTileArt, { layout: MaskLayout }> {
     return isMaskLayout(art.layout);
+}
+
+/**
+ * Every one of a mask layout's slots pointed at the same square — the
+ * mapper's "fill every slot with one tile" shortcut, for an entry with no
+ * differentiated edge art yet. The shipped grass area is exactly this:
+ * every slot but the fully-interior one still points at the same plain
+ * square. Replaces whatever the entry held before, the same way importing a
+ * nine-slice does — this is a fresh start, not folded onto the old data.
+ */
+export function fillMaskWithTile(layout: MaskLayout, ref: TileRef): DraftTileArt {
+    return { layout, tiles: new Array(MASK_LAYOUT_SIZES[layout]).fill(ref) };
+}
+
+/**
+ * A mask entry's own `tiles`, straight back from the JSON round trip the
+ * draft takes through `useStoredValue`'s localStorage string — every reload,
+ * but also every render, since nothing here keeps a live object between
+ * writes. JSON has no `undefined`, so every hole `withMaskSlotAssigned`
+ * leaves as `undefined` comes back as `null` instead, and every reader that
+ * trusts `undefined` — `draftTileRefsOf`'s own hole check chief among them —
+ * mishandles a `null` it wasn't expecting. Folding `null` back to `undefined`
+ * once, right where the round trip happens (`parseDraft`, in the component),
+ * is simpler than teaching every reader the two mean the same thing.
+ */
+export function normalizeDraftArt(art: DraftTileArt): DraftTileArt {
+    if (!isDraftMaskArt(art)) return art;
+    return { layout: art.layout, tiles: art.tiles.map(tile => tile ?? undefined) };
 }
 
 /** How many of a mask entry's slots are still unassigned, for the panel's own "7 of 16 left" nudge. A slot counts as assigned whether it holds one tile or several variants. */

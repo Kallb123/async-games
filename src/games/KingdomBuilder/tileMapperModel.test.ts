@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    crossMaskSlots,
     diagonalApplies,
     draftTileRefsOf,
     entriesUsingSheet,
+    fillMaskWithTile,
     gridFit,
-    interiorMaskSlot,
+    innerCornerMaskSlots,
+    islandMaskSlots,
+    islandNeighbourSides,
+    isDraftMaskArt,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
-    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
+    normalizeDraftArt,
     PREVIEW_WIDTH,
     previewRefOf,
     previewScale,
@@ -171,6 +176,39 @@ describe("withMaskSlotAssigned", () => {
     });
 });
 
+describe("normalizeDraftArt", () => {
+    it("folds a JSON round trip's null holes back to undefined for a mask entry", () => {
+        // JSON.parse(JSON.stringify(...)) turns an `undefined` array element
+        // into `null` — exactly what the draft comes back as from localStorage.
+        const tiles: (undefined | { sheet: string; index: number })[] = new Array(16).fill(undefined);
+        tiles[15] = { sheet: "ground", index: 0 };
+        const roundTripped: { layout: string; tiles: unknown[] } = JSON.parse(JSON.stringify({ layout: "mask16", tiles }));
+        expect(roundTripped.tiles[0]).toBeNull(); // the round trip really did turn it into null
+
+        const normalized = normalizeDraftArt(roundTripped as DraftTileArt);
+        expect(normalized).toEqual({ layout: "mask16", tiles });
+        expect(draftTileRefsOf(normalized)).toEqual([{ sheet: "ground", index: 0 }]); // no crash walking it, and no phantom null ref
+    });
+
+    it("leaves a wholly unassigned mask entry as all-undefined", () => {
+        const roundTripped = JSON.parse(JSON.stringify({ layout: "mask47", tiles: new Array(47).fill(undefined) })) as DraftTileArt;
+        const normalized = normalizeDraftArt(roundTripped);
+        expect(isDraftMaskArt(normalized) && normalized.tiles.every(tile => tile === undefined)).toBe(true);
+    });
+
+    it("passes non-mask art through unchanged", () => {
+        const single: DraftTileArt = { layout: "single", tile: { sheet: "town", index: 4 } };
+        expect(normalizeDraftArt(single)).toEqual(single);
+    });
+
+    it("leaves a real tile in place", () => {
+        const tiles = new Array(16).fill(undefined);
+        tiles[0] = { sheet: "ground", index: 2 };
+        const art: DraftTileArt = { layout: "mask16", tiles };
+        expect(normalizeDraftArt(art)).toEqual(art);
+    });
+});
+
 describe("draftTileRefsOf", () => {
     it("flattens a mask entry's variant slots alongside its plain ones", () => {
         const tiles = new Array(16).fill(undefined);
@@ -227,41 +265,96 @@ describe("diagonalApplies", () => {
     });
 });
 
-describe("maskPreviewFill", () => {
-    it("reads the four sides straight off the checkboxes for either layout", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true, south: true };
-        expect(maskPreviewFill("mask16", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
-        expect(maskPreviewFill("mask47", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+describe("islandNeighbourSides", () => {
+    it("the centre of a 3×3 island matches on every side — the fully-interior tile", () => {
+        const sides = islandNeighbourSides(1, 1);
+        expect(sides).toEqual({ north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true });
     });
 
-    it("mask16's diagonals are always irrelevant — a mask16 tile never asks about them", () => {
-        const allSides = { ...NO_NEIGHBOURS, north: true, east: true, south: true, west: true };
-        const fill = maskPreviewFill("mask16", allSides);
-        expect(fill.northEast).toBe("irrelevant");
-        expect(fill.southEast).toBe("irrelevant");
-        expect(fill.southWest).toBe("irrelevant");
-        expect(fill.northWest).toBe("irrelevant");
+    it("a top-left corner only matches the two sides that stay on the island", () => {
+        const sides = islandNeighbourSides(0, 0);
+        expect(sides).toMatchObject({ north: false, west: false, east: true, south: true });
+        expect(sides.northWest).toBe(false); // off the island on both axes
+        expect(sides.southEast).toBe(true); // the middle square, on the island
     });
 
-    it("mask47's diagonal matches its own checkbox once both sides beside it match", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true, east: true, northEast: true };
-        expect(maskPreviewFill("mask47", sides).northEast).toBe("match");
-        expect(maskPreviewFill("mask47", { ...sides, northEast: false }).northEast).toBe("differ");
-    });
-
-    it("mask47's diagonal is irrelevant wherever diagonalApplies says it can't matter — never a false 'differ'", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true }; // east open: the corner can't be seen
-        expect(maskPreviewFill("mask47", sides).northEast).toBe("irrelevant");
+    it("a top-centre edge matches three sides and both diagonals the island still has", () => {
+        const sides = islandNeighbourSides(0, 1);
+        expect(sides).toMatchObject({ north: false, east: true, south: true, west: true, southEast: true, southWest: true });
     });
 });
 
-describe("interiorMaskSlot", () => {
-    it("is 15 for mask16 — every side ticked", () => {
-        expect(interiorMaskSlot("mask16")).toBe(15);
+describe("islandMaskSlots", () => {
+    it("is exactly NINE_SLICE_MASKS for mask16 — the same fixed patch, read off the position instead of listed by hand", () => {
+        expect(islandMaskSlots("mask16")).toEqual(NINE_SLICE_MASKS);
     });
 
-    it("is mask47's slot for all eight neighbours matching", () => {
-        expect(interiorMaskSlot("mask47")).toBe(BLOB_47_KEYS.indexOf(255));
+    it("its centre is mask47's fully-interior slot too", () => {
+        expect(islandMaskSlots("mask47")[4]).toBe(BLOB_47_KEYS.indexOf(255));
+    });
+
+    it("is nine slots, every one of them a real, distinct neighbourhood", () => {
+        const slots = islandMaskSlots("mask47");
+        expect(slots).toHaveLength(9);
+        expect(new Set(slots).size).toBe(9);
+    });
+});
+
+describe("crossMaskSlots", () => {
+    it("the centre is the isolated tile — mask16's 0, and mask47's own isolated slot", () => {
+        expect(crossMaskSlots("mask16").centre).toBe(0);
+        expect(crossMaskSlots("mask47").centre).toBe(blobIndexOf(0));
+    });
+
+    it("each arm only matches on the side leading back to the centre, for mask16", () => {
+        const cross = crossMaskSlots("mask16");
+        expect(cross.north).toBe(maskFromSides({ ...NO_NEIGHBOURS, south: true }));
+        expect(cross.east).toBe(maskFromSides({ ...NO_NEIGHBOURS, west: true }));
+        expect(cross.south).toBe(maskFromSides({ ...NO_NEIGHBOURS, north: true }));
+        expect(cross.west).toBe(maskFromSides({ ...NO_NEIGHBOURS, east: true }));
+    });
+
+    it("mask47 reads the same lone-side neighbourhoods — no diagonal can ever apply to a peninsula tip", () => {
+        const cross = crossMaskSlots("mask47");
+        expect(cross.north).toBe(blobIndexOf(NEIGHBOUR_BITS.south));
+        expect(cross.east).toBe(blobIndexOf(NEIGHBOUR_BITS.west));
+        expect(cross.south).toBe(blobIndexOf(NEIGHBOUR_BITS.north));
+        expect(cross.west).toBe(blobIndexOf(NEIGHBOUR_BITS.east));
+    });
+
+    it("is five distinct slots", () => {
+        expect(new Set(Object.values(crossMaskSlots("mask16"))).size).toBe(5);
+    });
+});
+
+describe("innerCornerMaskSlots", () => {
+    it("is four distinct mask47 slots, none of them the fully-interior one", () => {
+        const values = Object.values(innerCornerMaskSlots());
+        expect(new Set(values).size).toBe(4);
+        expect(values).not.toContain(blobIndexOf(255));
+    });
+
+    it("each corner is the fully-interior neighbourhood with just that one diagonal left open", () => {
+        const corners = innerCornerMaskSlots();
+        expect(corners.northEast).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.northEast));
+        expect(corners.southEast).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.southEast));
+        expect(corners.southWest).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.southWest));
+        expect(corners.northWest).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.northWest));
+    });
+});
+
+describe("fillMaskWithTile", () => {
+    it("points every slot of a mask16 entry at the same ref", () => {
+        const ref = { sheet: "ground", index: 3 };
+        const art = fillMaskWithTile("mask16", ref);
+        expect(art.layout).toBe("mask16");
+        expect(isDraftMaskArt(art) ? art.tiles : []).toHaveLength(16);
+        expect(isDraftMaskArt(art) && art.tiles.every(tile => tile === ref)).toBe(true);
+    });
+
+    it("points every slot of a mask47 entry at the same ref", () => {
+        const art = fillMaskWithTile("mask47", { sheet: "ground", index: 7 });
+        expect(isDraftMaskArt(art) ? art.tiles : []).toHaveLength(47);
     });
 });
 
