@@ -505,7 +505,7 @@ has two halves:
   real tilesheets usually have). Columns and rows are derived from the image's
   own dimensions, so they cannot disagree with the file.
 - **The tiles each registry entry uses**, as `{ sheet, index }` references. The
-  shape of that reference is one of four **layouts**, and the same four serve
+  shape of that reference is one of five **layouts**, and the same five serve
   areas and overlays both:
   - `mask16` — sixteen variants picked by the 4-bit neighbour mask. Areas use
     this, and so does anything that connects to itself, like roads — an
@@ -630,8 +630,10 @@ not inside the `<svg>` does not scale with the map. A sibling `<canvas>` would
 have to re-derive that sizing and stay in step with it; an `<image>` inherits it
 for free, and no CSS or zoom code changes at all.
 
-The canvas is drawn at a fixed pixel size — the tile sheet's native tile size ×
-the grid, so the art is never resampled on the way in — and handed over as an
+The canvas is drawn at a fixed pixel size — the largest declared tile size ×
+the grid, so a sheet at that size is never resampled on the way in, and a
+smaller one is upscaled with smoothing off (§3.5.5) rather than blurred — and
+handed over as an
 object URL from `canvas.toBlob`, revoked when the map unmounts, rather than a
 `toDataURL` string that would hold a megabyte of base64 in the React tree. A
 pixel-art sheet gets `image-rendering: pixelated` so zooming in doesn't smear

@@ -80,7 +80,7 @@ describe("tileArtErrors", () => {
 
     it("rejects an area declaring a piece at all — an area is a ground fill, one square of art per square of map", () => {
         const art: Record<string, TileArt> = { g: { layout: "single", tile: { sheet: "grid", index: 0, width: 2, height: 2 } } };
-        expect(tileArtErrors("area", art, GRID_SHEET, FIXTURES, true)).toEqual([
+        expect(tileArtErrors("area", art, GRID_SHEET, FIXTURES)).toEqual([
             'tileset.ts area "g" declares a 2×2 piece, but an area is a ground fill — exactly one square of art per square of map',
         ]);
     });

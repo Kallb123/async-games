@@ -10,8 +10,8 @@
 // border-overlay tiles, then the sparse overlay list. PR 10 shipped with no
 // sheet at all, so only the fill pass ever drew anything — the fallback
 // colour every registry entry declares. PR 11 adds the first sheet and the
-// other two passes: a `mask16` area recomputes, per tile, which of its
-// sixteen art tiles its own neighbour mask picks (§3.5.5's autotiling), and a
+// other two passes: an area on a mask layout recomputes, per tile, which of
+// its art tiles its own neighbour mask picks (§3.5.5's autotiling), and a
 // `variants`/`single` area or overlay draws straight from the sheet. An area
 // or overlay with no art yet, or whose sheet failed to load, is left on the
 // fallback fill from pass one — never a coloured square standing in for a
@@ -139,12 +139,40 @@ export function seededVariantIndex(col: number, row: number, count: number): num
  * hands it a short array — the guard test is what actually keeps the shipped
  * manifest's arrays the right length.
  */
-function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, matches: NeighbourMatcher, col: number, row: number): TileRef | undefined {
-    const slot = art.layout === "mask16" ? sideMask(matches, col, row) : blobIndexOf(eightMask(matches, col, row));
+function maskSlot(layout: MaskLayout, matches: NeighbourMatcher, col: number, row: number): number {
+    return layout === "mask16" ? sideMask(matches, col, row) : blobIndexOf(eightMask(matches, col, row));
+}
+
+function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number): TileRef | undefined {
     return art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
 }
 
-/** Every tile a `variants`/`single`/`mask16` art entry could ever point at, for preloading every sheet a composite might need before drawing starts. */
+/**
+ * The sparse overlay list indexed by tile, for masking a self-connecting
+ * overlay against its neighbours. Two placements on one tile is a
+ * generated-world bug rather than something to draw twice over: the last one
+ * in wins the square's identity, and both still draw. Exported for testing
+ * without a DOM.
+ */
+export function overlayCodesByTile(overlays: readonly OverlayPlacement[]): Map<number, string> {
+    return new Map(overlays.map(placement => [placement.tile, placement.code]));
+}
+
+/**
+ * Which slot of a self-connecting overlay's mask art one placement draws — a
+ * road, a wall, a fence, masking against the other overlays around it rather
+ * than against the ground under it, which is what makes a road read as its own
+ * run and not as the grass it crosses. A square carrying no overlay matches
+ * nothing, so a lone bridge autotiles as a lone bridge; off the edge of the
+ * grid never matches, same as an area's. Exported for testing without a DOM.
+ */
+export function overlayMaskSlot(layout: MaskLayout, field: TerrainField, overlayByTile: ReadonlyMap<number, string>, tile: number): number {
+    const code = overlayByTile.get(tile);
+    if (code === undefined) return 0;
+    return maskSlot(layout, sameOverlayAs(field, overlayByTile, code), tile % field.columns, Math.floor(tile / field.columns));
+}
+
+/** Every tile a `variants`/`single`/mask art entry could ever point at, for preloading every sheet a composite might need before drawing starts. */
 function sheetNamesUsed(artMaps: ReadonlyArray<Readonly<Record<string, TileArt>>>): Set<string> {
     const names = new Set<string>();
     for (const map of artMaps) for (const art of Object.values(map)) for (const ref of tileRefsOf(art)) names.add(ref.sheet);
@@ -206,7 +234,7 @@ function drawTile(context: CanvasRenderingContext2D, manifest: TilesetManifest, 
     }
 }
 
-/** Pass one (§3.5.6): every tile's registry fallback colour, then a `variants`/`single` area's own picked tile on top where its sheet loaded. `mask16` areas are deliberately left on the fallback here — their real look is pass two's, once every tile's neighbours are known. */
+/** Pass one (§3.5.6): every tile's registry fallback colour, then a `variants`/`single` area's own picked tile on top where its sheet loaded. Areas on a mask layout are deliberately left on the fallback here — their real look is pass two's, once every tile's neighbours are known. */
 function paintFill(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
     for (let row = 0; row < field.rows; row++) {
         for (let col = 0; col < field.columns; col++) {
@@ -225,7 +253,7 @@ function paintFill(context: CanvasRenderingContext2D, field: TerrainField, tileP
     }
 }
 
-/** Pass two (§3.5.6): every `mask16` area redraws its own tiles, in the registry's priority order, picking each one's real neighbour-mask variant. A no-op for a tile whose area has no `mask16` entry or whose sheet never loaded — pass one's fallback (or its `variants`/`single` art) stands as its finished look. */
+/** Pass two (§3.5.6): every area on a mask layout redraws its own tiles, in the registry's priority order, picking each one's real neighbour-mask variant — the four sides for a `mask16`, all eight neighbours for a `mask47`. A no-op for a tile whose area has no mask entry or whose sheet never loaded — pass one's fallback (or its `variants`/`single` art) stands as its finished look. */
 function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
     for (const area of AREAS) {
         const art = AREA_ART[area.code];
@@ -233,7 +261,7 @@ function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField
         for (let row = 0; row < field.rows; row++) {
             for (let col = 0; col < field.columns; col++) {
                 if (field.codes[row * field.columns + col] !== area.code) continue;
-                const ref = maskTile(art, sameCodeAs(field, area.code), col, row);
+                const ref = maskTile(art, maskSlot(art.layout, sameCodeAs(field, area.code), col, row));
                 if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
             }
         }
@@ -242,13 +270,8 @@ function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField
 
 /** Pass three (§3.5.6): the sparse overlay list. An overlay with no `OVERLAY_ART` entry, or whose code the registry no longer recognises, or whose sheet failed to load, draws nothing — a missing bridge reads as "not drawn yet", never a coloured square standing in for one. */
 function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, overlays: readonly OverlayPlacement[], tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    // A self-connecting overlay — a road, a wall, a fence — masks against the
-    // other overlays around it, not against the ground under it, so the sparse
-    // list is indexed once here rather than scanned per neighbour per square.
-    // Two placements on one tile is a generated-world bug rather than
-    // something to draw twice over: last one in wins the square's identity,
-    // and both still draw.
-    const overlayByTile = new Map(overlays.map(placement => [placement.tile, placement.code]));
+    // Indexed once here rather than scanned per neighbour per square.
+    const overlayByTile = overlayCodesByTile(overlays);
 
     for (const placement of overlays) {
         if (placement.tile < 0 || placement.tile >= field.columns * field.rows) continue;
@@ -261,7 +284,7 @@ function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, o
             art.layout === "single" ? art.tile :
             art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] :
             art.layout === "variants" ? art.tiles[seededVariantIndex(col, row, art.tiles.length)] :
-            maskTile(art, sameOverlayAs(field, overlayByTile, placement.code), col, row); // a self-connecting overlay — a road, a wall — autotiles against its own kind exactly as an area does against its own.
+            maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile)); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
         if (!ref) continue;
         drawTile(context, manifest, images, ref, col, row, tilePixels);
     }

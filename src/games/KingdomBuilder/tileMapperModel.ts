@@ -4,7 +4,7 @@
 // owns pointer handling and the panels; this owns the grid maths, the tile
 // size suggestions and the printed `tileset.ts` source.
 
-import { BLOB_47_KEYS, blobKey, cellToIndex, indexToCell, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
+import { blobKey, cellToIndex, indexToCell, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
 
 /** A sheet whose grid divides its image evenly on both axes, in the range a real tilesheet's tile size is likely to sit in. Sorted smallest first, so the UI can offer them as "did you mean" chips without the author counting squares themselves. */
 export function suggestedTileSizes(imageWidth: number, imageHeight: number, margin: number, spacing: number, min = 8, max = 128): number[] {
@@ -58,21 +58,35 @@ export interface NeighbourSides {
     northWest: boolean;
 }
 
-/** The 8-bit mask a `mask47` role is picked by, from the mapper's eight "matches" checkboxes. Run through `blobKey` because a diagonal that can't matter must not read as a different slot from the same tile with it unticked. */
-export function mask8FromSides(sides: NeighbourSides): number {
+export type DiagonalName = "northEast" | "southEast" | "southWest" | "northWest";
+
+/** The checkboxes read straight off, before `blobKey` has had its say. */
+function rawMask8(sides: NeighbourSides): number {
     let mask = 0;
     for (const [name, bit] of Object.entries(NEIGHBOUR_BITS)) {
         if (sides[name as keyof NeighbourSides]) mask |= bit;
     }
-    return blobKey(mask);
+    return mask;
 }
 
-/** Whether a diagonal can change this tile's picture at all — it can only where both the sides beside it already match, which is what collapses 256 combinations to 47. The mapper greys out the ones that can't, so a role is never entered that no map square could ever ask for. */
-export function diagonalApplies(sides: NeighbourSides, diagonal: "northEast" | "southEast" | "southWest" | "northWest"): boolean {
-    if (diagonal === "northEast") return sides.north && sides.east;
-    if (diagonal === "southEast") return sides.south && sides.east;
-    if (diagonal === "southWest") return sides.south && sides.west;
-    return sides.north && sides.west;
+/** The 8-bit mask a `mask47` role is picked by, from the mapper's eight "matches" checkboxes. Run through `blobKey` because a diagonal that can't matter must not read as a different slot from the same tile with it unticked. */
+export function mask8FromSides(sides: NeighbourSides): number {
+    return blobKey(rawMask8(sides));
+}
+
+/**
+ * Whether a diagonal can change this tile's picture at all — it can only where
+ * both the sides beside it already match, which is what collapses 256
+ * combinations to 47. The mapper greys out the ones that can't, so a role is
+ * never entered that no map square could ever ask for.
+ *
+ * Asked of `blobKey` rather than re-listing which sides each diagonal needs:
+ * that table lives in `tileset.ts` and is the one the compositor actually
+ * picks slots with, so a second copy here could only ever drift from it.
+ */
+export function diagonalApplies(sides: NeighbourSides, diagonal: DiagonalName): boolean {
+    const bit = NEIGHBOUR_BITS[diagonal];
+    return (blobKey(rawMask8(sides) | bit) & bit) !== 0;
 }
 
 /**
@@ -104,7 +118,11 @@ export const NINE_SLICE_MASKS: readonly number[] = [6, 14, 12, 7, 15, 13, 3, 11,
  * re-import of the same block prints the same file.
  */
 export function nearestDeclaredMask(wanted: number, declared: readonly number[] = NINE_SLICE_MASKS): number {
-    const popcount = (bits: number): number => bits.toString(2).split("").filter(bit => bit === "1").length;
+    const popcount = (bits: number): number => {
+        let count = 0;
+        for (let rest = bits; rest !== 0; rest >>>= 1) count += rest & 1;
+        return count;
+    };
     const cost = (candidate: number): number => popcount(candidate & ~wanted) * 2 + popcount(wanted & ~candidate);
     return [...declared].sort((a, b) => cost(a) - cost(b) || a - b)[0];
 }
@@ -132,7 +150,7 @@ export function mask16FromNineSlice(sheet: string, topLeftIndex: number, columns
 
 /**
  * The mapper's own in-progress shape for one registry entry's art — identical
- * to the shipped `TileArt` except a `mask16` entry may have holes while it's
+ * to the shipped `TileArt` except a mask entry may have holes while it's
  * still being clicked through. Never handed to the guard test or the running
  * app directly; `printTilesetDeclarations` is what turns a complete one into
  * real `TileArt` source, and leaves an incomplete one out with a note instead
@@ -147,7 +165,7 @@ export type DraftTileArt =
 
 /** `tileset.ts`'s `isMaskArt` for the mapper's own in-progress shape — the same question asked of a draft that may still have holes in it. */
 export function isDraftMaskArt(art: DraftTileArt): art is Extract<DraftTileArt, { layout: MaskLayout }> {
-    return art.layout === "mask16" || art.layout === "mask47";
+    return isMaskLayout(art.layout);
 }
 
 /** How many of a mask entry's slots are still unassigned, for the panel's own "7 of 16 left" nudge. */

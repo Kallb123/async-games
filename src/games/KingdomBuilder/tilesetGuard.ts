@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { indexToCell, isMaskArt, isMaskLayout, isSingleSquare, MASK_LAYOUT_SIZES, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, tileRefsOf, TILESET, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
+import { indexToCell, isMaskArt, isSingleSquare, MASK_LAYOUT_SIZES, singleSquareReason, sheetColumns, sheetRows, tileRefSize, tileRefsOf, TILESET, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
 
 /**
  * Reads a PNG's own declared width/height straight from its IHDR chunk — the
@@ -24,21 +24,38 @@ function pngDimensions(filePath: string): { width: number; height: number } {
     return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
-/** A ref that declares a piece bigger than one square where only one is allowed, or an anchor outside itself — the shape errors that don't need the sheet's dimensions to spot. `singleSquareBecause` is null where a piece is allowed, and otherwise says why it isn't, so the message names the actual rule being broken. */
+/** A whole number of squares, at least one — or simply absent, which means one. */
+function declaresSaneExtent(value: number | undefined): boolean {
+    return value === undefined || (Number.isInteger(value) && value >= 1);
+}
+
+/** Inside a piece of the given extent — or absent, which takes the default. */
+function declaresSaneAnchor(value: number | undefined, extent: number): boolean {
+    return value === undefined || (Number.isInteger(value) && value >= 0 && value < extent);
+}
+
+/**
+ * A ref that declares a piece where only one square is allowed, a size that
+ * isn't a whole number of squares, or an anchor outside its own piece — the
+ * shape errors that don't need the sheet's dimensions to spot. Checks the
+ * declared numbers directly rather than round-tripping them through
+ * `tileRefSize`/`tileRefAnchor` and asking whether those had to change
+ * anything, so a later tweak to how those two clamp can't quietly move what
+ * the guard rejects. `singleSquareBecause` names the rule being broken, or is
+ * null where a piece is allowed.
+ */
 function pieceShapeErrors(label: string, code: string, ref: TileRef, singleSquareBecause: string | null): string[] {
     const errors: string[] = [];
     const { width, height } = tileRefSize(ref);
 
+    if (!declaresSaneExtent(ref.width) || !declaresSaneExtent(ref.height)) {
+        errors.push(`tileset.ts ${label} "${code}" declares a piece size of ${ref.width ?? 1}×${ref.height ?? 1}, which isn't a whole number of squares of at least one`);
+    }
     if (singleSquareBecause && !isSingleSquare(ref)) {
         errors.push(`tileset.ts ${label} "${code}" declares a ${width}×${height} piece, but ${singleSquareBecause}`);
     }
-    if ((ref.width !== undefined && ref.width !== width) || (ref.height !== undefined && ref.height !== height)) {
-        errors.push(`tileset.ts ${label} "${code}" declares a piece size of ${ref.width}×${ref.height}, which isn't a whole number of squares of at least one`);
-    }
-
-    const anchor = tileRefAnchor(ref);
-    if ((ref.anchorX !== undefined && ref.anchorX !== anchor.x) || (ref.anchorY !== undefined && ref.anchorY !== anchor.y)) {
-        errors.push(`tileset.ts ${label} "${code}" anchors at (${ref.anchorX}, ${ref.anchorY}), which is outside its own ${width}×${height} piece`);
+    if (!declaresSaneAnchor(ref.anchorX, width) || !declaresSaneAnchor(ref.anchorY, height)) {
+        errors.push(`tileset.ts ${label} "${code}" anchors at (${ref.anchorX ?? 0}, ${ref.anchorY ?? height - 1}), which is outside its own ${width}×${height} piece`);
     }
     return errors;
 }
@@ -57,10 +74,12 @@ export function tileArtErrors(
     artByCode: Readonly<Record<string, TileArt>>,
     manifest: TilesetManifest = TILESET,
     publicDir: string = path.join(process.cwd(), "public"),
-    /** True for `AREA_ART`, whose refs are all one square — an area fills the grid rather than standing on it. */
-    areaArt = false,
 ): string[] {
     const errors: string[] = [];
+    // Derived from the label rather than passed alongside it: a caller that
+    // said "area" and then forgot the flag would get an area checked under the
+    // relaxed rules, and nothing would say so.
+    const kind = label === "area" ? "area" : "overlay";
     const dimensionsBySheet = new Map<string, { width: number; height: number } | null>();
 
     for (const [code, art] of Object.entries(artByCode)) {
@@ -75,11 +94,7 @@ export function tileArtErrors(
             // A mask tile is picked per square of map, so it is one square of
             // art whatever kind of entry declares it — a road that autotiles
             // is still laid one square at a time.
-            const singleSquareBecause =
-                areaArt ? "an area is a ground fill — exactly one square of art per square of map" :
-                isMaskArt(art) ? `a ${art.layout} tile is picked one square of map at a time` :
-                null;
-            errors.push(...pieceShapeErrors(label, code, ref, singleSquareBecause));
+            errors.push(...pieceShapeErrors(label, code, ref, singleSquareReason(kind, art.layout)));
 
             const sheet = manifest.sheets[ref.sheet];
             if (!sheet) {

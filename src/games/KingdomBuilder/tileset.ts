@@ -110,6 +110,18 @@ export function isMaskLayout(layout: string): layout is MaskLayout {
     return layout in MASK_LAYOUT_SIZES;
 }
 
+/**
+ * Why art of this kind and layout has to be exactly one square, or null where
+ * it may be a piece. Stated once and asked twice: the mapper doesn't offer the
+ * piece controls where this is non-null, and the guard rejects a piece there —
+ * so the screen and the test can't come to disagree about what is legal.
+ */
+export function singleSquareReason(kind: "area" | "overlay", layout: TileArt["layout"]): string | null {
+    if (kind === "area") return "an area is a ground fill — exactly one square of art per square of map";
+    if (isMaskLayout(layout)) return `a ${layout} tile is picked one square of map at a time`;
+    return null;
+}
+
 /** True for the layouts picked per square of map by a neighbour mask, as opposed to by a placement's own direction or a seeded hash. */
 export function isMaskArt(art: TileArt): art is Extract<TileArt, { layout: MaskLayout }> {
     return isMaskLayout(art.layout);

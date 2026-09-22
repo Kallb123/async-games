@@ -15,7 +15,7 @@ describe("the tileset manifest", () => {
     });
 
     it("every area's art passes the full disk-backed guard against the real public/ directory", () => {
-        expect(tileArtErrors("area", AREA_ART, TILESET, undefined, true)).toEqual([]);
+        expect(tileArtErrors("area", AREA_ART)).toEqual([]);
     });
 
     it("every overlay's art passes the same guard", () => {

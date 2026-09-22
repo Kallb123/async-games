@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { neighbourMask, neighbourMask8, overlaysKey, seededVariantIndex, terrainFieldMatchesGrid } from "./useTerrainImage";
+import { neighbourMask, neighbourMask8, overlayCodesByTile, overlayMaskSlot, overlaysKey, seededVariantIndex, terrainFieldMatchesGrid } from "./useTerrainImage";
 import { NINE_SLICE_MASKS } from "./tileMapperModel";
 import { blobIndexOf, NEIGHBOUR_BITS } from "./tileset";
 import type { TerrainField } from "./worldgen/terrainField";
@@ -119,6 +119,54 @@ describe("neighbourMask8", () => {
         const openCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wgwwwwwww" };
         const closedCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wggwwwwww" };
         expect(blobIndexOf(neighbourMask8(openCorner, 1, 1))).toBe(blobIndexOf(neighbourMask8(closedCorner, 1, 1)));
+    });
+});
+
+describe("a self-connecting overlay's own mask", () => {
+    // Five squares of grass across, with a road (R) laid along the middle three.
+    const FIELD: TerrainField = { columns: 5, rows: 1, tileSize: 2, codes: "ggggg" };
+    const ROAD = [{ tile: 1, code: "R" }, { tile: 2, code: "R" }, { tile: 3, code: "R" }];
+
+    it("masks against the other overlays around it, not against the ground under it", () => {
+        // Every square of ground here is grass, so a mask taken from the
+        // terrain would call all three of these fully interior. The road's own
+        // run is what it has to read.
+        const byTile = overlayCodesByTile(ROAD);
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 1)).toBe(2); // west end: only east continues
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 2)).toBe(2 | 8); // middle: east and west
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 3)).toBe(8); // east end: only west
+    });
+
+    it("treats a square with no overlay on it as no match, so a lone bridge reads as a lone bridge", () => {
+        const byTile = overlayCodesByTile([{ tile: 2, code: "B" }]);
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 2)).toBe(0);
+    });
+
+    it("treats a different overlay code as no match — a road doesn't join a fence", () => {
+        const byTile = overlayCodesByTile([{ tile: 1, code: "R" }, { tile: 2, code: "F" }]);
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 1)).toBe(0);
+    });
+
+    it("never treats off-grid as a match", () => {
+        const byTile = overlayCodesByTile([{ tile: 0, code: "R" }, { tile: 1, code: "R" }]);
+        expect(overlayMaskSlot("mask16", FIELD, byTile, 0)).toBe(2); // east only; nothing west of column 0
+    });
+
+    it("reads all eight neighbours for a mask47 overlay", () => {
+        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "ggggggggg" };
+        const every = overlayCodesByTile(Array.from({ length: 9 }, (_, tile) => ({ tile, code: "R" })));
+        expect(overlayMaskSlot("mask47", field, every, 4)).toBe(blobIndexOf(255));
+    });
+
+    it("gives a tile carrying no overlay at all the empty slot rather than reading someone else's run", () => {
+        expect(overlayMaskSlot("mask16", FIELD, overlayCodesByTile(ROAD), 0)).toBe(0);
+    });
+});
+
+describe("overlayCodesByTile", () => {
+    it("lets the last placement win a tile two of them claim, rather than throwing over a generated-world bug", () => {
+        const byTile = overlayCodesByTile([{ tile: 4, code: "B" }, { tile: 4, code: "F" }]);
+        expect(byTile.get(4)).toBe("F");
     });
 });
 

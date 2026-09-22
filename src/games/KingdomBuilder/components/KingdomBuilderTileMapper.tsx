@@ -31,10 +31,11 @@ import {
     maskRemaining,
     printTilesetDeclarations,
     suggestedTileSizes,
+    type DiagonalName,
     type DraftTileArt,
     type NeighbourSides,
 } from "../tileMapperModel";
-import { blobIndexOf, cellToIndex, indexToCell, MASK_LAYOUT_SIZES, tileRefSize, type SheetDefinition, type TileRef } from "../tileset";
+import { blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, singleSquareReason, tilePieceParts, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
 const DISPLAY_WIDTH = 640;
@@ -82,7 +83,7 @@ function layoutOf(art: DraftTileArt | undefined): Layout | null {
 
 /** A mask entry's slots stay real holes (`undefined`) until each one is actually clicked — `maskRemaining`'s "N left" count, and the guard the export panel warns about, both depend on an unclicked slot never quietly reading as done. */
 function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: TileRef, role: string): DraftTileArt {
-    if (layout === "mask16" || layout === "mask47") {
+    if (isMaskLayout(layout)) {
         const slot = Number(role);
         const tiles = art && isDraftMaskArt(art) && art.layout === layout ? [...art.tiles] : new Array<TileRef | undefined>(MASK_LAYOUT_SIZES[layout]).fill(undefined);
         tiles[slot] = ref;
@@ -97,19 +98,16 @@ function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: Ti
     return { layout: "variants", tiles: [...tiles, ref] };
 }
 
-const SIDES = [
-    { key: "north" as const, label: "North" },
-    { key: "east" as const, label: "East" },
-    { key: "south" as const, label: "South" },
-    { key: "west" as const, label: "West" },
-];
-
-/** The four diagonals a `mask47` role adds to the four sides, each named with the two sides that have to match before it can change the picture. */
-const DIAGONALS = [
-    { key: "northEast" as const, label: "NE" },
-    { key: "southEast" as const, label: "SE" },
-    { key: "southWest" as const, label: "SW" },
-    { key: "northWest" as const, label: "NW" },
+/** The neighbours a mask role is entered from: the four sides every mask layout asks about, then the four diagonals only `mask47` does. One list, so a row of checkboxes is written once. */
+const NEIGHBOURS: readonly { key: keyof NeighbourSides; label: string; diagonal: boolean }[] = [
+    { key: "north", label: "North", diagonal: false },
+    { key: "east", label: "East", diagonal: false },
+    { key: "south", label: "South", diagonal: false },
+    { key: "west", label: "West", diagonal: false },
+    { key: "northEast", label: "NE", diagonal: true },
+    { key: "southEast", label: "SE", diagonal: true },
+    { key: "southWest", label: "SW", diagonal: true },
+    { key: "northWest", label: "NW", diagonal: true },
 ];
 
 /** Every neighbour matching: the fully-interior tile, which is where a mask entry is most naturally started. */
@@ -183,22 +181,21 @@ export default function KingdomBuilderTileMapper() {
         setImageError(null);
     };
 
-    // Only an overlay's non-mask art may be a piece: an area fills the grid one
-    // square at a time, and so does a mask tile whoever declares it. Same rule
-    // the guard enforces, asked here so the panel simply doesn't offer it.
-    const piecesAllowed = entryKind === "overlay" && activeLayout !== "mask16" && activeLayout !== "mask47";
+    // Asked of the same function the guard rejects a piece with, so the panel
+    // can't come to offer something the test would refuse.
+    const piecesAllowed = singleSquareReason(entryKind, activeLayout) === null;
+    // One 47-slot derivation, read by the role tag, the hint and `assignTile`.
+    const maskSlot = blobIndexOf(mask8FromSides(maskSideState));
 
-    const assignTile = (index: number) => {
-        if (!entryCode) return;
-        const ref = withPiece({ sheet: draft.sheetName, index }, piece, piecesAllowed);
-        const role =
-            activeLayout === "mask16" ? String(maskFromSides(maskSideState)) :
-            activeLayout === "mask47" ? String(blobIndexOf(mask8FromSides(maskSideState))) :
-            activeLayout === "orientation" ? orientationKey.trim() : "";
-        if (activeLayout === "orientation" && !role) return;
+    /**
+     * Writes the picked entry's art back into the draft, given whatever it was
+     * before — the one path both a single click and a nine-slice import take,
+     * so the "which of the two art maps, and refresh this sheet's definition"
+     * bookkeeping is written once.
+     */
+    const updateArt = (nextArtFrom: (previous: DraftTileArt | undefined) => DraftTileArt) => {
         setDraft(current => {
-            const art = entryKind === "area" ? current.areaArt[entryCode] : current.overlayArt[entryCode];
-            const nextArt = withTileAssigned(art, activeLayout, ref, role);
+            const nextArt = nextArtFrom(entryKind === "area" ? current.areaArt[entryCode] : current.overlayArt[entryCode]);
             return {
                 ...current,
                 areaArt: entryKind === "area" ? { ...current.areaArt, [entryCode]: nextArt } : current.areaArt,
@@ -209,6 +206,17 @@ export default function KingdomBuilderTileMapper() {
                 sheets: { ...current.sheets, [current.sheetName]: { path: current.artPath, tileWidth: current.tileWidth, tileHeight: current.tileHeight, margin: current.margin, spacing: current.spacing } },
             };
         });
+    };
+
+    const assignTile = (index: number) => {
+        if (!entryCode) return;
+        const ref = withPiece({ sheet: draft.sheetName, index }, piece, piecesAllowed);
+        const role =
+            activeLayout === "mask16" ? String(maskFromSides(maskSideState)) :
+            activeLayout === "mask47" ? String(maskSlot) :
+            activeLayout === "orientation" ? orientationKey.trim() : "";
+        if (activeLayout === "orientation" && !role) return;
+        updateArt(previous => withTileAssigned(previous, activeLayout, ref, role));
     };
 
     /**
@@ -226,12 +234,7 @@ export default function KingdomBuilderTileMapper() {
         }
         setImageError(null);
         setNineSliceArmed(false);
-        setDraft(current => ({
-            ...current,
-            areaArt: entryKind === "area" ? { ...current.areaArt, [entryCode]: { layout: "mask16", tiles } } : current.areaArt,
-            overlayArt: entryKind === "overlay" ? { ...current.overlayArt, [entryCode]: { layout: "mask16", tiles } } : current.overlayArt,
-            sheets: { ...current.sheets, [current.sheetName]: { path: current.artPath, tileWidth: current.tileWidth, tileHeight: current.tileHeight, margin: current.margin, spacing: current.spacing } },
-        }));
+        updateArt(() => ({ layout: "mask16", tiles }));
     };
 
     // Every tile index already assigned to *any* entry on this sheet, for the
@@ -246,11 +249,7 @@ export default function KingdomBuilderTileMapper() {
                     if (!ref || ref.sheet !== draft.sheetName) continue;
                     // A piece claims every square it covers, so the preview
                     // marks the whole rectangle rather than only its corner.
-                    const { width, height } = tileRefSize(ref);
-                    const origin = indexToCell(ref.index, Math.max(1, fit?.columns ?? 1));
-                    for (let y = 0; y < height; y++) {
-                        for (let x = 0; x < width; x++) map.set(cellToIndex(origin.col + x, origin.row + y, Math.max(1, fit?.columns ?? 1)), code);
-                    }
+                    for (const part of tilePieceParts(ref, Math.max(1, fit?.columns ?? 1))) map.set(part.index, code);
                 }
             }
         };
@@ -353,24 +352,21 @@ export default function KingdomBuilderTileMapper() {
                     </label>
                 </div>
 
-                {(activeLayout === "mask16" || activeLayout === "mask47") && (
+                {isMaskLayout(activeLayout) && (
                     <>
                         <div className="ag-btn-row ag-btn-row--wrap">
-                            {SIDES.map(side => (
-                                <label key={side.key} className="ag-editor-field ag-editor-field--inline">
-                                    <input type="checkbox" checked={maskSideState[side.key]} onChange={event => setMaskSideState({ ...maskSideState, [side.key]: event.target.checked })} />
-                                    <span className="ag-field-label">{side.label} matches</span>
-                                </label>
-                            ))}
-                            {activeLayout === "mask47" && DIAGONALS.map(diagonal => (
-                                <label key={diagonal.key} className="ag-editor-field ag-editor-field--inline">
-                                    {/* A diagonal only changes the picture where both the sides beside it match, so the ones that can't are disabled rather than silently ignored — otherwise two different tickings would enter the same slot. */}
-                                    <input type="checkbox" disabled={!diagonalApplies(maskSideState, diagonal.key)} checked={diagonalApplies(maskSideState, diagonal.key) && maskSideState[diagonal.key]} onChange={event => setMaskSideState({ ...maskSideState, [diagonal.key]: event.target.checked })} />
-                                    <span className="ag-field-label">{diagonal.label} matches</span>
-                                </label>
-                            ))}
+                            {NEIGHBOURS.filter(neighbour => !neighbour.diagonal || activeLayout === "mask47").map(neighbour => {
+                                // A diagonal only changes the picture where both the sides beside it match, so the ones that can't are disabled rather than silently ignored — otherwise two different tickings would enter the same slot.
+                                const applies = !neighbour.diagonal || diagonalApplies(maskSideState, neighbour.key as DiagonalName);
+                                return (
+                                    <label key={neighbour.key} className="ag-editor-field ag-editor-field--inline">
+                                        <input type="checkbox" disabled={!applies} checked={applies && maskSideState[neighbour.key]} onChange={event => setMaskSideState({ ...maskSideState, [neighbour.key]: event.target.checked })} />
+                                        <span className="ag-field-label">{neighbour.label} matches</span>
+                                    </label>
+                                );
+                            })}
                             <span className="ag-tag">
-                                {activeLayout === "mask16" ? `mask ${maskFromSides(maskSideState)}` : `slot ${blobIndexOf(mask8FromSides(maskSideState))} of 47`}
+                                {activeLayout === "mask16" ? `mask ${maskFromSides(maskSideState)}` : `slot ${maskSlot} of 47`}
                             </span>
                             {currentArt && isDraftMaskArt(currentArt) && <span className="ag-tag">{maskRemaining(currentArt.layout, currentArt.tiles)} of {MASK_LAYOUT_SIZES[currentArt.layout]} left</span>}
                         </div>
@@ -413,7 +409,7 @@ export default function KingdomBuilderTileMapper() {
                     <p className="ag-hint">
                         {nineSliceArmed
                             ? <>Click the <strong>top-left</strong> square of a 3×3 block to fill all sixteen of <strong>{entryCode}</strong>&apos;s masks from it.</>
-                            : <>Click a square below to assign it to <strong>{entryCode}</strong>{activeLayout === "mask16" ? ` — mask ${maskFromSides(maskSideState)}` : activeLayout === "mask47" ? ` — slot ${blobIndexOf(mask8FromSides(maskSideState))}` : ""}.</>}
+                            : <>Click a square below to assign it to <strong>{entryCode}</strong>{activeLayout === "mask16" ? ` — mask ${maskFromSides(maskSideState)}` : activeLayout === "mask47" ? ` — slot ${maskSlot}` : ""}.</>}
                     </p>
                 )}
                 {!entryCode && <p className="ag-hint">Choose a registry entry above before clicking the sheet.</p>}
@@ -460,7 +456,7 @@ export default function KingdomBuilderTileMapper() {
             </Section>
 
             <Section label="Export">
-                <p className="ag-hint">Paste this over the <code>TILESET</code>, <code>AREA_ART</code> and <code>OVERLAY_ART</code> declarations in <code>src/games/KingdomBuilder/tileset.ts</code>, then run <code>npm test</code> — the guard checks every sheet exists, every index is in bounds, and every mask16 entry declares all sixteen.</p>
+                <p className="ag-hint">Paste this over the <code>TILESET</code>, <code>AREA_ART</code> and <code>OVERLAY_ART</code> declarations in <code>src/games/KingdomBuilder/tileset.ts</code>, then run <code>npm test</code> — the guard checks every sheet exists, every piece lands wholly inside its sheet, every mask entry declares all its slots (sixteen, or forty-seven), no area or mask entry declares a piece, and no anchor sits outside its own piece.</p>
                 <pre className="ag-editor-section ag-editor-code">{printed}</pre>
                 <div className="ag-btn-row ag-btn-row--wrap">
                     <button type="button" className="ag-btn ag-btn--primary" onClick={copyToClipboard}>{copyState === "copied" ? "Copied!" : "Copy to clipboard"}</button>
