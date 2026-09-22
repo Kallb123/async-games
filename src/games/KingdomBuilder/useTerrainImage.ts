@@ -21,14 +21,17 @@ import { useEffect, useMemo } from "react";
 
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { AREAS, areaForCode } from "./worldgen/areas";
-import { overlayForCode, type OverlayPlacement } from "./worldgen/overlays";
+import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 import { AREA_ART, blobIndexOf, isMaskArt, NEIGHBOUR_BITS, OVERLAY_ART, pickMaskSlotTile, seededVariantIndex, sheetColumns, sheetSourceRect, sheetTilePixels, tilePieceParts, tileRefsOf, TILESET, type MaskLayout, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
 
 // `seededVariantIndex` lives in tileset.ts now (both this file and the mapper
 // model need it), re-exported here so nothing importing it from this file —
-// this module used to be its only home — has to change.
-export { seededVariantIndex };
+// this module used to be its only home — has to change. `overlayCodesByTile`
+// moved to worldgen/overlays.ts for the same reason: the overlay vocabulary's
+// road pass (worldgen/overlayVocabulary.ts) needs the same tile→code index
+// this rendering pass does, and it can't import from a 'use client' module.
+export { seededVariantIndex, overlayCodesByTile };
 
 export interface TerrainImageWorld {
     terrainField?: TerrainField;
@@ -138,17 +141,6 @@ function maskSlot(layout: MaskLayout, matches: NeighbourMatcher, col: number, ro
 function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number, col: number, row: number): TileRef | undefined {
     const entry = art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
     return entry === undefined ? undefined : pickMaskSlotTile(entry, col, row);
-}
-
-/**
- * The sparse overlay list indexed by tile, for masking a self-connecting
- * overlay against its neighbours. Two placements on one tile is a
- * generated-world bug rather than something to draw twice over: the last one
- * in wins the square's identity, and both still draw. Exported for testing
- * without a DOM.
- */
-export function overlayCodesByTile(overlays: readonly OverlayPlacement[]): Map<number, string> {
-    return new Map(overlays.map(placement => [placement.tile, placement.code]));
 }
 
 /**

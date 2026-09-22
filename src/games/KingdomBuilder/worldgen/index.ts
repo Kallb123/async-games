@@ -3,6 +3,7 @@ export * from "./generateWorld";
 export * from "./graphConnectivity";
 export * from "./landmass";
 export * from "./overlays";
+export * from "./overlayVocabulary";
 export * from "./random";
 export * from "./settlementSites";
 export * from "./terrainField";
