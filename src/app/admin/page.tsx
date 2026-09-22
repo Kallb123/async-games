@@ -19,9 +19,14 @@ export default function Admin() {
             <AdminUserAnalytics />
 
             <Section label="Game tools">
-                <Link href="/admin/racecars" className="ag-btn ag-btn--light ag-btn--block">
-                    Race Cars track editor
-                </Link>
+                <div className="ag-stack">
+                    <Link href="/admin/racecars" className="ag-btn ag-btn--light ag-btn--block">
+                        Race Cars track editor
+                    </Link>
+                    <Link href="/admin/kingdombuilder-tiles" className="ag-btn ag-btn--light ag-btn--block">
+                        Kingdom Builder tile mapper
+                    </Link>
+                </div>
             </Section>
         </AdminPage>
     );

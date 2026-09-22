@@ -61,7 +61,7 @@ export function overlaysKey(overlays: OverlayPlacement[] | undefined): string {
  * code still autotile consistently with each other. Exported for testing
  * without a DOM.
  */
-export function neighbourMask(field: Pick<TerrainField, "columns" | "rows" | "codes">, col: number, row: number): number {
+export function neighbourMask(field: TerrainField, col: number, row: number): number {
     const code = field.codes[row * field.columns + col];
     const matches = (c: number, r: number): boolean => c >= 0 && c < field.columns && r >= 0 && r < field.rows && field.codes[r * field.columns + c] === code;
     let mask = 0;

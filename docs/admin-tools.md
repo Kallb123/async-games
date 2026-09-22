@@ -325,6 +325,66 @@ section reading zero is one that will load.
 This is admin-only internal tooling; a player never sees it, so it does not earn
 a release note (see AGENTS.md, "Keep the What's new notes up to date").
 
+## Game tools: the Kingdom Builder tile mapper
+
+`/admin` → **Kingdom Builder tile mapper** → `/admin/kingdombuilder-tiles`
+(`KingdomBuilderTileMapper`). A build-time authoring aid for the world map's
+tilesheets, in the same spirit as the track editor above: it produces the
+`tileset.ts` data a developer pastes into the repo, persists nothing
+server-side, and sits behind the same client-only `isAdmin` gate — no
+`/api/admin` route behind it either.
+
+### Why it exists
+
+Kingdom Builder GDD §3.5.5 draws the world's ground from tilesheets: each
+registry area or overlay uses one of four layouts (`mask16`, `orientation`,
+`variants`, `single`), addressed as `{ sheet, index }` — a flat, row-major
+square on a named sheet. Counting pixels in an image viewer to work out which
+index is which square, for every mask a 16-tile autotile needs, is exactly the
+kind of job this repo hands to an editor rather than a human with a
+calculator.
+
+### What you do with it
+
+1. **Point it at a sheet.** *Art path* takes anything already under
+   `public/art/kingdombuilder/`; *Upload sheet from disk* previews a file
+   before it's committed anywhere (held in this browser only, like the track
+   editor's traced backdrop — never written into the printed file).
+2. **Set the tile size.** Width and height in pixels, plus the sheet's own
+   margin and spacing (the outer border and inter-tile gutter a real
+   tilesheet usually has). The panel offers every size in a sane range that
+   divides the loaded image evenly on both axes as one-tap chips, and warns
+   when the current numbers leave a partial row or column — the usual sign of
+   an undeclared gutter.
+3. **Pick what you're assigning.** Choose an area or an overlay from the
+   registry, and the layout its art uses (locked once any tile has been
+   assigned to it, so a partway-through entry can't be switched into a shape
+   half its tiles don't match). A `mask16` entry picks its role from four
+   "matches" checkboxes — north/east/south/west, the same 4-bit mask
+   `useTerrainImage.ts` computes at render time — an `orientation` entry from
+   a free-text key (whatever an `OverlayPlacement.orientation` will carry,
+   e.g. `"ns"`), and `variants`/`single` need no role at all.
+4. **Click the squares.** Each click on the sheet preview assigns the tile
+   under the pointer to whatever's currently picked; an assigned square is
+   tinted and labelled with its entry's code so the sheet reads back at a
+   glance. A `mask16` entry's own panel counts down "N of 16 left".
+5. **Copy `tileset.ts`.** The export panel prints the sheet list plus
+   `AREA_ART`/`OVERLAY_ART` in the exact shape the real file declares them —
+   paste it over those three declarations (the type imports, `sheetTilePixels`
+   and the guard functions don't move) and run `npm test`. An entry with a
+   `mask16` still missing some of its sixteen is left out as a comment naming
+   how many, rather than printed with a hole in it, so a half-finished draft
+   never turns into a `tileset.ts` that doesn't compile.
+
+**Save/resume** works the same as the track editor's: the draft — every
+sheet, every assignment — autosaves to this browser's storage, so a reload
+keeps the work. The loaded image itself doesn't: an *Art path* reloads for
+free, and an uploaded file asks to be chosen again.
+
+### No "What's new" entry
+
+Same reasoning as the track editor's: admin-only tooling a player never sees.
+
 ## Adding another admin tool
 
 Put the route under `src/app/api/admin/**`, open it with `requireAdmin()`, and
