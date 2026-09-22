@@ -4,10 +4,13 @@ import {
     BEACH_CODE,
     FIELDS_CODE,
     GRASS_CODE,
+    HILLS_CODE,
     LAND_WINDOW_CODES,
+    MOUNTAINS_CODE,
     OCEAN_CODE,
     PROVISIONAL_WATER_CODE,
     RIVER_CODE,
+    WOODLAND_CODE,
     areaForCode,
     areaWeightForCode,
     windowAreaFor,
@@ -57,6 +60,14 @@ describe("the pass codes terrainField.ts reads and writes", () => {
     it("lists exactly the window-placed areas as land-window codes", () => {
         const windowCodes = AREAS.filter(area => area.placement.kind === "window").map(area => area.code).sort();
         expect([...LAND_WINDOW_CODES].sort()).toEqual(windowCodes);
+    });
+});
+
+describe("the codes overlayVocabulary.ts reads for scattered-landmark placement", () => {
+    it("resolve to the matching registry entry's own code — one export each, not a second listing", () => {
+        expect(AREAS.find(area => area.code === WOODLAND_CODE)?.name).toBe("Woodland");
+        expect(AREAS.find(area => area.code === HILLS_CODE)?.name).toBe("Hills");
+        expect(AREAS.find(area => area.code === MOUNTAINS_CODE)?.name).toBe("Mountains");
     });
 });
 
