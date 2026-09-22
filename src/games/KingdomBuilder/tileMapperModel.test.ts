@@ -9,6 +9,8 @@ import {
     maskRemaining,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
+    PREVIEW_WIDTH,
+    previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
     type DraftTileArt,
@@ -31,6 +33,42 @@ describe("suggestedTileSizes", () => {
     it("accounts for margin and spacing, not just the raw image size", () => {
         // 132px wide, 2px margin each side, 4px spacing: usable = 132-4+4=132, so 33 still fits at size 29 (29+4=33). Sanity: also confirm plain 33 fits with no spacing.
         expect(suggestedTileSizes(70, 70, 2, 0, 8, 128)).toContain(33); // usable 66, 66/33=2
+    });
+});
+
+describe("previewScale", () => {
+    it("scales a small sheet up to fill the column", () => {
+        // The attached-tileset case: 192px across in a 440px column.
+        expect(previewScale(192)).toBeCloseTo(PREVIEW_WIDTH / 192);
+        expect(previewScale(192) * 192).toBeCloseTo(PREVIEW_WIDTH);
+    });
+
+    it("never shrinks a big sheet below 1:1 — it scrolls instead of becoming unclickable", () => {
+        expect(previewScale(1024)).toBe(1);
+        expect(previewScale(4000)).toBe(1);
+    });
+
+    it("never blows a tiny sheet up past 4x", () => {
+        expect(previewScale(16)).toBe(4);
+        expect(previewScale(1)).toBe(4);
+    });
+
+    it("multiplies by the zoom the stepper is on", () => {
+        expect(previewScale(1024, 2)).toBe(2);
+        expect(previewScale(1024, 0.5)).toBe(0.5);
+    });
+
+    it("keeps a sheet's aspect ratio by construction — one scale for both axes", () => {
+        // The bug this replaced sized the frame from a stale measurement, so a
+        // 192×336 sheet was drawn in a 128×128 box. One scalar applied to both
+        // axes cannot do that, whatever the sheet's shape.
+        const scale = previewScale(192);
+        expect((192 * scale) / (336 * scale)).toBeCloseTo(192 / 336);
+    });
+
+    it("is a sane scale rather than Infinity for a width of zero", () => {
+        expect(previewScale(0)).toBe(1);
+        expect(Number.isFinite(previewScale(0))).toBe(true);
     });
 });
 

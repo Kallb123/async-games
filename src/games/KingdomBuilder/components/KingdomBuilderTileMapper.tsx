@@ -19,6 +19,7 @@ import { useMemo, useRef, useState } from "react";
 import Section from "@/components/ui/Section";
 import { AREAS } from "@/games/KingdomBuilder/worldgen/areas";
 import { OVERLAYS } from "@/games/KingdomBuilder/worldgen/overlays";
+import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
@@ -29,6 +30,7 @@ import {
     mask8FromSides,
     maskFromSides,
     maskRemaining,
+    previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
     type DiagonalName,
@@ -38,7 +40,9 @@ import {
 import { blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, singleSquareReason, tilePieceParts, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
-const DISPLAY_WIDTH = 640;
+const ZOOM_STEP = 0.25;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
 
 type EntryKind = "area" | "overlay";
 type Layout = DraftTileArt["layout"];
@@ -147,8 +151,15 @@ export default function KingdomBuilderTileMapper() {
 
     const [imageError, setImageError] = useState<string | null>(null);
     const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-    const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
     const imageUrl = uploadedUrl ?? draft.artPath;
+    // Keyed on the image it was taken from. The measuring `<img>` below only
+    // renders while this is null, so holding it in plain `useState` meant it
+    // was measured once — from whatever sheet happened to load first — and
+    // never again: load a 192×336 sheet after the default 128×128 one and the
+    // frame stayed 128×128, stretching the new sheet into a square and drawing
+    // a 4×4 grid over it. `useResettingState` drops it the moment the source
+    // changes, which puts the measuring `<img>` back on screen for the new one.
+    const [naturalSize, setNaturalSize] = useResettingState<{ width: number; height: number } | null>(null, imageUrl);
 
     const [entryKind, setEntryKind] = useState<EntryKind>("area");
     const [entryCode, setEntryCode] = useState<string>("");
@@ -161,6 +172,7 @@ export default function KingdomBuilderTileMapper() {
     // again after the click that used it.
     const [nineSliceArmed, setNineSliceArmed] = useState(false);
     const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+    const [zoom, setZoom] = useState(1);
 
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -177,7 +189,10 @@ export default function KingdomBuilderTileMapper() {
             setImageError("That file is bigger than this screen will load — save it under public/art first.");
             return;
         }
-        setUploadedUrl(URL.createObjectURL(file));
+        setUploadedUrl(current => {
+            if (current) URL.revokeObjectURL(current);
+            return URL.createObjectURL(file);
+        });
         setImageError(null);
     };
 
@@ -271,11 +286,11 @@ export default function KingdomBuilderTileMapper() {
         }
     };
 
-    // A big sheet shrinks to fit the column; a small one (a first sheet is
-    // often a handful of 16px tiles) is scaled *up* instead, capped well
-    // short of turning individual pixels into unclickable postage stamps —
-    // clicking a precise square matters more here than a 1:1 preview.
-    const scale = naturalSize ? Math.min(4, DISPLAY_WIDTH / naturalSize.width) : 1;
+    // A small sheet (a first sheet is often a handful of 16px tiles) is scaled
+    // *up* to fill the column; a big one is left at 1:1 and scrolls inside its
+    // frame rather than being shrunk until its squares can't be clicked
+    // accurately. `previewScale` has the reasoning and the test.
+    const scale = naturalSize ? previewScale(naturalSize.width, zoom) : 1;
 
     return (
         <>
@@ -416,7 +431,22 @@ export default function KingdomBuilderTileMapper() {
             </Section>
 
             <Section label="Sheet preview">
+                {naturalSize && (
+                    <div className="ag-editor-toolbar">
+                        <span className="ag-hint">{naturalSize.width} × {naturalSize.height}px{fit ? ` — ${fit.columns} × ${fit.rows} squares` : ""}</span>
+                        <div className="ag-editor-zoom">
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(current => Math.max(MIN_ZOOM, current - ZOOM_STEP))} aria-label="Zoom out">−</button>
+                            <span className="ag-hint">{Math.round(scale * 100)}%</span>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(current => Math.min(MAX_ZOOM, current + ZOOM_STEP))} aria-label="Zoom in">+</button>
+                        </div>
+                    </div>
+                )}
                 {naturalSize && fit ? (
+                    // The sheet and its overlay scroll inside a fixed frame:
+                    // a dozen squares across and twenty down is an ordinary
+                    // sheet, and at a size its squares can actually be clicked
+                    // that is taller than the screen.
+                    <div className="ag-editor-canvas">
                     <div style={{ position: "relative", width: naturalSize.width * scale, height: naturalSize.height * scale }}>
                         {/* eslint-disable-next-line @next/next/no-img-element -- a build-time authoring aid loading an arbitrary local path or uploaded file, not the app's own served art */}
                         <img src={imageUrl} alt="Tile sheet" style={{ width: "100%", height: "100%", imageRendering: "pixelated", display: "block" }} />
@@ -448,6 +478,7 @@ export default function KingdomBuilderTileMapper() {
                                 );
                             })}
                         </svg>
+                    </div>
                     </div>
                 ) : (
                     // eslint-disable-next-line @next/next/no-img-element
