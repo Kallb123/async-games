@@ -127,24 +127,23 @@ export function isMaskArt(art: TileArt): art is Extract<TileArt, { layout: MaskL
     return isMaskLayout(art.layout);
 }
 
-/** No sheet had landed as of PR 10 — PR 11 adds the first. */
 export const TILESET: TilesetManifest = {
     sheets: {
-        ground: { path: "/art/kingdombuilder/ground-basic.png", tileWidth: 32, tileHeight: 32, margin: 0, spacing: 0 },
+        ground: { path: "/art/kingdombuilder/overworld-grass.png", tileWidth: 16, tileHeight: 16, margin: 0, spacing: 0 },
     },
 };
 
-/** Which registry entry (by area code) uses which art, and how. An area with no entry here still draws its `fallbackColour` (§3.5.6). */
 export const AREA_ART: Readonly<Record<string, TileArt>> = {
-    // Grass, drawn as a 16-tile autotile blob so its edge against whatever
-    // borders it (fields, woodland, the beach) reads as ground giving way
-    // rather than a hard rectangle. Laid out 4 columns × 4 rows on the sheet,
-    // row-major, so tile index == mask index.
-    g: { layout: "mask16", tiles: Array.from({ length: 16 }, (_, index) => ({ sheet: "ground", index })) },
+    g: { layout: "mask16", tiles: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }] },
+    r: { layout: "mask16", tiles: [{ sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 50 }, { sheet: "ground", index: 62 }, { sheet: "ground", index: 49 }, { sheet: "ground", index: 61 }] },
+    w: { layout: "mask16", tiles: [{ sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 57 }, { sheet: "ground", index: 69 }, { sheet: "ground", index: 57 }, { sheet: "ground", index: 69 }, { sheet: "ground", index: 83 }, { sheet: "ground", index: 83 }, { sheet: "ground", index: 82 }, { sheet: "ground", index: 82 }, { sheet: "ground", index: 59 }, { sheet: "ground", index: 71 }, { sheet: "ground", index: 58 }, { sheet: "ground", index: 70 }] },
+    s: { layout: "mask16", tiles: [{ sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 51 }, { sheet: "ground", index: 63 }, { sheet: "ground", index: 51 }, { sheet: "ground", index: 63 }, { sheet: "ground", index: 77 }, { sheet: "ground", index: 77 }, { sheet: "ground", index: 76 }, { sheet: "ground", index: 76 }, { sheet: "ground", index: 53 }, { sheet: "ground", index: 65 }, { sheet: "ground", index: 52 }, { sheet: "ground", index: 64 }] },
+    f: { layout: "mask16", tiles: [{ sheet: "ground", index: 215 }, { sheet: "ground", index: 215 }, { sheet: "ground", index: 215 }, { sheet: "ground", index: 177 }, { sheet: "ground", index: 215 }, { sheet: "ground", index: 215 }, { sheet: "ground", index: 177 }, { sheet: "ground", index: 177 }, { sheet: "ground", index: 215 }, { sheet: "ground", index: 179 }, { sheet: "ground", index: 178 }, { sheet: "ground", index: 178 }, { sheet: "ground", index: 179 }, { sheet: "ground", index: 179 }, { sheet: "ground", index: 178 }, { sheet: "ground", index: 178 }] },
 };
 
-/** Same idea as `AREA_ART`, keyed by overlay code. Empty until PR 12 brings the scattered/decorative vocabulary art alongside it. */
-export const OVERLAY_ART: Readonly<Record<string, TileArt>> = {};
+export const OVERLAY_ART: Readonly<Record<string, TileArt>> = {
+    // (none yet)
+};
 
 /** The composite canvas's fallback tile size, in pixels, for as long as no sheet declares one — the largest declared sheet tile size once one does (§3.5.5), so a later, more detailed sheet is never downsampled to match. */
 const FALLBACK_TILE_PIXELS = 16;
