@@ -6,6 +6,7 @@ import {
     entriesUsingSheet,
     gridFit,
     interiorMaskSlot,
+    isDraftMaskArt,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
@@ -14,6 +15,7 @@ import {
     maskSlotVariantCount,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
+    normalizeDraftArt,
     PREVIEW_WIDTH,
     previewRefOf,
     previewScale,
@@ -168,6 +170,39 @@ describe("withMaskSlotAssigned", () => {
     it("leaves every other slot untouched", () => {
         const tiles = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, true);
         expect(tiles[0]).toBeUndefined();
+    });
+});
+
+describe("normalizeDraftArt", () => {
+    it("folds a JSON round trip's null holes back to undefined for a mask entry", () => {
+        // JSON.parse(JSON.stringify(...)) turns an `undefined` array element
+        // into `null` — exactly what the draft comes back as from localStorage.
+        const tiles: (undefined | { sheet: string; index: number })[] = new Array(16).fill(undefined);
+        tiles[15] = { sheet: "ground", index: 0 };
+        const roundTripped: { layout: string; tiles: unknown[] } = JSON.parse(JSON.stringify({ layout: "mask16", tiles }));
+        expect(roundTripped.tiles[0]).toBeNull(); // the round trip really did turn it into null
+
+        const normalized = normalizeDraftArt(roundTripped as DraftTileArt);
+        expect(normalized).toEqual({ layout: "mask16", tiles });
+        expect(draftTileRefsOf(normalized)).toEqual([{ sheet: "ground", index: 0 }]); // no crash walking it, and no phantom null ref
+    });
+
+    it("leaves a wholly unassigned mask entry as all-undefined", () => {
+        const roundTripped = JSON.parse(JSON.stringify({ layout: "mask47", tiles: new Array(47).fill(undefined) })) as DraftTileArt;
+        const normalized = normalizeDraftArt(roundTripped);
+        expect(isDraftMaskArt(normalized) && normalized.tiles.every(tile => tile === undefined)).toBe(true);
+    });
+
+    it("passes non-mask art through unchanged", () => {
+        const single: DraftTileArt = { layout: "single", tile: { sheet: "town", index: 4 } };
+        expect(normalizeDraftArt(single)).toEqual(single);
+    });
+
+    it("leaves a real tile in place", () => {
+        const tiles = new Array(16).fill(undefined);
+        tiles[0] = { sheet: "ground", index: 2 };
+        const art: DraftTileArt = { layout: "mask16", tiles };
+        expect(normalizeDraftArt(art)).toEqual(art);
     });
 });
 

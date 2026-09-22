@@ -242,6 +242,22 @@ export function isDraftMaskArt(art: DraftTileArt): art is Extract<DraftTileArt, 
     return isMaskLayout(art.layout);
 }
 
+/**
+ * A mask entry's own `tiles`, straight back from the JSON round trip the
+ * draft takes through `useStoredValue`'s localStorage string — every reload,
+ * but also every render, since nothing here keeps a live object between
+ * writes. JSON has no `undefined`, so every hole `withMaskSlotAssigned`
+ * leaves as `undefined` comes back as `null` instead, and every reader that
+ * trusts `undefined` — `draftTileRefsOf`'s own hole check chief among them —
+ * mishandles a `null` it wasn't expecting. Folding `null` back to `undefined`
+ * once, right where the round trip happens (`parseDraft`, in the component),
+ * is simpler than teaching every reader the two mean the same thing.
+ */
+export function normalizeDraftArt(art: DraftTileArt): DraftTileArt {
+    if (!isDraftMaskArt(art)) return art;
+    return { layout: art.layout, tiles: art.tiles.map(tile => tile ?? undefined) };
+}
+
 /** How many of a mask entry's slots are still unassigned, for the panel's own "7 of 16 left" nudge. A slot counts as assigned whether it holds one tile or several variants. */
 export function maskRemaining(layout: MaskLayout, tiles: readonly (MaskSlotArt | undefined)[]): number {
     return MASK_LAYOUT_SIZES[layout] - tiles.filter(Boolean).length;

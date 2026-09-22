@@ -35,6 +35,7 @@ import {
     maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
+    normalizeDraftArt,
     previewRefOf,
     previewScale,
     printTilesetDeclarations,
@@ -79,10 +80,16 @@ const DEFAULT_DRAFT: Draft = {
     overlayArt: {},
 };
 
+/** A registry's worth of draft art, `normalizeDraftArt`'d one entry at a time — `parseDraft`'s own fix for what the JSON round trip does to a mask entry's holes. */
+function normalizeDraftArtMap(art: Record<string, DraftTileArt>): Record<string, DraftTileArt> {
+    return Object.fromEntries(Object.entries(art).map(([code, entry]) => [code, normalizeDraftArt(entry)]));
+}
+
 function parseDraft(stored: string | null): Draft {
     if (!stored) return DEFAULT_DRAFT;
     try {
-        return { ...DEFAULT_DRAFT, ...JSON.parse(stored) };
+        const parsed: Draft = { ...DEFAULT_DRAFT, ...JSON.parse(stored) };
+        return { ...parsed, areaArt: normalizeDraftArtMap(parsed.areaArt), overlayArt: normalizeDraftArtMap(parsed.overlayArt) };
     } catch {
         return DEFAULT_DRAFT;
     }
