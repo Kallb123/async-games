@@ -337,12 +337,13 @@ server-side, and sits behind the same client-only `isAdmin` gate — no
 ### Why it exists
 
 Kingdom Builder GDD §3.5.5 draws the world's ground from tilesheets: each
-registry area or overlay uses one of four layouts (`mask16`, `orientation`,
-`variants`, `single`), addressed as `{ sheet, index }` — a flat, row-major
-square on a named sheet. Counting pixels in an image viewer to work out which
-index is which square, for every mask a 16-tile autotile needs, is exactly the
-kind of job this repo hands to an editor rather than a human with a
-calculator.
+registry area or overlay uses one of five layouts (`mask16`, `mask47`,
+`orientation`, `variants`, `single`), addressed as `{ sheet, index }` — a flat,
+row-major square on a named sheet, optionally widened into a piece several
+squares across. Counting pixels in an image viewer to work out which index is
+which square, for every mask a 16-tile autotile needs — let alone the 47 a
+blob sheet needs — is exactly the kind of job this repo hands to an editor
+rather than a human with a calculator.
 
 ### What you do with it
 
@@ -361,20 +362,42 @@ calculator.
    assigned to it, so a partway-through entry can't be switched into a shape
    half its tiles don't match). A `mask16` entry picks its role from four
    "matches" checkboxes — north/east/south/west, the same 4-bit mask
-   `useTerrainImage.ts` computes at render time — an `orientation` entry from
-   a free-text key (whatever an `OverlayPlacement.orientation` will carry,
-   e.g. `"ns"`), and `variants`/`single` need no role at all.
-4. **Click the squares.** Each click on the sheet preview assigns the tile
+   `useTerrainImage.ts` computes at render time; a `mask47` entry adds the four
+   diagonals, each disabled unless both the sides beside it are ticked, since a
+   diagonal whose side is open can't change the picture and must not enter a
+   second slot for the same tile. An `orientation` entry takes a free-text key
+   (whatever an `OverlayPlacement.orientation` will carry, e.g. `"ns"`), and
+   `variants`/`single` need no role at all.
+4. **Say how big the piece is**, where one may be. An overlay's
+   `orientation`/`variants`/`single` art can be several squares across — the
+   walled town, the church — so those layouts show a width, a height and an
+   anchor: which square *of the piece* lands on the square of map it's placed
+   on, defaulting to the bottom-left so a building stands on its base and rises
+   over the ground behind it. Areas and mask layouts don't offer it, because
+   they fill the grid one square at a time and the guard rejects a piece there.
+5. **Click the squares.** Each click on the sheet preview assigns the tile
    under the pointer to whatever's currently picked; an assigned square is
    tinted and labelled with its entry's code so the sheet reads back at a
-   glance. A `mask16` entry's own panel counts down "N of 16 left".
-5. **Copy `tileset.ts`.** The export panel prints the sheet list plus
+   glance, and a piece marks every square it covers rather than just its
+   corner. A mask entry's own panel counts down "N of 16 left" (or of 47).
+6. **Or import a nine-slice.** Most hand-drawn sheets arrive as 3×3 blocks —
+   corner, edge, centre — which is nine of the sixteen neighbourhoods a
+   `mask16` wants. *Import a 3×3 nine-slice* arms the next click to take that
+   square as a block's top-left and fill all sixteen at once: the nine from the
+   block, and the seven a nine-slice never draws aliased onto the closest it
+   has (`nearestDeclaredMask` in `tileMapperModel.ts` has the weighting, and
+   ties break low so the same block always prints the same file). Clicking
+   within three squares of the right or bottom edge says so rather than
+   wrapping onto the next row.
+7. **Copy `tileset.ts`.** The export panel prints the sheet list plus
    `AREA_ART`/`OVERLAY_ART` in the exact shape the real file declares them —
    paste it over those three declarations (the type imports, `sheetTilePixels`
-   and the guard functions don't move) and run `npm test`. An entry with a
-   `mask16` still missing some of its sixteen is left out as a comment naming
-   how many, rather than printed with a hole in it, so a half-finished draft
-   never turns into a `tileset.ts` that doesn't compile.
+   and the guard functions don't move) and run `npm test`. A one-square
+   reference still prints as the bare `{ sheet, index }` it always did, and a
+   piece prints only the fields it actually departs from the defaults on. An
+   entry with a mask still missing some of its slots is left out as a comment
+   naming how many, rather than printed with a hole in it, so a half-finished
+   draft never turns into a `tileset.ts` that doesn't compile.
 
 **Save/resume** works the same as the track editor's: the draft — every
 sheet, every assignment — autosaves to this browser's storage, so a reload
