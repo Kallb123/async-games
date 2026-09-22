@@ -4,7 +4,7 @@
 // owns pointer handling and the panels; this owns the grid maths, the tile
 // size suggestions and the printed `tileset.ts` source.
 
-import { blobIndexOf, blobKey, cellToIndex, indexToCell, isMaskSlotVariants, maskSlotRefs, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
+import { blobIndexOf, blobKey, cellToIndex, indexToCell, isMaskSlotVariants, maskSlotRefs, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, tileRefsOf, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
 
 /** A sheet whose grid divides its image evenly on both axes, in the range a real tilesheet's tile size is likely to sit in. Sorted smallest first, so the UI can offer them as "did you mean" chips without the author counting squares themselves. */
 export function suggestedTileSizes(imageWidth: number, imageHeight: number, margin: number, spacing: number, min = 8, max = 128): number[] {
@@ -306,6 +306,24 @@ function printTileArt(art: DraftTileArt): string | null {
     }
     if (art.tiles.some(tile => !tile) || art.tiles.length !== MASK_LAYOUT_SIZES[art.layout]) return null;
     return `{ layout: "${art.layout}", tiles: [${art.tiles.map(tile => quoteMaskSlot(tile as MaskSlotArt)).join(", ")}] }`;
+}
+
+/**
+ * Every entry of a registry's art map (`AREA_ART` or `OVERLAY_ART`) that
+ * points at least one of its tiles at the given sheet — the mapper's "load a
+ * previously configured sheet" pull. Picking up a sheet again should mean
+ * picking up whatever mapping was already pointed at it too, so continuing an
+ * entry that's already fully declared doesn't mean re-clicking it from
+ * scratch. A `TileArt` is itself a valid `DraftTileArt` (its mask arrays just
+ * happen to have no holes), so the caller can fold this straight into the
+ * draft's own `areaArt`/`overlayArt`.
+ */
+export function entriesUsingSheet(art: Readonly<Record<string, TileArt>>, sheetName: string): Record<string, TileArt> {
+    const entries: Record<string, TileArt> = {};
+    for (const [code, entry] of Object.entries(art)) {
+        if (tileRefsOf(entry).some(ref => ref.sheet === sheetName)) entries[code] = entry;
+    }
+    return entries;
 }
 
 /**

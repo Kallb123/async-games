@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     diagonalApplies,
     draftTileRefsOf,
+    entriesUsingSheet,
     gridFit,
     interiorMaskSlot,
     mask16FromNineSlice,
@@ -22,7 +23,7 @@ import {
     type DraftTileArt,
     type NeighbourSides,
 } from "./tileMapperModel";
-import { blobIndexOf, BLOB_47_KEYS, NEIGHBOUR_BITS } from "./tileset";
+import { blobIndexOf, BLOB_47_KEYS, NEIGHBOUR_BITS, type TileArt } from "./tileset";
 
 const NO_NEIGHBOURS: NeighbourSides = { north: false, northEast: false, east: false, southEast: false, south: false, southWest: false, west: false, northWest: false };
 
@@ -366,6 +367,30 @@ describe("BLOB_47_KEYS", () => {
     it("puts the empty neighbourhood first and the fully-enclosed one last", () => {
         expect(BLOB_47_KEYS[0]).toBe(0);
         expect(BLOB_47_KEYS[46]).toBe(255);
+    });
+});
+
+describe("entriesUsingSheet", () => {
+    const g: TileArt = { layout: "single", tile: { sheet: "ground", index: 0 } };
+    const t: TileArt = { layout: "variants", tiles: [{ sheet: "town", index: 1 }, { sheet: "town", index: 2 }] };
+    const mixed: TileArt = { layout: "orientation", tiles: { ns: { sheet: "ground", index: 5 }, ew: { sheet: "town", index: 6 } } };
+
+    it("keeps only the entries with at least one tile on the given sheet", () => {
+        expect(entriesUsingSheet({ g, t }, "ground")).toEqual({ g });
+        expect(entriesUsingSheet({ g, t }, "town")).toEqual({ t });
+    });
+
+    it("keeps an entry that mixes sheets, since it does have a tile on the one asked about", () => {
+        expect(entriesUsingSheet({ mixed }, "ground")).toEqual({ mixed });
+        expect(entriesUsingSheet({ mixed }, "town")).toEqual({ mixed });
+    });
+
+    it("is empty for a sheet nothing points at", () => {
+        expect(entriesUsingSheet({ g, t }, "castle")).toEqual({});
+    });
+
+    it("is empty for an empty registry", () => {
+        expect(entriesUsingSheet({}, "ground")).toEqual({});
     });
 });
 

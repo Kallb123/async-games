@@ -25,6 +25,7 @@ import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
     diagonalApplies,
     draftTileRefsOf,
+    entriesUsingSheet,
     gridFit,
     interiorMaskSlot,
     isDraftMaskArt,
@@ -44,7 +45,7 @@ import {
     type MaskPreviewFill,
     type NeighbourSides,
 } from "../tileMapperModel";
-import { blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, sheetColumns, sheetSourceRect, singleSquareReason, tilePieceParts, tileRefSize, type MaskLayout, type SheetDefinition, type TileRef } from "../tileset";
+import { AREA_ART, blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, OVERLAY_ART, sheetColumns, sheetSourceRect, singleSquareReason, TILESET, tilePieceParts, tileRefSize, type MaskLayout, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
 const ZOOM_STEP = 0.25;
@@ -192,6 +193,7 @@ export default function KingdomBuilderTileMapper() {
     const [addVariant, setAddVariant] = useState(false);
     const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
     const [zoom, setZoom] = useState(1);
+    const [loadSheetChoice, setLoadSheetChoice] = useState("");
 
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -213,6 +215,36 @@ export default function KingdomBuilderTileMapper() {
             return URL.createObjectURL(file);
         });
         setImageError(null);
+    };
+
+    // Committed sheets, for "pick up where tileset.ts left off" rather than
+    // clicking an already-shipped entry back in from scratch.
+    const committedSheetNames = Object.keys(TILESET.sheets);
+
+    const loadExistingSheet = (name: string) => {
+        const sheetDef = TILESET.sheets[name];
+        if (!sheetDef) return;
+        setUploadedUrl(current => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+        });
+        setDraft(current => ({
+            ...current,
+            sheetName: name,
+            artPath: sheetDef.path,
+            tileWidth: sheetDef.tileWidth,
+            tileHeight: sheetDef.tileHeight,
+            margin: sheetDef.margin,
+            spacing: sheetDef.spacing,
+            sheets: { ...current.sheets, [name]: sheetDef },
+            // Replaces whatever the draft already held for these codes with
+            // tileset.ts's own — "load" means "match the file", not "merge
+            // with whatever I'd half-clicked before".
+            areaArt: { ...current.areaArt, ...entriesUsingSheet(AREA_ART, name) },
+            overlayArt: { ...current.overlayArt, ...entriesUsingSheet(OVERLAY_ART, name) },
+        }));
+        setImageError(null);
+        setLoadSheetChoice("");
     };
 
     // Asked of the same function the guard rejects a piece with, so the panel
@@ -345,6 +377,21 @@ export default function KingdomBuilderTileMapper() {
                     {uploadedUrl && <span className="ag-tag">Previewing an uploaded file — save it under public/art before committing</span>}
                 </div>
                 {imageError && <div className="ag-callout" role="alert">{imageError}</div>}
+                {committedSheetNames.length > 0 && (
+                    <>
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <label className="ag-editor-field">
+                                <span className="ag-field-label">Or load a sheet already in tileset.ts</span>
+                                <select className="ag-select" value={loadSheetChoice} onChange={event => setLoadSheetChoice(event.target.value)}>
+                                    <option value="">Choose one…</option>
+                                    {committedSheetNames.map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            </label>
+                            <button type="button" className="ag-btn ag-btn--light" disabled={!loadSheetChoice} onClick={() => loadExistingSheet(loadSheetChoice)}>Load sheet &amp; its mappings</button>
+                        </div>
+                        <p className="ag-hint">Pulls in that sheet&apos;s own size, margin and spacing, and every area or overlay whose art already points at it — replacing whatever the draft currently holds for those, so you pick up where <code>tileset.ts</code> left off rather than re-clicking it in.</p>
+                    </>
+                )}
             </Section>
 
             <Section label="Tile size">

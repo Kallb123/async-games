@@ -350,7 +350,13 @@ rather than a human with a calculator.
 1. **Point it at a sheet.** *Art path* takes anything already under
    `public/art/kingdombuilder/`; *Upload sheet from disk* previews a file
    before it's committed anywhere (held in this browser only, like the track
-   editor's traced backdrop — never written into the printed file).
+   editor's traced backdrop — never written into the printed file). Or **load
+   a sheet already in `tileset.ts`**: pick it from the dropdown and *Load
+   sheet & its mappings* brings in its size, margin and spacing along with
+   every area or overlay whose art already points at it, replacing whatever
+   the draft currently holds for those (`entriesUsingSheet` in
+   `tileMapperModel.ts`) — so continuing an already-shipped entry means
+   picking up where the file left off, not re-clicking it in from scratch.
 2. **Set the tile size.** Width and height in pixels, plus the sheet's own
    margin and spacing (the outer border and inter-tile gutter a real
    tilesheet usually has). The panel offers every size in a sane range that
