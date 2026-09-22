@@ -96,7 +96,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 <Section label="World" isLoading={isLoading} action={data && <span className="ag-tag">Tick {data.currentTick}</span>}>
                     {isLoading ? <Skeleton width="100%" height={320} radius={14} /> : data && map && (
                         <>
-                            <p className={styles.hint}>Tap one of your castles to open it, or choose a ringed site for your next settlement.</p>
+                            <p className={styles.hint}>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</p>
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={240} maxWidth={360}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
@@ -114,14 +114,27 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
                                             const isOpen = node.siteType === "expansion" && !settlement;
-                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={isOpen || isMine} isSelected={selectedSite === node.id}
+                                            const isSelected = selectedSite === node.id;
+                                            // No ring: ClickableMapNode's default ring offset is sized for World
+                                            // Domination's/Outbreak's much bigger nodes, and at this board's tight
+                                            // scale it dwarfed the map on a site-dense world. What a site is —
+                                            // "Open site", "Your town", "Claimed" — is already the label under it;
+                                            // "selected" is the one state a label can't say, so it gets its own
+                                            // fill on the site's own dot instead (see .selected).
+                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={isOpen || isMine} isSelected={isSelected} showRing={false}
                                                 onClick={isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? "Claimed settlement" : isOpen ? "Open settlement site" : "Starting site"}>
-                                                <circle className={`${styles.site} ${isMine ? styles.mine : settlement ? styles.occupied : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
+                                                <circle className={`${styles.site} ${isSelected ? styles.selected : isMine ? styles.mine : settlement ? styles.occupied : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
                                                 {settlement && <text className={styles.keep} x={node.x} y={node.y}>♜</text>}
                                             </ClickableMapNode>;
                                         })}
-                                        <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8}
+                                        {/* MapLabel's own default strokeWidth (3) is tuned for boards that
+                                            draw at fontSize 9+ (Outbreak, Train Time) — at this board's fontSize
+                                            of 1.8 it outweighed the glyphs themselves, so every label's outline
+                                            merged into one dark blob with stray points poking out of it wherever
+                                            a letter's own shape ran furthest (an unmistakable "t" or "y" read as
+                                            a tail pointing nowhere in particular). Scaled down to match. */}
+                                        <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8} strokeWidth={0.4}
                                             labels={data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => ({
                                                 key: node.id, x: node.x, y: node.y, radius: SETTLEMENT_RADIUS,
                                                 text: occupiedByNode.get(node.id)?.isMine ? "Your town" : occupiedByNode.has(node.id) ? "Claimed" : node.siteType === "expansion" ? "Open site" : "Start",
@@ -156,7 +169,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         <button type="button" className="ag-btn ag-btn--ghost" onClick={() => setSelectedSite(null)}>Cancel</button>
                         <button type="button" className="ag-btn ag-btn--primary" disabled={founding} onClick={found}>{founding ? "Founding…" : "Found here"}</button>
                     </div>}
-                    {!selectedSite && openSites.length > 0 && <p className={styles.hint}>Choose a ringed open site on the map to expand your kingdom.</p>}
+                    {!selectedSite && openSites.length > 0 && <p className={styles.hint}>Choose an &quot;Open site&quot; on the map to expand your kingdom.</p>}
                     {openSites.length === 0 && data && <div className="ag-empty">Every expansion site has been claimed.</div>}
                     {message && <div className="ag-callout" role="alert">{message}</div>}
                 </Section>

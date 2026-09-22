@@ -131,7 +131,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Kingdom Builder's world map no longer hides its own ground art",
-                detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, blotting out the grass, forest and quarry art underneath it and the squares around it. Settlement markers are now sized to fit their own square, and a big field of grass draws from several tiles instead of repeating one, so the map reads as a picture again.",
+                detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, and every tappable site on top of that in a thick gold ring sized for a much bigger board — between the two, a site-dense map was more circle than art. Both are gone in favour of a small dot and the \"Open site\"/\"Your town\" label already sitting next to it, whose own text used to render as an illegible dark blob. A big field of grass now draws from several tiles instead of repeating one, so the map reads as a picture again.",
                 game: "kingdombuilder",
             },
             {
