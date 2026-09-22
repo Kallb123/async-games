@@ -116,6 +116,11 @@ export function diagonalApplies(sides: NeighbourSides, diagonal: DiagonalName): 
     return (blobKey(rawMask8(sides) | bit) & bit) !== 0;
 }
 
+/** The slot one neighbourhood picks for either mask layout — mask16's plain 4-bit value, or mask47's blob-collapsed one — asked once here so the mapper's several "test scene" previews below (and `islandMaskSlots`) never derive it twice. */
+function maskSlotFor(layout: MaskLayout, sides: NeighbourSides): number {
+    return layout === "mask16" ? maskFromSides(sides) : blobIndexOf(mask8FromSides(sides));
+}
+
 /**
  * The four sides' "matches" for one square of a self-contained 3×3 "island"
  * of one entry, purely from its own (row, col) inside the block — the same
@@ -154,11 +159,50 @@ export function islandMaskSlots(layout: MaskLayout): readonly number[] {
     const slots: number[] = [];
     for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
-            const sides = islandNeighbourSides(row, col);
-            slots.push(layout === "mask16" ? maskFromSides(sides) : blobIndexOf(mask8FromSides(sides)));
+            slots.push(maskSlotFor(layout, islandNeighbourSides(row, col)));
         }
     }
     return slots;
+}
+
+/**
+ * The isolated tile and the four peninsula tips, laid out as a cross so the
+ * shape reads at a glance — five of the seven exotic neighbourhoods
+ * `nearestDeclaredMask`'s own comment names as what a nine-slice block never
+ * draws (an isolated square, and the end of a peninsula, one per direction;
+ * the two one-square-wide *strips* are the two it leaves out). The centre is
+ * a square of this terrain with nothing touching it anywhere; each arm is the
+ * far tip of a thin strand reaching out from a body in that direction, so it
+ * only matches on the one side that leads back toward the middle. Works for
+ * either mask layout — none of these five ever has two adjacent sides both
+ * matching, so no diagonal can ever apply to one of them (`diagonalApplies`),
+ * and mask16 and mask47 read the same neighbourhood identically.
+ */
+export function crossMaskSlots(layout: MaskLayout): { centre: number; north: number; east: number; south: number; west: number } {
+    const none: NeighbourSides = { north: false, northEast: false, east: false, southEast: false, south: false, southWest: false, west: false, northWest: false };
+    const slot = (sides: Partial<NeighbourSides>) => maskSlotFor(layout, { ...none, ...sides });
+    return {
+        centre: slot({}),
+        north: slot({ south: true }), // the arm above the centre only touches the body below it
+        east: slot({ west: true }),
+        south: slot({ north: true }),
+        west: slot({ east: true }),
+    };
+}
+
+/**
+ * The four inner corners, `mask47`'s own answer to "two arms close around one
+ * square of something else" (tileset.ts's header comment) — the picture a
+ * `mask16` tile can never draw, because it has no diagonal to ask about at
+ * all. Each is otherwise the fully-interior neighbourhood — every side and
+ * every other diagonal matching — with only the one corner being shown left
+ * open, so the difference from "surrounded on every side" is exactly that one
+ * corner. `mask47`-only concept, so this doesn't take a layout.
+ */
+export function innerCornerMaskSlots(): { northWest: number; northEast: number; southWest: number; southEast: number } {
+    const allMatch: NeighbourSides = { north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true };
+    const slot = (corner: DiagonalName) => blobIndexOf(mask8FromSides({ ...allMatch, [corner]: false }));
+    return { northWest: slot("northWest"), northEast: slot("northEast"), southWest: slot("southWest"), southEast: slot("southEast") };
 }
 
 /** One mask slot's own preview tile: its first variant, for a slot declaring several — the preview shows one concrete picture rather than the whole rotation. `undefined` for a slot never clicked. */
@@ -247,6 +291,18 @@ export type DraftTileArt =
 /** `tileset.ts`'s `isMaskArt` for the mapper's own in-progress shape — the same question asked of a draft that may still have holes in it. */
 export function isDraftMaskArt(art: DraftTileArt): art is Extract<DraftTileArt, { layout: MaskLayout }> {
     return isMaskLayout(art.layout);
+}
+
+/**
+ * Every one of a mask layout's slots pointed at the same square — the
+ * mapper's "fill every slot with one tile" shortcut, for an entry with no
+ * differentiated edge art yet. The shipped grass area is exactly this:
+ * every slot but the fully-interior one still points at the same plain
+ * square. Replaces whatever the entry held before, the same way importing a
+ * nine-slice does — this is a fresh start, not folded onto the old data.
+ */
+export function fillMaskWithTile(layout: MaskLayout, ref: TileRef): DraftTileArt {
+    return { layout, tiles: new Array(MASK_LAYOUT_SIZES[layout]).fill(ref) };
 }
 
 /**

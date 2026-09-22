@@ -23,10 +23,13 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
+    crossMaskSlots,
     diagonalApplies,
     draftTileRefsOf,
     entriesUsingSheet,
+    fillMaskWithTile,
     gridFit,
+    innerCornerMaskSlots,
     isDraftMaskArt,
     islandMaskSlots,
     mask16FromNineSlice,
@@ -189,6 +192,10 @@ export default function KingdomBuilderTileMapper() {
     // so it is a mode you turn on deliberately and which turns itself off
     // again after the click that used it.
     const [nineSliceArmed, setNineSliceArmed] = useState(false);
+    // Filling every slot with one square is the same kind of one-click, whole-
+    // entry action as a nine-slice import — arm it, then the next click on the
+    // sheet is what gets repeated, not a single slot.
+    const [fillArmed, setFillArmed] = useState(false);
     // A mask slot's second (and third, …) tile — folding a click into what
     // the slot already holds instead of replacing it, the same way ticking
     // this on and clicking several squares builds up a `variants` area's list.
@@ -312,6 +319,18 @@ export default function KingdomBuilderTileMapper() {
         setImageError(null);
         setNineSliceArmed(false);
         updateArt(() => ({ layout: "mask16", tiles }));
+    };
+
+    /**
+     * Points every slot of the active mask entry at the square clicked — the
+     * quick placeholder fill an entry with no differentiated edge art yet
+     * wants, the same shortcut the shipped grass area's own borders already
+     * lean on (every slot but the fully-interior one is the same plain tile).
+     */
+    const fillWholeMask = (index: number) => {
+        if (!entryCode || !isMaskLayout(activeLayout)) return;
+        setFillArmed(false);
+        updateArt(() => fillMaskWithTile(activeLayout, { sheet: draft.sheetName, index }));
     };
 
     // Every tile index already assigned to *any* entry on this sheet, for the
@@ -481,6 +500,12 @@ export default function KingdomBuilderTileMapper() {
                                 <span className="ag-hint">Fills all sixteen from one 3×3 block: nine come from the block, the seven a nine-slice never draws are aliased onto the closest it has.</span>
                             </div>
                         )}
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <button type="button" className={fillArmed ? "ag-btn ag-btn--primary" : "ag-btn ag-btn--light"} onClick={() => setFillArmed(!fillArmed)} disabled={!entryCode}>
+                                {fillArmed ? "Click a square to fill every slot with it…" : `Fill all ${MASK_LAYOUT_SIZES[activeLayout]} with one tile`}
+                            </button>
+                            <span className="ag-hint">A flat placeholder fill for an entry with no differentiated edge art yet — the same shortcut the shipped grass area&apos;s own borders already lean on. Replaces whatever this entry currently holds.</span>
+                        </div>
                     </>
                 )}
                 {activeLayout === "orientation" && (
@@ -512,6 +537,8 @@ export default function KingdomBuilderTileMapper() {
                     <p className="ag-hint">
                         {nineSliceArmed
                             ? <>Click the <strong>top-left</strong> square of a 3×3 block to fill all sixteen of <strong>{entryCode}</strong>&apos;s masks from it.</>
+                            : fillArmed
+                            ? <>Click a square to fill every slot of <strong>{entryCode}</strong> with it.</>
                             : <>Click a square below to {isMaskLayout(activeLayout) && addVariant ? "add another variant to" : "assign it to"} <strong>{entryCode}</strong>{isMaskLayout(activeLayout) ? ` — ${activeLayout === "mask16" ? "mask" : "slot"} ${activeMaskSlot}` : ""}.</>}
                     </p>
                 )}
@@ -550,7 +577,9 @@ export default function KingdomBuilderTileMapper() {
                                 const row = Math.floor((y - draft.margin) / (draft.tileHeight + draft.spacing));
                                 if (col < 0 || row < 0 || col >= fit.columns || row >= fit.rows) return;
                                 const index = cellToIndex(col, row, fit.columns);
-                                if (nineSliceArmed) importNineSlice(index); else assignTile(index);
+                                if (nineSliceArmed) importNineSlice(index);
+                                else if (fillArmed) fillWholeMask(index);
+                                else assignTile(index);
                             }}
                         >
                             {Array.from({ length: fit.columns * fit.rows }, (_, index) => {
@@ -593,6 +622,35 @@ export default function KingdomBuilderTileMapper() {
                         <p className="ag-hint">
                             A self-contained 3×3 patch of this entry, so every one of the nine squares is real — the middle is the fully-interior tile, the rest are its edges and corners. The ringed square is whichever {activeLayout === "mask16" ? "mask" : "slot"} the checkboxes above currently point at, when that is one of these nine. A dashed square is a slot nothing has been clicked onto yet.
                         </p>
+
+                        <MaskCrossPreview
+                            layout={activeLayout}
+                            tiles={activeMaskSlotTiles}
+                            activeSlot={activeMaskSlot}
+                            sheet={currentSheetDef}
+                            sheetName={draft.sheetName}
+                            imageUrl={imageUrl}
+                            naturalSize={naturalSize}
+                        />
+                        <p className="ag-hint">
+                            The isolated tile and the four peninsula tips — a lone square of this entry with nothing else touching it, and the far end of a thin strand reaching out in each direction. None of the nine-slice importer&apos;s block draws these, so an entry that leans on it is worth checking here too.
+                        </p>
+
+                        {activeLayout === "mask47" && (
+                            <>
+                                <MaskInnerCornerPreview
+                                    tiles={activeMaskSlotTiles}
+                                    activeSlot={activeMaskSlot}
+                                    sheet={currentSheetDef}
+                                    sheetName={draft.sheetName}
+                                    imageUrl={imageUrl}
+                                    naturalSize={naturalSize}
+                                />
+                                <p className="ag-hint">
+                                    The four inner corners — two arms closing around one square of something else, the picture only mask47 can draw. Each square here is otherwise fully surrounded, with just that one corner left open.
+                                </p>
+                            </>
+                        )}
                     </>
                 ) : (
                     <NonMaskArtPreview art={currentArt} sheet={currentSheetDef} sheetName={draft.sheetName} imageUrl={imageUrl} naturalSize={naturalSize} />
@@ -620,9 +678,14 @@ export default function KingdomBuilderTileMapper() {
 // index — a nested `<svg>` whose own `viewBox` is the crop rectangle, with the
 // full sheet image placed at the negative of its corner, is the same trick as
 // `MapEdges`' off-board stubs: the parent element clips to its viewBox, so
-// only the square inside it ever draws. `MaskIslandPreview` is the
-// mask16/mask47 "3×3 preview"; `NonMaskArtPreview` is the plainer one for
-// orientation/variants/single, a strip of one tile per declared role.
+// only the square inside it ever draws. `MaskSlotGrid` is the shared renderer
+// behind three mask16/mask47 previews, each a fixed arrangement of real slots
+// read off `tileMapperModel.ts`'s pure geometry rather than the checkboxes:
+// `MaskIslandPreview` (a self-contained 3×3 patch), `MaskCrossPreview` (the
+// isolated tile and the four peninsula tips) and `MaskInnerCornerPreview`
+// (mask47's four inner corners, which mask16 can never draw). `NonMaskArtPreview`
+// is the plainer one for orientation/variants/single, a strip of one tile per
+// declared role.
 
 const PREVIEW_TILE_PX = 48;
 
@@ -667,24 +730,53 @@ function PreviewCell({ highlighted, tile, sheet, imageUrl, naturalSize }: { high
  * checkboxes, and only lands on a cell when the slot they currently point at
  * happens to be one of these nine.
  */
-function MaskIslandPreview({ layout, tiles, activeSlot, sheet, sheetName, imageUrl, naturalSize }: {
-    layout: MaskLayout;
+interface MaskSlotGridProps {
     tiles: readonly (MaskSlotArt | undefined)[] | undefined;
     activeSlot: number;
     sheet: SheetDefinition;
     sheetName: string;
     imageUrl: string;
     naturalSize: { width: number; height: number };
-}) {
+}
+
+/**
+ * A grid of mask preview cells, one per named position — the shared renderer
+ * behind the island, cross and inner-corner previews below, so "read this
+ * slot, resolve its tile, ring it if the checkboxes point at it" is written
+ * once. `cells` is row-major, `columns` wide; `null` leaves a position
+ * visually blank, which is how the cross's own unused corners stay unused
+ * rather than reading as a fourth kind of placeholder.
+ */
+function MaskSlotGrid({ columns, cells, tiles, activeSlot, sheet, sheetName, imageUrl, naturalSize }: MaskSlotGridProps & { columns: number; cells: readonly (number | null)[] }) {
     return (
-        <div className="ag-tile-preview-grid">
-            {islandMaskSlots(layout).map((slot, index) => {
+        <div className="ag-tile-preview-grid" style={{ gridTemplateColumns: `repeat(${columns}, 48px)`, gridTemplateRows: `repeat(${Math.ceil(cells.length / columns)}, 48px)` }}>
+            {cells.map((slot, index) => {
+                if (slot === null) return <div key={index} />;
                 const ref = previewRefOf(tiles?.[slot]);
                 const tile = ref && ref.sheet === sheetName ? ref : undefined;
                 return <PreviewCell key={index} highlighted={slot === activeSlot} tile={tile} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
             })}
         </div>
     );
+}
+
+/** The mask16/mask47 preview: a self-contained 3×3 island of this entry (`islandMaskSlots`) — see the file header. */
+function MaskIslandPreview({ layout, ...grid }: MaskSlotGridProps & { layout: MaskLayout }) {
+    return <MaskSlotGrid columns={3} cells={islandMaskSlots(layout)} {...grid} />;
+}
+
+/** The isolated tile and the four peninsula tips, arranged as a plus so the shape reads at a glance (`crossMaskSlots`) — see the file header. */
+function MaskCrossPreview({ layout, ...grid }: MaskSlotGridProps & { layout: MaskLayout }) {
+    const cross = crossMaskSlots(layout);
+    const cells: readonly (number | null)[] = [null, cross.north, null, cross.west, cross.centre, cross.east, null, cross.south, null];
+    return <MaskSlotGrid columns={3} cells={cells} {...grid} />;
+}
+
+/** The four inner corners a mask47 entry can draw and a mask16 one never can (`innerCornerMaskSlots`) — see the file header. */
+function MaskInnerCornerPreview(grid: MaskSlotGridProps) {
+    const corners = innerCornerMaskSlots();
+    const cells: readonly number[] = [corners.northWest, corners.northEast, corners.southWest, corners.southEast];
+    return <MaskSlotGrid columns={2} cells={cells} {...grid} />;
 }
 
 /** One labelled tile of an orientation/variants/single preview strip. A tile on a sheet this screen doesn't currently have loaded can't be cropped — shown the same as "nothing assigned" rather than a broken image. */

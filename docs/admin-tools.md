@@ -404,25 +404,46 @@ rather than a human with a calculator.
    ties break low so the same block always prints the same file). Clicking
    within three squares of the right or bottom edge says so rather than
    wrapping onto the next row.
-7. **Check the preview.** A "Preview" panel shows what the currently-picked
+7. **Or fill every slot with one tile.** *Fill all 16 with one tile* (or 47)
+   arms the next click to point the entire entry at that one square —
+   `fillMaskWithTile` in `tileMapperModel.ts`, the flat placeholder fill an
+   entry with no differentiated edge art yet wants. The shipped grass area
+   already leans on the idea by hand: every slot but the fully-interior one is
+   the same plain square. Works for either mask layout, and — like the
+   nine-slice import — replaces whatever the entry held before rather than
+   folding into it.
+8. **Check the preview.** A "Preview" panel shows what the currently-picked
    entry will actually look like, from real cropped squares of the loaded
-   sheet rather than a description of them. For a `mask16`/`mask47` entry it's
-   a self-contained 3×3 island of the entry itself (`islandMaskSlots` in
-   `tileMapperModel.ts`): the same fixed patch the nine-slice importer reads a
-   block from, only run the other way — every one of the nine squares really
-   is this entry, so every one draws from a real slot (the middle is the
-   fully-interior one, the rest are its edges and corners) rather than
-   standing in for a neighbour the mapper doesn't actually know. It's
-   independent of the checkboxes above — an island square's own neighbours
-   are fixed by where it sits in the block, not by anything you tick — so it
-   stops moving the moment you've clicked a slot in, rather than reverting to
-   showing one square repeated the instant the checkboxes return to their
-   all-matching default. A ring still follows the checkboxes, landing on
-   whichever of the nine cells is the slot they currently point at (nothing is
-   ringed when that slot isn't one of the nine). A dashed square is a slot
-   nothing's been clicked onto yet. `orientation`/`variants`/`single` get the
-   plainer version, a strip of one tile per declared role.
-8. **Copy `tileset.ts`.** The export panel prints the sheet list plus
+   sheet rather than a description of them, in three parts for a
+   `mask16`/`mask47` entry — all three read straight off the entry's own
+   slots rather than the checkboxes above, so none of them collapses to one
+   square repeated the instant the checkboxes return to their all-matching
+   default; a ring still follows the checkboxes onto whichever cell is the
+   slot they currently point at, when that slot is one of the ones shown:
+   - **A self-contained 3×3 island** (`islandMaskSlots`): the same fixed
+     patch the nine-slice importer reads a block from, only run the other
+     way — every one of the nine squares really is this entry, so every one
+     draws from a real slot (the middle is the fully-interior one, the rest
+     are its edges and corners) rather than standing in for a neighbour the
+     mapper doesn't actually know.
+   - **A cross** (`crossMaskSlots`): the isolated tile in the middle — a
+     square of this entry with nothing else touching it anywhere — and the
+     far tip of a peninsula reaching out in each of the four directions, only
+     matching on the one side that leads back toward a body. Five of the
+     seven exotic neighbourhoods a nine-slice import can't draw
+     (`nearestDeclaredMask`'s own list; the two one-square-wide strips are
+     the two left out), so an entry that leans on the importer is worth
+     checking here too. Works for either mask layout.
+   - **The four inner corners** (`innerCornerMaskSlots`, `mask47` only): two
+     arms closing around one square of something else, the picture a
+     `mask16` tile can never draw because it has no diagonal to ask about at
+     all. Each square is otherwise fully surrounded, with only that one
+     corner left open.
+
+   A dashed square, in any of the three, is a slot nothing's been clicked
+   onto yet. `orientation`/`variants`/`single` get the plainer version, a
+   strip of one tile per declared role.
+9. **Copy `tileset.ts`.** The export panel prints the sheet list plus
    `AREA_ART`/`OVERLAY_ART` in the exact shape the real file declares them —
    paste it over those three declarations (the type imports, `sheetTilePixels`
    and the guard functions don't move) and run `npm test`. A one-square

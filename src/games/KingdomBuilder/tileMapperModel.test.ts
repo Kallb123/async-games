@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    crossMaskSlots,
     diagonalApplies,
     draftTileRefsOf,
     entriesUsingSheet,
+    fillMaskWithTile,
     gridFit,
+    innerCornerMaskSlots,
     islandMaskSlots,
     islandNeighbourSides,
     isDraftMaskArt,
@@ -294,6 +297,64 @@ describe("islandMaskSlots", () => {
         const slots = islandMaskSlots("mask47");
         expect(slots).toHaveLength(9);
         expect(new Set(slots).size).toBe(9);
+    });
+});
+
+describe("crossMaskSlots", () => {
+    it("the centre is the isolated tile — mask16's 0, and mask47's own isolated slot", () => {
+        expect(crossMaskSlots("mask16").centre).toBe(0);
+        expect(crossMaskSlots("mask47").centre).toBe(blobIndexOf(0));
+    });
+
+    it("each arm only matches on the side leading back to the centre, for mask16", () => {
+        const cross = crossMaskSlots("mask16");
+        expect(cross.north).toBe(maskFromSides({ ...NO_NEIGHBOURS, south: true }));
+        expect(cross.east).toBe(maskFromSides({ ...NO_NEIGHBOURS, west: true }));
+        expect(cross.south).toBe(maskFromSides({ ...NO_NEIGHBOURS, north: true }));
+        expect(cross.west).toBe(maskFromSides({ ...NO_NEIGHBOURS, east: true }));
+    });
+
+    it("mask47 reads the same lone-side neighbourhoods — no diagonal can ever apply to a peninsula tip", () => {
+        const cross = crossMaskSlots("mask47");
+        expect(cross.north).toBe(blobIndexOf(NEIGHBOUR_BITS.south));
+        expect(cross.east).toBe(blobIndexOf(NEIGHBOUR_BITS.west));
+        expect(cross.south).toBe(blobIndexOf(NEIGHBOUR_BITS.north));
+        expect(cross.west).toBe(blobIndexOf(NEIGHBOUR_BITS.east));
+    });
+
+    it("is five distinct slots", () => {
+        expect(new Set(Object.values(crossMaskSlots("mask16"))).size).toBe(5);
+    });
+});
+
+describe("innerCornerMaskSlots", () => {
+    it("is four distinct mask47 slots, none of them the fully-interior one", () => {
+        const values = Object.values(innerCornerMaskSlots());
+        expect(new Set(values).size).toBe(4);
+        expect(values).not.toContain(blobIndexOf(255));
+    });
+
+    it("each corner is the fully-interior neighbourhood with just that one diagonal left open", () => {
+        const corners = innerCornerMaskSlots();
+        expect(corners.northEast).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.northEast));
+        expect(corners.southEast).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.southEast));
+        expect(corners.southWest).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.southWest));
+        expect(corners.northWest).toBe(blobIndexOf(255 & ~NEIGHBOUR_BITS.northWest));
+    });
+});
+
+describe("fillMaskWithTile", () => {
+    it("points every slot of a mask16 entry at the same ref", () => {
+        const ref = { sheet: "ground", index: 3 };
+        const art = fillMaskWithTile("mask16", ref);
+        expect(art.layout).toBe("mask16");
+        expect(isDraftMaskArt(art) ? art.tiles : []).toHaveLength(16);
+        expect(isDraftMaskArt(art) && art.tiles.every(tile => tile === ref)).toBe(true);
+    });
+
+    it("points every slot of a mask47 entry at the same ref", () => {
+        const art = fillMaskWithTile("mask47", { sheet: "ground", index: 7 });
+        expect(isDraftMaskArt(art) ? art.tiles : []).toHaveLength(47);
     });
 });
 
