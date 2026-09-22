@@ -117,44 +117,48 @@ export function diagonalApplies(sides: NeighbourSides, diagonal: DiagonalName): 
 }
 
 /**
- * How each of the eight neighbour cells in the mapper's own "3×3 preview"
- * should read, from the same checkboxes `assignTile` reads the active slot
- * from: "match" draws the entry's own fully-interior tile there (more of the
- * same terrain), "differ" draws a plain "something else" placeholder, and
- * "irrelevant" — the four diagonals of a `mask16` entry only — draws neither,
- * because a `mask16` tile is picked from its four sides alone and a corner
- * tick there can never change its picture. A `mask47` diagonal is "irrelevant"
- * too wherever `diagonalApplies` says it can't matter, for the same reason the
- * checkbox itself is disabled there — the preview and the checkbox can't come
- * to disagree about what a tick means.
+ * The four sides' "matches" for one square of a self-contained 3×3 "island"
+ * of one entry, purely from its own (row, col) inside the block — the same
+ * fixed patch `NINE_SLICE_MASKS` already lists by hand for `mask16`, asked
+ * generically instead so the mapper's own preview can ask it of `mask47` too.
+ * A neighbour outside the 3×3 never matches, the same rule a real map's edge
+ * follows — an island square's neighbours are entirely decided by where it
+ * sits in the block, never by anything an author has to tick.
  */
-export type MaskPreviewFill = "match" | "differ" | "irrelevant";
-
-export function maskPreviewFill(layout: MaskLayout, sides: NeighbourSides): Record<keyof NeighbourSides, MaskPreviewFill> {
-    const corner = (key: DiagonalName): MaskPreviewFill => {
-        if (layout !== "mask47" || !diagonalApplies(sides, key)) return "irrelevant";
-        return sides[key] ? "match" : "differ";
-    };
+export function islandNeighbourSides(row: number, col: number): NeighbourSides {
+    const onIsland = (r: number, c: number) => r >= 0 && r < 3 && c >= 0 && c < 3;
     return {
-        north: sides.north ? "match" : "differ",
-        east: sides.east ? "match" : "differ",
-        south: sides.south ? "match" : "differ",
-        west: sides.west ? "match" : "differ",
-        northEast: corner("northEast"),
-        southEast: corner("southEast"),
-        southWest: corner("southWest"),
-        northWest: corner("northWest"),
+        north: onIsland(row - 1, col),
+        northEast: onIsland(row - 1, col + 1),
+        east: onIsland(row, col + 1),
+        southEast: onIsland(row + 1, col + 1),
+        south: onIsland(row + 1, col),
+        southWest: onIsland(row + 1, col - 1),
+        west: onIsland(row, col - 1),
+        northWest: onIsland(row - 1, col - 1),
     };
 }
 
 /**
- * The slot a mask entry's fully-interior tile sits at — every neighbour
- * matching — which is what the preview's "match" cells draw as "more of this
- * terrain". `mask16`'s is the plain top bit; `mask47`'s is whichever of its 47
- * slots the all-eight-bits mask collapses onto.
+ * The nine slots a self-contained 3×3 island of one entry draws from, row
+ * by row — the mapper's own "3×3 preview": every square of the block is
+ * really this entry, so every one of the nine is a real, already-meaningful
+ * slot (the centre is the fully-interior one) rather than a stand-in for a
+ * neighbour the mapper doesn't actually know. Matches `NINE_SLICE_MASKS`
+ * exactly for `mask16` — same fixed patch, read off the position instead of
+ * listed by hand — and extends the idea to `mask47`, whose extra diagonals a
+ * 3×3 block also fully decides (every neighbour of every island square, on or
+ * off the island, is itself one of the nine or off the edge).
  */
-export function interiorMaskSlot(layout: MaskLayout): number {
-    return layout === "mask16" ? 15 : blobIndexOf(0xff);
+export function islandMaskSlots(layout: MaskLayout): readonly number[] {
+    const slots: number[] = [];
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            const sides = islandNeighbourSides(row, col);
+            slots.push(layout === "mask16" ? maskFromSides(sides) : blobIndexOf(mask8FromSides(sides)));
+        }
+    }
+    return slots;
 }
 
 /** One mask slot's own preview tile: its first variant, for a slot declaring several — the preview shows one concrete picture rather than the whole rotation. `undefined` for a slot never clicked. */

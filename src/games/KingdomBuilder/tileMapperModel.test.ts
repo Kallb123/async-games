@@ -5,12 +5,12 @@ import {
     draftTileRefsOf,
     entriesUsingSheet,
     gridFit,
-    interiorMaskSlot,
+    islandMaskSlots,
+    islandNeighbourSides,
     isDraftMaskArt,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
-    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
     nearestDeclaredMask,
@@ -262,41 +262,38 @@ describe("diagonalApplies", () => {
     });
 });
 
-describe("maskPreviewFill", () => {
-    it("reads the four sides straight off the checkboxes for either layout", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true, south: true };
-        expect(maskPreviewFill("mask16", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
-        expect(maskPreviewFill("mask47", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+describe("islandNeighbourSides", () => {
+    it("the centre of a 3×3 island matches on every side — the fully-interior tile", () => {
+        const sides = islandNeighbourSides(1, 1);
+        expect(sides).toEqual({ north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true });
     });
 
-    it("mask16's diagonals are always irrelevant — a mask16 tile never asks about them", () => {
-        const allSides = { ...NO_NEIGHBOURS, north: true, east: true, south: true, west: true };
-        const fill = maskPreviewFill("mask16", allSides);
-        expect(fill.northEast).toBe("irrelevant");
-        expect(fill.southEast).toBe("irrelevant");
-        expect(fill.southWest).toBe("irrelevant");
-        expect(fill.northWest).toBe("irrelevant");
+    it("a top-left corner only matches the two sides that stay on the island", () => {
+        const sides = islandNeighbourSides(0, 0);
+        expect(sides).toMatchObject({ north: false, west: false, east: true, south: true });
+        expect(sides.northWest).toBe(false); // off the island on both axes
+        expect(sides.southEast).toBe(true); // the middle square, on the island
     });
 
-    it("mask47's diagonal matches its own checkbox once both sides beside it match", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true, east: true, northEast: true };
-        expect(maskPreviewFill("mask47", sides).northEast).toBe("match");
-        expect(maskPreviewFill("mask47", { ...sides, northEast: false }).northEast).toBe("differ");
-    });
-
-    it("mask47's diagonal is irrelevant wherever diagonalApplies says it can't matter — never a false 'differ'", () => {
-        const sides = { ...NO_NEIGHBOURS, north: true }; // east open: the corner can't be seen
-        expect(maskPreviewFill("mask47", sides).northEast).toBe("irrelevant");
+    it("a top-centre edge matches three sides and both diagonals the island still has", () => {
+        const sides = islandNeighbourSides(0, 1);
+        expect(sides).toMatchObject({ north: false, east: true, south: true, west: true, southEast: true, southWest: true });
     });
 });
 
-describe("interiorMaskSlot", () => {
-    it("is 15 for mask16 — every side ticked", () => {
-        expect(interiorMaskSlot("mask16")).toBe(15);
+describe("islandMaskSlots", () => {
+    it("is exactly NINE_SLICE_MASKS for mask16 — the same fixed patch, read off the position instead of listed by hand", () => {
+        expect(islandMaskSlots("mask16")).toEqual(NINE_SLICE_MASKS);
     });
 
-    it("is mask47's slot for all eight neighbours matching", () => {
-        expect(interiorMaskSlot("mask47")).toBe(BLOB_47_KEYS.indexOf(255));
+    it("its centre is mask47's fully-interior slot too", () => {
+        expect(islandMaskSlots("mask47")[4]).toBe(BLOB_47_KEYS.indexOf(255));
+    });
+
+    it("is nine slots, every one of them a real, distinct neighbourhood", () => {
+        const slots = islandMaskSlots("mask47");
+        expect(slots).toHaveLength(9);
+        expect(new Set(slots).size).toBe(9);
     });
 });
 

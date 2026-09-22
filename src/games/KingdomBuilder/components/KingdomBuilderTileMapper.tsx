@@ -27,12 +27,11 @@ import {
     draftTileRefsOf,
     entriesUsingSheet,
     gridFit,
-    interiorMaskSlot,
     isDraftMaskArt,
+    islandMaskSlots,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
-    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
     normalizeDraftArt,
@@ -43,10 +42,9 @@ import {
     withMaskSlotAssigned,
     type DiagonalName,
     type DraftTileArt,
-    type MaskPreviewFill,
     type NeighbourSides,
 } from "../tileMapperModel";
-import { AREA_ART, blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, OVERLAY_ART, sheetColumns, sheetSourceRect, singleSquareReason, TILESET, tilePieceParts, tileRefSize, type MaskLayout, type SheetDefinition, type TileRef } from "../tileset";
+import { AREA_ART, blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, OVERLAY_ART, sheetColumns, sheetSourceRect, singleSquareReason, TILESET, tilePieceParts, tileRefSize, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
 const ZOOM_STEP = 0.25;
@@ -136,9 +134,6 @@ const NEIGHBOURS: readonly { key: keyof NeighbourSides; label: string; diagonal:
 
 /** Every neighbour matching: the fully-interior tile, which is where a mask entry is most naturally started. */
 const ALL_NEIGHBOURS_MATCH: NeighbourSides = { north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true };
-
-/** The "3×3 preview"'s nine cells in row-major reading order, the centre a sentinel rather than a ninth `NeighbourSides` key. */
-const MASK_PREVIEW_CELLS: readonly (keyof NeighbourSides | "centre")[] = ["northWest", "north", "northEast", "west", "centre", "east", "southWest", "south", "southEast"];
 
 /** A piece bigger than one square, as the panel holds it while it's being typed. One square is the default, and the anchor defaults to the bottom-left the same way a printed ref's does. */
 interface PieceDraft {
@@ -269,11 +264,6 @@ export default function KingdomBuilderTileMapper() {
     // here straight off the form so the preview doesn't wait for a click to
     // catch up with a size the author just changed.
     const currentSheetDef: SheetDefinition = { path: draft.artPath, tileWidth: draft.tileWidth, tileHeight: draft.tileHeight, margin: draft.margin, spacing: draft.spacing };
-    // The preview only ever has one sheet's image loaded (`imageUrl`), so a ref
-    // an earlier session assigned against a sheet since swapped out can't be
-    // cropped from it — shown the same as "nothing clicked here yet" rather
-    // than a broken image.
-    const resolvePreviewTile = (tile: TileRef | undefined): TileRef | undefined => (tile && tile.sheet === draft.sheetName ? tile : undefined);
 
     /**
      * Writes the picked entry's art back into the draft, given whatever it was
@@ -591,19 +581,17 @@ export default function KingdomBuilderTileMapper() {
                     <p className="ag-hint">Load a sheet above to preview this entry.</p>
                 ) : isMaskLayout(activeLayout) ? (
                     <>
-                        <MaskNeighbourhoodPreview
+                        <MaskIslandPreview
                             layout={activeLayout}
-                            sides={maskSideState}
-                            centreTile={resolvePreviewTile(previewRefOf(activeMaskSlotTiles?.[activeMaskSlot]))}
-                            interiorTile={resolvePreviewTile(previewRefOf(activeMaskSlotTiles?.[interiorMaskSlot(activeLayout)]))}
+                            tiles={activeMaskSlotTiles}
+                            activeSlot={activeMaskSlot}
                             sheet={currentSheetDef}
+                            sheetName={draft.sheetName}
                             imageUrl={imageUrl}
                             naturalSize={naturalSize}
                         />
                         <p className="ag-hint">
-                            The centre square is whatever {activeLayout === "mask16" ? "mask" : "slot"} {activeMaskSlot} holds so far. The sides mirror the checkboxes above — hatched wherever that neighbour differs from this entry
-                            {activeLayout === "mask47" ? ", and blank on a corner a diagonal can't change" : ""}; {activeLayout === "mask16" ? "the four corners are always left blank, since a mask16 tile is never picked by them. " : ""}
-                            A dashed square is a slot nothing&apos;s been clicked onto yet.
+                            A self-contained 3×3 patch of this entry, so every one of the nine squares is real — the middle is the fully-interior tile, the rest are its edges and corners. The ringed square is whichever {activeLayout === "mask16" ? "mask" : "slot"} the checkboxes above currently point at, when that is one of these nine. A dashed square is a slot nothing has been clicked onto yet.
                         </p>
                     </>
                 ) : (
@@ -632,7 +620,7 @@ export default function KingdomBuilderTileMapper() {
 // index — a nested `<svg>` whose own `viewBox` is the crop rectangle, with the
 // full sheet image placed at the negative of its corner, is the same trick as
 // `MapEdges`' off-board stubs: the parent element clips to its viewBox, so
-// only the square inside it ever draws. `MaskNeighbourhoodPreview` is the
+// only the square inside it ever draws. `MaskIslandPreview` is the
 // mask16/mask47 "3×3 preview"; `NonMaskArtPreview` is the plainer one for
 // orientation/variants/single, a strip of one tile per declared role.
 
@@ -662,32 +650,38 @@ function PreviewPiece({ tile, sheet, imageUrl, naturalSize }: { tile: TileRef; s
     );
 }
 
-/** One cell of the 3×3 preview: a real sprite where there's a tile to crop, a hatch or a blank where the checkboxes say there isn't one to show, and a dashed "?" for a slot nothing's been clicked onto yet. */
-function PreviewCell({ kind, tile, sheet, imageUrl, naturalSize }: { kind: MaskPreviewFill | "centre"; tile: TileRef | undefined; sheet: SheetDefinition; imageUrl: string; naturalSize: { width: number; height: number } }) {
-    const empty = !tile && (kind === "match" || kind === "centre");
-    const className = ["ag-tile-preview-cell", kind === "centre" && "ag-tile-preview-cell--centre", kind === "differ" && "ag-tile-preview-cell--differ", kind === "irrelevant" && "ag-tile-preview-cell--irrelevant", empty && "ag-tile-preview-cell--empty"]
-        .filter(Boolean)
-        .join(" ");
-    return <div className={className}>{tile ? <SpriteSquare imageUrl={imageUrl} naturalSize={naturalSize} sheet={sheet} index={tile.index} size={PREVIEW_TILE_PX} /> : empty ? "?" : null}</div>;
+/** One cell of the 3×3 island preview: a real sprite where its slot has one, a dashed "?" where nothing's been clicked onto it yet, and a ring around whichever cell is the slot the checkboxes above currently point at. */
+function PreviewCell({ highlighted, tile, sheet, imageUrl, naturalSize }: { highlighted: boolean; tile: TileRef | undefined; sheet: SheetDefinition; imageUrl: string; naturalSize: { width: number; height: number } }) {
+    const className = ["ag-tile-preview-cell", highlighted && "ag-tile-preview-cell--active", !tile && "ag-tile-preview-cell--empty"].filter(Boolean).join(" ");
+    return <div className={className}>{tile ? <SpriteSquare imageUrl={imageUrl} naturalSize={naturalSize} sheet={sheet} index={tile.index} size={PREVIEW_TILE_PX} /> : "?"}</div>;
 }
 
-/** The mask16/mask47 preview: the entry's own neighbourhood, from the same checkboxes `assignTile` reads the active slot from. */
-function MaskNeighbourhoodPreview({ layout, sides, centreTile, interiorTile, sheet, imageUrl, naturalSize }: {
+/**
+ * The mask16/mask47 preview: a self-contained 3×3 island of this entry
+ * (`islandMaskSlots`) — every one of the nine squares really is this entry,
+ * so every one draws from a real slot rather than standing in for a
+ * neighbour the mapper doesn't actually know. Independent of the checkboxes
+ * above (an island square's own neighbours are fixed by where it sits in the
+ * block, not by anything an author ticks), so it stops moving once you've
+ * clicked a slot in — only the "you're editing this one" ring follows the
+ * checkboxes, and only lands on a cell when the slot they currently point at
+ * happens to be one of these nine.
+ */
+function MaskIslandPreview({ layout, tiles, activeSlot, sheet, sheetName, imageUrl, naturalSize }: {
     layout: MaskLayout;
-    sides: NeighbourSides;
-    centreTile: TileRef | undefined;
-    interiorTile: TileRef | undefined;
+    tiles: readonly (MaskSlotArt | undefined)[] | undefined;
+    activeSlot: number;
     sheet: SheetDefinition;
+    sheetName: string;
     imageUrl: string;
     naturalSize: { width: number; height: number };
 }) {
-    const fill = maskPreviewFill(layout, sides);
     return (
         <div className="ag-tile-preview-grid">
-            {MASK_PREVIEW_CELLS.map(cell => {
-                if (cell === "centre") return <PreviewCell key="centre" kind="centre" tile={centreTile} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
-                const kind = fill[cell];
-                return <PreviewCell key={cell} kind={kind} tile={kind === "match" ? interiorTile : undefined} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
+            {islandMaskSlots(layout).map((slot, index) => {
+                const ref = previewRefOf(tiles?.[slot]);
+                const tile = ref && ref.sheet === sheetName ? ref : undefined;
+                return <PreviewCell key={index} highlighted={slot === activeSlot} tile={tile} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
             })}
         </div>
     );
