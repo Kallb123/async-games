@@ -141,6 +141,13 @@ describe("a mask slot's own art", () => {
         expect(refs).toEqual(expect.arrayContaining([...VARIANTS]));
     });
 
+    it("tileRefsOf flattens an orientation entry's own variant keys the same way", () => {
+        const art: TileArt = { layout: "orientation", tiles: { ns: PLAIN, ew: VARIANTS } };
+        const refs = tileRefsOf(art);
+        expect(refs).toHaveLength(4); // "ns" alone, plus "ew"'s three variants
+        expect(refs).toEqual(expect.arrayContaining([PLAIN, ...VARIANTS]));
+    });
+
     it("seededVariantIndex still lives here, and behaves the same as it always did", () => {
         expect(seededVariantIndex(1, 1, 0)).toBe(0);
         expect(seededVariantIndex(7, 3, 5)).toBe(seededVariantIndex(7, 3, 5));

@@ -25,6 +25,7 @@ import {
     printTilesetDeclarations,
     suggestedTileSizes,
     withMaskSlotAssigned,
+    withOrientationKeyAssigned,
     type DraftTileArt,
     type NeighbourSides,
 } from "./tileMapperModel";
@@ -176,6 +177,29 @@ describe("withMaskSlotAssigned", () => {
     });
 });
 
+describe("withOrientationKeyAssigned", () => {
+    it("assigns a bare ref to a new key", () => {
+        expect(withOrientationKeyAssigned({}, "ns", { sheet: "ground", index: 0 }, true)).toEqual({ ns: { sheet: "ground", index: 0 } });
+    });
+
+    it("replaces a key's existing tile when appendVariant is false", () => {
+        const first = withOrientationKeyAssigned({}, "ns", { sheet: "ground", index: 0 }, false);
+        const second = withOrientationKeyAssigned(first, "ns", { sheet: "ground", index: 1 }, false);
+        expect(second.ns).toEqual({ sheet: "ground", index: 1 });
+    });
+
+    it("turns a key's single tile into a two-tile variant array when appendVariant is true — same idea as a mask slot's own", () => {
+        const first = withOrientationKeyAssigned({}, "ns", { sheet: "ground", index: 0 }, false);
+        const second = withOrientationKeyAssigned(first, "ns", { sheet: "ground", index: 1 }, true);
+        expect(second.ns).toEqual([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }]);
+    });
+
+    it("leaves every other key untouched", () => {
+        const tiles = withOrientationKeyAssigned({ ew: { sheet: "ground", index: 5 } }, "ns", { sheet: "ground", index: 0 }, true);
+        expect(tiles.ew).toEqual({ sheet: "ground", index: 5 });
+    });
+});
+
 describe("normalizeDraftArt", () => {
     it("folds a JSON round trip's null holes back to undefined for a mask entry", () => {
         // JSON.parse(JSON.stringify(...)) turns an `undefined` array element
@@ -232,6 +256,12 @@ describe("draftTileRefsOf", () => {
         expect(draftTileRefsOf({ layout: "single", tile: { sheet: "town", index: 4 } })).toEqual([{ sheet: "town", index: 4 }]);
         expect(draftTileRefsOf({ layout: "variants", tiles: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }] })).toEqual([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }]);
         expect(draftTileRefsOf({ layout: "orientation", tiles: { ns: { sheet: "ground", index: 0 } } })).toEqual([{ sheet: "ground", index: 0 }]);
+    });
+
+    it("flattens an orientation key holding several variants, same as a mask slot's own", () => {
+        const refs = draftTileRefsOf({ layout: "orientation", tiles: { ns: { sheet: "ground", index: 0 }, ew: [{ sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }] } });
+        expect(refs).toEqual(expect.arrayContaining([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }]));
+        expect(refs).toHaveLength(3);
     });
 });
 
@@ -497,6 +527,11 @@ describe("printTilesetDeclarations", () => {
         expect(printed).toContain(`ground: { path: "/art/kingdombuilder/ground-basic.png", tileWidth: 32, tileHeight: 32, margin: 0, spacing: 0 },`);
         expect(printed).toContain(`g: { layout: "mask16", tiles: [{ sheet: "ground", index: 0 }`);
         expect(printed).toContain(`B: { layout: "orientation", tiles: { "ns": { sheet: "ground", index: 0 } } },`);
+    });
+
+    it("prints an orientation key holding several variants as an array, same as a mask slot's own", () => {
+        const overlayArt: Record<string, DraftTileArt> = { B: { layout: "orientation", tiles: { ns: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }] } } };
+        expect(printTilesetDeclarations({}, {}, overlayArt)).toContain(`B: { layout: "orientation", tiles: { "ns": [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }] } },`);
     });
 
     it("prints a multi-square piece's size, and its anchor only where it isn't the default bottom-left", () => {

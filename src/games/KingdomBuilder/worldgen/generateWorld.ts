@@ -1,6 +1,7 @@
 import { connectWorldGraph, isConnected } from "./graphConnectivity";
 import { generateLandmass, type Landmass, type WorldEdge, type WorldNode } from "./landmass";
 import type { OverlayPlacement } from "./overlays";
+import { applyOverlayVocabulary } from "./overlayVocabulary";
 import { createRandom } from "./random";
 import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
 import { applySitesToTerrainField, generateBaseTerrainField, type TerrainField } from "./terrainField";
@@ -68,14 +69,19 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
                 lastFailure = "no starting-site assignment passed the fairness constraints";
                 continue;
             }
+            const finalNodes = [...terrainNodes, ...assignment.sites];
+            // The overlay vocabulary (§3.5.3, PR 12) runs last: piers, roads
+            // and signposts all read the *final* site types and graph, which
+            // only exist once the fairness assignment above has succeeded.
+            const vocabulary = applyOverlayVocabulary(terrainField, finalNodes, edges, overlays, random);
             return {
                 seed,
                 generationAttempt: attempt,
                 landmass,
                 terrainField,
-                overlays,
-                nodes: [...terrainNodes, ...assignment.sites],
-                edges,
+                overlays: vocabulary.overlays,
+                nodes: finalNodes,
+                edges: vocabulary.edges,
                 fairness: assignment.fairness,
             };
         } catch (error) {

@@ -29,7 +29,8 @@ const BEACH_ELIGIBLE_CODES = new Set(["g", "w", "s"]);
 const gridColumns = (width: number): number => Math.round(width / TERRAIN_FIELD_TILE_SIZE);
 const gridRows = (height: number): number => Math.round(height / TERRAIN_FIELD_TILE_SIZE);
 
-function tileCentre(col: number, row: number): Point {
+/** A tile's own centre in world units — shared by every pass that needs to measure distance from a tile rather than just walk its grid position. */
+export function tileCentre(col: number, row: number): Point {
     return { x: col * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2, y: row * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2 };
 }
 

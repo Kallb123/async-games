@@ -1,13 +1,15 @@
 // The overlay registry (GDD §3.5.3): things that sit on top of an area
-// without replacing it — a bridge over a river, a ford across a lake. Same
-// "nothing branches on it by name" rule as AREAS.
+// without replacing it — a bridge over a river, a ford across a lake, a road
+// laid along the grass it crosses. Same "nothing branches on it by name" rule
+// as AREAS.
 //
-// PR 9 carries only the *derived, load-bearing* entries: the bridge or ford
+// PR 9 shipped only the *derived, load-bearing* entries — the bridge or ford
 // the connectivity pass writes on every water crossing it finds, because
-// without one of those two a crossing simply isn't offered to the graph.
-// The scattered, decorative vocabulary (ruins, standing stones, watchtowers…)
-// is PR 12's — the shape lands here so that PR is additive, not the
-// vocabulary.
+// without one of those two a crossing simply isn't offered to the graph. This
+// file now carries the rest of the vocabulary (PR 12, worldgen/overlayVocabulary.ts):
+// the derived-but-not-load-bearing piers, roads and signposts, and the
+// scattered, decorative pass — ruins, standing stones, shipwrecks,
+// watchtowers.
 
 export type OverlaySource = "derived" | "scattered";
 
@@ -43,6 +45,53 @@ export const OVERLAYS: readonly OverlayDefinition[] = [
         movement: { kind: "passable", multiplier: 2, appliesTo: ["l"] },
         source: "derived",
     },
+    {
+        code: "R",
+        name: "Road",
+        // Stated as a fixed weight rather than a per-area override: every
+        // area's own weight is at least 1 (grass/fields/beach), so capping a
+        // road tile at 1 can only ever match or improve the ground beneath
+        // it, never cost more (worldgen/overlayVocabulary.ts's road pass, and
+        // its own guard test, both rest on that).
+        movement: { kind: "weight", multiplier: 1 },
+        source: "derived",
+    },
+    {
+        code: "P",
+        name: "Pier",
+        movement: { kind: "none" },
+        source: "derived",
+    },
+    {
+        code: "J",
+        name: "Signpost",
+        movement: { kind: "none" },
+        source: "derived",
+    },
+    {
+        code: "U",
+        name: "Ruins",
+        movement: { kind: "none" },
+        source: "scattered",
+    },
+    {
+        code: "T",
+        name: "Standing stones",
+        movement: { kind: "none" },
+        source: "scattered",
+    },
+    {
+        code: "K",
+        name: "Shipwreck",
+        movement: { kind: "none" },
+        source: "scattered",
+    },
+    {
+        code: "V",
+        name: "Watchtower",
+        movement: { kind: "none" },
+        source: "scattered",
+    },
 ];
 
 export const OVERLAY_BY_CODE: ReadonlyMap<string, OverlayDefinition> = new Map(OVERLAYS.map(overlay => [overlay.code, overlay]));
@@ -62,4 +111,15 @@ export function overlaysCrossing(areaCode: string): readonly OverlayDefinition[]
 
 export function overlayForCode(code: string): OverlayDefinition | undefined {
     return OVERLAY_BY_CODE.get(code);
+}
+
+/**
+ * The sparse overlay list indexed by tile — shared by generation (which
+ * overlay, if any, already claims a tile) and rendering (which overlay a
+ * self-connecting mask like Road autotiles against). Two placements on one
+ * tile is a generated-world bug rather than something to draw twice over: the
+ * last one in wins the square's identity.
+ */
+export function overlayCodesByTile(overlays: readonly OverlayPlacement[]): Map<number, string> {
+    return new Map(overlays.map(placement => [placement.tile, placement.code]));
 }

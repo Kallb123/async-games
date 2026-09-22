@@ -94,6 +94,13 @@ export function tileArtErrors(
                 }
             });
         }
+        if (art.layout === "orientation") {
+            for (const [key, slot] of Object.entries(art.tiles)) {
+                if (isMaskSlotVariants(slot) && slot.length === 0) {
+                    errors.push(`tileset.ts ${label} "${code}" orientation key "${key}" declares zero variants — either a real tile or at least one`);
+                }
+            }
+        }
 
         for (const ref of tileRefsOf(art)) {
             // A mask tile is picked per square of map, so it is one square of

@@ -372,8 +372,13 @@ rather than a human with a calculator.
    diagonals, each disabled unless both the sides beside it are ticked, since a
    diagonal whose side is open can't change the picture and must not enter a
    second slot for the same tile. An `orientation` entry takes a free-text key
-   (whatever an `OverlayPlacement.orientation` will carry, e.g. `"ns"`), and
-   `variants`/`single` need no role at all.
+   — whatever `OverlayPlacement.orientation` will carry — looked up at render
+   time; only two overlays' generators actually set one today (Bridge/Ford get
+   `"ns"`/`"ew"`, the direction the crossing itself runs; Pier gets
+   `"n"`/`"e"`/`"s"`/`"w"`, the side of the site facing the water), so anything
+   else declares one key of its own choosing (e.g. `"default"`) and leans on
+   the variant checkbox below for a look that still varies. `variants`/`single`
+   need no role at all.
 4. **Say how big the piece is**, where one may be. An overlay's
    `orientation`/`variants`/`single` art can be several squares across — the
    walled town, the church — so those layouts show a width, a height and an
@@ -386,15 +391,18 @@ rather than a human with a calculator.
    tinted and labelled with its entry's code so the sheet reads back at a
    glance, and a piece marks every square it covers rather than just its
    corner. A mask entry's own panel counts down "N of 16 left" (or of 47).
-   Once a mask role already holds a tile, an **"Add as another variant for
-   this slot"** checkbox appears next to it: tick it and the next click folds
-   the new square into that slot instead of replacing it, so the slot ends up
-   holding several interchangeable tiles — picked at render time the same
-   seeded-hash way a `variants` entry's own list is. It's the escape hatch for
-   the slot a big filled area leans on hardest, mask16's fully-interior slot
-   (mask 15, every side ticked): several plain-grass squares instead of one
-   repeating across the whole field. Leave it unticked to keep clicking
-   normally replacing whatever a role already holds.
+   Once a mask slot or an orientation key already holds a tile, an **"Add as
+   another variant for this slot/key"** checkbox appears next to it: tick it
+   and the next click folds the new square in alongside what's there instead
+   of replacing it, so that slot or key ends up holding several
+   interchangeable tiles — picked at render time the same seeded-hash way a
+   `variants` entry's own list is. It's the escape hatch for the slot a big
+   filled area leans on hardest, mask16's fully-interior slot (mask 15, every
+   side ticked): several plain-grass squares instead of one repeating across
+   the whole field — and equally the way an `orientation` entry with no real
+   direction (Ruins, say) shows several different looks under its one key.
+   Leave it unticked to keep clicking normally replacing whatever a slot or
+   key already holds.
 6. **Or import a nine-slice.** Most hand-drawn sheets arrive as 3×3 blocks —
    corner, edge, centre — which is nine of the sixteen neighbourhoods a
    `mask16` wants. *Import a 3×3 nine-slice* arms the next click to take that

@@ -80,7 +80,20 @@ describe("Kingdom Builder world generation", () => {
         // Tiles crossed (world x 1→9 over 2-unit tiles): 1 unit of grass, 2 of
         // grass, 2 of river at the bridge's ×2.5, then 2 and 1 more of grass.
         expect(edges[0].movementCost).toBeCloseTo(1 * 1 + 2 * 1 + 2 * 2.5 + 2 * 1 + 1 * 1, 6);
-        expect(overlays).toEqual([{ tile: 2, code: "B" }]);
+        // The crossing runs east–west (west and east sit on the same row), so
+        // the bridge's own orientation key follows the direction of travel,
+        // not the river it crosses (§3.5.5).
+        expect(overlays).toEqual([{ tile: 2, code: "B", orientation: "ew" }]);
+    });
+
+    it("orients a bridge/ford by the direction of travel across it, not the water's own direction", () => {
+        const northSouth: SettlementNode[] = [
+            { id: "north", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
+            { id: "south", kind: "settlement", siteType: "expansion", x: 1, y: 9 },
+        ];
+        const field = fieldOf(1, 5, "grrrg");
+        const { overlays } = connectWorldGraph(northSouth, field, createRandom("river-ns"), 0);
+        expect(overlays.every(overlay => overlay.orientation === "ns")).toBe(true);
     });
 
     it("never crosses open ocean, with or without an extra edge to try", () => {

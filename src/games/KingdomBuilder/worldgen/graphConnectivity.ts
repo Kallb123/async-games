@@ -79,6 +79,18 @@ export interface ConnectedGraph {
  * exist at all, and what does it cost" now comes from walking real terrain
  * (§3.5.4) instead of a nearest-node guess and a hard-coded river band.
  */
+/**
+ * Which way a crossing runs through the tiles its edge crosses — the
+ * direction whoever travels it moves in, not the water's own direction, per
+ * §3.5.5's "a bridge across a river runs the way the crossing runs". A
+ * straight edge has one direction for its whole length, so this is computed
+ * once per edge and stamped onto every crossing tile that edge contributes,
+ * rather than re-derived per tile.
+ */
+function crossingOrientation(from: Point, to: Point): "ns" | "ew" {
+    return Math.abs(to.x - from.x) >= Math.abs(to.y - from.y) ? "ew" : "ns";
+}
+
 export function connectWorldGraph(nodes: readonly WorldNode[], field: TerrainField, random: RandomSource, extraEdgeRatio = 0.3): ConnectedGraph {
     if (nodes.length < 2) return { edges: [], overlays: [] };
     const connected = new Set<string>([nodes[0].id]);
@@ -88,8 +100,11 @@ export function connectWorldGraph(nodes: readonly WorldNode[], field: TerrainFie
 
     const addEdge = (from: WorldNode, to: WorldNode, result: EdgeCostResult): void => {
         keys.add(edgeKey(from.id, to.id));
-        for (const crossing of result.crossings) {
-            if (!overlaysByTile.has(crossing.tile)) overlaysByTile.set(crossing.tile, { tile: crossing.tile, code: crossing.overlayCode });
+        if (result.crossings.length > 0) {
+            const orientation = crossingOrientation(from, to);
+            for (const crossing of result.crossings) {
+                if (!overlaysByTile.has(crossing.tile)) overlaysByTile.set(crossing.tile, { tile: crossing.tile, code: crossing.overlayCode, orientation });
+            }
         }
         edges.push({
             id: `edge-${edges.length}`,

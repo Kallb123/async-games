@@ -170,6 +170,10 @@ export const OCEAN_CODE = codeOf("Ocean");
 export const RIVER_CODE = codeOf("River");
 export const BEACH_CODE = codeOf("Beach");
 export const FIELDS_CODE = codeOf("Fields");
+/** Read by the overlay vocabulary's scattered-landmark placement (worldgen/overlayVocabulary.ts), which has to recognise these three without branching on an area by name. */
+export const WOODLAND_CODE = codeOf("Woodland");
+export const HILLS_CODE = codeOf("Hills");
+export const MOUNTAINS_CODE = codeOf("Mountains");
 /** The land elevation windows' own codes — what a "land window" tile can be, for anything (like smoothing) that needs to recognise one without re-listing them. */
 export const LAND_WINDOW_CODES: ReadonlySet<string> = new Set(AREA_WINDOWS.map(area => area.code));
 
