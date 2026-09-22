@@ -749,7 +749,7 @@ interface MaskSlotGridProps {
  */
 function MaskSlotGrid({ columns, cells, tiles, activeSlot, sheet, sheetName, imageUrl, naturalSize }: MaskSlotGridProps & { columns: number; cells: readonly (number | null)[] }) {
     return (
-        <div className="ag-tile-preview-grid" style={{ gridTemplateColumns: `repeat(${columns}, 48px)`, gridTemplateRows: `repeat(${Math.ceil(cells.length / columns)}, 48px)` }}>
+        <div className="ag-tile-preview-grid" style={{ gridTemplateColumns: `repeat(${columns}, ${PREVIEW_TILE_PX}px)`, gridTemplateRows: `repeat(${Math.ceil(cells.length / columns)}, ${PREVIEW_TILE_PX}px)` }}>
             {cells.map((slot, index) => {
                 if (slot === null) return <div key={index} />;
                 const ref = previewRefOf(tiles?.[slot]);
