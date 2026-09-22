@@ -88,10 +88,13 @@ export async function acceptWorldSeat(invite: IInvitationData, worldId: string, 
         try {
             await joinWorld(worldId, actorId);
         } catch (error) {
-            if (!(error instanceof KingdomBuilderPersistenceError)) throw error;
-            // No room left in the world after all, or it has gone: hand the
+            // No room left in the world after all, or it has gone — both
+            // refused before any roster seat was taken: hand the invitation
             // seat back to the code so it isn't held by someone who is not in
-            // the world, and say nothing started.
+            // the world, and say nothing started. Anything later (a founding
+            // that failed after the roster seat landed) keeps both seats: the
+            // world view finishes that founding the next time they open it.
+            if (!(error instanceof KingdomBuilderPersistenceError) || (error.code !== "WORLD_FULL" && error.code !== "WORLD_NOT_FOUND")) throw error;
             await InvitationModel.updateOne(
                 { inviteId: invite.inviteId },
                 { $set: { "userIdList.$[seat].userId": OPEN_SEAT_ID, "userIdList.$[seat].inviteAccepted": false } },

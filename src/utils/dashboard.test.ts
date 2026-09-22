@@ -108,3 +108,22 @@ describe('buildDashboard unread chat counts', () => {
         expect(dashboard.worlds).toEqual([]);
     });
 });
+
+describe('buildDashboard world invitations', () => {
+    it("drops a world invitation from Invites once the player has joined the world, and keeps it until then", async () => {
+        const invite = (accepted: boolean) => ({
+            inviteId: '33333333-3333-4333-8333-333333333333',
+            senderId: ANN.id,
+            userIdList: [{ userId: BOB.id, inviteAccepted: accepted }],
+            timestamp: '2026-01-01T00:00:00.000Z',
+            gameFriendlyName: 'Kingdom Builder',
+            worldId: '64b000000000000000000001',
+        });
+
+        vi.spyOn(InvitationModel, 'find').mockReturnValue({ exec: async () => [invite(false)] } as never);
+        expect((await buildDashboard(BOB.id)).incoming).toHaveLength(1);
+
+        vi.spyOn(InvitationModel, 'find').mockReturnValue({ exec: async () => [invite(true)] } as never);
+        expect((await buildDashboard(BOB.id)).incoming).toEqual([]);
+    });
+});

@@ -8,6 +8,7 @@ import { buildUserDirectory, UserDirectory } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
 import type { ICompletedGame, IDashboardResponse, IGameResponse } from '@/utils/apiModels/GameDataApi';
 import { worldSummaries } from '@/games/KingdomBuilder';
+import { worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
 
 /**
  * Everything the home screen shows, read as one snapshot.
@@ -106,6 +107,17 @@ function withUnreadChat(response: IGameResponse, counts: Map<string, number>): I
     return { ...response, unreadChatCount: counts.get(response.gameId) ?? 0 };
 }
 
+/**
+ * Whether this is a Kingdom Builder world invitation the player has already
+ * accepted — which, for a world, means they are in it. The world's own row in
+ * `worlds` is how they get back to it; the invitation stays open for the
+ * seats still to fill, and would otherwise sit in "Invites" as a spent ✓ for
+ * the rest of its life.
+ */
+function hasJoinedWorld(invite: IInvitationDataDocument, userId: string): boolean {
+    return !!worldIdOfInvitation(invite) && invite.userIdList.some(seat => seat.userId === userId && seat.inviteAccepted);
+}
+
 export async function buildDashboard(userId: string): Promise<IDashboardResponse> {
     // Three reads, then partitioned here. "My turn" and "their turn" were two
     // Mongo queries over the same set of games, and the two invite lists two
@@ -144,7 +156,7 @@ export async function buildDashboard(userId: string): Promise<IDashboardResponse
         worlds,
         myTurn: games.filter(game => game.currentTurn === userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
         theirTurn: games.filter(game => game.currentTurn !== userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
-        incoming: invitations.filter(({ invite }) => invite.senderId !== userId).map(({ response }) => response),
+        incoming: invitations.filter(({ invite }) => invite.senderId !== userId && !hasJoinedWorld(invite, userId)).map(({ response }) => response),
         outgoing: invitations.filter(({ invite }) => invite.senderId === userId).map(({ response }) => response),
         completed: toCompletedGames(results, directory),
     };
