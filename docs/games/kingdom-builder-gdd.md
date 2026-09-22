@@ -1590,8 +1590,9 @@ one-line entries in the guide and tutorial registries.
   part of it) toward another node, and a movement step in the tick engine
   using §6.2's terrain multipliers. Arrival does nothing special yet — this
   PR is purely "can an army cross the generated graph."
-- **PR 15 — Fog of war.** Redact in-transit armies from
-  `CreateDataResponse(viewerId)` for everyone but the owner — a `croupier`
+- **PR 15 — Fog of war.** Redact in-transit armies from `worldView(worldId,
+  userId)` — Kingdom Builder's own per-viewer response, which the shared
+  `CreateDataResponse` guard does not cover — for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
 - **PR 16 — Automatic siege on arrival.** Arrival at a hostile settlement

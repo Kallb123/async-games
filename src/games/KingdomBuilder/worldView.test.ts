@@ -7,6 +7,8 @@ vi.mock("@/utils/users/clerk", () => ({
 vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn() }));
 vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
 
+import { buildUserDirectory } from "@/utils/users/clerk";
+
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
@@ -83,6 +85,33 @@ describe("Kingdom Builder world view", () => {
         mockSettlements(settlements);
         mockWorld(world);
         expect((await worldView(worldId, "rival")).invite).toBeUndefined();
+    });
+
+    it("puts nothing of a rival's settlement on the wire but where it is and whose", async () => {
+        const worldId = new Types.ObjectId().toString();
+        const rivalSettlementId = new Types.ObjectId();
+        mockSettlements([
+            { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", tiles: [] },
+            {
+                _id: rivalSettlementId, ownerId: "user_RIVALSECRET", nodeId: "other",
+                tiles: [{ position: 0, building: { type: "barracks", level: 97531 } }],
+                resources: { wood: 86420, stone: 0, iron: 0 },
+                construction: { tilePosition: 1, buildingType: "walls", targetLevel: 1, ticksRemaining: 1357 },
+            },
+        ]);
+        mockWorld({
+            hostId: "owner",
+            seatCount: 4,
+            roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }, { userId: "user_RIVALSECRET", siteId: "other", joinedAt: new Date() }],
+        });
+
+        vi.mocked(buildUserDirectory).mockResolvedValueOnce({ name: () => "A player", imageUrl: () => null });
+
+        const wire = JSON.stringify(await worldView(worldId, "owner"));
+
+        for (const secret of ["user_RIVALSECRET", "97531", "86420", "1357", "barracks", "walls", rivalSettlementId.toString()]) {
+            expect(wire).not.toContain(secret);
+        }
     });
 
     it("finishes the settlement of a player seated by a join that never founded it", async () => {

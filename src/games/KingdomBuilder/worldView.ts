@@ -35,13 +35,14 @@ export interface KingdomBuilderWorldView {
     seatCount: number;
     players: KingdomBuilderWorldPlayer[];
     settlements: Array<{
-        settlementId: string;
+        /** Yours only: the key to a settlement's own screen, which only its owner may open. */
+        settlementId?: string;
         nodeId: string;
         isMine: boolean;
         /** The owner's index in `players`. */
         seat: number;
     }>;
-    /** The world's live join code — sent to its host only, the one player who offered the seats. */
+    /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
 }
 
@@ -115,7 +116,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         settlements: settlements.flatMap(settlement => {
             const ownerSeat = seatOf.get(settlement.ownerId);
             return ownerSeat === undefined ? [] : [{
-                settlementId: settlement._id.toString(),
+                ...(settlement.ownerId === userId ? { settlementId: settlement._id.toString() } : {}),
                 nodeId: settlement.nodeId,
                 isMine: settlement.ownerId === userId,
                 seat: ownerSeat,
