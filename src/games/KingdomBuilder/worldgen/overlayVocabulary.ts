@@ -87,8 +87,13 @@ export function deriveRoadOverlays(
     return { edges: updatedEdges, overlays: [...roadTiles.values()] };
 }
 
-/** Expanding a ring search outward from (col, row), the nearest tile carrying `code` and not already claimed — deterministic, so the same field always finds the same tile. */
-function nearestUnclaimedTile(field: TerrainField, col: number, row: number, code: string, radius: number, claimed: ReadonlySet<number>): number | undefined {
+/**
+ * The one expanding-ring walk both proximity checks below need: every tile
+ * within `radius` of (col, row), nearest ring first, off the grid never
+ * visited — deterministic, so the same field always finds the same tile.
+ * Stops at the first tile `accept` returns true for.
+ */
+function findInRings(field: TerrainField, col: number, row: number, radius: number, accept: (tile: number) => boolean): number | undefined {
     for (let ring = 0; ring <= radius; ring++) {
         for (let dr = -ring; dr <= ring; dr++) {
             for (let dc = -ring; dc <= ring; dc++) {
@@ -96,27 +101,21 @@ function nearestUnclaimedTile(field: TerrainField, col: number, row: number, cod
                 const c = col + dc, r = row + dr;
                 if (c < 0 || c >= field.columns || r < 0 || r >= field.rows) continue;
                 const tile = tileIndex(field, c, r);
-                if (claimed.has(tile) || field.codes[tile] !== code) continue;
-                return tile;
+                if (accept(tile)) return tile;
             }
         }
     }
     return undefined;
 }
 
-/** How far a landmark's own tile is from the nearest tile carrying `code` — infinite if none is within `radius`. */
-function distanceToNearestCode(field: TerrainField, col: number, row: number, code: string, radius: number): number {
-    for (let ring = 0; ring <= radius; ring++) {
-        for (let dr = -ring; dr <= ring; dr++) {
-            for (let dc = -ring; dc <= ring; dc++) {
-                if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-                const c = col + dc, r = row + dr;
-                if (c < 0 || c >= field.columns || r < 0 || r >= field.rows) continue;
-                if (field.codes[tileIndex(field, c, r)] === code) return ring;
-            }
-        }
-    }
-    return Infinity;
+/** The nearest tile carrying `code` and not already claimed, within `radius`. */
+function nearestUnclaimedTile(field: TerrainField, col: number, row: number, code: string, radius: number, claimed: ReadonlySet<number>): number | undefined {
+    return findInRings(field, col, row, radius, tile => !claimed.has(tile) && field.codes[tile] === code);
+}
+
+/** Whether a tile carrying `code` sits within `radius` — every call site here only ever asks a yes/no question, never how far. */
+function isCodeNearby(field: TerrainField, col: number, row: number, code: string, radius: number): boolean {
+    return findInRings(field, col, row, radius, tile => field.codes[tile] === code) !== undefined;
 }
 
 const PIER_SEARCH_RADIUS = 2;
@@ -211,7 +210,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
             minimumSpacing: 8,
             eligible: (field, col, row) => {
                 if (field.codes[tileIndex(field, col, row)] !== HILLS_CODE) return false;
-                return distanceToNearestCode(field, col, row, FIELDS_CODE, AWAY_FROM_FIELDS_RADIUS) > AWAY_FROM_FIELDS_RADIUS;
+                return !isCodeNearby(field, col, row, FIELDS_CODE, AWAY_FROM_FIELDS_RADIUS);
             },
         },
         {
@@ -220,7 +219,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
             minimumSpacing: 6,
             eligible: (field, col, row) => {
                 if (field.codes[tileIndex(field, col, row)] !== OCEAN_CODE) return false;
-                return distanceToNearestCode(field, col, row, BEACH_CODE, NEAR_SHORE_RADIUS) <= NEAR_SHORE_RADIUS;
+                return isCodeNearby(field, col, row, BEACH_CODE, NEAR_SHORE_RADIUS);
             },
         },
         {
