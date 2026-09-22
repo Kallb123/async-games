@@ -108,6 +108,31 @@ describe("tileArtErrors", () => {
         ]);
     });
 
+    it("accepts a mask slot declaring several variants, checking every one of them lands in bounds", () => {
+        const tiles = Array.from({ length: 16 }, () => ({ sheet: "tiny", index: 0 }));
+        (tiles as unknown[])[15] = [{ sheet: "tiny", index: 0 }, { sheet: "tiny", index: 0 }];
+        const art: Record<string, TileArt> = { g: { layout: "mask16", tiles } };
+        expect(tileArtErrors("area", art, TINY_SHEET, FIXTURES)).toEqual([]);
+    });
+
+    it("rejects a variant inside a mask slot that lands outside its sheet, same as a plain slot would", () => {
+        const tiles = Array.from({ length: 16 }, () => ({ sheet: "tiny", index: 0 }));
+        (tiles as unknown[])[15] = [{ sheet: "tiny", index: 0 }, { sheet: "tiny", index: 1 }];
+        const art: Record<string, TileArt> = { g: { layout: "mask16", tiles } };
+        expect(tileArtErrors("area", art, TINY_SHEET, FIXTURES)).toEqual([
+            'tileset.ts area "g" index 1 is outside sheet "tiny"\'s 1×1 grid',
+        ]);
+    });
+
+    it("rejects a mask slot declaring zero variants", () => {
+        const tiles = Array.from({ length: 16 }, () => ({ sheet: "tiny", index: 0 }));
+        (tiles as unknown[])[15] = [];
+        const art: Record<string, TileArt> = { g: { layout: "mask16", tiles } };
+        expect(tileArtErrors("area", art, TINY_SHEET, FIXTURES)).toEqual([
+            'tileset.ts area "g" mask slot 15 declares zero variants — either a real tile or at least one',
+        ]);
+    });
+
     it("checks every tile an orientation or variants entry declares", () => {
         const orientation: Record<string, TileArt> = { B: { layout: "orientation", tiles: { ns: { sheet: "tiny", index: 0 }, ew: { sheet: "tiny", index: 3 } } } };
         expect(tileArtErrors("overlay", orientation, TINY_SHEET, FIXTURES)).toEqual([

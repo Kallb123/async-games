@@ -23,7 +23,12 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { AREAS, areaForCode } from "./worldgen/areas";
 import { overlayForCode, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
-import { AREA_ART, blobIndexOf, isMaskArt, NEIGHBOUR_BITS, OVERLAY_ART, sheetColumns, sheetSourceRect, sheetTilePixels, tilePieceParts, tileRefsOf, TILESET, type MaskLayout, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
+import { AREA_ART, blobIndexOf, isMaskArt, NEIGHBOUR_BITS, OVERLAY_ART, pickMaskSlotTile, seededVariantIndex, sheetColumns, sheetSourceRect, sheetTilePixels, tilePieceParts, tileRefsOf, TILESET, type MaskLayout, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
+
+// `seededVariantIndex` lives in tileset.ts now (both this file and the mapper
+// model need it), re-exported here so nothing importing it from this file —
+// this module used to be its only home — has to change.
+export { seededVariantIndex };
 
 export interface TerrainImageWorld {
     terrainField?: TerrainField;
@@ -120,19 +125,6 @@ function eightMask(matches: NeighbourMatcher, col: number, row: number): number 
 }
 
 /**
- * A deterministic pick in `[0, count)` from a tile's own coordinates — no
- * `Math.random`, so a `variants` area's texture is stable across renders and
- * identical for every player looking at the same world. Exported for testing
- * without a DOM.
- */
-export function seededVariantIndex(col: number, row: number, count: number): number {
-    if (count <= 0) return 0;
-    const h = Math.imul(col, 374761393) ^ Math.imul(row, 668265263);
-    const mixed = Math.imul(h ^ (h >>> 13), 1274126177);
-    return Math.abs(mixed ^ (mixed >>> 16)) % count;
-}
-
-/**
  * The tile a mask layout draws for one square of map: the 4-bit mask straight
  * into a `mask16`'s sixteen, or the 8-bit mask through `blobIndexOf` into a
  * `mask47`'s forty-seven. Falls back to the entry's last tile if a caller ever
@@ -143,8 +135,9 @@ function maskSlot(layout: MaskLayout, matches: NeighbourMatcher, col: number, ro
     return layout === "mask16" ? sideMask(matches, col, row) : blobIndexOf(eightMask(matches, col, row));
 }
 
-function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number): TileRef | undefined {
-    return art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
+function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number, col: number, row: number): TileRef | undefined {
+    const entry = art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
+    return entry === undefined ? undefined : pickMaskSlotTile(entry, col, row);
 }
 
 /**
@@ -261,7 +254,7 @@ function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField
         for (let row = 0; row < field.rows; row++) {
             for (let col = 0; col < field.columns; col++) {
                 if (field.codes[row * field.columns + col] !== area.code) continue;
-                const ref = maskTile(art, maskSlot(art.layout, sameCodeAs(field, area.code), col, row));
+                const ref = maskTile(art, maskSlot(art.layout, sameCodeAs(field, area.code), col, row), col, row);
                 if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
             }
         }
@@ -284,7 +277,7 @@ function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, o
             art.layout === "single" ? art.tile :
             art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] :
             art.layout === "variants" ? art.tiles[seededVariantIndex(col, row, art.tiles.length)] :
-            maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile)); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
+            maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile), col, row); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
         if (!ref) continue;
         drawTile(context, manifest, images, ref, col, row, tilePixels);
     }

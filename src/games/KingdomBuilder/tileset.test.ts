@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AREA_ART, blobKey, cellToIndex, indexToCell, isSingleSquare, NEIGHBOUR_BITS, OVERLAY_ART, sheetTilePixels, tilePieceParts, tileRefAnchor, tileRefSize, tilesetDeclarationErrors, TILESET, type TilesetManifest } from "./tileset";
+import { AREA_ART, blobKey, cellToIndex, indexToCell, isMaskSlotVariants, isSingleSquare, maskSlotRefs, NEIGHBOUR_BITS, OVERLAY_ART, pickMaskSlotTile, seededVariantIndex, sheetTilePixels, tilePieceParts, tileRefAnchor, tileRefsOf, tileRefSize, tilesetDeclarationErrors, TILESET, type TileArt, type TilesetManifest } from "./tileset";
 import { tileArtErrors } from "./tilesetGuard";
 
 const SHEET = { path: "/art/kingdombuilder/ground.png", tileWidth: 16, tileHeight: 16, margin: 0, spacing: 0 };
@@ -100,6 +100,50 @@ describe("blobKey", () => {
     it("keeps a diagonal only where both its sides match", () => {
         expect(blobKey(NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.east | NEIGHBOUR_BITS.northEast)).toBe(NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.east | NEIGHBOUR_BITS.northEast);
         expect(blobKey(NEIGHBOUR_BITS.north | NEIGHBOUR_BITS.northEast)).toBe(NEIGHBOUR_BITS.north);
+    });
+});
+
+describe("a mask slot's own art", () => {
+    const PLAIN = { sheet: "ground", index: 0 };
+    const VARIANTS = [{ sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }, { sheet: "ground", index: 3 }] as const;
+
+    it("isMaskSlotVariants tells a plain ref from a variants array", () => {
+        expect(isMaskSlotVariants(PLAIN)).toBe(false);
+        expect(isMaskSlotVariants(VARIANTS)).toBe(true);
+    });
+
+    it("maskSlotRefs wraps a plain ref alone, and hands a variants array back as-is", () => {
+        expect(maskSlotRefs(PLAIN)).toEqual([PLAIN]);
+        expect(maskSlotRefs(VARIANTS)).toEqual(VARIANTS);
+    });
+
+    it("pickMaskSlotTile always returns the one ref of a plain slot", () => {
+        expect(pickMaskSlotTile(PLAIN, 3, 7)).toEqual(PLAIN);
+    });
+
+    it("pickMaskSlotTile picks one of a variants array's own tiles, deterministically for the same square", () => {
+        const pick = pickMaskSlotTile(VARIANTS, 3, 7);
+        expect(VARIANTS).toContainEqual(pick);
+        expect(pickMaskSlotTile(VARIANTS, 3, 7)).toEqual(pick);
+    });
+
+    it("pickMaskSlotTile varies across neighbouring squares rather than always the same variant", () => {
+        const picks = new Set(Array.from({ length: 8 }, (_, col) => JSON.stringify(pickMaskSlotTile(VARIANTS, col, 0))));
+        expect(picks.size).toBeGreaterThan(1);
+    });
+
+    it("tileRefsOf flattens every mask slot's variants alongside its plain slots", () => {
+        const tiles = Array.from({ length: 16 }, () => PLAIN);
+        (tiles as unknown[])[15] = VARIANTS;
+        const art: TileArt = { layout: "mask16", tiles };
+        const refs = tileRefsOf(art);
+        expect(refs).toHaveLength(18); // 15 plain slots + 3 variants for the 16th
+        expect(refs).toEqual(expect.arrayContaining([...VARIANTS]));
+    });
+
+    it("seededVariantIndex still lives here, and behaves the same as it always did", () => {
+        expect(seededVariantIndex(1, 1, 0)).toBe(0);
+        expect(seededVariantIndex(7, 3, 5)).toBe(seededVariantIndex(7, 3, 5));
     });
 });
 

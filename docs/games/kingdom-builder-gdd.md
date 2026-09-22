@@ -520,6 +520,13 @@ has two halves:
     the pick is stable across renders and across players.
   - `single` — one tile, for a landmark that only looks one way.
 
+  Any slot of a `mask16`/`mask47` entry may itself hold several
+  interchangeable tiles instead of one — the same seeded pick a `variants`
+  area uses, nested one level down. That is the escape hatch for the slot a
+  big filled area leans on hardest: mask16's fully-interior slot (mask 15),
+  where a single square of grass repeating across a whole field of it reads
+  as an obvious tile rather than a texture.
+
 **A reference may be a piece several squares across.** A walled town, a church,
 a two-square cliff face: art that no single square of ground can hold. So a
 `{ sheet, index }` may also carry a `width` and `height` in sheet squares, with
@@ -564,7 +571,11 @@ editor (`docs/admin-tools.md`):
   checkboxes plus the four diagonals, each greyed out unless both the sides
   beside it are ticked, so a role no square of map could ever ask for can't be
   entered. A piece states its size in squares and where its anchor sits, on the
-  layouts allowed to be one.
+  layouts allowed to be one. A mask role that already has a tile offers its own
+  "add as another variant for this slot" checkbox — ticking it before the next
+  click folds that square into the slot's tile instead of replacing it, growing
+  a plain slot into a variant array exactly the way a `variants` entry's list
+  grows one click at a time.
 - **Import a nine-slice**: most hand-drawn sheets come as 3×3 blocks — corner,
   edge, centre — which is nine of the sixteen neighbourhoods a `mask16` wants.
   One click on the block's top-left square fills all sixteen: the nine it has
@@ -594,9 +605,9 @@ A guard test keeps the manifest honest: every referenced sheet exists, every
 piece lands wholly inside the sheet's derived bounds (a 3-wide piece two squares
 from the right edge would otherwise wrap onto the next row and quietly draw
 someone else's art), every `mask16` entry declares all sixteen and every
-`mask47` all forty-seven, no area or mask entry declares a piece, no anchor sits
-outside its own piece, every registry code is unique and every retired code
-stays reserved.
+`mask47` all forty-seven, no mask slot declares a variant array with nothing in
+it, no area or mask entry declares a piece, no anchor sits outside its own
+piece, every registry code is unique and every retired code stays reserved.
 That is the same "registry-and-its-test" shape the repo already uses for game
 guides and themes.
 

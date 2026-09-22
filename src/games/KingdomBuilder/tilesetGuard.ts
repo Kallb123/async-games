@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { indexToCell, isMaskArt, isSingleSquare, MASK_LAYOUT_SIZES, singleSquareReason, sheetColumns, sheetRows, tileRefSize, tileRefsOf, TILESET, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
+import { indexToCell, isMaskArt, isMaskSlotVariants, isSingleSquare, MASK_LAYOUT_SIZES, singleSquareReason, sheetColumns, sheetRows, tileRefSize, tileRefsOf, TILESET, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
 
 /**
  * Reads a PNG's own declared width/height straight from its IHDR chunk — the
@@ -88,6 +88,11 @@ export function tileArtErrors(
             if (art.tiles.length !== expected) {
                 errors.push(`tileset.ts ${label} "${code}" declares a ${art.layout} entry with ${art.tiles.length} tile(s), not all ${expected}`);
             }
+            art.tiles.forEach((slot, index) => {
+                if (isMaskSlotVariants(slot) && slot.length === 0) {
+                    errors.push(`tileset.ts ${label} "${code}" mask slot ${index} declares zero variants — either a real tile or at least one`);
+                }
+            });
         }
 
         for (const ref of tileRefsOf(art)) {

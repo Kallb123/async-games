@@ -2,17 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import {
     diagonalApplies,
+    draftTileRefsOf,
     gridFit,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
     maskRemaining,
+    maskSlotVariantCount,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
     PREVIEW_WIDTH,
     previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
+    withMaskSlotAssigned,
     type DraftTileArt,
     type NeighbourSides,
 } from "./tileMapperModel";
@@ -114,6 +117,79 @@ describe("maskRemaining", () => {
         tiles[0] = { sheet: "ground", index: 0 };
         tiles[15] = { sheet: "ground", index: 15 };
         expect(maskRemaining("mask16", tiles)).toBe(14);
+    });
+});
+
+describe("maskSlotVariantCount", () => {
+    it("is 0 for a slot never clicked", () => {
+        expect(maskSlotVariantCount(undefined)).toBe(0);
+    });
+
+    it("is 1 for a plain slot", () => {
+        expect(maskSlotVariantCount({ sheet: "ground", index: 0 })).toBe(1);
+    });
+
+    it("is the array's own length for a slot holding several variants", () => {
+        expect(maskSlotVariantCount([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }])).toBe(3);
+    });
+});
+
+describe("withMaskSlotAssigned", () => {
+    const EMPTY = new Array(16).fill(undefined);
+
+    it("assigns a bare ref to an empty slot, appendVariant or not", () => {
+        const tiles = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, true);
+        expect(tiles[15]).toEqual({ sheet: "ground", index: 0 });
+    });
+
+    it("replaces a slot's existing tile when appendVariant is false", () => {
+        const first = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, false);
+        const second = withMaskSlotAssigned(first, 15, { sheet: "ground", index: 1 }, false);
+        expect(second[15]).toEqual({ sheet: "ground", index: 1 });
+    });
+
+    it("turns a slot's single tile into a two-tile variant array when appendVariant is true", () => {
+        const first = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, false);
+        const second = withMaskSlotAssigned(first, 15, { sheet: "ground", index: 1 }, true);
+        expect(second[15]).toEqual([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }]);
+    });
+
+    it("keeps growing an existing variant array rather than nesting it", () => {
+        let tiles = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, false);
+        tiles = withMaskSlotAssigned(tiles, 15, { sheet: "ground", index: 1 }, true);
+        tiles = withMaskSlotAssigned(tiles, 15, { sheet: "ground", index: 2 }, true);
+        expect(tiles[15]).toEqual([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }]);
+    });
+
+    it("leaves every other slot untouched", () => {
+        const tiles = withMaskSlotAssigned(EMPTY, 15, { sheet: "ground", index: 0 }, true);
+        expect(tiles[0]).toBeUndefined();
+    });
+});
+
+describe("draftTileRefsOf", () => {
+    it("flattens a mask entry's variant slots alongside its plain ones", () => {
+        const tiles = new Array(16).fill(undefined);
+        tiles[0] = { sheet: "ground", index: 0 };
+        tiles[15] = [{ sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }];
+        const art: DraftTileArt = { layout: "mask16", tiles };
+        expect(draftTileRefsOf(art)).toEqual([
+            { sheet: "ground", index: 0 },
+            { sheet: "ground", index: 1 },
+            { sheet: "ground", index: 2 },
+        ]);
+    });
+
+    it("skips holes rather than throwing on an entry still being clicked through", () => {
+        const tiles = new Array(16).fill(undefined);
+        tiles[0] = { sheet: "ground", index: 0 };
+        expect(draftTileRefsOf({ layout: "mask16", tiles })).toEqual([{ sheet: "ground", index: 0 }]);
+    });
+
+    it("handles single, variants and orientation the same way tileset.ts's own tileRefsOf does", () => {
+        expect(draftTileRefsOf({ layout: "single", tile: { sheet: "town", index: 4 } })).toEqual([{ sheet: "town", index: 4 }]);
+        expect(draftTileRefsOf({ layout: "variants", tiles: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }] })).toEqual([{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }]);
+        expect(draftTileRefsOf({ layout: "orientation", tiles: { ns: { sheet: "ground", index: 0 } } })).toEqual([{ sheet: "ground", index: 0 }]);
     });
 });
 
@@ -288,5 +364,14 @@ describe("printTilesetDeclarations", () => {
         const printed = printTilesetDeclarations({}, areaArt, {});
         expect(printed).toContain("// g: not finished yet — 15 of 16 mask tiles left to click");
         expect(printed).not.toContain(`g: { layout: "mask16"`);
+    });
+
+    it("prints a mask slot holding several variants as an array, and a plain slot as a bare ref either way", () => {
+        const tiles = Array.from({ length: 16 }, (_, index) => ({ sheet: "ground", index }));
+        (tiles as unknown[])[15] = [{ sheet: "ground", index: 15 }, { sheet: "ground", index: 16 }, { sheet: "ground", index: 17 }];
+        const areaArt: Record<string, DraftTileArt> = { g: { layout: "mask16", tiles } };
+        const printed = printTilesetDeclarations({}, areaArt, {});
+        expect(printed).toContain(`[{ sheet: "ground", index: 15 }, { sheet: "ground", index: 16 }, { sheet: "ground", index: 17 }]`);
+        expect(printed).toContain(`{ sheet: "ground", index: 0 },`); // slot 0 is still a bare ref
     });
 });
