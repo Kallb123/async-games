@@ -8,6 +8,7 @@ import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useHydrated } from "@/utils/hooks/useNow";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { GAME_META } from "@/utils/ui/games";
+import { pluralize } from "@/utils/ui/text";
 
 interface KingdomBuilderWorldListProps extends RefreshableState {
     worlds: KingdomBuilderWorldSummary[];
@@ -27,7 +28,12 @@ function WorldRow({ world }: { world: KingdomBuilderWorldSummary }) {
         onClick={() => setSeenLevels(String(world.completedBuildLevels))}
         icon={<GameThumb meta={META} size={38} radius={9} />}
         title={META.name}
-        sub={`Tick ${world.currentTick} · ${world.settlementCount} ${world.settlementCount === 1 ? "settlement" : "settlements"}${finished > 0 ? ` · ${finished} ${finished === 1 ? "build" : "builds"} finished` : ""}`}
+        sub={[
+            `Tick ${world.currentTick}`,
+            `${world.playerCount}/${pluralize(world.seatCount, "player")}`,
+            pluralize(world.settlementCount, "settlement"),
+            ...(finished > 0 ? [`${pluralize(finished, "build")} finished`] : []),
+        ].join(" · ")}
         action={hydrated ? <span className="ag-list-row-time">Next tick {new Date(world.nextTickAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span> : undefined}
     />;
 }

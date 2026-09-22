@@ -5,6 +5,13 @@ import type { Landmass, WorldEdge, WorldNode } from "./worldgen/landmass";
 import type { OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 
+/** One player's place in a world (§11.3 PR 8): who, the start site they claimed, and when. */
+export interface KingdomBuilderSeat {
+    userId: string;
+    siteId: string;
+    joinedAt: Date;
+}
+
 export interface IKingdomBuilderWorld {
     seed: string;
     generationAttempt: number;
@@ -22,6 +29,15 @@ export interface IKingdomBuilderWorld {
     fairness: FairnessReport;
     currentTick: number;
     nextTickAt: Date;
+    /**
+     * Who opened the world, how many seats it holds (§1's ten at most), and
+     * who holds them. Absent on a world opened before PR 8 — a world of one,
+     * whose only member is the owner of its settlements, and which nobody
+     * else can join because no invitation points at it.
+     */
+    hostId?: string;
+    seatCount?: number;
+    roster?: KingdomBuilderSeat[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -69,6 +85,12 @@ const TerrainFieldSchema = new Schema<TerrainField>({
     codes: { type: String, required: true },
 }, { _id: false });
 
+const SeatSchema = new Schema<KingdomBuilderSeat>({
+    userId: { type: String, required: true },
+    siteId: { type: String, required: true },
+    joinedAt: { type: Date, required: true },
+}, { _id: false });
+
 const OverlayPlacementSchema = new Schema<OverlayPlacement>({
     tile: { type: Number, required: true },
     code: { type: String, required: true },
@@ -86,6 +108,9 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     fairness: { type: FairnessSchema, required: true },
     currentTick: { type: Number, required: true, min: 0, default: 0 },
     nextTickAt: { type: Date, required: true, default: Date.now },
+    hostId: String,
+    seatCount: { type: Number, min: 1, max: 10 },
+    roster: { type: [SeatSchema], required: false, default: undefined },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });

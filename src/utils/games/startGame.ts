@@ -8,6 +8,7 @@ import { GameDataModel, IGameData, IGameDataDocument } from '@/utils/mongodb/Gam
 import { gameDataModelFor } from '@/utils/mongodb/mongodb';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { asStoredHistory } from '@/utils/games/history';
+import { acceptWorldSeat, worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
 
 /**
  * Turn an invitation into a live game: build the game document for the
@@ -147,6 +148,14 @@ export async function acceptSeat(
         // Gone between the caller reading it and this update: cancelled, or
         // already turned into a game by a request that raced this one.
         return gameStartedFrom(invite.inviteId);
+    }
+
+    // A Kingdom Builder world is already running when its invitation is sent,
+    // so a seat on it is accepted by joining the world there and then — never
+    // by the all-accepted gate below or a CreateGame (see acceptWorldSeat).
+    const worldId = worldIdOfInvitation(current);
+    if (worldId) {
+        return acceptWorldSeat(current, worldId, actorId);
     }
 
     const userIdList = current.userIdList.map(uid => uid.userId);

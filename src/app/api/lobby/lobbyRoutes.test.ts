@@ -115,6 +115,28 @@ describe('GET /api/lobby/[inviteId]', () => {
         expect(response.status).toBe(404);
     });
 
+    it("sends the host of a Kingdom Builder world's invitation to the world", async () => {
+        signIn(ANN);
+        seedLobby({ worldId: '64b000000000000000000001', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+
+        const response = await lobby(get(`/api/lobby/${INVITE_ID}`), params());
+
+        expect(await response.json()).toEqual({
+            success: true,
+            startedGame: { gameId: '64b000000000000000000001', gameUrl: 'kingdombuilder' }
+        });
+    });
+
+    it("keeps a world invitation's lobby for a named player who hasn't joined yet", async () => {
+        signIn(BOB);
+        seedLobby({ worldId: '64b000000000000000000001', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+
+        const body = await (await lobby(get(`/api/lobby/${INVITE_ID}`), params())).json();
+
+        expect(body.startedGame).toBeUndefined();
+        expect(body.invite.joinCode).toBe('PLUM');
+    });
+
     it('401s a caller with no session, so a refreshing cookie retries', async () => {
         noLobby();
 

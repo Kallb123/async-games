@@ -6,6 +6,7 @@ import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/Invita
 import { isOpenSeat, OPEN_SEAT_ID } from '@/utils/games/lobby';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { acceptSeat } from '@/utils/games/startGame';
+import { worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
 
 export interface ILobbyStartRequest {
     inviteId: string;
@@ -38,6 +39,12 @@ export async function POST(request: NextRequest) {
     }
     if (invite.senderId !== userId) {
         return NextResponse.json({}, { status: 403, statusText: "Only the host can start the lobby" });
+    }
+
+    // A world has nothing to start: it was running before anyone was invited,
+    // and its open seats are for joining mid-season, not closing off.
+    if (worldIdOfInvitation(invite)) {
+        return NextResponse.json({}, { status: 400, statusText: "This world is already running" });
     }
 
     const meta = GAME_META[invite.gameType.toLowerCase()];

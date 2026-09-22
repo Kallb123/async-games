@@ -6,6 +6,8 @@ import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { invitationToResponse, invitationUserIds } from '@/utils/games/invitationResponse';
 import { buildUserDirectory } from '@/utils/users/clerk';
+import { worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
+import { meta as kingdomBuilderMeta } from '@/games/KingdomBuilder/meta';
 
 export interface ILobbyParams {
     inviteId: string
@@ -95,6 +97,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IL
         // No invitation and no game: it expired, it was cancelled, it never
         // existed, or it was never this caller's to look at.
         return NextResponse.json({}, { status: 404, statusText: "Lobby not found" });
+    }
+
+    // A world invitation's lobby is the world itself, which was running
+    // before anyone was invited: whoever is already in it — the host, or a
+    // seat that has been accepted and so has joined — is sent there, the way
+    // a lobby that has become a game sends everyone to the board. That covers
+    // every road here: the host's "Awaiting response" row, and a member who
+    // types the code a second time.
+    const worldId = worldIdOfInvitation(invite);
+    if (worldId && (invite.senderId === userId || invite.userIdList.some(seat => seat.userId === userId && seat.inviteAccepted))) {
+        const started: ILobbyResponse = {
+            success: true,
+            startedGame: { gameId: worldId as uuidString, gameUrl: kingdomBuilderMeta.url },
+        };
+        return NextResponse.json(started);
     }
 
     const directory = await buildUserDirectory(invitationUserIds(invite));
