@@ -4835,13 +4835,20 @@ button.ag-tt-ticket { cursor: pointer; }
 /* ---- The track editor (docs/admin-tools.md) ----
    An admin-only authoring surface, not a game screen — so it wears the ordinary
    ag-* form kit and adds only what the canvas of tiles needs. */
-.ag-rcedit-grid {
+/* `.ag-editor-*` is the generic half of these four: a grid of labelled fields,
+   a bordered panel, and a monospace read-only code block are exactly what any
+   build-time authoring screen behind /admin wants, not just the Race Cars
+   track editor that first grew them — the Kingdom Builder tile mapper
+   (docs/admin-tools.md) is the second one now, which is the signal AGENTS.md
+   asks for rather than a second copy of the same rules under a new prefix. */
+.ag-rcedit-grid, .ag-editor-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
 }
-.ag-rcedit-field { display: flex; flex-direction: column; gap: 4px; }
-.ag-rcedit-section {
+.ag-rcedit-field, .ag-editor-field { display: flex; flex-direction: column; gap: 4px; }
+.ag-editor-field--inline { flex-direction: row; align-items: center; gap: 6px; }
+.ag-rcedit-section, .ag-editor-section {
     border: 1px solid var(--ag-line);
     border-radius: 12px;
     padding: 10px;
@@ -4851,8 +4858,8 @@ button.ag-tt-ticket { cursor: pointer; }
    pushed to the end. */
 .ag-rcedit-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ag-rcedit-toolbar-zoom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
-/* The printed track file — a read-only code block, monospace and pre-wrapped. */
-.ag-rcedit-code { font-family: monospace; font-size: 12px; white-space: pre; }
+/* The printed file — a read-only code block, monospace and pre-wrapped. */
+.ag-rcedit-code, .ag-editor-code { font-family: monospace; font-size: 12px; white-space: pre; }
 .ag-rcedit-issues { margin: 0; padding-left: 18px; }
 /* The image plus its tile overlay scrolls inside a fixed frame so a big circuit
    pans without pushing the panels off-screen; the SVG is sized in px for zoom. */
@@ -4952,6 +4959,14 @@ button.ag-tt-ticket { cursor: pointer; }
        rather than above them. */
     .ag-rcedit-page .ag-rcedit-canvas { max-height: 80vh; }
 }
+
+/* The Kingdom Builder tile mapper's own grid overlay (§3.5.5,
+   docs/admin-tools.md): one cell per square of the loaded sheet, drawn over
+   it in an SVG the same way the track editor draws its tiles — tokens, never
+   an inline literal, so the mark reads consistently in both themes. */
+.ag-tilemap-cell { fill: transparent; stroke: var(--ag-line); stroke-width: 0.5; }
+.ag-tilemap-cell--assigned { fill: color-mix(in oklch, var(--ag-green) 35%, transparent); }
+.ag-tilemap-cell-label { fill: var(--ag-ink); font: 700 1em var(--ag-font); pointer-events: none; }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

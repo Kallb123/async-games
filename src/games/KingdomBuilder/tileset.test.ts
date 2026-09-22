@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { sheetTilePixels, tilesetDeclarationErrors, TILESET, type TilesetManifest } from "./tileset";
+import { AREA_ART, cellToIndex, indexToCell, OVERLAY_ART, sheetTilePixels, tilesetDeclarationErrors, TILESET, type TilesetManifest } from "./tileset";
+import { tileArtErrors } from "./tilesetGuard";
 
 const SHEET = { path: "/art/kingdombuilder/ground.png", tileWidth: 16, tileHeight: 16, margin: 0, spacing: 0 };
 
 describe("the tileset manifest", () => {
-    it("has no sheet declared yet — PR 11 is the first one", () => {
-        expect(TILESET.sheets).toEqual({});
+    it("has its first sheet declared — PR 11's ground autotile", () => {
+        expect(Object.keys(TILESET.sheets)).toEqual(["ground"]);
     });
 
-    it("passes its own guard with nothing declared", () => {
+    it("passes its own guard", () => {
         expect(tilesetDeclarationErrors()).toEqual([]);
+    });
+
+    it("every area's art passes the full disk-backed guard against the real public/ directory", () => {
+        expect(tileArtErrors("area", AREA_ART)).toEqual([]);
+    });
+
+    it("every overlay's art passes the same guard", () => {
+        expect(tileArtErrors("overlay", OVERLAY_ART)).toEqual([]);
     });
 
     it("falls back to a fixed pixel size per tile until a sheet declares one", () => {
@@ -20,6 +29,19 @@ describe("the tileset manifest", () => {
     it("takes the largest declared sheet tile size once one exists", () => {
         const manifest: TilesetManifest = { sheets: { ground: { ...SHEET, tileWidth: 24, tileHeight: 16 } } };
         expect(Math.max(manifest.sheets.ground.tileWidth, manifest.sheets.ground.tileHeight)).toBe(24);
+    });
+});
+
+describe("indexToCell / cellToIndex", () => {
+    it("round-trip through a grid's own column count", () => {
+        for (let index = 0; index < 16; index++) {
+            const { col, row } = indexToCell(index, 4);
+            expect(cellToIndex(col, row, 4)).toBe(index);
+        }
+    });
+
+    it("is (0, 0) for a grid with no columns rather than dividing by it", () => {
+        expect(indexToCell(5, 0)).toEqual({ col: 0, row: 0 });
     });
 });
 

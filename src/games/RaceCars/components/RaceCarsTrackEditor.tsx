@@ -35,6 +35,7 @@ import {
     type MarkKind,
 } from '@/games/RaceCars/tracks/editorModel';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
+import { MAX_LOCAL_IMAGE_BYTES } from '@/utils/ui/editorLimits';
 
 /**
  * The Race Cars track editor (docs/admin-tools.md): cut the lap into sections,
@@ -91,11 +92,11 @@ const TILE_RADIUS = 7;
 const DRAG_SLOP = 4;
 /** How near the pointer must be to a tile centre to paint it, in art units. */
 const PAINT_HIT = TILE_RADIUS * 1.8;
-/** File-size ceilings: a big track's draft JSON is far under the first, and a
- *  traced backdrop far under the second — enough to turn a wrong huge file into
- *  the same error message a parse failure gives rather than a frozen tab. */
+/** A big track's draft JSON is far under this — enough to turn a wrong huge
+ *  file into the same error message a parse failure gives rather than a
+ *  frozen tab. The traced backdrop's own ceiling, `MAX_LOCAL_IMAGE_BYTES`,
+ *  is shared with the Kingdom Builder tile mapper's sheet upload. */
 const MAX_DRAFT_BYTES = 8 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
 type Mode = 'place' | 'exits' | 'paint' | 'mark';
 
@@ -543,7 +544,7 @@ export default function RaceCarsTrackEditor() {
         const file = event.target.files?.[0];
         if (!file) return;
         setFileError(null);
-        if (file.size > MAX_IMAGE_BYTES) { setFileError("That image is too big to trace against."); event.target.value = ''; return; }
+        if (file.size > MAX_LOCAL_IMAGE_BYTES) { setFileError("That image is too big to trace against."); event.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = () => {
             const href = typeof reader.result === 'string' ? reader.result : '';
