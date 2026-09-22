@@ -2,9 +2,9 @@
 
 **Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
-(PR 6), worlds on the dashboard (PR 7), and the area registry and generated
-ground (PR 9) are shipped. PR 8 (more than one player in a world) is next;
-§11.3 is the plan for the rest.
+(PR 6), worlds on the dashboard (PR 7), the area registry and generated
+ground (PR 9), and the overlay vocabulary (PR 12) are shipped. PR 8 (more
+than one player in a world) is next; §11.3 is the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -1524,26 +1524,31 @@ one-line entries in the guide and tutorial registries.
      with a test).
   6. One `whatsNew.ts` line — and if PR 10's line has not shipped to players
      yet, this widens that line rather than adding a second, per AGENTS.md.
-- **PR 12 — The overlay vocabulary.** The rest of §3.5.3 — piers, roads,
-  landmarks — and the first real test of whether the registries extend as
-  promised. If any of this needs a change outside `AREAS`, `OVERLAYS`, the
-  manifest and one placement pass each, PRs 9–11 got the shape wrong and this
-  is where that shows.
+- **PR 12 — The overlay vocabulary.** Shipped. The rest of §3.5.3 — piers,
+  roads, landmarks — landed as a straight extension of `AREAS`/`OVERLAYS` and
+  one placement pass each, with no change needed outside them: PRs 9–11's
+  shape held.
   1. The derived overlays that aren't load-bearing: piers on coastal sites,
      roads under the edges between occupied settlements, signposts at
-     junctions.
+     junctions where three or more edges meet — `worldgen/overlayVocabulary.ts`.
   2. The scattered pass and its rules: ruins, standing stones, shipwrecks,
      watchtowers — seeded, so a world's landmarks are the same for everyone
-     who loads it.
-  3. Their art and manifest entries, through the mapper and the pipeline.
-  4. Roads are the one entry here with a movement effect, so the cost walk
-     gains the road rule (§3.5.3) and a test that a road never makes a tile
-     cost more than the bare ground would — a road through a marsh has to be
-     an improvement, not a trap.
-  5. Reviewers: `caveman` (the extension claim, honestly assessed), `gremlin`
-     (an overlay list that can grow unbounded if a placement rule misfires —
-     a cap, and what a tile with two overlays draws).
-  6. One `whatsNew.ts` line: the map gains bridges, roads and ruins.
+     who loads it, and tolerant of a shortfall on an unlucky or small world
+     rather than failing generation over a decorative pass.
+  3. Roads are the one entry here with a movement effect, so the cost walk
+     gains the road rule (§3.5.3): a road tile's weight is capped at the
+     `Road` registry entry's own multiplier, which — per the registry's own
+     comment and its guard test — no area's weight can undercut, so a road
+     can only ever match or improve the ground it's laid on, never cost more.
+  4. Reviewed by `caveman`, `rulebook` and `gremlin`.
+  5. No `whatsNew.ts` line: every overlay here still draws nothing (§3.5.6's
+     rule for a registry entry with no art yet), exactly as Bridge and Ford
+     already do — nothing on the map changes for a player until a sheet
+     lands for one of these through PR 11's mapper.
+  6. Their art and manifest entries — through the mapper and the pipeline —
+     are follow-up work, not blocking: same as every area shipped ahead of
+     its own art (§3.5.2), a registry entry with no sheet yet draws nothing
+     rather than standing in the way.
 - **PR 13 — Barracks and units.** Unit types/levels (§6.1) and a training
   queue on the barracks tile. Units accumulate in a garrison; nothing can
   leave it yet.
