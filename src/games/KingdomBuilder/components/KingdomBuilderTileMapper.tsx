@@ -25,22 +25,27 @@ import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
     diagonalApplies,
     draftTileRefsOf,
+    entriesUsingSheet,
     gridFit,
+    interiorMaskSlot,
     isDraftMaskArt,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
+    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
+    previewRefOf,
     previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
     withMaskSlotAssigned,
     type DiagonalName,
     type DraftTileArt,
+    type MaskPreviewFill,
     type NeighbourSides,
 } from "../tileMapperModel";
-import { blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, singleSquareReason, tilePieceParts, type SheetDefinition, type TileRef } from "../tileset";
+import { AREA_ART, blobIndexOf, cellToIndex, indexToCell, isMaskLayout, MASK_LAYOUT_SIZES, OVERLAY_ART, sheetColumns, sheetSourceRect, singleSquareReason, TILESET, tilePieceParts, tileRefSize, type MaskLayout, type SheetDefinition, type TileRef } from "../tileset";
 
 const STORAGE_KEY = "ag-kingdombuilder-tile-mapper";
 const ZOOM_STEP = 0.25;
@@ -125,6 +130,9 @@ const NEIGHBOURS: readonly { key: keyof NeighbourSides; label: string; diagonal:
 /** Every neighbour matching: the fully-interior tile, which is where a mask entry is most naturally started. */
 const ALL_NEIGHBOURS_MATCH: NeighbourSides = { north: true, northEast: true, east: true, southEast: true, south: true, southWest: true, west: true, northWest: true };
 
+/** The "3×3 preview"'s nine cells in row-major reading order, the centre a sentinel rather than a ninth `NeighbourSides` key. */
+const MASK_PREVIEW_CELLS: readonly (keyof NeighbourSides | "centre")[] = ["northWest", "north", "northEast", "west", "centre", "east", "southWest", "south", "southEast"];
+
 /** A piece bigger than one square, as the panel holds it while it's being typed. One square is the default, and the anchor defaults to the bottom-left the same way a printed ref's does. */
 interface PieceDraft {
     width: number;
@@ -185,6 +193,7 @@ export default function KingdomBuilderTileMapper() {
     const [addVariant, setAddVariant] = useState(false);
     const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
     const [zoom, setZoom] = useState(1);
+    const [loadSheetChoice, setLoadSheetChoice] = useState("");
 
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -208,6 +217,36 @@ export default function KingdomBuilderTileMapper() {
         setImageError(null);
     };
 
+    // Committed sheets, for "pick up where tileset.ts left off" rather than
+    // clicking an already-shipped entry back in from scratch.
+    const committedSheetNames = Object.keys(TILESET.sheets);
+
+    const loadExistingSheet = (name: string) => {
+        const sheetDef = TILESET.sheets[name];
+        if (!sheetDef) return;
+        setUploadedUrl(current => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+        });
+        setDraft(current => ({
+            ...current,
+            sheetName: name,
+            artPath: sheetDef.path,
+            tileWidth: sheetDef.tileWidth,
+            tileHeight: sheetDef.tileHeight,
+            margin: sheetDef.margin,
+            spacing: sheetDef.spacing,
+            sheets: { ...current.sheets, [name]: sheetDef },
+            // Replaces whatever the draft already held for these codes with
+            // tileset.ts's own — "load" means "match the file", not "merge
+            // with whatever I'd half-clicked before".
+            areaArt: { ...current.areaArt, ...entriesUsingSheet(AREA_ART, name) },
+            overlayArt: { ...current.overlayArt, ...entriesUsingSheet(OVERLAY_ART, name) },
+        }));
+        setImageError(null);
+        setLoadSheetChoice("");
+    };
+
     // Asked of the same function the guard rejects a piece with, so the panel
     // can't come to offer something the test would refuse.
     const piecesAllowed = singleSquareReason(entryKind, activeLayout) === null;
@@ -217,6 +256,17 @@ export default function KingdomBuilderTileMapper() {
     const activeMaskSlot = activeLayout === "mask16" ? maskFromSides(maskSideState) : maskSlot;
     const activeMaskSlotTiles = currentArt && isDraftMaskArt(currentArt) && currentArt.layout === activeLayout ? currentArt.tiles : undefined;
     const activeMaskSlotVariantCount = maskSlotVariantCount(activeMaskSlotTiles?.[activeMaskSlot]);
+
+    // The sheet this tile's own fields describe, for the preview below — the
+    // same shape `updateArt` folds into `draft.sheets` on the next click, read
+    // here straight off the form so the preview doesn't wait for a click to
+    // catch up with a size the author just changed.
+    const currentSheetDef: SheetDefinition = { path: draft.artPath, tileWidth: draft.tileWidth, tileHeight: draft.tileHeight, margin: draft.margin, spacing: draft.spacing };
+    // The preview only ever has one sheet's image loaded (`imageUrl`), so a ref
+    // an earlier session assigned against a sheet since swapped out can't be
+    // cropped from it — shown the same as "nothing clicked here yet" rather
+    // than a broken image.
+    const resolvePreviewTile = (tile: TileRef | undefined): TileRef | undefined => (tile && tile.sheet === draft.sheetName ? tile : undefined);
 
     /**
      * Writes the picked entry's art back into the draft, given whatever it was
@@ -327,6 +377,21 @@ export default function KingdomBuilderTileMapper() {
                     {uploadedUrl && <span className="ag-tag">Previewing an uploaded file — save it under public/art before committing</span>}
                 </div>
                 {imageError && <div className="ag-callout" role="alert">{imageError}</div>}
+                {committedSheetNames.length > 0 && (
+                    <>
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <label className="ag-editor-field">
+                                <span className="ag-field-label">Or load a sheet already in tileset.ts</span>
+                                <select className="ag-select" value={loadSheetChoice} onChange={event => setLoadSheetChoice(event.target.value)}>
+                                    <option value="">Choose one…</option>
+                                    {committedSheetNames.map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            </label>
+                            <button type="button" className="ag-btn ag-btn--light" disabled={!loadSheetChoice} onClick={() => loadExistingSheet(loadSheetChoice)}>Load sheet &amp; its mappings</button>
+                        </div>
+                        <p className="ag-hint">Pulls in that sheet&apos;s own size, margin and spacing, and every area or overlay whose art already points at it — replacing whatever the draft currently holds for those, so you pick up where <code>tileset.ts</code> left off rather than re-clicking it in.</p>
+                    </>
+                )}
             </Section>
 
             <Section label="Tile size">
@@ -512,6 +577,33 @@ export default function KingdomBuilderTileMapper() {
                 )}
             </Section>
 
+            <Section label="Preview">
+                {!entryCode ? (
+                    <p className="ag-hint">Choose a registry entry above to preview it.</p>
+                ) : !naturalSize || !fit ? (
+                    <p className="ag-hint">Load a sheet above to preview this entry.</p>
+                ) : isMaskLayout(activeLayout) ? (
+                    <>
+                        <MaskNeighbourhoodPreview
+                            layout={activeLayout}
+                            sides={maskSideState}
+                            centreTile={resolvePreviewTile(previewRefOf(activeMaskSlotTiles?.[activeMaskSlot]))}
+                            interiorTile={resolvePreviewTile(previewRefOf(activeMaskSlotTiles?.[interiorMaskSlot(activeLayout)]))}
+                            sheet={currentSheetDef}
+                            imageUrl={imageUrl}
+                            naturalSize={naturalSize}
+                        />
+                        <p className="ag-hint">
+                            The centre square is whatever {activeLayout === "mask16" ? "mask" : "slot"} {activeMaskSlot} holds so far. The sides mirror the checkboxes above — hatched wherever that neighbour differs from this entry
+                            {activeLayout === "mask47" ? ", and blank on a corner a diagonal can't change" : ""}; {activeLayout === "mask16" ? "the four corners are always left blank, since a mask16 tile is never picked by them. " : ""}
+                            A dashed square is a slot nothing&apos;s been clicked onto yet.
+                        </p>
+                    </>
+                ) : (
+                    <NonMaskArtPreview art={currentArt} sheet={currentSheetDef} sheetName={draft.sheetName} imageUrl={imageUrl} naturalSize={naturalSize} />
+                )}
+            </Section>
+
             <Section label="Export">
                 <p className="ag-hint">Paste this over the <code>TILESET</code>, <code>AREA_ART</code> and <code>OVERLAY_ART</code> declarations in <code>src/games/KingdomBuilder/tileset.ts</code>, then run <code>npm test</code> — the guard checks every sheet exists, every piece lands wholly inside its sheet, every mask entry declares all its slots (sixteen, or forty-seven), no area or mask entry declares a piece, and no anchor sits outside its own piece.</p>
                 <pre className="ag-editor-section ag-editor-code">{printed}</pre>
@@ -522,4 +614,117 @@ export default function KingdomBuilderTileMapper() {
             </Section>
         </>
     );
+}
+
+// ─── The preview ─────────────────────────────────────────────────────────────
+//
+// docs/admin-tools.md's "check your work" step: real cropped squares of the
+// loaded sheet, not a description of them, so a mismatched border reads as a
+// mismatch before it's ever pasted into tileset.ts. `SpriteSquare` crops one
+// sheet square the same way the click handler above turns a click into an
+// index — a nested `<svg>` whose own `viewBox` is the crop rectangle, with the
+// full sheet image placed at the negative of its corner, is the same trick as
+// `MapEdges`' off-board stubs: the parent element clips to its viewBox, so
+// only the square inside it ever draws. `MaskNeighbourhoodPreview` is the
+// mask16/mask47 "3×3 preview"; `NonMaskArtPreview` is the plainer one for
+// orientation/variants/single, a strip of one tile per declared role.
+
+const PREVIEW_TILE_PX = 48;
+
+function SpriteSquare({ imageUrl, naturalSize, sheet, index, size }: { imageUrl: string; naturalSize: { width: number; height: number }; sheet: SheetDefinition; index: number; size: number }) {
+    const { sx, sy, sw, sh } = sheetSourceRect(sheet, naturalSize.width, index);
+    return (
+        <svg width={size} height={size} viewBox={`0 0 ${sw} ${sh}`} style={{ display: "block" }}>
+            <image href={imageUrl} x={-sx} y={-sy} width={naturalSize.width} height={naturalSize.height} style={{ imageRendering: "pixelated" }} />
+        </svg>
+    );
+}
+
+/** A (possibly multi-square) piece, laid out from its own top-left corner — the art it shows, not where a placement's anchor would stand it on the map. */
+function PreviewPiece({ tile, sheet, imageUrl, naturalSize }: { tile: TileRef; sheet: SheetDefinition; imageUrl: string; naturalSize: { width: number; height: number } }) {
+    const { width, height } = tileRefSize(tile);
+    const columns = Math.max(1, sheetColumns(sheet, naturalSize.width));
+    const origin = indexToCell(tile.index, columns);
+    return (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${width}, ${PREVIEW_TILE_PX}px)` }}>
+            {Array.from({ length: width * height }, (_, i) => {
+                const index = cellToIndex(origin.col + (i % width), origin.row + Math.floor(i / width), columns);
+                return <SpriteSquare key={i} imageUrl={imageUrl} naturalSize={naturalSize} sheet={sheet} index={index} size={PREVIEW_TILE_PX} />;
+            })}
+        </div>
+    );
+}
+
+/** One cell of the 3×3 preview: a real sprite where there's a tile to crop, a hatch or a blank where the checkboxes say there isn't one to show, and a dashed "?" for a slot nothing's been clicked onto yet. */
+function PreviewCell({ kind, tile, sheet, imageUrl, naturalSize }: { kind: MaskPreviewFill | "centre"; tile: TileRef | undefined; sheet: SheetDefinition; imageUrl: string; naturalSize: { width: number; height: number } }) {
+    const empty = !tile && (kind === "match" || kind === "centre");
+    const className = ["ag-tile-preview-cell", kind === "centre" && "ag-tile-preview-cell--centre", kind === "differ" && "ag-tile-preview-cell--differ", kind === "irrelevant" && "ag-tile-preview-cell--irrelevant", empty && "ag-tile-preview-cell--empty"]
+        .filter(Boolean)
+        .join(" ");
+    return <div className={className}>{tile ? <SpriteSquare imageUrl={imageUrl} naturalSize={naturalSize} sheet={sheet} index={tile.index} size={PREVIEW_TILE_PX} /> : empty ? "?" : null}</div>;
+}
+
+/** The mask16/mask47 preview: the entry's own neighbourhood, from the same checkboxes `assignTile` reads the active slot from. */
+function MaskNeighbourhoodPreview({ layout, sides, centreTile, interiorTile, sheet, imageUrl, naturalSize }: {
+    layout: MaskLayout;
+    sides: NeighbourSides;
+    centreTile: TileRef | undefined;
+    interiorTile: TileRef | undefined;
+    sheet: SheetDefinition;
+    imageUrl: string;
+    naturalSize: { width: number; height: number };
+}) {
+    const fill = maskPreviewFill(layout, sides);
+    return (
+        <div className="ag-tile-preview-grid">
+            {MASK_PREVIEW_CELLS.map(cell => {
+                if (cell === "centre") return <PreviewCell key="centre" kind="centre" tile={centreTile} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
+                const kind = fill[cell];
+                return <PreviewCell key={cell} kind={kind} tile={kind === "match" ? interiorTile : undefined} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} />;
+            })}
+        </div>
+    );
+}
+
+/** One labelled tile of an orientation/variants/single preview strip. A tile on a sheet this screen doesn't currently have loaded can't be cropped — shown the same as "nothing assigned" rather than a broken image. */
+function PreviewStripItem({ label, tile, sheet, sheetName, imageUrl, naturalSize }: {
+    label: string;
+    tile: TileRef;
+    sheet: SheetDefinition;
+    sheetName: string;
+    imageUrl: string;
+    naturalSize: { width: number; height: number };
+}) {
+    return (
+        <div className="ag-tile-preview-strip-item">
+            {tile.sheet === sheetName ? <PreviewPiece tile={tile} sheet={sheet} imageUrl={imageUrl} naturalSize={naturalSize} /> : <div className="ag-tile-preview-cell ag-tile-preview-cell--empty">?</div>}
+            <span className="ag-hint">{label}</span>
+        </div>
+    );
+}
+
+function NonMaskArtPreview({ art, sheet, sheetName, imageUrl, naturalSize }: {
+    art: DraftTileArt | undefined;
+    sheet: SheetDefinition;
+    sheetName: string;
+    imageUrl: string;
+    naturalSize: { width: number; height: number };
+}) {
+    if (!art) return <p className="ag-hint">Nothing assigned to this entry yet.</p>;
+    if (art.layout === "single") return <div className="ag-tile-preview-strip"><PreviewStripItem label="tile" tile={art.tile} sheet={sheet} sheetName={sheetName} imageUrl={imageUrl} naturalSize={naturalSize} /></div>;
+    if (art.layout === "variants") {
+        return (
+            <div className="ag-tile-preview-strip">
+                {art.tiles.map((tile, index) => <PreviewStripItem key={index} label={`#${index + 1}`} tile={tile} sheet={sheet} sheetName={sheetName} imageUrl={imageUrl} naturalSize={naturalSize} />)}
+            </div>
+        );
+    }
+    if (art.layout === "orientation") {
+        return (
+            <div className="ag-tile-preview-strip">
+                {Object.entries(art.tiles).map(([key, tile]) => <PreviewStripItem key={key} label={key} tile={tile} sheet={sheet} sheetName={sheetName} imageUrl={imageUrl} naturalSize={naturalSize} />)}
+            </div>
+        );
+    }
+    return null; // mask layouts are MaskNeighbourhoodPreview's, not this one's.
 }

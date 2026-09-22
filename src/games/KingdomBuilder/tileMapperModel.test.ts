@@ -3,15 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
     diagonalApplies,
     draftTileRefsOf,
+    entriesUsingSheet,
     gridFit,
+    interiorMaskSlot,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
+    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
     PREVIEW_WIDTH,
+    previewRefOf,
     previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
@@ -19,7 +23,7 @@ import {
     type DraftTileArt,
     type NeighbourSides,
 } from "./tileMapperModel";
-import { blobIndexOf, BLOB_47_KEYS, NEIGHBOUR_BITS } from "./tileset";
+import { blobIndexOf, BLOB_47_KEYS, NEIGHBOUR_BITS, type TileArt } from "./tileset";
 
 const NO_NEIGHBOURS: NeighbourSides = { north: false, northEast: false, east: false, southEast: false, south: false, southWest: false, west: false, northWest: false };
 
@@ -223,6 +227,58 @@ describe("diagonalApplies", () => {
     });
 });
 
+describe("maskPreviewFill", () => {
+    it("reads the four sides straight off the checkboxes for either layout", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true, south: true };
+        expect(maskPreviewFill("mask16", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+        expect(maskPreviewFill("mask47", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+    });
+
+    it("mask16's diagonals are always irrelevant — a mask16 tile never asks about them", () => {
+        const allSides = { ...NO_NEIGHBOURS, north: true, east: true, south: true, west: true };
+        const fill = maskPreviewFill("mask16", allSides);
+        expect(fill.northEast).toBe("irrelevant");
+        expect(fill.southEast).toBe("irrelevant");
+        expect(fill.southWest).toBe("irrelevant");
+        expect(fill.northWest).toBe("irrelevant");
+    });
+
+    it("mask47's diagonal matches its own checkbox once both sides beside it match", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true, east: true, northEast: true };
+        expect(maskPreviewFill("mask47", sides).northEast).toBe("match");
+        expect(maskPreviewFill("mask47", { ...sides, northEast: false }).northEast).toBe("differ");
+    });
+
+    it("mask47's diagonal is irrelevant wherever diagonalApplies says it can't matter — never a false 'differ'", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true }; // east open: the corner can't be seen
+        expect(maskPreviewFill("mask47", sides).northEast).toBe("irrelevant");
+    });
+});
+
+describe("interiorMaskSlot", () => {
+    it("is 15 for mask16 — every side ticked", () => {
+        expect(interiorMaskSlot("mask16")).toBe(15);
+    });
+
+    it("is mask47's slot for all eight neighbours matching", () => {
+        expect(interiorMaskSlot("mask47")).toBe(BLOB_47_KEYS.indexOf(255));
+    });
+});
+
+describe("previewRefOf", () => {
+    it("is undefined for a slot never clicked", () => {
+        expect(previewRefOf(undefined)).toBeUndefined();
+    });
+
+    it("is the ref itself for a plain slot", () => {
+        expect(previewRefOf({ sheet: "ground", index: 4 })).toEqual({ sheet: "ground", index: 4 });
+    });
+
+    it("is the first variant for a slot holding several — one concrete picture, not the whole rotation", () => {
+        expect(previewRefOf([{ sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }])).toEqual({ sheet: "ground", index: 1 });
+    });
+});
+
 describe("NINE_SLICE_MASKS", () => {
     it("is nine distinct masks, one per square of a 3×3 block", () => {
         expect(NINE_SLICE_MASKS).toHaveLength(9);
@@ -311,6 +367,30 @@ describe("BLOB_47_KEYS", () => {
     it("puts the empty neighbourhood first and the fully-enclosed one last", () => {
         expect(BLOB_47_KEYS[0]).toBe(0);
         expect(BLOB_47_KEYS[46]).toBe(255);
+    });
+});
+
+describe("entriesUsingSheet", () => {
+    const g: TileArt = { layout: "single", tile: { sheet: "ground", index: 0 } };
+    const t: TileArt = { layout: "variants", tiles: [{ sheet: "town", index: 1 }, { sheet: "town", index: 2 }] };
+    const mixed: TileArt = { layout: "orientation", tiles: { ns: { sheet: "ground", index: 5 }, ew: { sheet: "town", index: 6 } } };
+
+    it("keeps only the entries with at least one tile on the given sheet", () => {
+        expect(entriesUsingSheet({ g, t }, "ground")).toEqual({ g });
+        expect(entriesUsingSheet({ g, t }, "town")).toEqual({ t });
+    });
+
+    it("keeps an entry that mixes sheets, since it does have a tile on the one asked about", () => {
+        expect(entriesUsingSheet({ mixed }, "ground")).toEqual({ mixed });
+        expect(entriesUsingSheet({ mixed }, "town")).toEqual({ mixed });
+    });
+
+    it("is empty for a sheet nothing points at", () => {
+        expect(entriesUsingSheet({ g, t }, "castle")).toEqual({});
+    });
+
+    it("is empty for an empty registry", () => {
+        expect(entriesUsingSheet({}, "ground")).toEqual({});
     });
 });
 
