@@ -173,9 +173,12 @@ export function previewRefOf(slot: MaskSlotArt | undefined): TileRef | undefined
  * A nine-slice is a *picture of a patch*, so each square's mask is the
  * neighbourhood that square has within the patch — the top-left corner of a
  * patch has neighbours to its east and south, and nothing to its north or
- * west, which is mask 6.
+ * west, which is mask 6. `islandMaskSlots` computes exactly this same patch
+ * from each square's own position rather than listing it by hand — asked for
+ * `mask16` here so this stays the one array both the importer and a test
+ * (which pins the two together) actually read.
  */
-export const NINE_SLICE_MASKS: readonly number[] = [6, 14, 12, 7, 15, 13, 3, 11, 9];
+export const NINE_SLICE_MASKS: readonly number[] = islandMaskSlots("mask16");
 
 /**
  * The declared mask that stands in best for one a 3×3 block never drew.
