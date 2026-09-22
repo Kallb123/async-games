@@ -59,10 +59,10 @@ describe("deriveRoadOverlays", () => {
 });
 
 describe("derivePierOverlays", () => {
-    it("finds the nearest beach tile for a coastal settlement site", () => {
+    it("finds the nearest beach tile for a coastal settlement site, oriented toward it", () => {
         const field = fieldOf(3, 1, "gbo");
         const nodes: WorldNode[] = [settlement("town", 1, 1)]; // sits on tile 0 (grass)
-        expect(derivePierOverlays(field, nodes, new Set())).toEqual([{ tile: 1, code: "P" }]);
+        expect(derivePierOverlays(field, nodes, new Set())).toEqual([{ tile: 1, code: "P", orientation: "e" }]);
     });
 
     it("gives nothing to a site with no beach within reach", () => {

@@ -133,6 +133,13 @@ describe("tileArtErrors", () => {
         ]);
     });
 
+    it("rejects an orientation key declaring zero variants, same as a mask slot would", () => {
+        const art: Record<string, TileArt> = { B: { layout: "orientation", tiles: { ns: { sheet: "tiny", index: 0 }, ew: [] } } };
+        expect(tileArtErrors("overlay", art, TINY_SHEET, FIXTURES)).toEqual([
+            'tileset.ts overlay "B" orientation key "ew" declares zero variants — either a real tile or at least one',
+        ]);
+    });
+
     it("checks every tile an orientation or variants entry declares", () => {
         const orientation: Record<string, TileArt> = { B: { layout: "orientation", tiles: { ns: { sheet: "tiny", index: 0 }, ew: { sheet: "tiny", index: 3 } } } };
         expect(tileArtErrors("overlay", orientation, TINY_SHEET, FIXTURES)).toEqual([

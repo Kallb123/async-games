@@ -284,7 +284,7 @@ export function mask16FromNineSlice(sheet: string, topLeftIndex: number, columns
 export type DraftTileArt =
     | { layout: "mask16"; tiles: readonly (MaskSlotArt | undefined)[] }
     | { layout: "mask47"; tiles: readonly (MaskSlotArt | undefined)[] }
-    | { layout: "orientation"; tiles: Readonly<Record<string, TileRef>> }
+    | { layout: "orientation"; tiles: Readonly<Record<string, MaskSlotArt>> }
     | { layout: "variants"; tiles: readonly TileRef[] }
     | { layout: "single"; tile: TileRef };
 
@@ -333,25 +333,41 @@ export function maskSlotVariantCount(slot: MaskSlotArt | undefined): number {
 }
 
 /**
- * Writes one clicked square back into a mask entry's slot — replacing
- * whatever was there, or, with `appendVariant`, folding it in alongside what
- * was there instead: the slot's existing single tile becomes a two-tile
- * variant array, and an existing variant array just grows by one. That is
- * the mapper's own version of what a `variants` area already does by simply
- * appending to its list — a mask slot's "list" is just one slot deep inside
- * its sixteen (or forty-seven).
+ * What one clicked square becomes for a slot/key that may already hold
+ * something — replacing it, or, with `appendVariant`, folding it in alongside
+ * what was there instead: an existing single tile becomes a two-tile variant
+ * array, and an existing variant array just grows by one. That is the
+ * mapper's own version of what a `variants` area already does by simply
+ * appending to its list. Shared by a mask slot (indexed) and an orientation
+ * key (named) below, which are otherwise the exact same idea keyed two
+ * different ways.
  */
+function foldedAssignment(existing: MaskSlotArt | undefined, ref: TileRef, appendVariant: boolean): MaskSlotArt {
+    return appendVariant && existing !== undefined ? [...(isMaskSlotVariants(existing) ? existing : [existing]), ref] : ref;
+}
+
+/** Writes one clicked square back into a mask entry's slot — see `foldedAssignment`. */
 export function withMaskSlotAssigned(tiles: readonly (MaskSlotArt | undefined)[], slot: number, ref: TileRef, appendVariant: boolean): readonly (MaskSlotArt | undefined)[] {
     const next = [...tiles];
-    const existing = next[slot];
-    next[slot] = appendVariant && existing !== undefined ? [...(isMaskSlotVariants(existing) ? existing : [existing]), ref] : ref;
+    next[slot] = foldedAssignment(next[slot], ref, appendVariant);
     return next;
 }
 
-/** Every real `TileRef` a draft entry points at so far — holes skipped, a mask slot's variants flattened — for the mapper's own "already assigned" overlay on the sheet preview. */
+/**
+ * Writes one clicked square into an orientation entry's own named key — the
+ * same idea as `withMaskSlotAssigned`, keyed by name instead of index. An
+ * orientation entry's keys are open-ended rather than a fixed sixteen or
+ * forty-seven, so there's no array of holes to index into: a key simply
+ * isn't in the record until something is assigned to it.
+ */
+export function withOrientationKeyAssigned(tiles: Readonly<Record<string, MaskSlotArt>>, key: string, ref: TileRef, appendVariant: boolean): Record<string, MaskSlotArt> {
+    return { ...tiles, [key]: foldedAssignment(tiles[key], ref, appendVariant) };
+}
+
+/** Every real `TileRef` a draft entry points at so far — holes skipped, a mask slot's (or orientation key's) variants flattened — for the mapper's own "already assigned" overlay on the sheet preview. */
 export function draftTileRefsOf(art: DraftTileArt): TileRef[] {
     if (art.layout === "single") return [art.tile];
-    if (art.layout === "orientation") return Object.values(art.tiles);
+    if (art.layout === "orientation") return Object.values(art.tiles).flatMap(maskSlotRefs);
     if (art.layout === "variants") return [...art.tiles];
     return art.tiles.flatMap(slot => (slot === undefined ? [] : maskSlotRefs(slot)));
 }
@@ -380,7 +396,7 @@ function printTileArt(art: DraftTileArt): string | null {
     if (art.layout === "single") return `{ layout: "single", tile: ${quoteTileRef(art.tile)} }`;
     if (art.layout === "variants") return `{ layout: "variants", tiles: [${art.tiles.map(quoteTileRef).join(", ")}] }`;
     if (art.layout === "orientation") {
-        const entries = Object.entries(art.tiles).map(([key, ref]) => `${JSON.stringify(key)}: ${quoteTileRef(ref)}`);
+        const entries = Object.entries(art.tiles).map(([key, slot]) => `${JSON.stringify(key)}: ${quoteMaskSlot(slot)}`);
         return `{ layout: "orientation", tiles: { ${entries.join(", ")} } }`;
     }
     if (art.tiles.some(tile => !tile) || art.tiles.length !== MASK_LAYOUT_SIZES[art.layout]) return null;

@@ -120,6 +120,13 @@ function isCodeNearby(field: TerrainField, col: number, row: number, code: strin
 
 const PIER_SEARCH_RADIUS = 2;
 
+/** Which compass side (col, row) sits on relative to (fromCol, fromRow) — a pier's own `orientation`, the side of the settlement site that faces the water it points out into. */
+function compassDirection(fromCol: number, fromRow: number, col: number, row: number): "n" | "e" | "s" | "w" {
+    const dc = col - fromCol, dr = row - fromRow;
+    if (Math.abs(dc) >= Math.abs(dr)) return dc >= 0 ? "e" : "w";
+    return dr >= 0 ? "s" : "n"; // row increases downward on the grid
+}
+
 /** Piers (§3.5.3): a shore tile beside a settlement site on the coast — landmarks, not a route, so no cost changes. A site with no beach nearby simply gets none. */
 export function derivePierOverlays(field: TerrainField, nodes: readonly WorldNode[], claimed: ReadonlySet<number>): OverlayPlacement[] {
     const placements: OverlayPlacement[] = [];
@@ -129,7 +136,8 @@ export function derivePierOverlays(field: TerrainField, nodes: readonly WorldNod
         const { col, row } = tileAt(field, node);
         const tile = nearestUnclaimedTile(field, col, row, BEACH_CODE, PIER_SEARCH_RADIUS, owned);
         if (tile === undefined) continue;
-        placements.push({ tile, code: PIER_CODE });
+        const orientation = compassDirection(col, row, tile % field.columns, Math.floor(tile / field.columns));
+        placements.push({ tile, code: PIER_CODE, orientation });
         owned.add(tile);
     }
     return placements;

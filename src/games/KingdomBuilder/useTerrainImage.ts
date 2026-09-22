@@ -265,9 +265,14 @@ function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, o
         if (!art) continue;
 
         const col = placement.tile % field.columns, row = Math.floor(placement.tile / field.columns);
+        // An orientation key may itself hold several interchangeable tiles
+        // (the same MaskSlotArt escape hatch a mask slot uses) — picked the
+        // same stable, seeded way, so "several different ruins under one
+        // key" varies per placement rather than always drawing the first one.
+        const orientationSlot = art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] : undefined;
         const ref =
             art.layout === "single" ? art.tile :
-            art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] :
+            art.layout === "orientation" ? (orientationSlot ? pickMaskSlotTile(orientationSlot, col, row) : undefined) :
             art.layout === "variants" ? art.tiles[seededVariantIndex(col, row, art.tiles.length)] :
             maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile), col, row); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
         if (!ref) continue;

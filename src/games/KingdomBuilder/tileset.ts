@@ -24,20 +24,30 @@
 //   more art — a 3×3 nine-slice fills a `mask16` with aliases, a `mask47`
 //   wants 47 drawn squares — so both layouts stay and the art decides.
 // - `orientation` — a handful of tiles keyed by whatever orientation string
-//   the placement carries (a bridge's `OverlayPlacement.orientation`).
+//   the placement carries (`OverlayPlacement.orientation`). Only two overlays
+//   have a generator that actually sets one: Bridge and Ford get `"ns"` or
+//   `"ew"` — the direction the crossing itself runs through that tile, north–
+//   south or east–west (worldgen/graphConnectivity.ts) — and Pier gets one of
+//   `"n"`/`"e"`/`"s"`/`"w"`, the side of the settlement site that faces the
+//   water (worldgen/overlayVocabulary.ts). Every other overlay's placements
+//   never carry one, so they always draw whichever key was declared first —
+//   which is exactly how an entry with no real direction (Signpost, Ruins,
+//   Standing stones, Shipwreck, Watchtower) is meant to use this layout: one
+//   key (e.g. `"default"`) is enough, and a placement's own tile picks between
+//   that key's variants (below) rather than between keys.
 // - `variants` — a handful of interchangeable tiles, picked by a seeded hash
 //   of the tile's own coordinates, so a big field of grass doesn't visibly
 //   repeat and the pick is stable across renders and across players.
 // - `single` — one tile, for a landmark that only looks one way.
 //
-// Any slot of a `mask16`/`mask47` entry may itself declare several
-// interchangeable tiles instead of one — a `MaskSlotArt`, picked by the same
-// seeded hash a `variants` area uses. That is the escape hatch for the slot a
-// big filled area leans on hardest: mask16's fully-interior slot (mask 15),
-// where a single square of grass repeating across a whole field of it reads
-// as an obvious tile rather than a texture. A plain `TileRef` still means
-// exactly what it always did, so every existing entry keeps meaning what it
-// printed.
+// Any slot of a `mask16`/`mask47` entry, or any key of an `orientation` entry,
+// may itself declare several interchangeable tiles instead of one — a
+// `MaskSlotArt`, picked by the same seeded hash a `variants` area uses. That
+// is the escape hatch for "there might be several different ruins" as much as
+// it is for mask16's fully-interior slot (mask 15), where a single square of
+// grass repeating across a whole field of it reads as an obvious tile rather
+// than a texture. A plain `TileRef` still means exactly what it always did,
+// so every existing entry keeps meaning what it printed.
 //
 // A `TileRef` is one square by default and may instead describe a **piece**
 // several squares across: the walled town, the church, the two-square cliff
@@ -109,7 +119,7 @@ export type MaskSlotArt = TileRef | readonly TileRef[];
 export type TileArt =
     | { layout: "mask16"; tiles: readonly MaskSlotArt[] }
     | { layout: "mask47"; tiles: readonly MaskSlotArt[] }
-    | { layout: "orientation"; tiles: Readonly<Record<string, TileRef>> }
+    | { layout: "orientation"; tiles: Readonly<Record<string, MaskSlotArt>> }
     | { layout: "variants"; tiles: readonly TileRef[] }
     | { layout: "single"; tile: TileRef };
 
@@ -340,7 +350,7 @@ export function blobIndexOf(mask8: number): number {
 /** Every `TileRef` a `TileArt` entry can hand out, for validating each one lands in bounds without a caller re-deriving the shape per layout. */
 export function tileRefsOf(art: TileArt): readonly TileRef[] {
     if (art.layout === "single") return [art.tile];
-    if (art.layout === "orientation") return Object.values(art.tiles);
+    if (art.layout === "orientation") return Object.values(art.tiles).flatMap(maskSlotRefs);
     if (isMaskArt(art)) return art.tiles.flatMap(maskSlotRefs);
     return art.tiles;
 }
