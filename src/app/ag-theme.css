@@ -4856,21 +4856,29 @@ button.ag-tt-ticket { cursor: pointer; }
 /* The editor's own toolbar row: the mode buttons keep their natural width
    (unlike .ag-btn-row, which stretches its children), and the zoom group is
    pushed to the end. */
-.ag-rcedit-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.ag-rcedit-toolbar-zoom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.ag-rcedit-toolbar, .ag-editor-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ag-rcedit-toolbar-zoom, .ag-editor-zoom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
 /* The printed file — a read-only code block, monospace and pre-wrapped. */
 .ag-rcedit-code, .ag-editor-code { font-family: monospace; font-size: 12px; white-space: pre; }
 .ag-rcedit-issues { margin: 0; padding-left: 18px; }
 /* The image plus its tile overlay scrolls inside a fixed frame so a big circuit
-   pans without pushing the panels off-screen; the SVG is sized in px for zoom. */
-.ag-rcedit-canvas {
+   pans without pushing the panels off-screen; the SVG is sized in px for zoom.
+   The tile mapper's sheet preview wants exactly the same frame, for the same
+   reason: an ordinary tilesheet is a dozen squares across and twenty down, and
+   at a size whose squares can be clicked accurately that is taller than the
+   screen and wider than the column. */
+.ag-rcedit-canvas, .ag-editor-canvas {
     overflow: auto;
     max-height: 65vh;
     border: 1px solid var(--ag-line);
     border-radius: 12px;
     background: var(--ag-surface-2);
-    touch-action: none;
 }
+/* Only the track editor's: it owns every pointer press on its canvas (see
+   RaceCarsTrackEditor.tsx), so the browser must not claim one as a pan. The
+   mapper wants the opposite — a tall sheet is scrolled by touch like anything
+   else, and its own handling is a plain click. */
+.ag-rcedit-canvas { touch-action: none; }
 .ag-rcedit-svg { display: block; background: var(--ag-surface); touch-action: none; }
 .ag-rcedit-tile {
     fill: color-mix(in oklch, var(--ag-terracotta) 65%, white);

@@ -19,6 +19,33 @@ export function suggestedTileSizes(imageWidth: number, imageHeight: number, marg
     return sizes;
 }
 
+/**
+ * The width the sheet preview has to play with: the app column
+ * (`--ag-app-width`, 480px) less `.ag-section`'s 20px of padding each side.
+ * A sheet wider than this scrolls inside its frame rather than being squeezed
+ * — see `previewScale`.
+ */
+export const PREVIEW_WIDTH = 440;
+
+/** Never shrink pixel art below 1:1 in an editor — an 8px square at half size is unhittable, and the frame scrolls instead. Never blow it up past 4×, where a sheet stops fitting on screen at all. */
+const MIN_PREVIEW_SCALE = 1;
+const MAX_PREVIEW_SCALE = 4;
+
+/**
+ * How many screen pixels one sheet pixel is drawn at: fit the sheet's width to
+ * the column, clamped, then multiplied by whatever the zoom stepper is on.
+ *
+ * Clamping at 1 rather than fitting unconditionally is the point. A 1024px
+ * sheet fitted to a 440px column would draw a 16px square at 7 screen pixels,
+ * which no one can click accurately; at 1:1 it overflows and the frame scrolls,
+ * which is what the track editor's canvas does for the same reason.
+ */
+export function previewScale(naturalWidth: number, zoom = 1): number {
+    if (naturalWidth <= 0) return MIN_PREVIEW_SCALE;
+    const fitted = Math.min(MAX_PREVIEW_SCALE, Math.max(MIN_PREVIEW_SCALE, PREVIEW_WIDTH / naturalWidth));
+    return fitted * zoom;
+}
+
 export interface GridFit {
     columns: number;
     rows: number;

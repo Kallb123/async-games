@@ -399,10 +399,23 @@ rather than a human with a calculator.
    naming how many, rather than printed with a hole in it, so a half-finished
    draft never turns into a `tileset.ts` that doesn't compile.
 
+**The preview frame** is the track editor's (`.ag-rcedit-canvas` /
+`.ag-editor-canvas`, one rule): the sheet and its grid overlay scroll inside a
+fixed frame rather than pushing the panels off the screen. An ordinary
+tilesheet is a dozen squares across and twenty down, and at a size whose
+squares can be clicked accurately that is taller than the screen. A small sheet
+is scaled up to fill the column; a big one stays at 1:1 and scrolls, because a
+16px square drawn at 7 screen pixels can't be clicked accurately — and the
+zoom stepper overrides both. `previewScale` in `tileMapperModel.ts` has the
+reasoning and the test.
+
 **Save/resume** works the same as the track editor's: the draft — every
 sheet, every assignment — autosaves to this browser's storage, so a reload
 keeps the work. The loaded image itself doesn't: an *Art path* reloads for
-free, and an uploaded file asks to be chosen again.
+free, and an uploaded file asks to be chosen again. The sheet's pixel
+dimensions are re-measured every time the image changes, so swapping a
+192×336 sheet in after a 128×128 one re-cuts the grid for the new shape
+instead of keeping the old one's.
 
 ### No "What's new" entry
 
