@@ -1480,7 +1480,7 @@ one-line entries in the guide and tutorial registries.
      and the unknown-code path), `rulebook` (two new registries with their
      tests, new files in `worldgen/`, new schema fields).
      No `whatsNew.ts` line: nothing here is visible yet.
-- **PR 10 — Draw the ground beneath the graph.** §3.5.6's composited layer, in
+- **PR 10 — Draw the ground beneath the graph.** Shipped. §3.5.6's composited layer, in
   flat colours, before any art exists.
   1. The `tileset.ts` manifest with its sheet list empty and nothing but each
      registry entry's fallback colour resolved — plus the guard test in its
@@ -1500,7 +1500,7 @@ one-line entries in the guide and tutorial registries.
      the grid, an unknown area code, and an object URL that must not leak on
      every refetch — draw the fallback, never throw inside a board).
   6. One `whatsNew.ts` line: the world map now reads as terrain.
-- **PR 11 — The sheets, the mapper and the borders.** The art landing, and the
+- **PR 11 — The sheets, the mapper and the borders.** Shipped. The art landing, and the
   first PR here that needs art to exist.
   1. The tileset mapper at `/admin/kingdombuilder-tiles` per §3.5.5: the
      **pixel tile-size picker** (width and height, margin and spacing, live
