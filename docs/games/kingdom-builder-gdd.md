@@ -1375,10 +1375,12 @@ one player, no map, no armies.
 Each PR below is additive on top of the shipped prototype — new fields, new
 routes, new commands — so the same non-disruption property holds: none of
 them changes what Milestone A already does for a settlement sitting alone.
-Three of them reach outside Kingdom Builder's own files, and they are
-deliberately the only three: **PR 7** touches the home dashboard and the app
-rail, **PR 11** adds a page to `/admin` and its entry in the admin-tools doc,
-and **PR 22** the push-notification plumbing. Everything else stays inside
+Four of them reach outside Kingdom Builder's own files, and they are
+deliberately the only four: **PR 7** touches the home dashboard and the app
+rail, **PR 8** the shared invitation flow (`acceptSeat`, the lobby routes, the
+join-code card and seat-count hook it shares with every setup screen),
+**PR 11** adds a page to `/admin` and its entry in the admin-tools doc, and
+**PR 22** the push-notification plumbing. Everything else stays inside
 `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 23's
 one-line entries in the guide and tutorial registries.
 
@@ -1421,7 +1423,7 @@ one-line entries in the guide and tutorial registries.
   cardinality problem answered by shape rather than by squeezing a persistent
   world into the single-match model.
 
-- **PR 8 — More than one player in a world.** The generator has placed ten
+- **PR 8 — More than one player in a world.** Shipped. The generator has placed ten
   fair `player-start` sites since PR 1 (§3.3) and `foundSettlement` has taken
   a `userId` since PR 2, but only ever one is claimed:
   `/api/newgame/kingdombuilder` founds the host's settlement and the other
@@ -1457,6 +1459,20 @@ one-line entries in the guide and tutorial registries.
      while a tick is mid-sweep), `rulebook` (the setup screen should now look
      like every other setup screen).
   7. One `whatsNew.ts` line.
+
+  How it landed: the roster is `hostId`, `seatCount` and `roster` on the world
+  document; `joinWorld` claims a seat with one conditional `$push` (no seat
+  already, site free, roster short of the seat count) and then founds through
+  `foundSettlement(…, "first")`. The code, its expiry and the invite rows live
+  on a `KingdomBuilderInvitation` — the ordinary lobby invitation plus a
+  `worldId` — whose seats `acceptSeat` accepts by joining the world instead of
+  gating on everyone and calling `CreateGame`; it is kept out of
+  `INVITATION_MODELS` so the generic lobby route can never mint one without a
+  world. The code is reaped with the lobby's longest lifetime (seven days), so
+  a world's unfilled seats close with it rather than staying a permanent open
+  link. The "world size" on the setup screen is its seat count — the named
+  players plus the open seats plus the host. The `whatsNew.ts` line was left
+  for the release that announces multiplayer.
 
 - **PR 9 — The area registry and the generated ground.** Shipped. §3.5.2 and
   §3.5.4, with no art and no new pixels on screen: the world gains a ground
