@@ -130,6 +130,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Kingdom Builder's world map no longer hides its own ground art",
+                detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, blotting out the grass, forest and quarry art underneath it and the squares around it. Settlement markers are now sized to fit their own square, and a big field of grass draws from several tiles instead of repeating one, so the map reads as a picture again.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Signing in with Google no longer leaves the form tappable underneath",
                 detail: "In the app, tapping Continue with Google could sit for a moment while your account was checked and our side of the handshake finished — and until now the sign-in card underneath stayed fully clickable the whole time, so a stray tap could fight the sign-in already under way. It's now covered by a pulsing loading bar and locked until the check is done.",
             },
@@ -166,11 +171,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A Settlements & Cities turn that ends itself gives nothing away",
                 detail: "When your turn ended on its own because there was nothing left to build, buy or trade, the match log told everyone exactly that — so the table could work out you couldn't afford a road and were short of every resource. An automatic ending now reads as \"ended their turn\", the same as tapping the button — in the log, in the notification others get, and in the match review. You still see your own roll held on screen with the note explaining it.",
-                game: "settlementsandcities",
-            },
-            {
-                title: "The dice roll chart's tallest bars are the right height again",
-                detail: "On a Settlements & Cities result page, every bar near the top of the roll frequency chart was drawn at the same height — a 7 rolled sixteen times looked no more common than a 5 rolled thirteen times, so the shape the chart exists to show was flattened out. The bars are back in proportion, with the count still sitting on top of each one.",
                 game: "settlementsandcities",
             },
         ],

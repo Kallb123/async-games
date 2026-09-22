@@ -24,15 +24,18 @@ import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { MAX_LOCAL_IMAGE_BYTES } from "@/utils/ui/editorLimits";
 import {
     diagonalApplies,
+    draftTileRefsOf,
     gridFit,
     isDraftMaskArt,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
     maskRemaining,
+    maskSlotVariantCount,
     previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
+    withMaskSlotAssigned,
     type DiagonalName,
     type DraftTileArt,
     type NeighbourSides,
@@ -85,13 +88,18 @@ function layoutOf(art: DraftTileArt | undefined): Layout | null {
     return art?.layout ?? null;
 }
 
-/** A mask entry's slots stay real holes (`undefined`) until each one is actually clicked — `maskRemaining`'s "N left" count, and the guard the export panel warns about, both depend on an unclicked slot never quietly reading as done. */
-function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: TileRef, role: string): DraftTileArt {
+/**
+ * A mask entry's slots stay real holes (`undefined`) until each one is
+ * actually clicked — `maskRemaining`'s "N left" count, and the guard the
+ * export panel warns about, both depend on an unclicked slot never quietly
+ * reading as done. `appendVariant` folds the click into whatever the slot
+ * already holds instead of overwriting it — see `withMaskSlotAssigned`.
+ */
+function withTileAssigned(art: DraftTileArt | undefined, layout: Layout, ref: TileRef, role: string, appendVariant: boolean): DraftTileArt {
     if (isMaskLayout(layout)) {
         const slot = Number(role);
-        const tiles = art && isDraftMaskArt(art) && art.layout === layout ? [...art.tiles] : new Array<TileRef | undefined>(MASK_LAYOUT_SIZES[layout]).fill(undefined);
-        tiles[slot] = ref;
-        return { layout, tiles };
+        const tiles = art && isDraftMaskArt(art) && art.layout === layout ? art.tiles : new Array(MASK_LAYOUT_SIZES[layout]).fill(undefined);
+        return { layout, tiles: withMaskSlotAssigned(tiles, slot, ref, appendVariant) };
     }
     if (layout === "orientation") {
         const tiles = art?.layout === "orientation" ? { ...art.tiles } : {};
@@ -171,6 +179,10 @@ export default function KingdomBuilderTileMapper() {
     // so it is a mode you turn on deliberately and which turns itself off
     // again after the click that used it.
     const [nineSliceArmed, setNineSliceArmed] = useState(false);
+    // A mask slot's second (and third, …) tile — folding a click into what
+    // the slot already holds instead of replacing it, the same way ticking
+    // this on and clicking several squares builds up a `variants` area's list.
+    const [addVariant, setAddVariant] = useState(false);
     const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
     const [zoom, setZoom] = useState(1);
 
@@ -201,6 +213,10 @@ export default function KingdomBuilderTileMapper() {
     const piecesAllowed = singleSquareReason(entryKind, activeLayout) === null;
     // One 47-slot derivation, read by the role tag, the hint and `assignTile`.
     const maskSlot = blobIndexOf(mask8FromSides(maskSideState));
+    // Whichever of the two the active layout actually is — read by `assignTile` and the variant toggle alike, so they can't drift onto different slots from the same checkboxes.
+    const activeMaskSlot = activeLayout === "mask16" ? maskFromSides(maskSideState) : maskSlot;
+    const activeMaskSlotTiles = currentArt && isDraftMaskArt(currentArt) && currentArt.layout === activeLayout ? currentArt.tiles : undefined;
+    const activeMaskSlotVariantCount = maskSlotVariantCount(activeMaskSlotTiles?.[activeMaskSlot]);
 
     /**
      * Writes the picked entry's art back into the draft, given whatever it was
@@ -227,11 +243,10 @@ export default function KingdomBuilderTileMapper() {
         if (!entryCode) return;
         const ref = withPiece({ sheet: draft.sheetName, index }, piece, piecesAllowed);
         const role =
-            activeLayout === "mask16" ? String(maskFromSides(maskSideState)) :
-            activeLayout === "mask47" ? String(maskSlot) :
+            isMaskLayout(activeLayout) ? String(activeMaskSlot) :
             activeLayout === "orientation" ? orientationKey.trim() : "";
         if (activeLayout === "orientation" && !role) return;
-        updateArt(previous => withTileAssigned(previous, activeLayout, ref, role));
+        updateArt(previous => withTileAssigned(previous, activeLayout, ref, role, isMaskLayout(activeLayout) && addVariant));
     };
 
     /**
@@ -259,9 +274,8 @@ export default function KingdomBuilderTileMapper() {
         const map = new Map<number, string>();
         const record = (byCode: Record<string, DraftTileArt>) => {
             for (const [code, art] of Object.entries(byCode)) {
-                const refs = art.layout === "single" ? [art.tile] : art.layout === "orientation" ? Object.values(art.tiles) : art.tiles;
-                for (const ref of refs) {
-                    if (!ref || ref.sheet !== draft.sheetName) continue;
+                for (const ref of draftTileRefsOf(art)) {
+                    if (ref.sheet !== draft.sheetName) continue;
                     // A piece claims every square it covers, so the preview
                     // marks the whole rectangle rather than only its corner.
                     for (const part of tilePieceParts(ref, Math.max(1, fit?.columns ?? 1))) map.set(part.index, code);
@@ -341,14 +355,14 @@ export default function KingdomBuilderTileMapper() {
                 <div className="ag-editor-grid">
                     <label className="ag-editor-field">
                         <span className="ag-field-label">Kind</span>
-                        <select className="ag-select" value={entryKind} onChange={event => { setEntryKind(event.target.value as EntryKind); setEntryCode(""); }}>
+                        <select className="ag-select" value={entryKind} onChange={event => { setEntryKind(event.target.value as EntryKind); setEntryCode(""); setAddVariant(false); }}>
                             <option value="area">Area</option>
                             <option value="overlay">Overlay</option>
                         </select>
                     </label>
                     <label className="ag-editor-field">
                         <span className="ag-field-label">Registry entry</span>
-                        <select className="ag-select" value={entryCode} onChange={event => setEntryCode(event.target.value)}>
+                        <select className="ag-select" value={entryCode} onChange={event => { setEntryCode(event.target.value); setAddVariant(false); }}>
                             <option value="">Choose one…</option>
                             {(entryKind === "area" ? AREAS : OVERLAYS).map(entry => (
                                 <option key={entry.code} value={entry.code}>{entry.name} ({entry.code})</option>
@@ -385,6 +399,18 @@ export default function KingdomBuilderTileMapper() {
                             </span>
                             {currentArt && isDraftMaskArt(currentArt) && <span className="ag-tag">{maskRemaining(currentArt.layout, currentArt.tiles)} of {MASK_LAYOUT_SIZES[currentArt.layout]} left</span>}
                         </div>
+                        {activeMaskSlotVariantCount > 0 && (
+                            <div className="ag-btn-row ag-btn-row--wrap">
+                                <label className="ag-editor-field ag-editor-field--inline">
+                                    <input type="checkbox" checked={addVariant} onChange={event => setAddVariant(event.target.checked)} />
+                                    <span className="ag-field-label">Add as another variant for this slot instead of replacing it</span>
+                                </label>
+                                <span className="ag-hint">
+                                    {activeMaskSlotVariantCount} tile{activeMaskSlotVariantCount === 1 ? "" : "s"} for this slot so far{activeMaskSlotVariantCount > 1 ? " — one is picked per square of map, stably" : ""}.
+                                    {" "}Handy for the fully-interior slot of a big filled area (mask 15), where one tile repeating reads as an obvious tile rather than a texture.
+                                </span>
+                            </div>
+                        )}
                         {activeLayout === "mask16" && (
                             <div className="ag-btn-row ag-btn-row--wrap">
                                 <button type="button" className={nineSliceArmed ? "ag-btn ag-btn--primary" : "ag-btn ag-btn--light"} onClick={() => setNineSliceArmed(!nineSliceArmed)} disabled={!entryCode}>
@@ -424,7 +450,7 @@ export default function KingdomBuilderTileMapper() {
                     <p className="ag-hint">
                         {nineSliceArmed
                             ? <>Click the <strong>top-left</strong> square of a 3×3 block to fill all sixteen of <strong>{entryCode}</strong>&apos;s masks from it.</>
-                            : <>Click a square below to assign it to <strong>{entryCode}</strong>{activeLayout === "mask16" ? ` — mask ${maskFromSides(maskSideState)}` : activeLayout === "mask47" ? ` — slot ${maskSlot}` : ""}.</>}
+                            : <>Click a square below to {isMaskLayout(activeLayout) && addVariant ? "add another variant to" : "assign it to"} <strong>{entryCode}</strong>{isMaskLayout(activeLayout) ? ` — ${activeLayout === "mask16" ? "mask" : "slot"} ${activeMaskSlot}` : ""}.</>}
                     </p>
                 )}
                 {!entryCode && <p className="ag-hint">Choose a registry entry above before clicking the sheet.</p>}

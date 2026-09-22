@@ -4,7 +4,7 @@
 // owns pointer handling and the panels; this owns the grid maths, the tile
 // size suggestions and the printed `tileset.ts` source.
 
-import { blobKey, cellToIndex, indexToCell, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
+import { blobKey, cellToIndex, indexToCell, isMaskSlotVariants, maskSlotRefs, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
 
 /** A sheet whose grid divides its image evenly on both axes, in the range a real tilesheet's tile size is likely to sit in. Sorted smallest first, so the UI can offer them as "did you mean" chips without the author counting squares themselves. */
 export function suggestedTileSizes(imageWidth: number, imageHeight: number, margin: number, spacing: number, min = 8, max = 128): number[] {
@@ -184,8 +184,8 @@ export function mask16FromNineSlice(sheet: string, topLeftIndex: number, columns
  * of printing a hole no `TileRef` could describe.
  */
 export type DraftTileArt =
-    | { layout: "mask16"; tiles: readonly (TileRef | undefined)[] }
-    | { layout: "mask47"; tiles: readonly (TileRef | undefined)[] }
+    | { layout: "mask16"; tiles: readonly (MaskSlotArt | undefined)[] }
+    | { layout: "mask47"; tiles: readonly (MaskSlotArt | undefined)[] }
     | { layout: "orientation"; tiles: Readonly<Record<string, TileRef>> }
     | { layout: "variants"; tiles: readonly TileRef[] }
     | { layout: "single"; tile: TileRef };
@@ -195,9 +195,39 @@ export function isDraftMaskArt(art: DraftTileArt): art is Extract<DraftTileArt, 
     return isMaskLayout(art.layout);
 }
 
-/** How many of a mask entry's slots are still unassigned, for the panel's own "7 of 16 left" nudge. */
-export function maskRemaining(layout: MaskLayout, tiles: readonly (TileRef | undefined)[]): number {
+/** How many of a mask entry's slots are still unassigned, for the panel's own "7 of 16 left" nudge. A slot counts as assigned whether it holds one tile or several variants. */
+export function maskRemaining(layout: MaskLayout, tiles: readonly (MaskSlotArt | undefined)[]): number {
     return MASK_LAYOUT_SIZES[layout] - tiles.filter(Boolean).length;
+}
+
+/** How many interchangeable tiles a mask slot already holds — 0 for one not yet clicked, 1 for a plain slot, or however many variants its array has. Powers the mapper's own "N variant(s) so far" hint next to a mask role. */
+export function maskSlotVariantCount(slot: MaskSlotArt | undefined): number {
+    if (slot === undefined) return 0;
+    return isMaskSlotVariants(slot) ? slot.length : 1;
+}
+
+/**
+ * Writes one clicked square back into a mask entry's slot — replacing
+ * whatever was there, or, with `appendVariant`, folding it in alongside what
+ * was there instead: the slot's existing single tile becomes a two-tile
+ * variant array, and an existing variant array just grows by one. That is
+ * the mapper's own version of what a `variants` area already does by simply
+ * appending to its list — a mask slot's "list" is just one slot deep inside
+ * its sixteen (or forty-seven).
+ */
+export function withMaskSlotAssigned(tiles: readonly (MaskSlotArt | undefined)[], slot: number, ref: TileRef, appendVariant: boolean): readonly (MaskSlotArt | undefined)[] {
+    const next = [...tiles];
+    const existing = next[slot];
+    next[slot] = appendVariant && existing !== undefined ? [...(isMaskSlotVariants(existing) ? existing : [existing]), ref] : ref;
+    return next;
+}
+
+/** Every real `TileRef` a draft entry points at so far — holes skipped, a mask slot's variants flattened — for the mapper's own "already assigned" overlay on the sheet preview. */
+export function draftTileRefsOf(art: DraftTileArt): TileRef[] {
+    if (art.layout === "single") return [art.tile];
+    if (art.layout === "orientation") return Object.values(art.tiles);
+    if (art.layout === "variants") return [...art.tiles];
+    return art.tiles.flatMap(slot => (slot === undefined ? [] : maskSlotRefs(slot)));
 }
 
 /** Prints only the piece fields a ref actually departs from the defaults on, so the overwhelmingly common one-square ref still prints as the `{ sheet, index }` it always did. */
@@ -214,6 +244,11 @@ function quoteTileRef(ref: TileRef): string {
     return `{ ${parts.join(", ")} }`;
 }
 
+/** A mask slot's own printed form: a bare ref, or `[ref, ref, …]` for one holding several variants. */
+function quoteMaskSlot(slot: MaskSlotArt): string {
+    return isMaskSlotVariants(slot) ? `[${slot.map(quoteTileRef).join(", ")}]` : quoteTileRef(slot);
+}
+
 /** `null` for a mask entry that hasn't had all its slots clicked yet — nothing valid to print, so the caller falls back to a comment naming how many are left rather than a `TileArt` with a hole in it. */
 function printTileArt(art: DraftTileArt): string | null {
     if (art.layout === "single") return `{ layout: "single", tile: ${quoteTileRef(art.tile)} }`;
@@ -223,7 +258,7 @@ function printTileArt(art: DraftTileArt): string | null {
         return `{ layout: "orientation", tiles: { ${entries.join(", ")} } }`;
     }
     if (art.tiles.some(tile => !tile) || art.tiles.length !== MASK_LAYOUT_SIZES[art.layout]) return null;
-    return `{ layout: "${art.layout}", tiles: [${art.tiles.map(tile => quoteTileRef(tile as TileRef)).join(", ")}] }`;
+    return `{ layout: "${art.layout}", tiles: [${art.tiles.map(tile => quoteMaskSlot(tile as MaskSlotArt)).join(", ")}] }`;
 }
 
 /**

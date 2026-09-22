@@ -380,6 +380,15 @@ rather than a human with a calculator.
    tinted and labelled with its entry's code so the sheet reads back at a
    glance, and a piece marks every square it covers rather than just its
    corner. A mask entry's own panel counts down "N of 16 left" (or of 47).
+   Once a mask role already holds a tile, an **"Add as another variant for
+   this slot"** checkbox appears next to it: tick it and the next click folds
+   the new square into that slot instead of replacing it, so the slot ends up
+   holding several interchangeable tiles — picked at render time the same
+   seeded-hash way a `variants` entry's own list is. It's the escape hatch for
+   the slot a big filled area leans on hardest, mask16's fully-interior slot
+   (mask 15, every side ticked): several plain-grass squares instead of one
+   repeating across the whole field. Leave it unticked to keep clicking
+   normally replacing whatever a role already holds.
 6. **Or import a nine-slice.** Most hand-drawn sheets arrive as 3×3 blocks —
    corner, edge, centre — which is nine of the sixteen neighbourhoods a
    `mask16` wants. *Import a 3×3 nine-slice* arms the next click to take that

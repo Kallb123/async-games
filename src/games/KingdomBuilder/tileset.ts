@@ -30,6 +30,15 @@
 //   repeat and the pick is stable across renders and across players.
 // - `single` — one tile, for a landmark that only looks one way.
 //
+// Any slot of a `mask16`/`mask47` entry may itself declare several
+// interchangeable tiles instead of one — a `MaskSlotArt`, picked by the same
+// seeded hash a `variants` area uses. That is the escape hatch for the slot a
+// big filled area leans on hardest: mask16's fully-interior slot (mask 15),
+// where a single square of grass repeating across a whole field of it reads
+// as an obvious tile rather than a texture. A plain `TileRef` still means
+// exactly what it always did, so every existing entry keeps meaning what it
+// printed.
+//
 // A `TileRef` is one square by default and may instead describe a **piece**
 // several squares across: the walled town, the church, the two-square cliff
 // face no single ground tile can hold. A piece states where its own anchor
@@ -94,12 +103,44 @@ export interface TileRef {
     anchorY?: number;
 }
 
+/** One mask slot's art: a single tile, as every slot used to be, or several interchangeable ones — see the file header. */
+export type MaskSlotArt = TileRef | readonly TileRef[];
+
 export type TileArt =
-    | { layout: "mask16"; tiles: readonly TileRef[] }
-    | { layout: "mask47"; tiles: readonly TileRef[] }
+    | { layout: "mask16"; tiles: readonly MaskSlotArt[] }
+    | { layout: "mask47"; tiles: readonly MaskSlotArt[] }
     | { layout: "orientation"; tiles: Readonly<Record<string, TileRef>> }
     | { layout: "variants"; tiles: readonly TileRef[] }
     | { layout: "single"; tile: TileRef };
+
+/** True for a mask slot declaring several interchangeable tiles rather than one. */
+export function isMaskSlotVariants(slot: MaskSlotArt): slot is readonly TileRef[] {
+    return Array.isArray(slot);
+}
+
+/** Every `TileRef` a mask slot could ever draw — itself, for a plain slot, or all of a variant slot's — so the guard can check each one lands in bounds. */
+export function maskSlotRefs(slot: MaskSlotArt): readonly TileRef[] {
+    return isMaskSlotVariants(slot) ? slot : [slot];
+}
+
+/**
+ * A deterministic pick in `[0, count)` from a tile's own coordinates — no
+ * `Math.random`, so a `variants` area's texture (and a mask slot's own
+ * variants) are stable across renders and identical for every player looking
+ * at the same world.
+ */
+export function seededVariantIndex(col: number, row: number, count: number): number {
+    if (count <= 0) return 0;
+    const h = Math.imul(col, 374761393) ^ Math.imul(row, 668265263);
+    const mixed = Math.imul(h ^ (h >>> 13), 1274126177);
+    return Math.abs(mixed ^ (mixed >>> 16)) % count;
+}
+
+/** The one `TileRef` a mask slot draws for a particular square of map: itself, for a plain slot, or one of its variants, picked the same stable way a `variants` area's own tile is. Undefined only where a slot's variants array is empty — the guard rejects that, so a real manifest never reaches it. */
+export function pickMaskSlotTile(slot: MaskSlotArt, col: number, row: number): TileRef | undefined {
+    if (!isMaskSlotVariants(slot)) return slot;
+    return slot.length > 0 ? slot[seededVariantIndex(col, row, slot.length)] : undefined;
+}
 
 /** How many tiles a mask layout must declare — the length its `tiles` array is guarded at, and the number of slots the mapper counts down from. */
 export const MASK_LAYOUT_SIZES = { mask16: 16, mask47: 47 } as const;
@@ -134,7 +175,13 @@ export const TILESET: TilesetManifest = {
 };
 
 export const AREA_ART: Readonly<Record<string, TileArt>> = {
-    g: { layout: "mask16", tiles: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }] },
+    // Every slot but the fully-interior one (15) is still a placeholder —
+    // this area has no differentiated edge art yet, only a flat fill. Slot
+    // 15 draws from several plain-grass squares of the sheet instead of
+    // repeating one, picked per square the same stable way a `variants`
+    // area is (§3.5.5) — a big field of grass reads as a texture rather
+    // than one obviously-tiled square.
+    g: { layout: "mask16", tiles: [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, { sheet: "ground", index: 0 }, [{ sheet: "ground", index: 0 }, { sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }, { sheet: "ground", index: 3 }, { sheet: "ground", index: 4 }]] },
     r: { layout: "mask16", tiles: [{ sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 50 }, { sheet: "ground", index: 62 }, { sheet: "ground", index: 49 }, { sheet: "ground", index: 61 }] },
     w: { layout: "mask16", tiles: [{ sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 81 }, { sheet: "ground", index: 57 }, { sheet: "ground", index: 69 }, { sheet: "ground", index: 57 }, { sheet: "ground", index: 69 }, { sheet: "ground", index: 83 }, { sheet: "ground", index: 83 }, { sheet: "ground", index: 82 }, { sheet: "ground", index: 82 }, { sheet: "ground", index: 59 }, { sheet: "ground", index: 71 }, { sheet: "ground", index: 58 }, { sheet: "ground", index: 70 }] },
     s: { layout: "mask16", tiles: [{ sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 75 }, { sheet: "ground", index: 51 }, { sheet: "ground", index: 63 }, { sheet: "ground", index: 51 }, { sheet: "ground", index: 63 }, { sheet: "ground", index: 77 }, { sheet: "ground", index: 77 }, { sheet: "ground", index: 76 }, { sheet: "ground", index: 76 }, { sheet: "ground", index: 53 }, { sheet: "ground", index: 65 }, { sheet: "ground", index: 52 }, { sheet: "ground", index: 64 }] },
@@ -294,6 +341,7 @@ export function blobIndexOf(mask8: number): number {
 export function tileRefsOf(art: TileArt): readonly TileRef[] {
     if (art.layout === "single") return [art.tile];
     if (art.layout === "orientation") return Object.values(art.tiles);
+    if (isMaskArt(art)) return art.tiles.flatMap(maskSlotRefs);
     return art.tiles;
 }
 

@@ -27,7 +27,13 @@ const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
 // Builder's world is a much tighter 100×70 viewBox for many more nodes — the
 // original sizes overlapped each other and read as an oversized graph.
 const TERRAIN_RADIUS = 1.15;
-const SETTLEMENT_RADIUS = 1.6;
+// A settlement's own filled circle sits on top of the composited ground
+// (PR 11's tileset art), not a flat silhouette, so it has to stay small
+// enough that its own tile's art still reads underneath the marker — a
+// square of the field is TERRAIN_FIELD_TILE_SIZE (2 world units) across, and
+// this is deliberately smaller than that rather than the 1.6 that used to
+// spill a filled disc a tile and a half wide over every neighbour's art.
+const SETTLEMENT_RADIUS = 0.85;
 
 function landPath(view: KingdomBuilderWorldView): string {
     const { resolution, width, height, values, landThreshold } = view.landmass;
