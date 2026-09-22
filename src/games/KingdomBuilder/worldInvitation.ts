@@ -3,7 +3,8 @@ import { Types } from "mongoose";
 import type { User } from "@clerk/nextjs/server";
 
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
-import { LOBBY_MAX_TTL_MS, OPEN_SEAT_ID, openSeats } from "@/utils/games/lobby";
+import type { AcceptSeatResult } from "@/utils/games/startGame";
+import { LOBBY_MAX_TTL_MS, OPEN_SEAT_ID, openSeats, seatList } from "@/utils/games/lobby";
 import { saveWithFreshJoinCode } from "@/utils/games/joinCodeSave";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
 import { InvitationModel, type IInvitationData } from "@/utils/mongodb/InvitationData";
@@ -36,14 +37,10 @@ interface OpenWorldInvitationOptions {
  * "anyone can join" link (docs/account-less-play.md §4).
  */
 export function openWorldInvitation({ worldId, host, invitees, openSeatCount }: OpenWorldInvitationOptions): Promise<IKingdomBuilderInvitationDocument> {
-    const userIdList = invitees
-        .map(user => ({ userId: user.id, inviteAccepted: false }))
-        .concat(Array.from({ length: openSeatCount }, () => ({ userId: OPEN_SEAT_ID, inviteAccepted: false })));
-
     return saveWithFreshJoinCode(joinCode => new KingdomBuilderInvitationModel({
         inviteId: randomUUID(),
         senderId: host.id,
-        userIdList,
+        userIdList: seatList(invitees, openSeatCount),
         turnTimer: UNLIMITED_TURN_TIMER,
         timestamp: new Date().toISOString(),
         gameType: KINGDOM_BUILDER_GAME_TYPE,
@@ -64,12 +61,6 @@ export async function liveWorldInvitation(worldId: string): Promise<{ joinCode: 
     return { joinCode: invite.joinCode, expiresAt: invite.expiresAt.toISOString(), openSeats: openSeats(invite).length };
 }
 
-export interface WorldSeatResult {
-    gameStarted: boolean;
-    gameId?: uuidString;
-    gameUrl?: string;
-}
-
 /**
  * `acceptSeat`'s answer for a world invitation. A world was running before
  * anyone was invited to it, so there is no "everyone has accepted, now begin"
@@ -79,8 +70,15 @@ export interface WorldSeatResult {
  *
  * Only a seat on the invitation joins — the host is already in, and anybody
  * else who posts this invitation's id holds nothing on it to accept.
+ *
+ * The seat is marked accepted only after the join lands. Accepted is what
+ * every other road reads as "in" (the join route's already-seated answer, the
+ * lobby screen's forward to the world, the dashboard's spent ✓), so a join
+ * that fails part-way must leave the seat pending: then a retry — the code
+ * again, or Accept on the dashboard — runs the (idempotent) join again rather
+ * than finding a seat that says "in" over a player who isn't.
  */
-export async function acceptWorldSeat(invite: IInvitationData, worldId: string, actorId: string): Promise<WorldSeatResult> {
+export async function acceptWorldSeat(invite: IInvitationData, worldId: string, actorId: string): Promise<AcceptSeatResult> {
     const hasSeat = invite.userIdList.some(seat => seat.userId === actorId);
     if (!hasSeat && invite.senderId !== actorId) return { gameStarted: false };
 
@@ -91,9 +89,8 @@ export async function acceptWorldSeat(invite: IInvitationData, worldId: string, 
             // No room left in the world after all, or it has gone — both
             // refused before any roster seat was taken: hand the invitation
             // seat back to the code so it isn't held by someone who is not in
-            // the world, and say nothing started. Anything later (a founding
-            // that failed after the roster seat landed) keeps both seats: the
-            // world view finishes that founding the next time they open it.
+            // the world, and say nothing started. Anything else leaves the
+            // seat pending, and the request fails for the player to retry.
             if (!(error instanceof KingdomBuilderPersistenceError) || (error.code !== "WORLD_FULL" && error.code !== "WORLD_NOT_FOUND")) throw error;
             await InvitationModel.updateOne(
                 { inviteId: invite.inviteId },
@@ -103,6 +100,11 @@ export async function acceptWorldSeat(invite: IInvitationData, worldId: string, 
             console.warn(`Kingdom Builder: could not seat ${actorId} in world ${worldId}: ${error.code}`);
             return { gameStarted: false };
         }
+        await InvitationModel.updateOne(
+            { inviteId: invite.inviteId },
+            { $set: { "userIdList.$[seat].inviteAccepted": true } },
+            { arrayFilters: [{ "seat.userId": actorId }] },
+        );
     }
     return { gameStarted: true, gameId: worldId as uuidString, gameUrl: meta.url };
 }

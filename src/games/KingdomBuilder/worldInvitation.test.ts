@@ -28,11 +28,22 @@ afterEach(() => {
 });
 
 describe("acceptWorldSeat", () => {
-    it("joins the world for a seat-holder and sends them to it", async () => {
+    it("joins the world for a seat-holder, then marks the seat accepted, and sends them to it", async () => {
+        const updateOne = vi.spyOn(InvitationModel, "updateOne").mockResolvedValue({} as never);
         const result = await acceptWorldSeat(invite([{ userId: "guest", inviteAccepted: true }]), WORLD_ID, "guest");
 
         expect(joinWorld).toHaveBeenCalledWith(WORLD_ID, "guest");
         expect(result).toEqual({ gameStarted: true, gameId: WORLD_ID, gameUrl: "kingdombuilder" });
+        expect(updateOne.mock.calls[0][1]).toEqual({ $set: { "userIdList.$[seat].inviteAccepted": true } });
+        expect(vi.mocked(joinWorld).mock.invocationCallOrder[0]).toBeLessThan(updateOne.mock.invocationCallOrder[0]);
+    });
+
+    it("leaves the seat pending when the join fails part-way, so a retry can finish it", async () => {
+        vi.mocked(joinWorld).mockRejectedValue(new Error("network"));
+        const updateOne = vi.spyOn(InvitationModel, "updateOne");
+
+        await expect(acceptWorldSeat(invite([{ userId: "guest", inviteAccepted: false }]), WORLD_ID, "guest")).rejects.toThrow("network");
+        expect(updateOne).not.toHaveBeenCalled();
     });
 
     it("seats nobody who holds nothing on the invitation", async () => {

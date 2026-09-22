@@ -3,11 +3,11 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
-import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
+import { IInvitationDataDocument, IInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { themeIdFor } from '@/utils/ui/gameThemes';
-import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
+import { lobbyTtlMs, seatList } from '@/utils/games/lobby';
 import { isValidTurnTimer } from '@/utils/games/TurnTimer';
 import { saveWithFreshJoinCode } from '@/utils/games/joinCodeSave';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
@@ -102,9 +102,7 @@ export async function POST(request: NextRequest) {
 
     await dbConnect();
 
-    const userIdList: IUserIdAcceptance[] = invitedUsers
-        .map(user => ({ userId: user.id, inviteAccepted: false }))
-        .concat(Array.from({ length: seatCount }, () => ({ userId: OPEN_SEAT_ID, inviteAccepted: false })));
+    const userIdList = seatList(invitedUsers, seatCount);
 
     // The spread comes first on purpose: every field the server decides —
     // ids, the sender, the seats, the timer, the game, the theme, the code

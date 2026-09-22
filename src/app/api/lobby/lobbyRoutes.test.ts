@@ -16,9 +16,10 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 
-import { ANN, BOB, get, resetApiRouteStubs, seedSnakesAndLadders, signIn, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, get, jsonPost, resetApiRouteStubs, seedSnakesAndLadders, signIn, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { GET as lobby } from './[inviteId]/route';
+import { POST as startLobby } from './start/route';
 
 const INVITE_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -143,5 +144,19 @@ describe('GET /api/lobby/[inviteId]', () => {
         const response = await lobby(get(`/api/lobby/${INVITE_ID}`), params());
 
         expect(response.status).toBe(401);
+    });
+});
+
+describe('POST /api/lobby/start', () => {
+    it('refuses to "start" a Kingdom Builder world, which is already running', async () => {
+        signIn(ANN);
+        seedLobby({ worldId: '64b000000000000000000001', gameType: 'KingdomBuilder', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+        const pull = vi.spyOn(InvitationModel, 'findOneAndUpdate');
+
+        const response = await startLobby(jsonPost('/api/lobby/start', { inviteId: INVITE_ID }));
+
+        expect(response.status).toBe(400);
+        // Its open seats stay open for players joining mid-season.
+        expect(pull).not.toHaveBeenCalled();
     });
 });

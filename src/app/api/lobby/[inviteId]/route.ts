@@ -6,8 +6,8 @@ import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { invitationToResponse, invitationUserIds } from '@/utils/games/invitationResponse';
 import { buildUserDirectory } from '@/utils/users/clerk';
+import { metaForGame } from '@/utils/ui/games';
 import { worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
-import { meta as kingdomBuilderMeta } from '@/games/KingdomBuilder/meta';
 
 export interface ILobbyParams {
     inviteId: string
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IL
     if (worldId && (invite.senderId === userId || invite.userIdList.some(seat => seat.userId === userId && seat.inviteAccepted))) {
         const started: ILobbyResponse = {
             success: true,
-            startedGame: { gameId: worldId as uuidString, gameUrl: kingdomBuilderMeta.url },
+            startedGame: { gameId: worldId as uuidString, gameUrl: metaForGame({ friendlyName: invite.gameFriendlyName })?.url ?? invite.gameType.toLowerCase() },
         };
         return NextResponse.json(started);
     }

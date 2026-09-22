@@ -159,7 +159,13 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
    — is saved, the invitation is deleted, and a `GameStart` push goes out
    (plus the opening `YourTurn` push, unless the player who triggered the
    start is the one up first). That helper is the single game-start path, so
-   any future route that starts a game shares it.
+   any future route that starts a game shares it. A Kingdom Builder world
+   invitation (one carrying a `worldId`) is the exception: the world was
+   running before anyone was invited, so accepting a seat joins it there and
+   then (`acceptWorldSeat`), never reaches `CreateGame`, and the invitation
+   stays open for the seats still to fill; the lobby screen forwards the
+   world's members to it and "start now" refuses it — see
+   `docs/games/kingdom-builder-gdd.md` §11.3 PR 8.
 3. **Play.** On each turn the active player submits a **command**
    (`POST /api/game/command`). The server validates it's their turn, executes the
    command against the persisted game, checks for game-over / end-of-turn,

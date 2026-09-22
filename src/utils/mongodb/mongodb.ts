@@ -15,6 +15,9 @@ import { RaceCarsGameDataModel, RaceCarsInvitationModel } from '@/games/RaceCars
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
+// (KingdomBuilderInvitation is deliberately absent from INVITATION_MODELS, so
+// the generic POST /api/lobby can never mint a world invitation without its
+// world — see src/games/KingdomBuilder/KingdomBuilderInvitation.ts.)
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in GAME_DATA_MODELS / INVITATION_MODELS.
 type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData' | 'RaceCarsGameData';

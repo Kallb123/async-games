@@ -2,9 +2,10 @@
 
 **Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
-(PR 6), worlds on the dashboard (PR 7), the area registry and generated
-ground (PR 9), and the overlay vocabulary (PR 12) are shipped. PR 8 (more
-than one player in a world) is next; §11.3 is the plan for the rest.
+(PR 6), worlds on the dashboard (PR 7), more than one player in a world
+(PR 8), the area registry and generated ground (PR 9), and the overlay
+vocabulary (PR 12) are shipped. PR 13 (barracks and units) is next; §11.3 is
+the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on

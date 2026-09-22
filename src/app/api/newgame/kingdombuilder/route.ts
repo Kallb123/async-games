@@ -33,6 +33,8 @@ export interface KingdomBuilderWorldResponse {
     settlementId: string;
     /** Present when the world was opened with seats for others to fill. */
     joinCode?: string;
+    /** The world was made but its invitation wasn't — nobody else can join it (the setup screen says so). */
+    invitationFailed?: true;
 }
 
 export async function POST(request: NextRequest) {
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest) {
             if (setup.invitees.length > 0) await sendGameInvitePush(setup.invitees, setup.host, invite);
         } catch (error) {
             console.error(`Failed to open the invitation for Kingdom Builder world ${created.worldId}`, error);
+            response.invitationFailed = true;
         }
     }
     return NextResponse.json(response);

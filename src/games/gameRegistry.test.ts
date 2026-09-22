@@ -60,7 +60,9 @@ describe("game registry completeness", () => {
     it("registers every engine-backed game's Mongoose discriminator models in mongodb.ts", () => {
         // This also covers game creation: startGameFromInvitation picks a game's
         // model straight out of GAME_DATA_MODELS in this same file, so there is
-        // no per-game branch in the invite-accept route left to check — and the
+        // no per-game branch in the invite-accept route left to check (the one
+        // exception, Kingdom Builder's world invitations, is a standalone game
+        // this test skips — see acceptSeat) — and the
         // record's typed keys make it a compile-time check on top of this one.
         const mongodbSource = read("src/utils/mongodb/mongodb.ts");
         const engineBackedGames = gameNames.filter((name) =>

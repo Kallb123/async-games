@@ -125,6 +125,15 @@ export async function acceptSeat(
     invite: IInvitationDataDocument,
     actorId: string
 ): Promise<AcceptSeatResult> {
+    // A Kingdom Builder world is already running when its invitation is sent,
+    // so a seat on it is accepted by joining the world there and then — never
+    // by the all-accepted gate below or a CreateGame — and only marked
+    // accepted once the join has landed (see acceptWorldSeat).
+    const worldId = worldIdOfInvitation(invite);
+    if (worldId) {
+        return acceptWorldSeat(invite, worldId, actorId);
+    }
+
     // One conditional update, not the read-modify-write this used to be: the
     // seat flips and the current invitation comes back in the same round trip,
     // so the all-accepted check below reads what is in the database rather than
@@ -148,14 +157,6 @@ export async function acceptSeat(
         // Gone between the caller reading it and this update: cancelled, or
         // already turned into a game by a request that raced this one.
         return gameStartedFrom(invite.inviteId);
-    }
-
-    // A Kingdom Builder world is already running when its invitation is sent,
-    // so a seat on it is accepted by joining the world there and then — never
-    // by the all-accepted gate below or a CreateGame (see acceptWorldSeat).
-    const worldId = worldIdOfInvitation(current);
-    if (worldId) {
-        return acceptWorldSeat(current, worldId, actorId);
     }
 
     const userIdList = current.userIdList.map(uid => uid.userId);

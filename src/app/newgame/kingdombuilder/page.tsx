@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FcmTokenComp } from "@/components/FirebaseForeground";
+import { useToast } from "@/components/ToastContext";
 import UserInviteList from "@/components/UserInviteList";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import PartySizeHint from "@/components/ui/PartySizeHint";
@@ -27,13 +28,12 @@ export default function NewKingdomBuilder() {
     // fill by name is left open for the code.
     const { seatCount, setSeatCount, maxSeats, partySize, partySizeError } = usePartySeats(META, players.length, META.maxPlayers - 1);
     const [starting, setStarting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const { showToast } = useToast();
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (starting || partySizeError) return;
         setStarting(true);
-        setError(null);
         try {
             const body: KingdomBuilderWorldRequest = { userList: players, turnTimer: UNLIMITED_TURN_TIMER, openSeats: seatCount };
             const response = await fetch("/api/newgame/kingdombuilder", {
@@ -44,10 +44,11 @@ export default function NewKingdomBuilder() {
             });
             if (!response.ok) throw new Error(response.statusText || "The world could not be created.");
             const result = await response.json() as KingdomBuilderWorldResponse;
+            if (result.invitationFailed) showToast("Your world is ready, but the invitations couldn't be sent — nobody else can join it.", "danger");
             router.push(`/kingdombuilder/${result.worldId}`);
         } catch (cause) {
             console.error("Failed to start Kingdom Builder", cause);
-            setError("Your world could not be created. Check your connection and try again.");
+            showToast("Your world could not be created. Check your connection and try again.", "danger");
             setStarting(false);
         }
     };
@@ -60,13 +61,12 @@ export default function NewKingdomBuilder() {
             actionDisabled={starting || !!partySizeError}
             footnote={seatCount > 0 ? "Share the code from the world map to fill the open seats" : players.length > 0 ? "Friends join as they accept" : "A world of your own"}
         >
+            <Section label="Your world">
+                <p>Everyone starts with a town centre and an empty 3×3 settlement on a fair starting site. Resources arrive every 15 minutes, ready for you to build lumber camps, quarries and mines. The world keeps running after it opens, so friends can join days later.</p>
+            </Section>
             <UserInviteList userList={userList} setItem={setItem} />
             <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
             <PartySizeHint meta={META} total={partySize} />
-            <Section label="Your world">
-                <p>Everyone starts with a town centre and an empty 3×3 settlement on a fair starting site. Resources arrive every 15 minutes, ready for you to build lumber camps, quarries and mines. The world keeps running after it opens, so friends can join days later.</p>
-                {error && <div className="ag-callout" role="alert">{error}</div>}
-            </Section>
             <FcmTokenComp />
         </GameSetupLayout>
     );
