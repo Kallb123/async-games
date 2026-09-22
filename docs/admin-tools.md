@@ -398,7 +398,22 @@ rather than a human with a calculator.
    ties break low so the same block always prints the same file). Clicking
    within three squares of the right or bottom edge says so rather than
    wrapping onto the next row.
-7. **Copy `tileset.ts`.** The export panel prints the sheet list plus
+7. **Check the preview.** A "Preview" panel shows what the currently-picked
+   entry will actually look like, from real cropped squares of the loaded
+   sheet rather than a description of them. For a `mask16`/`mask47` entry it's
+   a live 3×3 neighbourhood: the centre is whatever the role the checkboxes
+   currently point at holds so far, the four sides mirror those same
+   checkboxes — hatched wherever that neighbour is ticked to differ, drawn
+   from the entry's own fully-interior tile wherever it's ticked to match —
+   and, for `mask47`, the four corners do too, except a mask16 entry leaves
+   them blank because a mask16 tile is never picked by them in the first
+   place (`maskPreviewFill` in `tileMapperModel.ts`). A dashed square is a
+   slot nothing's been clicked onto yet, on either side of the checkboxes: the
+   centre before its own role is assigned, or a "match" side before the
+   fully-interior slot (mask16's 15, mask47's all-eight-neighbours slot) is.
+   `orientation`/`variants`/`single` get the plainer version, a strip of one
+   tile per declared role.
+8. **Copy `tileset.ts`.** The export panel prints the sheet list plus
    `AREA_ART`/`OVERLAY_ART` in the exact shape the real file declares them —
    paste it over those three declarations (the type imports, `sheetTilePixels`
    and the guard functions don't move) and run `npm test`. A one-square

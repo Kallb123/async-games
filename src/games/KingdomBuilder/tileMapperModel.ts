@@ -4,7 +4,7 @@
 // owns pointer handling and the panels; this owns the grid maths, the tile
 // size suggestions and the printed `tileset.ts` source.
 
-import { blobKey, cellToIndex, indexToCell, isMaskSlotVariants, maskSlotRefs, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
+import { blobIndexOf, blobKey, cellToIndex, indexToCell, isMaskSlotVariants, maskSlotRefs, MASK_LAYOUT_SIZES, NEIGHBOUR_BITS, isMaskLayout, sheetColumns, sheetRows, tileRefAnchor, tileRefSize, type MaskLayout, type MaskSlotArt, type SheetDefinition, type TileArt, type TileRef } from "./tileset";
 
 /** A sheet whose grid divides its image evenly on both axes, in the range a real tilesheet's tile size is likely to sit in. Sorted smallest first, so the UI can offer them as "did you mean" chips without the author counting squares themselves. */
 export function suggestedTileSizes(imageWidth: number, imageHeight: number, margin: number, spacing: number, min = 8, max = 128): number[] {
@@ -114,6 +114,53 @@ export function mask8FromSides(sides: NeighbourSides): number {
 export function diagonalApplies(sides: NeighbourSides, diagonal: DiagonalName): boolean {
     const bit = NEIGHBOUR_BITS[diagonal];
     return (blobKey(rawMask8(sides) | bit) & bit) !== 0;
+}
+
+/**
+ * How each of the eight neighbour cells in the mapper's own "3×3 preview"
+ * should read, from the same checkboxes `assignTile` reads the active slot
+ * from: "match" draws the entry's own fully-interior tile there (more of the
+ * same terrain), "differ" draws a plain "something else" placeholder, and
+ * "irrelevant" — the four diagonals of a `mask16` entry only — draws neither,
+ * because a `mask16` tile is picked from its four sides alone and a corner
+ * tick there can never change its picture. A `mask47` diagonal is "irrelevant"
+ * too wherever `diagonalApplies` says it can't matter, for the same reason the
+ * checkbox itself is disabled there — the preview and the checkbox can't come
+ * to disagree about what a tick means.
+ */
+export type MaskPreviewFill = "match" | "differ" | "irrelevant";
+
+export function maskPreviewFill(layout: MaskLayout, sides: NeighbourSides): Record<keyof NeighbourSides, MaskPreviewFill> {
+    const corner = (key: DiagonalName): MaskPreviewFill => {
+        if (layout !== "mask47" || !diagonalApplies(sides, key)) return "irrelevant";
+        return sides[key] ? "match" : "differ";
+    };
+    return {
+        north: sides.north ? "match" : "differ",
+        east: sides.east ? "match" : "differ",
+        south: sides.south ? "match" : "differ",
+        west: sides.west ? "match" : "differ",
+        northEast: corner("northEast"),
+        southEast: corner("southEast"),
+        southWest: corner("southWest"),
+        northWest: corner("northWest"),
+    };
+}
+
+/**
+ * The slot a mask entry's fully-interior tile sits at — every neighbour
+ * matching — which is what the preview's "match" cells draw as "more of this
+ * terrain". `mask16`'s is the plain top bit; `mask47`'s is whichever of its 47
+ * slots the all-eight-bits mask collapses onto.
+ */
+export function interiorMaskSlot(layout: MaskLayout): number {
+    return layout === "mask16" ? 15 : blobIndexOf(0xff);
+}
+
+/** One mask slot's own preview tile: its first variant, for a slot declaring several — the preview shows one concrete picture rather than the whole rotation. `undefined` for a slot never clicked. */
+export function previewRefOf(slot: MaskSlotArt | undefined): TileRef | undefined {
+    if (slot === undefined) return undefined;
+    return isMaskSlotVariants(slot) ? slot[0] : slot;
 }
 
 /**

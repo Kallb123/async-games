@@ -4,14 +4,17 @@ import {
     diagonalApplies,
     draftTileRefsOf,
     gridFit,
+    interiorMaskSlot,
     mask16FromNineSlice,
     mask8FromSides,
     maskFromSides,
+    maskPreviewFill,
     maskRemaining,
     maskSlotVariantCount,
     nearestDeclaredMask,
     NINE_SLICE_MASKS,
     PREVIEW_WIDTH,
+    previewRefOf,
     previewScale,
     printTilesetDeclarations,
     suggestedTileSizes,
@@ -220,6 +223,58 @@ describe("diagonalApplies", () => {
         expect(diagonalApplies({ ...NO_NEIGHBOURS, north: true }, "northEast")).toBe(false);
         expect(diagonalApplies({ ...NO_NEIGHBOURS, south: true, west: true }, "southWest")).toBe(true);
         expect(diagonalApplies({ ...NO_NEIGHBOURS, south: true, west: true }, "southEast")).toBe(false);
+    });
+});
+
+describe("maskPreviewFill", () => {
+    it("reads the four sides straight off the checkboxes for either layout", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true, south: true };
+        expect(maskPreviewFill("mask16", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+        expect(maskPreviewFill("mask47", sides)).toMatchObject({ north: "match", east: "differ", south: "match", west: "differ" });
+    });
+
+    it("mask16's diagonals are always irrelevant — a mask16 tile never asks about them", () => {
+        const allSides = { ...NO_NEIGHBOURS, north: true, east: true, south: true, west: true };
+        const fill = maskPreviewFill("mask16", allSides);
+        expect(fill.northEast).toBe("irrelevant");
+        expect(fill.southEast).toBe("irrelevant");
+        expect(fill.southWest).toBe("irrelevant");
+        expect(fill.northWest).toBe("irrelevant");
+    });
+
+    it("mask47's diagonal matches its own checkbox once both sides beside it match", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true, east: true, northEast: true };
+        expect(maskPreviewFill("mask47", sides).northEast).toBe("match");
+        expect(maskPreviewFill("mask47", { ...sides, northEast: false }).northEast).toBe("differ");
+    });
+
+    it("mask47's diagonal is irrelevant wherever diagonalApplies says it can't matter — never a false 'differ'", () => {
+        const sides = { ...NO_NEIGHBOURS, north: true }; // east open: the corner can't be seen
+        expect(maskPreviewFill("mask47", sides).northEast).toBe("irrelevant");
+    });
+});
+
+describe("interiorMaskSlot", () => {
+    it("is 15 for mask16 — every side ticked", () => {
+        expect(interiorMaskSlot("mask16")).toBe(15);
+    });
+
+    it("is mask47's slot for all eight neighbours matching", () => {
+        expect(interiorMaskSlot("mask47")).toBe(BLOB_47_KEYS.indexOf(255));
+    });
+});
+
+describe("previewRefOf", () => {
+    it("is undefined for a slot never clicked", () => {
+        expect(previewRefOf(undefined)).toBeUndefined();
+    });
+
+    it("is the ref itself for a plain slot", () => {
+        expect(previewRefOf({ sheet: "ground", index: 4 })).toEqual({ sheet: "ground", index: 4 });
+    });
+
+    it("is the first variant for a slot holding several — one concrete picture, not the whole rotation", () => {
+        expect(previewRefOf([{ sheet: "ground", index: 1 }, { sheet: "ground", index: 2 }])).toEqual({ sheet: "ground", index: 1 });
     });
 });
 

@@ -4976,6 +4976,37 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-tilemap-cell--assigned { fill: color-mix(in oklch, var(--ag-green) 35%, transparent); }
 .ag-tilemap-cell-label { fill: var(--ag-ink); font: 700 1em var(--ag-font); pointer-events: none; }
 
+/* The tile mapper's "3×3 preview" (docs/admin-tools.md): a mask entry's own
+   neighbourhood, drawn from real cropped squares of the loaded sheet rather
+   than a description of them, so a mismatched border reads as a mismatch
+   before it's pasted into tileset.ts. A "differ" cell (a neighbour the
+   checkboxes say isn't this terrain) is drawn as a hatch rather than another
+   sheet's art, since the mapper doesn't know what that neighbour actually is —
+   only that it isn't this. An "irrelevant" cell (a mask16 corner, which a
+   mask16 tile is never picked by) is left blank rather than hatched, so it
+   doesn't read as a second kind of mismatch. An unclicked slot — the centre
+   before anything's assigned to it, or the interior tile a "match" cell
+   stands in for — is a dashed "?", the same as everywhere else the mapper
+   says "nothing here yet". The same three cell classes back the strip of
+   tiles a `variants`/`orientation`/`single` entry previews, one tile each. */
+.ag-tile-preview-grid { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); gap: 3px; }
+.ag-tile-preview-cell {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--ag-surface-2);
+}
+.ag-tile-preview-cell--centre { outline: 2px solid var(--ag-terracotta-deep); outline-offset: -2px; }
+.ag-tile-preview-cell--differ { background: repeating-linear-gradient(45deg, var(--ag-surface-2), var(--ag-surface-2) 5px, var(--ag-line) 5px, var(--ag-line) 6px); }
+.ag-tile-preview-cell--irrelevant { background: transparent; }
+.ag-tile-preview-cell--empty { border: 1px dashed var(--ag-line); color: var(--ag-ink-softer); font-size: 12px; background: transparent; }
+.ag-tile-preview-strip { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.ag-tile-preview-strip-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
 /* ============================================================= *
  *  Desktop expansion — design §16.
  *
