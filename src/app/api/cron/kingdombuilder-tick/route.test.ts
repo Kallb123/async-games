@@ -81,7 +81,7 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
         expect(updateOne.update.$set.resources).toEqual({ wood: 1, stone: 0, iron: 0, wheat: 4 });
     });
 
-    it("marches the world's armies, camping one and folding one that reached home back into its garrison", async () => {
+    it("marches the world's armies, camping one, folding one that reached home back into its garrison, and dating a siege", async () => {
         process.env.CRON_SECRET = "cron-secret";
         const worldId = "64b000000000000000000002";
         const lean = vi.fn().mockResolvedValueOnce([{ _id: worldId }]).mockResolvedValue([]);
@@ -98,23 +98,31 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             garrison: { militia: 1 },
         }] }) } as never);
         const settlementWrites = vi.spyOn(KingdomBuilderSettlementModel, "bulkWrite").mockResolvedValue({} as never);
-        const army = (id: string, targetNodeId: string) => ({
+        const army = (id: string, targetNodeId: string, camped: object = {}) => ({
             _id: id, worldId, ownerId: "owner", units: { militia: 2, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
-            path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "somewhere", targetNodeId,
+            path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "somewhere", targetNodeId, ...camped,
         });
-        const armyFind = vi.spyOn(KingdomBuilderArmyModel, "find")
-            .mockReturnValue({ session: () => ({ lean: async () => [army("a1", "home"), army("a2", "camp")] }) } as never);
+        const armyFind = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ session: () => ({ lean: async () => [
+            army("a1", "home"), army("a2", "camp"),
+            // Camped at the owner's town since before sieges existed, and camped on open ground.
+            army("a3", "home", { ownerId: "rival", travelled: 2, arrivedAtTick: 2 }),
+            army("a4", "camp", { travelled: 2, arrivedAtTick: 2 }),
+            // Besieging a town that has since gone — its owner left the world.
+            army("a5", "camp", { travelled: 2, arrivedAtTick: 2, besiegingSince: 3 }),
+        ] }) } as never);
         const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
 
         const response = await POST(request("Bearer cron-secret"));
 
         expect(response.status).toBe(200);
-        expect(armyFind).toHaveBeenCalledWith({ worldId, arrivedAtTick: null });
+        expect(armyFind).toHaveBeenCalledWith({ worldId });
         const [{ updateOne }] = settlementWrites.mock.calls[0][0] as unknown as [{ updateOne: { update: { $set: Record<string, unknown> } } }];
         expect(updateOne.update.$set.garrison).toMatchObject({ militia: 3 });
         expect(armyWrites.mock.calls[0][0]).toEqual([
             { deleteOne: { filter: { _id: "a1", worldId } } },
             { updateOne: { filter: { _id: "a2", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 6 } } } },
+            { updateOne: { filter: { _id: "a3", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2, besiegingSince: 6 } } } },
+            { updateOne: { filter: { _id: "a5", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2 }, $unset: { besiegingSince: 1 } } } },
         ]);
     });
 });

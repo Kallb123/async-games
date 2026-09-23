@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
-import { endWorld, foundExpansion, KingdomBuilderPersistenceError, leaveWorld, marchArmy, worldView } from "@/games/KingdomBuilder";
+import { endWorld, foundExpansion, KingdomBuilderPersistenceError, leaveWorld, marchArmy, pushAttack, sallyOut, worldView } from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -57,6 +57,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (action === "march") {
             return NextResponse.json(await marchArmy(context.worldId, context.userId, { targetNodeId, settlementId, units, armyId }));
         }
+        // GDD §8: a siege comes to blows — the besieger pushes, or the defender sallies out.
+        if (action === "push") return NextResponse.json(await pushAttack(context.worldId, context.userId, armyId));
+        if (action === "sally") return NextResponse.json(await sallyOut(context.worldId, context.userId, settlementId));
         if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
         return NextResponse.json(await foundExpansion(context.worldId, context.userId, siteId));
     } catch (error) {

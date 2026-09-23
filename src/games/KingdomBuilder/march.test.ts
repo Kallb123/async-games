@@ -148,7 +148,7 @@ describe("marchArmy — an army already out", () => {
             { _id: armyId, worldId, ownerId: "owner", travelled: 4, targetNodeId: "camp" },
             {
                 $set: { path: [2, 1, 0], pathCosts: [0, 2, 4], travelled: 0, targetNodeId: "start", fromNodeId: "start" },
-                $unset: { arrivedAtTick: 1 },
+                $unset: { arrivedAtTick: 1, besiegingSince: 1 },
             },
         );
     });

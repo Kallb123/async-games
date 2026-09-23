@@ -28,6 +28,13 @@ export interface KingdomBuilderMarch {
     targetNodeId: string;
     /** The tick it reached `targetNodeId` on — absent while it is still marching. */
     arrivedAtTick?: number;
+    /**
+     * The tick it began besieging the settlement it is camped at (§8, PR 21) —
+     * absent unless it is camped at another player's. The tick sets and clears
+     * it, so a town founded under a camp, or one whose owner left, is noticed
+     * a tick later rather than at arrival.
+     */
+    besiegingSince?: number;
 }
 
 /** A route an army could take, and what it would cost it tile by tile. */
@@ -78,10 +85,10 @@ export function armyTile(march: Pick<KingdomBuilderMarch, "path" | "pathCosts" |
 
 /**
  * One tick of marching. An army still on the road spends its pace, and on the
- * tick it runs out of road it arrives. Arrival does nothing yet beyond that
- * (siege is PR 21) — except at one of its owner's own settlements, where it
- * rejoins the garrison and stops being an army at all: the returned `joins`
- * names that settlement's node.
+ * tick it runs out of road it arrives and camps — except at one of its owner's
+ * own settlements, where it rejoins the garrison and stops being an army at
+ * all: the returned `joins` names that settlement's node. Whether a camp is a
+ * siege is the tick's to decide (tick.ts), since that can change under it.
  */
 export function advanceMarch<T extends KingdomBuilderMarch>(march: T, tick: number, homeNodes: ReadonlySet<string>): { march: T; joins?: string } {
     if (march.arrivedAtTick !== undefined) return { march };

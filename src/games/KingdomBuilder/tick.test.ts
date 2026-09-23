@@ -108,10 +108,10 @@ describe("Kingdom Builder tick engine", () => {
 
         const result = applyTick(input);
         expect(result.settlements[0].garrison).toEqual(garrisonOf({ militia: 3, scout: 1 }));
-        // The one bound elsewhere camps, a rival's stays a rival's, and the long march is still on the road.
+        // The one bound elsewhere camps, a rival's lays siege (siege.test.ts), and the long march is still on the road.
         expect(result.armies).toEqual([
             { ...army("elsewhere"), travelled: 2, arrivedAtTick: 5 },
-            { ...army("site", "rival"), travelled: 2, arrivedAtTick: 5 },
+            { ...army("site", "rival"), travelled: 2, arrivedAtTick: 5, besiegingSince: 5 },
             { ...army("site"), pathCosts: [0, 20], travelled: 2 },
         ]);
         expect(input.armies[0].travelled).toBe(0);

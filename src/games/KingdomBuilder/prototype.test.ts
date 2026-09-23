@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPrototypeError, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
@@ -12,9 +13,10 @@ const tiles = Array.from({ length: 9 }, (_, position) => ({
     ...(position === 4 ? { building: { type: "town-centre" as const, level: 1 } } : {}),
 }));
 
-/** The world is live unless a test says otherwise. */
+/** The world is live, and nobody is besieging anything, unless a test says otherwise. */
 function liveWorld() {
     vi.spyOn(KingdomBuilderWorldModel, "exists").mockResolvedValue({ _id: worldId } as never);
+    vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ select: () => ({ lean: async () => [] }) } as never);
 }
 beforeEach(liveWorld);
 afterEach(() => vi.restoreAllMocks());

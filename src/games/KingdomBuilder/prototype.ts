@@ -10,7 +10,9 @@ import {
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KINGDOM_BUILDER_BUILDING_PRODUCES, KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
+import { siegesOn } from "./besiegers";
 import { catchmentOfSettlement } from "./land";
+import type { KingdomBuilderSiege } from "./siege";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
@@ -44,6 +46,8 @@ export interface KingdomBuilderSettlementView {
     /** The barracks' queue, head first — the head is the unit in training. */
     trainingQueue: KingdomBuilderTrainingOrder[];
     garrison: KingdomBuilderGarrison;
+    /** The siege on it (§8), if another player's army is camped there. */
+    siege?: KingdomBuilderSiege;
 }
 
 export class KingdomBuilderPrototypeError extends Error {
@@ -93,10 +97,12 @@ export async function settlementView(worldId: string, settlementId: string, user
 
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
     if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
-    const [ownerSettlements, catchment] = await Promise.all([
+    const [ownerSettlements, catchment, sieges] = await Promise.all([
         KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1 }).lean(),
         catchmentOfSettlement(worldId, settlement),
+        siegesOn(worldId, [settlement]),
     ]);
+    const siege = sieges.get(settlement.nodeId);
 
     return {
         worldId,
@@ -123,6 +129,7 @@ export async function settlementView(worldId: string, settlementId: string, user
         })),
         trainingQueue: (settlement.trainingQueue ?? []).map(({ unitType, ticksRemaining }: KingdomBuilderTrainingOrder) => ({ unitType, ticksRemaining })),
         garrison: garrisonOf(settlement.garrison),
+        ...(siege ? { siege } : {}),
     };
 }
 

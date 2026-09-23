@@ -7,8 +7,9 @@ Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
-§4.6), army dispatch and movement (PR 19, §6.2) and fog of war (PR 20, §6.3)
-are shipped. PR 21 (automatic siege on arrival) comes next; §11.3 is the plan
+§4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3) and
+automatic siege on arrival (PR 21, §8) are shipped. PR 22 (combat resolution)
+comes next; §11.3 is the plan
 for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -1723,6 +1724,25 @@ around it.
 
 ## 8. Sieges in detail
 
+> As shipped in PR 21: an army camped at another player's settlement besieges
+> it from the tick it arrives. The town produces half from the next tick; after
+> a four-tick grace period (an hour) its building and training stop where they
+> are as well. There are no walls yet, so nothing stops regenerating. The
+> besieger can **push the attack** with every army of theirs at the town, and
+> the defender can **sally out** with the whole garrison against every army at
+> the gate. Until PR 22's combat engine arrives, both are settled by a
+> placeholder: the side with more units wins outright and loses nothing, the
+> other is destroyed, and a tie holds for the defender. A won push destroys the
+> garrison but does not take the town — capture is a later rule — so the siege
+> goes on.
+>
+> One consequence of PR 20's sight: a settlement always sees its own tile, so a
+> defender sees exactly what is camped at their gate from the moment the siege
+> begins. The last paragraph below — sallying as a bet on a stack the defender
+> "mostly can't" see — therefore holds only for a relief force still on the
+> road, not for the besiegers themselves. Whether a besieging army should be
+> able to hide its numbers is part of §12's sight question.
+
 A siege is deliberately the *opening* move, not a lesser attack, and — per
 §6.4 — not a choice: any army that reaches a hostile player settlement opens
 one automatically. What follows is two independent clocks, one per side,
@@ -2542,10 +2562,44 @@ reduced-motion rule in `ag-theme.css`.
   each sighting in its owner's colour with no road, and an "In sight" list
   names each rival army near the closest place on the map and each garrison a
   scout is counting. First-pass radii (§12). No `whatsNew.ts` line.
-- **PR 21 — Automatic siege on arrival.** Arrival at a hostile settlement
+- **PR 21 — Automatic siege on arrival.** Shipped. Arrival at a hostile settlement
   opens a siege (§6.4/§8): debuffs, the grace period, and the two new
   player actions, "push the attack" and "sally out" — both stubbed to a
   placeholder resolution for now.
+
+  How it landed: a siege is not a document of its own but a fact about an army.
+  An army gains `besiegingSince` when the tick finds it camped at a settlement
+  that isn't its owner's, and loses it when no such settlement stands there any
+  more (its owner left the world) or when it is sent onward. The tick dates it,
+  rather than the arrival, so a town founded under a camp — or an army camped at
+  a rival's town since before this PR — gets its grace period too. `siege.ts` is
+  the pure half: `siegeOf` dates a siege from the earliest army still besieging,
+  `siegeStage` is `grace` for `KINGDOM_BUILDER_SIEGE_GRACE_TICKS` (4) ticks and
+  `full` after, and `placeholderBattle` is the stand-in for combat. `applyTick`
+  reads sieges from the armies as the tick begins, so an army arriving this tick
+  bites from the next: a besieged settlement's production is halved (rounded
+  down) in either stage, and in the full one its construction and training
+  queue don't advance. The tick cron now loads every army in a world, camped ones
+  included, and writes only those that moved or began or ended a siege.
+  Push and sally are `action: "push"` (an army id) and `action: "sally"` (a
+  settlement id) on the world route, in `assault.ts`. The army or settlement is
+  looked up with the caller as owner first, so a stranger learns nothing. Each
+  battle runs in one transaction that first bumps the world's `battlesFought`,
+  so it conflicts with the tick, a dispatch or another battle rather than
+  fighting a garrison that has changed. A push sends every army of the caller's
+  besieging that settlement; a sally sends the whole garrison against every
+  besieger, whoever owns them. The reply is the world view plus a `battle`
+  report — what the caller sent and what it met — told only to the side that
+  fought. `worldView` tells a player about the sieges on their own settlements
+  (`siege: { sinceTick, fullFromTick }`) and on their own armies
+  (`besiegingSince`). It reads only whose each camp is and since when, and tells
+  nobody else that a town is besieged; a third player sees the army at the gate
+  only if it is in their sight. The world map gains a Sieges section — each town
+  under siege with Sally out, each besieging army with Push the attack, both
+  confirmed before they go, then a line on how the battle went — and the
+  settlement screen says when it is under siege. The other side of a battle
+  learns of it only from what it left behind; a report for both sides is PR 22's.
+  No `whatsNew.ts` line.
 - **PR 22 — Combat resolution.** The deterministic multi-round attrition
   engine with unit-type counters (§7.3/§7.6) as a pure function with its own
   matchup-table test suite, then wired into the two actions PR 21 stubbed.
@@ -2757,6 +2811,12 @@ guessed at here:
   new one elsewhere so the map doesn't run out of soft targets over a
   multi-week season, and does garrison strength scale continuously with
   distance from the centre or in discrete tiers?
+- Siege numbers (§8): first pass since PR 21 — a four-tick grace period, half
+  production throughout, building and training stopped after the grace period.
+  Whether sieges should stack (two besiegers biting harder than one), and what a
+  won push should lead to — capture, razing, or a settler's line of succession
+  (§4.4) — are open until combat (PR 22) makes a push something other than a
+  headcount.
 - Does a sallying garrison forfeit the settlement's wall/terrain defence
   bonus entirely (§8), or keep some fraction of it? Zero is the simpler rule
   but may make sallying out a trap rather than a real choice.

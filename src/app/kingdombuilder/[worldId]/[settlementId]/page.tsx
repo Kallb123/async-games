@@ -26,6 +26,7 @@ import {
     trainingTicksFor,
     type KingdomBuilderUnitType,
 } from "@/games/KingdomBuilder/units";
+import { describeSiege } from "@/games/KingdomBuilder/siege";
 import { formatTicks } from "@/games/KingdomBuilder/tick";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
@@ -128,6 +129,11 @@ export default function KingdomBuilderSettlementPage({
                 </Section>
             ) : (
                 <>
+                    {data?.siege && (
+                        <Section label="Under siege">
+                            <div className="ag-callout" role="status">{describeSiege(data.siege, data.currentTick)} Sally out from the world map to fight the besiegers.</div>
+                        </Section>
+                    )}
                     <Section label="Resources" isLoading={isLoading}>
                         <div className="ag-stat-row">
                             {KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => (

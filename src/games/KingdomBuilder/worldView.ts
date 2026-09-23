@@ -6,6 +6,8 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
+import { siegesOn } from "./besiegers";
+import type { KingdomBuilderSiege } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
 import { barracksLevelOf, garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
@@ -54,6 +56,12 @@ export interface KingdomBuilderWorldView {
          * the moment the scout moves off.
          */
         garrison?: KingdomBuilderGarrison;
+        /**
+         * Yours only: the siege on it (§8), if another player's army is camped
+         * there. Nobody else is told a town is besieged — a third player learns
+         * it only by seeing the army at its gate.
+         */
+        siege?: KingdomBuilderSiege;
     }>;
     /** Your own armies in the field (§6.2), with their roads and orders — nobody else's army appears here. */
     armies: KingdomBuilderArmyView[];
@@ -85,6 +93,8 @@ export interface KingdomBuilderArmyView {
     ticksToArrive: number;
     /** The tick it arrived on, once it has. */
     arrivedAtTick?: number;
+    /** The tick it began besieging the settlement it is camped at (§8), if it is. */
+    besiegingSince?: number;
 }
 
 export interface KingdomBuilderArmySighting {
@@ -115,6 +125,7 @@ async function readArmies(worldId: string, userId: string): Promise<KingdomBuild
     return armies.map(army => {
         const units = garrisonOf(army.units);
         const arrivedAtTick = army.arrivedAtTick ?? undefined;
+        const besiegingSince = army.besiegingSince ?? undefined;
         return {
             armyId: army._id.toString(),
             units,
@@ -124,6 +135,7 @@ async function readArmies(worldId: string, userId: string): Promise<KingdomBuild
             targetNodeId: army.targetNodeId,
             ticksToArrive: arrivedAtTick === undefined ? Math.max(1, ticksToArrive(army, paceOf(units) ?? 1)) : 0,
             ...(arrivedAtTick === undefined ? {} : { arrivedAtTick }),
+            ...(besiegingSince === undefined ? {} : { besiegingSince }),
         };
     });
 }
@@ -188,10 +200,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
     }
     const hostId = world.hostId ?? memberIds[0];
-    const [directory, invite, armies] = await Promise.all([
+    const [directory, invite, armies, sieges] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
         readArmies(worldId, userId),
+        siegesOn(worldId, settlements.filter(settlement => settlement.ownerId === userId)),
         // The repair for a leave that died before handing the invitation on (§9.1).
         hostId === userId && roster.length > 0
             ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))
@@ -241,6 +254,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                 isMine: settlement.ownerId === userId,
                 seat: ownerSeat,
                 ...(settlement.ownerId === userId || isScouted(settlement.nodeId) ? { garrison: garrisonOf(settlement.garrison) } : {}),
+                ...(settlement.ownerId === userId && sieges.has(settlement.nodeId) ? { siege: sieges.get(settlement.nodeId)! } : {}),
             }];
         }),
         armies,

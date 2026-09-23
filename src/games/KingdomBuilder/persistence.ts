@@ -9,7 +9,7 @@ import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
 export class KingdomBuilderPersistenceError extends Error {
-    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE" | "WORLD_FULL" | "FORBIDDEN" | "ARMY_NOT_FOUND" | "ARMY_BUSY" | "NO_ROUTE", message: string) {
+    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE" | "WORLD_FULL" | "FORBIDDEN" | "ARMY_NOT_FOUND" | "ARMY_BUSY" | "NO_ROUTE" | "NO_SIEGE", message: string) {
         super(message);
         this.name = "KingdomBuilderPersistenceError";
     }
