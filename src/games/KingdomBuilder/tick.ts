@@ -3,6 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
+import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE } from "./buildings";
 import { advanceTraining } from "./units";
 
 export interface KingdomBuilderTickWorld {
@@ -12,10 +13,19 @@ export interface KingdomBuilderTickWorld {
 
 const EMPTY_PRODUCTION: KingdomBuilderResources = { wood: 0, stone: 0, iron: 0 };
 
-/** Returns the resources produced by the settlement's completed buildings. */
+/**
+ * Returns the resources produced by the settlement's completed buildings. The
+ * town centre's trickle comes whatever else stands, so a settlement too poor
+ * for its cheapest building still earns its way to one (§4.5).
+ */
 export function productionFor(tiles: readonly KingdomBuilderTile[]): KingdomBuilderResources {
     return tiles.reduce<KingdomBuilderResources>((production, tile) => {
         const building = tile.building;
+        if (building?.type === "town-centre") {
+            production.wood += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.wood;
+            production.stone += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.stone;
+            production.iron += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.iron;
+        }
         if (building?.type === "lumber-camp") production.wood += building.level;
         if (building?.type === "quarry") production.stone += building.level;
         if (building?.type === "mine") production.iron += building.level;

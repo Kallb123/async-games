@@ -19,8 +19,10 @@ function liveWorld() {
 beforeEach(liveWorld);
 afterEach(() => vi.restoreAllMocks());
 
+const plenty = { wood: 500, stone: 500, iron: 500 };
+
 function existingSettlement(ownerId = "owner") {
-    const lean = vi.fn().mockResolvedValue({ ownerId, tiles });
+    const lean = vi.fn().mockResolvedValue({ ownerId, tiles, resources: plenty });
     const select = vi.fn().mockReturnValue({ lean });
     vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue({ select } as never);
 }
@@ -57,7 +59,7 @@ describe("Kingdom Builder prototype construction", () => {
 
     it("atomically limits a settlement to one queued building", async () => {
         const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
-        const initialLean = vi.fn().mockResolvedValue({ ownerId: "owner", tiles });
+        const initialLean = vi.fn().mockResolvedValue({ ownerId: "owner", tiles, resources: plenty });
         findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: initialLean }) } as never);
         findOne.mockReturnValueOnce({
             lean: vi.fn().mockResolvedValue({ ownerId: "owner", nodeId: "start", tiles, resources: { wood: 0, stone: 0, iron: 0 },
@@ -77,7 +79,10 @@ describe("Kingdom Builder prototype construction", () => {
 
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ ownerId: "owner", construction: { $exists: false } }),
-            { $set: { construction: { tilePosition: 0, buildingType: "mine", targetLevel: 1, ticksRemaining: 2 } } },
+            {
+                $set: { construction: { tilePosition: 0, buildingType: "mine", targetLevel: 1, ticksRemaining: 2 } },
+                $inc: { "resources.wood": -20, "resources.stone": -10, "resources.iron": -0 },
+            },
             { new: true },
         );
         expect(view.tiles[0].construction).toEqual({ buildingType: "mine", targetLevel: 1, ticksRemaining: 2 });
@@ -93,7 +98,7 @@ function withBarracks(level: number) {
 function stubSettlement(existing: object, updated: object | null = { _id: settlementId }) {
     liveWorld();
     const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
-    findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(existing) }) } as never);
+    findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ resources: plenty, ...existing }) }) } as never);
     findOne.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ nodeId: "start", resources: { wood: 0, stone: 0, iron: 0 }, ...existing }) } as never);
     const update = vi.spyOn(KingdomBuilderSettlementModel, "findOneAndUpdate")
         .mockReturnValue({ lean: vi.fn().mockResolvedValue(updated) } as never);
@@ -105,6 +110,38 @@ function stubSettlement(existing: object, updated: object | null = { _id: settle
     } as never);
     return update;
 }
+
+describe("Kingdom Builder building costs", () => {
+    it("refuses a building the stores can't pay for, before writing anything", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles, resources: { wood: 14, stone: 0, iron: 0 } });
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "lumber-camp"))
+            .rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("pays in the same conditional write that queues the building", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles, resources: { wood: 15, stone: 0, iron: 0 } });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 0, "lumber-camp");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                ownerId: "owner",
+                construction: { $exists: false },
+                "resources.wood": { $gte: 15 }, "resources.stone": { $gte: 0 }, "resources.iron": { $gte: 0 },
+            }),
+            expect.objectContaining({ $inc: { "resources.wood": -15, "resources.stone": -0, "resources.iron": -0 } }),
+            { new: true },
+        );
+    });
+
+    it("reports a lost race instead of overdrawing", async () => {
+        stubSettlement({ ownerId: "owner", tiles, resources: { wood: 15, stone: 0, iron: 0 } }, null);
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "lumber-camp"))
+            .rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
 
 describe("Kingdom Builder barracks", () => {
     it("allows one barracks per settlement", async () => {
@@ -122,7 +159,10 @@ describe("Kingdom Builder barracks", () => {
 
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ "tiles.building.type": { $ne: "barracks" } }),
-            { $set: { construction: { tilePosition: 1, buildingType: "barracks", targetLevel: 1, ticksRemaining: 2 } } },
+            {
+                $set: { construction: { tilePosition: 1, buildingType: "barracks", targetLevel: 1, ticksRemaining: 2 } },
+                $inc: { "resources.wood": -30, "resources.stone": -20, "resources.iron": -10 },
+            },
             { new: true },
         );
     });
@@ -134,7 +174,10 @@ describe("Kingdom Builder barracks", () => {
 
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ tiles: { $elemMatch: { position: 0, "building.type": "barracks", "building.level": 2 } } }),
-            { $set: { construction: { tilePosition: 0, buildingType: "barracks", targetLevel: 3, ticksRemaining: 6 } } },
+            {
+                $set: { construction: { tilePosition: 0, buildingType: "barracks", targetLevel: 3, ticksRemaining: 6 } },
+                $inc: { "resources.wood": -90, "resources.stone": -60, "resources.iron": -30 },
+            },
             { new: true },
         );
 

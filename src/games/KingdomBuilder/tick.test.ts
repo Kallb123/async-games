@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { describe, expect, it } from "vitest";
 
 import type { IKingdomBuilderSettlement } from "./KingdomBuilderSettlementModel";
+import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE } from "./buildings";
 import { applyTick } from "./tick";
 
 function settlement(overrides: Partial<IKingdomBuilderSettlement> = {}): IKingdomBuilderSettlement {
@@ -43,6 +44,14 @@ describe("Kingdom Builder tick engine", () => {
         expect(completed.settlements[0].construction).toBeUndefined();
         expect(completed.settlements[0].resources.wood).toBe(0);
         expect(applyTick(completed).settlements[0].resources.wood).toBe(2);
+    });
+
+    it("pays the town centre's trickle whatever else stands", () => {
+        const input = { currentTick: 0, settlements: [settlement({
+            tiles: [{ position: 4, building: { type: "town-centre", level: 1 } }], resources: { wood: 0, stone: 0, iron: 0 },
+        })] };
+
+        expect(applyTick(input).settlements[0].resources).toEqual(KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE);
     });
 
     it("trains the barracks' queue into the garrison alongside construction", () => {

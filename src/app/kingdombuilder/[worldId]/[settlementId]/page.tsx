@@ -8,7 +8,8 @@ import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import Stat from "@/components/ui/Stat";
 import type { KingdomBuilderResources, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
-import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, type KingdomBuilderPrototypeBuilding } from "@/games/KingdomBuilder/buildings";
+import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "@/games/KingdomBuilder/buildings";
+import { canAfford, formatResources, shortfallFor } from "@/games/KingdomBuilder/resources";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -27,16 +28,23 @@ import styles from "./page.module.css";
 
 const BUILDING_DETAILS: Record<string, { name: string; icon: string; resource?: string }> = {
     "town-centre": { name: "Town centre", icon: "🏰" },
-    "lumber-camp": { name: "Lumber camp", icon: "🪵", resource: "Produces wood every tick" },
-    quarry: { name: "Quarry", icon: "🪨", resource: "Produces stone every tick" },
-    mine: { name: "Mine", icon: "⛏️", resource: "Produces iron every tick" },
-    barracks: { name: "Barracks", icon: "🏯", resource: "Trains army units" },
+    "lumber-camp": { name: "Lumber camp", icon: "🪵", resource: "produces wood every tick" },
+    quarry: { name: "Quarry", icon: "🪨", resource: "produces stone every tick" },
+    mine: { name: "Mine", icon: "⛏️", resource: "produces iron every tick" },
+    barracks: { name: "Barracks", icon: "🏯", resource: "trains army units" },
 };
 
-const RESOURCE_TYPES = ["wood", "stone", "iron"] as const;
-
-function formatCost(cost: KingdomBuilderResources): string {
-    return RESOURCE_TYPES.filter(resource => cost[resource] > 0).map(resource => `${cost[resource]} ${resource}`).join(" · ");
+/**
+ * What a row costs against the stores, for every priced row — buildings and
+ * units alike. An unaffordable row stays on screen with its shortfall, so a
+ * player can see what they are saving for (§4.5).
+ */
+function priceFor(cost: KingdomBuilderResources, stores: KingdomBuilderResources) {
+    const affordable = canAfford(stores, cost);
+    return {
+        affordable,
+        label: affordable ? formatResources(cost) : `${formatResources(cost)} (short ${formatResources(shortfallFor(stores, cost))})`,
+    };
 }
 
 function ticks(count: number): string {
@@ -86,6 +94,9 @@ export default function KingdomBuilderSettlementPage({
     const buildableTypes = KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => type !== "barracks" || (!barracks && !construction));
     const trainingQueue = data?.trainingQueue ?? [];
     const queueFull = trainingQueue.length >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT;
+    const upgradePrice = data && barracks && barracksLevel < KINGDOM_BUILDER_BARRACKS_MAX_LEVEL
+        ? priceFor(buildingCostFor("barracks", barracksLevel + 1), data.resources)
+        : null;
 
     return (
         <main>
@@ -148,18 +159,22 @@ export default function KingdomBuilderSettlementPage({
                             <>
                                 <p className={styles.status}>{selectedTile === null ? "Choose an empty tile, then pick a building." : `Building on tile ${selectedTile + 1}.`}</p>
                                 <div className="ag-build-list">
-                                    {buildableTypes.map(buildingType => (
-                                        <BuildRow
-                                            key={buildingType}
-                                            icon={BUILDING_DETAILS[buildingType].icon}
-                                            name={BUILDING_DETAILS[buildingType].name}
-                                            cost={BUILDING_DETAILS[buildingType].resource}
-                                            tag={pending === buildingType ? "Queuing…" : "Build"}
-                                            disabled={selectedTile === null || isPending}
-                                            pending={pending === buildingType}
-                                            onClick={() => queueBuilding(buildingType)}
-                                        />
-                                    ))}
+                                    {data && buildableTypes.map(buildingType => {
+                                        const price = priceFor(buildingCostFor(buildingType, 1), data.resources);
+                                        return (
+                                            <BuildRow
+                                                key={buildingType}
+                                                icon={BUILDING_DETAILS[buildingType].icon}
+                                                name={BUILDING_DETAILS[buildingType].name}
+                                                cost={`${price.label} · ${ticks(buildTicksFor(1))} · ${BUILDING_DETAILS[buildingType].resource}`}
+                                                tag={pending === buildingType ? "Queuing…" : price.affordable ? "Build" : "Can't afford"}
+                                                tagMuted={!price.affordable}
+                                                disabled={selectedTile === null || !price.affordable || isPending}
+                                                pending={pending === buildingType}
+                                                onClick={() => queueBuilding(buildingType)}
+                                            />
+                                        );
+                                    })}
                                 </div>
                             </>
                         )}
@@ -175,14 +190,14 @@ export default function KingdomBuilderSettlementPage({
                                         + (trainingQueue.length > 1 ? `, then ${trainingQueue.length - 1} more (${trainingQueue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".")}
                             </p>
                             <div className="ag-build-list">
-                                {barracksLevel < KINGDOM_BUILDER_BARRACKS_MAX_LEVEL && (
+                                {upgradePrice && (
                                     <BuildRow
                                         icon={BUILDING_DETAILS.barracks.icon}
                                         name={`Upgrade to level ${barracksLevel + 1}`}
-                                        cost={`Unlocks stronger units and trains faster · ${ticks(buildTicksFor(barracksLevel + 1))}`}
-                                        tag={construction ? "Busy" : pending === "upgrade" ? "Queuing…" : "Upgrade"}
-                                        tagMuted={!!construction}
-                                        disabled={!!construction || isPending}
+                                        cost={`${upgradePrice.label} · ${ticks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units and trains faster`}
+                                        tag={construction ? "Busy" : pending === "upgrade" ? "Queuing…" : upgradePrice.affordable ? "Upgrade" : "Can't afford"}
+                                        tagMuted={!!construction || !upgradePrice.affordable}
+                                        disabled={!!construction || !upgradePrice.affordable || isPending}
                                         pending={pending === "upgrade"}
                                         onClick={() => send("upgrade", { tilePosition: barracks.position, buildingType: "barracks" })}
                                     />
@@ -231,15 +246,15 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
 }) {
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const trainTicks = trainingTicksFor(unitType, barracksLevel);
-    const affordable = RESOURCE_TYPES.every(resource => resources[resource] >= unit.cost[resource]);
-    const blocker = trainTicks === null ? `Level ${unit.barracksLevel}` : queueFull ? "Queue full" : !affordable ? "Can't afford" : null;
+    const price = priceFor(unit.cost, resources);
+    const blocker = trainTicks === null ? `Level ${unit.barracksLevel}` : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
     return (
         <BuildRow
             icon={unit.icon}
             name={unit.name}
             cost={trainTicks === null
                 ? `${unit.role} · needs a level ${unit.barracksLevel} barracks`
-                : `${formatCost(unit.cost)} · ${ticks(trainTicks)} · ${unit.speed}`}
+                : `${price.label} · ${ticks(trainTicks)} · ${unit.speed}`}
             tag={pending ? "Queuing…" : blocker ?? "Train"}
             tagMuted={!!blocker}
             disabled={!!blocker || disabled}

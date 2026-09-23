@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { createWorld, foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { WorldNode } from "./worldgen/landmass";
 
@@ -54,7 +55,7 @@ describe("Kingdom Builder persistence", () => {
             position: KINGDOM_BUILDER_TOWN_CENTRE_INDEX,
             building: { type: "town-centre", level: 1 },
         });
-        expect(settlement.resources).toEqual({ wood: 0, stone: 0, iron: 0 });
+        expect(settlement.resources).toEqual(KINGDOM_BUILDER_STARTING_STOCKPILE);
     });
 
     it("does not found on expansion or terrain nodes", async () => {
@@ -73,6 +74,8 @@ describe("Kingdom Builder persistence", () => {
 
         await foundSettlement(worldId, "user-1", "expansion-1", undefined, "expansion");
 
-        expect(create.mock.calls[0][0]).toMatchObject({ ownerId: "user-1", nodeId: "expansion-1", settlementNumber: 1 });
+        expect(create.mock.calls[0][0]).toMatchObject({
+            ownerId: "user-1", nodeId: "expansion-1", settlementNumber: 1, resources: { wood: 0, stone: 0, iron: 0 },
+        });
     });
 });
