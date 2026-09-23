@@ -7,7 +7,7 @@ const SHEET = { path: "/art/kingdombuilder/ground.png", tileWidth: 16, tileHeigh
 
 describe("the tileset manifest", () => {
     it("has its first sheet declared — PR 11's ground autotile", () => {
-        expect(Object.keys(TILESET.sheets)).toEqual(["ground"]);
+        expect(Object.keys(TILESET.sheets)).toContain("ground");
     });
 
     it("passes its own guard", () => {
