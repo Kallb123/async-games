@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ClientSession } from "mongoose";
 
-import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, catchmentForSettlement, removeEndedWorlds } from "@/games/KingdomBuilder";
+import { KingdomBuilderArmyModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, catchmentForSettlement, removeEndedWorlds } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -38,7 +38,9 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
         MAX_CATCH_UP_TICKS,
         Math.floor((now.getTime() - scheduledTick.getTime()) / KINGDOM_BUILDER_TICK_INTERVAL_MS) + 1,
     );
-    let ticked = { currentTick: world.currentTick, settlements };
+    // Only the armies still on the road: one that has arrived just waits (PR 19).
+    const armies = await KingdomBuilderArmyModel.find({ worldId, arrivedAtTick: null }).session(session).lean();
+    let ticked = { currentTick: world.currentTick, settlements, armies };
     for (let tick = 0; tick < elapsedTicks; tick++) ticked = applyTick(ticked);
 
     const nextTickAt = new Date(scheduledTick.getTime() + elapsedTicks * KINGDOM_BUILDER_TICK_INTERVAL_MS);
@@ -64,6 +66,20 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
                     update: settlement.construction
                         ? { $set: { ...fields, construction: settlement.construction } }
                         : { $set: fields, $unset: { construction: 1 } },
+                },
+            };
+        }), { session });
+    }
+    if (armies.length) {
+        // An army missing from the ticked list marched home and rejoined its garrison, saved above.
+        const marched = new Map(ticked.armies.map(army => [army._id.toString(), army]));
+        await KingdomBuilderArmyModel.bulkWrite(armies.map(army => {
+            const next = marched.get(army._id.toString());
+            if (!next) return { deleteOne: { filter: { _id: army._id, worldId } } };
+            return {
+                updateOne: {
+                    filter: { _id: army._id, worldId },
+                    update: { $set: { travelled: next.travelled, ...(next.arrivedAtTick === undefined ? {} : { arrivedAtTick: next.arrivedAtTick }) } },
                 },
             };
         }), { session });

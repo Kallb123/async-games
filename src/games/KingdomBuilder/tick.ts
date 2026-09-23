@@ -3,6 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
+import { addUnits, advanceMarch, type KingdomBuilderMarch } from "./armies";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { advanceTraining } from "./units";
@@ -11,6 +12,11 @@ import { groundlessCatchment, type KingdomBuilderCatchment } from "./worldgen/ca
 export interface KingdomBuilderTickWorld {
     currentTick: number;
     settlements: readonly IKingdomBuilderSettlement[];
+    /**
+     * Armies in the field (PR 19). One that reaches a settlement of its
+     * owner's rejoins that garrison, and is gone from the list the tick returns.
+     */
+    armies?: readonly KingdomBuilderMarch[];
 }
 
 /**
@@ -45,9 +51,12 @@ function catchmentOf(settlement: IKingdomBuilderSettlement): KingdomBuilderCatch
  * barracks' queue and the building queue are separate (§4.2).
  */
 export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
+    const currentTick = world.currentTick + 1;
+    const { armies, joining } = marchArmies(world, currentTick);
     return {
         ...world,
-        currentTick: world.currentTick + 1,
+        currentTick,
+        ...(world.armies ? { armies } : {}),
         settlements: world.settlements.map(settlement => {
             const production = productionFor(settlement.tiles, catchmentOf(settlement));
             const construction = settlement.construction;
@@ -64,11 +73,41 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
                 ...settlement,
                 tiles,
                 resources: addResources(settlement.resources, production),
-                ...advanceTraining(settlement.trainingQueue, settlement.garrison),
+                ...withJoining(advanceTraining(settlement.trainingQueue, settlement.garrison), joining.get(settlement)),
                 ...(construction && ticksRemaining !== 0
                     ? { construction: { ...construction, ticksRemaining: ticksRemaining! } }
                     : { construction: undefined }),
             };
         }),
     };
+}
+
+/**
+ * Every army's move this tick (§6.2). Movement comes after the settlements'
+ * own work in the same tick, so an army that marches home is back in the
+ * garrison the tick it arrives, beside whatever the barracks finished.
+ */
+function marchArmies(world: KingdomBuilderTickWorld, tick: number) {
+    const homes = new Map<string, Map<string, IKingdomBuilderSettlement>>();
+    for (const settlement of world.settlements) {
+        if (!homes.has(settlement.ownerId)) homes.set(settlement.ownerId, new Map());
+        homes.get(settlement.ownerId)!.set(settlement.nodeId, settlement);
+    }
+    const joining = new Map<IKingdomBuilderSettlement, KingdomBuilderMarch["units"][]>();
+    const armies: KingdomBuilderMarch[] = [];
+    for (const army of world.armies ?? []) {
+        const home = homes.get(army.ownerId) ?? new Map<string, IKingdomBuilderSettlement>();
+        const { march, joins } = advanceMarch(army, tick, new Set(home.keys()));
+        const settlement = joins === undefined ? undefined : home.get(joins);
+        if (!settlement) {
+            armies.push(march);
+            continue;
+        }
+        joining.set(settlement, [...(joining.get(settlement) ?? []), march.units]);
+    }
+    return { armies, joining };
+}
+
+function withJoining<T extends { garrison: KingdomBuilderMarch["units"] }>(trained: T, arriving: readonly KingdomBuilderMarch["units"][] = []): T {
+    return { ...trained, garrison: arriving.reduce(addUnits, trained.garrison) };
 }

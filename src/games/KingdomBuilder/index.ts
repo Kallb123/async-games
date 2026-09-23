@@ -1,3 +1,4 @@
+export * from "./KingdomBuilderArmyModel";
 export * from "./KingdomBuilderSettlementModel";
 export * from "./KingdomBuilderWorldModel";
 export * from "./lifecycle";
@@ -11,3 +12,4 @@ export * from "./units";
 export * from "./buildings";
 export * from "./resources";
 export * from "./land";
+export * from "./armies";

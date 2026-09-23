@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { IKingdomBuilderSettlement } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE } from "./buildings";
 import { applyTick } from "./tick";
+import { garrisonOf } from "./units";
 
 function settlement(overrides: Partial<IKingdomBuilderSettlement> = {}): IKingdomBuilderSettlement {
     return {
@@ -95,5 +96,28 @@ describe("Kingdom Builder tick engine", () => {
         const thrice = applyTick(applyTick(once));
         expect(thrice.settlements[0].garrison?.militia).toBe(2);
         expect(thrice.settlements[0].trainingQueue).toEqual([]);
+    });
+
+    it("marches armies and folds one that reaches its owner's own settlement back into the garrison", () => {
+        const army = (targetNodeId: string, ownerId = "owner") => ({
+            ownerId, units: garrisonOf({ militia: 2, scout: 1 }), path: [0, 1], pathCosts: [0, 2], travelled: 0, targetNodeId,
+        });
+        const input = { currentTick: 4, settlements: [settlement({ garrison: garrisonOf({ militia: 1 }) })], armies: [
+            army("site"), army("elsewhere"), army("site", "rival"), { ...army("site"), pathCosts: [0, 20] },
+        ] };
+
+        const result = applyTick(input);
+        expect(result.settlements[0].garrison).toEqual(garrisonOf({ militia: 3, scout: 1 }));
+        // The one bound elsewhere camps, a rival's stays a rival's, and the long march is still on the road.
+        expect(result.armies).toEqual([
+            { ...army("elsewhere"), travelled: 2, arrivedAtTick: 5 },
+            { ...army("site", "rival"), travelled: 2, arrivedAtTick: 5 },
+            { ...army("site"), pathCosts: [0, 20], travelled: 2 },
+        ]);
+        expect(input.armies[0].travelled).toBe(0);
+    });
+
+    it("leaves a world with no armies field without one", () => {
+        expect(applyTick({ currentTick: 0, settlements: [] })).not.toHaveProperty("armies");
     });
 });

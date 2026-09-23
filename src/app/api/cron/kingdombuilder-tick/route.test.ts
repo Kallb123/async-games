@@ -7,7 +7,7 @@ vi.mock("@/utils/mongodb/mongodb", () => ({
     }),
 }));
 
-import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel } from "@/games/KingdomBuilder";
+import { KingdomBuilderArmyModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel } from "@/games/KingdomBuilder";
 import { POST } from "./route";
 
 const originalSecret = process.env.CRON_SECRET;
@@ -69,6 +69,7 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             resources: { wood: 0, stone: 0, iron: 0 },
         }] }) } as never);
         const bulkWrite = vi.spyOn(KingdomBuilderSettlementModel, "bulkWrite").mockResolvedValue({} as never);
+        vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ session: () => ({ lean: async () => [] }) } as never);
 
         const response = await POST(request("Bearer cron-secret"));
 
@@ -78,5 +79,42 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
         expect(updateOne.update.$set.catchment).toEqual({ wood: "none", stone: "none", iron: "none", wheat: "rich" });
         // A rich farm's 3 and the town centre's 1 — into stores that had no wheat field at all.
         expect(updateOne.update.$set.resources).toEqual({ wood: 1, stone: 0, iron: 0, wheat: 4 });
+    });
+
+    it("marches the world's armies, camping one and folding one that reached home back into its garrison", async () => {
+        process.env.CRON_SECRET = "cron-secret";
+        const worldId = "64b000000000000000000002";
+        const lean = vi.fn().mockResolvedValueOnce([{ _id: worldId }]).mockResolvedValue([]);
+        const chain = { sort: () => chain, limit: () => chain, select: () => chain, lean };
+        vi.spyOn(KingdomBuilderWorldModel, "find").mockReturnValue(chain as never);
+        vi.spyOn(KingdomBuilderWorldModel, "findById")
+            .mockReturnValue({ select: () => ({ session: () => ({ lean: async () => ({ currentTick: 5, nextTickAt: new Date(Date.now() - 1000) }) }) }) } as never);
+        vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ session: () => ({ lean: async () => [{
+            _id: "s1", worldId, ownerId: "owner", nodeId: "home",
+            tiles: [{ position: 4, building: { type: "town-centre", level: 1 } }],
+            resources: { wood: 0, stone: 0, iron: 0, wheat: 0 },
+            catchment: { wood: "none", stone: "none", iron: "none", wheat: "none" },
+            garrison: { militia: 1 },
+        }] }) } as never);
+        const settlementWrites = vi.spyOn(KingdomBuilderSettlementModel, "bulkWrite").mockResolvedValue({} as never);
+        const army = (id: string, targetNodeId: string) => ({
+            _id: id, worldId, ownerId: "owner", units: { militia: 2, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
+            path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "somewhere", targetNodeId,
+        });
+        const armyFind = vi.spyOn(KingdomBuilderArmyModel, "find")
+            .mockReturnValue({ session: () => ({ lean: async () => [army("a1", "home"), army("a2", "camp")] }) } as never);
+        const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
+
+        const response = await POST(request("Bearer cron-secret"));
+
+        expect(response.status).toBe(200);
+        expect(armyFind).toHaveBeenCalledWith({ worldId, arrivedAtTick: null });
+        const [{ updateOne }] = settlementWrites.mock.calls[0][0] as unknown as [{ updateOne: { update: { $set: Record<string, unknown> } } }];
+        expect(updateOne.update.$set.garrison).toMatchObject({ militia: 3 });
+        expect(armyWrites.mock.calls[0][0]).toEqual([
+            { deleteOne: { filter: { _id: "a1", worldId } } },
+            { updateOne: { filter: { _id: "a2", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 6 } } } },
+        ]);
     });
 });
