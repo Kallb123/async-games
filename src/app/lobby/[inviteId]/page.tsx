@@ -7,17 +7,14 @@ import { useToast } from "@/components/ToastContext";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import type { ILobbyResponse } from "@/app/api/lobby/[inviteId]/route";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
-import { buildJoinHref } from "@/utils/games/joinCode";
-import { formatRemainingUntil } from "@/utils/games/TurnTimer";
-import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { metaForGame, partySizeErrorMessage } from "@/utils/ui/games";
-import { shareOrCopyLink } from "@/utils/ui/share";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import Avatar from "@/components/ui/Avatar";
 import PartySizeHint from "@/components/ui/PartySizeHint";
+import JoinCodeCard from "@/components/ui/JoinCodeCard";
 
 // Where everyone with a seat waits: the host who opened the lobby and each
 // player who has claimed a seat with the code. Same screen for both — the code
@@ -31,7 +28,6 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   useAuthGuard();
   const router = useRouter();
   const { showToast } = useToast();
-  const now = useNowToTheMinute();
   const enterStartedGame = useEnterStartedGame();
   const [starting, setStarting] = useState(false);
 
@@ -82,32 +78,6 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   const meta = metaForGame({ url: startedGame?.gameUrl, friendlyName: invite?.gameFriendlyName });
   const seats = invite?.userList ?? [];
   const claimedSeats = seats.filter(seat => seat.name !== OPEN_SEAT_LABEL);
-
-  // A code that quietly stopped working is the one thing a host can't explain
-  // to the friend still typing it in, so the deadline is on screen from the
-  // start rather than only in the toast that follows it. How long a lobby gets
-  // depends on the turn timer they chose (see lobbyTtlMs), which is the other
-  // reason to say it rather than leave it to be learned.
-  const expiresIn = invite?.expiresAt ? formatRemainingUntil(invite.expiresAt, now) : null;
-
-  // What the card hands over is the code's second form: a link that opens
-  // /join with the code already in the box (docs/account-less-play.md §4).
-  // "Go to the site, tap Join, type PLUM" is three instructions a friend can
-  // abandon at any one of them; a link is one tap, and it is a strict superset
-  // of the code it contains — which is why this is a change to the control
-  // that's already here rather than a second button beside it. The code stays
-  // on screen, large, for whoever is sitting opposite and typing it.
-  const handleShare = async () => {
-    if (!invite?.joinCode) return;
-    const { joinCode } = invite;
-    const url = `${window.location.origin}${buildJoinHref(joinCode)}`;
-    // Names the game in the shared message too: where a chat app renders the
-    // link preview the card says it, but a plain-text paste is all some of
-    // them show.
-    const result = await shareOrCopyLink(url, `Join my ${invite.gameFriendlyName} game — the code is ${joinCode}.`);
-    if (result === 'copied') showToast('Link copied!', 'success');
-    if (result === 'failed') showToast('Could not copy — share the code instead.', 'danger');
-  };
 
   // The party if the host starts right now: every claimed seat plus the host,
   // which is what POST /api/lobby/start leaves once it drops the empty ones.
@@ -163,23 +133,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
         </div>
       ) : (
         <>
-          <div className="ag-section">
-            <button
-              type="button"
-              className="ag-card ag-joincode-card"
-              onClick={handleShare}
-              disabled={!invite?.joinCode}
-            >
-              <div className="ag-section-label">
-                Tap to share
-              </div>
-              <div className="ag-joincode" style={{ "--ag-joincode-size": "44px", marginTop: 4 } as React.CSSProperties}>
-                {invite?.joinCode ?? "····"}
-              </div>
-            </button>
-            <p className="ag-hint ag-hint--center">Sends a link that opens straight onto an open seat — or read the code out.</p>
-            {expiresIn && <p className="ag-hint ag-hint--center">Works for another {expiresIn}, then the lobby closes.</p>}
-          </div>
+          <JoinCodeCard joinCode={invite?.joinCode} gameFriendlyName={invite?.gameFriendlyName} expiresAt={invite?.expiresAt} />
 
           <ListSection
             label="Seats"

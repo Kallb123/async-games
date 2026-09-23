@@ -1,5 +1,5 @@
 // The generated ground (GDD §3.5): a square grid of area codes over the same
-// 100×70 coordinate space the world graph already occupies, painted from the
+// WORLD_WIDTH × WORLD_HEIGHT coordinate space the world graph already occupies, painted from the
 // landmass's own elevation field plus a second, independently generated
 // moisture field. This is what makes movement cost something observed off the
 // ground an edge crosses (§3.5.4) rather than a guess at the nearest node.
@@ -9,7 +9,7 @@
 // pass needs settlement sites to exist first, so it — and the smoothing that
 // follows it — runs as a second step once `generateWorld` has placed them.
 
-import { coherentNoiseGrid, isLand, landValueAt, pointDistance, type Landmass, type Point } from "./landmass";
+import { WORLD_AREA_SCALE, coherentNoiseGrid, isLand, landValueAt, noiseLatticeFor, pointDistance, type Landmass, type Point } from "./landmass";
 import type { RandomSource } from "./random";
 import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, LAND_WINDOW_CODES, OCEAN_CODE, PROVISIONAL_WATER_CODE, RIVER_CODE, windowAreaFor } from "./areas";
 
@@ -88,7 +88,7 @@ export function runWaterSplitPass(codes: string[], columns: number, rows: number
  * on every attempt, and `generateWorld`'s retry loop absorbs a world where
  * the resulting graph can't connect.
  */
-export function runRiverTracePass(codes: string[], elevations: readonly number[], columns: number, rows: number, random: RandomSource, riverCount = 1): void {
+export function runRiverTracePass(codes: string[], elevations: readonly number[], columns: number, rows: number, random: RandomSource, riverCount = Math.round(WORLD_AREA_SCALE)): void {
     const isWater = (index: number): boolean => codes[index] === OCEAN_CODE || codes[index] === PROVISIONAL_WATER_CODE;
     const sources = random.shuffle(elevations.map((elevation, index) => index).filter(index => !isWater(index) && elevations[index] >= 0.6)).slice(0, riverCount);
 
@@ -171,7 +171,7 @@ export function runSmoothingPass(codes: string[], columns: number, rows: number,
 export function generateBaseTerrainField(landmass: Landmass, random: RandomSource): { field: TerrainField; elevations: number[] } {
     const columns = gridColumns(landmass.width);
     const rows = gridRows(landmass.height);
-    const moisture = coherentNoiseGrid(random, columns, rows);
+    const moisture = coherentNoiseGrid(random, columns, rows, noiseLatticeFor(landmass.width));
     const elevations: number[] = [];
     const codes: string[] = [];
 

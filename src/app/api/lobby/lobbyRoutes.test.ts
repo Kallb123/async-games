@@ -16,9 +16,10 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 
-import { ANN, BOB, get, resetApiRouteStubs, seedSnakesAndLadders, signIn, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, get, jsonPost, resetApiRouteStubs, seedSnakesAndLadders, signIn, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { GET as lobby } from './[inviteId]/route';
+import { POST as startLobby } from './start/route';
 
 const INVITE_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -115,11 +116,47 @@ describe('GET /api/lobby/[inviteId]', () => {
         expect(response.status).toBe(404);
     });
 
+    it("sends the host of a Kingdom Builder world's invitation to the world", async () => {
+        signIn(ANN);
+        seedLobby({ worldId: '64b000000000000000000001', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+
+        const response = await lobby(get(`/api/lobby/${INVITE_ID}`), params());
+
+        expect(await response.json()).toEqual({
+            success: true,
+            startedGame: { gameId: '64b000000000000000000001', gameUrl: 'kingdombuilder' }
+        });
+    });
+
+    it("keeps a world invitation's lobby for a named player who hasn't joined yet", async () => {
+        signIn(BOB);
+        seedLobby({ worldId: '64b000000000000000000001', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+
+        const body = await (await lobby(get(`/api/lobby/${INVITE_ID}`), params())).json();
+
+        expect(body.startedGame).toBeUndefined();
+        expect(body.invite.joinCode).toBe('PLUM');
+    });
+
     it('401s a caller with no session, so a refreshing cookie retries', async () => {
         noLobby();
 
         const response = await lobby(get(`/api/lobby/${INVITE_ID}`), params());
 
         expect(response.status).toBe(401);
+    });
+});
+
+describe('POST /api/lobby/start', () => {
+    it('refuses to "start" a Kingdom Builder world, which is already running', async () => {
+        signIn(ANN);
+        seedLobby({ worldId: '64b000000000000000000001', gameType: 'KingdomBuilder', gameFriendlyName: 'Kingdom Builder' } as Partial<IInvitationDataDocument>);
+        const pull = vi.spyOn(InvitationModel, 'findOneAndUpdate');
+
+        const response = await startLobby(jsonPost('/api/lobby/start', { inviteId: INVITE_ID }));
+
+        expect(response.status).toBe(400);
+        // Its open seats stay open for players joining mid-season.
+        expect(pull).not.toHaveBeenCalled();
     });
 });

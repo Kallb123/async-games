@@ -16,7 +16,7 @@
 // meaning is declared.
 
 import type { Point, SettlementSiteType, WorldEdge, WorldNode } from "./landmass";
-import { pointDistance } from "./landmass";
+import { WORLD_AREA_SCALE, pointDistance } from "./landmass";
 import type { RandomSource } from "./random";
 import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, HILLS_CODE, MOUNTAINS_CODE, OCEAN_CODE, WOODLAND_CODE, areaWeightForCode } from "./areas";
 import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./overlays";
@@ -203,7 +203,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
     return [
         {
             code: "U",
-            count: 6,
+            count: 6 * WORLD_AREA_SCALE,
             minimumSpacing: 8,
             eligible: (field, col, row) => {
                 const code = field.codes[tileIndex(field, col, row)];
@@ -214,7 +214,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
         },
         {
             code: "T",
-            count: 4,
+            count: 4 * WORLD_AREA_SCALE,
             minimumSpacing: 8,
             eligible: (field, col, row) => {
                 if (field.codes[tileIndex(field, col, row)] !== HILLS_CODE) return false;
@@ -223,7 +223,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
         },
         {
             code: "K",
-            count: 4,
+            count: 4 * WORLD_AREA_SCALE,
             minimumSpacing: 6,
             eligible: (field, col, row) => {
                 if (field.codes[tileIndex(field, col, row)] !== OCEAN_CODE) return false;
@@ -232,7 +232,7 @@ function scatteredRules(nodes: readonly WorldNode[]): readonly ScatteredRule[] {
         },
         {
             code: "V",
-            count: 3,
+            count: 3 * WORLD_AREA_SCALE,
             minimumSpacing: 10,
             eligible: (field, col, row) => field.codes[tileIndex(field, col, row)] === MOUNTAINS_CODE,
         },

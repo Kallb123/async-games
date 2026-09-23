@@ -116,29 +116,47 @@ export function connectWorldGraph(nodes: readonly WorldNode[], field: TerrainFie
         });
     };
 
-    // Prim's algorithm gives the shortest available bridge into the connected component.
-    while (connected.size < nodes.length) {
-        let best: { from: WorldNode; to: WorldNode; distance: number; result: EdgeCostResult } | undefined;
-        for (const from of nodes) {
-            if (!connected.has(from.id)) continue;
-            for (const to of nodes) {
-                if (connected.has(to.id)) continue;
-                const result = edgeCostFor(field, from, to);
-                if (!result.passable) continue;
-                const candidateDistance = pointDistance(from, to);
-                if (!best || candidateDistance < best.distance) best = { from, to, distance: candidateDistance, result };
-            }
+    // Every pair's walk is computed once and shared by both passes below —
+    // the walk is the expensive part, and a world of a couple of hundred
+    // nodes would otherwise repeat it for every pair on every Prim step.
+    const pairCosts = nodes.map((from, first) => nodes.map((to, second) =>
+        second > first ? edgeCostFor(field, from, to) : undefined));
+    const pairCost = (first: number, second: number): EdgeCostResult =>
+        first < second ? pairCosts[first][second]! : pairCosts[second][first]!;
+
+    // Prim's algorithm gives the shortest available bridge into the connected
+    // component: each node outside it remembers its nearest passable link in,
+    // refreshed as each new node joins, so a step is a scan of that table.
+    const inTree = nodes.map((_, index) => index === 0);
+    const bestLink: ({ from: number; distance: number } | undefined)[] = nodes.map(() => undefined);
+    const offerLinksFrom = (from: number): void => {
+        for (let to = 0; to < nodes.length; to++) {
+            if (inTree[to] || !pairCost(from, to).passable) continue;
+            const distance = pointDistance(nodes[from], nodes[to]);
+            const current = bestLink[to];
+            if (!current || distance < current.distance) bestLink[to] = { from, distance };
         }
-        if (!best) throw new Error("Unable to connect world graph");
-        addEdge(best.from, best.to, best.result);
-        connected.add(best.to.id);
+    };
+    offerLinksFrom(0);
+    while (connected.size < nodes.length) {
+        let next: number | undefined;
+        for (let index = 0; index < nodes.length; index++) {
+            const link = bestLink[index];
+            if (!inTree[index] && link && (next === undefined || link.distance < bestLink[next]!.distance)) next = index;
+        }
+        if (next === undefined) throw new Error("Unable to connect world graph");
+        const { from } = bestLink[next]!;
+        addEdge(nodes[from], nodes[next], pairCost(from, next));
+        connected.add(nodes[next].id);
+        inTree[next] = true;
+        offerLinksFrom(next);
     }
 
     const candidates: { from: WorldNode; to: WorldNode; distance: number; result: EdgeCostResult }[] = [];
     for (let first = 0; first < nodes.length; first++) {
         for (let second = first + 1; second < nodes.length; second++) {
             if (keys.has(edgeKey(nodes[first].id, nodes[second].id))) continue;
-            const result = edgeCostFor(field, nodes[first], nodes[second]);
+            const result = pairCost(first, second);
             if (!result.passable) continue;
             candidates.push({ from: nodes[first], to: nodes[second], distance: pointDistance(nodes[first], nodes[second]), result });
         }

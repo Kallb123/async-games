@@ -3,14 +3,13 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
-import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
+import { IInvitationDataDocument, IInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { themeIdFor } from '@/utils/ui/gameThemes';
-import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
+import { lobbyTtlMs, seatList } from '@/utils/games/lobby';
 import { isValidTurnTimer } from '@/utils/games/TurnTimer';
-import { generateJoinCode } from '@/utils/games/joinCode';
-import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
+import { saveWithFreshJoinCode } from '@/utils/games/joinCodeSave';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { readableName } from '@/utils/ui/players';
 
@@ -24,11 +23,6 @@ export interface ILobbyRequest extends IInvitationRequest {
     seatCount: number;
     [extraGameSetting: string]: unknown;
 }
-
-// A generated code collides with a live lobby's about 1-in-234k of the time
-// (docs/account-less-play.md §4), so a handful of retries is already many
-// times more headroom than the collision odds need.
-const MAX_JOIN_CODE_ATTEMPTS = 5;
 
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
@@ -108,49 +102,33 @@ export async function POST(request: NextRequest) {
 
     await dbConnect();
 
-    const userIdList: IUserIdAcceptance[] = invitedUsers
-        .map(user => ({ userId: user.id, inviteAccepted: false }))
-        .concat(Array.from({ length: seatCount }, () => ({ userId: OPEN_SEAT_ID, inviteAccepted: false })));
+    const userIdList = seatList(invitedUsers, seatCount);
 
-    let invite: IInvitationDataDocument | undefined;
-    for (let attempt = 0; !invite; attempt++) {
-        // The spread comes first on purpose: every field the server decides —
-        // ids, the sender, the seats, the timer, the game, the theme, the code
-        // and its expiry — is re-set below it, so a body that sent one of them
-        // is overwritten rather than believed. Moving any of those keys above
-        // the spread would hand the client its own value back. What survives it
-        // is each game's own settings (`enabledDocks` and friends), which
-        // Mongoose's strict mode limits to that game's schema.
-        const candidate: IInvitationDataDocument = new invitationModel({
-            ...gameSettings,
-            inviteId: randomUUID(),
-            senderId: userId,
-            userIdList,
-            turnTimer,
-            timestamp: (new Date()).toISOString(),
-            gameType,
-            gameFriendlyName: meta.name,
-            // Every game's theme in one place: `gameSettings` carried whatever
-            // the client asked for, and this is what decides the game is
-            // actually played in one of that game's own themes (or, for a game
-            // with none, in nothing at all).
-            theme: themeIdFor(gameType.toLowerCase(), gameSettings.theme),
-            joinCode: generateJoinCode(),
-            expiresAt: new Date(Date.now() + lobbyTtlMs(turnTimer)),
-            senderName: readableName(thisUser),
-        });
-        try {
-            await candidate.save();
-            invite = candidate;
-        } catch (err: any) {
-            // The partial unique index on joinCode throws this on a
-            // collision — no coordination, no counter, just try again with a
-            // fresh code (docs/account-less-play.md §4).
-            if (!isDuplicateKeyError(err) || attempt >= MAX_JOIN_CODE_ATTEMPTS - 1) {
-                throw err;
-            }
-        }
-    }
+    // The spread comes first on purpose: every field the server decides —
+    // ids, the sender, the seats, the timer, the game, the theme, the code
+    // and its expiry — is re-set below it, so a body that sent one of them
+    // is overwritten rather than believed. Moving any of those keys above
+    // the spread would hand the client its own value back. What survives it
+    // is each game's own settings (`enabledDocks` and friends), which
+    // Mongoose's strict mode limits to that game's schema.
+    const invite = await saveWithFreshJoinCode((joinCode): IInvitationDataDocument => new invitationModel({
+        ...gameSettings,
+        inviteId: randomUUID(),
+        senderId: userId,
+        userIdList,
+        turnTimer,
+        timestamp: (new Date()).toISOString(),
+        gameType,
+        gameFriendlyName: meta.name,
+        // Every game's theme in one place: `gameSettings` carried whatever
+        // the client asked for, and this is what decides the game is
+        // actually played in one of that game's own themes (or, for a game
+        // with none, in nothing at all).
+        theme: themeIdFor(gameType.toLowerCase(), gameSettings.theme),
+        joinCode,
+        expiresAt: new Date(Date.now() + lobbyTtlMs(turnTimer)),
+        senderName: readableName(thisUser),
+    }));
 
     if (invitedUsers.length > 0) {
         await sendGameInvitePush(invitedUsers, thisUser, invite);

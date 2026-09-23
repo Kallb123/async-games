@@ -20,7 +20,7 @@ describe("Kingdom Builder world summaries", () => {
         vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ select: settlementSelect } as never);
 
         const worldLean = vi.fn().mockResolvedValue([
-            { _id: firstWorld, currentTick: 12, nextTickAt: new Date("2026-09-21T13:00:00Z") },
+            { _id: firstWorld, currentTick: 12, nextTickAt: new Date("2026-09-21T13:00:00Z"), seatCount: 4, roster: [{ userId: "player-1" }, { userId: "a" }, { userId: "b" }] },
             { _id: secondWorld, currentTick: 3, nextTickAt: new Date("2026-09-21T14:00:00Z") },
         ]);
         const sort = vi.fn().mockReturnValue({ lean: worldLean });
@@ -28,8 +28,8 @@ describe("Kingdom Builder world summaries", () => {
         const findWorlds = vi.spyOn(KingdomBuilderWorldModel, "find").mockReturnValue({ select } as never);
 
         await expect(worldSummaries("player-1")).resolves.toEqual([
-            { worldId: firstWorld.toString(), currentTick: 12, nextTickAt: "2026-09-21T13:00:00.000Z", settlementCount: 2, completedBuildLevels: 4 },
-            { worldId: secondWorld.toString(), currentTick: 3, nextTickAt: "2026-09-21T14:00:00.000Z", settlementCount: 1, completedBuildLevels: 1 },
+            { worldId: firstWorld.toString(), currentTick: 12, nextTickAt: "2026-09-21T13:00:00.000Z", settlementCount: 2, completedBuildLevels: 4, playerCount: 3, seatCount: 4 },
+            { worldId: secondWorld.toString(), currentTick: 3, nextTickAt: "2026-09-21T14:00:00.000Z", settlementCount: 1, completedBuildLevels: 1, playerCount: 1, seatCount: 1 },
         ]);
         expect(KingdomBuilderSettlementModel.find).toHaveBeenCalledWith({ ownerId: "player-1" });
         expect(findWorlds).toHaveBeenCalledWith({ _id: { $in: [firstWorld.toString(), secondWorld.toString()] } });

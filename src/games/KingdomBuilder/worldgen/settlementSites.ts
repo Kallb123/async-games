@@ -1,4 +1,4 @@
-import { isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
+import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
 import { graphDistances, weightedGraphDistances } from "./graphConnectivity";
 
@@ -24,7 +24,8 @@ export function placeSettlementSites(
     options: SettlementOptions = {},
 ): SettlementNode[] {
     const playerStarts = options.playerStarts ?? 10;
-    const expansionSites = options.expansionSites ?? 14;
+    // Ten seats however big the world is (§1); only the open ground between them grows.
+    const expansionSites = options.expansionSites ?? 14 * WORLD_AREA_SCALE;
     const total = playerStarts + expansionSites;
     const minimumDistance = 8;
     const candidates: Point[] = [];

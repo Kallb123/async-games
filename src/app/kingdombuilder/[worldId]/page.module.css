@@ -7,16 +7,12 @@
 .quarry { fill: var(--ag-ink-soft); }
 .ore { fill: var(--ag-gold); }
 .site { fill: var(--ag-surface); stroke: var(--ag-dark); stroke-width: 0.5; }
-.mine { fill: var(--ag-terracotta); }
-.occupied { fill: var(--ag-ink-soft); }
 /* The one settlement state a label can't say by itself — "you've picked this one, tap Found here to confirm" — so it still gets its own look now that the oversized ring is gone. */
 .selected { fill: var(--ag-gold); stroke: var(--ag-terracotta-deep); stroke-width: 0.6; }
 .keep { fill: var(--ag-on-dark); font: 800 2.6px/1 var(--ag-font); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .hint { margin: 0 0 10px; font: 600 12px/1.4 var(--ag-font); color: var(--ag-ink-soft); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font: 700 10px/1 var(--ag-font); color: var(--ag-ink-soft); }
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--legend-colour); }
-.legendMine { --legend-colour: var(--ag-terracotta); }
 .legendOpen { --legend-colour: var(--ag-surface); }
-.legendTaken { --legend-colour: var(--ag-ink-soft); }
 .legendTerrain { --legend-colour: var(--ag-success); }
 .legendGround::before { border-radius: 3px; }

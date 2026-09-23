@@ -1,10 +1,10 @@
 'use client'
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContext";
 import type { IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import type { ILobbyRequest } from "@/app/api/lobby/route";
-import { partySizeErrorMessage, type GameMeta } from "@/utils/ui/games";
+import type { GameMeta } from "@/utils/ui/games";
+import { usePartySeats } from "@/utils/hooks/usePartySeats";
 import { lobbyPath } from "@/utils/games/lobby";
 
 interface CreateLobbyOrInviteOptions {
@@ -34,27 +34,14 @@ interface CreateLobbyOrInviteOptions {
  * one-hour TTL it never had.
  *
  * Because the branch depends on the whole party — named invitees *and* open
- * seats — this hook also owns the party arithmetic each screen used to redo
- * for itself: how many seats are still affordable, how big the party is, and
- * whether the primary action can fire. An open seat is a player (a
- * code-holder claims it), so "two open seats and nobody named" is a perfectly
- * good party and the button stays live for it.
+ * seats — the party arithmetic comes from `usePartySeats`, and this adds
+ * whether the primary action can fire.
  */
 export function useCreateLobbyOrInvite({ meta, gameType, invitePath, invitedCount }: CreateLobbyOrInviteOptions) {
-    const [chosenSeats, setSeatCount] = useState(0);
+    const { seatCount, setSeatCount, maxSeats, partySize, partySizeError } = usePartySeats(meta, invitedCount);
     const router = useRouter();
     const { showToast } = useToast();
 
-    // Most seats the party can still afford: the game's maximum, less the
-    // people already named, less the host themselves.
-    const maxSeats = meta.maxPlayers - invitedCount - 1;
-    // Naming somebody shrinks `maxSeats`, so clamp rather than let a
-    // previously-chosen count stand and submit a party that no longer fits.
-    const seatCount = Math.min(chosenSeats, Math.max(maxSeats, 0));
-    // The host isn't a userIdList entry (they're senderId), so the party is
-    // the named invitees, plus the open seats, plus the host themselves.
-    const partySize = invitedCount + seatCount + 1;
-    const partySizeError = partySizeErrorMessage(meta, partySize);
     // Somebody has to be playing besides the host — a game whose minimum is 1
     // (Smartthink) would otherwise let an empty invite through.
     const canSubmit = invitedCount + seatCount > 0 && !partySizeError;

@@ -6,10 +6,14 @@ import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
 export const maxDuration = 60;
-export const KINGDOM_BUILDER_TICK_INTERVAL_MS = 60 * 60 * 1000;
+// A world ticks every 15 minutes (GDD §5.5/§12): short enough that a queued
+// building visibly moves within one sitting, still coarse enough that a sweep
+// across every world stays cheap.
+export const KINGDOM_BUILDER_TICK_INTERVAL_MS = 15 * 60 * 1000;
 const SWEEP_BUDGET_MS = (maxDuration - 10) * 1000;
 const SWEEP_CANDIDATE_LIMIT = 100;
-const MAX_CATCH_UP_TICKS = 24 * 365;
+// At most a year of missed ticks is caught up in one sweep.
+const MAX_CATCH_UP_TICKS = 365 * 24 * (60 * 60 * 1000 / KINGDOM_BUILDER_TICK_INTERVAL_MS);
 
 async function tickWorld(worldId: string, now: Date, session: ClientSession): Promise<boolean> {
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1 }).session(session).lean();

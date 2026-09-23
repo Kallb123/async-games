@@ -50,6 +50,27 @@ export interface LandmassOptions {
     landThreshold?: number;
 }
 
+/**
+ * The world's size in world units. Doubled in both directions from the
+ * original 100×70 — four times the ground for the same ten seats — with every
+ * count that fills it (terrain nodes, expansion sites, rivers, landmarks)
+ * scaled by WORLD_AREA_SCALE so the map is as dense as before, just bigger.
+ */
+export const WORLD_WIDTH = 200;
+export const WORLD_HEIGHT = 140;
+/** How many times the original 100×70 world's area this one is. */
+export const WORLD_AREA_SCALE = (WORLD_WIDTH * WORLD_HEIGHT) / (100 * 70);
+
+/**
+ * The coarse lattice size for a noise grid spanning `width` world units, so
+ * a feature (a hill range, a wet patch) stays the same size in world units
+ * however big the world is — rather than the same fraction of it, which is
+ * all a fixed lattice would give a bigger world: the old map, magnified.
+ */
+export function noiseLatticeFor(width: number): number {
+    return Math.max(2, Math.round((8 * width) / 100) + 1);
+}
+
 export const pointDistance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);
 
 function interpolate(a: number, b: number, amount: number): number {
@@ -85,11 +106,12 @@ export function coherentNoiseGrid(random: RandomSource, columns: number, rows: n
 
 /** Builds a coherent value-noise island, with ocean forced around every edge. */
 export function generateLandmass(random: RandomSource, options: LandmassOptions = {}): Landmass {
-    const width = options.width ?? 100;
-    const height = options.height ?? 70;
-    const resolution = options.resolution ?? 48;
+    const width = options.width ?? WORLD_WIDTH;
+    const height = options.height ?? WORLD_HEIGHT;
+    // The same ~2 world units per sample the original 100-wide, 48-sample map had.
+    const resolution = options.resolution ?? Math.round((48 * width) / 100);
     const landThreshold = options.landThreshold ?? 0.31;
-    const noise = coherentNoiseGrid(random, resolution, resolution);
+    const noise = coherentNoiseGrid(random, resolution, resolution, noiseLatticeFor(width));
     const values: number[] = [];
 
     for (let row = 0; row < resolution; row++) {

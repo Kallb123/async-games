@@ -2,9 +2,10 @@
 
 **Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
-(PR 6), worlds on the dashboard (PR 7), the area registry and generated
-ground (PR 9), and the overlay vocabulary (PR 12) are shipped. PR 8 (more
-than one player in a world) is next; §11.3 is the plan for the rest.
+(PR 6), worlds on the dashboard (PR 7), more than one player in a world
+(PR 8), the area registry and generated ground (PR 9), and the overlay
+vocabulary (PR 12) are shipped. PR 13 (barracks and units) is next; §11.3 is
+the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -31,6 +32,7 @@ movement — build on those two decisions rather than re-opening them.
    - 3.3 [Balance constraints](#33-balance-constraints)
    - 3.4 [Barbarian villages](#34-barbarian-villages)
    - 3.5 [Terrain areas, overlays and the tiled map](#35-terrain-areas-overlays-and-the-tiled-map)
+   - 3.6 [World size](#36-world-size)
 4. [Settlements](#4-settlements)
    - 4.1 [Layout](#41-layout)
    - 4.2 [Buildings](#42-buildings)
@@ -288,7 +290,8 @@ same 100×70 coordinate space the map already uses — square matters, because t
 existing 48×48 field has cells 2.08 × 1.46 world units and art drawn for a
 square tile stretches visibly on those. A tile of 2 × 2 world units gives a
 50 × 35 grid: 1,750 tiles, a sane amount of art to author against and a small
-amount of data to ship.
+amount of data to ship. (The world has since grown to 200×140 — see §3.6 — so
+a new world's grid is 100 × 70, 7,000 tiles, at the same 2 × 2 tile.)
 
 The set of areas is **a registry, not a fixed list**. This is the part to get
 right, because a fantasy overworld accretes ground types forever — a desert
@@ -675,6 +678,22 @@ than hand-written, because a colour that means something to a sighted player
 should be named somewhere, and a hand-written legend is the first thing to go
 stale the next time an area is added.
 
+### 3.6 World size
+
+A world is **200 × 140 world units** — doubled in both directions from the
+100 × 70 the generator first used, so four times the ground for the same ten
+seats. Everything that fills the map scales with its area rather than staying
+fixed: four times the terrain nodes (128), four times the expansion sites (56,
+still beside exactly ten player starts), a river per original map's worth of
+ground, and four times the scattered landmarks. The noise lattices scale with
+the width too, so a hill range or a wet patch is the same size in world units
+as before rather than the old map magnified — a bigger world, not a zoomed-in
+one. Spacing rules (minimum node and site separation, the fields radius, the
+fairness reach) are unchanged, which is what keeps the density the same.
+
+Worlds generated before the change keep their stored 100 × 70 dimensions; the
+map screen reads its viewBox off the stored landmass, so both sizes draw.
+
 ---
 
 ## 4. Settlements
@@ -870,9 +889,9 @@ future tick) or at the next sweep, depending on the action.
 
 **Timer-gated WEGO — a fixed real-time tick that is also numbered and
 recorded like a turn.** Concretely: the world advances every fixed interval
-(an hour is a reasonable starting point — long enough that a sweep across
-many worlds is cheap, short enough that "wait for the next tick" never feels
-like the main activity; the exact length is still open, §12). Every sweep is
+(15 minutes, shortened from the hour this document first proposed once
+playtesting showed an hour made "wait for the next tick" the main activity —
+still coarse enough that a sweep across many worlds is cheap; §12). Every sweep is
 assigned a monotonic turn number and is driven by an ordered command log
 exactly like this app's other games, so turn recap and "since you were last
 here" work unmodified in spirit — the log just happens to be appended to by
@@ -1357,10 +1376,12 @@ one player, no map, no armies.
 Each PR below is additive on top of the shipped prototype — new fields, new
 routes, new commands — so the same non-disruption property holds: none of
 them changes what Milestone A already does for a settlement sitting alone.
-Three of them reach outside Kingdom Builder's own files, and they are
-deliberately the only three: **PR 7** touches the home dashboard and the app
-rail, **PR 11** adds a page to `/admin` and its entry in the admin-tools doc,
-and **PR 22** the push-notification plumbing. Everything else stays inside
+Four of them reach outside Kingdom Builder's own files, and they are
+deliberately the only four: **PR 7** touches the home dashboard and the app
+rail, **PR 8** the shared invitation flow (`acceptSeat`, the lobby routes, the
+join-code card and seat-count hook it shares with every setup screen),
+**PR 11** adds a page to `/admin` and its entry in the admin-tools doc, and
+**PR 22** the push-notification plumbing. Everything else stays inside
 `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 23's
 one-line entries in the guide and tutorial registries.
 
@@ -1403,7 +1424,7 @@ one-line entries in the guide and tutorial registries.
   cardinality problem answered by shape rather than by squeezing a persistent
   world into the single-match model.
 
-- **PR 8 — More than one player in a world.** The generator has placed ten
+- **PR 8 — More than one player in a world.** Shipped. The generator has placed ten
   fair `player-start` sites since PR 1 (§3.3) and `foundSettlement` has taken
   a `userId` since PR 2, but only ever one is claimed:
   `/api/newgame/kingdombuilder` founds the host's settlement and the other
@@ -1439,6 +1460,20 @@ one-line entries in the guide and tutorial registries.
      while a tick is mid-sweep), `rulebook` (the setup screen should now look
      like every other setup screen).
   7. One `whatsNew.ts` line.
+
+  How it landed: the roster is `hostId`, `seatCount` and `roster` on the world
+  document; `joinWorld` claims a seat with one conditional `$push` (no seat
+  already, site free, roster short of the seat count) and then founds through
+  `foundSettlement(…, "first")`. The code, its expiry and the invite rows live
+  on a `KingdomBuilderInvitation` — the ordinary lobby invitation plus a
+  `worldId` — whose seats `acceptSeat` accepts by joining the world instead of
+  gating on everyone and calling `CreateGame`; it is kept out of
+  `INVITATION_MODELS` so the generic lobby route can never mint one without a
+  world. The code is reaped with the lobby's longest lifetime (seven days), so
+  a world's unfilled seats close with it rather than staying a permanent open
+  link. The "world size" on the setup screen is its seat count — the named
+  players plus the open seats plus the host. The `whatsNew.ts` line was left
+  for the release that announces multiplayer.
 
 - **PR 9 — The area registry and the generated ground.** Shipped. §3.5.2 and
   §3.5.4, with no art and no new pixels on screen: the world gains a ground
@@ -1556,8 +1591,9 @@ one-line entries in the guide and tutorial registries.
   part of it) toward another node, and a movement step in the tick engine
   using §6.2's terrain multipliers. Arrival does nothing special yet — this
   PR is purely "can an army cross the generated graph."
-- **PR 15 — Fog of war.** Redact in-transit armies from
-  `CreateDataResponse(viewerId)` for everyone but the owner — a `croupier`
+- **PR 15 — Fog of war.** Redact in-transit armies from `worldView(worldId,
+  userId)` — Kingdom Builder's own per-viewer response, which the shared
+  `CreateDataResponse` guard does not cover — for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
 - **PR 16 — Automatic siege on arrival.** Arrival at a hostile settlement
@@ -1643,8 +1679,10 @@ over real days, rather than by whoever still has the URL in their history.
 Left open deliberately, for playtesting or a follow-up doc rather than
 guessed at here:
 
-- Tick length: is an hour right, or does a faster (e.g. 15-minute) or slower
-  (e.g. 4-hour) cadence suit the target session shape better?
+- Tick length: settled at 15 minutes (§5.5), down from the hour first
+  proposed. Whether build and travel times should be retuned to match — a
+  two-tick building now finishes in half an hour — is part of the numbers
+  pass below.
 - Exact terrain movement-cost multipliers (§6.2) and exact scout/detection
   parameters (§6.3) — range, reliability, whether detection is guaranteed or
   itself a chance — need numbers, not just relative ordering.

@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 
 import BoardZoom from "@/components/ui/BoardZoom";
 import ClickableMapNode from "@/components/ui/ClickableMapNode";
+import Avatar from "@/components/ui/Avatar";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
+import JoinCodeCard from "@/components/ui/JoinCodeCard";
+import ListRow from "@/components/ui/ListRow";
+import ListSection from "@/components/ui/ListSection";
 import MapEdges from "@/components/ui/MapEdges";
 import MapLabelLayer from "@/components/ui/MapLabelLayer";
 import Section from "@/components/ui/Section";
@@ -17,6 +21,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { GAME_META } from "@/utils/ui/games";
+import { playerColour } from "@/utils/ui/playerColours";
 import { worldBuildsStorageKey } from "@/games/KingdomBuilder/worldSummaryTypes";
 import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
@@ -24,8 +29,9 @@ import styles from "./page.module.css";
 
 const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
 // Smaller than World Domination or Outbreak's own node radii because Kingdom
-// Builder's world is a much tighter 100×70 viewBox for many more nodes — the
-// original sizes overlapped each other and read as an oversized graph.
+// Builder's world packs many more nodes into its viewBox (200×140 for a new
+// world, 100×70 for one generated before it grew) — the original sizes
+// overlapped each other and read as an oversized graph.
 const TERRAIN_RADIUS = 1.15;
 // A settlement's own filled circle sits on top of the composited ground
 // (PR 11's tileset art), not a flat silhouette, so it has to stay small
@@ -45,6 +51,12 @@ function landPath(view: KingdomBuilderWorldView): string {
         const y = Math.floor(index / resolution) * cellHeight;
         return `M${x} ${y}h${cellWidth}v${cellHeight}h-${cellWidth}z`;
     }).join("");
+}
+
+/** The name under a settlement site: whose town it is, or what is still free there. */
+function settlementLabel(settlement: KingdomBuilderWorldView["settlements"][number] | undefined, node: SettlementNode, ownerName: (seat: number) => string): string {
+    if (settlement) return settlement.isMine ? "Your town" : ownerName(settlement.seat);
+    return node.siteType === "expansion" ? "Open site" : "Start";
 }
 
 export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ worldId: string }> }) {
@@ -85,9 +97,14 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     };
 
     const unavailable = status === 404;
+    // The zoom steps were tuned on a 100-unit-wide world; a wider one needs
+    // proportionally deeper steps to put its pieces at the same size on screen.
+    const zoomWidth = 240 * Math.max(1, (data?.landmass.width ?? 100) / 100);
     const occupiedByNode = new Map(data?.settlements.map(settlement => [settlement.nodeId, settlement]) ?? []);
     const openSites = data?.nodes.filter((node): node is SettlementNode => node.kind === "settlement" && node.siteType === "expansion" && !occupiedByNode.has(node.id)) ?? [];
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
+    const players = data?.players ?? [];
+    const ownerName = (seat: number) => players[seat]?.name ?? "Another player";
 
     return (
         <main>
@@ -98,7 +115,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         <>
                             <p className={styles.hint}>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</p>
                             <div className="ag-board-frame">
-                                <BoardZoom zoomWidth={240} maxWidth={360}>
+                                <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
                                         {terrain.href
                                             ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />
@@ -123,8 +140,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             // fill on the site's own dot instead (see .selected).
                                             return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={isOpen || isMine} isSelected={isSelected} showRing={false}
                                                 onClick={isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
-                                                title={isMine ? "Your settlement" : settlement ? "Claimed settlement" : isOpen ? "Open settlement site" : "Starting site"}>
-                                                <circle className={`${styles.site} ${isSelected ? styles.selected : isMine ? styles.mine : settlement ? styles.occupied : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
+                                                title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isOpen ? "Open settlement site" : "Free starting site"}>
+                                                {/* Every settlement wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. */}
+                                                <circle className={`${styles.site} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
+                                                    style={settlement && !isSelected ? { fill: playerColour(settlement.seat) } : undefined} />
                                                 {settlement && <text className={styles.keep} x={node.x} y={node.y}>♜</text>}
                                             </ClickableMapNode>;
                                         })}
@@ -137,14 +156,16 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8} strokeWidth={0.4}
                                             labels={data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => ({
                                                 key: node.id, x: node.x, y: node.y, radius: SETTLEMENT_RADIUS,
-                                                text: occupiedByNode.get(node.id)?.isMine ? "Your town" : occupiedByNode.has(node.id) ? "Claimed" : node.siteType === "expansion" ? "Open site" : "Start",
+                                                text: settlementLabel(occupiedByNode.get(node.id), node, ownerName),
                                             }))} />
                                     </svg>
                                 </BoardZoom>
                             </div>
                             <div className={styles.legend} aria-label="Map legend">
-                                <span className={styles.legendMine}>Your settlement</span><span className={styles.legendOpen}>Open site</span>
-                                <span className={styles.legendTaken}>Claimed</span><span className={styles.legendTerrain}>Resource terrain</span>
+                                <span className={styles.legendOpen}>Open site</span><span className={styles.legendTerrain}>Resource terrain</span>
+                                {players.map(player => (
+                                    <span key={player.seat} style={{ "--legend-colour": playerColour(player.seat) } as CSSProperties}>{player.isMe ? "You" : player.name}</span>
+                                ))}
                             </div>
                             {terrain.href && (
                                 <div className={styles.legend} aria-label="Ground legend">
@@ -156,6 +177,18 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         </>
                     )}
                 </Section>
+                {data?.invite && (
+                    <JoinCodeCard joinCode={data.invite.joinCode} gameFriendlyName={GAME_META.kingdombuilder.name} expiresAt={data.invite.expiresAt}
+                        expiryConsequence="the open seats close" />
+                )}
+                <ListSection label={data ? `Players · ${players.length}/${data.seatCount}` : "Players"} isLoading={isLoading} skeletonRows={2}>
+                    {players.map(player => (
+                        <ListRow key={player.seat}
+                            icon={<Avatar name={player.name} imageUrl={player.imageUrl} size={34} ring={playerColour(player.seat)} />}
+                            title={player.isMe ? `${player.name} (you)` : player.name}
+                            sub={player.isHost ? "Opened this world" : "Joined"} />
+                    ))}
+                </ListSection>
                 <Section label="Your settlements" isLoading={isLoading}>
                     <div className="ag-build-list">
                         {mySettlements.map((settlement, index) => (

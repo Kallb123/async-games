@@ -8,6 +8,7 @@ import { GameDataModel, IGameData, IGameDataDocument } from '@/utils/mongodb/Gam
 import { gameDataModelFor } from '@/utils/mongodb/mongodb';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { asStoredHistory } from '@/utils/games/history';
+import { acceptWorldSeat, worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
 
 /**
  * Turn an invitation into a live game: build the game document for the
@@ -124,6 +125,15 @@ export async function acceptSeat(
     invite: IInvitationDataDocument,
     actorId: string
 ): Promise<AcceptSeatResult> {
+    // A Kingdom Builder world is already running when its invitation is sent,
+    // so a seat on it is accepted by joining the world there and then — never
+    // by the all-accepted gate below or a CreateGame — and only marked
+    // accepted once the join has landed (see acceptWorldSeat).
+    const worldId = worldIdOfInvitation(invite);
+    if (worldId) {
+        return acceptWorldSeat(invite, worldId, actorId);
+    }
+
     // One conditional update, not the read-modify-write this used to be: the
     // seat flips and the current invitation comes back in the same round trip,
     // so the all-accepted check below reads what is in the database rather than

@@ -47,6 +47,14 @@ export function lobbyPath(inviteId: string): string {
     return `/lobby/${inviteId}`;
 }
 
+// A new invitation's seat list: one unaccepted row per named player, then one
+// open seat per code-holder still to come.
+export function seatList(invitees: { id: string }[], openSeatCount: number): IUserIdAcceptance[] {
+    return invitees
+        .map(user => ({ userId: user.id, inviteAccepted: false }))
+        .concat(Array.from({ length: openSeatCount }, () => ({ userId: OPEN_SEAT_ID, inviteAccepted: false })));
+}
+
 export function isOpenSeat(entry: IUserIdAcceptance): boolean {
     return entry.userId === OPEN_SEAT_ID;
 }

@@ -25,7 +25,7 @@ export async function worldSummaries(userId: string): Promise<KingdomBuilderWorl
     if (counts.size === 0) return [];
 
     const worlds = await KingdomBuilderWorldModel.find({ _id: { $in: [...counts.keys()] } })
-        .select({ currentTick: 1, nextTickAt: 1 })
+        .select({ currentTick: 1, nextTickAt: 1, seatCount: 1, "roster.userId": 1 })
         .sort({ updatedAt: -1 })
         .lean();
 
@@ -35,5 +35,8 @@ export async function worldSummaries(userId: string): Promise<KingdomBuilderWorl
         nextTickAt: world.nextTickAt.toISOString(),
         settlementCount: counts.get(world._id.toString()) ?? 0,
         completedBuildLevels: completedBuildLevels.get(world._id.toString()) ?? 0,
+        // A world opened before rosters existed is a world of one.
+        playerCount: world.roster?.length || 1,
+        seatCount: Math.max(world.seatCount ?? 1, world.roster?.length ?? 1),
     }));
 }

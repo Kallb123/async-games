@@ -1,12 +1,12 @@
 import { Types, type ClientSession } from "mongoose";
 
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
-import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { generateWorld } from "./worldgen";
-import type { WorldNode } from "./worldgen/landmass";
+import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
 export class KingdomBuilderPersistenceError extends Error {
-    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE", message: string) {
+    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE" | "WORLD_FULL", message: string) {
         super(message);
         this.name = "KingdomBuilderPersistenceError";
     }
@@ -14,17 +14,44 @@ export class KingdomBuilderPersistenceError extends Error {
 
 export type KingdomBuilderSettlementKind = "first" | "expansion";
 
-export async function createWorld(seed: string, session?: ClientSession) {
+/** Who is opening a world, and how many seats (themselves included) it holds. */
+export interface KingdomBuilderWorldHost {
+    userId: string;
+    seatCount: number;
+}
+
+/**
+ * Generates and persists one world. Given a host, the world is born with its
+ * roster (§11.3 PR 8) — the host in the first seat, on a free player start —
+ * so the caller founds the host's settlement on `roster[0].siteId`.
+ */
+export async function createWorld(seed: string, session?: ClientSession, host?: KingdomBuilderWorldHost) {
     const normalisedSeed = seed.trim();
     if (!normalisedSeed) {
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A world seed is required");
     }
 
     const generated = generateWorld(normalisedSeed);
-    const values = { ...generated, currentTick: 0 };
+    let hosting = {};
+    if (host) {
+        const [site] = freePlayerStarts(generated.nodes, []);
+        if (!site) throw new Error("Generated Kingdom Builder world has no starting settlement");
+        hosting = {
+            hostId: host.userId,
+            seatCount: host.seatCount,
+            roster: [{ userId: host.userId, siteId: site.id, joinedAt: new Date() }],
+        };
+    }
+    const values = { ...generated, currentTick: 0, ...hosting };
     if (!session) return KingdomBuilderWorldModel.create(values);
     const [world] = await KingdomBuilderWorldModel.create([values], { session });
     return world;
+}
+
+/** The player-start sites no seat has claimed yet, in the world's own node order. */
+export function freePlayerStarts(nodes: readonly WorldNode[], roster: readonly Pick<KingdomBuilderSeat, "siteId">[]): SettlementNode[] {
+    const taken = new Set(roster.map(seat => seat.siteId));
+    return nodes.filter((node): node is SettlementNode => node.kind === "settlement" && node.siteType === "player-start" && !taken.has(node.id));
 }
 
 function createStartingTiles(): KingdomBuilderTile[] {
