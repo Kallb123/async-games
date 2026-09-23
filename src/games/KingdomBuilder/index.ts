@@ -1,4 +1,5 @@
 export * from "./KingdomBuilderArmyModel";
+export * from "./KingdomBuilderBattleModel";
 export * from "./KingdomBuilderSettlementModel";
 export * from "./KingdomBuilderWorldModel";
 export * from "./lifecycle";
@@ -17,3 +18,5 @@ export * from "./march";
 export * from "./sight";
 export * from "./siege";
 export * from "./assault";
+export * from "./combat";
+export * from "./battleReports";

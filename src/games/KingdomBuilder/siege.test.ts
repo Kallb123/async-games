@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { IKingdomBuilderSettlement } from "./KingdomBuilderSettlementModel";
 import type { KingdomBuilderMarch } from "./armies";
-import { KINGDOM_BUILDER_SIEGE_GRACE_TICKS, besiegedProduction, placeholderBattle, siegeOf, siegeStage } from "./siege";
+import { KINGDOM_BUILDER_SIEGE_GRACE_TICKS, besiegedProduction, siegeOf, siegeStage } from "./siege";
 import { applyTick } from "./tick";
 import { garrisonOf } from "./units";
 
@@ -46,20 +46,6 @@ describe("siegeOf", () => {
         ["an army not yet dated by the tick", camp({ besiegingSince: undefined })],
     ])("ignores %s", (_, army) => {
         expect(siegeOf(town, [army])).toBeUndefined();
-    });
-});
-
-describe("placeholderBattle", () => {
-    it("gives the win to the bigger side, which loses nothing, and destroys the other", () => {
-        expect(placeholderBattle({ militia: 3 }, { infantry: 2 })).toEqual({
-            attackerWon: true, attacker: garrisonOf({ militia: 3 }), defender: garrisonOf(),
-        });
-    });
-
-    it("holds a tie for the defender", () => {
-        expect(placeholderBattle({ militia: 2 }, { militia: 1, scout: 1 })).toEqual({
-            attackerWon: false, attacker: garrisonOf(), defender: garrisonOf({ militia: 1, scout: 1 }),
-        });
     });
 });
 

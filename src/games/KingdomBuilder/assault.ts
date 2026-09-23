@@ -1,30 +1,20 @@
 // The two ways a siege comes to blows (GDD §8, §11.3 PR 21): the besieger
 // pushes the attack on the garrison, or the defender sallies out against the
-// besiegers. Both resolve with `placeholderBattle` until §7's combat engine
-// replaces it (PR 22).
+// besiegers. Both are fought out by §7's combat engine (PR 22) and kept as a
+// battle both sides can read.
 
-import mongoose, { Types, type ClientSession } from "mongoose";
+import mongoose, { Types, type AnyBulkWriteOperation, type ClientSession } from "mongoose";
 
-import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
+import { KingdomBuilderArmyModel, type IKingdomBuilderArmyDocument } from "./KingdomBuilderArmyModel";
+import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { unitCount } from "./armies";
+import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
-import { combinedUnits, placeholderBattle } from "./siege";
+import { combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
-
-/** How a battle went, told to the side that started it — who only ever learns what they fought. */
-export interface KingdomBuilderBattleReport {
-    kind: "push" | "sally";
-    won: boolean;
-    /** What went in on the player's side. */
-    sent: KingdomBuilderGarrison;
-    /** What it met. */
-    faced: KingdomBuilderGarrison;
-}
-
-export type KingdomBuilderBattleView = KingdomBuilderWorldView & { battle: KingdomBuilderBattleReport };
 
 function invalid(message: string): KingdomBuilderPersistenceError {
     return new KingdomBuilderPersistenceError("INVALID_INPUT", message);
@@ -35,32 +25,65 @@ function invalid(message: string): KingdomBuilderPersistenceError {
  * too, so a battle and a tick (or a dispatch, or a second battle) at once
  * conflict and one is retried against what the other left — never a garrison
  * that has trained, marched or fought since it was read. It also refuses an
- * ended world.
+ * ended world. Returns the tick the battle is fought on.
  */
-async function claimBattle(worldId: string, session: ClientSession) {
-    const live = await KingdomBuilderWorldModel.updateOne({ _id: worldId, endedAt: null }, { $inc: { battlesFought: 1 } }, { session });
-    if (live.modifiedCount !== 1) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
+async function claimBattle(worldId: string, session: ClientSession): Promise<number> {
+    const live = await KingdomBuilderWorldModel.findOneAndUpdate(
+        { _id: worldId, endedAt: null }, { $inc: { battlesFought: 1 } }, { session, projection: { currentTick: 1 } },
+    ).lean();
+    if (!live) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
+    return live.currentTick;
 }
 
-/** One battle: claimed, fought and saved in one transaction, then the caller's view with how it went. */
-async function runBattle(worldId: string, userId: string, fight: (session: ClientSession) => Promise<KingdomBuilderBattleReport>): Promise<KingdomBuilderBattleView> {
-    let report: KingdomBuilderBattleReport | undefined;
+/** What a fight hands back to be kept: where, who was on each side with what, and how it went. */
+interface Fought {
+    nodeId: string;
+    attackerIds: string[];
+    defenderIds: string[];
+    attacker: KingdomBuilderGarrison;
+    defender: KingdomBuilderGarrison;
+    battle: KingdomBuilderBattle;
+}
+
+/**
+ * One battle: claimed, fought and saved in one transaction, and kept for both
+ * sides to read. The reply is the caller's view, whose `battles` begin with it.
+ */
+async function runBattle(worldId: string, userId: string, kind: "push" | "sally", fight: (session: ClientSession) => Promise<Fought>): Promise<KingdomBuilderWorldView> {
     await mongoose.connection.transaction(async session => {
-        await claimBattle(worldId, session);
-        report = await fight(session);
+        const tick = await claimBattle(worldId, session);
+        const { battle, ...fought } = await fight(session);
+        await KingdomBuilderBattleModel.create([{ worldId, tick, kind, ...fought, rounds: battle.rounds }], { session });
     });
-    return { ...(await worldView(worldId, userId)), battle: report! };
+    return worldView(worldId, userId);
 }
 
-type Camp = { _id: Types.ObjectId; units: KingdomBuilderGarrison };
+type Camp = { _id: Types.ObjectId; ownerId: string; units: KingdomBuilderGarrison };
+
+/** The armies camped at a settlement that fought as one side, oldest first so their survivors are shared the same way every time. */
+function campsAt(filter: Record<string, unknown>, session: ClientSession) {
+    return KingdomBuilderArmyModel.find({ ...filter, besiegingSince: { $ne: null } })
+        .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1 }).session(session).lean<Camp[]>();
+}
+
+/** Leaves each army that fought with its share of what survived — and disbands it if that is nothing. */
+async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession) {
+    const shares = shareSurvivors(camps.map(camp => camp.units), survivors);
+    const writes: AnyBulkWriteOperation<IKingdomBuilderArmyDocument>[] = camps.map((camp, index) => unitCount(shares[index]) === 0
+        ? { deleteOne: { filter: { _id: camp._id, worldId } } }
+        : { updateOne: { filter: { _id: camp._id, worldId }, update: { $set: { units: shares[index] } } } });
+    await KingdomBuilderArmyModel.bulkWrite(writes, { session });
+}
 
 /**
  * The besieger pushes the attack (§8): every army of theirs besieging the
- * same settlement goes in together against its garrison. Won, the garrison is
- * destroyed and the siege goes on — taking a settlement is a later rule; lost,
- * the armies are.
+ * same settlement goes in together against its garrison, which fights from
+ * behind its town's defences. Won, the garrison is destroyed and the siege
+ * goes on — taking a settlement is a later rule. Otherwise whatever is left
+ * of the armies keeps up the siege, and whatever is left of the garrison
+ * stays home.
  */
-export async function pushAttack(worldId: string, userId: string, armyId: unknown): Promise<KingdomBuilderBattleView> {
+export async function pushAttack(worldId: string, userId: string, armyId: unknown): Promise<KingdomBuilderWorldView> {
     if (!Types.ObjectId.isValid(worldId)) throw invalid("A valid world is required");
     if (typeof armyId !== "string" || !Types.ObjectId.isValid(armyId)) throw invalid("Choose an army");
     // Whose it is comes first, so a stranger learns nothing about the world from what is refused.
@@ -70,53 +93,48 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         throw new KingdomBuilderPersistenceError("NO_SIEGE", "This army isn't besieging anywhere");
     }
 
-    return runBattle(worldId, userId, async session => {
+    return runBattle(worldId, userId, "push", async session => {
         const target = await KingdomBuilderSettlementModel.findOne({ worldId, nodeId: army.targetNodeId, ownerId: { $ne: userId } })
-            .select({ garrison: 1 }).session(session).lean();
-        const attackers = await KingdomBuilderArmyModel.find({ worldId, ownerId: userId, targetNodeId: army.targetNodeId, besiegingSince: { $ne: null } })
-            .select({ units: 1 }).session(session).lean<Camp[]>();
+            .select({ ownerId: 1, garrison: 1 }).session(session).lean();
+        const attackers = await campsAt({ worldId, ownerId: userId, targetNodeId: army.targetNodeId }, session);
         if (!target || !attackers.some(attacker => attacker._id.toString() === armyId)) {
             throw new KingdomBuilderPersistenceError("NO_SIEGE", "The siege ended before the attack could go in");
         }
         const sent = combinedUnits(attackers.map(attacker => attacker.units));
         const faced = garrisonOf(target.garrison);
-        const battle = placeholderBattle(sent, faced);
-        if (battle.attackerWon) {
-            await KingdomBuilderSettlementModel.updateOne({ _id: target._id, worldId }, { $set: { garrison: battle.defender } }, { session });
-        } else {
-            await KingdomBuilderArmyModel.deleteMany({ _id: { $in: attackers.map(attacker => attacker._id) }, worldId, ownerId: userId }, { session });
-        }
-        return { kind: "push", won: battle.attackerWon, sent, faced };
+        const battle = resolveBattle(sent, faced, { fortified: true });
+        await KingdomBuilderSettlementModel.updateOne({ _id: target._id, worldId }, { $set: { garrison: battle.defender } }, { session });
+        await returnSurvivors(worldId, attackers, battle.attacker, session);
+        return { nodeId: army.targetNodeId, attackerIds: [userId], defenderIds: [target.ownerId], attacker: sent, defender: faced, battle };
     });
 }
 
 /**
  * The defender sallies out (§8): the settlement's whole garrison goes out
- * against every army besieging it, in the open. Won, the besiegers are
- * destroyed and the siege is lifted; lost, the garrison is.
+ * against every army besieging it, in the open, without its town's defences.
+ * Won, the besiegers are destroyed and the siege is lifted. Otherwise
+ * whatever is left of the garrison comes home, and whatever is left of the
+ * besiegers keeps up the siege.
  */
-export async function sallyOut(worldId: string, userId: string, settlementId: unknown): Promise<KingdomBuilderBattleView> {
+export async function sallyOut(worldId: string, userId: string, settlementId: unknown): Promise<KingdomBuilderWorldView> {
     if (!Types.ObjectId.isValid(worldId)) throw invalid("A valid world is required");
     if (typeof settlementId !== "string" || !Types.ObjectId.isValid(settlementId)) throw invalid("Choose a settlement");
     const exists = await KingdomBuilderSettlementModel.exists({ _id: settlementId, worldId, ownerId: userId });
     if (!exists) throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement not found");
 
-    return runBattle(worldId, userId, async session => {
+    return runBattle(worldId, userId, "sally", async session => {
         const settlement = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId, ownerId: userId })
             .select({ nodeId: 1, garrison: 1 }).session(session).lean();
         if (!settlement) throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement not found");
         const sent = garrisonOf(settlement.garrison);
         if (unitCount(sent) === 0) throw new KingdomBuilderPersistenceError("ARMY_BUSY", "There is no garrison to sally out with");
-        const besiegers = await KingdomBuilderArmyModel.find({ worldId, targetNodeId: settlement.nodeId, ownerId: { $ne: userId }, besiegingSince: { $ne: null } })
-            .select({ units: 1 }).session(session).lean<Camp[]>();
+        const besiegers = await campsAt({ worldId, targetNodeId: settlement.nodeId, ownerId: { $ne: userId } }, session);
         if (besiegers.length === 0) throw new KingdomBuilderPersistenceError("NO_SIEGE", "This settlement isn't under siege");
         const faced = combinedUnits(besiegers.map(besieger => besieger.units));
-        const battle = placeholderBattle(sent, faced);
-        if (battle.attackerWon) {
-            await KingdomBuilderArmyModel.deleteMany({ _id: { $in: besiegers.map(besieger => besieger._id) }, worldId }, { session });
-        } else {
-            await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, { $set: { garrison: battle.attacker } }, { session });
-        }
-        return { kind: "sally", won: battle.attackerWon, sent, faced };
+        const battle = resolveBattle(sent, faced, { fortified: false });
+        await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, { $set: { garrison: battle.attacker } }, { session });
+        await returnSurvivors(worldId, besiegers, battle.defender, session);
+        const defenderIds = [...new Set(besiegers.map(besieger => besieger.ownerId))];
+        return { nodeId: settlement.nodeId, attackerIds: [userId], defenderIds, attacker: sent, defender: faced, battle };
     });
 }

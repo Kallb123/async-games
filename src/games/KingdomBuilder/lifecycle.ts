@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { LOBBY_MAX_TTL_MS } from "@/utils/games/lobby";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
+import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
@@ -129,6 +130,7 @@ export async function removeWorld(worldId: string): Promise<void> {
     if (!world.endedAt) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "Only an ended world can be removed");
     await KingdomBuilderSettlementModel.deleteMany({ worldId });
     await KingdomBuilderArmyModel.deleteMany({ worldId });
+    await KingdomBuilderBattleModel.deleteMany({ worldId });
     await KingdomBuilderInvitationModel.deleteMany({ worldId });
     await KingdomBuilderWorldModel.deleteOne({ _id: worldId, endedAt: { $ne: null } });
 }

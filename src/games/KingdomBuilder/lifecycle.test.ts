@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./worldInvitation", () => ({ reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
+import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
@@ -33,6 +34,7 @@ function mockDeletes() {
     return {
         settlements: vi.spyOn(KingdomBuilderSettlementModel, "deleteMany").mockResolvedValue({} as never),
         armies: vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({} as never),
+        battles: vi.spyOn(KingdomBuilderBattleModel, "deleteMany").mockResolvedValue({} as never),
         armyExists: vi.spyOn(KingdomBuilderArmyModel, "exists").mockResolvedValue(null),
         invitations: vi.spyOn(KingdomBuilderInvitationModel, "deleteMany").mockResolvedValue({} as never),
         world: vi.spyOn(KingdomBuilderWorldModel, "deleteOne").mockResolvedValue({} as never),
@@ -229,14 +231,15 @@ describe("removeWorld", () => {
         expect(deletes.settlements).not.toHaveBeenCalled();
     });
 
-    it("removes settlements and armies, then the invitation, then the world", async () => {
+    it("removes settlements, armies and battles, then the invitation, then the world", async () => {
         mockWorldReads({ endedAt: new Date() });
         const deletes = mockDeletes();
 
         await removeWorld(worldId);
 
         expect(deletes.armies).toHaveBeenCalledWith({ worldId });
-        const order = [deletes.settlements, deletes.armies, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
+        expect(deletes.battles).toHaveBeenCalledWith({ worldId });
+        const order = [deletes.settlements, deletes.armies, deletes.battles, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
         expect(order).toEqual([...order].sort((a, b) => a - b));
     });
 });
