@@ -1,5 +1,11 @@
 import { Document, Model, Schema, Types, model, models } from "mongoose";
 
+import {
+    KINGDOM_BUILDER_UNIT_TYPES,
+    type KingdomBuilderGarrison,
+    type KingdomBuilderTrainingOrder,
+} from "./units";
+
 export const KINGDOM_BUILDER_GRID_SIZE = 9;
 export const KINGDOM_BUILDER_TOWN_CENTRE_INDEX = 4;
 
@@ -36,6 +42,10 @@ export interface IKingdomBuilderSettlement {
     tiles: KingdomBuilderTile[];
     resources: KingdomBuilderResources;
     construction?: KingdomBuilderConstruction;
+    /** The barracks' queue, head first (§11.3 PR 13). Absent on older documents. */
+    trainingQueue?: KingdomBuilderTrainingOrder[];
+    /** Units stationed here. Absent on older documents, which read as empty. */
+    garrison?: KingdomBuilderGarrison;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -66,6 +76,16 @@ const ConstructionSchema = new Schema<KingdomBuilderConstruction>({
     ticksRemaining: { type: Number, required: true, min: 1 },
 }, { _id: false });
 
+const TrainingOrderSchema = new Schema<KingdomBuilderTrainingOrder>({
+    unitType: { type: String, enum: KINGDOM_BUILDER_UNIT_TYPES, required: true },
+    ticksRemaining: { type: Number, required: true, min: 1 },
+}, { _id: false });
+
+const GarrisonSchema = new Schema<KingdomBuilderGarrison>(
+    Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, { type: Number, required: true, min: 0, default: 0 }])),
+    { _id: false },
+);
+
 function isValidTileGrid(tiles: KingdomBuilderTile[]): boolean {
     if (tiles.length !== KINGDOM_BUILDER_GRID_SIZE) return false;
     if (new Set(tiles.map(({ position }) => position)).size !== KINGDOM_BUILDER_GRID_SIZE) return false;
@@ -85,6 +105,8 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     },
     resources: { type: ResourcesSchema, required: true },
     construction: ConstructionSchema,
+    trainingQueue: { type: [TrainingOrderSchema], default: undefined },
+    garrison: GarrisonSchema,
 }, { timestamps: true });
 
 KingdomBuilderSettlementSchema.index({ ownerId: 1, worldId: 1 });

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
     KingdomBuilderPrototypeError,
     queuePrototypeBuilding,
+    queueUnitTraining,
     settlementView,
 } from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
@@ -45,9 +46,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { tilePosition, buildingType } = await readJsonBody<{ tilePosition: number; buildingType: string }>(request);
+    const { tilePosition, buildingType, unitType } = await readJsonBody<{ tilePosition: number; buildingType: string; unitType: string }>(request);
 
     try {
+        // A body naming a unit trains it at the barracks; anything else queues a building.
+        if (unitType !== undefined) {
+            return NextResponse.json(await queueUnitTraining(context.worldId, context.settlementId, context.userId, unitType));
+        }
         return NextResponse.json(await queuePrototypeBuilding(
             context.worldId,
             context.settlementId,

@@ -3,9 +3,9 @@
 **Status:** In build. Time model (§5.5) and combat model (§7.6) decided;
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
-(PR 8), the area registry and generated ground (PR 9), and the overlay
-vocabulary (PR 12) are shipped. PR 13 (barracks and units) is next; §11.3 is
-the plan for the rest.
+(PR 8), the area registry and generated ground (PR 9), the overlay
+vocabulary (PR 12), and barracks and units (PR 13) are shipped. PR 14 (army
+dispatch and movement) is next; §11.3 is the plan for the rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -1584,9 +1584,30 @@ one-line entries in the guide and tutorial registries.
      are follow-up work, not blocking: same as every area shipped ahead of
      its own art (§3.5.2), a registry entry with no sheet yet draws nothing
      rather than standing in the way.
-- **PR 13 — Barracks and units.** Unit types/levels (§6.1) and a training
+- **PR 13 — Barracks and units.** Shipped. Unit types/levels (§6.1) and a training
   queue on the barracks tile. Units accumulate in a garrison; nothing can
   leave it yet.
+
+  How it landed: `units.ts` is the roster — §6.1's five units, each with a
+  cost in all three resources, a base training time, the §6.2 speed label
+  PR 14 will turn into ticks per edge, and the barracks level that unlocks it.
+  "Levels" are the barracks' own: a settlement may hold one barracks, the one
+  building a player can raise a level (to 3, each level taking longer to
+  build), which unlocks infantry at 2 and cavalry and the siege engine at 3
+  and takes a tick off every unit's training for each level above the one that
+  unlocked it, never below one. Training is the first thing to *spend*
+  resources (§4.3): a unit's whole cost is taken when it is queued, by one
+  conditional update that repeats every check (owner, barracks level, queue
+  room, stores) so a tick or a second tab in between fails the write rather
+  than overdrawing. The queue — up to twenty units, head first — sits on the
+  settlement beside the building queue rather than sharing it (§4.2's
+  "separately"), and `applyTick` counts down only its head, so a barracks
+  finishes at most one unit a tick into the `garrison` counts. A document from
+  before this PR has neither field and reads as an empty queue and garrison.
+  Both stay on the owner's own settlement screen: nothing in the world map or
+  the dashboard carries them, which is PR 15's fog-of-war contract holding
+  before there is an army to hide. Buildings still cost nothing to raise — a
+  building price is not in any PR yet. No `whatsNew.ts` line on this branch.
 - **PR 14 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, and a movement step in the tick engine
   using §6.2's terrain multipliers. Arrival does nothing special yet — this
