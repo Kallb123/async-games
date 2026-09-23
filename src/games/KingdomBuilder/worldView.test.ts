@@ -97,6 +97,8 @@ describe("Kingdom Builder world view", () => {
                 tiles: [{ position: 0, building: { type: "barracks", level: 97531 } }],
                 resources: { wood: 86420, stone: 0, iron: 0 },
                 construction: { tilePosition: 1, buildingType: "walls", targetLevel: 1, ticksRemaining: 1357 },
+                trainingQueue: [{ unitType: "cavalry", ticksRemaining: 2468 }],
+                garrison: { militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 13579 },
             },
         ]);
         mockWorld({
@@ -109,7 +111,7 @@ describe("Kingdom Builder world view", () => {
 
         const wire = JSON.stringify(await worldView(worldId, "owner"));
 
-        for (const secret of ["user_RIVALSECRET", "97531", "86420", "1357", "barracks", "walls", rivalSettlementId.toString()]) {
+        for (const secret of ["user_RIVALSECRET", "97531", "86420", "1357", "barracks", "walls", "cavalry", "2468", "13579", rivalSettlementId.toString()]) {
             expect(wire).not.toContain(secret);
         }
     });

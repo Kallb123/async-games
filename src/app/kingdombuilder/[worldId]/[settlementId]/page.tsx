@@ -7,7 +7,7 @@ import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import Stat from "@/components/ui/Stat";
-import type { KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
+import type { KingdomBuilderResources, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
 import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, type KingdomBuilderPrototypeBuilding } from "@/games/KingdomBuilder/buildings";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
@@ -33,8 +33,10 @@ const BUILDING_DETAILS: Record<string, { name: string; icon: string; resource?: 
     barracks: { name: "Barracks", icon: "🏯", resource: "Trains army units" },
 };
 
-function formatCost(cost: { wood: number; stone: number; iron: number }): string {
-    return (["wood", "stone", "iron"] as const).filter(resource => cost[resource] > 0).map(resource => `${cost[resource]} ${resource}`).join(" · ");
+const RESOURCE_TYPES = ["wood", "stone", "iron"] as const;
+
+function formatCost(cost: KingdomBuilderResources): string {
+    return RESOURCE_TYPES.filter(resource => cost[resource] > 0).map(resource => `${cost[resource]} ${resource}`).join(" · ");
 }
 
 function ticks(count: number): string {
@@ -229,7 +231,7 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
 }) {
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const trainTicks = trainingTicksFor(unitType, barracksLevel);
-    const affordable = (["wood", "stone", "iron"] as const).every(resource => resources[resource] >= unit.cost[resource]);
+    const affordable = RESOURCE_TYPES.every(resource => resources[resource] >= unit.cost[resource]);
     const blocker = trainTicks === null ? `Level ${unit.barracksLevel}` : queueFull ? "Queue full" : !affordable ? "Can't afford" : null;
     return (
         <BuildRow
