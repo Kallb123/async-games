@@ -6,12 +6,12 @@ import {
     KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE,
     buildingCostFor,
 } from "./buildings";
-import economy from "./economy.json";
-import { KINGDOM_BUILDER_UNIT_TYPES } from "./units";
+import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, tunedResources } from "./resources";
 
-describe("Kingdom Builder economy.json", () => {
-    // A tuning pass edits this file by hand, so a typo should fail here rather than in a player's stores.
+describe("Kingdom Builder economy.ts", () => {
+    // Its types already demand a price for every building and unit; this is
+    // the rule they can't state, run over the real file.
     const entries = [
         ...Object.entries(economy.buildingCosts).map(([name, amounts]) => [`buildingCosts.${name}`, amounts] as const),
         ...Object.entries(economy.unitCosts).map(([name, amounts]) => [`unitCosts.${name}`, amounts] as const),
@@ -19,19 +19,8 @@ describe("Kingdom Builder economy.json", () => {
         ["townCentreTrickle", economy.townCentreTrickle] as const,
     ];
 
-    it.each(entries)("%s names only known resources, in whole non-negative amounts", (_, amounts) => {
-        for (const [resource, amount] of Object.entries(amounts)) {
-            expect(KINGDOM_BUILDER_RESOURCE_TYPES).toContain(resource);
-            expect(Number.isInteger(amount) && amount >= 0).toBe(true);
-        }
-    });
-
-    it("prices exactly the buildings a player can raise", () => {
-        expect(Object.keys(economy.buildingCosts).toSorted()).toEqual([...KINGDOM_BUILDER_PROTOTYPE_BUILDINGS].toSorted());
-    });
-
-    it("prices exactly the units a barracks can train", () => {
-        expect(Object.keys(economy.unitCosts).toSorted()).toEqual([...KINGDOM_BUILDER_UNIT_TYPES].toSorted());
+    it.each(entries)("%s is in whole non-negative amounts", (name, amounts) => {
+        expect(() => tunedResources(name, amounts)).not.toThrow();
     });
 
     it("never gives a building away, so the trickle is what gets a settlement started", () => {
@@ -44,7 +33,6 @@ describe("Kingdom Builder economy.json", () => {
     it("refuses a bad entry when the file loads, rather than failing open", () => {
         expect(() => tunedResources("test", { wood: -15 })).toThrow("bad wood");
         expect(() => tunedResources("test", { wood: 1.5 })).toThrow("bad wood");
-        expect(() => tunedResources("test", { gold: 1 })).toThrow("bad gold");
         expect(tunedResources("test", { stone: 3 })).toEqual({ wood: 0, stone: 3, iron: 0 });
     });
 

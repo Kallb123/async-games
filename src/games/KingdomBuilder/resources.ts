@@ -11,14 +11,15 @@ export function resourcesOf(partial?: Partial<KingdomBuilderResources>): Kingdom
 }
 
 /**
- * An entry read from economy.json, refusing anything but whole non-negative
- * amounts of known resources — a negative price would pay the player to build,
- * so a bad edit fails loudly at load rather than open in someone's stores.
+ * An entry of economy.ts, refusing anything but whole non-negative amounts —
+ * the one rule its types can't state. A negative price would pay the player
+ * to build, so a bad edit fails loudly at load rather than open in someone's
+ * stores.
  */
-export function tunedResources(name: string, entry: Partial<Record<string, number>>): KingdomBuilderResources {
+export function tunedResources(name: string, entry: Partial<KingdomBuilderResources>): KingdomBuilderResources {
     for (const [resource, amount] of Object.entries(entry)) {
-        if (!(KINGDOM_BUILDER_RESOURCE_TYPES as readonly string[]).includes(resource) || !Number.isInteger(amount) || amount! < 0) {
-            throw new Error(`economy.json: ${name} has a bad ${resource} amount (${amount})`);
+        if (!Number.isInteger(amount) || amount < 0) {
+            throw new Error(`economy.ts: ${name} has a bad ${resource} amount (${amount})`);
         }
     }
     return resourcesOf(entry);

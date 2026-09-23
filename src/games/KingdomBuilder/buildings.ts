@@ -2,7 +2,7 @@
 // the server checks against without pulling Mongoose into the client bundle.
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
-import economy from "./economy.json";
+import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources } from "./resources";
 
 export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine", "barracks"] as const;
@@ -14,9 +14,8 @@ export function buildTicksFor(targetLevel: number): number {
     return KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS * targetLevel;
 }
 
-// The prices (units' too, read by units.ts), the first settlement's stockpile and the town centre's trickle
-// (GDD §4.5) live in economy.json so a tuning pass edits numbers, not code.
-// A resource left out of an entry costs (or grants) none.
+// The prices, the first settlement's stockpile and the town centre's trickle
+// live in economy.ts, so a tuning pass edits numbers, not logic.
 const LEVEL_ONE_COSTS: Record<KingdomBuilderPrototypeBuilding, KingdomBuilderResources> = Object.fromEntries(
     KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.map(type => [type, tunedResources(`buildingCosts.${type}`, economy.buildingCosts[type])]),
 ) as Record<KingdomBuilderPrototypeBuilding, KingdomBuilderResources>;

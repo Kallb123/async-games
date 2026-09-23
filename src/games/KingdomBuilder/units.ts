@@ -1,5 +1,5 @@
 import type { KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
-import economy from "./economy.json";
+import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { tunedResources } from "./resources";
 
 /** GDD §6.1's roster, in the order the barracks unlocks them. */
@@ -14,7 +14,7 @@ export interface KingdomBuilderUnitDefinition {
     role: string;
     /** §6.2: a stack moves at the pace of its slowest unit. PR 19 turns this into a pace over the tiles (§3.8). */
     speed: "slow" | "medium" | "fast";
-    /** Paid in full when the unit is queued. Priced in economy.json, beside the buildings. */
+    /** Paid in full when the unit is queued. Priced in economy.ts, beside the buildings. */
     cost: KingdomBuilderResources;
     /** Ticks to train at the barracks level that unlocks it; each level above that takes one off. */
     trainTicks: number;
@@ -25,19 +25,19 @@ export interface KingdomBuilderUnitDefinition {
 export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilderUnitDefinition> = {
     militia: {
         name: "Militia", icon: "🛡️", role: "Cheap garrison filler", speed: "slow",
-        cost: tunedResources("unitCosts.militia", economy.unitCosts["militia"]), trainTicks: 2, barracksLevel: 1,
+        cost: tunedResources("unitCosts.militia", economy.unitCosts.militia), trainTicks: 2, barracksLevel: 1,
     },
     scout: {
         name: "Scout", icon: "🔭", role: "Reveals a target before you commit", speed: "fast",
-        cost: tunedResources("unitCosts.scout", economy.unitCosts["scout"]), trainTicks: 2, barracksLevel: 1,
+        cost: tunedResources("unitCosts.scout", economy.unitCosts.scout), trainTicks: 2, barracksLevel: 1,
     },
     infantry: {
         name: "Infantry", icon: "⚔️", role: "The main attacking stack", speed: "medium",
-        cost: tunedResources("unitCosts.infantry", economy.unitCosts["infantry"]), trainTicks: 3, barracksLevel: 2,
+        cost: tunedResources("unitCosts.infantry", economy.unitCosts.infantry), trainTicks: 3, barracksLevel: 2,
     },
     cavalry: {
         name: "Cavalry", icon: "🐎", role: "Fast raids and reinforcement", speed: "fast",
-        cost: tunedResources("unitCosts.cavalry", economy.unitCosts["cavalry"]), trainTicks: 4, barracksLevel: 3,
+        cost: tunedResources("unitCosts.cavalry", economy.unitCosts.cavalry), trainTicks: 4, barracksLevel: 3,
     },
     "siege-engine": {
         name: "Siege engine", icon: "🪓", role: "Breaks walls", speed: "slow",

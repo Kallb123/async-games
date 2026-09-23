@@ -1202,8 +1202,8 @@ army and forecloses that army from anything else in the meantime.
 ### 4.5 Building costs and the starting stockpile
 
 > PR 17 shipped this section; the prices (units' too), the starting stockpile and the town
-> centre's trickle are read from `src/games/KingdomBuilder/economy.json`, so a
-> tuning pass edits that file rather than code. The farm and wheat rows wait on
+> centre's trickle are read from `src/games/KingdomBuilder/economy.ts`, so a
+> tuning pass edits that one file. The farm and wheat rows wait on
 > PR 18.
 
 Through PR 13 a building costs only time: `queuePrototypeBuilding` checks the tile and
@@ -2385,12 +2385,15 @@ reduced-motion rule in `ag-theme.css`.
      `gremlin` (a tick landing between the read and the conditional write),
      `caveman` (building and unit costs should be one shape and one helper).
 
-  How it landed: the numbers are data, not code — `economy.json` beside
-  `buildings.ts` holds each building's level-one price, every unit's training
-  price (moved out of `units.ts`, so both are tuned in one place), the first settlement's
+  How it landed: every number lives in `economy.ts` beside `buildings.ts` —
+  each building's level-one price, every unit's training price (moved out of
+  `units.ts`, so both are tuned in one place), the first settlement's
   stockpile and the town centre's trickle, a resource left out of an entry
-  reading as none, and a guard test fails on an unknown resource, a fraction, a
-  negative, or a building or unit missing from (or extra to) its price list.
+  reading as none. It is TypeScript like `tileset.ts` rather than JSON, so each
+  number can carry a comment and `satisfies` makes a missing building or unit,
+  or a misspelt resource, a compile error; the one rule types can't state —
+  whole, non-negative amounts — is checked when the module loads, and a guard
+  test runs that check over the real file.
   `buildingCostFor(type, level)` is the level-one price × the target level.
   `resources.ts` is the one affordability vocabulary — `canAfford`,
   `shortfallFor`, `formatResources` — used by the server's pre-checks and the
