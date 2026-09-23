@@ -7,16 +7,17 @@ import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import Stat from "@/components/ui/Stat";
-import type { KingdomBuilderResources, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
+import type { KingdomBuilderBuildingType, KingdomBuilderResources, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
 import {
     KINGDOM_BUILDER_BUILDING_PRODUCES,
     KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
     buildTicksFor,
     buildingCostFor,
+    buildingOutputFor,
     type KingdomBuilderPrototypeBuilding,
 } from "@/games/KingdomBuilder/buildings";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, type KingdomBuilderResourceType } from "@/games/KingdomBuilder/resources";
-import { outputPerLevelFor, type KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
+import type { KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -50,10 +51,10 @@ function landLabel(resource: KingdomBuilderResourceType, catchment: KingdomBuild
     return tier === "none" ? `No ${LAND_NAMES[resource]}` : `${tier[0].toUpperCase()}${tier.slice(1)} ${LAND_NAMES[resource]}`;
 }
 
-/** "+2 wood" a tick for a production building at this level on this land, or nothing for one that makes nothing. */
-function outputOf(type: string, level: number, catchment: KingdomBuilderCatchment): string | null {
-    const resource = KINGDOM_BUILDER_BUILDING_PRODUCES[type as KingdomBuilderPrototypeBuilding];
-    return resource ? `+${level * outputPerLevelFor(catchment[resource])} ${resource}` : null;
+/** "+2 wood" a tick for a production building at this level on this land, or nothing for one that isn't one. */
+function outputOf(type: KingdomBuilderBuildingType, level: number, catchment: KingdomBuilderCatchment): string | null {
+    const output = buildingOutputFor(type, level, catchment);
+    return output ? `+${output.amount} ${output.resource}` : null;
 }
 
 /**

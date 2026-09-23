@@ -3,10 +3,10 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { KINGDOM_BUILDER_BUILDING_PRODUCES, KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE } from "./buildings";
+import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { advanceTraining } from "./units";
-import { groundlessCatchment, outputPerLevelFor, type KingdomBuilderCatchment } from "./worldgen/catchment";
+import { groundlessCatchment, type KingdomBuilderCatchment } from "./worldgen/catchment";
 
 export interface KingdomBuilderTickWorld {
     currentTick: number;
@@ -23,8 +23,8 @@ export function productionFor(tiles: readonly KingdomBuilderTile[], catchment: K
     return tiles.reduce<KingdomBuilderResources>((production, tile) => {
         const building = tile.building;
         if (building?.type === "town-centre") return addResources(production, KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE);
-        const resource = building && KINGDOM_BUILDER_BUILDING_PRODUCES[building.type];
-        if (resource) production[resource] += building.level * outputPerLevelFor(catchment[resource]);
+        const output = building && buildingOutputFor(building.type, building.level, catchment);
+        if (output) production[output.resource] += output.amount;
         return production;
     }, resourcesOf());
 }
@@ -35,7 +35,7 @@ export function productionFor(tiles: readonly KingdomBuilderTile[], catchment: K
  * the engine produces nothing for want of a field it didn't get.
  */
 function catchmentOf(settlement: IKingdomBuilderSettlement): KingdomBuilderCatchment {
-    return settlement.catchment ?? groundlessCatchment(settlement.tiles.some(tile => tile.building?.type === "mine"));
+    return settlement.catchment ?? groundlessCatchment(settlement.tiles);
 }
 
 /**

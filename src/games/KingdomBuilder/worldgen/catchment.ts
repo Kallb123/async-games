@@ -7,8 +7,9 @@
 
 import { KINGDOM_BUILDER_ECONOMY as economy } from "../economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, type KingdomBuilderResourceType } from "../resources";
+import type { KingdomBuilderTile } from "../KingdomBuilderSettlementModel";
 import { areaForCode } from "./areas";
-import type { TerrainField } from "./terrainField";
+import { neighboursOf, type TerrainField } from "./terrainField";
 
 /** Worst to best. "none" is land that doesn't yield the resource at all — its building can't be built there. */
 export const KINGDOM_BUILDER_YIELD_TIERS = ["none", "poor", "good", "rich"] as const;
@@ -50,10 +51,8 @@ export function catchmentTiles(field: Pick<TerrainField, "columns" | "rows">, ti
 }
 
 function besideIrrigatingWater(field: TerrainField, tile: number): boolean {
-    const col = tile % field.columns, row = Math.floor(tile / field.columns);
-    const beside = [[col + 1, row], [col - 1, row], [col, row + 1], [col, row - 1]];
-    return beside.some(([c, r]) => c >= 0 && c < field.columns && r >= 0 && r < field.rows
-        && areaForCode(field.codes[r * field.columns + c]).irrigates === true);
+    return neighboursOf(tile % field.columns, Math.floor(tile / field.columns), field.columns, field.rows)
+        .some(neighbour => areaForCode(field.codes[neighbour]).irrigates === true);
 }
 
 /**
@@ -82,7 +81,8 @@ export function catchmentFor(field: TerrainField, tile: number): KingdomBuilderC
  * before PR 9): Good in everything, bar iron — which stays where a mine
  * already stands, and nowhere else.
  */
-export function groundlessCatchment(hasMine: boolean): KingdomBuilderCatchment {
+export function groundlessCatchment(tiles: readonly KingdomBuilderTile[] = []): KingdomBuilderCatchment {
+    const hasMine = tiles.some(tile => tile.building?.type === "mine");
     return { wood: "good", stone: "good", iron: hasMine ? "good" : "none", wheat: "good" };
 }
 

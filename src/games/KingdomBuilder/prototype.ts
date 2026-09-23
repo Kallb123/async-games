@@ -34,7 +34,7 @@ export interface KingdomBuilderSettlementView {
     nextTickAt: string;
     completedBuildLevels: number;
     resources: KingdomBuilderResources;
-    /** How well the settlement's land yields each resource (§4.6) — its own, so its owner's alone to see like the rest of this view. */
+    /** How well the settlement's land yields each resource (§4.6). Anyone could work it out from the public map; it is here so the screen needn't. */
     catchment: KingdomBuilderCatchment;
     tiles: Array<{
         position: number;

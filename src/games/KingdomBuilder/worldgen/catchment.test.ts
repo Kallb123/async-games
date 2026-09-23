@@ -52,8 +52,8 @@ describe("a settlement's catchment", () => {
     });
 
     it("gives land with no ground to read Good in everything, iron only where a mine stands", () => {
-        expect(groundlessCatchment(false)).toEqual({ wood: "good", stone: "good", iron: "none", wheat: "good" });
-        expect(groundlessCatchment(true).iron).toBe("good");
+        expect(groundlessCatchment([])).toEqual({ wood: "good", stone: "good", iron: "none", wheat: "good" });
+        expect(groundlessCatchment([{ position: 0, building: { type: "mine", level: 1 } }]).iron).toBe("good");
     });
 
     it("reads an unknown area code as grass rather than throwing", () => {

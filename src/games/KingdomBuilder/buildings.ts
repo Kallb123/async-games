@@ -4,6 +4,7 @@
 import type { KingdomBuilderBuildingType, KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources, type KingdomBuilderResourceType } from "./resources";
+import { outputPerLevelFor, type KingdomBuilderCatchment } from "./worldgen/catchment";
 
 export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
@@ -19,6 +20,16 @@ export const KINGDOM_BUILDER_BUILDING_PRODUCES: Partial<Record<KingdomBuilderBui
     mine: "iron",
     farm: "wheat",
 };
+
+/** What a building makes each tick at this level on this land — its level × the tier's output — or nothing for one that isn't a production building. */
+export function buildingOutputFor(
+    type: KingdomBuilderBuildingType,
+    level: number,
+    catchment: KingdomBuilderCatchment,
+): { resource: KingdomBuilderResourceType; amount: number } | undefined {
+    const resource = KINGDOM_BUILDER_BUILDING_PRODUCES[type];
+    return resource && { resource, amount: level * outputPerLevelFor(catchment[resource]) };
+}
 export const KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS = 2;
 
 /** Ticks to raise a building to a level: the first costs the prototype's two, each level after it two more. */

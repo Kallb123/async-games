@@ -22,7 +22,7 @@ export interface KingdomBuilderLandWorld {
 export function catchmentForSettlement(world: KingdomBuilderLandWorld, settlement: { nodeId: string; tiles?: readonly KingdomBuilderTile[] }): KingdomBuilderCatchment {
     const field = world.terrainField;
     const site = world.nodes.find(node => node.id === settlement.nodeId);
-    if (!field || !site) return groundlessCatchment((settlement.tiles ?? []).some(tile => tile.building?.type === "mine"));
+    if (!field || !site) return groundlessCatchment(settlement.tiles);
     if (site.tile !== undefined) return catchmentFor(field, site.tile);
     const { col, row } = tileAt(field, site);
     return catchmentFor(field, tileIndex(field, col, row));

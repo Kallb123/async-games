@@ -73,7 +73,8 @@ export function areaCodeAt(field: TerrainField, point: Point): string {
     return field.codes[tileIndex(field, col, row)];
 }
 
-function neighboursOf(col: number, row: number, columns: number, rows: number): number[] {
+/** The four orthogonal neighbours of (col, row), off the grid left out. */
+export function neighboursOf(col: number, row: number, columns: number, rows: number): number[] {
     const candidates: [number, number][] = [[col + 1, row], [col - 1, row], [col, row + 1], [col, row - 1]];
     return candidates.filter(([c, r]) => c >= 0 && c < columns && r >= 0 && r < rows).map(([c, r]) => r * columns + c);
 }
