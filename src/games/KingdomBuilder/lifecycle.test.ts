@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./worldInvitation", () => ({ reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
@@ -31,6 +32,8 @@ function mockWorldWrites(...modifiedCounts: number[]) {
 function mockDeletes() {
     return {
         settlements: vi.spyOn(KingdomBuilderSettlementModel, "deleteMany").mockResolvedValue({} as never),
+        armies: vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({} as never),
+        armyExists: vi.spyOn(KingdomBuilderArmyModel, "exists").mockResolvedValue(null),
         invitations: vi.spyOn(KingdomBuilderInvitationModel, "deleteMany").mockResolvedValue({} as never),
         world: vi.spyOn(KingdomBuilderWorldModel, "deleteOne").mockResolvedValue({} as never),
     };
@@ -124,7 +127,7 @@ describe("adminEndWorld", () => {
 });
 
 describe("leaveWorld", () => {
-    it("pulls a player's seat and settlements, and brings the invitation in line", async () => {
+    it("pulls a player's seat, settlements and armies, and brings the invitation in line", async () => {
         mockWorldReads({ hostId: "host", roster: [seat("host"), seat("guest")] });
         const updateOne = mockWorldWrites(1);
         const deletes = mockDeletes();
@@ -136,6 +139,8 @@ describe("leaveWorld", () => {
             { $pull: { roster: { userId: "guest" } } },
         );
         expect(deletes.settlements).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
+        // Their armies in the field disband where they stand (§9.1).
+        expect(deletes.armies).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
         expect(reconcileWorldInvitation).toHaveBeenCalledWith(worldId, "host", ["host"]);
     });
 
@@ -188,6 +193,18 @@ describe("leaveWorld", () => {
         await expect(leaveWorld(worldId, "stranger")).rejects.toEqual(expect.objectContaining({ code: "WORLD_NOT_FOUND" }));
         await expect(leaveWorld(worldId, "host")).rejects.toEqual(expect.objectContaining({ code: "WORLD_NOT_FOUND" }));
         expect(deletes.settlements).not.toHaveBeenCalled();
+        expect(deletes.armies).not.toHaveBeenCalled();
+    });
+
+    it("finishes a leave that died after pulling the seat but before disbanding the armies", async () => {
+        mockWorldReads({ hostId: "host", roster: [seat("host")] });
+        vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue(null);
+        const deletes = mockDeletes();
+        deletes.armyExists.mockResolvedValue({ _id: "a" } as never);
+
+        await leaveWorld(worldId, "leaver");
+
+        expect(deletes.armies).toHaveBeenCalledWith({ worldId, ownerId: "leaver" });
     });
 
     it("ends a world from before rosters, whose one member is its settlements' owner", async () => {
@@ -212,13 +229,14 @@ describe("removeWorld", () => {
         expect(deletes.settlements).not.toHaveBeenCalled();
     });
 
-    it("removes settlements, then the invitation, then the world", async () => {
+    it("removes settlements and armies, then the invitation, then the world", async () => {
         mockWorldReads({ endedAt: new Date() });
         const deletes = mockDeletes();
 
         await removeWorld(worldId);
 
-        const order = [deletes.settlements, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
+        expect(deletes.armies).toHaveBeenCalledWith({ worldId });
+        const order = [deletes.settlements, deletes.armies, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
         expect(order).toEqual([...order].sort((a, b) => a - b));
     });
 });

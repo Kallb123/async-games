@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     worldView: vi.fn(),
     endWorld: vi.fn(),
     leaveWorld: vi.fn(),
+    marchArmy: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: mocks.userId }) }));
@@ -19,6 +20,7 @@ vi.mock("@/games/KingdomBuilder", () => ({
     worldView: mocks.worldView,
     endWorld: mocks.endWorld,
     leaveWorld: mocks.leaveWorld,
+    marchArmy: mocks.marchArmy,
 }));
 
 import { KingdomBuilderPersistenceError } from "@/games/KingdomBuilder";
@@ -85,5 +87,17 @@ describe("/api/kingdombuilder/[worldId]", () => {
 
         expect((await POST(request("POST", JSON.stringify({ action: "explode" })), { params })).status).toBe(400);
         expect(mocks.foundExpansion).not.toHaveBeenCalled();
+    });
+
+    it("passes a march order on as the caller's, and answers a missing army with 404", async () => {
+        mocks.marchArmy.mockResolvedValueOnce({ worldId: "world" });
+        const order = { action: "march", settlementId: "s", units: { militia: 2 }, targetNodeId: "camp", ownerId: "someone-else" };
+        expect((await POST(request("POST", JSON.stringify(order)), { params })).status).toBe(200);
+        expect(mocks.marchArmy).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", { settlementId: "s", units: { militia: 2 }, targetNodeId: "camp", armyId: undefined });
+
+        mocks.marchArmy.mockRejectedValueOnce(new KingdomBuilderPersistenceError("ARMY_NOT_FOUND" as never, "Army not found"));
+        expect((await POST(request("POST", JSON.stringify({ action: "march", armyId: "a", targetNodeId: "camp" })), { params })).status).toBe(404);
+        mocks.marchArmy.mockRejectedValueOnce(new KingdomBuilderPersistenceError("NO_ROUTE" as never, "No way"));
+        expect((await POST(request("POST", JSON.stringify({ action: "march", armyId: "a", targetNodeId: "isle" })), { params })).status).toBe(409);
     });
 });

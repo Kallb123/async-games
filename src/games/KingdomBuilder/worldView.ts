@@ -2,8 +2,11 @@ import { Types } from "mongoose";
 
 import { buildUserDirectory } from "@/utils/users/clerk";
 
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
+import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
+import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
 import { ensureFirstSettlement } from "./roster";
@@ -42,9 +45,32 @@ export interface KingdomBuilderWorldView {
         isMine: boolean;
         /** The owner's index in `players`. */
         seat: number;
+        /** Yours only: the units stationed there, which an army is drawn from (§6.2). */
+        garrison?: KingdomBuilderGarrison;
     }>;
+    /**
+     * Your own armies in the field (§6.2), and nobody else's: an army on the
+     * march is hidden from everyone but its owner (§6.3), and until PR 20's
+     * scouts there is no way to see anyone else's.
+     */
+    armies: KingdomBuilderArmyView[];
     /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
+}
+
+export interface KingdomBuilderArmyView {
+    armyId: string;
+    units: KingdomBuilderGarrison;
+    /** The tile it stands on now. */
+    tile: number;
+    /** The rest of its road, from `tile` to the end — just `tile` once it has arrived. */
+    route: number[];
+    fromNodeId: string;
+    targetNodeId: string;
+    /** 0 once it has arrived. */
+    ticksToArrive: number;
+    /** The tick it arrived on, once it has. */
+    arrivedAtTick?: number;
 }
 
 function validateWorldId(worldId: string) {
@@ -53,12 +79,31 @@ function validateWorldId(worldId: string) {
     }
 }
 
-type SettlementRow = { _id: Types.ObjectId; ownerId: string; nodeId: string; tiles?: KingdomBuilderTile[] };
+type SettlementRow = { _id: Types.ObjectId; ownerId: string; nodeId: string; tiles?: KingdomBuilderTile[]; garrison?: Partial<KingdomBuilderGarrison> };
 
 function readSettlements(worldId: string): Promise<SettlementRow[]> {
     return KingdomBuilderSettlementModel.find({ worldId })
-        .select({ ownerId: 1, nodeId: 1, tiles: 1 })
+        .select({ ownerId: 1, nodeId: 1, tiles: 1, garrison: 1 })
         .lean<SettlementRow[]>();
+}
+
+/** The viewer's own armies — the query names the owner, so nobody else's is ever read. */
+async function readArmies(worldId: string, userId: string): Promise<KingdomBuilderArmyView[]> {
+    const armies = await KingdomBuilderArmyModel.find({ worldId, ownerId: userId }).sort({ createdAt: 1, _id: 1 }).lean();
+    return armies.map(army => {
+        const units = garrisonOf(army.units);
+        const arrivedAtTick = army.arrivedAtTick ?? undefined;
+        return {
+            armyId: army._id.toString(),
+            units,
+            tile: armyTile(army),
+            route: army.path.slice(pathIndexOf(army)),
+            fromNodeId: army.fromNodeId,
+            targetNodeId: army.targetNodeId,
+            ticksToArrive: arrivedAtTick === undefined ? Math.max(1, ticksToArrive(army, paceOf(units) ?? 1)) : 0,
+            ...(arrivedAtTick === undefined ? {} : { arrivedAtTick }),
+        };
+    });
 }
 
 export async function worldView(worldId: string, userId: string): Promise<KingdomBuilderWorldView> {
@@ -101,9 +146,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
     }
     const hostId = world.hostId ?? memberIds[0];
-    const [directory, invite] = await Promise.all([
+    const [directory, invite, armies] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
+        readArmies(worldId, userId),
         // The repair for a leave that died before handing the invitation on (§9.1).
         hostId === userId && roster.length > 0
             ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))
@@ -136,8 +182,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                 nodeId: settlement.nodeId,
                 isMine: settlement.ownerId === userId,
                 seat: ownerSeat,
+                ...(settlement.ownerId === userId ? { garrison: garrisonOf(settlement.garrison) } : {}),
             }];
         }),
+        armies,
         ...(invite ? { invite } : {}),
     };
 }

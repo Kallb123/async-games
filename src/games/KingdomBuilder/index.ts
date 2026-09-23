@@ -13,3 +13,4 @@ export * from "./buildings";
 export * from "./resources";
 export * from "./land";
 export * from "./armies";
+export * from "./march";
