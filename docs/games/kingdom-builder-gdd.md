@@ -4,10 +4,10 @@
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
-vocabulary (PR 12), and barracks and units (PR 13) are shipped. PRs 14–18 —
-ending a world, the map-shape overhaul (§3.7), travel over the tiles (§3.8),
-building costs (§4.5) and wheat with land-driven production (§4.6) — come
-next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
+vocabulary (PR 12), barracks and units (PR 13), and ending a world (PR 14) are
+shipped. PRs 15–18 — the map-shape overhaul (§3.7), travel over the tiles
+(§3.8), building costs (§4.5) and wheat with land-driven production (§4.6) —
+come next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
 rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
@@ -1983,7 +1983,7 @@ one-line entries in the guide and tutorial registries.
   the dashboard carries them, which is PR 20's fog-of-war contract holding
   before there is an army to hide. Buildings still cost nothing to raise — PR 17
   prices them. No `whatsNew.ts` line on this branch.
-- **PR 14 — End, leave and remove a world.** §9.1. First of the new five
+- **PR 14 — End, leave and remove a world.** Shipped. §9.1. First of the new five
   because it is what makes the others testable: each of PRs 15–18 changes what
   a *new* world or settlement looks like, and without this every tester is left
   playing, or looking past, the worlds generated before it.
@@ -2013,6 +2013,29 @@ one-line entries in the guide and tutorial registries.
      admin gate), `gremlin` (ending mid-sweep, a removal that dies partway, two
      players leaving at once so nobody is host, a bounded batch), `caveman`
      (the confirmation and the admin list should be existing pieces).
+
+  How it landed: `lifecycle.ts` holds all of it. Ending is one `updateOne`
+  conditional on `endedAt: null` and on the host still being the one read
+  (`hostId: {$exists: false}` for a pre-PR 8 world, whose first settlement's
+  owner is its host); the invitation is deleted straight after, best-effort,
+  since `joinWorld` and `foundSettlement` already refuse an ended world. The
+  sweep, the claim write in `tickWorld`, `worldView`, `worldSummaries` and both
+  settlement commands (`assertWorldLive`) all read `endedAt`, and an ended
+  world answers 404 like a missing one. Leaving is a loop, bounded like
+  `joinWorld`'s, around one conditional roster write guarded on what it was
+  decided from — the last player (nobody joined since), the host (still host,
+  successor still seated) or anyone else — so two leaves at once can't hand the
+  world to someone who has gone; the loser re-reads. The leaver's settlements
+  are deleted before that write and again after, so a leave that dies partway
+  leaves a player still seated rather than a settlement squatting on a freed
+  site. The invitation follows the roster: the leaver's seat on it goes back to
+  the code, and when the host leaves the successor becomes its sender and their
+  own seat reopens. The host can also leave rather than end, handing the world
+  on. Removal deletes settlements, then the invitation, then the world; the tick
+  cron's last step removes up to 20 worlds ended over seven days
+  (`LOBBY_MAX_TTL_MS`) ago, each in its own try, found through a partial index
+  on `endedAt`. `endReason` is `host`, `abandoned` or `admin`. The admin page
+  lists the newest 50 worlds.
 - **PR 15 — Map shape: ranges, not a central massif.** §3.7. Generator-only;
   existing worlds are untouched.
   1. Split the landmass: the falloff becomes only the land mask (with domain
