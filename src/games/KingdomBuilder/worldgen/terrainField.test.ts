@@ -14,7 +14,6 @@ import {
     runWaterSplitPass,
     tileAt,
     tileIndex,
-    walkTileLine,
     TERRAIN_FIELD_TILE_SIZE,
     type TerrainField,
 } from "./terrainField";
@@ -176,29 +175,5 @@ describe("areaCodeAt / tileAt", () => {
         const field: TerrainField = { columns: 5, rows: 5, tileSize: TERRAIN_FIELD_TILE_SIZE, codes: "g".repeat(25) };
         expect(() => areaCodeAt(field, { x: -50, y: 9999 })).not.toThrow();
         expect(tileAt(field, { x: -50, y: 9999 })).toEqual({ col: 0, row: 4 });
-    });
-});
-
-describe("walkTileLine", () => {
-    it("sums to the line's full length across the tiles it crosses", () => {
-        const field: TerrainField = { columns: 10, rows: 10, tileSize: 2, codes: "g".repeat(100) };
-        const from = { x: 1, y: 1 };
-        const to = { x: 17, y: 9 };
-        const segments = walkTileLine(field, from, to);
-        const total = segments.reduce((sum, segment) => sum + segment.length, 0);
-        expect(total).toBeCloseTo(Math.hypot(to.x - from.x, to.y - from.y), 6);
-        expect(new Set(segments.map(segment => `${segment.col},${segment.row}`)).size).toBe(segments.length);
-    });
-
-    it("walks a straight horizontal line through every tile it passes, never diagonally slipping a corner", () => {
-        const field: TerrainField = { columns: 5, rows: 5, tileSize: 2, codes: "g".repeat(25) };
-        const segments = walkTileLine(field, { x: 0, y: 5 }, { x: 10, y: 5 });
-        expect(segments.every(segment => segment.row === 2)).toBe(true);
-        expect(segments.map(segment => segment.col)).toEqual([0, 1, 2, 3, 4]);
-    });
-
-    it("returns nothing for a zero-length line", () => {
-        const field: TerrainField = { columns: 5, rows: 5, tileSize: 2, codes: "g".repeat(25) };
-        expect(walkTileLine(field, { x: 3, y: 3 }, { x: 3, y: 3 })).toEqual([]);
     });
 });

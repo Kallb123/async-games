@@ -38,6 +38,12 @@ export interface WorldEdge {
     terrain: EdgeTerrain;
     movementCost: number;
     chokepoint: boolean;
+    /**
+     * The route this edge draws (§3.8): the cheapest tile path between its two
+     * nodes, both of their tiles included, and what `movementCost` is the cost
+     * of. Absent only on a world old enough to have no terrain field to path.
+     */
+    path?: number[];
 }
 
 export interface Landmass {

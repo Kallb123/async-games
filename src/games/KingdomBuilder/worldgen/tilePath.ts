@@ -6,7 +6,7 @@
 // tile's area weight, or the overlay's where one overrides it.
 
 import { areaWeightForCode } from "./areas";
-import { overlayForCode, type OverlayPlacement } from "./overlays";
+import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./overlays";
 import type { Point } from "./landmass";
 import type { TerrainField } from "./terrainField";
 
@@ -47,7 +47,7 @@ function tileWeight(code: string | undefined, overlayCode: string | undefined): 
 /** The grid a search runs over: the field's ground with its overlays applied. */
 export function travelGridFor(field: TerrainField, overlays: readonly OverlayPlacement[] = []): TravelGrid {
     const size = field.columns * field.rows;
-    const overlayByTile = new Map(overlays.map(overlay => [overlay.tile, overlay.code]));
+    const overlayByTile = overlayCodesByTile(overlays);
     const weights = new Float64Array(size);
     const cornerBlocked = new Uint8Array(size);
     for (let tile = 0; tile < size; tile++) {
@@ -117,9 +117,27 @@ function forEachStep(grid: TravelGrid, tile: number, visit: (next: number, cost:
         if (grid.weights[next] === Infinity) continue;
         const diagonal = dc !== 0 && dr !== 0;
         if (diagonal && (grid.cornerBlocked[row * grid.columns + c] || grid.cornerBlocked[r * grid.columns + col])) continue;
-        const length = grid.tileSize * (diagonal ? Math.SQRT2 : 1);
-        visit(next, (length * (grid.weights[tile] + grid.weights[next])) / 2);
+        visit(next, stepCost(grid, tile, next, diagonal));
     }
+}
+
+/** Half the step spent on each tile, at that tile's weight. */
+function stepCost(grid: TravelGrid, from: number, to: number, diagonal: boolean): number {
+    return (grid.tileSize * (diagonal ? Math.SQRT2 : 1) * (grid.weights[from] + grid.weights[to])) / 2;
+}
+
+/**
+ * What an already-chosen path costs on `grid` — for a route whose ground has
+ * changed under it since it was found, as a road laid along it does.
+ */
+export function pathCost(grid: TravelGrid, tiles: readonly number[]): number {
+    let cost = 0;
+    for (let step = 1; step < tiles.length; step++) {
+        const from = tiles[step - 1], to = tiles[step];
+        const diagonal = from % grid.columns !== to % grid.columns && Math.floor(from / grid.columns) !== Math.floor(to / grid.columns);
+        cost += stepCost(grid, from, to, diagonal);
+    }
+    return cost;
 }
 
 /** A binary min-heap of tiles keyed by priority — the frontier both searches below share. */

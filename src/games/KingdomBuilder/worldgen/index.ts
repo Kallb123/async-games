@@ -1,4 +1,5 @@
 export * from "./areas";
+export * from "./crossings";
 export * from "./generateWorld";
 export * from "./graphConnectivity";
 export * from "./landmass";
