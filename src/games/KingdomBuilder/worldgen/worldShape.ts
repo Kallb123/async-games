@@ -4,7 +4,7 @@
 // under the same cap, and the "generate 20 worlds" test asserts them too.
 
 import { FIELDS_CODE, GRASS_CODE, HILLS_CODE, LAKE_CODE, MARSH_CODE, MOUNTAINS_CODE, OCEAN_CODE, RIVER_CODE, WOODLAND_CODE } from "./areas";
-import type { TerrainField } from "./terrainField";
+import { connectedRegions, type TerrainField } from "./terrainField";
 
 export interface CompositionBand {
     label: string;
@@ -36,29 +36,9 @@ export function compositionOf(field: TerrainField): number[] {
 
 /** The share of all mountain tiles in the largest eight-connected mass of them; 0 for a world with none. */
 export function largestMountainRegionShare(field: TerrainField): number {
-    const seen = new Uint8Array(field.codes.length);
-    let total = 0, largest = 0;
-    for (let start = 0; start < field.codes.length; start++) {
-        if (seen[start] || field.codes[start] !== MOUNTAINS_CODE) continue;
-        seen[start] = 1;
-        const queue = [start];
-        for (let head = 0; head < queue.length; head++) {
-            const col = queue[head] % field.columns, row = Math.floor(queue[head] / field.columns);
-            for (let dr = -1; dr <= 1; dr++) {
-                for (let dc = -1; dc <= 1; dc++) {
-                    const c = col + dc, r = row + dr;
-                    if (c < 0 || c >= field.columns || r < 0 || r >= field.rows) continue;
-                    const neighbour = r * field.columns + c;
-                    if (seen[neighbour] || field.codes[neighbour] !== MOUNTAINS_CODE) continue;
-                    seen[neighbour] = 1;
-                    queue.push(neighbour);
-                }
-            }
-        }
-        total += queue.length;
-        largest = Math.max(largest, queue.length);
-    }
-    return total === 0 ? 0 : largest / total;
+    const { sizes } = connectedRegions(field.columns, field.rows, index => field.codes[index] === MOUNTAINS_CODE, true);
+    const total = sizes.reduce((sum, size) => sum + size, 0);
+    return total === 0 ? 0 : Math.max(...sizes) / total;
 }
 
 /**

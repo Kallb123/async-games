@@ -3,7 +3,7 @@ import { generateWorld } from "./generateWorld";
 import { connectWorldGraph, edgeCostFor, isConnected } from "./graphConnectivity";
 import { createRandom } from "./random";
 import { checkSettlementFairness } from "./settlementSites";
-import { generateBaseTerrainField, type TerrainField } from "./terrainField";
+import { generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { WORLD_AREA_SCALE, generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
 import { MOUNTAINS_CODE } from "./areas";
@@ -40,7 +40,7 @@ describe("Kingdom Builder world generation", () => {
         const random = createRandom("terrain");
         const landmass = generateLandmass(random);
         const { field } = generateBaseTerrainField(landmass, random);
-        const nodes = placeTerrainNodes(landmass, field, random, { count: 20, minimumDistance: 5 });
+        const nodes = placeTerrainNodes(landmass, field, mainlandOf(field), random, { count: 20, minimumDistance: 5 });
         expect(nodes).toHaveLength(20);
         expect(nodes.every(node => isLand(landmass, node))).toBe(true);
         expect(new Set(nodes.map(node => node.terrain))).toEqual(new Set(["forest", "quarry", "ore"]));

@@ -4,7 +4,7 @@ import type { OverlayPlacement } from "./overlays";
 import { applyOverlayVocabulary } from "./overlayVocabulary";
 import { createRandom } from "./random";
 import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
-import { applySitesToTerrainField, generateBaseTerrainField, type TerrainField } from "./terrainField";
+import { applySitesToTerrainField, generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { placeTerrainNodes, type TerrainNodeOptions } from "./terrainNodes";
 import { checkWorldShape } from "./worldShape";
 
@@ -56,9 +56,10 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
             const random = createRandom(`${seed}:${attempt}`);
             const landmass = generateLandmass(random);
             const { field: baseField } = generateBaseTerrainField(landmass, random);
-            const terrainNodes = placeTerrainNodes(landmass, baseField, random, options.terrain);
+            const onMainland = mainlandOf(baseField);
+            const terrainNodes = placeTerrainNodes(landmass, baseField, onMainland, random, options.terrain);
             const requestedStarts = options.settlements?.playerStarts ?? 10;
-            const settlementSites = placeSettlementSites(landmass, baseField, terrainNodes, random, options.settlements);
+            const settlementSites = placeSettlementSites(landmass, onMainland, terrainNodes, random, options.settlements);
             const terrainField = applySitesToTerrainField(baseField, settlementSites);
             // §3.7's composition bands and mountain-region rule, checked
             // before the graph — the expensive step — so a world whose ground

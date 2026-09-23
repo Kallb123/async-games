@@ -273,6 +273,39 @@ export function generateBaseTerrainField(landmass: Landmass, random: RandomSourc
 }
 
 /**
+ * Labels every tile `include` accepts with the connected region it belongs
+ * to — four-connected, or eight-connected with `diagonal` — and counts each
+ * region's tiles. `component` is -1 for a tile left out. Shared by the
+ * mainland below and worldShape.ts's largest-mountain-region rule.
+ */
+export function connectedRegions(columns: number, rows: number, include: (index: number) => boolean, diagonal = false): { component: Int32Array; sizes: number[] } {
+    const component = new Int32Array(columns * rows).fill(-1);
+    const sizes: number[] = [];
+    for (let start = 0; start < component.length; start++) {
+        if (component[start] !== -1 || !include(start)) continue;
+        const id = sizes.length;
+        const queue = [start];
+        component[start] = id;
+        for (let head = 0; head < queue.length; head++) {
+            const col = queue[head] % columns, row = Math.floor(queue[head] / columns);
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if ((dr === 0 && dc === 0) || (!diagonal && dr !== 0 && dc !== 0)) continue;
+                    const c = col + dc, r = row + dr;
+                    if (c < 0 || c >= columns || r < 0 || r >= rows) continue;
+                    const neighbour = r * columns + c;
+                    if (component[neighbour] !== -1 || !include(neighbour)) continue;
+                    component[neighbour] = id;
+                    queue.push(neighbour);
+                }
+            }
+        }
+        sizes.push(queue.length);
+    }
+    return { component, sizes };
+}
+
+/**
  * The tiles of the largest body of land — the ground every node goes on
  * (§3.7). A warped coast throws off the odd offshore island, and the
  * archipelago preset a whole ring of them; ocean is impassable, so a node on
@@ -281,24 +314,8 @@ export function generateBaseTerrainField(landmass: Landmass, random: RandomSourc
  * crossing can take a route over the first two.
  */
 export function mainlandOf(field: TerrainField): (point: Point) => boolean {
-    const component = new Int32Array(field.codes.length).fill(-1);
-    const sizes: number[] = [];
-    for (let start = 0; start < field.codes.length; start++) {
-        if (component[start] !== -1 || field.codes[start] === OCEAN_CODE) continue;
-        const id = sizes.length;
-        const queue = [start];
-        component[start] = id;
-        for (let head = 0; head < queue.length; head++) {
-            const index = queue[head];
-            for (const neighbour of neighboursOf(index % field.columns, Math.floor(index / field.columns), field.columns, field.rows)) {
-                if (component[neighbour] !== -1 || field.codes[neighbour] === OCEAN_CODE) continue;
-                component[neighbour] = id;
-                queue.push(neighbour);
-            }
-        }
-        sizes.push(queue.length);
-    }
-    const largest = sizes.indexOf(Math.max(...sizes));
+    const { component, sizes } = connectedRegions(field.columns, field.rows, index => field.codes[index] !== OCEAN_CODE);
+    const largest = sizes.indexOf(Math.max(0, ...sizes));
     return point => {
         const { col, row } = tileAt(field, point);
         return component[tileIndex(field, col, row)] === largest;

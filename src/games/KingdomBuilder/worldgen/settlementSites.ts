@@ -1,7 +1,6 @@
 import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
 import { graphDistances, weightedGraphDistances } from "./graphConnectivity";
-import { mainlandOf, type TerrainField } from "./terrainField";
 
 export interface SettlementOptions {
     playerStarts?: number;
@@ -20,7 +19,7 @@ export interface FairnessReport {
 /** Places settlement candidates on the mainland; topology later decides which become starts. */
 export function placeSettlementSites(
     landmass: Landmass,
-    field: TerrainField,
+    onMainland: (point: Point) => boolean,
     terrainNodes: readonly TerrainNode[],
     random: RandomSource,
     options: SettlementOptions = {},
@@ -31,7 +30,6 @@ export function placeSettlementSites(
     const total = playerStarts + expansionSites;
     const minimumDistance = 8;
     const candidates: Point[] = [];
-    const onMainland = mainlandOf(field);
 
     for (let attempt = 0; attempt < total * 1000 && candidates.length < total * 3; attempt++) {
         const candidate = { x: random.between(4, landmass.width - 4), y: random.between(4, landmass.height - 4) };
