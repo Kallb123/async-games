@@ -31,8 +31,11 @@ function mockWorld(world: object | null) {
     } as never);
 }
 
-function mockArmies(armies: object[]) {
-    return vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ lean: vi.fn().mockResolvedValue(armies) }) } as never);
+/** The viewer's own armies come back sorted; everyone else's through a projection. */
+function mockArmies(armies: object[], rivals: object[] = []) {
+    return vi.spyOn(KingdomBuilderArmyModel, "find").mockImplementation(((filter: { ownerId: unknown }) => (typeof filter.ownerId === "string"
+        ? { sort: () => ({ lean: vi.fn().mockResolvedValue(armies) }) }
+        : { select: () => ({ lean: vi.fn().mockResolvedValue(rivals) }) })) as never);
 }
 
 beforeEach(() => {
@@ -222,5 +225,108 @@ describe("Kingdom Builder world view", () => {
         // A garrison is its owner's to see: the rival's settlement carries none.
         expect(view.settlements.find(settlement => settlement.isMine)?.garrison?.militia).toBe(2);
         expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("garrison");
+    });
+
+    describe("fog of war", () => {
+        // A 20×20 field: tile = row * 20 + col. The viewer's town is at (2, 2), the rival's at (17, 17).
+        const at = (col: number, row: number) => row * 20 + col;
+        const FIELD = { columns: 20, rows: 20, tileSize: 2, codes: "g".repeat(400) };
+        const NODES = [
+            { id: "start", kind: "settlement", siteType: "player-start", x: 5, y: 5, tile: at(2, 2) },
+            { id: "other", kind: "settlement", siteType: "player-start", x: 35, y: 35, tile: at(17, 17) },
+        ];
+        const worldId = new Types.ObjectId().toString();
+
+        function setUp(rivalGarrison: object = { militia: 24680 }) {
+            mockSettlements([
+                { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", tiles: [], garrison: { militia: 1 } },
+                { _id: new Types.ObjectId(), ownerId: "rival", nodeId: "other", tiles: [], garrison: rivalGarrison },
+            ]);
+            mockWorld({
+                hostId: "owner", terrainField: FIELD, nodes: NODES,
+                roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }, { userId: "rival", siteId: "other", joinedAt: new Date() }],
+            });
+        }
+
+        function rivalArmy(tile: number, units: object = { cavalry: 2 }) {
+            return { ownerId: "rival", units, path: [tile], pathCosts: [0], travelled: 0 };
+        }
+
+        function ownArmy(tile: number, units: object) {
+            return { _id: new Types.ObjectId(), ownerId: "owner", units, path: [tile], pathCosts: [0], travelled: 0, fromNodeId: "start", targetNodeId: "somewhere" };
+        }
+
+        it("sends nothing of a rival army out of sight — not where it is, what it holds or where it is going", async () => {
+            setUp();
+            const find = mockArmies([], [{ ...rivalArmy(at(10, 10), { cavalry: 97531 }), targetNodeId: "start", fromNodeId: "other" }]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sightings).toEqual([]);
+            expect(JSON.stringify(view)).not.toContain("97531");
+            // The rivals' read asks for nothing about their orders.
+            expect(find).toHaveBeenCalledWith({ worldId, ownerId: { $ne: "owner" } });
+        });
+
+        it("spots a rival army from the viewer's own town, and sends only its seat, tile and units", async () => {
+            setUp();
+            mockArmies([], [{ ...rivalArmy(at(4, 3)), targetNodeId: "start", fromNodeId: "other", arrivedAtTick: 9, _id: new Types.ObjectId() }]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sight).toEqual([{ tile: at(2, 2), radius: 3 }]);
+            expect(view.sightings).toEqual([{ seat: 1, tile: at(4, 3), units: { militia: 0, scout: 0, infantry: 0, cavalry: 2, "siege-engine": 0 } }]);
+        });
+
+        it("scouts a rival army with an army of the viewer's own nearby, where the town can't see it", async () => {
+            setUp();
+            mockArmies([ownArmy(at(10, 10), { militia: 1 })], [rivalArmy(at(13, 12)), rivalArmy(at(16, 10))]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sightings.map(sighting => sighting.tile)).toEqual([at(13, 12)]);
+        });
+
+        it("sees farther with a scout in the army, and reads the garrison of a rival town only then", async () => {
+            setUp();
+            mockArmies([ownArmy(at(10, 10), { militia: 1 })]);
+            const unscouted = await worldView(worldId, "owner");
+            expect(unscouted.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("garrison");
+
+            setUp();
+            mockArmies([ownArmy(at(12, 12), { scout: 1 })], [rivalArmy(at(16, 10))]);
+            const scouted = await worldView(worldId, "owner");
+            expect(scouted.sightings.map(sighting => sighting.tile)).toEqual([at(16, 10)]);
+            expect(scouted.settlements.find(settlement => !settlement.isMine)?.garrison?.militia).toBe(24680);
+        });
+
+        it("widens a town's watch as its barracks grows", async () => {
+            mockSettlements([
+                { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", tiles: [{ position: 0, building: { type: "barracks", level: 3 } }] },
+                { _id: new Types.ObjectId(), ownerId: "rival", nodeId: "other", tiles: [] },
+            ]);
+            mockWorld({
+                hostId: "owner", terrainField: FIELD, nodes: NODES,
+                roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }, { userId: "rival", siteId: "other", joinedAt: new Date() }],
+            });
+            mockArmies([], [rivalArmy(at(8, 2))]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sight).toEqual([{ tile: at(2, 2), radius: 7 }]);
+            expect(view.sightings).toHaveLength(1);
+        });
+
+        it("never reads a rival's armies on a world without the ground to see them on", async () => {
+            mockSettlements([{ _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start" }]);
+            mockWorld({});
+            const find = mockArmies([]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sight).toEqual([]);
+            expect(view.sightings).toEqual([]);
+            expect(find).toHaveBeenCalledTimes(1);
+        });
     });
 });
