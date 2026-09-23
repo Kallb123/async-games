@@ -80,9 +80,9 @@ function interpolate(a: number, b: number, amount: number): number {
 
 /**
  * A coherent value-noise grid: a coarse random lattice, bilinearly
- * interpolated up to `columns` × `rows`. Shared by the landmass's own
- * elevation field and terrainField.ts's moisture field, so both terrain
- * inputs are the same kind of noise rather than two hand-rolled generators.
+ * interpolated up to `columns` × `rows`. Shared by the land mask, its warp,
+ * and terrainField.ts's lowland and moisture fields, so every terrain input is
+ * the same kind of noise rather than several hand-rolled generators.
  */
 export function coherentNoiseGrid(random: RandomSource, columns: number, rows: number, coarseSize = 9): number[] {
     const coarse = Array.from({ length: coarseSize * coarseSize }, () => random.next());
@@ -104,22 +104,90 @@ export function coherentNoiseGrid(random: RandomSource, columns: number, rows: n
     return values;
 }
 
-/** Builds a coherent value-noise island, with ocean forced around every edge. */
+/**
+ * The overall outline a world's land takes (§3.7) — one continent, two joined
+ * by an isthmus, or a large island with an archipelago offshore. Each is a
+ * handful of shapes in the map's -1…1 space whose falloffs are max-combined,
+ * so none of them is a special case anywhere past this table.
+ */
+export const LAND_SHAPE_PRESETS = ["continent", "twin-continents", "archipelago"] as const;
+export type LandShapePreset = (typeof LAND_SHAPE_PRESETS)[number];
+
+/** A blob of land: an ellipse (`from === to`) or a capsule stretched between two points, in the map's -1…1 space. */
+interface LandShape {
+    from: Point;
+    to: Point;
+    radiusX: number;
+    radiusY: number;
+}
+
+const blob = (x: number, y: number, radiusX: number, radiusY: number): LandShape => ({ from: { x, y }, to: { x, y }, radiusX, radiusY });
+
+function landShapesFor(preset: LandShapePreset, random: RandomSource): LandShape[] {
+    const jitter = (amount: number): number => random.between(-amount, amount);
+    switch (preset) {
+        case "continent":
+            return [blob(jitter(0.1), jitter(0.08), random.between(0.9, 1), random.between(0.8, 0.9))];
+        case "twin-continents": {
+            const west = blob(-0.46 + jitter(0.05), jitter(0.15), random.between(0.5, 0.56), random.between(0.72, 0.84));
+            const east = blob(0.46 + jitter(0.05), jitter(0.15), random.between(0.5, 0.56), random.between(0.72, 0.84));
+            return [west, east, { from: west.from, to: east.from, radiusX: 0.16, radiusY: 0.16 }];
+        }
+        case "archipelago": {
+            const main = blob(jitter(0.18), jitter(0.1), random.between(0.78, 0.88), random.between(0.7, 0.8));
+            const islets = Array.from({ length: 4 + random.integer(4) }, () => {
+                const angle = random.between(0, Math.PI * 2);
+                return blob(Math.cos(angle) * 0.8, Math.sin(angle) * 0.72, random.between(0.1, 0.17), random.between(0.12, 0.2));
+            });
+            return [main, ...islets];
+        }
+    }
+}
+
+/** 1 at a shape's spine, falling to 0 at its rim — the same curve the original single island used. */
+function shapeFalloff(shape: LandShape, point: Point): number {
+    const dx = shape.to.x - shape.from.x, dy = shape.to.y - shape.from.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const along = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - shape.from.x) * dx + (point.y - shape.from.y) * dy) / lengthSquared));
+    const distance = Math.hypot((point.x - shape.from.x - dx * along) / shape.radiusX, (point.y - shape.from.y - dy * along) / shape.radiusY);
+    return Math.max(0, 1 - Math.pow(distance, 1.7));
+}
+
+/**
+ * Builds the land mask (§3.7): where there is land and where there is sea,
+ * and nothing else. It is a seeded shape preset's falloff, read through a
+ * domain warp — each sample offset by a second, low-frequency noise before the
+ * falloff is read — so the coast grows bays, peninsulas and the odd offshore
+ * island rather than a rounded blob, with ocean forced around every edge.
+ * Height is not in here: that is terrainField.ts's own elevation field, built
+ * from mountainRanges.ts, so being far from the sea no longer means being high.
+ */
 export function generateLandmass(random: RandomSource, options: LandmassOptions = {}): Landmass {
     const width = options.width ?? WORLD_WIDTH;
     const height = options.height ?? WORLD_HEIGHT;
     // The same ~2 world units per sample the original 100-wide, 48-sample map had.
     const resolution = options.resolution ?? Math.round((48 * width) / 100);
     const landThreshold = options.landThreshold ?? 0.31;
-    const noise = coherentNoiseGrid(random, resolution, resolution, noiseLatticeFor(width));
+    const shapes = landShapesFor(LAND_SHAPE_PRESETS[random.integer(LAND_SHAPE_PRESETS.length)], random);
+    const detail = coherentNoiseGrid(random, resolution, resolution, noiseLatticeFor(width));
+    // Half the detail noise's frequency: a warp that wobbles as fast as the
+    // coast's own detail only roughens it, where a slower one bends it.
+    const warpLattice = Math.max(2, Math.round(noiseLatticeFor(width) / 2));
+    const warpX = coherentNoiseGrid(random, resolution, resolution, warpLattice);
+    const warpY = coherentNoiseGrid(random, resolution, resolution, warpLattice);
+    const warpStrength = 0.28;
     const values: number[] = [];
 
     for (let row = 0; row < resolution; row++) {
         for (let column = 0; column < resolution; column++) {
+            const index = row * resolution + column;
             const nx = (column / (resolution - 1)) * 2 - 1;
             const ny = (row / (resolution - 1)) * 2 - 1;
-            const islandFalloff = Math.max(0, 1 - Math.pow(Math.hypot(nx, ny * 1.15), 1.7));
-            values.push(islandFalloff * (0.58 + noise[row * resolution + column] * 0.42));
+            const warped = { x: nx + (warpX[index] - 0.5) * 2 * warpStrength, y: ny + (warpY[index] - 0.5) * 2 * warpStrength };
+            const falloff = Math.max(...shapes.map(shape => shapeFalloff(shape, warped)));
+            // The border itself is always sea, however far the warp pulled a shape towards it.
+            const border = Math.min(1, (1 - Math.abs(nx)) * 12, (1 - Math.abs(ny)) * 12);
+            values.push(falloff * border * (0.58 + detail[index] * 0.42));
         }
     }
 

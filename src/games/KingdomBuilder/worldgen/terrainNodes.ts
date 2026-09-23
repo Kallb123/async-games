@@ -1,6 +1,6 @@
-import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
+import { WORLD_AREA_SCALE, pointDistance, type Landmass, type TerrainNode, type TerrainNodeType } from "./landmass";
 import type { RandomSource } from "./random";
-import { areaCodeAt, type TerrainField } from "./terrainField";
+import { areaCodeAt, mainlandOf, type TerrainField } from "./terrainField";
 
 export interface TerrainNodeOptions {
     count?: number;
@@ -20,16 +20,17 @@ const TERRAIN_TYPE_BY_AREA_CODE: Partial<Record<string, TerrainNodeType>> = {
     m: "ore",
 };
 
-/** Poisson-disc-style rejection sampling over the generated land, one node per matching patch of ground. */
+/** Poisson-disc-style rejection sampling over the mainland (never an offshore island a route can't reach), one node per matching patch of ground. */
 export function placeTerrainNodes(landmass: Landmass, field: TerrainField, random: RandomSource, options: TerrainNodeOptions = {}): TerrainNode[] {
     const count = options.count ?? 32 * WORLD_AREA_SCALE;
     const minimumDistance = options.minimumDistance ?? 5.5;
     const maximumAttempts = options.maximumAttempts ?? count * 2000;
     const nodes: TerrainNode[] = [];
+    const onMainland = mainlandOf(field);
 
     for (let attempt = 0; attempt < maximumAttempts && nodes.length < count; attempt++) {
         const point = { x: random.between(3, landmass.width - 3), y: random.between(3, landmass.height - 3) };
-        if (!isLand(landmass, point) || nodes.some(node => pointDistance(node, point) < minimumDistance)) continue;
+        if (!onMainland(point) || nodes.some(node => pointDistance(node, point) < minimumDistance)) continue;
         const terrain = TERRAIN_TYPE_BY_AREA_CODE[areaCodeAt(field, point)];
         if (!terrain) continue;
         nodes.push({
