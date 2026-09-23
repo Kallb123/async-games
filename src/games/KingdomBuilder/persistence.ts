@@ -2,7 +2,7 @@ import { Types, type ClientSession } from "mongoose";
 
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
-import { barbarianVillagesFor } from "./barbarians";
+import { barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { catchmentForSettlement } from "./land";
 import { resourcesOf } from "./resources";
@@ -95,7 +95,8 @@ export async function foundSettlement(
         throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement site not found in this world");
     }
     // A barbarian site is open ground once its village has been burnt (§3.4).
-    const isOpen = site.siteType === "expansion" || (site.siteType === "barbarian" && !world.barbarians?.some((village: { nodeId: string }) => village.nodeId === siteId));
+    const villages: KingdomBuilderBarbarianVillage[] = world.barbarians ?? [];
+    const isOpen = site.siteType === "expansion" || (site.siteType === "barbarian" && !villages.some(village => village.nodeId === siteId));
     if (kind === "first" ? site.siteType !== "player-start" : !isOpen) {
         throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", `The site is not available for ${kind === "first" ? "a first" : "an expansion"} settlement`);
     }

@@ -6,6 +6,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
+import type { KingdomBuilderBarbarianVillage } from "./barbarians";
 import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
 import { siegesOn } from "./besiegers";
 import type { KingdomBuilderSiege } from "./siege";
@@ -64,6 +65,12 @@ export interface KingdomBuilderWorldView {
          */
         siege?: KingdomBuilderSiege;
     }>;
+    /**
+     * The barbarian villages still standing (§3.4) — public, like every
+     * settlement. What is left of a garrison is shown only while a scouting
+     * army of the viewer's can see the village, as with a rival's town (§6.3).
+     */
+    barbarians: Array<{ nodeId: string; garrison?: KingdomBuilderGarrison }>;
     /** Your own armies in the field (§6.2), with their roads and orders — nobody else's army appears here. */
     armies: KingdomBuilderArmyView[];
     /**
@@ -173,9 +180,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     const ownsSettlement = settlements.some(settlement => settlement.ownerId === userId);
 
     const world = await KingdomBuilderWorldModel.findById(worldId)
-        .select({ currentTick: 1, landmass: 1, terrainField: 1, overlays: 1, nodes: 1, edges: 1, hostId: 1, seatCount: 1, roster: 1, endedAt: 1 })
+        .select({ currentTick: 1, landmass: 1, terrainField: 1, overlays: 1, nodes: 1, edges: 1, hostId: 1, seatCount: 1, roster: 1, endedAt: 1, barbarians: 1 })
         .lean();
     const roster: KingdomBuilderSeat[] = world?.roster ?? [];
+    const villages: KingdomBuilderBarbarianVillage[] = world?.barbarians ?? [];
     const seat = roster.find(entry => entry.userId === userId);
     // A world is open to its members only: the roster, or — for a world opened
     // before rosters existed — the owners of its settlements. Not a member and
@@ -269,6 +277,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                 ...(settlement.ownerId === userId && sieges.has(settlement.nodeId) ? { siege: sieges.get(settlement.nodeId)! } : {}),
             }];
         }),
+        barbarians: villages.map(village => ({
+            nodeId: village.nodeId,
+            ...(isScouted(village.nodeId) ? { garrison: garrisonOf(village.garrison) } : {}),
+        })),
         armies,
         sight,
         sightings,

@@ -43,6 +43,7 @@ interface ArmiesSectionProps {
 export default function ArmiesSection({ endpoint, view, march, onMarchChange, preview, placeName, onMarched }: ArmiesSectionProps) {
     const { submit, isPending, message } = useJsonMutation<KingdomBuilderWorldView>(endpoint, "The army couldn't set out. Try again.");
     const mySettlements = view.settlements.filter(settlement => settlement.isMine && settlement.settlementId);
+    const villages = new Set(view.barbarians.map(village => village.nodeId));
 
     const send = async () => {
         if (!march?.targetNodeId) return;
@@ -94,7 +95,9 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                         <ListRow key={army.armyId} icon={army.arrivedAtTick === undefined ? "⚔️" : army.besiegingSince === undefined ? "⛺" : "🏹"} title={formatUnits(army.units)}
                             sub={army.arrivedAtTick === undefined
                                 ? `Marching to ${placeName(army.targetNodeId)} — ${formatTicks(army.ticksToArrive)}`
-                                : army.besiegingSince === undefined
+                                : villages.has(army.targetNodeId)
+                                    ? "Fighting the barbarians — again each tick until one side is gone"
+                                    : army.besiegingSince === undefined
                                     ? `Camped at ${placeName(army.targetNodeId)} since tick ${army.arrivedAtTick}`
                                     : `Besieging ${placeName(army.targetNodeId)} since tick ${army.besiegingSince}`}
                             action={<button type="button" className="ag-btn ag-btn--light" onClick={() => onMarchChange({ armyId: army.armyId })}>Orders</button>} />
@@ -113,7 +116,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                     );
                 })}
             </div>
-            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, and one that reaches another player&apos;s town lays siege to it.</p>}
+            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town.</p>}
         </Section>
     );
 }
