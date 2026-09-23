@@ -8,6 +8,7 @@ import {
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -20,15 +21,6 @@ import {
     type KingdomBuilderTrainingOrder,
 } from "./units";
 import { completedBuildLevels } from "./worldSummaryTypes";
-
-export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine", "barracks"] as const;
-export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
-export const KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS = 2;
-
-/** Ticks to raise a building to a level: the first costs the prototype's two, each level after it two more. */
-export function buildTicksFor(targetLevel: number): number {
-    return KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS * targetLevel;
-}
 
 export interface KingdomBuilderSettlementView {
     worldId: string;

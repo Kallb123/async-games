@@ -7,3 +7,4 @@ export * from "./worldView";
 export * from "./worldSummaries";
 export * from "./worldSummaryTypes";
 export * from "./units";
+export * from "./buildings";
