@@ -74,7 +74,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     // garrison, saved above; one that neither moved nor began or ended a siege
     // is left alone.
     const marched = new Map(ticked.armies.map(army => [army._id.toString(), army]));
-    const armyWrites = armies.flatMap(army => {
+    const armyWrites = armies.flatMap<Parameters<typeof KingdomBuilderArmyModel.bulkWrite>[0][number]>(army => {
         const next = marched.get(army._id.toString());
         if (!next) return [{ deleteOne: { filter: { _id: army._id, worldId } } }];
         const besiegingSince = next.besiegingSince ?? undefined;
