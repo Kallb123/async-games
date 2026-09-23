@@ -2635,14 +2635,19 @@ reduced-motion rule in `ag-theme.css`.
 
   Every battle is kept, as a `KingdomBuilderBattleModel` document: the world,
   the tick, the kind, the node, who fought on each side (`attackerIds`, and
-  `defenderIds` — every besieger's owner in a sally), what each side brought
-  and each round's losses; what was left is worked out from those. It answers
-  PR 21's leftover: the side that didn't start a battle reads it too.
-  `battleReports.ts` turns one into a `KingdomBuilderBattleReport` from the
-  reader's side — theirs first, the other second, `won`/`lost`/`held` — and
-  `worldView` carries the viewer's latest five (`battles`), read by naming the
-  viewer on either side, so nobody sees a battle they weren't in. Nothing in a
-  report is news to its reader: each side saw the other at the gate. The push
+  `defenderIds` — every besieger's owner in a sally), what each side brought,
+  each round's losses, and `shares`: what each player who fought brought and
+  kept. It answers PR 21's leftover: the side that didn't start a battle reads
+  it too. `battleReports.ts` turns one into a `KingdomBuilderBattleReport` from
+  the reader's side — their own units first, the other side second,
+  `won`/`lost`/`held` — and `worldView` carries the viewer's latest five
+  (`battles`), read by naming the viewer on either side, so nobody sees a
+  battle they weren't in; a failed read shows no battles rather than failing
+  the view. Nothing in a report is news to its reader, who saw the other side
+  at the gate — except what a fellow besieger brought, so a besieger sharing a
+  side with another player's armies is told their own units only, and their
+  own side's losses round by round are left out (they would give the other's
+  away). The push
   and sally reply is now just the world view, whose `battles` begin with the
   one just fought, and removing a world removes its battles; a leaver's stay for
   the others who fought them. The world map gains a Battles section under

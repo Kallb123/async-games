@@ -44,7 +44,7 @@ export default function BattlesSection({ view, placeName }: BattlesSectionProps)
                             <summary className="ag-hint">Round by round <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span></summary>
                             <ol className="ag-hint">
                                 {report.rounds.map((round, number) => (
-                                    <li key={number}>You lost {unitsOrNone(round.lost)}; they lost {unitsOrNone(round.killed)}.</li>
+                                    <li key={number}>{round.lost && <>You lost {unitsOrNone(round.lost)}; </>}{round.lost ? "they" : "They"} lost {unitsOrNone(round.killed)}.</li>
                                 ))}
                             </ol>
                         </details>}

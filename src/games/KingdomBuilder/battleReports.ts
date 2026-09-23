@@ -25,17 +25,24 @@ export interface KingdomBuilderBattleReport {
      * - `held`: both still stand after the last round — which is the defender's.
      */
     outcome: "won" | "lost" | "held";
-    /** What went in on the reader's side, and what it met. */
+    /**
+     * What the reader sent and kept — their own units only, even on a side
+     * shared with other besiegers, who are told nothing of each other's (§6.3).
+     */
     sent: KingdomBuilderGarrison;
-    faced: KingdomBuilderGarrison;
-    /** What was left of each. */
     left: KingdomBuilderGarrison;
+    /** What the other side brought, and what was left of it. */
+    faced: KingdomBuilderGarrison;
     faceLeft: KingdomBuilderGarrison;
-    /** Each round's losses, the reader's side first. */
-    rounds: { lost: KingdomBuilderGarrison; killed: KingdomBuilderGarrison }[];
+    /**
+     * Each round: what the other side lost, and — while the reader's side was
+     * theirs alone — what they lost. A shared side's losses are left out, since
+     * they would say what the reader's fellow besiegers had.
+     */
+    rounds: { lost?: KingdomBuilderGarrison; killed: KingdomBuilderGarrison }[];
 }
 
-type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "attacker" | "defender" | "rounds">;
+type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "defenderIds" | "attacker" | "defender" | "rounds" | "shares">;
 
 function afterLosses(stack: Partial<KingdomBuilderGarrison>, losses: readonly Partial<KingdomBuilderGarrison>[]): KingdomBuilderGarrison {
     return losses.reduce<KingdomBuilderGarrison>(subtractUnits, garrisonOf(stack));
@@ -45,7 +52,9 @@ function afterLosses(stack: Partial<KingdomBuilderGarrison>, losses: readonly Pa
 export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderBattleReport {
     const started = battle.attackerIds.includes(userId);
     const [mine, theirs] = started ? ["attacker", "defender"] as const : ["defender", "attacker"] as const;
-    const left = afterLosses(battle[mine], battle.rounds.map(round => round[mine]));
+    const alone = (started ? battle.attackerIds : battle.defenderIds).length === 1;
+    const share = battle.shares.find(entry => entry.ownerId === userId);
+    const sent = garrisonOf(share?.sent), left = garrisonOf(share?.left);
     const faceLeft = afterLosses(battle[theirs], battle.rounds.map(round => round[theirs]));
     const outcome = unitCount(left) === 0 ? "lost" : unitCount(faceLeft) === 0 ? "won" : "held";
     return {
@@ -55,11 +64,11 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         nodeId: battle.nodeId,
         started,
         outcome,
-        sent: garrisonOf(battle[mine]),
-        faced: garrisonOf(battle[theirs]),
+        sent,
         left,
+        faced: garrisonOf(battle[theirs]),
         faceLeft,
-        rounds: battle.rounds.map(round => ({ lost: garrisonOf(round[mine]), killed: garrisonOf(round[theirs]) })),
+        rounds: battle.rounds.map(round => ({ ...(alone ? { lost: garrisonOf(round[mine]) } : {}), killed: garrisonOf(round[theirs]) })),
     };
 }
 
@@ -68,7 +77,7 @@ export async function recentBattles(worldId: string, userId: string): Promise<Ki
     const battles = await KingdomBuilderBattleModel.find({ worldId, $or: [{ attackerIds: userId }, { defenderIds: userId }] })
         .sort({ createdAt: -1, _id: -1 })
         .limit(KINGDOM_BUILDER_BATTLE_REPORTS)
-        .select({ kind: 1, tick: 1, nodeId: 1, attackerIds: 1, attacker: 1, defender: 1, rounds: 1 })
+        .select({ kind: 1, tick: 1, nodeId: 1, attackerIds: 1, defenderIds: 1, attacker: 1, defender: 1, rounds: 1, shares: 1 })
         .lean<BattleRecord[]>();
     return battles.map(battle => reportFor(battle, userId));
 }

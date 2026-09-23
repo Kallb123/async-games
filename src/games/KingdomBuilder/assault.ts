@@ -6,10 +6,10 @@
 import mongoose, { Types, type AnyBulkWriteOperation, type ClientSession } from "mongoose";
 
 import { KingdomBuilderArmyModel, type IKingdomBuilderArmyDocument } from "./KingdomBuilderArmyModel";
-import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
+import { KingdomBuilderBattleModel, type KingdomBuilderBattleShare } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { unitCount } from "./armies";
+import { addUnits, unitCount } from "./armies";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { combinedUnits } from "./siege";
@@ -42,6 +42,7 @@ interface Fought {
     defenderIds: string[];
     attacker: KingdomBuilderGarrison;
     defender: KingdomBuilderGarrison;
+    shares: KingdomBuilderBattleShare[];
     battle: KingdomBuilderBattle;
 }
 
@@ -66,13 +67,27 @@ function campsAt(filter: Record<string, unknown>, session: ClientSession) {
         .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1 }).session(session).lean<Camp[]>();
 }
 
-/** Leaves each army that fought with its share of what survived — and disbands it if that is nothing. */
-async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession) {
-    const shares = shareSurvivors(camps.map(camp => camp.units), survivors);
-    const writes: AnyBulkWriteOperation<IKingdomBuilderArmyDocument>[] = camps.map((camp, index) => unitCount(shares[index]) === 0
+/**
+ * Leaves each army that fought with its share of what survived — and disbands
+ * it if that is nothing. Returns what each owner brought and kept, so each can
+ * be told their own and nobody else's.
+ */
+async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession): Promise<KingdomBuilderBattleShare[]> {
+    const kept = shareSurvivors(camps.map(camp => camp.units), survivors);
+    const writes: AnyBulkWriteOperation<IKingdomBuilderArmyDocument>[] = camps.map((camp, index) => unitCount(kept[index]) === 0
         ? { deleteOne: { filter: { _id: camp._id, worldId } } }
-        : { updateOne: { filter: { _id: camp._id, worldId }, update: { $set: { units: shares[index] } } } });
+        : { updateOne: { filter: { _id: camp._id, worldId }, update: { $set: { units: kept[index] } } } });
     await KingdomBuilderArmyModel.bulkWrite(writes, { session });
+    const byOwner = new Map<string, KingdomBuilderBattleShare>();
+    camps.forEach((camp, index) => {
+        const share = byOwner.get(camp.ownerId);
+        byOwner.set(camp.ownerId, {
+            ownerId: camp.ownerId,
+            sent: addUnits(share?.sent, camp.units),
+            left: addUnits(share?.left, kept[index]),
+        });
+    });
+    return [...byOwner.values()];
 }
 
 /**
@@ -104,8 +119,9 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         const faced = garrisonOf(target.garrison);
         const battle = resolveBattle(sent, faced, { fortified: true });
         await KingdomBuilderSettlementModel.updateOne({ _id: target._id, worldId }, { $set: { garrison: battle.defender } }, { session });
-        await returnSurvivors(worldId, attackers, battle.attacker, session);
-        return { nodeId: army.targetNodeId, attackerIds: [userId], defenderIds: [target.ownerId], attacker: sent, defender: faced, battle };
+        const shares = await returnSurvivors(worldId, attackers, battle.attacker, session);
+        shares.push({ ownerId: target.ownerId, sent: faced, left: battle.defender });
+        return { nodeId: army.targetNodeId, attackerIds: [userId], defenderIds: [target.ownerId], attacker: sent, defender: faced, shares, battle };
     });
 }
 
@@ -133,8 +149,10 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
         const faced = combinedUnits(besiegers.map(besieger => besieger.units));
         const battle = resolveBattle(sent, faced, { fortified: false });
         await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, { $set: { garrison: battle.attacker } }, { session });
-        await returnSurvivors(worldId, besiegers, battle.defender, session);
-        const defenderIds = [...new Set(besiegers.map(besieger => besieger.ownerId))];
-        return { nodeId: settlement.nodeId, attackerIds: [userId], defenderIds, attacker: sent, defender: faced, battle };
+        const besiegerShares = await returnSurvivors(worldId, besiegers, battle.defender, session);
+        return {
+            nodeId: settlement.nodeId, attackerIds: [userId], defenderIds: besiegerShares.map(share => share.ownerId), attacker: sent, defender: faced,
+            shares: [{ ownerId: userId, sent, left: battle.attacker }, ...besiegerShares], battle,
+        };
     });
 }

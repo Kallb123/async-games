@@ -20,12 +20,25 @@ export interface IKingdomBuilderBattle {
     /** Who fought on each side: the pusher or the sallying garrison's owner attacks. */
     attackerIds: string[];
     defenderIds: string[];
-    /** What went in on each side. */
+    /** What went in on each side, all its owners' together. */
     attacker: KingdomBuilderGarrison;
     defender: KingdomBuilderGarrison;
+    /** Each round's losses, side by side. */
     rounds: KingdomBuilderBattleRound[];
+    /**
+     * What each player who fought brought and kept. A side can be several
+     * players — every besieger a sally goes out against — and none of them is
+     * told what the others brought (§6.3), so each reads their own from here.
+     */
+    shares: KingdomBuilderBattleShare[];
     createdAt: Date;
     updatedAt: Date;
+}
+
+export interface KingdomBuilderBattleShare {
+    ownerId: string;
+    sent: KingdomBuilderGarrison;
+    left: KingdomBuilderGarrison;
 }
 
 export interface IKingdomBuilderBattleDocument extends IKingdomBuilderBattle, Document {}
@@ -34,6 +47,12 @@ export interface IKingdomBuilderBattleModel extends Model<IKingdomBuilderBattleD
 const RoundSchema = new Schema<KingdomBuilderBattleRound>({
     attacker: { type: KingdomBuilderGarrisonSchema, required: true },
     defender: { type: KingdomBuilderGarrisonSchema, required: true },
+}, { _id: false });
+
+const ShareSchema = new Schema<KingdomBuilderBattleShare>({
+    ownerId: { type: String, required: true },
+    sent: { type: KingdomBuilderGarrisonSchema, required: true },
+    left: { type: KingdomBuilderGarrisonSchema, required: true },
 }, { _id: false });
 
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({
@@ -46,6 +65,7 @@ export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocume
     attacker: { type: KingdomBuilderGarrisonSchema, required: true },
     defender: { type: KingdomBuilderGarrisonSchema, required: true },
     rounds: { type: [RoundSchema], required: true },
+    shares: { type: [ShareSchema], required: true },
 }, { timestamps: true });
 
 // A player's latest battles in a world, from either side.

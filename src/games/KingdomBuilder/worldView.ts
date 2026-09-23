@@ -212,7 +212,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
         readArmies(worldId, userId),
         siegesOn(worldId, settlements.filter(settlement => settlement.ownerId === userId)),
-        recentBattles(worldId, userId),
+        // A history, not the board: a failed read shows no battles rather than no world.
+        recentBattles(worldId, userId).catch(error => {
+            console.error(`Kingdom Builder: could not read the battles in world ${worldId}`, error);
+            return [];
+        }),
         // The repair for a leave that died before handing the invitation on (§9.1).
         hostId === userId && roster.length > 0
             ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))

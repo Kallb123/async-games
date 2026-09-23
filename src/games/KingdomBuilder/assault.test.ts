@@ -59,6 +59,10 @@ describe("pushAttack", () => {
         expect(kept()).toEqual([{
             worldId, tick: 12, kind: "push", nodeId: "town", attackerIds: ["attacker"], defenderIds: ["defender"],
             attacker: sent, defender: garrisonOf({ militia: 3 }), rounds: battle.rounds,
+            shares: [
+                { ownerId: "attacker", sent, left: battle.attacker },
+                { ownerId: "defender", sent: garrisonOf({ militia: 3 }), left: battle.defender },
+            ],
         }]);
         expect(KingdomBuilderWorldModel.findOneAndUpdate).toHaveBeenCalledWith(
             { _id: worldId, endedAt: null }, { $inc: { battlesFought: 1 } }, { session, projection: { currentTick: 1 } },
@@ -136,7 +140,14 @@ describe("sallyOut", () => {
         expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith(
             { _id: settlementId.toString(), worldId, ownerId: "defender" }, { $set: { garrison: battle.attacker } }, { session },
         );
-        expect(kept()[0]).toMatchObject({ kind: "sally", attackerIds: ["defender"], defenderIds: ["one", "two"], rounds: battle.rounds });
+        expect(kept()[0]).toMatchObject({
+            kind: "sally", attackerIds: ["defender"], defenderIds: ["one", "two"], rounds: battle.rounds,
+            shares: [
+                { ownerId: "defender", sent: garrisonOf({ infantry: 6 }), left: battle.attacker },
+                { ownerId: "one", sent: garrisonOf({ militia: 1 }), left: garrisonOf() },
+                { ownerId: "two", sent: garrisonOf({ militia: 2 }), left: garrisonOf() },
+            ],
+        });
     });
 
     it("loses the garrison when it is outfought", async () => {

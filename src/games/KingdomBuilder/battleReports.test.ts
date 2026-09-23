@@ -11,11 +11,15 @@ afterEach(() => vi.restoreAllMocks());
 // infantryman in each of two rounds, and the other two militia in round two.
 const battleId = new Types.ObjectId();
 const battle = {
-    _id: battleId, kind: "push" as const, tick: 9, nodeId: "town", attackerIds: ["attacker"],
+    _id: battleId, kind: "push" as const, tick: 9, nodeId: "town", attackerIds: ["attacker"], defenderIds: ["defender"],
     attacker: garrisonOf({ militia: 4 }), defender: garrisonOf({ infantry: 2 }),
     rounds: [
         { attacker: garrisonOf({ militia: 2 }), defender: garrisonOf({ infantry: 1 }) },
         { attacker: garrisonOf({ militia: 1 }), defender: garrisonOf({ infantry: 1 }) },
+    ],
+    shares: [
+        { ownerId: "attacker", sent: garrisonOf({ militia: 4 }), left: garrisonOf({ militia: 1 }) },
+        { ownerId: "defender", sent: garrisonOf({ infantry: 2 }), left: garrisonOf() },
     ],
 };
 
@@ -39,7 +43,32 @@ describe("reportFor", () => {
     });
 
     it("calls it held while both sides still stand", () => {
-        expect(reportFor({ ...battle, rounds: battle.rounds.slice(0, 1) }, "defender").outcome).toBe("held");
+        const held = { ...battle, rounds: battle.rounds.slice(0, 1), shares: [
+            { ownerId: "attacker", sent: garrisonOf({ militia: 4 }), left: garrisonOf({ militia: 2 }) },
+            { ownerId: "defender", sent: garrisonOf({ infantry: 2 }), left: garrisonOf({ infantry: 1 }) },
+        ] };
+        expect(reportFor(held, "defender").outcome).toBe("held");
+    });
+
+    it("tells a besieger sharing a side only their own units, and not the side's losses round by round", () => {
+        // A sally against two players' armies: "one" brought 2 militia, "two" 3 cavalry.
+        const sally = {
+            _id: battleId, kind: "sally" as const, tick: 9, nodeId: "town", attackerIds: ["defender"], defenderIds: ["one", "two"],
+            attacker: garrisonOf({ infantry: 6 }), defender: garrisonOf({ militia: 2, cavalry: 3 }),
+            rounds: [{ attacker: garrisonOf({ infantry: 2 }), defender: garrisonOf({ militia: 2, cavalry: 1 }) }],
+            shares: [
+                { ownerId: "defender", sent: garrisonOf({ infantry: 6 }), left: garrisonOf({ infantry: 4 }) },
+                { ownerId: "one", sent: garrisonOf({ militia: 2 }), left: garrisonOf() },
+                { ownerId: "two", sent: garrisonOf({ cavalry: 3 }), left: garrisonOf({ cavalry: 2 }) },
+            ],
+        };
+        const one = reportFor(sally, "one");
+        expect(one).toMatchObject({ outcome: "lost", sent: garrisonOf({ militia: 2 }), left: garrisonOf(), faced: garrisonOf({ infantry: 6 }) });
+        expect(one.rounds).toEqual([{ killed: garrisonOf({ infantry: 2 }) }]);
+        expect(JSON.stringify(one)).not.toContain('"cavalry":3');
+        expect(reportFor(sally, "two")).toMatchObject({ outcome: "held", sent: garrisonOf({ cavalry: 3 }), left: garrisonOf({ cavalry: 2 }) });
+        // The garrison's owner fought them all at their gate, and reads the whole of it.
+        expect(reportFor(sally, "defender").rounds[0].lost).toEqual(garrisonOf({ infantry: 2 }));
     });
 });
 
