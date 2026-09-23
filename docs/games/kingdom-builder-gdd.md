@@ -1666,6 +1666,12 @@ so it can merge to `main` without disrupting anything already shipped:
   route or cron, `croupier` the moment any response carries hidden state,
   `caveman` on any UI, `rulebook` on anything that changes shared
   metadata or wiring).
+- **No "What's new" lines while the game is pre-release.** Kingdom Builder
+  is being built in the open but not yet announced, so the PRs from here on
+  add nothing to `whatsNew.ts` — AGENTS.md's release-note rule is about what
+  players have been told, and nobody has been told about this yet. The
+  release that announces the game gets its one line then. (The shipped PRs
+  below record the lines they did or didn't add at the time.)
 - **Commits within a PR are ordered so the PR still builds at every commit**,
   the same discipline as the PR sequence itself, just one level down —
   reviewers should be able to check out any commit in a PR and get a green
@@ -2007,7 +2013,6 @@ one-line entries in the guide and tutorial registries.
      admin gate), `gremlin` (ending mid-sweep, a removal that dies partway, two
      players leaving at once so nobody is host, a bounded batch), `caveman`
      (the confirmation and the admin list should be existing pieces).
-  8. One `whatsNew.ts` line: hosts can end a world, and players can leave one.
 - **PR 15 — Map shape: ranges, not a central massif.** §3.7. Generator-only;
   existing worlds are untouched.
   1. Split the landmass: the falloff becomes only the land mask (with domain
@@ -2025,8 +2030,6 @@ one-line entries in the guide and tutorial registries.
   6. Reviewers: `gremlin` (more rejection criteria means more retries; what
      happens at the cap, and how long generation now takes at the p99 seed),
      `rulebook` (still no branch on an area name; the new script documented).
-  7. One `whatsNew.ts` line: new worlds have mountain ranges, passes and
-     varied coasts.
 - **PR 16 — The tiles are the roads.** §3.8. Lands before PR 19 so armies
   never move along edges at all.
   1. `tile` on every node; generation snaps nodes to distinct passable tiles,
@@ -2050,7 +2053,6 @@ one-line entries in the guide and tutorial registries.
      search over a malformed field, how long the flood takes over ten
      starts), `croupier` (a stored path is exactly what fog of war must hide
      once armies carry one — agree now where it lives).
-  8. One `whatsNew.ts` line: routes on the map follow the land.
 - **PR 17 — Buildings cost resources.** §4.5.
   1. A `cost(type, level)` beside `buildTicksFor` in `buildings.ts`, with the
      first-pass table, shared by client and server.
@@ -2067,8 +2069,6 @@ one-line entries in the guide and tutorial registries.
      on a settlement that isn't yours now also spends someone else's stores),
      `gremlin` (a tick landing between the read and the conditional write),
      `caveman` (building and unit costs should be one shape and one helper).
-  7. One `whatsNew.ts` line: buildings now cost resources, and every kingdom
-     starts with enough for its first camps.
 - **PR 18 — Wheat, farms, and land-driven production.** §4.6.
   1. `wheat` in `KingdomBuilderResources` (absent reads as zero), the farm
      building, wheat in every unit's cost and in the starting stockpile.
@@ -2087,8 +2087,6 @@ one-line entries in the guide and tutorial registries.
      schema change and its backfill), `gremlin` (the backfill over every
      settlement, a world with no field), `caveman` (tiers read off the
      registry, never a switch on area name).
-  8. One `whatsNew.ts` line: wheat and farms arrive, and a settlement's land
-     now decides what it's good at producing.
 - **PR 19 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, pathed over the tiles by PR 16's
   pathfinder, and a movement step in the tick engine spending §6.2's terrain
