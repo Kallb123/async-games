@@ -8,7 +8,9 @@ vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14) and the
 map-shape overhaul (PR 15, §3.7) are shipped. PRs 16–18 — travel over the tiles
 (§3.8), building costs (§4.5) and wheat with land-driven production (§4.6) —
 come next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
-rest.
+rest, including two presentation PRs for the ground — transparent-backed tiles
+(PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
+their art is ready.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -258,7 +260,8 @@ generated **areas** the graph is drawn on top of (grass, fields, woodland,
 hills, mountains, water — an open list, not a fixed one), the **overlays** that
 sit on them (bridges, piers, roads, the landmarks that make a map feel like a
 place), where their movement costs come from, and how the whole lot is painted
-from hand-drawn tilesheets.
+from hand-drawn tilesheets — including sheets whose edges are transparent
+rather than grass-backed (§3.5.7), and tiles that animate (§3.5.8).
 
 Both lists are registries rather than enums, because an overworld map is never
 finished: the thing this section is most concerned with is that the tenth area
@@ -639,7 +642,10 @@ The interactive layer does not change. `MapEdges`, `ClickableMapNode`,
 The draw is three passes over one surface, in this order: every area's fill in
 `priority` order, then every area's border-overlay tiles in that same order,
 then the sparse overlay list (§3.5.3). All three iterate the registries, so an
-area or an overlay added later is drawn without this code being touched. Three
+area or an overlay added later is drawn without this code being touched.
+(§3.5.7 changes what pass one starts a square from when its art is
+transparent-backed; §3.5.8 adds a separate animated layer over the result, and
+leaves the composite itself static.) Three
 ways to put the result on screen:
 
 | Approach | Verdict |
@@ -692,6 +698,224 @@ been reading the silhouette. The legend is generated from the registry rather
 than hand-written, because a colour that means something to a sighted player
 should be named somewhere, and a hand-written legend is the first thing to go
 stale the next time an area is added.
+
+#### 3.5.7 Transparent-backed tiles
+
+Every sheet shipped so far is **grass-backed**: an edge tile of woodland,
+beach or water is drawn over a square of grass, because the artist assumed
+grass is what surrounds it. That holds while grass is the only thing any area
+meets, and stops holding everywhere else. Where woodland meets beach the
+woodland's edge tile brings a strip of grass with it, so the two are separated
+by a sliver of ground that isn't on the map; where mountains meet water, the
+same. With ten areas and more to come (§3.5.2), "everything borders grass" is
+a promise the generator does not keep, and the fringe is the most visible seam
+on the map.
+
+So the renderer also accepts **transparent-backed** art: an edge tile whose
+open side is alpha rather than grass, meaning "whatever is next door shows
+through here". It is how most commercial and open overworld tilesets are drawn
+now, and it is what lets any two areas meet without anyone drawing that pair.
+
+**Declared per art entry, not guessed per pixel.** An `AREA_ART` entry gains an
+optional `backing: "baked" | "transparent"`, defaulting to `"baked"`, so every
+entry already in `tileset.ts` means what it printed. It lives on the entry
+rather than the sheet because one sheet can carry both kinds — and on the
+entry rather than the tile, because an area whose edges disagree about what
+lies under them has no coherent look. Overlays don't need it: an overlay is
+drawn over ground that is already there (§3.5.6's third pass), so a bridge
+with a transparent background has always worked.
+
+**What shows through.** A transparent edge tile's square is drawn in two steps
+instead of one: first an **underlay** built from its neighbours, then the tile
+itself over it. The underlay is split into four wedges — the triangles from the
+square's centre to each of its sides — and each wedge is filled with the
+**interior** tile of whatever area lies across that side: the fully-matched
+slot of a mask entry (mask 15, or the blob's full tile), a `variants` entry's
+seeded pick, or the registry `fallbackColour` for an area with no art. A side
+that matches the square's own area fills with its own interior, which the
+tile's opaque part will cover anyway. Wedges rather than one underlay per
+square because a square of woodland can have beach to its north and water to
+its east, and each side's gap should show what is actually on that side. The
+wedge seams run through the tile's corners, which is where an edge tile's own
+art is densest, so the join between two different underlays is hidden under
+the tile rather than drawn across its open side.
+
+Consequences worth being deliberate about:
+
+- **Two transparent areas meeting each draw their own fringe over the
+  other's interior.** Woodland's edge shows beach through it, beach's edge shows
+  woodland through it, and the boundary reads as the two blending. This is
+  symmetric, so `priority` stays what it was — paint order — rather than
+  becoming a rule about which area wins a border.
+- **A baked area next to a transparent one still works.** The baked tile
+  covers its own square; the transparent neighbour shows the baked area's
+  *interior* tile through its gap, not the baked edge tile with its grass
+  fringe, which is the whole point.
+- **An interior tile has to be opaque.** It is what fills other areas' gaps,
+  so an interior with holes would show through to nothing. The guard test
+  checks this rather than trusting it (below).
+- **Mixing is allowed, and it is a migration path.** A sheet can be redrawn
+  one area at a time — mountains first, since they look worst on grass —
+  without the rest of the map changing.
+
+Pass one of §3.5.6 changes shape to fit: a square whose area is baked (or has
+no art) still starts from its fallback colour, and a square whose area is
+transparent starts from its four-wedge underlay. Passes two and three are
+unchanged. The cost is up to four extra clipped `drawImage` calls per
+transparent edge square, once per world, into the same offscreen canvas — no
+new DOM, and nothing per frame.
+
+**The art pipeline has to keep the alpha.** `npm run optimise-art` quantises to
+a 256-colour palette; that keeps a transparent index, but a soft
+anti-aliased edge gets its alpha quantised along with its colour. Pixel art
+with hard alpha edges is unaffected. Hand-painted art with feathered edges
+needs checking before and after the optimiser, and the PR lands with one such
+sheet so the round-trip is exercised rather than assumed.
+
+**The guard, extended.** `tilesetGuard.ts` currently reads only a PNG's IHDR
+header. For a transparent entry it decodes the sheet with `sharp` (already a
+dev dependency, via the optimiser) and asserts that every interior tile it
+declares is fully opaque — the one property the underlay depends on. The
+opposite check is useful as a warning, not a failure: a `"baked"` entry whose
+edge tiles carry real transparency is probably a sheet someone forgot to
+declare.
+
+**The mapper** (§3.5.5) draws the loaded sheet over a checkerboard, so alpha
+is visible rather than rendered as white. When the sheet has an alpha channel
+with transparent pixels in it, the backing control defaults to `"transparent"`
+and says why. The slot preview for a transparent entry shows the tile over a
+chosen neighbour area — beach, water, grass — so an artist sees the seam they
+are about to ship.
+
+#### 3.5.8 Animated tiles
+
+Water that shimmers, a fire burning in a ruined watchtower, fields and
+woodland moving in the wind, a windmill's sails turning. None of it changes
+what a tile *is*, but a map that moves reads as a place, and a player who
+opens the world to check a timer sees that it is alive. This is the one part
+of the ground layer that is not "composite once, draw forever", so most of
+this section is about keeping the cost of it bounded.
+
+**What animates.** Any area art entry or overlay art entry may declare an
+`animation`. An animated entry's tiles are **frames**: frame 0 is the tile the
+entry already declares, and frames 1…n−1 are found by a fixed **offset** on the
+same sheet.
+
+```ts
+animation?: {
+    frames: number;          // 2–8
+    frameMs: number;         // ≥ 120 — pixel art animates at 4–8 fps, not 60
+    offset: { columns: number; rows: number }; // frame k of any tile is k × offset squares from frame 0
+    phase?: "seeded" | "sweep"; // default "seeded"; see below
+}
+```
+
+The offset is the layout nearly every animated tileset is drawn in: a whole
+copy of the tile block per frame, side by side or stacked. Declaring it once
+per entry means a 47-slot water entry becomes animated with one field, not 47
+lists of frames. A sheet whose frames are scattered arbitrarily is rearranged
+in the art tool into that shape before it is committed, rather than
+accommodated with a second way of declaring frames; that keeps the manifest,
+the guard and the mapper to one model. Every slot, variant and piece square
+of an animated entry animates with the same frame count and timing, so a
+shoreline and the open water behind it ripple together.
+
+**Why not just recomposite.** §3.5.6 composites the whole map into one canvas
+because the tile loop is expensive and the result is large: at 100 × 70
+squares and 32px art, the canvas is 3,200 × 2,240 — about 28 MB decoded. Doing
+that per frame, or holding one full-map raster per frame, is out of the
+question on a phone. An on-screen canvas redrawn per frame is ruled out for the
+reason §3.5.6 gives: `BoardZoom` sizes the `<svg>`, and anything outside it has
+to re-derive that sizing.
+
+**Decision: a second, SVG-native layer whose size is bounded by the art, not
+by the map.** The approach rests on one observation: however many squares of
+water there are, there are only as many *different* animated squares as the
+manifest declares.
+
+1. **An atlas of frames.** After the static composite, the renderer bakes every
+   frame of every distinct animated square it actually needs — after the mask
+   slot, the variant and the piece part have been picked — into one small
+   atlas canvas at the composite's tile size, smoothing off. One `toBlob`, one
+   object URL, revoked on unmount exactly like the composite's.
+2. **One `<pattern>` per (square, frame).** Each is `patternUnits="userSpaceOnUse"`,
+   one world tile square, anchored at the map's origin, so it lines up with
+   the grid exactly. Its content is the atlas `<image>`, offset so that frame
+   sits in the pattern's one tile.
+3. **One `<path>` per (square, frame, phase group)**, covering every map square
+   that draws that square of art, in the same run-length rectangle form the old
+   silhouette used. Frame paths are shown one at a time by a CSS
+   `visibility` keyframe with `steps()`. Each path's `animation-delay` is set
+   to its frame's slot in the cycle. Toggling visibility on a handful of paths
+   is supported the same everywhere, whereas animating content *inside* a
+   `<pattern>` has a history of browsers not repainting it. That is why the
+   frames are separate patterns rather than one moving one.
+
+The layer sits between the composite `<image>` and `MapEdges`, inside the same
+`<svg>`, so `BoardZoom` scales it for free and it stays *beneath the node
+graph* as §3.5.6 requires. Its DOM is bounded by *distinct animated squares ×
+frames × phase groups* — tens to low hundreds of nodes for a realistic
+manifest — whatever the size of the world. A 7,000-square ocean is still one
+path per frame.
+
+**The static composite leaves animated squares to the layer above.** If the
+composite drew frame 0 under the animated layer, a transparent frame (§3.5.7)
+would show frame 0 through its gaps. So an animated square gets only its
+underlay in the composite: the four-wedge underlay for a transparent entry, or
+its fallback colour for a baked one. The layer draws all of its frames,
+including frame 0. The two sections compose cleanly: transparency decides what
+is under a square, animation decides what is drawn on it.
+
+**Phase, so a whole ocean doesn't blink in unison.** A square's phase offsets
+where in the cycle it starts. `"seeded"` picks it from the same stable
+coordinate hash `seededVariantIndex` uses, split into a few groups, so
+neighbouring squares are out of step and the same for every player. `"sweep"`
+derives it from `col + row`, so a gust visibly travels across a field or a
+wood. The number of phase groups is capped (four) because each one multiplies
+the path count.
+
+**Performance and restraint:**
+
+- **`prefers-reduced-motion` gets frame 0, still.** The layer is still drawn —
+  it is where animated squares' art now lives — but its keyframes are switched
+  off in the same `@media (prefers-reduced-motion: reduce)` block
+  `ag-theme.css` already uses elsewhere. The map keeps its look and drops only
+  the motion.
+- **The map stops when nobody can see it.** Browsers already throttle
+  animations in a hidden tab. The layer also pauses (`animation-play-state`)
+  while the map is scrolled out of view, using an `IntersectionObserver` on the
+  board, so a map scrolled away from on its own page costs nothing.
+- **Slow on purpose.** `frameMs ≥ 120` is enforced by the guard, not left as
+  advice. Every frame step repaints the map's visible region, and 4–8 fps is
+  both the budget and how pixel art is meant to move.
+- **A budget, measured.** The PR that lands this profiles a 100 × 70 world
+  with animated water and woodland on a mid-range Android phone, zoomed out and
+  zoomed in. It states the frame cost in the PR description. If the fully
+  zoomed-out view is over budget, the fallback is to animate only from the
+  first zoom step in, where far fewer squares are on screen. That is a
+  one-line condition on the layer, not a redesign.
+- **Nothing animates the node graph.** Settlements, edges and labels are the
+  information on the map, and they stay still. Motion belongs to the ground and
+  the landmarks on it.
+
+**Overlays animate the same way, and for free.** An overlay placement resolves
+to one or more squares of art (a piece is drawn a square at a time, §3.5.5), so
+an animated overlay's squares go into the same atlas and the same
+path-per-frame groups as an area's. A burning watchtower, a turning windmill
+and a flag on a keep need no code of their own. They also come out as the
+cheapest case, because overlays are sparse.
+
+**The guard** checks what can be checked statically: `frames` in 2–8,
+`frameMs ≥ 120`, a phase from the list, and every frame of every declared tile
+landing inside the sheet's bounds. The last is the same bounds check pieces
+already get, run once per frame offset, so an offset that walks frame 3 off
+the right edge of the sheet fails the test instead of drawing someone else's
+art.
+
+**The mapper** gains a frames control on the entry — frame count, frame time,
+phase — and sets the offset by asking for one click: "now click frame 2 of the
+tile you just assigned". The entry's preview then cycles through its frames,
+so a wrong offset shows as a stutter before anything is committed.
 
 ### 3.6 World size
 
@@ -1778,7 +2002,9 @@ join-code card and seat-count hook it shares with every setup screen),
 **PR 11** and **PR 14** each add a page to `/admin` and its entry in the
 admin-tools doc, and **PR 27** the push-notification plumbing. Everything else stays inside
 `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 28's
-one-line entries in the guide and tutorial registries.
+one-line entries in the guide and tutorial registries, PRs 29 and 30's lines
+in the tile mapper's existing admin-tools entry, and PR 30's
+reduced-motion rule in `ag-theme.css`.
 
 - **PR 6 — World map view and multiple settlements.** Shipped. Render the
   generated graph and let a second settlement be founded elsewhere on it. No armies
@@ -2178,6 +2404,93 @@ one-line entries in the guide and tutorial registries.
   AGENTS.md, deliberately last rather than first since it documents
   mechanics that were still moving through PRs 6–27.
 
+Two presentation PRs were planned after the list above was drawn up, and are
+numbered after it for that reason only. Neither depends on anything past
+PR 11, neither touches a rule, a cost or the wire format, and both can land
+whenever their art is ready — before PR 28 included, since a guide describes
+mechanics and these change none.
+
+- **PR 29 — Transparent-backed tiles.** §3.5.7. Lets an area's art say
+  "whatever is next door shows through here" instead of assuming grass.
+  1. `backing?: "baked" | "transparent"` on area art entries in `tileset.ts`,
+     defaulting to `"baked"`, so the shipped manifest is unchanged byte for byte.
+  2. The underlay in `useTerrainImage.ts`'s pass one: for a square whose
+     area is transparent, four clipped wedges, each filled with the interior
+     tile (or fallback colour) of the area across that side. It is one helper
+     beside `drawTile` that finds "the interior tile of this area". Pass two
+     then draws the edge tile over it as it does today. Unit tested without a
+     DOM on the pure half: which area and which interior ref each wedge of a
+     square resolves to, on hand-built fields (a woodland square with beach
+     north and water east; a square matching on every side; the map's own
+     border).
+  3. The guard: `tilesetGuard.ts` decodes the sheet of any transparent entry
+     with `sharp` and fails if a declared interior tile has a pixel with alpha
+     below 255. It warns, without failing, on a baked entry whose edge tiles
+     carry transparency.
+  4. The mapper: checkerboard behind the sheet, the backing control
+     (defaulting to transparent when the sheet has alpha), and the slot preview
+     over a chosen neighbour area. `docs/admin-tools.md`'s mapper entry gains a
+     line for each.
+  5. The first transparent sheet into `art-masters/kingdombuilder/` and
+     `public/art/kingdombuilder/` through `npm run optimise-art`, with the
+     before-and-after alpha checked (§3.5.7). It is re-mapped for at least the
+     areas whose grass fringe shows worst — mountains, beach and water — with the
+     rest left baked, which exercises the mixed case on day one.
+  6. Before-and-after screenshots of the same world's map attached to the PR,
+     showing the borders that used to carry a grass fringe. (`npm run
+     kb-worlds` draws fallback colours only, so it can't show this.)
+  7. Reviewers: `caveman` (one underlay helper, reusing the mask and variant
+     pickers pass one and two already have — not a second way of picking an
+     interior tile), `gremlin` (a sheet whose alpha the optimiser mangled, a
+     transparent entry whose neighbour has no art, a neighbour code the
+     registry doesn't know, the map's own edge), `rulebook` (the manifest field
+     and its guard, the art pipeline, the admin-tools doc).
+  8. One `whatsNew.ts` enhancement line: different kinds of ground on the
+     world map now meet cleanly, without a strip of grass between them.
+- **PR 30 — Animated tiles.** §3.5.8. Water, fire and wind.
+  1. `animation?: { frames, frameMs, offset, phase? }` on area and overlay art
+     entries in `tileset.ts`, and a pure `animatedSquares(field, overlays)` that
+     resolves every map square drawing animated art to its distinct
+     (square of art, phase group). This is the grouping the layer is built
+     from, and it is unit tested without a DOM: a field of one animated area
+     yields one group per phase however large it is, and a mixed field yields
+     exactly the distinct slots used.
+  2. The composite leaves animated squares at their underlay (PR 29's wedges
+     for a transparent entry, the fallback colour for a baked one) instead of
+     drawing frame 0.
+  3. The frame atlas: every frame of every distinct animated square baked into
+     one small canvas, one `toBlob` object URL revoked alongside the
+     composite's, from the same effect in `useTerrainImage` (which now returns
+     both).
+  4. `AnimatedTerrainLayer`, a Kingdom Builder component drawn inside the map's
+     `<svg>` between the composite `<image>` and `MapEdges`. It holds one
+     `<pattern>` per (square, frame) and one `<path>` per (square, frame, phase
+     group), with the visibility keyframes and phase delays. The CSS lives in
+     `ag-theme.css` beside the other `@media (prefers-reduced-motion: reduce)`
+     blocks. It pauses off screen via an `IntersectionObserver` on the board.
+  5. The guard: frame count 2–8, `frameMs ≥ 120`, the phase list, and every
+     frame of every declared tile inside its sheet's bounds.
+  6. The mapper: the frames control, the "click frame 2" offset pick and the
+     cycling preview. `docs/admin-tools.md` gains a line.
+  7. Art: animated water first (ocean, lake and river share it), then one
+     animated overlay (a fire or a windmill) to prove the overlay path.
+     Woodland in the wind follows as art arrives, as manifest entries only.
+  8. The profile from §3.5.8 in the PR description: a 100 × 70 world, animated
+     water and woodland, a mid-range Android phone, zoomed out and in. If the
+     zoomed-out view is over budget, the layer animates only from the first
+     zoom step in.
+  9. Reviewers: `caveman` (the layer should be the smallest thing that draws
+     patterns and paths inside the existing `<svg>` — no second map renderer,
+     no zoom code of its own), `gremlin` (an atlas `toBlob` that returns
+     `null`, a second object URL that must not leak on refetch, a manifest that
+     declares hundreds of distinct animated squares, a board that unmounts
+     mid-bake), `rulebook` (the manifest field and its guard, the CSS in the
+     theme file, the admin-tools doc).
+  10. One `whatsNew.ts` enhancement line: the world map now moves, with water
+      and fire animating. If PR 29's line hasn't shipped to players yet, and
+      the two land close together, widen that line instead of adding a second
+      one, per AGENTS.md.
+
 ### 11.4 Ordering constraints
 
 Most of Milestone B can be resequenced to fit priorities without breaking
@@ -2248,6 +2561,14 @@ makes them testable at all. PR 15 before PR 16 is a preference rather than a
 dependency — the pathfinder works on any field — but tuning passes and
 crossings is easier on the map shape they'll actually ship on.
 
+PRs 29 and 30 (transparent and animated tiles) have no hard dependency on
+anything after PR 11, and none on each other: animated baked art works
+without PR 29, and an animated square simply sits on its fallback colour
+rather than a four-wedge underlay. PR 29 first is still the preference. It
+means PR 30's "the composite draws only the underlay" rule has a real underlay
+to draw from day one, and it means animated water can be drawn transparent at
+the shoreline from its first sheet, rather than being redrawn later.
+
 ---
 
 ## 12. Open questions
@@ -2295,6 +2616,12 @@ guessed at here:
 - Terrain nodes after §4.6: once production reads the tiles, do forest,
   quarry and ore nodes retire, stay as pure landmarks, or become rich deposits
   that raise the tier of a catchment they fall inside?
+- Animated tiles (§3.5.8): whether the fully zoomed-out map can afford to
+  animate on a mid-range phone, or only from the first zoom step in — PR 30
+  measures it rather than guessing. Also whether players get their own
+  "still map" toggle (through `useStoredValue`) beyond `prefers-reduced-motion`,
+  and whether seasonal themes (§9) should swap in their own animated art, such
+  as snowfall over a winter world.
 - Map-shape presets (§3.7): which shapes the launch set ships with, and
   whether the host should pick one on the setup screen or it stays a seeded
   surprise.
