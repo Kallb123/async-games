@@ -174,6 +174,9 @@ export const FIELDS_CODE = codeOf("Fields");
 export const WOODLAND_CODE = codeOf("Woodland");
 export const HILLS_CODE = codeOf("Hills");
 export const MOUNTAINS_CODE = codeOf("Mountains");
+/** Read by the composition bands (worldgen/worldShape.ts), which measure a world's share of each kind of ground. */
+export const MARSH_CODE = codeOf("Marsh");
+export const LAKE_CODE = codeOf("Lake");
 /** The land elevation windows' own codes — what a "land window" tile can be, for anything (like smoothing) that needs to recognise one without re-listing them. */
 export const LAND_WINDOW_CODES: ReadonlySet<string> = new Set(AREA_WINDOWS.map(area => area.code));
 
@@ -197,6 +200,18 @@ export function areaForCode(code: string): AreaDefinition {
 
 export function areaWeightForCode(code: string): AreaWeight {
     return areaForCode(code).weight;
+}
+
+/**
+ * Where an elevation window starts — what mountainRanges.ts shapes a ridge's
+ * profile against, so the ranges it lays down land in the registry's mountain
+ * and hills bands however those bands are later retuned, rather than in a
+ * second copy of their numbers.
+ */
+export function elevationFloorOf(code: string): number {
+    const placement = AREA_BY_CODE.get(code)?.placement;
+    if (placement?.kind !== "window") throw new Error(`Kingdom Builder: area "${code}" is not an elevation window`);
+    return placement.elevation[0];
 }
 
 function inBand(value: number, band: readonly [number, number]): boolean {

@@ -1,7 +1,7 @@
 // The generated ground (GDD §3.5): a square grid of area codes over the same
-// WORLD_WIDTH × WORLD_HEIGHT coordinate space the world graph already occupies, painted from the
-// landmass's own elevation field plus a second, independently generated
-// moisture field. This is what makes movement cost something observed off the
+// WORLD_WIDTH × WORLD_HEIGHT coordinate space the world graph already occupies, painted from an
+// elevation field — seeded mountain ranges over rolling lowland (§3.7) — plus
+// a moisture field carrying those ranges' rain shadow. This is what makes movement cost something observed off the
 // ground an edge crosses (§3.5.4) rather than a guess at the nearest node.
 //
 // Generation order, per §3.5.2: noise → windows → passes → smoothing. The
@@ -10,8 +10,9 @@
 // follows it — runs as a second step once `generateWorld` has placed them.
 
 import { WORLD_AREA_SCALE, coherentNoiseGrid, isLand, landValueAt, noiseLatticeFor, pointDistance, type Landmass, type Point } from "./landmass";
+import { placeMountainRanges, rangeElevationGrid, type MountainRange } from "./mountainRanges";
 import type { RandomSource } from "./random";
-import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, LAND_WINDOW_CODES, OCEAN_CODE, PROVISIONAL_WATER_CODE, RIVER_CODE, windowAreaFor } from "./areas";
+import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, HILLS_CODE, LAND_WINDOW_CODES, OCEAN_CODE, PROVISIONAL_WATER_CODE, RIVER_CODE, elevationFloorOf, windowAreaFor } from "./areas";
 
 /** A world tile is 2×2 world units of ground, and never changes (§3.5.5). */
 export const TERRAIN_FIELD_TILE_SIZE = 2;
@@ -81,12 +82,19 @@ export function runWaterSplitPass(codes: string[], columns: number, rows: number
     }
 }
 
+/** How many times a river may climb out of a hollow on its way to the sea before it gives up and pools there instead. */
+const RIVER_MAXIMUM_CLIMBS = 4;
+
 /**
  * Downhill trace (§3.5.2): from high ground, step to the lowest unvisited
- * neighbour until the water's edge, carving a one-tile river. Gives up on a
- * local minimum on land rather than looping — a river need not reach the sea
- * on every attempt, and `generateWorld`'s retry loop absorbs a world where
- * the resulting graph can't connect.
+ * neighbour until the water's edge, carving a one-tile river. A river caught
+ * in a hollow short of the sea spills over its lowest rim a few times, then
+ * ends in a small lake rather than looping — a river need not reach the sea on
+ * every attempt, and `generateWorld`'s retry loop absorbs a world where the
+ * resulting graph can't connect. A source with nowhere lower to go carves
+ * nothing at all. `generateBaseTerrainField` asks for rivers in proportion to
+ * the mountain ranges (§3.7), so they rise in several places and run to
+ * different coasts.
  */
 export function runRiverTracePass(codes: string[], elevations: readonly number[], columns: number, rows: number, random: RandomSource, riverCount = Math.round(WORLD_AREA_SCALE)): void {
     const isWater = (index: number): boolean => codes[index] === OCEAN_CODE || codes[index] === PROVISIONAL_WATER_CODE;
@@ -94,22 +102,33 @@ export function runRiverTracePass(codes: string[], elevations: readonly number[]
 
     for (const source of sources) {
         let current = source;
+        let climbs = 0;
+        let reachedWater = false;
         const visited = new Set<number>([current]);
         for (let step = 0; step < columns + rows; step++) {
-            const col = current % columns, row = Math.floor(current / columns);
-            const neighbours = neighboursOf(col, row, columns, rows);
-            if (neighbours.some(isWater)) break;
+            const neighbours = neighboursOf(current % columns, Math.floor(current / columns), columns, rows);
+            if (neighbours.some(isWater)) { reachedWater = true; break; }
             let next: number | undefined;
-            let lowest = elevations[current];
             for (const neighbour of neighbours) {
-                if (visited.has(neighbour) || elevations[neighbour] >= lowest) continue;
-                lowest = elevations[neighbour];
-                next = neighbour;
+                if (!visited.has(neighbour) && (next === undefined || elevations[neighbour] < elevations[next])) next = neighbour;
             }
-            if (next === undefined) break;
+            const climbing = next !== undefined && elevations[next] >= elevations[current];
+            if (next === undefined || (climbing && (current === source || climbs >= RIVER_MAXIMUM_CLIMBS))) break;
+            if (climbing) climbs++;
             codes[next] = RIVER_CODE;
             visited.add(next);
             current = next;
+        }
+        if (!reachedWater && current !== source) poolAt(codes, current % columns, Math.floor(current / columns), columns, rows);
+    }
+}
+
+/** Where a river gives up short of the sea it spreads into a small lake — the tile it stopped on and the eight around it. */
+function poolAt(codes: string[], col: number, row: number, columns: number, rows: number): void {
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            const c = col + dc, r = row + dr;
+            if (c >= 0 && c < columns && r >= 0 && r < rows && codes[r * columns + c] !== OCEAN_CODE) codes[r * columns + c] = PROVISIONAL_WATER_CODE;
         }
     }
 }
@@ -163,31 +182,146 @@ export function runSmoothingPass(codes: string[], columns: number, rows: number,
 }
 
 /**
- * Everything that only needs the landmass: the elevation/moisture windows,
- * then water-split, river-trace and beach-band. Returns the elevation grid
- * alongside the field so terrain-node placement (§3.5.4) can read the same
- * samples without recomputing them.
+ * The lowlands' own gentle rise and fall (§3.7): mostly below the hills band,
+ * now and then just into it, never near a mountain. The noise is shifted per
+ * world so that exactly this share of the land rolls up into hills of its own
+ * — a fixed offset left that share to the luck of the noise, which swung the
+ * hills from a tenth of the land to a fifth between seeds.
  */
-export function generateBaseTerrainField(landmass: Landmass, random: RandomSource): { field: TerrainField; elevations: number[] } {
+const ROLLING_HILLS_SHARE = 0.09;
+const LOWLAND_AMPLITUDE = 0.22;
+/** How much higher the deep interior sits than the coast — a gentle tilt, so rivers leaving the ranges find their way down to the sea. */
+const INLAND_RISE = 0.08;
+/** How far the rain shadow looks along the wind for a range, and how much it wets or dries the ground it finds one from. */
+const HILLS_FLOOR = elevationFloorOf(HILLS_CODE);
+const RAIN_SHADOW_REACH = 24;
+const RAIN_SHADOW_STRENGTH = 0.24;
+/** The moisture noise, squeezed towards its middle and nudged wetter: more of the lowland reaches the woodland band without as much more reaching marsh. */
+const MOISTURE_SPREAD = 0.75;
+const MOISTURE_BIAS = 0.01;
+
+/**
+ * The rain shadow (§3.7): a range wrings the rain out of the prevailing wind,
+ * so the ground with a range downwind of it — the windward side — is wetter,
+ * and the ground with one upwind of it — the lee — is drier. Returns, per
+ * tile, how much to add to its moisture: the height of the tallest range
+ * downwind within reach, less the tallest upwind, both fading with distance.
+ * `wind` is the direction the wind blows *towards*, as a unit vector.
+ */
+export function rainShadow(rangeHeights: readonly number[], columns: number, rows: number, wind: Point): number[] {
+    const tiles = RAIN_SHADOW_REACH / TERRAIN_FIELD_TILE_SIZE;
+    const heightAt = (col: number, row: number): number => {
+        const c = Math.round(col), r = Math.round(row);
+        return c < 0 || c >= columns || r < 0 || r >= rows ? 0 : rangeHeights[r * columns + c];
+    };
+    return rangeHeights.map((_, index) => {
+        const col = index % columns, row = Math.floor(index / columns);
+        let windward = 0, lee = 0;
+        for (let step = 1; step <= tiles; step++) {
+            const fade = 1 - (step - 1) / tiles;
+            windward = Math.max(windward, heightAt(col + wind.x * step, row + wind.y * step) * fade);
+            lee = Math.max(lee, heightAt(col - wind.x * step, row - wind.y * step) * fade);
+        }
+        return (windward - lee) * RAIN_SHADOW_STRENGTH;
+    });
+}
+
+/**
+ * Everything that only needs the landmass: the elevation/moisture windows,
+ * then water-split, river-trace and beach-band. Elevation is its own field
+ * (§3.7) — the seeded mountain ranges over a gently rolling lowland — rather
+ * than the land mask read a second time, and moisture carries the ranges'
+ * rain shadow. Returns the elevation grid alongside the field so anything
+ * downstream can read the same samples without recomputing them.
+ */
+export function generateBaseTerrainField(landmass: Landmass, random: RandomSource): { field: TerrainField; elevations: number[]; ranges: MountainRange[] } {
     const columns = gridColumns(landmass.width);
     const rows = gridRows(landmass.height);
-    const moisture = coherentNoiseGrid(random, columns, rows, noiseLatticeFor(landmass.width));
+    const lattice = noiseLatticeFor(landmass.width);
+    const centres = Array.from({ length: columns * rows }, (_, index) => tileCentre(index % columns, Math.floor(index / columns)));
+    const ranges = placeMountainRanges(landmass, random);
+    const rangeHeights = rangeElevationGrid(ranges, centres);
+    const lowland = coherentNoiseGrid(random, columns, rows, lattice);
+    const windAngle = random.between(0, Math.PI * 2);
+    const shadow = rainShadow(rangeHeights, columns, rows, { x: Math.cos(windAngle), y: Math.sin(windAngle) });
+    const moisture = coherentNoiseGrid(random, columns, rows, lattice);
     const elevations: number[] = [];
     const codes: string[] = [];
 
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < columns; col++) {
-            const point = tileCentre(col, row);
-            const elevation = landValueAt(landmass, point);
-            elevations.push(elevation);
-            codes.push(isLand(landmass, point) ? windowAreaFor(elevation, moisture[row * columns + col]).code : PROVISIONAL_WATER_CODE);
-        }
+    const onLand = centres.map(point => isLand(landmass, point));
+    const rolling = centres.map((point, index) => {
+        const inland = Math.max(0, Math.min(1, (landValueAt(landmass, point) - landmass.landThreshold) / 0.4));
+        return lowland[index] * LOWLAND_AMPLITUDE + inland * INLAND_RISE;
+    });
+    const landRolling = rolling.filter((_, index) => onLand[index]).sort((a, b) => a - b);
+    const hillsLine = landRolling[Math.floor(landRolling.length * (1 - ROLLING_HILLS_SHARE))] ?? 0;
+    const lowlandBase = HILLS_FLOOR - hillsLine;
+
+    for (let index = 0; index < centres.length; index++) {
+        const elevation = Math.max(rangeHeights[index], lowlandBase + rolling[index]);
+        const wetness = 0.5 + (moisture[index] - 0.5) * MOISTURE_SPREAD + MOISTURE_BIAS + shadow[index];
+        elevations.push(elevation);
+        codes.push(onLand[index] ? windowAreaFor(elevation, wetness).code : PROVISIONAL_WATER_CODE);
     }
 
     runWaterSplitPass(codes, columns, rows);
-    runRiverTracePass(codes, elevations, columns, rows, random);
+    // Three rivers for every two ranges: enough water that a world's lakes and
+    // rivers reach their §3.7 band, rising in the ranges rather than one massif.
+    runRiverTracePass(codes, elevations, columns, rows, random, Math.max(1, Math.round(ranges.length * 1.5)));
     runBeachPass(codes, columns, rows);
-    return { field: { columns, rows, tileSize: TERRAIN_FIELD_TILE_SIZE, codes: codes.join("") }, elevations };
+    return { field: { columns, rows, tileSize: TERRAIN_FIELD_TILE_SIZE, codes: codes.join("") }, elevations, ranges };
+}
+
+/**
+ * Labels every tile `include` accepts with the connected region it belongs
+ * to — four-connected, or eight-connected with `diagonal` — and counts each
+ * region's tiles. `component` is -1 for a tile left out. Shared by the
+ * mainland below and worldShape.ts's largest-mountain-region rule.
+ */
+export function connectedRegions(columns: number, rows: number, include: (index: number) => boolean, diagonal = false): { component: Int32Array; sizes: number[] } {
+    const component = new Int32Array(columns * rows).fill(-1);
+    const sizes: number[] = [];
+    for (let start = 0; start < component.length; start++) {
+        if (component[start] !== -1 || !include(start)) continue;
+        const id = sizes.length;
+        const queue = [start];
+        component[start] = id;
+        for (let head = 0; head < queue.length; head++) {
+            const col = queue[head] % columns, row = Math.floor(queue[head] / columns);
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if ((dr === 0 && dc === 0) || (!diagonal && dr !== 0 && dc !== 0)) continue;
+                    const c = col + dc, r = row + dr;
+                    if (c < 0 || c >= columns || r < 0 || r >= rows) continue;
+                    const neighbour = r * columns + c;
+                    if (component[neighbour] !== -1 || !include(neighbour)) continue;
+                    component[neighbour] = id;
+                    queue.push(neighbour);
+                }
+            }
+        }
+        sizes.push(queue.length);
+    }
+    return { component, sizes };
+}
+
+/**
+ * The tiles of the largest body of land — the ground every node goes on
+ * (§3.7). A warped coast throws off the odd offshore island, and the
+ * archipelago preset a whole ring of them; ocean is impassable, so a node on
+ * one could never be linked to the rest, and would only burn a retry. Lakes,
+ * rivers and beach all count as part of the land they sit in, because a
+ * crossing can take a route over the first two.
+ */
+export function mainlandOf(field: TerrainField): (point: Point) => boolean {
+    const { component, sizes } = connectedRegions(field.columns, field.rows, index => field.codes[index] !== OCEAN_CODE);
+    // A world with no land has no mainland — not every ocean tile, which is what a -1 match against unlabelled tiles would give.
+    if (sizes.length === 0) return () => false;
+    const largest = sizes.indexOf(Math.max(...sizes));
+    return point => {
+        const { col, row } = tileAt(field, point);
+        return component[tileIndex(field, col, row)] === largest;
+    };
 }
 
 /** The step that needs settlement sites: fields around them, then the smoothing pass that closes generation out. */

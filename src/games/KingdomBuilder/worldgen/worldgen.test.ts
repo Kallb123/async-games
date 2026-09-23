@@ -3,10 +3,23 @@ import { generateWorld } from "./generateWorld";
 import { connectWorldGraph, edgeCostFor, isConnected } from "./graphConnectivity";
 import { createRandom } from "./random";
 import { checkSettlementFairness } from "./settlementSites";
-import { generateBaseTerrainField, type TerrainField } from "./terrainField";
+import { generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { WORLD_AREA_SCALE, generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
+import { MOUNTAINS_CODE } from "./areas";
+import { checkWorldShape } from "./worldShape";
 import type { SettlementNode, TerrainNode, WorldEdge } from "./landmass";
+
+/** How many mountain tiles fall in each of the map's 3 × 3 ninths, row-major — so index 4 is the middle one. */
+function mountainTilesByNinth(field: TerrainField): number[] {
+    const ninths = Array.from({ length: 9 }, () => 0);
+    for (let tile = 0; tile < field.codes.length; tile++) {
+        if (field.codes[tile] !== MOUNTAINS_CODE) continue;
+        const col = tile % field.columns, row = Math.floor(tile / field.columns);
+        ninths[Math.floor((row * 3) / field.rows) * 3 + Math.floor((col * 3) / field.columns)]++;
+    }
+    return ninths;
+}
 
 function fieldOf(columns: number, rows: number, codes: string): TerrainField {
     return { columns, rows, tileSize: 2, codes };
@@ -27,7 +40,7 @@ describe("Kingdom Builder world generation", () => {
         const random = createRandom("terrain");
         const landmass = generateLandmass(random);
         const { field } = generateBaseTerrainField(landmass, random);
-        const nodes = placeTerrainNodes(landmass, field, random, { count: 20, minimumDistance: 5 });
+        const nodes = placeTerrainNodes(landmass, field, mainlandOf(field), random, { count: 20, minimumDistance: 5 });
         expect(nodes).toHaveLength(20);
         expect(nodes.every(node => isLand(landmass, node))).toBe(true);
         expect(new Set(nodes.map(node => node.terrain))).toEqual(new Set(["forest", "quarry", "ore"]));
@@ -127,9 +140,16 @@ describe("Kingdom Builder world generation", () => {
         expect(generateWorld("repeatable").nodes).not.toEqual(generateWorld("different").nodes);
     });
 
-    it("generates 20 worlds that all pass the starting-site fairness checks", () => {
+    it("generates 20 worlds that all pass the starting-site fairness and map-shape checks, with their mountains spread across the map", () => {
+        let spreadWorlds = 0;
+        let middleNinthShare = 0;
         for (let index = 0; index < 20; index++) {
             const world = generateWorld(`fairness-${index}`);
+            expect(checkWorldShape(world.terrainField), `seed fairness-${index}`).toEqual([]);
+            const ninths = mountainTilesByNinth(world.terrainField);
+            const mountains = ninths.reduce((sum, count) => sum + count, 0);
+            if (ninths.filter(count => count > 0).length >= 3) spreadWorlds++;
+            middleNinthShare += ninths[4] / mountains / 20;
             const terrain = world.nodes.filter((node): node is TerrainNode => node.kind === "terrain");
             const sites = world.nodes.filter((node): node is SettlementNode => node.kind === "settlement");
             const report = checkSettlementFairness(sites, terrain, world.edges);
@@ -137,5 +157,10 @@ describe("Kingdom Builder world generation", () => {
             expect(sites.filter(site => site.siteType === "player-start")).toHaveLength(10);
             expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(14 * WORLD_AREA_SCALE);
         }
-    }, 30_000);
+        // §3.7's answer to "one block in the middle": mountains in at least
+        // three of the map's ninths in most worlds, and the middle ninth
+        // holding no more than its fair share of them on average.
+        expect(spreadWorlds).toBeGreaterThanOrEqual(18);
+        expect(middleNinthShare).toBeLessThan(0.25);
+    }, 60_000);
 });

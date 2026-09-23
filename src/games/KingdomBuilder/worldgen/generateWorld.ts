@@ -4,8 +4,9 @@ import type { OverlayPlacement } from "./overlays";
 import { applyOverlayVocabulary } from "./overlayVocabulary";
 import { createRandom } from "./random";
 import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
-import { applySitesToTerrainField, generateBaseTerrainField, type TerrainField } from "./terrainField";
+import { applySitesToTerrainField, generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { placeTerrainNodes, type TerrainNodeOptions } from "./terrainNodes";
+import { checkWorldShape } from "./worldShape";
 
 export interface GeneratedWorld {
     seed: string;
@@ -37,7 +38,8 @@ const DEFAULT_GENERATION_BUDGET_MS = 45_000;
  * then the water/river/beach passes — so terrain nodes can be placed on
  * matching ground (§3.5.4) before settlement sites are chosen. Only once
  * sites exist can the fields pass and the closing smoothing run, and only
- * once the ground is final can the graph be connected over it.
+ * once the ground is final — and has passed §3.7's shape checks — can the
+ * graph be connected over it.
  */
 export function generateWorld(seed: string, options: GenerateWorldOptions = {}): GeneratedWorld {
     const maximumAttempts = options.maximumAttempts ?? 80;
@@ -54,10 +56,19 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
             const random = createRandom(`${seed}:${attempt}`);
             const landmass = generateLandmass(random);
             const { field: baseField } = generateBaseTerrainField(landmass, random);
-            const terrainNodes = placeTerrainNodes(landmass, baseField, random, options.terrain);
+            const onMainland = mainlandOf(baseField);
+            const terrainNodes = placeTerrainNodes(landmass, baseField, onMainland, random, options.terrain);
             const requestedStarts = options.settlements?.playerStarts ?? 10;
-            const settlementSites = placeSettlementSites(landmass, terrainNodes, random, options.settlements);
+            const settlementSites = placeSettlementSites(landmass, onMainland, terrainNodes, random, options.settlements);
             const terrainField = applySitesToTerrainField(baseField, settlementSites);
+            // §3.7's composition bands and mountain-region rule, checked
+            // before the graph — the expensive step — so a world whose ground
+            // drifted out of shape costs a retry, not a connection pass.
+            const shapeFailures = checkWorldShape(terrainField);
+            if (shapeFailures.length > 0) {
+                lastFailure = `map shape: ${shapeFailures.join("; ")}`;
+                continue;
+            }
             const nodes = [...terrainNodes, ...settlementSites];
             const { edges, overlays } = connectWorldGraph(nodes, terrainField, random);
             if (!isConnected(nodes, edges)) {
