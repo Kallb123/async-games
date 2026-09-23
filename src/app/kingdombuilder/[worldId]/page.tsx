@@ -17,7 +17,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
-import { AREAS, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
+import { AREAS, tileIndexCentre, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -77,14 +77,18 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const map = useMemo(() => {
         if (!data) return null;
         const indexById = new Map(data.nodes.map((node, index) => [node.id, index]));
+        const field = data.terrainField;
+        const drawn = data.edges.flatMap(edge => {
+            const from = indexById.get(edge.from);
+            const to = indexById.get(edge.to);
+            return from === undefined || to === undefined ? [] : [{ pair: [from, to] as [number, number], edge }];
+        });
         return {
             path: landPath(data),
             edgeNodes: data.nodes.map(node => ({ name: node.id, x: node.x, y: node.y })),
-            edges: data.edges.flatMap(edge => {
-                const from = indexById.get(edge.from);
-                const to = indexById.get(edge.to);
-                return from === undefined || to === undefined ? [] : [[from, to] as [number, number]];
-            }),
+            edges: drawn.map(({ pair }) => pair),
+            // Each route drawn along the tiles it takes (§3.8) — its two ends are the nodes themselves.
+            waypoints: drawn.map(({ edge }) => (field && edge.path ? edge.path.slice(1, -1).map(tile => tileIndexCentre(field, tile)) : undefined)),
         };
     }, [data]);
 
@@ -121,7 +125,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         {terrain.href
                                             ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />
                                             : <path className={styles.land} d={map.path} />}
-                                        <MapEdges nodes={map.edgeNodes} edges={map.edges} width={data.landmass.width} strokeOpacity={0.28} />
+                                        <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <g key={node.id}>
                                                 <circle className={`${styles.terrain} ${styles[node.terrain]}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />

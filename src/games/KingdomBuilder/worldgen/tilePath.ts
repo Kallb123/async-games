@@ -8,7 +8,7 @@
 import { areaWeightForCode } from "./areas";
 import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./overlays";
 import type { Point } from "./landmass";
-import type { TerrainField } from "./terrainField";
+import { tileIndexCentre, type TerrainField } from "./terrainField";
 
 export interface TravelGrid {
     columns: number;
@@ -75,7 +75,6 @@ export function snapToTiles<T extends Point>(points: readonly T[], grid: TravelG
     return points.map(point => {
         const col = Math.max(0, Math.min(grid.columns - 1, Math.floor(point.x / grid.tileSize)));
         const row = Math.max(0, Math.min(grid.rows - 1, Math.floor(point.y / grid.tileSize)));
-        const centreOf = (tile: number): Point => ({ x: (tile % grid.columns + 0.5) * grid.tileSize, y: (Math.floor(tile / grid.columns) + 0.5) * grid.tileSize });
         let best: { tile: number; distance: number } | undefined;
         // Rings are square, so the nearest free tile by straight-line distance
         // can sit one ring further out than the first ring with any at all.
@@ -87,7 +86,7 @@ export function snapToTiles<T extends Point>(points: readonly T[], grid: TravelG
                     if (c < 0 || c >= grid.columns || r < 0 || r >= grid.rows) continue;
                     const tile = r * grid.columns + c;
                     if (taken.has(tile) || grid.weights[tile] === Infinity) continue;
-                    const centre = centreOf(tile);
+                    const centre = tileIndexCentre(grid, tile);
                     const distance = Math.hypot(centre.x - point.x, centre.y - point.y);
                     if (!best || distance < best.distance) best = { tile, distance };
                 }
@@ -95,7 +94,7 @@ export function snapToTiles<T extends Point>(points: readonly T[], grid: TravelG
         }
         if (!best) throw new Error(`No free passable tile near (${point.x.toFixed(1)}, ${point.y.toFixed(1)})`);
         taken.add(best.tile);
-        return { ...point, ...centreOf(best.tile), tile: best.tile };
+        return { ...point, ...tileIndexCentre(grid, best.tile), tile: best.tile };
     });
 }
 

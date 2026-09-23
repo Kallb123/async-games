@@ -35,6 +35,11 @@ export function tileCentre(col: number, row: number): Point {
     return { x: col * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2, y: row * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2 };
 }
 
+/** The centre of a tile given by its row-major index, on any grid of `tileSize` squares — a node's own position (§3.8), and each bend of a route drawn on the map. */
+export function tileIndexCentre(grid: Pick<TerrainField, "columns" | "tileSize">, tile: number): Point {
+    return { x: (tile % grid.columns + 0.5) * grid.tileSize, y: (Math.floor(tile / grid.columns) + 0.5) * grid.tileSize };
+}
+
 export function tileIndex(field: Pick<TerrainField, "columns">, col: number, row: number): number {
     return row * field.columns + col;
 }
