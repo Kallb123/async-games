@@ -66,6 +66,12 @@ export interface IKingdomBuilderWorld {
      * is counted in a transaction that can't miss the other's army.
      */
     armiesDispatched?: number;
+    /**
+     * How many battles a siege has seen (PR 21), for the same reason: bumping
+     * it makes a push or a sally conflict with the tick, a dispatch, or another
+     * battle over the same world, rather than fight a garrison that has moved.
+     */
+    battlesFought?: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -146,6 +152,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     endedAt: Date,
     endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
     armiesDispatched: { type: Number, min: 0 },
+    battlesFought: { type: Number, min: 0 },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });

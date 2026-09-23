@@ -31,11 +31,13 @@ function mockWorld(world: object | null) {
     } as never);
 }
 
-/** The viewer's own armies come back sorted; everyone else's through a projection. */
-function mockArmies(armies: object[], rivals: object[] = []) {
-    return vi.spyOn(KingdomBuilderArmyModel, "find").mockImplementation(((filter: { ownerId: unknown }) => (typeof filter.ownerId === "string"
-        ? { sort: () => ({ lean: vi.fn().mockResolvedValue(armies) }) }
-        : { select: () => ({ lean: vi.fn().mockResolvedValue(rivals) }) })) as never);
+/** The viewer's own armies come back sorted; everyone else's through a projection; the camps at the viewer's towns by node. */
+function mockArmies(armies: object[], rivals: object[] = [], camps: object[] = []) {
+    return vi.spyOn(KingdomBuilderArmyModel, "find").mockImplementation(((filter: { ownerId?: unknown; targetNodeId?: unknown }) => (filter.targetNodeId
+        ? { select: () => ({ lean: vi.fn().mockResolvedValue(camps) }) }
+        : typeof filter.ownerId === "string"
+            ? { sort: () => ({ lean: vi.fn().mockResolvedValue(armies) }) }
+            : { select: () => ({ lean: vi.fn().mockResolvedValue(rivals) }) })) as never);
 }
 
 beforeEach(() => {
@@ -300,6 +302,23 @@ describe("Kingdom Builder world view", () => {
             expect(scouted.settlements.find(settlement => !settlement.isMine)?.garrison?.militia).toBe(24680);
         });
 
+        it("tells the viewer their own town is besieged, and since when — and tells nobody else of anyone's", async () => {
+            setUp();
+            const camps = [
+                { ownerId: "rival", targetNodeId: "start", besiegingSince: 7 },
+                { ownerId: "owner", targetNodeId: "other", besiegingSince: 3 },
+            ];
+            const find = mockArmies([{ ...ownArmy(at(16, 10), { militia: 1 }), targetNodeId: "other", arrivedAtTick: 3, besiegingSince: 3 }], [], camps);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.settlements.find(settlement => settlement.isMine)?.siege).toEqual({ sinceTick: 7, fullFromTick: 12 });
+            expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("siege");
+            expect(view.armies[0].besiegingSince).toBe(3);
+            // The camps are read at the viewer's own towns only, and only whose each is and since when.
+            expect(find).toHaveBeenCalledWith({ worldId, targetNodeId: { $in: ["start"] }, besiegingSince: { $ne: null } });
+        });
+
         it("widens a town's watch as its barracks grows", async () => {
             mockSettlements([
                 { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", tiles: [{ position: 0, building: { type: "barracks", level: 3 } }] },
@@ -326,7 +345,7 @@ describe("Kingdom Builder world view", () => {
 
             expect(view.sight).toEqual([]);
             expect(view.sightings).toEqual([]);
-            expect(find).toHaveBeenCalledTimes(1);
+            expect(find.mock.calls.filter(([filter]) => (filter as { ownerId?: unknown }).ownerId && typeof (filter as { ownerId?: unknown }).ownerId !== "string")).toEqual([]);
         });
     });
 });

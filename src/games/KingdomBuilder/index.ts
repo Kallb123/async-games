@@ -16,3 +16,4 @@ export * from "./armies";
 export * from "./march";
 export * from "./sight";
 export * from "./siege";
+export * from "./assault";

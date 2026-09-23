@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
     endWorld: vi.fn(),
     leaveWorld: vi.fn(),
     marchArmy: vi.fn(),
+    pushAttack: vi.fn(),
+    sallyOut: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: mocks.userId }) }));
@@ -21,6 +23,8 @@ vi.mock("@/games/KingdomBuilder", () => ({
     endWorld: mocks.endWorld,
     leaveWorld: mocks.leaveWorld,
     marchArmy: mocks.marchArmy,
+    pushAttack: mocks.pushAttack,
+    sallyOut: mocks.sallyOut,
 }));
 
 import { KingdomBuilderPersistenceError } from "@/games/KingdomBuilder";
@@ -99,5 +103,15 @@ describe("/api/kingdombuilder/[worldId]", () => {
         expect((await POST(request("POST", JSON.stringify({ action: "march", armyId: "a", targetNodeId: "camp" })), { params })).status).toBe(404);
         mocks.marchArmy.mockRejectedValueOnce(new KingdomBuilderPersistenceError("NO_ROUTE" as never, "No way"));
         expect((await POST(request("POST", JSON.stringify({ action: "march", armyId: "a", targetNodeId: "isle" })), { params })).status).toBe(409);
+    });
+
+    it("passes a push and a sally on as the caller's, and answers a siege that's over with 409", async () => {
+        mocks.pushAttack.mockResolvedValueOnce({ worldId: "world", battle: { won: true } });
+        expect((await POST(request("POST", JSON.stringify({ action: "push", armyId: "a", ownerId: "someone-else" })), { params })).status).toBe(200);
+        expect(mocks.pushAttack).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", "a");
+
+        mocks.sallyOut.mockRejectedValueOnce(new KingdomBuilderPersistenceError("NO_SIEGE" as never, "Not besieged"));
+        expect((await POST(request("POST", JSON.stringify({ action: "sally", settlementId: "s" })), { params })).status).toBe(409);
+        expect(mocks.sallyOut).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", "s");
     });
 });
