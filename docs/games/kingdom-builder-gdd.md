@@ -4,8 +4,8 @@
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
-vocabulary (PR 12), barracks and units (PR 13), and ending a world (PR 14) are
-shipped. PRs 15–18 — the map-shape overhaul (§3.7), travel over the tiles
+vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14) and the
+map-shape overhaul (PR 15, §3.7) are shipped. PRs 16–18 — travel over the tiles
 (§3.8), building costs (§4.5) and wheat with land-driven production (§4.6) —
 come next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
 rest.
@@ -743,14 +743,24 @@ placed on purpose rather than falling out of the coast:
    offshore island rather than a rounded blob. A small set of seeded **shape
    presets** — one continent, two continents joined by an isthmus, a large
    island with an archipelago — picked per world, give worlds a different
-   overall read without any of them being a special case in the code.
-2. **Mountain ranges as ridge lines.** Seed two to five ranges per world
-   (scaled by `WORLD_AREA_SCALE`, like every other count). A range is a short
-   polyline — a random walk with a bounded turn per step, 20–60 world units
-   long — placed anywhere on land, **with no bias toward the centre**. Elevation
-   near a range is a ridged profile of distance to the polyline, so a range is
-   long and thin, has foothills (the hills band) on both flanks, and ends
-   rather than filling a region.
+   overall read without any of them being a special case in the code. Every
+   node goes on the **mainland** — the largest body of land, lakes and rivers
+   included — because ocean is impassable, and a site on an offshore island
+   could never be linked to the rest; the islands are scenery.
+2. **Mountain ranges as ridge lines.** A range is a short polyline — a random
+   walk with a bounded turn per step, 26–64 world units long — placed anywhere
+   on land, **with no bias toward the centre**, and at least 14 units from
+   every other range's spine so two ranges never merge into a massif. Ranges
+   are added against a **budget of ridge length** rather than a count: enough
+   spine for the mountain cores to cover a seeded 6.5–8.5% of the land, so a
+   small continent gets a few ranges and a big one more, and the mountain share
+   lands in its band on most seeds rather than by luck. (A fixed two-to-five
+   per original map's worth of ground was the first plan; it left the mountain
+   share swinging from 3% to 13% between seeds.) Elevation near a range is a
+   ridged profile of distance to the polyline, shaped against the registry's
+   own mountain and hills floors, so a range is long and thin, has foothills
+   (the hills band) on both flanks, and narrows to its ends rather than
+   filling a region.
 3. **Passes are placed, not hoped for.** Each range longer than a threshold
    gets one or two gaps cut into its ridge — a notch in the profile that drops
    to the hills band — at points chosen along the range. A pass is where
@@ -759,7 +769,10 @@ placed on purpose rather than falling out of the coast:
    where an edge happened to be drawn.
 4. **Rolling ground everywhere else.** A low-amplitude noise field gives the
    lowlands their hills and hollows, so hills are not *only* foothills and a
-   plain is not perfectly flat.
+   plain is not perfectly flat. It is shifted per world so that a fixed 9% of
+   the land rolls up into hills of its own, rather than leaving that share to
+   the noise, and tilted gently upward away from the coast so rivers find the
+   sea.
 5. **Moisture from the ranges.** The existing moisture field gains a
    rain-shadow term: one side of a range (fixed per world, the "prevailing
    wind") is wetter, the other drier. Woodland and marsh then cluster on the
@@ -768,7 +781,10 @@ placed on purpose rather than falling out of the coast:
    promised.
 6. **Rivers from every range.** With several high points instead of one,
    the downhill trace (§3.5.2) naturally starts rivers in several places and
-   sends them to different coasts.
+   sends them to different coasts — three rivers for every two ranges. A river
+   caught in a hollow spills over its lowest rim up to four times; one that
+   still can't reach the sea pools into a small lake where it stops, rather
+   than ending dead on dry land.
 
 **Composition bands, checked like fairness.** A hand-tuned generator drifts, so
 the shape is asserted, not trusted. After generation, measure the share of land
@@ -799,8 +815,12 @@ Two more pieces make this reviewable rather than a matter of taste:
 
 - **A contact sheet.** A dev-only script (`npm run kb-worlds`, beside
   `npm run icons`) writes a PNG grid of N seeded worlds drawn in the registry's
-  fallback colours. A change to the generator is reviewed by looking at the
-  before-and-after sheets in the PR, not by reading noise maths.
+  fallback colours, and prints each world's passing attempt, generation time
+  and area shares. A change to the generator is reviewed by looking at the
+  before-and-after sheets in the PR, not by reading noise maths:
+  `npm run kb-worlds -- --out before.png` on the base branch, the same on
+  yours, and compare. `--count`, `--prefix`, `--columns` and `--scale` change
+  how many worlds, their seeds, the grid and the pixels per tile.
 - **Everything still goes through the registry.** Ranges, passes and rain
   shadow change the *inputs* to the elevation and moisture windows; they do not
   add a `switch` on area names. A new area stays one `AREAS` entry.
@@ -2039,8 +2059,12 @@ one-line entries in the guide and tutorial registries.
   (`LOBBY_MAX_TTL_MS`) ago, each in its own try, found through a partial index
   on `endedAt`. `endReason` is `host`, `abandoned` or `admin`. The admin page
   lists the newest 50 worlds.
-- **PR 15 — Map shape: ranges, not a central massif.** §3.7. Generator-only;
-  existing worlds are untouched.
+- **PR 15 — Map shape: ranges, not a central massif.** Shipped. §3.7.
+  Generator-only; existing worlds are untouched. As tuned, about four in five
+  first attempts pass the bands, and over 200 seeds no world needed more than
+  its fifth attempt (of the loop's 80) or 1.7 s end to end — p99 1.4 s. The
+  shape checks run before the graph is connected, so a rejected attempt skips
+  its most expensive step.
   1. Split the landmass: the falloff becomes only the land mask (with domain
      warping and the seeded shape presets); elevation becomes its own field.
   2. `mountainRanges.ts` in `worldgen/`: seeded ridge polylines anywhere on
