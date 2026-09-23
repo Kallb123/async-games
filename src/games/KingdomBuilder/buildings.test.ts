@@ -8,7 +8,7 @@ import {
 } from "./buildings";
 import economy from "./economy.json";
 import { KINGDOM_BUILDER_UNIT_TYPES } from "./units";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, tunedResources } from "./resources";
 
 describe("Kingdom Builder economy.json", () => {
     // A tuning pass edits this file by hand, so a typo should fail here rather than in a player's stores.
@@ -39,6 +39,13 @@ describe("Kingdom Builder economy.json", () => {
             expect(KINGDOM_BUILDER_RESOURCE_TYPES.some(resource => buildingCostFor(type, 1)[resource] > 0)).toBe(true);
         }
         expect(KINGDOM_BUILDER_RESOURCE_TYPES.some(resource => KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE[resource] > 0)).toBe(true);
+    });
+
+    it("refuses a bad entry when the file loads, rather than failing open", () => {
+        expect(() => tunedResources("test", { wood: -15 })).toThrow("bad wood");
+        expect(() => tunedResources("test", { wood: 1.5 })).toThrow("bad wood");
+        expect(() => tunedResources("test", { gold: 1 })).toThrow("bad gold");
+        expect(tunedResources("test", { stone: 3 })).toEqual({ wood: 0, stone: 3, iron: 0 });
     });
 
     it("lets the starting stockpile buy at least one building", () => {

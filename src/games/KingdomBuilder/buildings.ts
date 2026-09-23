@@ -3,7 +3,7 @@
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import economy from "./economy.json";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources } from "./resources";
 
 export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine", "barracks"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
@@ -18,14 +18,14 @@ export function buildTicksFor(targetLevel: number): number {
 // (GDD §4.5) live in economy.json so a tuning pass edits numbers, not code.
 // A resource left out of an entry costs (or grants) none.
 const LEVEL_ONE_COSTS: Record<KingdomBuilderPrototypeBuilding, KingdomBuilderResources> = Object.fromEntries(
-    KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.map(type => [type, resourcesOf(economy.buildingCosts[type])]),
+    KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.map(type => [type, tunedResources(`buildingCosts.${type}`, economy.buildingCosts[type])]),
 ) as Record<KingdomBuilderPrototypeBuilding, KingdomBuilderResources>;
 
 /** Resources a player's first settlement is founded with; later ones start empty. */
-export const KINGDOM_BUILDER_STARTING_STOCKPILE: KingdomBuilderResources = resourcesOf(economy.startingStockpile);
+export const KINGDOM_BUILDER_STARTING_STOCKPILE: KingdomBuilderResources = tunedResources("startingStockpile", economy.startingStockpile);
 
 /** What a town centre produces every tick on its own, so no settlement can be left with no way forward. */
-export const KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE: KingdomBuilderResources = resourcesOf(economy.townCentreTrickle);
+export const KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE: KingdomBuilderResources = tunedResources("townCentreTrickle", economy.townCentreTrickle);
 
 /**
  * The whole price of raising a building to a level, paid when it is queued:
