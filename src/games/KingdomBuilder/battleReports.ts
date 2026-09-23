@@ -1,8 +1,8 @@
 import type { Types } from "mongoose";
 
 import { KingdomBuilderBattleModel, type IKingdomBuilderBattle } from "./KingdomBuilderBattleModel";
-import { unitCount } from "./armies";
-import { KINGDOM_BUILDER_UNIT_TYPES, garrisonOf, type KingdomBuilderGarrison } from "./units";
+import { subtractUnits, unitCount } from "./armies";
+import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 
 /** How many of a player's latest battles in a world the view carries. */
 export const KINGDOM_BUILDER_BATTLE_REPORTS = 5;
@@ -38,11 +38,7 @@ export interface KingdomBuilderBattleReport {
 type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "attacker" | "defender" | "rounds">;
 
 function afterLosses(stack: Partial<KingdomBuilderGarrison>, losses: readonly Partial<KingdomBuilderGarrison>[]): KingdomBuilderGarrison {
-    const left = garrisonOf(stack);
-    for (const loss of losses) {
-        for (const unitType of KINGDOM_BUILDER_UNIT_TYPES) left[unitType] -= loss[unitType] ?? 0;
-    }
-    return left;
+    return losses.reduce<KingdomBuilderGarrison>(subtractUnits, garrisonOf(stack));
 }
 
 /** A stored battle from one side's point of view. The caller has already made sure they fought in it. */

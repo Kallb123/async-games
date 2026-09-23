@@ -4,7 +4,7 @@
 // and a player who scouted the other side can work the result out beforehand.
 
 import { KINGDOM_BUILDER_UNIT_TYPES, garrisonOf, type KingdomBuilderGarrison, type KingdomBuilderUnitType } from "./units";
-import { unitCount } from "./armies";
+import { subtractUnits, unitCount } from "./armies";
 
 export interface KingdomBuilderCombatStats {
     /** Damage one unit deals a round, before counters. */
@@ -121,10 +121,6 @@ function takeLosses(stack: KingdomBuilderGarrison, wounds: Record<KingdomBuilder
     })) as KingdomBuilderGarrison;
 }
 
-function minus(stack: KingdomBuilderGarrison, losses: KingdomBuilderGarrison): KingdomBuilderGarrison {
-    return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, stack[unitType] - losses[unitType]])));
-}
-
 const noWounds = () => garrisonOf() as Record<KingdomBuilderUnitType, number>;
 
 /**
@@ -144,8 +140,8 @@ export function resolveBattle(attacker: Partial<KingdomBuilderGarrison>, defende
             attacker: takeLosses(attacking, attackerWounds, damageDealt(defending, attacking), 1),
             defender: takeLosses(defending, defenderWounds, damageDealt(attacking, defending), 1 + defence),
         };
-        attacking = minus(attacking, round.attacker);
-        defending = minus(defending, round.defender);
+        attacking = subtractUnits(attacking, round.attacker);
+        defending = subtractUnits(defending, round.defender);
         rounds.push(round);
     }
     return { attackerWon: unitCount(defending) === 0 && unitCount(attacking) > 0, attacker: attacking, defender: defending, rounds, defence };

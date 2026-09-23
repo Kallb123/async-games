@@ -104,3 +104,9 @@ export function addUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Part
     const left = garrisonOf(a), right = garrisonOf(b);
     return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, left[unitType] + right[unitType]])));
 }
+
+/** What is left of a stack once another is taken out of it, reading a missing count as none. */
+export function subtractUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Partial<KingdomBuilderGarrison>): KingdomBuilderGarrison {
+    const left = garrisonOf(a), right = garrisonOf(b);
+    return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, left[unitType] - right[unitType]])));
+}

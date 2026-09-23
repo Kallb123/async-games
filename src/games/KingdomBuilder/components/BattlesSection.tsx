@@ -3,9 +3,9 @@
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
 
-import { unitCount } from "../armies";
+import { subtractUnits, unitCount } from "../armies";
 import type { KingdomBuilderBattleReport } from "../battleReports";
-import { KINGDOM_BUILDER_UNIT_TYPES, formatUnits, garrisonOf, type KingdomBuilderGarrison } from "../units";
+import { formatUnits, type KingdomBuilderGarrison } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
 
 interface BattlesSectionProps {
@@ -17,10 +17,6 @@ interface BattlesSectionProps {
 const OUTCOMES: Record<KingdomBuilderBattleReport["outcome"], string> = { won: "Won", lost: "Lost", held: "Stand-off" };
 
 const unitsOrNone = (units: Partial<KingdomBuilderGarrison>) => unitCount(units) > 0 ? formatUnits(units) : "nothing";
-
-function lostFrom(before: KingdomBuilderGarrison, after: KingdomBuilderGarrison): KingdomBuilderGarrison {
-    return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, before[unitType] - after[unitType]])));
-}
 
 function titleOf(report: KingdomBuilderBattleReport, place: string): string {
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
@@ -43,7 +39,7 @@ export default function BattlesSection({ view, placeName }: BattlesSectionProps)
                     action={<span className="ag-tag ag-tag--quiet">{OUTCOMES[report.outcome]}</span>}
                     sub={<>
                         Tick {report.tick} · you sent {unitsOrNone(report.sent)} against {unitsOrNone(report.faced)}.
-                        {" "}You lost {unitsOrNone(lostFrom(report.sent, report.left))}; they lost {unitsOrNone(lostFrom(report.faced, report.faceLeft))}.
+                        {" "}You lost {unitsOrNone(subtractUnits(report.sent, report.left))}; they lost {unitsOrNone(subtractUnits(report.faced, report.faceLeft))}.
                         {report.rounds.length > 0 && <details className="ag-disclosure">
                             <summary className="ag-hint">Round by round <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span></summary>
                             <ol className="ag-hint">
