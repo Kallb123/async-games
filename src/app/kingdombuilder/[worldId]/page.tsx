@@ -19,6 +19,7 @@ import { paceOf, routeBetween, ticksToArrive } from "@/games/KingdomBuilder/armi
 import ArmiesSection, { type MarchDraft, type MarchPreview } from "@/games/KingdomBuilder/components/ArmiesSection";
 import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
 import FogLayer from "@/games/KingdomBuilder/components/FogLayer";
+import SiegesSection from "@/games/KingdomBuilder/components/SiegesSection";
 import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
@@ -235,6 +236,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         </>
                     )}
                 </Section>
+                {data && <SiegesSection endpoint={endpoint} view={data} placeName={placeName} onFought={setData} />}
                 {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
                 {data && players.length > 1 && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
                 {data?.invite && (

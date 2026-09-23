@@ -81,3 +81,10 @@ export function placeholderBattle(attacker: Partial<KingdomBuilderGarrison>, def
 export function combinedUnits(stacks: readonly Partial<KingdomBuilderGarrison>[]): KingdomBuilderGarrison {
     return stacks.reduce<KingdomBuilderGarrison>(addUnits, garrisonOf());
 }
+
+/** What a siege is doing to the settlement now, as its owner reads it. */
+export function describeSiege(siege: KingdomBuilderSiege, tick: number): string {
+    return siegeStage(siege, tick) === "full"
+        ? `Besieged since tick ${siege.sinceTick}: production is halved, and building and training have stopped.`
+        : `Besieged since tick ${siege.sinceTick}: production is halved, and from tick ${siege.fullFromTick} building and training stop too.`;
+}

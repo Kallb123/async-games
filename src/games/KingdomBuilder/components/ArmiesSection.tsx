@@ -91,10 +91,12 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
             {view.armies.length > 0 && (
                 <div className="ag-list">
                     {view.armies.map(army => (
-                        <ListRow key={army.armyId} icon={army.arrivedAtTick === undefined ? "⚔️" : "⛺"} title={formatUnits(army.units)}
+                        <ListRow key={army.armyId} icon={army.arrivedAtTick === undefined ? "⚔️" : army.besiegingSince === undefined ? "⛺" : "🏹"} title={formatUnits(army.units)}
                             sub={army.arrivedAtTick === undefined
                                 ? `Marching to ${placeName(army.targetNodeId)} — ${formatTicks(army.ticksToArrive)}`
-                                : `Camped at ${placeName(army.targetNodeId)} since tick ${army.arrivedAtTick}`}
+                                : army.besiegingSince === undefined
+                                    ? `Camped at ${placeName(army.targetNodeId)} since tick ${army.arrivedAtTick}`
+                                    : `Besieging ${placeName(army.targetNodeId)} since tick ${army.besiegingSince}`}
                             action={<button type="button" className="ag-btn ag-btn--light" onClick={() => onMarchChange({ armyId: army.armyId })}>Orders</button>} />
                     ))}
                 </div>
@@ -111,7 +113,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                     );
                 })}
             </div>
-            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison.</p>}
+            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, and one that reaches another player&apos;s town lays siege to it.</p>}
         </Section>
     );
 }
