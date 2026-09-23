@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./worldView", () => ({ worldView: vi.fn(async () => ({ worldId: "view" })) }));
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
+import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { pushAttack, sallyOut } from "./assault";
+import { resolveBattle } from "./combat";
 import { garrisonOf } from "./units";
 
 const worldId = new Types.ObjectId().toString();
@@ -16,7 +18,7 @@ const settlementId = new Types.ObjectId();
 
 /** A chain ending in `.lean()`, whatever is called on the way. */
 function chain(result: unknown) {
-    const link = { select: () => link, session: () => link, lean: async () => result };
+    const link = { select: () => link, sort: () => link, session: () => link, lean: async () => result };
     return link as never;
 }
 
@@ -24,42 +26,72 @@ let session: object;
 beforeEach(() => {
     session = {};
     vi.spyOn(mongoose.connection, "transaction").mockImplementation((async (callback: (session: object) => Promise<unknown>) => callback(session)) as never);
-    vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+    vi.spyOn(KingdomBuilderWorldModel, "findOneAndUpdate").mockReturnValue({ lean: async () => ({ currentTick: 12 }) } as never);
+    vi.spyOn(KingdomBuilderBattleModel, "create").mockResolvedValue([] as never);
+    vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
+    vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
 });
+
+/** The battle the tests expect to have been kept. */
+function kept() {
+    return vi.mocked(KingdomBuilderBattleModel.create).mock.calls[0][0] as unknown as [Record<string, unknown>];
+}
 afterEach(() => vi.restoreAllMocks());
 
 describe("pushAttack", () => {
     function besieging(garrison: object, attackers: object[]) {
         const findOne = vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue(chain({ _id: armyId, targetNodeId: "town", besiegingSince: 4 }));
-        vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue(chain({ _id: settlementId, garrison }));
+        vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue(chain({ _id: settlementId, ownerId: "defender", garrison }));
         const find = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue(chain(attackers));
         return { findOne, find };
     }
 
-    it("sends every army of the attacker's at the settlement in together, and destroys the garrison when it wins", async () => {
-        const { find } = besieging({ militia: 3 }, [{ _id: armyId, units: { militia: 2 } }, { _id: otherArmyId, units: { cavalry: 2 } }]);
-        const garrison = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
-        const removed = vi.spyOn(KingdomBuilderArmyModel, "deleteMany");
+    it("sends every army of the attacker's at the settlement in together against the fortified garrison, and keeps the battle for both sides", async () => {
+        const { find } = besieging({ militia: 3 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 2 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2 } }]);
+        const sent = garrisonOf({ militia: 2, cavalry: 2 });
+        const battle = resolveBattle(sent, { militia: 3 }, { fortified: true });
+        expect(battle.attackerWon).toBe(true);
 
-        const view = await pushAttack(worldId, "attacker", armyId.toString());
+        await pushAttack(worldId, "attacker", armyId.toString());
 
-        expect(view.battle).toEqual({ kind: "push", won: true, sent: garrisonOf({ militia: 2, cavalry: 2 }), faced: garrisonOf({ militia: 3 }) });
         expect(find).toHaveBeenCalledWith({ worldId, ownerId: "attacker", targetNodeId: "town", besiegingSince: { $ne: null } });
-        expect(garrison).toHaveBeenCalledWith({ _id: settlementId, worldId }, { $set: { garrison: garrisonOf() } }, { session });
-        expect(removed).not.toHaveBeenCalled();
-        expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { battlesFought: 1 } }, { session });
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith({ _id: settlementId, worldId }, { $set: { garrison: garrisonOf() } }, { session });
+        expect(kept()).toEqual([{
+            worldId, tick: 12, kind: "push", nodeId: "town", attackerIds: ["attacker"], defenderIds: ["defender"],
+            attacker: sent, defender: garrisonOf({ militia: 3 }), rounds: battle.rounds,
+            shares: [
+                { ownerId: "attacker", sent, left: battle.attacker },
+                { ownerId: "defender", sent: garrisonOf({ militia: 3 }), left: battle.defender },
+            ],
+        }]);
+        expect(KingdomBuilderWorldModel.findOneAndUpdate).toHaveBeenCalledWith(
+            { _id: worldId, endedAt: null }, { $inc: { battlesFought: 1 } }, { session, projection: { currentTick: 1 } },
+        );
     });
 
-    it("loses the attacking armies on a tie", async () => {
-        besieging({ militia: 2 }, [{ _id: armyId, units: { militia: 2 } }]);
-        const removed = vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({} as never);
-        const garrison = vi.spyOn(KingdomBuilderSettlementModel, "updateOne");
+    it("hands each attacking army back its share of the survivors, and disbands one left with none", async () => {
+        besieging({ militia: 4 }, [{ _id: armyId, ownerId: "attacker", units: { infantry: 3 } }, { _id: otherArmyId, ownerId: "attacker", units: { scout: 1 } }]);
+        const battle = resolveBattle({ infantry: 3, scout: 1 }, { militia: 4 }, { fortified: true });
+        // The infantry win without a loss, but the scout soaks its share of the blows and falls.
+        expect(battle.attacker).toEqual(garrisonOf({ infantry: 3 }));
 
-        const view = await pushAttack(worldId, "attacker", armyId.toString());
+        await pushAttack(worldId, "attacker", armyId.toString());
 
-        expect(view.battle.won).toBe(false);
-        expect(removed).toHaveBeenCalledWith({ _id: { $in: [armyId] }, worldId, ownerId: "attacker" }, { session });
-        expect(garrison).not.toHaveBeenCalled();
+        expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([
+            { updateOne: { filter: { _id: armyId, worldId }, update: { $set: { units: garrisonOf({ infantry: 3 }) } } } },
+            { deleteOne: { filter: { _id: otherArmyId, worldId } } },
+        ], { session });
+    });
+
+    it("loses the attacking armies against a garrison they can't break, and leaves what is left of it at home", async () => {
+        besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 } }]);
+        const battle = resolveBattle({ militia: 5 }, { militia: 5 }, { fortified: true });
+        expect(battle.attackerWon).toBe(false);
+
+        await pushAttack(worldId, "attacker", armyId.toString());
+
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith({ _id: settlementId, worldId }, { $set: { garrison: battle.defender } }, { session });
+        expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([{ deleteOne: { filter: { _id: armyId, worldId } } }], { session });
     });
 
     it("tells a stranger only that the army isn't found, before anything else is read", async () => {
@@ -93,25 +125,39 @@ describe("sallyOut", () => {
         return vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue(chain(besiegers));
     }
 
-    it("sends the whole garrison against every besieger, and lifts the siege when it wins", async () => {
-        const find = besieged({ militia: 4 }, [{ _id: armyId, units: { militia: 1 } }, { _id: otherArmyId, units: { infantry: 2 } }]);
-        const removed = vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({} as never);
+    it("sends the whole garrison into the open against every besieger, whoever owns them, and lifts the siege when it wins", async () => {
+        const find = besieged({ infantry: 6 }, [{ _id: armyId, ownerId: "one", units: { militia: 1 } }, { _id: otherArmyId, ownerId: "two", units: { militia: 2 } }]);
+        const battle = resolveBattle({ infantry: 6 }, { militia: 3 }, { fortified: false });
+        expect(battle.attackerWon).toBe(true);
 
-        const view = await sallyOut(worldId, "defender", settlementId.toString());
+        await sallyOut(worldId, "defender", settlementId.toString());
 
-        expect(view.battle).toEqual({ kind: "sally", won: true, sent: garrisonOf({ militia: 4 }), faced: garrisonOf({ militia: 1, infantry: 2 }) });
         expect(find).toHaveBeenCalledWith({ worldId, targetNodeId: "town", ownerId: { $ne: "defender" }, besiegingSince: { $ne: null } });
-        expect(removed).toHaveBeenCalledWith({ _id: { $in: [armyId, otherArmyId] }, worldId }, { session });
+        expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([
+            { deleteOne: { filter: { _id: armyId, worldId } } },
+            { deleteOne: { filter: { _id: otherArmyId, worldId } } },
+        ], { session });
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith(
+            { _id: settlementId.toString(), worldId, ownerId: "defender" }, { $set: { garrison: battle.attacker } }, { session },
+        );
+        expect(kept()[0]).toMatchObject({
+            kind: "sally", attackerIds: ["defender"], defenderIds: ["one", "two"], rounds: battle.rounds,
+            shares: [
+                { ownerId: "defender", sent: garrisonOf({ infantry: 6 }), left: battle.attacker },
+                { ownerId: "one", sent: garrisonOf({ militia: 1 }), left: garrisonOf() },
+                { ownerId: "two", sent: garrisonOf({ militia: 2 }), left: garrisonOf() },
+            ],
+        });
     });
 
-    it("loses the garrison when it is outnumbered", async () => {
-        besieged({ militia: 1 }, [{ _id: armyId, units: { militia: 3 } }]);
-        const garrison = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+    it("loses the garrison when it is outfought", async () => {
+        besieged({ militia: 1 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 3 } }]);
 
-        const view = await sallyOut(worldId, "defender", settlementId.toString());
+        await sallyOut(worldId, "defender", settlementId.toString());
 
-        expect(view.battle.won).toBe(false);
-        expect(garrison).toHaveBeenCalledWith({ _id: settlementId.toString(), worldId, ownerId: "defender" }, { $set: { garrison: garrisonOf() } }, { session });
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith(
+            { _id: settlementId.toString(), worldId, ownerId: "defender" }, { $set: { garrison: garrisonOf() } }, { session },
+        );
     });
 
     it("refuses a settlement that isn't under siege, or has no garrison to send", async () => {
@@ -129,7 +175,7 @@ describe("sallyOut", () => {
 
     it("refuses an ended world", async () => {
         besieged({ militia: 4 }, [{ _id: armyId, units: { militia: 1 } }]);
-        vi.mocked(KingdomBuilderWorldModel.updateOne).mockResolvedValue({ modifiedCount: 0 } as never);
+        vi.mocked(KingdomBuilderWorldModel.findOneAndUpdate).mockReturnValue({ lean: async () => null } as never);
         await expect(sallyOut(worldId, "defender", settlementId.toString())).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
     });
 });

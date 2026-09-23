@@ -97,7 +97,8 @@ const TrainingOrderSchema = new Schema<KingdomBuilderTrainingOrder>({
     ticksRemaining: { type: Number, required: true, min: 1 },
 }, { _id: false });
 
-const GarrisonSchema = new Schema<KingdomBuilderGarrison>(
+/** A stack's units by type — a garrison's, an army's, a side's in a battle. */
+export const KingdomBuilderGarrisonSchema = new Schema<KingdomBuilderGarrison>(
     Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, { type: Number, required: true, min: 0, default: 0 }])),
     { _id: false },
 );
@@ -122,7 +123,7 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     resources: { type: ResourcesSchema, required: true },
     construction: ConstructionSchema,
     trainingQueue: { type: [TrainingOrderSchema], default: undefined },
-    garrison: GarrisonSchema,
+    garrison: KingdomBuilderGarrisonSchema,
     catchment: CatchmentSchema,
 }, { timestamps: true });
 

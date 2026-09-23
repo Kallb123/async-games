@@ -5,7 +5,7 @@
 // leaves, is beaten, or pushes the attack.
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
-import { addUnits, unitCount, type KingdomBuilderMarch } from "./armies";
+import { addUnits, type KingdomBuilderMarch } from "./armies";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf } from "./resources";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 
@@ -54,27 +54,6 @@ export function siegeStage(siege: KingdomBuilderSiege, tick: number): KingdomBui
 /** What a besieged settlement's buildings still bring in: half, rounded down, at either stage. */
 export function besiegedProduction(production: KingdomBuilderResources): KingdomBuilderResources {
     return resourcesOf(Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [resource, Math.floor(production[resource] / 2)])));
-}
-
-/** What a fight leaves standing on each side. */
-export interface KingdomBuilderBattle {
-    attackerWon: boolean;
-    attacker: KingdomBuilderGarrison;
-    defender: KingdomBuilderGarrison;
-}
-
-/**
- * The stand-in for combat until §7's engine lands (PR 22): the side with more
- * units wins outright and loses nothing, and the other is destroyed. The
- * attacker needs strictly more — a tie holds for the defender.
- */
-export function placeholderBattle(attacker: Partial<KingdomBuilderGarrison>, defender: Partial<KingdomBuilderGarrison>): KingdomBuilderBattle {
-    const attackerWon = unitCount(attacker) > unitCount(defender);
-    return {
-        attackerWon,
-        attacker: attackerWon ? garrisonOf(attacker) : garrisonOf(),
-        defender: attackerWon ? garrisonOf() : garrisonOf(defender),
-    };
 }
 
 /** Several stacks fighting as one. */

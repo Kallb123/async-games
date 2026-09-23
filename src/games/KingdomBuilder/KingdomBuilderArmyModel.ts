@@ -1,7 +1,7 @@
 import { Document, Model, Schema, Types, model, models } from "mongoose";
 
 import type { KingdomBuilderMarch } from "./armies";
-import { KINGDOM_BUILDER_UNIT_TYPES, type KingdomBuilderGarrison } from "./units";
+import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
 
 /**
  * A stack of units away from its garrison (GDD §6.2, §11.3 PR 19). Its route
@@ -19,15 +19,10 @@ export interface IKingdomBuilderArmy extends KingdomBuilderMarch {
 export interface IKingdomBuilderArmyDocument extends IKingdomBuilderArmy, Document {}
 export interface IKingdomBuilderArmyModel extends Model<IKingdomBuilderArmyDocument> {}
 
-const UnitsSchema = new Schema<KingdomBuilderGarrison>(
-    Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, { type: Number, required: true, min: 0, default: 0 }])),
-    { _id: false },
-);
-
 export const KingdomBuilderArmySchema = new Schema<IKingdomBuilderArmyDocument>({
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     ownerId: { type: String, required: true },
-    units: { type: UnitsSchema, required: true },
+    units: { type: KingdomBuilderGarrisonSchema, required: true },
     path: { type: [Number], required: true },
     pathCosts: { type: [Number], required: true },
     travelled: { type: Number, required: true, min: 0, default: 0 },

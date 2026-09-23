@@ -7,9 +7,9 @@ Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
-§4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3) and
-automatic siege on arrival (PR 21, §8) are shipped. PR 22 (combat resolution)
-comes next; §11.3 is the plan
+§4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
+automatic siege on arrival (PR 21, §8) and combat resolution (PR 22, §7.6) are
+shipped. PR 23 (barbarian villages) comes next; §11.3 is the plan
 for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -1697,6 +1697,21 @@ steps.
 
 ### 7.6 Decision, and future scope
 
+> As shipped in PR 22: `combat.ts`'s `resolveBattle` fights up to six rounds,
+> both sides striking at once from what stood at the start of each. Every unit
+> has an attack and a health (militia 2/6, scout 1/3, infantry 4/10, cavalry
+> 7/12, siege engine 1/10), spreads its attack over the other side by headcount,
+> and hits harder where a counter says: militia ×2 against cavalry, cavalry ×1.5
+> against infantry, infantry ×1.5 against militia, and everything ×1.5 (cavalry
+> ×2) against siege engines. Damage too small to kill carries over to the next
+> round. A garrison fighting from its own town divides the damage it takes by
+> 1.25, and each siege engine in the attacking stack takes 0.05 off that bonus —
+> the walls of §8 do not exist yet, so this is the defence siege engines break.
+> The attacker wins only by leaving the defender with nothing and something of
+> their own; both gone, or both still standing after the sixth round, holds for
+> the defender. There are no archers, so the counter triangle is between the
+> three fighting units. First-pass numbers (§12).
+
 **Option 3 — deterministic multi-round attrition with unit type counters —
 is the combat model**, reporting results as a round-by-round log (which also
 gives the combat report something worth reading, addressing Option 1's
@@ -1730,11 +1745,13 @@ around it.
 > are as well. There are no walls yet, so nothing stops regenerating. The
 > besieger can **push the attack** with every army of theirs at the town, and
 > the defender can **sally out** with the whole garrison against every army at
-> the gate. Until PR 22's combat engine arrives, both are settled by a
-> placeholder: the side with more units wins outright and loses nothing, the
-> other is destroyed, and a tie holds for the defender. A won push destroys the
-> garrison but does not take the town — capture is a later rule — so the siege
-> goes on.
+> the gate. Since PR 22 both are fought out by §7's engine: a push against the
+> garrison behind its town's defences, a sally in the open without them. What
+> survives on each side goes home — back into the garrison, or shared back
+> among the armies that fought by what each brought, an army left with nothing
+> disbanding. A won push destroys the garrison but does not take the town —
+> capture is a later rule — so the siege goes on; a stand-off leaves it where it
+> was. Both sides can read every battle afterwards.
 >
 > One consequence of PR 20's sight: a settlement always sees its own tile, so a
 > defender sees exactly what is camped at their gate from the moment the siege
@@ -2600,9 +2617,43 @@ reduced-motion rule in `ag-theme.css`.
   settlement screen says when it is under siege. The other side of a battle
   learns of it only from what it left behind; a report for both sides is PR 22's.
   No `whatsNew.ts` line.
-- **PR 22 — Combat resolution.** The deterministic multi-round attrition
+- **PR 22 — Combat resolution.** Shipped. The deterministic multi-round attrition
   engine with unit-type counters (§7.3/§7.6) as a pure function with its own
   matchup-table test suite, then wired into the two actions PR 21 stubbed.
+
+  How it landed: `combat.ts` is the pure half — `resolveBattle(attacker,
+  defender, { fortified })` and the stats, counters and defence behind it (§7.6
+  has the numbers), plus `shareSurvivors`, which hands a side's survivors back
+  to the stacks it fought with type by type, largest remainder first and the
+  older army on a tie. `combat.test.ts` is the matchup table: a row per fight a
+  player should be able to call from the counters alone. `assault.ts` fights a
+  push `fortified` and a sally not, then writes the garrison to what is left of
+  it and each army that fought to its share — deleting any left with nothing —
+  in one bulk write inside the battle's transaction. Survivors come home either
+  way, so a stand-off costs both sides what they lost and moves nothing else.
+  The battle's claim on the world now reads the tick it is fought on.
+
+  Every battle is kept, as a `KingdomBuilderBattleModel` document: the world,
+  the tick, the kind, the node, who fought on each side (`attackerIds`, and
+  `defenderIds` — every besieger's owner in a sally), what each side brought,
+  each round's losses, and `shares`: what each player who fought brought and
+  kept. It answers PR 21's leftover: the side that didn't start a battle reads
+  it too. `battleReports.ts` turns one into a `KingdomBuilderBattleReport` from
+  the reader's side — their own units first, the other side second,
+  `won`/`lost`/`held` — and `worldView` carries the viewer's latest five
+  (`battles`), read by naming the viewer on either side, so nobody sees a
+  battle they weren't in; a failed read shows no battles rather than failing
+  the view. Nothing in a report is news to its reader, who saw the other side
+  at the gate — except what a fellow besieger brought, so a besieger sharing a
+  side with another player's armies is told their own units only, and their
+  own side's losses round by round are left out (they would give the other's
+  away). The push
+  and sally reply is now just the world view, whose `battles` begin with the
+  one just fought, and removing a world removes its battles; a leaver's stay for
+  the others who fought them. The world map gains a Battles section under
+  Sieges — each battle with what went in, what each side lost, and a round by
+  round log to unfold — and Sieges' hint says what the defences do. No
+  `whatsNew.ts` line.
 - **PR 23 — Barbarian villages.** Generator gains barbarian site placement
   (§3.4); combat resolution from PR 22 applies directly on arrival, no
   siege phase, per §3.4's rule.

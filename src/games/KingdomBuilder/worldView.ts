@@ -6,6 +6,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
+import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
 import { siegesOn } from "./besiegers";
 import type { KingdomBuilderSiege } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
@@ -76,6 +77,12 @@ export interface KingdomBuilderWorldView {
      * not when it gets there. One out of sight is not sent at all (§6.3).
      */
     sightings: KingdomBuilderArmySighting[];
+    /**
+     * The viewer's latest battles in the world (§7.6), newest first — the
+     * ones they started and the ones fought against them — each from their
+     * own side. Nobody else's battle appears here.
+     */
+    battles: KingdomBuilderBattleReport[];
     /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
 }
@@ -200,11 +207,16 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
     }
     const hostId = world.hostId ?? memberIds[0];
-    const [directory, invite, armies, sieges] = await Promise.all([
+    const [directory, invite, armies, sieges, battles] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
         readArmies(worldId, userId),
         siegesOn(worldId, settlements.filter(settlement => settlement.ownerId === userId)),
+        // A history, not the board: a failed read shows no battles rather than no world.
+        recentBattles(worldId, userId).catch(error => {
+            console.error(`Kingdom Builder: could not read the battles in world ${worldId}`, error);
+            return [];
+        }),
         // The repair for a leave that died before handing the invitation on (§9.1).
         hostId === userId && roster.length > 0
             ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))
@@ -260,6 +272,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         armies,
         sight,
         sightings,
+        battles,
         ...(invite ? { invite } : {}),
     };
 }

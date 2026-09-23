@@ -6,12 +6,14 @@ vi.mock("@/utils/users/clerk", () => ({
 }));
 vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn(), reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
+vi.mock("./battleReports", () => ({ recentBattles: vi.fn(async () => []) }));
 
 import { buildUserDirectory } from "@/utils/users/clerk";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { recentBattles } from "./battleReports";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { ensureFirstSettlement } from "./roster";
 import { liveWorldInvitation } from "./worldInvitation";
@@ -77,6 +79,19 @@ describe("Kingdom Builder world view", () => {
             { seat: 1, name: "name:rival", imageUrl: null, isMe: true, isHost: false },
         ]);
         expect(view.seatCount).toBe(4);
+    });
+
+    it("carries the viewer's own battles, asked for by the viewer", async () => {
+        const worldId = new Types.ObjectId().toString();
+        mockSettlements([{ _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start" }]);
+        mockWorld({ hostId: "owner", roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }] });
+        const report = { kind: "sally", tick: 4, nodeId: "start" } as never;
+        vi.mocked(recentBattles).mockResolvedValueOnce([report]);
+
+        const view = await worldView(worldId, "owner");
+
+        expect(recentBattles).toHaveBeenCalledWith(worldId, "owner");
+        expect(view.battles).toEqual([report]);
     });
 
     it("shows the join code to the host and nobody else", async () => {
