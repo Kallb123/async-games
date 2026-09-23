@@ -18,6 +18,8 @@ import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
 import { paceOf, routeBetween, ticksToArrive } from "@/games/KingdomBuilder/armies";
 import ArmiesSection, { type MarchDraft, type MarchPreview } from "@/games/KingdomBuilder/components/ArmiesSection";
 import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
+import FogLayer from "@/games/KingdomBuilder/components/FogLayer";
+import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
 import { AREAS, tileIndexCentre, travelGridFor, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
@@ -164,6 +166,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />
                                             : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
+                                        {data.terrainField && players.length > 1 && <FogLayer field={data.terrainField} width={data.landmass.width} height={data.landmass.height} sight={data.sight} />}
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march} isSelected={march?.targetNodeId === node.id} showRing={false}
                                                 onClick={() => marchTo(node.id)} title={TERRAIN[node.terrain].name}>
@@ -194,7 +197,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             </ClickableMapNode>;
                                         })}
                                         {data.terrainField && (
-                                            <ArmyLayer field={data.terrainField} armies={data.armies} colour={myColour} preview={marchRoute?.route?.path}
+                                            <ArmyLayer field={data.terrainField} armies={data.armies} colour={myColour} sightings={data.sightings} ownerName={ownerName} preview={marchRoute?.route?.path}
                                                 selectedArmyId={march && "armyId" in march ? march.armyId : undefined}
                                                 onSelect={march ? undefined : armyId => startMarch({ armyId })} />
                                         )}
@@ -214,6 +217,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             </div>
                             <div className={styles.legend} aria-label="Map legend">
                                 <span className={styles.legendOpen}>Open site</span><span className={styles.legendTerrain}>Resource terrain</span>
+                                {players.length > 1 && <span className={styles.legendFog}>Shaded: out of sight</span>}
                                 {players.map(player => (
                                     <span key={player.seat} style={{ "--legend-colour": playerColour(player.seat) } as CSSProperties}>{player.isMe ? "You" : player.name}</span>
                                 ))}
@@ -232,6 +236,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                     )}
                 </Section>
                 {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
+                {data && players.length > 1 && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
                 {data?.invite && (
                     <JoinCodeCard joinCode={data.invite.joinCode} gameFriendlyName={GAME_META.kingdombuilder.name} expiresAt={data.invite.expiresAt}
                         expiryConsequence="the open seats close" />

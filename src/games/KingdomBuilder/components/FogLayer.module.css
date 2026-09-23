@@ -1,0 +1,2 @@
+.fog { pointer-events: none; }
+.shade { fill: var(--ag-dark); fill-opacity: 0.45; }
