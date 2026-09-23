@@ -4,10 +4,10 @@
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
-vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14) and the
-map-shape overhaul (PR 15, §3.7) are shipped. PRs 16–18 — travel over the tiles
-(§3.8), building costs (§4.5) and wheat with land-driven production (§4.6) —
-come next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
+vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
+map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8) and
+building costs (PR 17, §4.5) are shipped. PR 18 — wheat with land-driven
+production (§4.6) — comes next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
 rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -1201,6 +1201,11 @@ army and forecloses that army from anything else in the meantime.
 
 ### 4.5 Building costs and the starting stockpile
 
+> PR 17 shipped this section; the prices, the starting stockpile and the town
+> centre's trickle are read from `src/games/KingdomBuilder/economy.json`, so a
+> tuning pass edits that file rather than code. The farm and wheat rows wait on
+> PR 18.
+
 Through PR 13 a building costs only time: `queuePrototypeBuilding` checks the tile and
 the queue, never the stores, so a new settlement can fill all eight tiles on
 day one and resources are only ever spent on units. That makes the economy
@@ -2363,7 +2368,7 @@ reduced-motion rule in `ag-theme.css`.
   every edge's `path` are public map data; an army's route (PR 19) belongs on
   the army, not the world, so PR 20 has one field to redact. No `whatsNew.ts`
   line.
-- **PR 17 — Buildings cost resources.** §4.5.
+- **PR 17 — Buildings cost resources.** Shipped. §4.5.
   1. A `cost(type, level)` beside `buildTicksFor` in `buildings.ts`, with the
      first-pass table, shared by client and server.
   2. `queuePrototypeBuilding`'s conditional update gains the stores check and the
@@ -2379,6 +2384,25 @@ reduced-motion rule in `ag-theme.css`.
      on a settlement that isn't yours now also spends someone else's stores),
      `gremlin` (a tick landing between the read and the conditional write),
      `caveman` (building and unit costs should be one shape and one helper).
+
+  How it landed: the numbers are data, not code — `economy.json` beside
+  `buildings.ts` holds each building's level-one price, the first settlement's
+  stockpile and the town centre's trickle, a resource left out of an entry
+  reading as none, and a guard test fails on an unknown resource, a fraction, a
+  negative, or a building missing from (or extra to) the price list.
+  `buildingCostFor(type, level)` is the level-one price × the target level.
+  `resources.ts` is the one affordability vocabulary — `canAfford`,
+  `shortfallFor`, `formatResources` — used by the server's pre-checks and the
+  settlement screen, for units as much as buildings; both queue commands take
+  their cost with the same `spend` filter-and-`$inc`, so a building is paid for
+  in the conditional write that queues it, exactly as a unit has been since PR
+  13, and a lost race answers `QUEUE_BUSY` rather than overdrawing. Only
+  `foundSettlement(…, "first")` gets the stockpile (40 wood, 20 stone). The
+  trickle — 1 wood a tick — is paid by the town centre in `productionFor`, so
+  every settlement from before this earns it without a migration. The build,
+  upgrade and training rows all print their price, and an unaffordable one
+  stays on screen, disabled, with "short 5 wood" beside the price. The farm and
+  wheat wait on PR 18. No `whatsNew.ts` line.
 - **PR 18 — Wheat, farms, and land-driven production.** §4.6.
   1. `wheat` in `KingdomBuilderResources` (absent reads as zero), the farm
      building, wheat in every unit's cost and in the starting stockpile.
