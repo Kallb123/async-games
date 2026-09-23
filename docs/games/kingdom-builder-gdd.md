@@ -2494,7 +2494,9 @@ reduced-motion rule in `ag-theme.css`.
   conditional on the garrison still holding them), or new orders for an army
   already out — onward from its camp, or turned round from the tile it stands
   on, guarded on it not having moved since it was read. Twenty armies a player
-  a world at most. The settlement or army is looked up with the caller as owner
+  a world at most, counted inside the dispatch's transaction behind a write to
+  the world (`armiesDispatched`), so two dispatches at once conflict rather
+  than both slipping under the limit. The settlement or army is looked up with the caller as owner
   before anything about the world is read, so a stranger's order learns nothing.
   `worldView` carries the viewer's own armies and their own garrisons only —
   the query names the owner, so nobody else's army is ever read (§6.3). The

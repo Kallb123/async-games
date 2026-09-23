@@ -60,6 +60,12 @@ export interface IKingdomBuilderWorld {
      */
     endedAt?: Date;
     endReason?: KingdomBuilderEndReason;
+    /**
+     * How many armies have ever set out (PR 19). Nothing reads it: bumping it is
+     * the write that makes two dispatches at once conflict, so the army limit
+     * is counted in a transaction that can't miss the other's army.
+     */
+    armiesDispatched?: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -139,6 +145,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     roster: { type: [SeatSchema], required: false, default: undefined },
     endedAt: Date,
     endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
+    armiesDispatched: { type: Number, min: 0 },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });

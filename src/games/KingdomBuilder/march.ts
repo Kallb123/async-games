@@ -88,12 +88,18 @@ async function dispatchFromSettlement(worldId: string, userId: string, order: Ki
         throw new KingdomBuilderPersistenceError("ARMY_BUSY", "The garrison doesn't hold that many units");
     }
     const route = ground.route(ground.tileOf(settlement.nodeId), ground.tileOf(order.targetNodeId));
-    if (await KingdomBuilderArmyModel.countDocuments({ worldId, ownerId: userId }) >= KINGDOM_BUILDER_ARMY_LIMIT) {
-        throw new KingdomBuilderPersistenceError("ARMY_BUSY", `You already have ${KINGDOM_BUILDER_ARMY_LIMIT} armies in the field`);
-    }
 
     const sent = KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => units[unitType] > 0);
     await mongoose.connection.transaction(async session => {
+        // Every dispatch writes the world first, so two at once conflict and
+        // the one retried counts the other's army: a count alone, read in two
+        // snapshots side by side, would let both through the limit. It also
+        // refuses a world that ended since it was read.
+        const live = await KingdomBuilderWorldModel.updateOne({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session });
+        if (live.modifiedCount !== 1) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
+        if (await KingdomBuilderArmyModel.countDocuments({ worldId, ownerId: userId }).session(session) >= KINGDOM_BUILDER_ARMY_LIMIT) {
+            throw new KingdomBuilderPersistenceError("ARMY_BUSY", `You already have ${KINGDOM_BUILDER_ARMY_LIMIT} armies in the field`);
+        }
         const spent = await KingdomBuilderSettlementModel.updateOne(
             {
                 _id: order.settlementId, worldId, ownerId: userId,

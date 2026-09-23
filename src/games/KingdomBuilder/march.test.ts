@@ -38,7 +38,8 @@ const home = { _id: settlementId, nodeId: "start", garrison: garrisonOf({ militi
 
 beforeEach(() => {
     vi.spyOn(mongoose.connection, "transaction").mockImplementation((async (callback: (session: object) => Promise<unknown>) => callback({})) as never);
-    vi.spyOn(KingdomBuilderArmyModel, "countDocuments").mockResolvedValue(0 as never);
+    vi.spyOn(KingdomBuilderArmyModel, "countDocuments").mockReturnValue({ session: async () => 0 } as never);
+    vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -98,8 +99,16 @@ describe("marchArmy — out of a garrison", () => {
         const world = mockWorld();
         await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "isle" })).rejects.toMatchObject({ code: "NO_ROUTE" });
 
-        vi.mocked(KingdomBuilderArmyModel.countDocuments).mockResolvedValue(KINGDOM_BUILDER_ARMY_LIMIT as never);
+        const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne");
+        vi.mocked(KingdomBuilderArmyModel.countDocuments).mockReturnValue({ session: async () => KINGDOM_BUILDER_ARMY_LIMIT } as never);
         await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        // Counted inside the transaction, behind a write to the world that makes two dispatches at once conflict.
+        expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session: {} });
+        expect(spend).not.toHaveBeenCalled();
+
+        vi.mocked(KingdomBuilderWorldModel.updateOne).mockResolvedValue({ modifiedCount: 0 } as never);
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
+        vi.mocked(KingdomBuilderWorldModel.updateOne).mockResolvedValue({ modifiedCount: 1 } as never);
 
         world.mockReturnValue({ select: () => ({ lean: async () => ({ ...WORLD, endedAt: new Date() }) }) } as never);
         await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
