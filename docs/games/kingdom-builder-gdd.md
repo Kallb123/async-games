@@ -4,10 +4,10 @@
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
-vocabulary (PR 12), and barracks and units (PR 13) are shipped. PRs 14–18 —
-ending a world, the map-shape overhaul (§3.7), travel over the tiles (§3.8),
-building costs (§4.5) and wheat with land-driven production (§4.6) — come
-next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
+vocabulary (PR 12), barracks and units (PR 13), and ending a world (PR 14) are
+shipped. PRs 15–18 — the map-shape overhaul (§3.7), travel over the tiles
+(§3.8), building costs (§4.5) and wheat with land-driven production (§4.6) —
+come next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
 rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
@@ -1666,6 +1666,12 @@ so it can merge to `main` without disrupting anything already shipped:
   route or cron, `croupier` the moment any response carries hidden state,
   `caveman` on any UI, `rulebook` on anything that changes shared
   metadata or wiring).
+- **No "What's new" lines while the game is pre-release.** Kingdom Builder
+  is being built in the open but not yet announced, so the PRs from here on
+  add nothing to `whatsNew.ts` — AGENTS.md's release-note rule is about what
+  players have been told, and nobody has been told about this yet. The
+  release that announces the game gets its one line then. (The shipped PRs
+  below record the lines they did or didn't add at the time.)
 - **Commits within a PR are ordered so the PR still builds at every commit**,
   the same discipline as the PR sequence itself, just one level down —
   reviewers should be able to check out any commit in a PR and get a green
@@ -1977,7 +1983,7 @@ one-line entries in the guide and tutorial registries.
   the dashboard carries them, which is PR 20's fog-of-war contract holding
   before there is an army to hide. Buildings still cost nothing to raise — PR 17
   prices them. No `whatsNew.ts` line on this branch.
-- **PR 14 — End, leave and remove a world.** §9.1. First of the new five
+- **PR 14 — End, leave and remove a world.** Shipped. §9.1. First of the new five
   because it is what makes the others testable: each of PRs 15–18 changes what
   a *new* world or settlement looks like, and without this every tester is left
   playing, or looking past, the worlds generated before it.
@@ -2007,7 +2013,32 @@ one-line entries in the guide and tutorial registries.
      admin gate), `gremlin` (ending mid-sweep, a removal that dies partway, two
      players leaving at once so nobody is host, a bounded batch), `caveman`
      (the confirmation and the admin list should be existing pieces).
-  8. One `whatsNew.ts` line: hosts can end a world, and players can leave one.
+
+  How it landed: `lifecycle.ts` holds all of it. Ending is one `updateOne`
+  conditional on `endedAt: null` and on the host still being the one read
+  (`hostId: {$exists: false}` for a pre-PR 8 world, whose first settlement's
+  owner is its host); the invitation is deleted straight after, best-effort,
+  since `joinWorld` and `foundSettlement` already refuse an ended world. The
+  sweep, the claim write in `tickWorld`, `worldView`, `worldSummaries` and both
+  settlement commands (`assertWorldLive`) all read `endedAt`, and an ended
+  world answers 404 like a missing one. Leaving is a loop, bounded like
+  `joinWorld`'s, around one conditional roster write guarded on what it was
+  decided from — the last player (nobody joined since), the host (still host,
+  successor still seated) or anyone else — so two leaves at once can't hand the
+  world to someone who has gone; the loser re-reads. The leaver's settlements
+  are deleted before that write and again after, so a leave that dies partway
+  leaves a player still seated rather than a settlement squatting on a freed
+  site. The invitation follows the roster (`reconcileWorldInvitation`): the
+  host is its sender, and any seat accepted by someone no longer seated — the
+  leaver, or a successor who now hosts — goes back to the code. It runs after
+  every leave and on the host's own world view, which repairs a leave that died
+  before getting to it. A host's second tab ending an already-ended world
+  succeeds rather than being told it isn't the host. The host can also leave rather than end, handing the world
+  on. Removal deletes settlements, then the invitation, then the world; the tick
+  cron's last step removes up to 20 worlds ended over seven days
+  (`LOBBY_MAX_TTL_MS`) ago, each in its own try, found through a partial index
+  on `endedAt`. `endReason` is `host`, `abandoned` or `admin`. The admin page
+  lists the newest 50 worlds.
 - **PR 15 — Map shape: ranges, not a central massif.** §3.7. Generator-only;
   existing worlds are untouched.
   1. Split the landmass: the falloff becomes only the land mask (with domain
@@ -2025,8 +2056,6 @@ one-line entries in the guide and tutorial registries.
   6. Reviewers: `gremlin` (more rejection criteria means more retries; what
      happens at the cap, and how long generation now takes at the p99 seed),
      `rulebook` (still no branch on an area name; the new script documented).
-  7. One `whatsNew.ts` line: new worlds have mountain ranges, passes and
-     varied coasts.
 - **PR 16 — The tiles are the roads.** §3.8. Lands before PR 19 so armies
   never move along edges at all.
   1. `tile` on every node; generation snaps nodes to distinct passable tiles,
@@ -2050,7 +2079,6 @@ one-line entries in the guide and tutorial registries.
      search over a malformed field, how long the flood takes over ten
      starts), `croupier` (a stored path is exactly what fog of war must hide
      once armies carry one — agree now where it lives).
-  8. One `whatsNew.ts` line: routes on the map follow the land.
 - **PR 17 — Buildings cost resources.** §4.5.
   1. A `cost(type, level)` beside `buildTicksFor` in `buildings.ts`, with the
      first-pass table, shared by client and server.
@@ -2067,8 +2095,6 @@ one-line entries in the guide and tutorial registries.
      on a settlement that isn't yours now also spends someone else's stores),
      `gremlin` (a tick landing between the read and the conditional write),
      `caveman` (building and unit costs should be one shape and one helper).
-  7. One `whatsNew.ts` line: buildings now cost resources, and every kingdom
-     starts with enough for its first camps.
 - **PR 18 — Wheat, farms, and land-driven production.** §4.6.
   1. `wheat` in `KingdomBuilderResources` (absent reads as zero), the farm
      building, wheat in every unit's cost and in the starting stockpile.
@@ -2087,8 +2113,6 @@ one-line entries in the guide and tutorial registries.
      schema change and its backfill), `gremlin` (the backfill over every
      settlement, a world with no field), `caveman` (tiers read off the
      registry, never a switch on area name).
-  8. One `whatsNew.ts` line: wheat and farms arrive, and a settlement's land
-     now decides what it's good at producing.
 - **PR 19 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, pathed over the tiles by PR 16's
   pathfinder, and a movement step in the tick engine spending §6.2's terrain

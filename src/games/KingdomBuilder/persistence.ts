@@ -6,7 +6,7 @@ import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
 export class KingdomBuilderPersistenceError extends Error {
-    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE" | "WORLD_FULL", message: string) {
+    constructor(public readonly code: "INVALID_INPUT" | "WORLD_NOT_FOUND" | "SITE_NOT_FOUND" | "SITE_NOT_AVAILABLE" | "WORLD_FULL" | "FORBIDDEN", message: string) {
         super(message);
         this.name = "KingdomBuilderPersistenceError";
     }
@@ -79,9 +79,9 @@ export async function foundSettlement(
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
     }
 
-    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1 });
+    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, endedAt: 1 });
     const world = await (session ? query.session(session) : query).lean();
-    if (!world) {
+    if (!world || world.endedAt) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
     }
 

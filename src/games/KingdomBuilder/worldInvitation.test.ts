@@ -6,7 +6,8 @@ import { InvitationModel, type IInvitationData } from "@/utils/mongodb/Invitatio
 
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { joinWorld } from "./roster";
-import { acceptWorldSeat } from "./worldInvitation";
+import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
+import { acceptWorldSeat, reconcileWorldInvitation } from "./worldInvitation";
 
 const WORLD_ID = "64b000000000000000000001";
 
@@ -69,5 +70,22 @@ describe("acceptWorldSeat", () => {
 
         expect(result).toEqual({ gameStarted: false });
         expect(updateOne.mock.calls[0][1]).toEqual({ $set: { "userIdList.$[seat].userId": "open-seat", "userIdList.$[seat].inviteAccepted": false } });
+    });
+});
+
+describe("reconcileWorldInvitation", () => {
+    it("makes the host the sender and reopens accepted seats nobody holds a roster seat for", async () => {
+        const updateOne = vi.spyOn(KingdomBuilderInvitationModel, "updateOne").mockResolvedValue({} as never);
+
+        await reconcileWorldInvitation(WORLD_ID, "second", ["second", "third"]);
+
+        // The successor now hosts, so their own seat reopens too; a pending
+        // (unaccepted) named invitee is never touched.
+        const stale = { inviteAccepted: true, userId: { $nin: ["third"] } };
+        expect(updateOne).toHaveBeenCalledWith(
+            { worldId: WORLD_ID, $or: [{ senderId: { $ne: "second" } }, { userIdList: { $elemMatch: stale } }] },
+            { $set: { senderId: "second", "userIdList.$[seat].userId": "open-seat", "userIdList.$[seat].inviteAccepted": false } },
+            { arrayFilters: [{ "seat.inviteAccepted": true, "seat.userId": { $nin: ["third"] } }] },
+        );
     });
 });

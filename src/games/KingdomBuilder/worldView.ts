@@ -7,7 +7,7 @@ import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuil
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
 import { ensureFirstSettlement } from "./roster";
-import { liveWorldInvitation } from "./worldInvitation";
+import { liveWorldInvitation, reconcileWorldInvitation } from "./worldInvitation";
 import { completedBuildLevels } from "./worldSummaryTypes";
 
 /** One seat in a world, as every member sees it (§11.3 PR 8). */
@@ -66,14 +66,15 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     const ownsSettlement = settlements.some(settlement => settlement.ownerId === userId);
 
     const world = await KingdomBuilderWorldModel.findById(worldId)
-        .select({ currentTick: 1, landmass: 1, terrainField: 1, overlays: 1, nodes: 1, edges: 1, hostId: 1, seatCount: 1, roster: 1 })
+        .select({ currentTick: 1, landmass: 1, terrainField: 1, overlays: 1, nodes: 1, edges: 1, hostId: 1, seatCount: 1, roster: 1, endedAt: 1 })
         .lean();
     const roster: KingdomBuilderSeat[] = world?.roster ?? [];
     const seat = roster.find(entry => entry.userId === userId);
     // A world is open to its members only: the roster, or — for a world opened
     // before rosters existed — the owners of its settlements. Not a member and
-    // not there are the same answer, so a stranger can't probe for worlds.
-    if (!world || (!ownsSettlement && !seat)) {
+    // not there are the same answer, so a stranger can't probe for worlds —
+    // and an ended world (§9.1) is not there for anyone.
+    if (!world || world.endedAt || (!ownsSettlement && !seat)) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
     }
     if (seat && !ownsSettlement) {
@@ -92,6 +93,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     const [directory, invite] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
+        // The repair for a leave that died before handing the invitation on (§9.1).
+        hostId === userId && roster.length > 0
+            ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))
+            : undefined,
     ]);
 
     return {

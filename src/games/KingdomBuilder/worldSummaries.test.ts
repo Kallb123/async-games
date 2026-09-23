@@ -32,7 +32,7 @@ describe("Kingdom Builder world summaries", () => {
             { worldId: secondWorld.toString(), currentTick: 3, nextTickAt: "2026-09-21T14:00:00.000Z", settlementCount: 1, completedBuildLevels: 1, playerCount: 1, seatCount: 1 },
         ]);
         expect(KingdomBuilderSettlementModel.find).toHaveBeenCalledWith({ ownerId: "player-1" });
-        expect(findWorlds).toHaveBeenCalledWith({ _id: { $in: [firstWorld.toString(), secondWorld.toString()] } });
+        expect(findWorlds).toHaveBeenCalledWith({ _id: { $in: [firstWorld.toString(), secondWorld.toString()] }, endedAt: null });
     });
 
     it("does not read worlds when the player has no settlements", async () => {

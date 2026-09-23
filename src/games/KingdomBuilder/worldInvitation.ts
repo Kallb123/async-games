@@ -62,6 +62,25 @@ export async function liveWorldInvitation(worldId: string): Promise<{ joinCode: 
 }
 
 /**
+ * Brings a world's invitation back in line with its roster (GDD §9.1): the
+ * world's host is its sender, and a seat marked accepted by anyone no longer
+ * seated — a player who left, or the successor who now hosts instead — goes
+ * back to the code, so their freed start can be claimed by the next person to
+ * join. Accepted is only set after a join lands (see `acceptWorldSeat`), so a
+ * pending named invitee is never touched. Idempotent, and a read unless there
+ * is something to fix: `leaveWorld` runs it after every leave, and the host's
+ * world view runs it too, which repairs a leave that died before getting here.
+ */
+export async function reconcileWorldInvitation(worldId: string, hostId: string, rosterIds: readonly string[]): Promise<void> {
+    const stale = { inviteAccepted: true, userId: { $nin: rosterIds.filter(id => id !== hostId) } };
+    await KingdomBuilderInvitationModel.updateOne(
+        { worldId, $or: [{ senderId: { $ne: hostId } }, { userIdList: { $elemMatch: stale } }] },
+        { $set: { senderId: hostId, "userIdList.$[seat].userId": OPEN_SEAT_ID, "userIdList.$[seat].inviteAccepted": false } },
+        { arrayFilters: [{ "seat.inviteAccepted": stale.inviteAccepted, "seat.userId": stale.userId }] },
+    );
+}
+
+/**
  * `acceptSeat`'s answer for a world invitation. A world was running before
  * anyone was invited to it, so there is no "everyone has accepted, now begin"
  * gate and no `CreateGame`: accepting a seat is joining the world, there and

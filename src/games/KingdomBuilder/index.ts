@@ -1,5 +1,6 @@
 export * from "./KingdomBuilderSettlementModel";
 export * from "./KingdomBuilderWorldModel";
+export * from "./lifecycle";
 export * from "./persistence";
 export * from "./prototype";
 export * from "./tick";

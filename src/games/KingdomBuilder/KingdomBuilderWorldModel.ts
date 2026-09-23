@@ -12,6 +12,13 @@ export interface KingdomBuilderSeat {
     joinedAt: Date;
 }
 
+/**
+ * Why a world ended (GDD §9.1): its host ended it, its last player left, or an
+ * admin cleared it out. A season ending on schedule (PR 26) adds its own.
+ */
+export const KINGDOM_BUILDER_END_REASONS = ["host", "abandoned", "admin"] as const;
+export type KingdomBuilderEndReason = typeof KINGDOM_BUILDER_END_REASONS[number];
+
 export interface IKingdomBuilderWorld {
     seed: string;
     generationAttempt: number;
@@ -38,6 +45,13 @@ export interface IKingdomBuilderWorld {
     hostId?: string;
     seatCount?: number;
     roster?: KingdomBuilderSeat[];
+    /**
+     * When the world ended, and why (§9.1). Set once, by one conditional
+     * write; from then on the world never ticks, takes no command, lists on
+     * no dashboard, and is removed once the retention window has passed.
+     */
+    endedAt?: Date;
+    endReason?: KingdomBuilderEndReason;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -111,10 +125,16 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     hostId: String,
     seatCount: { type: Number, min: 1, max: 10 },
     roster: { type: [SeatSchema], required: false, default: undefined },
+    endedAt: Date,
+    endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });
 KingdomBuilderWorldSchema.index({ nextTickAt: 1, currentTick: 1 });
+// The admin list, newest first (docs/admin-tools.md).
+KingdomBuilderWorldSchema.index({ createdAt: -1 });
+// The removal sweep's query: only ended worlds carry the field, so only they are indexed.
+KingdomBuilderWorldSchema.index({ endedAt: 1 }, { partialFilterExpression: { endedAt: { $exists: true } } });
 
 export const KingdomBuilderWorldModel = models.KingdomBuilderWorld
     || model<IKingdomBuilderWorldDocument, IKingdomBuilderWorldModel>("KingdomBuilderWorld", KingdomBuilderWorldSchema);

@@ -24,7 +24,7 @@ export async function worldSummaries(userId: string): Promise<KingdomBuilderWorl
     }
     if (counts.size === 0) return [];
 
-    const worlds = await KingdomBuilderWorldModel.find({ _id: { $in: [...counts.keys()] } })
+    const worlds = await KingdomBuilderWorldModel.find({ _id: { $in: [...counts.keys()] }, endedAt: null })
         .select({ currentTick: 1, nextTickAt: 1, seatCount: 1, "roster.userId": 1 })
         .sort({ updatedAt: -1 })
         .lean();

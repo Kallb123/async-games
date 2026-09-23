@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
@@ -12,6 +12,11 @@ const tiles = Array.from({ length: 9 }, (_, position) => ({
     ...(position === 4 ? { building: { type: "town-centre" as const, level: 1 } } : {}),
 }));
 
+/** The world is live unless a test says otherwise. */
+function liveWorld() {
+    vi.spyOn(KingdomBuilderWorldModel, "exists").mockResolvedValue({ _id: worldId } as never);
+}
+beforeEach(liveWorld);
 afterEach(() => vi.restoreAllMocks());
 
 function existingSettlement(ownerId = "owner") {
@@ -28,6 +33,18 @@ describe("Kingdom Builder prototype construction", () => {
         await expect(queuePrototypeBuilding(worldId, settlementId, "intruder", 0, "mine")).rejects.toEqual(
             expect.objectContaining<Partial<KingdomBuilderPrototypeError>>({ code: "FORBIDDEN" }),
         );
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("takes no command on an ended world", async () => {
+        const exists = vi.spyOn(KingdomBuilderWorldModel, "exists").mockResolvedValue(null);
+        const update = vi.spyOn(KingdomBuilderSettlementModel, "findOneAndUpdate");
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "mine"))
+            .rejects.toEqual(expect.objectContaining({ code: "NOT_FOUND" }));
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia"))
+            .rejects.toEqual(expect.objectContaining({ code: "NOT_FOUND" }));
+        expect(exists).toHaveBeenCalledWith({ _id: worldId, endedAt: null });
         expect(update).not.toHaveBeenCalled();
     });
 
@@ -74,6 +91,7 @@ function withBarracks(level: number) {
 
 /** Stubs the pre-check read, the conditional write, and the view read after it. */
 function stubSettlement(existing: object, updated: object | null = { _id: settlementId }) {
+    liveWorld();
     const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
     findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(existing) }) } as never);
     findOne.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ nodeId: "start", resources: { wood: 0, stone: 0, iron: 0 }, ...existing }) } as never);
