@@ -178,8 +178,17 @@ export function isMaskArt(art: TileArt): art is Extract<TileArt, { layout: MaskL
     return isMaskLayout(art.layout);
 }
 
+
+        mountains: { path: "/art/kingdombuilder/overworld-mountains.png", tileWidth: 32, tileHeight: 32, margin: 0, spacing: 0 },
+
+export const AREA_ART: Readonly<Record<string, TileArt>> = {
+    m: { layout: "mask16", tiles: [{ sheet: "mountains", index: 7 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 12 }, { sheet: "mountains", index: 1 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 0 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 14 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 2 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 1 }, { sheet: "mountains", index: 7 }] },
+};
+
 export const TILESET: TilesetManifest = {
     sheets: {
+        // https://opengameart.org/content/worldmapoverworld-tileset
+        mountains: { path: "/art/kingdombuilder/overworld-mountains.png", tileWidth: 32, tileHeight: 32, margin: 0, spacing: 0 },
         ground: { path: "/art/kingdombuilder/overworld-grass.png", tileWidth: 16, tileHeight: 16, margin: 0, spacing: 0 },
     },
 };
@@ -194,7 +203,8 @@ export const AREA_ART: Readonly<Record<string, TileArt>> = {
     l: { layout: "mask16", tiles: [{ sheet: "ground", index: 61 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 50 }, { sheet: "ground", index: 62 }, { sheet: "ground", index: 49 }, { sheet: "ground", index: 61 }] },
     b: { layout: "mask16", tiles: [{ sheet: "ground", index: 61 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 72 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 48 }, { sheet: "ground", index: 60 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 74 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 73 }, { sheet: "ground", index: 50 }, { sheet: "ground", index: 62 }, { sheet: "ground", index: 49 }, { sheet: "ground", index: 61 }] },
     h: { layout: "mask16", tiles: [{ sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }, { sheet: "ground", index: 39 }] },
-    m: { layout: "mask16", tiles: [{ sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }] },
+    // m: { layout: "mask16", tiles: [{ sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }, { sheet: "ground", index: 115 }] },
+    m: { layout: "mask16", tiles: [{ sheet: "mountains", index: 7 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 12 }, { sheet: "mountains", index: 1 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 0 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 14 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 2 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 1 }, [{ sheet: "mountains", index: 7 }, { sheet: "mountains", index: 10 }]] },
 };
 
 export const OVERLAY_ART: Readonly<Record<string, TileArt>> = {
