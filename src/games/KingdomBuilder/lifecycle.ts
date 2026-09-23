@@ -1,12 +1,13 @@
 import { Types } from "mongoose";
 
-import { LOBBY_MAX_TTL_MS, OPEN_SEAT_ID } from "@/utils/games/lobby";
+import { LOBBY_MAX_TTL_MS } from "@/utils/games/lobby";
 
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_MAX_SEATS } from "./roster";
+import { reconcileWorldInvitation } from "./worldInvitation";
 
 /**
  * How long an ended world is kept before the tick cron removes it (GDD §9.1):
@@ -44,9 +45,9 @@ async function hostIdOf(worldId: string, world: { hostId?: string }): Promise<st
 }
 
 /**
- * Best-effort, after the write that decides things has landed. Every reader
- * already refuses an ended world (`joinWorld` won't seat anyone in one), so a
- * failure here leaves a stale row the removal sweep deletes, never a way in.
+ * Best-effort, after the write that decides things has landed: a failure is
+ * logged rather than failing a request whose real work is done. Each caller
+ * says what repairs it.
  */
 async function afterwards(what: string, worldId: string, step: () => Promise<unknown>) {
     try {
@@ -56,7 +57,11 @@ async function afterwards(what: string, worldId: string, step: () => Promise<unk
     }
 }
 
-/** Revokes a world's join code and invite rows, so nobody can be seated in a world that has ended. */
+/**
+ * Revokes a world's join code and invite rows. Every reader already refuses an
+ * ended world (`joinWorld` won't seat anyone in one), so a failure leaves a
+ * stale row the removal sweep deletes, never a way in.
+ */
 function revokeInvitation(worldId: string) {
     return afterwards("revoke the invitation", worldId, () => KingdomBuilderInvitationModel.deleteMany({ worldId }));
 }
@@ -93,9 +98,13 @@ export async function endWorld(worldId: string, userId: string, { deleteNow = fa
     }
 
     // Conditional on the host being who it was when read: a leave from the
-    // host's other tab that handed the world on in between fails this.
+    // host's other tab that handed the world on in between fails this. So does
+    // the host's own second tab ending it first — which is not a refusal.
     const ended = await markEnded(worldId, world.hostId ? { hostId: userId } : { hostId: { $exists: false } }, "host");
-    if (!ended) throw new KingdomBuilderPersistenceError("FORBIDDEN", "Only the host can end this world");
+    if (!ended) {
+        const now = await KingdomBuilderWorldModel.findById(worldId).select({ endedAt: 1, endReason: 1 }).lean();
+        if (!now?.endedAt || now.endReason !== "host") throw new KingdomBuilderPersistenceError("FORBIDDEN", "Only the host can end this world");
+    }
     if (deleteNow) await removeWorld(worldId);
 }
 
@@ -198,21 +207,12 @@ export async function leaveWorld(worldId: string, userId: string): Promise<void>
         if (!successor) {
             await revokeInvitation(worldId);
         } else {
-            // The invitation follows the roster. The seat on it that was the
-            // leaver's — or, when the host leaves, the successor's, who now
-            // hosts it instead of holding a seat — goes back to the code, so
-            // the freed site can be claimed by the next person to join.
-            const handingOn = world.hostId === userId;
-            const reopened = handingOn ? successor : userId;
-            await afterwards("hand on the invitation", worldId, () => KingdomBuilderInvitationModel.updateOne(
-                { worldId },
-                { $set: {
-                    "userIdList.$[seat].userId": OPEN_SEAT_ID,
-                    "userIdList.$[seat].inviteAccepted": false,
-                    ...(handingOn ? { senderId: successor } : {}),
-                } },
-                { arrayFilters: [{ "seat.userId": reopened }] },
-            ));
+            // The invitation follows the roster, so the freed start can be
+            // claimed by the next person to join. If this dies, the host's
+            // next look at the world repairs it.
+            const hostId = world.hostId === userId ? successor : world.hostId;
+            const remaining = roster.filter(seat => seat.userId !== userId).map(seat => seat.userId);
+            if (hostId) await afterwards("hand on the invitation", worldId, () => reconcileWorldInvitation(worldId, hostId, remaining));
         }
         return;
     }

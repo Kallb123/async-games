@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/utils/users/clerk", () => ({
     buildUserDirectory: vi.fn(async () => ({ name: (userId: string) => `name:${userId}`, imageUrl: () => null })),
 }));
-vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn() }));
+vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn(), reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
 
 import { buildUserDirectory } from "@/utils/users/clerk";

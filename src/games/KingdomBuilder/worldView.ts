@@ -7,7 +7,7 @@ import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuil
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
 import { ensureFirstSettlement } from "./roster";
-import { liveWorldInvitation } from "./worldInvitation";
+import { liveWorldInvitation, reconcileWorldInvitation } from "./worldInvitation";
 import { completedBuildLevels } from "./worldSummaryTypes";
 
 /** One seat in a world, as every member sees it (§11.3 PR 8). */
@@ -93,6 +93,10 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     const [directory, invite] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
+        // The repair for a leave that died before handing the invitation on (§9.1).
+        hostId === userId && roster.length > 0
+            ? reconcileWorldInvitation(worldId, hostId, memberIds).catch(error => console.error(`Kingdom Builder: could not reconcile the invitation for world ${worldId}`, error))
+            : undefined,
     ]);
 
     return {

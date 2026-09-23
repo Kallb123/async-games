@@ -2028,9 +2028,12 @@ one-line entries in the guide and tutorial registries.
   world to someone who has gone; the loser re-reads. The leaver's settlements
   are deleted before that write and again after, so a leave that dies partway
   leaves a player still seated rather than a settlement squatting on a freed
-  site. The invitation follows the roster: the leaver's seat on it goes back to
-  the code, and when the host leaves the successor becomes its sender and their
-  own seat reopens. The host can also leave rather than end, handing the world
+  site. The invitation follows the roster (`reconcileWorldInvitation`): the
+  host is its sender, and any seat accepted by someone no longer seated — the
+  leaver, or a successor who now hosts — goes back to the code. It runs after
+  every leave and on the host's own world view, which repairs a leave that died
+  before getting to it. A host's second tab ending an already-ended world
+  succeeds rather than being told it isn't the host. The host can also leave rather than end, handing the world
   on. Removal deletes settlements, then the invitation, then the world; the tick
   cron's last step removes up to 20 worlds ended over seven days
   (`LOBBY_MAX_TTL_MS`) ago, each in its own try, found through a partial index

@@ -1,9 +1,12 @@
 import { Types } from "mongoose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./worldInvitation", () => ({ reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
+
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
+import { reconcileWorldInvitation } from "./worldInvitation";
 import { adminEndWorld, endWorld, KINGDOM_BUILDER_ENDED_RETENTION_MS, leaveWorld, removeEndedWorlds, removeWorld } from "./lifecycle";
 
 const worldId = new Types.ObjectId().toString();
@@ -33,7 +36,10 @@ function mockDeletes() {
     };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(reconcileWorldInvitation).mockClear();
+});
 
 describe("endWorld", () => {
     const rostered = { hostId: "host", roster: [seat("host"), seat("guest")] };
@@ -64,7 +70,7 @@ describe("endWorld", () => {
     });
 
     it("refuses when the host changed between the read and the write", async () => {
-        mockWorldReads(rostered);
+        mockWorldReads(rostered, { hostId: "guest" });
         mockWorldWrites(0);
         const deletes = mockDeletes();
 
@@ -83,6 +89,14 @@ describe("endWorld", () => {
         await endWorld(worldId, "founder");
 
         expect(updateOne.mock.calls[0][0]).toEqual({ hostId: { $exists: false }, _id: worldId, endedAt: null });
+    });
+
+    it("takes a second tab's end, after the first already ended it, as done", async () => {
+        mockWorldReads(rostered, { endedAt: new Date(), endReason: "host" });
+        mockWorldWrites(0);
+        mockDeletes();
+
+        await expect(endWorld(worldId, "host")).resolves.toBeUndefined();
     });
 
     it("removes the world there and then when asked to", async () => {
@@ -110,11 +124,10 @@ describe("adminEndWorld", () => {
 });
 
 describe("leaveWorld", () => {
-    it("pulls a player's seat and settlements, and reopens their invitation seat", async () => {
+    it("pulls a player's seat and settlements, and brings the invitation in line", async () => {
         mockWorldReads({ hostId: "host", roster: [seat("host"), seat("guest")] });
         const updateOne = mockWorldWrites(1);
         const deletes = mockDeletes();
-        const invitation = vi.spyOn(KingdomBuilderInvitationModel, "updateOne").mockResolvedValue({} as never);
 
         await leaveWorld(worldId, "guest");
 
@@ -123,18 +136,13 @@ describe("leaveWorld", () => {
             { $pull: { roster: { userId: "guest" } } },
         );
         expect(deletes.settlements).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
-        expect(invitation).toHaveBeenCalledWith(
-            { worldId },
-            { $set: { "userIdList.$[seat].userId": "open-seat", "userIdList.$[seat].inviteAccepted": false } },
-            { arrayFilters: [{ "seat.userId": "guest" }] },
-        );
+        expect(reconcileWorldInvitation).toHaveBeenCalledWith(worldId, "host", ["host"]);
     });
 
     it("hands the host on to the longest-seated player, guarded on them still being there", async () => {
         mockWorldReads({ hostId: "host", roster: [seat("host"), seat("second"), seat("third")] });
         const updateOne = mockWorldWrites(1);
         mockDeletes();
-        const invitation = vi.spyOn(KingdomBuilderInvitationModel, "updateOne").mockResolvedValue({} as never);
 
         await leaveWorld(worldId, "host");
 
@@ -142,8 +150,7 @@ describe("leaveWorld", () => {
             { hostId: "host", "roster.userId": { $all: ["host", "second"] }, _id: worldId, endedAt: null },
             { $pull: { roster: { userId: "host" } }, $set: { hostId: "second" } },
         );
-        expect(invitation.mock.calls[0][1]).toEqual({ $set: expect.objectContaining({ senderId: "second" }) });
-        expect(invitation.mock.calls[0][2]).toEqual({ arrayFilters: [{ "seat.userId": "second" }] });
+        expect(reconcileWorldInvitation).toHaveBeenCalledWith(worldId, "second", ["second", "third"]);
     });
 
     it("re-reads and decides again when another leave lands first", async () => {
@@ -153,7 +160,6 @@ describe("leaveWorld", () => {
         );
         const updateOne = mockWorldWrites(0, 1);
         mockDeletes();
-        vi.spyOn(KingdomBuilderInvitationModel, "updateOne").mockResolvedValue({} as never);
 
         await leaveWorld(worldId, "host");
 

@@ -6,6 +6,7 @@ import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
 import RefreshAction from '@/components/ui/RefreshAction';
 import { useToast } from '@/components/ToastContext';
+import { useJsonMutation } from '@/utils/hooks/useJsonMutation';
 import { useRefreshableData } from '@/utils/hooks/useRefreshableData';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import { formatRelativeTime } from '@/utils/ui/time';
@@ -46,28 +47,21 @@ export default function AdminKingdomBuilderWorlds() {
     const [busy, setBusy] = useState<string | null>(null);
     const { data, setData, isLoading, isRefreshing, refresh } = useRefreshableData<AdminKingdomBuilderWorldsResponse>(ENDPOINT);
 
+    const { submit, isPending, message } = useJsonMutation<AdminKingdomBuilderWorldsResponse>(ENDPOINT, "Could not change that world. Please try again.");
+
     const act = async (world: AdminKingdomBuilderWorld, action: AdminKingdomBuilderWorldRequest['action']) => {
-        if (busy) return;
+        if (isPending) return;
         const question = action === 'delete'
             ? `Delete world ${world.seed} and every settlement in it? This can't be undone.`
             : `End world ${world.seed} for its ${world.playerCount} player${world.playerCount === 1 ? '' : 's'}? This can't be undone.`;
         if (!window.confirm(question)) return;
         setBusy(world.worldId);
-        try {
-            const body: AdminKingdomBuilderWorldRequest = { worldId: world.worldId, action };
-            const response = await fetch(ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (!response.ok) throw new Error(response.statusText || `HTTP ${response.status}`);
-            setData(await response.json() as AdminKingdomBuilderWorldsResponse);
+        const body: AdminKingdomBuilderWorldRequest = { worldId: world.worldId, action };
+        const worlds = await submit(body);
+        setBusy(null);
+        if (worlds) {
+            setData(worlds);
             showToast(action === 'delete' ? 'World deleted.' : 'World ended.', 'success');
-        } catch (error) {
-            console.error(`Failed to ${action} a Kingdom Builder world`, error);
-            showToast(`Could not ${action} that world. Please try again.`, 'danger');
-        } finally {
-            setBusy(null);
         }
     };
 
@@ -79,6 +73,7 @@ export default function AdminKingdomBuilderWorlds() {
             isRefreshing={isRefreshing}
             action={<RefreshAction onClick={refresh} />}
             empty={<div className="ag-empty">{data === null ? "Couldn't load the worlds." : 'No worlds yet.'}</div>}
+            hint={message ?? undefined}
         >
             {(data?.worlds ?? []).map(world => (
                 <ListRow
@@ -87,8 +82,8 @@ export default function AdminKingdomBuilderWorlds() {
                     title={<>{world.seed}{world.endedAt && <span className="ag-tag">Ended</span>}</>}
                     sub={worldLine(world, now)}
                     action={world.endedAt
-                        ? <ActionButton className="ag-btn ag-btn--danger" pending={busy === world.worldId} pendingLabel="Deleting…" onClick={() => act(world, 'delete')}>Delete</ActionButton>
-                        : <ActionButton className="ag-btn ag-btn--light" pending={busy === world.worldId} pendingLabel="Ending…" onClick={() => act(world, 'end')}>End</ActionButton>}
+                        ? <ActionButton className="ag-btn ag-btn--danger" pending={busy === world.worldId} pendingLabel="Deleting…" disabled={isPending} onClick={() => act(world, 'delete')}>Delete</ActionButton>
+                        : <ActionButton className="ag-btn ag-btn--light" pending={busy === world.worldId} pendingLabel="Ending…" disabled={isPending} onClick={() => act(world, 'end')}>End</ActionButton>}
                 />
             ))}
         </ListSection>

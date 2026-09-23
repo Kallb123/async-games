@@ -131,6 +131,8 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
 
 KingdomBuilderWorldSchema.index({ seed: 1 });
 KingdomBuilderWorldSchema.index({ nextTickAt: 1, currentTick: 1 });
+// The admin list, newest first (docs/admin-tools.md).
+KingdomBuilderWorldSchema.index({ createdAt: -1 });
 // The removal sweep's query: only ended worlds carry the field, so only they are indexed.
 KingdomBuilderWorldSchema.index({ endedAt: 1 }, { partialFilterExpression: { endedAt: { $exists: true } } });
 
