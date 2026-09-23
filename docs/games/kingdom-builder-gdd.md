@@ -2351,7 +2351,7 @@ reduced-motion rule in `ag-theme.css`.
   floods from each site to its reach — which is now 24, not 3: the old reach
   was the hop count carried into cost units, reached no resource from almost
   any start, and so every score was zero and the parity band never bit. With
-  a real reach every one of 20 seeds still passes by its third attempt, and
+  a real reach every one of 40 seeds still passes by its fourth attempt, and
   generation got faster — p50 about 180 ms, down from the best part of a
   second, since the straight-line walk of every pair of nodes is gone.
   `walkTileLine`, `edgeCostFor` and `weightedGraphDistances` went with it. A
