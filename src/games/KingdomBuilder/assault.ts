@@ -42,6 +42,16 @@ async function claimBattle(worldId: string, session: ClientSession) {
     if (live.modifiedCount !== 1) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
 }
 
+/** One battle: claimed, fought and saved in one transaction, then the caller's view with how it went. */
+async function runBattle(worldId: string, userId: string, fight: (session: ClientSession) => Promise<KingdomBuilderBattleReport>): Promise<KingdomBuilderBattleView> {
+    let report: KingdomBuilderBattleReport | undefined;
+    await mongoose.connection.transaction(async session => {
+        await claimBattle(worldId, session);
+        report = await fight(session);
+    });
+    return { ...(await worldView(worldId, userId)), battle: report! };
+}
+
 type Camp = { _id: Types.ObjectId; units: KingdomBuilderGarrison };
 
 /**
@@ -60,9 +70,7 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         throw new KingdomBuilderPersistenceError("NO_SIEGE", "This army isn't besieging anywhere");
     }
 
-    let report: KingdomBuilderBattleReport | undefined;
-    await mongoose.connection.transaction(async session => {
-        await claimBattle(worldId, session);
+    return runBattle(worldId, userId, async session => {
         const target = await KingdomBuilderSettlementModel.findOne({ worldId, nodeId: army.targetNodeId, ownerId: { $ne: userId } })
             .select({ garrison: 1 }).session(session).lean();
         const attackers = await KingdomBuilderArmyModel.find({ worldId, ownerId: userId, targetNodeId: army.targetNodeId, besiegingSince: { $ne: null } })
@@ -78,9 +86,8 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         } else {
             await KingdomBuilderArmyModel.deleteMany({ _id: { $in: attackers.map(attacker => attacker._id) }, worldId, ownerId: userId }, { session });
         }
-        report = { kind: "push", won: battle.attackerWon, sent, faced };
+        return { kind: "push", won: battle.attackerWon, sent, faced };
     });
-    return { ...(await worldView(worldId, userId)), battle: report! };
 }
 
 /**
@@ -94,9 +101,7 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
     const exists = await KingdomBuilderSettlementModel.exists({ _id: settlementId, worldId, ownerId: userId });
     if (!exists) throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement not found");
 
-    let report: KingdomBuilderBattleReport | undefined;
-    await mongoose.connection.transaction(async session => {
-        await claimBattle(worldId, session);
+    return runBattle(worldId, userId, async session => {
         const settlement = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId, ownerId: userId })
             .select({ nodeId: 1, garrison: 1 }).session(session).lean();
         if (!settlement) throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement not found");
@@ -112,7 +117,6 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
         } else {
             await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, { $set: { garrison: battle.attacker } }, { session });
         }
-        report = { kind: "sally", won: battle.attackerWon, sent, faced };
+        return { kind: "sally", won: battle.attackerWon, sent, faced };
     });
-    return { ...(await worldView(worldId, userId)), battle: report! };
 }

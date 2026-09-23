@@ -1735,6 +1735,13 @@ around it.
 > other is destroyed, and a tie holds for the defender. A won push destroys the
 > garrison but does not take the town — capture is a later rule — so the siege
 > goes on.
+>
+> One consequence of PR 20's sight: a settlement always sees its own tile, so a
+> defender sees exactly what is camped at their gate from the moment the siege
+> begins. The last paragraph below — sallying as a bet on a stack the defender
+> "mostly can't" see — therefore holds only for a relief force still on the
+> road, not for the besiegers themselves. Whether a besieging army should be
+> able to hide its numbers is part of §12's sight question.
 
 A siege is deliberately the *opening* move, not a lesser attack, and — per
 §6.4 — not a choice: any army that reaches a hostile player settlement opens

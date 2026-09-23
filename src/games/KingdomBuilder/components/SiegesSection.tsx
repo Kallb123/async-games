@@ -24,6 +24,8 @@ interface SiegesSectionProps {
 /** A battle being confirmed: which of the player's armies pushes, or which of their towns sallies out. */
 type Pending = { action: "push"; armyId: string } | { action: "sally"; settlementId: string };
 
+const keyOf = (pending: Pending) => `${pending.action}:${"armyId" in pending ? pending.armyId : pending.settlementId}`;
+
 function describeBattle(report: KingdomBuilderBattleReport): string {
     const faced = unitCount(report.faced) > 0 ? formatUnits(report.faced) : "nobody";
     if (report.kind === "push") {
@@ -45,7 +47,8 @@ function describeBattle(report: KingdomBuilderBattleReport): string {
  */
 export default function SiegesSection({ endpoint, view, placeName, onFought }: SiegesSectionProps) {
     const { submit, isPending, message } = useJsonMutation<KingdomBuilderBattleView>(endpoint, "That didn't go through — try again.");
-    const [confirming, setConfirming] = useState<Pending | null>(null);
+    // The one battle waiting on a second tap, by `keyOf`.
+    const [confirming, setConfirming] = useState<string | null>(null);
     const [report, setReport] = useState<KingdomBuilderBattleReport | null>(null);
     const mySettlements = view.settlements.filter(settlement => settlement.isMine && settlement.settlementId);
     const defending = mySettlements.filter(settlement => settlement.siege);
@@ -61,14 +64,12 @@ export default function SiegesSection({ endpoint, view, placeName, onFought }: S
             onFought(next);
         }
     };
-    const isConfirming = (pending: Pending) => confirming?.action === pending.action
-        && ("armyId" in pending ? "armyId" in confirming && confirming.armyId === pending.armyId : "settlementId" in confirming && confirming.settlementId === pending.settlementId);
-    const button = (pending: Pending, label: string, disabled = false) => isConfirming(pending)
+    const button = (pending: Pending, label: string, disabled = false) => confirming === keyOf(pending)
         ? <div className="ag-btn-row">
             <button type="button" className="ag-btn ag-btn--ghost" disabled={isPending} onClick={() => setConfirming(null)}>Cancel</button>
             <ActionButton className="ag-btn ag-btn--danger" pending={isPending} pendingLabel="Fighting…" onClick={() => fight(pending)}>{label}</ActionButton>
         </div>
-        : <button type="button" className="ag-btn ag-btn--light" disabled={disabled || isPending} onClick={() => setConfirming(pending)}>{label}</button>;
+        : <button type="button" className="ag-btn ag-btn--light" disabled={disabled || isPending} onClick={() => setConfirming(keyOf(pending))}>{label}</button>;
 
     return (
         <Section label="Sieges">

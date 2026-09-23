@@ -107,6 +107,8 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             // Camped at the owner's town since before sieges existed, and camped on open ground.
             army("a3", "home", { ownerId: "rival", travelled: 2, arrivedAtTick: 2 }),
             army("a4", "camp", { travelled: 2, arrivedAtTick: 2 }),
+            // Besieging a town that has since gone — its owner left the world.
+            army("a5", "camp", { travelled: 2, arrivedAtTick: 2, besiegingSince: 3 }),
         ] }) } as never);
         const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
 
@@ -120,6 +122,7 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             { deleteOne: { filter: { _id: "a1", worldId } } },
             { updateOne: { filter: { _id: "a2", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 6 } } } },
             { updateOne: { filter: { _id: "a3", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2, besiegingSince: 6 } } } },
+            { updateOne: { filter: { _id: "a5", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2 }, $unset: { besiegingSince: 1 } } } },
         ]);
     });
 });
