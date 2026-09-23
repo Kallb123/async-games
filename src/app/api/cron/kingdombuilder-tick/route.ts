@@ -38,21 +38,22 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     if (claimed.modifiedCount !== 1) return false;
 
     if (ticked.settlements.length) {
-        await KingdomBuilderSettlementModel.bulkWrite(ticked.settlements.map(settlement => ({
-            updateOne: {
-                filter: { _id: settlement._id, worldId },
-                update: settlement.construction
-                    ? { $set: {
-                        tiles: settlement.tiles,
-                        resources: settlement.resources,
-                        construction: settlement.construction,
-                    } }
-                    : {
-                        $set: { tiles: settlement.tiles, resources: settlement.resources },
-                        $unset: { construction: 1 },
-                    },
-            },
-        })), { session });
+        await KingdomBuilderSettlementModel.bulkWrite(ticked.settlements.map(settlement => {
+            const fields = {
+                tiles: settlement.tiles,
+                resources: settlement.resources,
+                trainingQueue: settlement.trainingQueue,
+                garrison: settlement.garrison,
+            };
+            return {
+                updateOne: {
+                    filter: { _id: settlement._id, worldId },
+                    update: settlement.construction
+                        ? { $set: { ...fields, construction: settlement.construction } }
+                        : { $set: fields, $unset: { construction: 1 } },
+                },
+            };
+        }), { session });
     }
     return true;
 }

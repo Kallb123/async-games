@@ -44,4 +44,21 @@ describe("Kingdom Builder tick engine", () => {
         expect(completed.settlements[0].resources.wood).toBe(0);
         expect(applyTick(completed).settlements[0].resources.wood).toBe(2);
     });
+
+    it("trains the barracks' queue into the garrison alongside construction", () => {
+        const input = { currentTick: 0, settlements: [settlement({
+            construction: { tilePosition: 3, buildingType: "barracks", targetLevel: 2, ticksRemaining: 2 },
+            trainingQueue: [{ unitType: "militia", ticksRemaining: 1 }, { unitType: "militia", ticksRemaining: 2 }],
+        })] };
+
+        const once = applyTick(input);
+        expect(once.settlements[0].garrison?.militia).toBe(1);
+        expect(once.settlements[0].trainingQueue).toEqual([{ unitType: "militia", ticksRemaining: 2 }]);
+        expect(once.settlements[0].construction?.ticksRemaining).toBe(1);
+        expect(input.settlements[0].trainingQueue).toHaveLength(2);
+
+        const thrice = applyTick(applyTick(once));
+        expect(thrice.settlements[0].garrison?.militia).toBe(2);
+        expect(thrice.settlements[0].trainingQueue).toEqual([]);
+    });
 });

@@ -3,6 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
+import { advanceTraining } from "./units";
 
 export interface KingdomBuilderTickWorld {
     currentTick: number;
@@ -25,7 +26,8 @@ export function productionFor(tiles: readonly KingdomBuilderTile[]): KingdomBuil
 /**
  * Applies one deterministic world tick without mutating its input. Production
  * is collected before construction advances, so a building completed by this
- * tick starts producing on the next one.
+ * tick starts producing on the next one. Training advances beside it: the
+ * barracks' queue and the building queue are separate (§4.2).
  */
 export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
     return {
@@ -51,6 +53,7 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
                     stone: settlement.resources.stone + production.stone,
                     iron: settlement.resources.iron + production.iron,
                 },
+                ...advanceTraining(settlement.trainingQueue, settlement.garrison),
                 ...(construction && ticksRemaining !== 0
                     ? { construction: { ...construction, ticksRemaining: ticksRemaining! } }
                     : { construction: undefined }),
