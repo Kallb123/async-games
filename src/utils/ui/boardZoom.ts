@@ -47,3 +47,19 @@ export function focusZoom(levels: number[], rectWidth: number, viewBoxWidth: num
     const fitting = levels.filter(level => level <= ceiling);
     return fitting.length > 0 ? Math.max(...fitting) : FIT_WIDTH;
 }
+
+/**
+ * Where a pinch leaves the board along one axis: the offset of the board's
+ * top-left corner from the pane's, in pixels (zero or negative — the board
+ * never pulls away from the frame's edge). The content point that sat under
+ * the fingers when the pinch began (`scroll + startFinger`, at the board's
+ * size then) is scaled by `scale` and kept under where the fingers are now,
+ * so the board both zooms about the fingers and travels with them.
+ * `contentSize` is the board's size along this axis when the pinch began,
+ * `paneSize` the frame's; the result is clamped so no gap opens at either
+ * end, and `-offset` is the scroll position to commit once the pinch ends.
+ */
+export function pinchOffset(scroll: number, startFinger: number, finger: number, scale: number, contentSize: number, paneSize: number): number {
+    const offset = finger - (scroll + startFinger) * scale;
+    return Math.min(0, Math.max(paneSize - contentSize * scale, offset));
+}
