@@ -13,9 +13,9 @@ import { joinWorld } from "./roster";
 import type { WorldNode } from "./worldgen";
 
 const NODES: WorldNode[] = [
-    { id: "start-a", x: 10, y: 10, kind: "settlement", siteType: "player-start" },
-    { id: "start-b", x: 40, y: 10, kind: "settlement", siteType: "player-start" },
-    { id: "open-1", x: 70, y: 10, kind: "settlement", siteType: "expansion" },
+    { id: "start-a", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "player-start" },
+    { id: "start-b", x: 40, y: 10, tile: 1, kind: "settlement", siteType: "player-start" },
+    { id: "open-1", x: 70, y: 10, tile: 2, kind: "settlement", siteType: "expansion" },
 ];
 
 function seat(userId: string, siteId: string) {

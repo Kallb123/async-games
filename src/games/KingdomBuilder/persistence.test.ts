@@ -41,7 +41,7 @@ describe("Kingdom Builder persistence", () => {
 
     it("founds a player's level-one town centre on an eligible site", async () => {
         const worldId = new Types.ObjectId().toString();
-        mockWorldNodes([{ id: "start-1", x: 10, y: 10, kind: "settlement", siteType: "player-start" }]);
+        mockWorldNodes([{ id: "start-1", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "player-start" }]);
         const create = vi.spyOn(KingdomBuilderSettlementModel, "create").mockImplementation(async (value) => value as never);
 
         await foundSettlement(worldId, " user-1 ", "start-1");
@@ -59,7 +59,7 @@ describe("Kingdom Builder persistence", () => {
 
     it("does not found on expansion or terrain nodes", async () => {
         const worldId = new Types.ObjectId().toString();
-        mockWorldNodes([{ id: "future-site", x: 10, y: 10, kind: "settlement", siteType: "expansion" }]);
+        mockWorldNodes([{ id: "future-site", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "expansion" }]);
 
         await expect(foundSettlement(worldId, "user-1", "future-site")).rejects.toEqual(
             expect.objectContaining<Partial<KingdomBuilderPersistenceError>>({ code: "SITE_NOT_AVAILABLE" }),
@@ -68,7 +68,7 @@ describe("Kingdom Builder persistence", () => {
 
     it("allows an owner to found more than one settlement at expansion sites", async () => {
         const worldId = new Types.ObjectId().toString();
-        mockWorldNodes([{ id: "expansion-1", x: 10, y: 10, kind: "settlement", siteType: "expansion" }]);
+        mockWorldNodes([{ id: "expansion-1", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "expansion" }]);
         const create = vi.spyOn(KingdomBuilderSettlementModel, "create").mockImplementation(async (value) => value as never);
 
         await foundSettlement(worldId, "user-1", "expansion-1", undefined, "expansion");

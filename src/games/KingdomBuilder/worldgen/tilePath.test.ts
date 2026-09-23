@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findTilePath, isPassableTile, tileCostsFrom, travelGridFor } from "./tilePath";
+import { findTilePath, isPassableTile, snapToTiles, tileCostsFrom, travelGridFor } from "./tilePath";
 import type { TerrainField } from "./terrainField";
 
 /** A hand-drawn field, one string per row — the grid the tests read. */
@@ -151,5 +151,32 @@ describe("tileCostsFrom", () => {
         const grid = travelGridFor(fieldOf("ogg"));
         expect(isPassableTile(grid, 0)).toBe(false);
         expect([...tileCostsFrom(grid, 0)]).toEqual([Infinity, Infinity, Infinity]);
+    });
+});
+
+describe("snapToTiles", () => {
+    it("stands a point on the tile under it, at that tile's centre", () => {
+        const [node] = snapToTiles([{ id: "a", x: 2.3, y: 0.4 }], travelGridFor(fieldOf("ggg")));
+        expect(node).toEqual({ id: "a", x: 3, y: 1, tile: 1 });
+    });
+
+    it("steps a point off water onto the nearest dry tile", () => {
+        const field = fieldOf(
+            "ggrgg",
+            "ggrgg",
+        );
+        expect(snapToTiles([{ x: 5.9, y: 1 }], travelGridFor(field))[0].tile).toBe(3);
+        expect(snapToTiles([{ x: 4.1, y: 1 }], travelGridFor(field))[0].tile).toBe(1);
+    });
+
+    it("never stands two points on one tile, nor on one already taken", () => {
+        const taken = new Set([1]);
+        const nodes = snapToTiles([{ x: 3.4, y: 1 }, { x: 3.2, y: 1 }], travelGridFor(fieldOf("ggggg")), taken);
+        expect(nodes.map(node => node.tile)).toEqual([2, 0]);
+        expect([...taken].sort()).toEqual([0, 1, 2]);
+    });
+
+    it("gives up rather than wandering the whole map when nothing near is free", () => {
+        expect(() => snapToTiles([{ x: 1, y: 1 }], travelGridFor(fieldOf("o".repeat(30))))).toThrow(/No free passable tile/);
     });
 });

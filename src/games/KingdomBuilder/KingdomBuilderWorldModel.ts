@@ -71,6 +71,8 @@ const WorldNodeSchema = new Schema({
     id: { type: String, required: true },
     x: { type: Number, required: true },
     y: { type: Number, required: true },
+    // Absent on a world generated before PR 16, which is snapped on read (§3.8).
+    tile: Number,
     kind: { type: String, enum: ["terrain", "settlement"], required: true },
     terrain: { type: String, enum: ["forest", "quarry", "ore"] },
     resourceYield: Number,

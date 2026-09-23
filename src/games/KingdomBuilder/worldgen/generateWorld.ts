@@ -59,7 +59,7 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
             const onMainland = mainlandOf(baseField);
             const terrainNodes = placeTerrainNodes(landmass, baseField, onMainland, random, options.terrain);
             const requestedStarts = options.settlements?.playerStarts ?? 10;
-            const settlementSites = placeSettlementSites(landmass, onMainland, terrainNodes, random, options.settlements);
+            const settlementSites = placeSettlementSites(landmass, baseField, onMainland, terrainNodes, random, options.settlements);
             const terrainField = applySitesToTerrainField(baseField, settlementSites);
             // §3.7's composition bands and mountain-region rule, checked
             // before the graph — the expensive step — so a world whose ground

@@ -7,6 +7,7 @@
 
 import { areaWeightForCode } from "./areas";
 import { overlayForCode, type OverlayPlacement } from "./overlays";
+import type { Point } from "./landmass";
 import type { TerrainField } from "./terrainField";
 
 export interface TravelGrid {
@@ -58,6 +59,44 @@ export function travelGridFor(field: TerrainField, overlays: readonly OverlayPla
 
 export function isPassableTile(grid: TravelGrid, tile: number): boolean {
     return Number.isInteger(tile) && tile >= 0 && tile < grid.weights.length && grid.weights[tile] !== Infinity;
+}
+
+/** How far, in rings of tiles, a node may be moved to find ground of its own before generation gives up on the attempt. */
+const SNAP_SEARCH_RINGS = 8;
+
+/**
+ * Stands every point on a tile of its own (§3.8): the one under it when that
+ * is passable and free, otherwise the nearest one that is — so a node the
+ * noise dropped in a river steps onto its bank. `x`/`y` become the tile's
+ * centre. `taken` holds tiles already spoken for and gains each one chosen,
+ * so a second call can keep clear of the first's.
+ */
+export function snapToTiles<T extends Point>(points: readonly T[], grid: TravelGrid, taken: Set<number> = new Set()): (T & { tile: number })[] {
+    return points.map(point => {
+        const col = Math.max(0, Math.min(grid.columns - 1, Math.floor(point.x / grid.tileSize)));
+        const row = Math.max(0, Math.min(grid.rows - 1, Math.floor(point.y / grid.tileSize)));
+        const centreOf = (tile: number): Point => ({ x: (tile % grid.columns + 0.5) * grid.tileSize, y: (Math.floor(tile / grid.columns) + 0.5) * grid.tileSize });
+        let best: { tile: number; distance: number } | undefined;
+        // Rings are square, so the nearest free tile by straight-line distance
+        // can sit one ring further out than the first ring with any at all.
+        for (let ring = 0; ring <= SNAP_SEARCH_RINGS && (best === undefined || ring <= best.distance / grid.tileSize + 1); ring++) {
+            for (let dr = -ring; dr <= ring; dr++) {
+                for (let dc = -ring; dc <= ring; dc++) {
+                    if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+                    const c = col + dc, r = row + dr;
+                    if (c < 0 || c >= grid.columns || r < 0 || r >= grid.rows) continue;
+                    const tile = r * grid.columns + c;
+                    if (taken.has(tile) || grid.weights[tile] === Infinity) continue;
+                    const centre = centreOf(tile);
+                    const distance = Math.hypot(centre.x - point.x, centre.y - point.y);
+                    if (!best || distance < best.distance) best = { tile, distance };
+                }
+            }
+        }
+        if (!best) throw new Error(`No free passable tile near (${point.x.toFixed(1)}, ${point.y.toFixed(1)})`);
+        taken.add(best.tile);
+        return { ...point, ...centreOf(best.tile), tile: best.tile };
+    });
 }
 
 const STEPS: readonly (readonly [number, number])[] = [

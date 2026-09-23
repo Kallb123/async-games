@@ -10,7 +10,7 @@ function fieldOf(columns: number, rows: number, codes: string): TerrainField {
 }
 
 function settlement(id: string, x: number, y: number, siteType: SettlementNode["siteType"] = "player-start"): SettlementNode {
-    return { id, kind: "settlement", siteType, x, y };
+    return { id, kind: "settlement", siteType, x, y, tile: Math.floor(x / 2) };
 }
 
 describe("deriveRoadOverlays", () => {

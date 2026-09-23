@@ -1,6 +1,7 @@
 import { WORLD_AREA_SCALE, pointDistance, type Landmass, type Point, type TerrainNode, type TerrainNodeType } from "./landmass";
 import type { RandomSource } from "./random";
 import { areaCodeAt, type TerrainField } from "./terrainField";
+import { snapToTiles, travelGridFor } from "./tilePath";
 
 export interface TerrainNodeOptions {
     count?: number;
@@ -20,12 +21,16 @@ const TERRAIN_TYPE_BY_AREA_CODE: Partial<Record<string, TerrainNodeType>> = {
     m: "ore",
 };
 
-/** Poisson-disc-style rejection sampling over the mainland (never an offshore island a route can't reach), one node per matching patch of ground. */
+/**
+ * Poisson-disc-style rejection sampling over the mainland (never an offshore
+ * island a route can't reach), one node per matching patch of ground, each
+ * then stood on a tile of its own (§3.8).
+ */
 export function placeTerrainNodes(landmass: Landmass, field: TerrainField, onMainland: (point: Point) => boolean, random: RandomSource, options: TerrainNodeOptions = {}): TerrainNode[] {
     const count = options.count ?? 32 * WORLD_AREA_SCALE;
     const minimumDistance = options.minimumDistance ?? 5.5;
     const maximumAttempts = options.maximumAttempts ?? count * 2000;
-    const nodes: TerrainNode[] = [];
+    const nodes: Omit<TerrainNode, "tile">[] = [];
 
     for (let attempt = 0; attempt < maximumAttempts && nodes.length < count; attempt++) {
         const point = { x: random.between(3, landmass.width - 3), y: random.between(3, landmass.height - 3) };
@@ -42,5 +47,5 @@ export function placeTerrainNodes(landmass: Landmass, field: TerrainField, onMai
     }
 
     if (nodes.length !== count) throw new Error(`Could only place ${nodes.length} of ${count} terrain nodes`);
-    return nodes;
+    return snapToTiles(nodes, travelGridFor(field));
 }

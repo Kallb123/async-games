@@ -3,7 +3,7 @@ import { generateWorld } from "./generateWorld";
 import { connectWorldGraph, edgeCostFor, isConnected } from "./graphConnectivity";
 import { createRandom } from "./random";
 import { checkSettlementFairness } from "./settlementSites";
-import { generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
+import { generateBaseTerrainField, mainlandOf, tileCentre, type TerrainField } from "./terrainField";
 import { WORLD_AREA_SCALE, generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
 import { MOUNTAINS_CODE } from "./areas";
@@ -36,7 +36,7 @@ describe("Kingdom Builder world generation", () => {
         }
     });
 
-    it("places separated terrain nodes only on land, matching the ground beneath them", () => {
+    it("places separated terrain nodes only on land, matching the ground beneath them, each on a tile of its own", () => {
         const random = createRandom("terrain");
         const landmass = generateLandmass(random);
         const { field } = generateBaseTerrainField(landmass, random);
@@ -44,7 +44,12 @@ describe("Kingdom Builder world generation", () => {
         expect(nodes).toHaveLength(20);
         expect(nodes.every(node => isLand(landmass, node))).toBe(true);
         expect(new Set(nodes.map(node => node.terrain))).toEqual(new Set(["forest", "quarry", "ore"]));
-        for (const node of nodes) expect(nodes.filter(other => Math.hypot(node.x - other.x, node.y - other.y) < 5)).toHaveLength(1);
+        expect(new Set(nodes.map(node => node.tile)).size).toBe(20);
+        for (const node of nodes) {
+            expect(node).toMatchObject(tileCentre(node.tile % field.columns, Math.floor(node.tile / field.columns)));
+            // Standing a node on its tile's centre moves it at most half a tile's diagonal.
+            expect(nodes.filter(other => Math.hypot(node.x - other.x, node.y - other.y) < 5 - 2 * Math.SQRT2)).toHaveLength(1);
+        }
     });
 
     it("connects every node with a real, terrain-derived movement cost", () => {
@@ -84,8 +89,8 @@ describe("Kingdom Builder world generation", () => {
 
     it("crosses a river only through a bridge it writes on the crossing tile", () => {
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
+            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1, tile: 0 },
+            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1, tile: 4 },
         ];
         const field = fieldOf(5, 1, "ggrgg");
         const { edges, overlays } = connectWorldGraph(nodes, field, createRandom("river"), 0);
@@ -101,8 +106,8 @@ describe("Kingdom Builder world generation", () => {
 
     it("orients a bridge/ford by the direction of travel across it, not the water's own direction", () => {
         const northSouth: SettlementNode[] = [
-            { id: "north", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "south", kind: "settlement", siteType: "expansion", x: 1, y: 9 },
+            { id: "north", kind: "settlement", siteType: "expansion", x: 1, y: 1, tile: 0 },
+            { id: "south", kind: "settlement", siteType: "expansion", x: 1, y: 9, tile: 4 },
         ];
         const field = fieldOf(1, 5, "grrrg");
         const { overlays } = connectWorldGraph(northSouth, field, createRandom("river-ns"), 0);
@@ -111,8 +116,8 @@ describe("Kingdom Builder world generation", () => {
 
     it("never crosses open ocean, with or without an extra edge to try", () => {
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
+            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1, tile: 0 },
+            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1, tile: 4 },
         ];
         const field = fieldOf(5, 1, "ggogg");
         expect(() => connectWorldGraph(nodes, field, createRandom("no-crossing"), 0)).toThrow("Unable to connect world graph");
@@ -120,10 +125,10 @@ describe("Kingdom Builder world generation", () => {
 
     it("reports graph-hop separation, parity, and cornering violations from a fixed fixture", () => {
         const starts: SettlementNode[] = ["a", "b", "c", "d"].map((id, index) => ({
-            id, kind: "settlement", siteType: "player-start", x: index, y: 0,
+            id, kind: "settlement", siteType: "player-start", x: index, y: 0, tile: index,
         }));
         const terrain: TerrainNode[] = ["a", "b", "c"].map((owner, index) => ({
-            id: `ore-${owner}`, kind: "terrain", terrain: "ore", resourceYield: 10, x: index, y: 1,
+            id: `ore-${owner}`, kind: "terrain", terrain: "ore", resourceYield: 10, x: index, y: 1, tile: 4 + index,
         }));
         const pairs = [["a", "b"], ["a", "c"], ["a", "d"], ["a", "ore-a"], ["b", "ore-b"], ["c", "ore-c"]];
         const edges: WorldEdge[] = pairs.map(([from, to], index) => ({

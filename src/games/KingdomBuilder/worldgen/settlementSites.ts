@@ -1,6 +1,8 @@
 import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
 import { graphDistances, weightedGraphDistances } from "./graphConnectivity";
+import type { TerrainField } from "./terrainField";
+import { snapToTiles, travelGridFor } from "./tilePath";
 
 export interface SettlementOptions {
     playerStarts?: number;
@@ -16,9 +18,13 @@ export interface FairnessReport {
     reasons: string[];
 }
 
-/** Places settlement candidates on the mainland; topology later decides which become starts. */
+/**
+ * Places settlement candidates on the mainland, each on a tile of its own that
+ * no terrain node stands on (§3.8); topology later decides which become starts.
+ */
 export function placeSettlementSites(
     landmass: Landmass,
+    field: TerrainField,
     onMainland: (point: Point) => boolean,
     terrainNodes: readonly TerrainNode[],
     random: RandomSource,
@@ -40,9 +46,10 @@ export function placeSettlementSites(
     }
     if (candidates.length < total) throw new Error(`Could only find ${candidates.length} settlement candidates`);
 
-    return random.shuffle(candidates).slice(0, total).map((point, index): SettlementNode => ({
+    const sites = random.shuffle(candidates).slice(0, total).map((point, index): Omit<SettlementNode, "tile"> => ({
         id: `settlement-site-${index}`, kind: "settlement", siteType: "expansion", ...point,
     }));
+    return snapToTiles(sites, travelGridFor(field), new Set(terrainNodes.map(node => node.tile)));
 }
 
 /**

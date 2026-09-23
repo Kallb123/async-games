@@ -11,6 +11,11 @@ export interface Point {
 
 interface BaseWorldNode extends Point {
     id: string;
+    /**
+     * The tile the node stands on (§3.8), row-major into the terrain field —
+     * passable, and nobody else's. `x`/`y` are that tile's centre.
+     */
+    tile: number;
 }
 
 export interface TerrainNode extends BaseWorldNode {
