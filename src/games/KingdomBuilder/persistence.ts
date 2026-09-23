@@ -3,6 +3,8 @@ import { Types, type ClientSession } from "mongoose";
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
+import { catchmentForSettlement } from "./land";
+import { resourcesOf } from "./resources";
 import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
@@ -80,7 +82,7 @@ export async function foundSettlement(
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
     }
 
-    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, endedAt: 1 });
+    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, terrainField: 1, endedAt: 1 });
     const world = await (session ? query.session(session) : query).lean();
     if (!world || world.endedAt) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
@@ -109,7 +111,9 @@ export async function foundSettlement(
         tiles: createStartingTiles(),
         // Only a first settlement gets the stockpile (§4.5): a free second one
         // carrying its own would print resources.
-        resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : { wood: 0, stone: 0, iron: 0 },
+        resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : resourcesOf(),
+        // Worked out once, here: the ground never changes under a world (§4.6).
+        catchment: catchmentForSettlement(world, { nodeId: siteId }),
     };
     if (!session) return KingdomBuilderSettlementModel.create(values);
     const [settlement] = await KingdomBuilderSettlementModel.create([values], { session });

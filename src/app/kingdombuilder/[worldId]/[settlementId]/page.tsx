@@ -8,8 +8,15 @@ import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import Stat from "@/components/ui/Stat";
 import type { KingdomBuilderResources, KingdomBuilderSettlementView } from "@/games/KingdomBuilder";
-import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "@/games/KingdomBuilder/buildings";
-import { canAfford, formatResources, shortfallFor } from "@/games/KingdomBuilder/resources";
+import {
+    KINGDOM_BUILDER_BUILDING_PRODUCES,
+    KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
+    buildTicksFor,
+    buildingCostFor,
+    type KingdomBuilderPrototypeBuilding,
+} from "@/games/KingdomBuilder/buildings";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, type KingdomBuilderResourceType } from "@/games/KingdomBuilder/resources";
+import { outputPerLevelFor, type KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -26,13 +33,28 @@ import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
 import styles from "./page.module.css";
 
-const BUILDING_DETAILS: Record<string, { name: string; icon: string; resource?: string }> = {
+const BUILDING_DETAILS: Record<string, { name: string; icon: string; role?: string }> = {
     "town-centre": { name: "Town centre", icon: "🏰" },
-    "lumber-camp": { name: "Lumber camp", icon: "🪵", resource: "produces wood every tick" },
-    quarry: { name: "Quarry", icon: "🪨", resource: "produces stone every tick" },
-    mine: { name: "Mine", icon: "⛏️", resource: "produces iron every tick" },
-    barracks: { name: "Barracks", icon: "🏯", resource: "trains army units" },
+    "lumber-camp": { name: "Lumber camp", icon: "🪵" },
+    quarry: { name: "Quarry", icon: "🪨" },
+    farm: { name: "Farm", icon: "🌾" },
+    mine: { name: "Mine", icon: "⛏️" },
+    barracks: { name: "Barracks", icon: "🏯", role: "trains army units" },
 };
+
+/** What the land is called when it yields each resource — "Rich woodland" (§4.6). */
+const LAND_NAMES: Record<KingdomBuilderResourceType, string> = { wood: "woodland", stone: "stone", iron: "iron", wheat: "farmland" };
+
+function landLabel(resource: KingdomBuilderResourceType, catchment: KingdomBuilderCatchment): string {
+    const tier = catchment[resource];
+    return tier === "none" ? `No ${LAND_NAMES[resource]}` : `${tier[0].toUpperCase()}${tier.slice(1)} ${LAND_NAMES[resource]}`;
+}
+
+/** "+2 wood" a tick for a production building at this level on this land, or nothing for one that makes nothing. */
+function outputOf(type: string, level: number, catchment: KingdomBuilderCatchment): string | null {
+    const resource = KINGDOM_BUILDER_BUILDING_PRODUCES[type as KingdomBuilderPrototypeBuilding];
+    return resource ? `+${level * outputPerLevelFor(catchment[resource])} ${resource}` : null;
+}
 
 /**
  * What a row costs against the stores, for every priced row — buildings and
@@ -110,9 +132,13 @@ export default function KingdomBuilderSettlementPage({
                 <>
                     <Section label="Resources" isLoading={isLoading}>
                         <div className="ag-stat-row">
-                            <Stat value={data?.resources.wood ?? "—"} label="wood" />
-                            <Stat value={data?.resources.stone ?? "—"} label="stone" />
-                            <Stat value={data?.resources.iron ?? "—"} label="iron" />
+                            {KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => (
+                                <Stat
+                                    key={resource}
+                                    value={data?.resources[resource] ?? "—"}
+                                    label={data ? <>{resource}<span className={styles.land}>{landLabel(resource, data.catchment)}</span></> : resource}
+                                />
+                            ))}
                         </div>
                     </Section>
 
@@ -138,7 +164,11 @@ export default function KingdomBuilderSettlementPage({
                                         <div className={`${styles.tile}${tile.construction ? ` ${styles.constructing}` : ""}`} key={tile.position}>
                                             <span className={styles.mark}>{BUILDING_DETAILS[buildingType ?? ""]?.icon ?? "◇"}</span>
                                             <span className={styles.name}>{BUILDING_DETAILS[buildingType ?? ""]?.name ?? "Empty tile"}</span>
-                                            {tile.building && <span className={styles.note}>Level {tile.building.level}</span>}
+                                            {tile.building && (
+                                                <span className={styles.note}>
+                                                    {[`Level ${tile.building.level}`, outputOf(tile.building.type, tile.building.level, data.catchment)].filter(Boolean).join(" · ")}
+                                                </span>
+                                            )}
                                             {tile.construction && <span className={styles.note}>{tile.construction.ticksRemaining} ticks left</span>}
                                         </div>
                                     );
@@ -161,15 +191,21 @@ export default function KingdomBuilderSettlementPage({
                                 <div className="ag-build-list">
                                     {data && buildableTypes.map(buildingType => {
                                         const price = priceFor(buildingCostFor(buildingType, 1), data.resources);
+                                        const produces = KINGDOM_BUILDER_BUILDING_PRODUCES[buildingType];
+                                        // Land with none of its resource can't hold it (§4.6); the row stays, saying why.
+                                        const barren = produces !== undefined && data.catchment[produces] === "none";
+                                        const role = produces ? `${outputOf(buildingType, 1, data.catchment)} a tick` : BUILDING_DETAILS[buildingType].role;
                                         return (
                                             <BuildRow
                                                 key={buildingType}
                                                 icon={BUILDING_DETAILS[buildingType].icon}
                                                 name={BUILDING_DETAILS[buildingType].name}
-                                                cost={`${price.label} · ${ticks(buildTicksFor(1))} · ${BUILDING_DETAILS[buildingType].resource}`}
-                                                tag={pending === buildingType ? "Queuing…" : price.affordable ? "Build" : "Can't afford"}
-                                                tagMuted={!price.affordable}
-                                                disabled={selectedTile === null || !price.affordable || isPending}
+                                                cost={barren
+                                                    ? `This settlement's land has no ${produces}`
+                                                    : `${price.label} · ${ticks(buildTicksFor(1))} · ${role}`}
+                                                tag={pending === buildingType ? "Queuing…" : barren ? `No ${produces}` : price.affordable ? "Build" : "Can't afford"}
+                                                tagMuted={barren || !price.affordable}
+                                                disabled={selectedTile === null || barren || !price.affordable || isPending}
                                                 pending={pending === buildingType}
                                                 onClick={() => queueBuilding(buildingType)}
                                             />

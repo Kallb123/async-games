@@ -15,6 +15,7 @@ import {
     areaWeightForCode,
     windowAreaFor,
 } from "./areas";
+import { KINGDOM_BUILDER_RESOURCE_TYPES } from "../resources";
 
 describe("the area registry", () => {
     it("gives every area a unique, single-character code", () => {
@@ -36,6 +37,30 @@ describe("the area registry", () => {
             } else {
                 expect(area.placement.elevation[0], `${area.name}'s elevation band is inverted`).toBeLessThanOrEqual(area.placement.elevation[1]);
             }
+        }
+    });
+
+    it("declares what every area yields in a catchment (§4.6), even if nothing, in known resources and sensible amounts", () => {
+        const resources = new Set(KINGDOM_BUILDER_RESOURCE_TYPES as readonly string[]);
+        for (const area of AREAS) {
+            expect(area.yields, `${area.name} declares no yields`).toBeDefined();
+            for (const [resource, amount] of Object.entries({ ...area.yields, ...area.irrigated })) {
+                expect(resources.has(resource), `${area.name} yields unknown ${resource}`).toBe(true);
+                expect(amount, `${area.name}'s ${resource}`).toBeGreaterThan(0);
+                expect(amount, `${area.name}'s ${resource}`).toBeLessThanOrEqual(2);
+            }
+            if (area.irrigated) {
+                for (const [resource, amount] of Object.entries(area.yields)) {
+                    expect(area.irrigated[resource as keyof typeof area.irrigated] ?? 0, `${area.name} yields less by water`).toBeGreaterThanOrEqual(amount);
+                }
+            }
+            if (area.irrigates) expect(area.yields, `${area.name} irrigates, so yields nothing itself`).toEqual({});
+        }
+    });
+
+    it("yields every resource from some ground, or no building for it could ever be raised", () => {
+        for (const resource of KINGDOM_BUILDER_RESOURCE_TYPES) {
+            expect(AREAS.some(area => (area.yields[resource] ?? 0) > 0), resource).toBe(true);
         }
     });
 

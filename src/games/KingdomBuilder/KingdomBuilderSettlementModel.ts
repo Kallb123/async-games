@@ -1,5 +1,7 @@
 import { Document, Model, Schema, Types, model, models } from "mongoose";
 
+import { KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
+import { KINGDOM_BUILDER_YIELD_TIERS, type KingdomBuilderCatchment } from "./worldgen/catchment";
 import {
     KINGDOM_BUILDER_UNIT_TYPES,
     type KingdomBuilderGarrison,
@@ -9,7 +11,7 @@ import {
 export const KINGDOM_BUILDER_GRID_SIZE = 9;
 export const KINGDOM_BUILDER_TOWN_CENTRE_INDEX = 4;
 
-export const KINGDOM_BUILDER_BUILDING_TYPES = ["town-centre", "lumber-camp", "quarry", "mine", "barracks", "market", "walls"] as const;
+export const KINGDOM_BUILDER_BUILDING_TYPES = ["town-centre", "lumber-camp", "quarry", "mine", "farm", "barracks", "market", "walls"] as const;
 export type KingdomBuilderBuildingType = typeof KINGDOM_BUILDER_BUILDING_TYPES[number];
 
 export interface KingdomBuilderTile {
@@ -24,6 +26,8 @@ export interface KingdomBuilderResources {
     wood: number;
     stone: number;
     iron: number;
+    /** From PR 18 (§4.6). A document from before it has none stored, and reads as zero through `resourcesOf`. */
+    wheat: number;
 }
 
 export interface KingdomBuilderConstruction {
@@ -46,6 +50,12 @@ export interface IKingdomBuilderSettlement {
     trainingQueue?: KingdomBuilderTrainingOrder[];
     /** Units stationed here. Absent on older documents, which read as empty. */
     garrison?: KingdomBuilderGarrison;
+    /**
+     * How well its land yields each resource (§4.6), worked out once at
+     * founding — the ground never changes under a world. Absent on a
+     * settlement founded before PR 18 until the tick or a view backfills it.
+     */
+    catchment?: KingdomBuilderCatchment;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -67,7 +77,13 @@ const ResourcesSchema = new Schema<KingdomBuilderResources>({
     wood: { type: Number, required: true, min: 0, default: 0 },
     stone: { type: Number, required: true, min: 0, default: 0 },
     iron: { type: Number, required: true, min: 0, default: 0 },
+    wheat: { type: Number, required: true, min: 0, default: 0 },
 }, { _id: false });
+
+const CatchmentSchema = new Schema<KingdomBuilderCatchment>(
+    Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [resource, { type: String, enum: KINGDOM_BUILDER_YIELD_TIERS, required: true }])),
+    { _id: false },
+);
 
 const ConstructionSchema = new Schema<KingdomBuilderConstruction>({
     tilePosition: { type: Number, required: true, min: 0, max: KINGDOM_BUILDER_GRID_SIZE - 1 },
@@ -107,6 +123,7 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     construction: ConstructionSchema,
     trainingQueue: { type: [TrainingOrderSchema], default: undefined },
     garrison: GarrisonSchema,
+    catchment: CatchmentSchema,
 }, { timestamps: true });
 
 KingdomBuilderSettlementSchema.index({ ownerId: 1, worldId: 1 });

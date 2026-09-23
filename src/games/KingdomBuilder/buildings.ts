@@ -1,12 +1,24 @@
 // Pure, so the settlement screen can read the same list, timings and prices
 // the server checks against without pulling Mongoose into the client bundle.
 
-import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
+import type { KingdomBuilderBuildingType, KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources, type KingdomBuilderResourceType } from "./resources";
 
-export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine", "barracks"] as const;
+export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
+
+/**
+ * What each production building makes. Its output per level is set by how
+ * well the settlement's land yields that resource (§4.6), and on land that
+ * yields none of it the building can't be built.
+ */
+export const KINGDOM_BUILDER_BUILDING_PRODUCES: Partial<Record<KingdomBuilderBuildingType, KingdomBuilderResourceType>> = {
+    "lumber-camp": "wood",
+    quarry: "stone",
+    mine: "iron",
+    farm: "wheat",
+};
 export const KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS = 2;
 
 /** Ticks to raise a building to a level: the first costs the prototype's two, each level after it two more. */

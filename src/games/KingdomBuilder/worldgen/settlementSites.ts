@@ -1,25 +1,18 @@
+import { catchmentFor, catchmentScore, missingResources, type KingdomBuilderCatchment } from "./catchment";
 import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
 import { graphDistances } from "./graphConnectivity";
 import type { TerrainField } from "./terrainField";
-import { snapToTiles, tileCostsFrom, travelGridFor, type TravelGrid } from "./tilePath";
+import { snapToTiles, travelGridFor } from "./tilePath";
 
 export interface SettlementOptions {
     playerStarts?: number;
     expansionSites?: number;
     minimumStartHops?: number;
-    /** How far a start's resource score looks, in travel cost over the tiles (§3.8) — the units an edge's `movementCost` is in. */
-    resourceReach?: number;
     parityTolerance?: number;
 }
 
-/**
- * Roughly three typical routes' worth of travel (a route costs about eight) —
- * the "three hops" this score used to count. Before §3.8 the reach was the
- * bare number 3 in cost units, which reached no resource at all from almost
- * any start, so every score was zero and the parity band never bit.
- */
-const DEFAULT_RESOURCE_REACH = 24;
+type FairnessOptions = Pick<SettlementOptions, "minimumStartHops" | "parityTolerance">;
 
 export interface FairnessReport {
     valid: boolean;
@@ -61,30 +54,31 @@ export function placeSettlementSites(
     return snapToTiles(sites, travelGridFor(field), new Set(terrainNodes.map(node => node.tile)));
 }
 
-/**
- * Total yield reachable within a travel-cost budget (§3.3) — a flood over the
- * tiles from the site's own (§3.8), the same search an army will make, rather
- * than a walk of the edges someone happened to draw.
- */
-function resourceScore(grid: TravelGrid, site: SettlementNode, terrainNodes: readonly TerrainNode[], resourceReach: number): number {
-    const costs = tileCostsFrom(grid, site.tile, resourceReach);
-    return terrainNodes.reduce((total, node) => total + (costs[node.tile] <= resourceReach ? node.resourceYield : 0), 0);
+/** Each site's land (§4.6), read once — the same tiers the settlement founded there will store. */
+function catchmentsOf(sites: readonly SettlementNode[], field: TerrainField): Map<string, KingdomBuilderCatchment> {
+    return new Map(sites.map(site => [site.id, catchmentFor(field, site.tile)]));
 }
 
+/**
+ * Scores player starts on the land around them (§3.3, §4.6): the total of
+ * their yield tiers must sit in the parity band — composition may differ, a
+ * Rich woodland start and a Rich mountain one are both fair — and every start
+ * must yield all four resources at least Poorly, since a start with no wheat
+ * or no iron can never train a single unit.
+ */
 export function checkSettlementFairness(
     sites: readonly SettlementNode[],
-    terrainNodes: readonly TerrainNode[],
     edges: readonly WorldEdge[],
-    grid: TravelGrid,
-    options: Pick<SettlementOptions, "minimumStartHops" | "resourceReach" | "parityTolerance"> = {},
+    field: TerrainField,
+    options: FairnessOptions = {},
+    catchments: ReadonlyMap<string, KingdomBuilderCatchment> = catchmentsOf(sites, field),
 ): FairnessReport {
     const minimumHops = options.minimumStartHops ?? 3;
-    const resourceReach = options.resourceReach ?? DEFAULT_RESOURCE_REACH;
     const parityTolerance = options.parityTolerance ?? 0.35;
     const starts = sites.filter(site => site.siteType === "player-start");
-    // Separation and cornering are topology (how many edges apart), so they stay hop-based; only the resource score is time-weighted.
+    // Separation and cornering are topology (how many edges apart), so they stay hop-based; the resource score is the land's.
     const hopMaps = new Map(starts.map(site => [site.id, graphDistances(site.id, edges)]));
-    const scores = Object.fromEntries(starts.map(site => [site.id, resourceScore(grid, site, terrainNodes, resourceReach)]));
+    const scores = Object.fromEntries(starts.map(site => [site.id, catchmentScore(catchments.get(site.id)!)]));
     const ordered = Object.values(scores).sort((a, b) => a - b);
     const median = ordered[Math.floor(ordered.length / 2)] ?? 0;
     const reasons: string[] = [];
@@ -92,6 +86,8 @@ export function checkSettlementFairness(
     for (const start of starts) {
         const distances = hopMaps.get(start.id)!;
         if (median > 0 && Math.abs(scores[start.id] - median) / median > parityTolerance) reasons.push(`${start.id} falls outside the resource-parity band`);
+        const missing = missingResources(catchments.get(start.id)!);
+        if (missing.length > 0) reasons.push(`${start.id} has no ${missing.join(" or ")} in its land`);
         for (const other of starts) {
             if (start.id < other.id && (distances.get(other.id) ?? Infinity) < minimumHops) reasons.push(`${start.id} and ${other.id} are too close`);
         }
@@ -105,21 +101,23 @@ export function checkSettlementFairness(
 /** Chooses which already-placed sites are starts once graph distances are known. */
 export function assignFairStartingSites(
     sites: readonly SettlementNode[],
-    terrainNodes: readonly TerrainNode[],
     edges: readonly WorldEdge[],
-    grid: TravelGrid,
+    field: TerrainField,
     random: RandomSource,
     playerStarts = 10,
-    options: Pick<SettlementOptions, "minimumStartHops" | "resourceReach" | "parityTolerance"> = {},
+    options: FairnessOptions = {},
 ): { sites: SettlementNode[]; fairness: FairnessReport } | undefined {
-    const resourceReach = options.resourceReach ?? DEFAULT_RESOURCE_REACH;
     const tolerance = options.parityTolerance ?? 0.35;
     const minimumHops = options.minimumStartHops ?? 3;
     const distances = new Map(sites.map(site => [site.id, graphDistances(site.id, edges)]));
-    const candidateScores = new Map(sites.map(site => [site.id, resourceScore(grid, site, terrainNodes, resourceReach)]));
+    const catchments = catchmentsOf(sites, field);
+    // Only land yielding all four resources can hold a start, so the band is
+    // centred on those sites alone.
+    const complete = sites.filter(site => missingResources(catchments.get(site.id)!).length === 0);
+    const candidateScores = new Map(complete.map(site => [site.id, catchmentScore(catchments.get(site.id)!)]));
     const orderedScores = [...candidateScores.values()].sort((a, b) => a - b);
     const median = orderedScores[Math.floor(orderedScores.length / 2)] ?? 0;
-    const eligible = sites.filter(site => median === 0 || Math.abs(candidateScores.get(site.id)! - median) / median <= tolerance);
+    const eligible = complete.filter(site => median === 0 || Math.abs(candidateScores.get(site.id)! - median) / median <= tolerance);
 
     for (let attempt = 0; attempt < 250; attempt++) {
         const chosen: SettlementNode[] = [];
@@ -133,7 +131,7 @@ export function assignFairStartingSites(
             ...site,
             siteType: selected.has(site.id) ? "player-start" : "expansion",
         }));
-        const fairness = checkSettlementFairness(classified, terrainNodes, edges, grid, options);
+        const fairness = checkSettlementFairness(classified, edges, field, options, catchments);
         if (fairness.valid) return { sites: classified, fairness };
     }
     return undefined;

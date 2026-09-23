@@ -21,24 +21,43 @@ interface Economy {
     startingStockpile: Amounts;
     /** What every town centre produces each tick on its own, so a settlement too poor for its cheapest building still earns its way to one. */
     townCentreTrickle: Amounts;
+    /** How far round its own tile a settlement's land reaches (§4.6), in tiles. */
+    catchmentRadius: number;
+    /**
+     * The share of that land a resource must come from to reach each tier, and
+     * what a production building makes there per level. Below `poor` — none of
+     * the land yields it — the building can't be built at all.
+     */
+    yieldTiers: Record<"poor" | "good" | "rich", { fromShare: number; outputPerLevel: number }>;
 }
 
 export const KINGDOM_BUILDER_ECONOMY = {
     buildingCosts: {
         "lumber-camp": { wood: 15 },
         quarry: { wood: 15 },
+        farm: { wood: 10, stone: 5 },
         mine: { wood: 20, stone: 10 },
         barracks: { wood: 30, stone: 20, iron: 10 },
     },
+    // Armies eat (§4.6): every unit's price carries wheat, cavalry most — horses eat.
     unitCosts: {
-        militia: { wood: 10, iron: 5 },
-        scout: { wood: 8, iron: 4 },
-        infantry: { wood: 10, iron: 15 },
-        cavalry: { wood: 20, iron: 25 },
-        "siege-engine": { wood: 40, stone: 20, iron: 15 },
+        militia: { wood: 10, iron: 5, wheat: 5 },
+        scout: { wood: 8, iron: 4, wheat: 3 },
+        infantry: { wood: 10, iron: 15, wheat: 8 },
+        cavalry: { wood: 20, iron: 25, wheat: 15 },
+        "siege-engine": { wood: 40, stone: 20, iron: 15, wheat: 10 },
     },
     // Buys a lumber camp and a quarry with 10 wood and 20 stone over — not yet
-    // a mine, so the first decision is what to wait for.
-    startingStockpile: { wood: 40, stone: 20 },
-    townCentreTrickle: { wood: 1 },
+    // a mine or a farm, so the first decision is what to wait for.
+    startingStockpile: { wood: 40, stone: 20, wheat: 20 },
+    townCentreTrickle: { wood: 1, wheat: 1 },
+    // A 9 × 9 square with its corners cut: 69 tiles, most of them the settlement's own neighbourhood.
+    catchmentRadius: 4,
+    // Output moves from 1 to 2 a level for a Good site, so the typical economy
+    // runs at about twice PR 13's rate; the prices above are pitched at that.
+    yieldTiers: {
+        poor: { fromShare: 0, outputPerLevel: 1 },
+        good: { fromShare: 0.15, outputPerLevel: 2 },
+        rich: { fromShare: 0.35, outputPerLevel: 3 },
+    },
 } satisfies Economy;

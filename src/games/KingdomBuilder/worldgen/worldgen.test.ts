@@ -9,7 +9,7 @@ import { WORLD_AREA_SCALE, generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
 import { MOUNTAINS_CODE } from "./areas";
 import { checkWorldShape } from "./worldShape";
-import type { SettlementNode, TerrainNode, WorldEdge } from "./landmass";
+import type { SettlementNode, WorldEdge } from "./landmass";
 
 /** How many mountain tiles fall in each of the map's 3 × 3 ninths, row-major — so index 4 is the middle one. */
 function mountainTilesByNinth(field: TerrainField): number[] {
@@ -122,23 +122,23 @@ describe("Kingdom Builder world generation", () => {
         expect(() => connectWorldGraph(nodes, field, travelGridFor(field), createRandom("no-crossing"), 0)).toThrow("Unable to connect world graph");
     });
 
-    it("reports graph-hop separation, parity, and cornering violations from a fixed fixture", () => {
+    it("reports graph-hop separation, parity, cornering and missing-resource violations from a fixed fixture", () => {
         const starts: SettlementNode[] = ["a", "b", "c", "d"].map((id, index) => ({
-            id, kind: "settlement", siteType: "player-start", x: index, y: 0, tile: index,
+            id, kind: "settlement", siteType: "player-start", x: index * 20 + 1, y: 1, tile: index * 10,
         }));
-        const terrain: TerrainNode[] = ["a", "b", "c"].map((owner, index) => ({
-            id: `ore-${owner}`, kind: "terrain", terrain: "ore", resourceYield: 10, x: index, y: 1, tile: 4 + index,
-        }));
-        const pairs = [["a", "b"], ["a", "c"], ["a", "d"], ["a", "ore-a"], ["b", "ore-b"], ["c", "ore-c"]];
+        const pairs = [["a", "b"], ["a", "c"], ["a", "d"]];
         const edges: WorldEdge[] = pairs.map(([from, to], index) => ({
             id: `e${index}`, from, to, terrain: "plains", movementCost: 1, chokepoint: false,
         }));
-        // Starts on the top row, their ore just below, on grass: one step (cost 2) apart.
-        const grid = travelGridFor(fieldOf(4, 2, "gggggggg"));
-        const report = checkSettlementFairness(starts, terrain, edges, grid, { minimumStartHops: 2, resourceReach: 2, parityTolerance: 0.2 });
+        // One row of ground: a's land has mountains, woodland and grass in
+        // reach; everyone else's is grass alone — rich in wheat, and nothing else.
+        const field = fieldOf(40, 1, "mmwgg" + "g".repeat(35));
+        const report = checkSettlementFairness(starts, edges, field, { minimumStartHops: 2, parityTolerance: 0.2 });
         expect(report.reasons).toContain("a and b are too close");
         expect(report.reasons).toContain("a is cornered by other starts");
-        expect(report.reasons.some(reason => reason.includes("resource-parity band"))).toBe(true);
+        expect(report.reasons).toContain("a falls outside the resource-parity band");
+        expect(report.reasons).toContain("b has no wood or stone or iron in its land");
+        expect(report.reasons.some(reason => reason.startsWith("a has no"))).toBe(false);
     });
 
     it("reproduces a world exactly from its seed", () => {
@@ -156,9 +156,9 @@ describe("Kingdom Builder world generation", () => {
             const mountains = ninths.reduce((sum, count) => sum + count, 0);
             if (ninths.filter(count => count > 0).length >= 3) spreadWorlds++;
             middleNinthShare += ninths[4] / mountains / 20;
-            const terrain = world.nodes.filter((node): node is TerrainNode => node.kind === "terrain");
             const sites = world.nodes.filter((node): node is SettlementNode => node.kind === "settlement");
-            const report = checkSettlementFairness(sites, terrain, world.edges, travelGridFor(world.terrainField, world.overlays));
+            const report = checkSettlementFairness(sites, world.edges, world.terrainField);
+            // Every start yields all four resources (§4.6) — checkSettlementFairness says so if one doesn't.
             expect(report.reasons, `seed fairness-${index}, attempt ${world.generationAttempt}`).toEqual([]);
             expect(sites.filter(site => site.siteType === "player-start")).toHaveLength(10);
             expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(14 * WORLD_AREA_SCALE);

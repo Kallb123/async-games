@@ -82,7 +82,7 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
                 lastFailure = "graph was disconnected";
                 continue;
             }
-            const assignment = assignFairStartingSites(settlementSites, terrainNodes, edges, grid, random, requestedStarts, options.settlements);
+            const assignment = assignFairStartingSites(settlementSites, edges, terrainField, random, requestedStarts, options.settlements);
             if (!assignment) {
                 lastFailure = "no starting-site assignment passed the fairness constraints";
                 continue;

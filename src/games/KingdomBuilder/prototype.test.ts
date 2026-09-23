@@ -19,10 +19,12 @@ function liveWorld() {
 beforeEach(liveWorld);
 afterEach(() => vi.restoreAllMocks());
 
-const plenty = { wood: 500, stone: 500, iron: 500 };
+const plenty = { wood: 500, stone: 500, iron: 500, wheat: 500 };
+/** Land that yields everything, so a test about something else never trips the tier check. */
+const land = { wood: "good", stone: "good", iron: "good", wheat: "good" } as const;
 
 function existingSettlement(ownerId = "owner") {
-    const lean = vi.fn().mockResolvedValue({ ownerId, tiles, resources: plenty });
+    const lean = vi.fn().mockResolvedValue({ ownerId, tiles, resources: plenty, catchment: land });
     const select = vi.fn().mockReturnValue({ lean });
     vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue({ select } as never);
 }
@@ -59,10 +61,10 @@ describe("Kingdom Builder prototype construction", () => {
 
     it("atomically limits a settlement to one queued building", async () => {
         const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
-        const initialLean = vi.fn().mockResolvedValue({ ownerId: "owner", tiles, resources: plenty });
+        const initialLean = vi.fn().mockResolvedValue({ ownerId: "owner", tiles, resources: plenty, catchment: land });
         findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: initialLean }) } as never);
         findOne.mockReturnValueOnce({
-            lean: vi.fn().mockResolvedValue({ ownerId: "owner", nodeId: "start", tiles, resources: { wood: 0, stone: 0, iron: 0 },
+            lean: vi.fn().mockResolvedValue({ ownerId: "owner", nodeId: "start", tiles, resources: { wood: 0, stone: 0, iron: 0 }, catchment: land,
                 construction: { tilePosition: 0, buildingType: "mine", targetLevel: 1, ticksRemaining: 2 } }),
         } as never);
         const updateLean = vi.fn().mockResolvedValue({ _id: settlementId });
@@ -81,7 +83,7 @@ describe("Kingdom Builder prototype construction", () => {
             expect.objectContaining({ ownerId: "owner", construction: { $exists: false } }),
             {
                 $set: { construction: { tilePosition: 0, buildingType: "mine", targetLevel: 1, ticksRemaining: 2 } },
-                $inc: { "resources.wood": -20, "resources.stone": -10, "resources.iron": -0 },
+                $inc: { "resources.wood": -20, "resources.stone": -10 },
             },
             { new: true },
         );
@@ -98,8 +100,8 @@ function withBarracks(level: number) {
 function stubSettlement(existing: object, updated: object | null = { _id: settlementId }) {
     liveWorld();
     const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
-    findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ resources: plenty, ...existing }) }) } as never);
-    findOne.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ nodeId: "start", resources: { wood: 0, stone: 0, iron: 0 }, ...existing }) } as never);
+    findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ resources: plenty, catchment: land, ...existing }) }) } as never);
+    findOne.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ nodeId: "start", resources: { wood: 0, stone: 0, iron: 0 }, catchment: land, ...existing }) } as never);
     const update = vi.spyOn(KingdomBuilderSettlementModel, "findOneAndUpdate")
         .mockReturnValue({ lean: vi.fn().mockResolvedValue(updated) } as never);
     vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({
@@ -129,11 +131,43 @@ describe("Kingdom Builder building costs", () => {
             expect.objectContaining({
                 ownerId: "owner",
                 construction: { $exists: false },
-                "resources.wood": { $gte: 15 }, "resources.stone": { $gte: 0 }, "resources.iron": { $gte: 0 },
+                "resources.wood": { $gte: 15 },
             }),
-            expect.objectContaining({ $inc: { "resources.wood": -15, "resources.stone": -0, "resources.iron": -0 } }),
+            expect.objectContaining({ $inc: { "resources.wood": -15 } }),
             { new: true },
         );
+        // Only what the price asks for is checked — a settlement stored before
+        // wheat existed has no wheat field for a `$gte: 0` to find.
+        expect(Object.keys(update.mock.calls[0][0] as object)).not.toContain("resources.wheat");
+    });
+
+    it("refuses a building on land that yields none of its resource, before writing anything", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles, catchment: { ...land, iron: "none" } });
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "mine"))
+            .rejects.toEqual(expect.objectContaining({ code: "NO_YIELD" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("works out the land of a settlement from before PR 18 from its world's ground, and saves it once", async () => {
+        const update = stubSettlement({ ownerId: "owner", nodeId: "start", tiles, catchment: undefined });
+        // The world's ground: one row of grass, the settlement on its first tile — wheat, and nothing else.
+        vi.mocked(KingdomBuilderWorldModel.findById).mockReturnValue({
+            select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({
+                currentTick: 3, nextTickAt: new Date("2030-01-01T00:00:00Z"),
+                terrainField: { columns: 12, rows: 1, tileSize: 2, codes: "g".repeat(12) },
+                nodes: [{ id: "start", kind: "settlement", siteType: "player-start", x: 1, y: 1, tile: 0 }],
+            }) }),
+        } as never);
+        const save = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({} as never);
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "lumber-camp"))
+            .rejects.toEqual(expect.objectContaining({ code: "NO_YIELD" }));
+        expect(save).toHaveBeenCalledWith(
+            expect.objectContaining({ catchment: { $exists: false } }),
+            { $set: { catchment: { wood: "none", stone: "none", iron: "none", wheat: "rich" } } },
+        );
+        expect(update).not.toHaveBeenCalled();
     });
 
     it("reports a lost race instead of overdrawing", async () => {
@@ -195,7 +229,7 @@ describe("Kingdom Builder barracks", () => {
 });
 
 describe("Kingdom Builder training", () => {
-    const rich = { wood: 100, stone: 100, iron: 100 };
+    const rich = { wood: 100, stone: 100, iron: 100, wheat: 100 };
 
     it("refuses forged units and somebody else's barracks", async () => {
         await expect(queueUnitTraining(worldId, settlementId, "owner", "dragon"))
@@ -221,7 +255,12 @@ describe("Kingdom Builder training", () => {
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
 
         vi.restoreAllMocks();
-        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: { wood: 100, stone: 100, iron: 4 } });
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: { wood: 100, stone: 100, iron: 4, wheat: 100 } });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
+
+        // Armies eat (§4.6) — and a settlement stored before wheat existed has none.
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: { wood: 100, stone: 100, iron: 100 } });
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
     });
 
@@ -235,10 +274,10 @@ describe("Kingdom Builder training", () => {
                 _id: settlementId, worldId, ownerId: "owner",
                 tiles: { $elemMatch: { "building.type": "barracks", "building.level": 3 } },
                 "trainingQueue.19": { $exists: false },
-                "resources.wood": { $gte: 10 }, "resources.stone": { $gte: 0 }, "resources.iron": { $gte: 5 },
+                "resources.wood": { $gte: 10 }, "resources.iron": { $gte: 5 }, "resources.wheat": { $gte: 5 },
             },
             {
-                $inc: { "resources.wood": -10, "resources.stone": -0, "resources.iron": -5 },
+                $inc: { "resources.wood": -10, "resources.iron": -5, "resources.wheat": -5 },
                 $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1 } },
             },
             { new: true },
