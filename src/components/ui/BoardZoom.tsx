@@ -100,17 +100,35 @@ function midpoint(touches: TouchList, pane: HTMLDivElement): { x: number; y: num
  * lets it keep up with the fingers on a board of a few hundred SVG nodes.
  */
 interface Pinch {
-    /** Finger spread, midpoint and scroll position when the pinch began. */
+    /**
+     * The baseline the current pair of fingers is measured from: their spread
+     * and midpoint, and the board's scroll position, size and zoom as drawn
+     * when they took hold. Re-taken whenever the pair changes mid-gesture (a
+     * third finger comes and goes), so the new pair carries on from wherever
+     * the old one left the board rather than from where the pinch began.
+     */
     spread: number;
     start: { x: number; y: number };
     scroll: { x: number; y: number };
-    /** The board's size, the pane's, and the zoom they were at, when it began. */
     content: { x: number; y: number };
-    pane: { x: number; y: number };
     zoom: number;
-    /** Where the latest frame left it: its scale over `zoom`, and the board's offset in the pane. */
-    scale: number;
+    /** The pane's size, which a pinch never changes. */
+    pane: { x: number; y: number };
+    /** The zoom actually laid out, which the transform scales from. */
+    laidOut: number;
+    /** Where the latest frame left it: the zoom drawn, and the board's offset in the pane. */
+    drawn: number;
     offset: { x: number; y: number };
+}
+
+/** Re-take a pinch's baseline from the fingers now down, keeping the board where it's drawn. */
+function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
+    const grown = pinch.drawn / pinch.zoom;
+    pinch.spread = spread(touches);
+    pinch.start = midpoint(touches, pane);
+    pinch.scroll = { x: -pinch.offset.x, y: -pinch.offset.y };
+    pinch.content = { x: pinch.content.x * grown, y: pinch.content.y * grown };
+    pinch.zoom = pinch.drawn;
 }
 
 /**
@@ -165,9 +183,14 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     // anchor — the two can never both be live, since nothing sets one while the
     // other is pending, but a focus reads as a deliberate "look here" and a
     // leftover anchor from an earlier pinch never should be. A finished pinch
-    // hands over its transform here too, in the same frame the new width lands.
+    // hands over its transform here too, in the same frame the new width lands
+    // (`scrollToRef`, which likewise is only ever set with nothing else
+    // pending). And a zoom that lands while fingers are still down — the pill,
+    // or a focus arriving mid-gesture — ends that pinch here: the board it was
+    // transforming has just been laid out afresh underneath it.
     useLayoutEffect(() => {
         zoomRef.current = zoom;
+        pinchRef.current = null;
         const pane = paneRef.current;
         if (!pane) return;
         const anchor = anchorRef.current;
@@ -195,18 +218,21 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     // so it's remeasured whenever either might have changed. The board's
     // proportions are the same at every zoom, which is what lets this measure
     // it at whatever zoom (or mid-pinch scale) it happens to be at.
+    // The board is looked up afresh each time, and its wrapper watched rather
+    // than the board itself, so a board that renders after BoardZoom mounts
+    // (or is swapped for another) is still measured.
     useEffect(() => {
         const pane = paneRef.current;
-        const board = pane?.querySelector('svg');
-        if (!pane || !board) return;
+        const content = contentRef.current;
+        if (!pane || !content) return;
         const measure = () => {
-            const box = board.getBoundingClientRect();
-            if (box.width > 0) setFitHeight(pane.clientWidth * box.height / box.width);
+            const box = content.querySelector('svg')?.getBoundingClientRect();
+            if (box && box.width > 0) setFitHeight(pane.clientWidth * box.height / box.width);
         };
         measure();
         const observer = new ResizeObserver(measure);
         observer.observe(pane);
-        observer.observe(board);
+        observer.observe(content);
         return () => observer.disconnect();
     }, []);
 
@@ -220,6 +246,12 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         const level = focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
         const target: FocusTarget = { ...focusCentre(focus.rect, viewBox), smooth: !prefersReducedMotion() };
         if (level === zoom) {
+            // Fingers still down would otherwise go on drawing over a pane
+            // that has just scrolled out from under them.
+            if (pinchRef.current && contentRef.current) {
+                pinchRef.current = null;
+                contentRef.current.style.transform = '';
+            }
             applyFocusTarget(pane, target);
         } else {
             focusTargetRef.current = target;
@@ -262,9 +294,10 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
                 start,
                 scroll,
                 content: { x: pane.scrollWidth, y: pane.scrollHeight },
-                pane: { x: pane.clientWidth, y: pane.clientHeight },
                 zoom: zoomRef.current,
-                scale: 1,
+                pane: { x: pane.clientWidth, y: pane.clientHeight },
+                laidOut: zoomRef.current,
+                drawn: zoomRef.current,
                 offset: { x: -scroll.x, y: -scroll.y },
             };
             // For the length of the pinch the pane sits unscrolled and the
@@ -278,32 +311,40 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
 
         const onTouchMove = (event: TouchEvent) => {
             const pinch = pinchRef.current;
-            if (!pinch || event.touches.length !== 2) return;
+            if (!pinch) return;
             // Non-passive on purpose: without this the browser zooms the page
             // (or scrolls the pane under the transform) instead, and React's
-            // own onTouchMove can't refuse it.
+            // own onTouchMove can't refuse it. Refused with a third finger down
+            // too — the board just holds still until it's back to a pair.
             event.preventDefault();
+            if (event.touches.length !== 2) return;
             const gap = spread(event.touches);
             if (gap === 0 || pinch.spread === 0) return;
             const scale = clamp(pinch.zoom * gap / pinch.spread) / pinch.zoom;
             const finger = midpoint(event.touches, pane);
-            pinch.scale = scale;
+            pinch.drawn = pinch.zoom * scale;
             pinch.offset = {
                 x: pinchOffset(pinch.scroll.x, pinch.start.x, finger.x, scale, pinch.content.x, pinch.pane.x),
                 y: pinchOffset(pinch.scroll.y, pinch.start.y, finger.y, scale, pinch.content.y, pinch.pane.y),
             };
-            content.style.transform = `translate(${pinch.offset.x}px, ${pinch.offset.y}px) scale(${scale})`;
+            content.style.transform = `translate(${pinch.offset.x}px, ${pinch.offset.y}px) scale(${pinch.drawn / pinch.laidOut})`;
         };
 
         // The fingers lifting is when the zoom actually changes: the board is
         // laid out at its new width and scrolled to exactly where the
         // transform had drawn it, in the one frame, so nothing visibly moves.
-        const endPinch = () => {
+        const endPinch = (event: TouchEvent) => {
             const pinch = pinchRef.current;
             if (!pinch) return;
+            // A finger lifting with two still down (a third had joined) isn't
+            // the end: the pair left carries on from where the board is drawn.
+            if (event.touches.length >= 2) {
+                if (event.touches.length === 2) rebase(pinch, event.touches, pane);
+                return;
+            }
             pinchRef.current = null;
             const scrollTo = { x: -pinch.offset.x, y: -pinch.offset.y };
-            const nextZoom = pinch.zoom * pinch.scale;
+            const nextZoom = pinch.drawn;
             if (nextZoom === zoomRef.current) {
                 content.style.transform = '';
                 pane.scrollLeft = scrollTo.x;
