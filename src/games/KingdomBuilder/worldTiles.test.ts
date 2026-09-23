@@ -53,4 +53,12 @@ describe("worldOnTiles", () => {
         expect(nodes.map(node => node.tile)).toEqual([0, 5]);
         expect(edges).toEqual([oldEdge]);
     });
+
+    it("falls back to open ground when a node has nowhere free to stand on the real field, and says so, so it is saved once", () => {
+        const drowned: TerrainField = { columns: 5, rows: 3, tileSize: 2, codes: "o".repeat(15) };
+        const { nodes, edges, changed } = worldOnTiles({ landmass: LANDMASS, terrainField: drowned, nodes: oldNodes(), edges: [oldEdge] });
+        expect(changed).toBe(true);
+        expect(nodes.map(node => node.tile)).toEqual([0, 5]);
+        expect(edges).toEqual([oldEdge]);
+    });
 });

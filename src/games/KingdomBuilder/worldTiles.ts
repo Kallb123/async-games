@@ -44,8 +44,10 @@ export function worldOnTiles(world: { landmass: Landmass; terrainField?: Terrain
     try {
         nodes = snapNodes(world.nodes, grid);
     } catch {
-        // Nowhere free to stand near some node — ground this odd has nothing to path over either.
-        return { nodes: snapNodes(world.nodes, openGround(world.landmass)), edges: world.edges, changed: false };
+        // Nowhere free to stand near some node — ground this odd has nothing to
+        // path over either, so it is placed as a world with no field would be,
+        // and saved like one: working it out again on every view gains nothing.
+        return { nodes: snapNodes(world.nodes, openGround(world.landmass)), edges: world.edges, changed: true };
     }
     const tileOf = new Map(nodes.map(node => [node.id, node.tile]));
     const edges = world.edges.map((edge): WorldEdge => {
