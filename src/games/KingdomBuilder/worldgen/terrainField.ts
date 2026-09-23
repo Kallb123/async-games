@@ -103,25 +103,23 @@ export function runRiverTracePass(codes: string[], elevations: readonly number[]
     for (const source of sources) {
         let current = source;
         let climbs = 0;
+        let reachedWater = false;
         const visited = new Set<number>([current]);
         for (let step = 0; step < columns + rows; step++) {
-            const col = current % columns, row = Math.floor(current / columns);
-            const neighbours = neighboursOf(col, row, columns, rows);
-            if (neighbours.some(isWater)) break;
+            const neighbours = neighboursOf(current % columns, Math.floor(current / columns), columns, rows);
+            if (neighbours.some(isWater)) { reachedWater = true; break; }
             let next: number | undefined;
             for (const neighbour of neighbours) {
                 if (!visited.has(neighbour) && (next === undefined || elevations[neighbour] < elevations[next])) next = neighbour;
             }
             const climbing = next !== undefined && elevations[next] >= elevations[current];
-            if (next === undefined || (climbing && (current === source || climbs >= RIVER_MAXIMUM_CLIMBS))) {
-                if (current !== source) poolAt(codes, col, row, columns, rows);
-                break;
-            }
+            if (next === undefined || (climbing && (current === source || climbs >= RIVER_MAXIMUM_CLIMBS))) break;
             if (climbing) climbs++;
             codes[next] = RIVER_CODE;
             visited.add(next);
             current = next;
         }
+        if (!reachedWater && current !== source) poolAt(codes, current % columns, Math.floor(current / columns), columns, rows);
     }
 }
 

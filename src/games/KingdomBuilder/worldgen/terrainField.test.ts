@@ -5,6 +5,8 @@ import {
     applySitesToTerrainField,
     areaCodeAt,
     generateBaseTerrainField,
+    mainlandOf,
+    rainShadow,
     runBeachPass,
     runFieldsPass,
     runRiverTracePass,
@@ -65,12 +67,54 @@ describe("runRiverTracePass", () => {
         expect(codes.slice(1, 5).some(code => code === "r")).toBe(true);
     });
 
+    it("pools into a small lake where it is caught in a hollow it can't climb out of", () => {
+        // A 5x5 bowl with no way out to the sea: one high corner to rise from,
+        // running down into a pit in the middle.
+        const columns = 5, rows = 5;
+        const codes = Array.from({ length: columns * rows }, () => "g");
+        const elevations = Array.from({ length: columns * rows }, (_, index) => {
+            const col = index % columns, row = Math.floor(index / columns);
+            return index === 0 ? 0.9 : 0.1 + Math.hypot(col - 2, row - 2) * 0.05;
+        });
+        runRiverTracePass(codes, elevations, columns, rows, createRandom("bowl"), 1);
+        expect(codes).toContain("r");
+        expect(codes).toContain("l");
+    });
+
     it("never overwrites water, and gives up rather than looping on a local minimum", () => {
         const columns = 3, rows = 1;
         const codes = ["g", "g", "g"];
         const elevations = [0.9, 0.9, 0.9]; // flat: no strictly-lower neighbour anywhere
         expect(() => runRiverTracePass(codes, elevations, columns, rows, createRandom("flat"), 1)).not.toThrow();
         expect(codes.every(code => code === "g")).toBe(true);
+    });
+});
+
+describe("rainShadow", () => {
+    it("wets the windward side of a range and dries its lee", () => {
+        // A 9-wide strip with a range in the middle column, and the wind blowing east (towards +x).
+        const columns = 9, rows = 1;
+        const heights = [0, 0, 0, 0, 1, 0, 0, 0, 0];
+        const shadow = rainShadow(heights, columns, rows, { x: 1, y: 0 });
+        expect(shadow[2]).toBeGreaterThan(0);
+        expect(shadow[6]).toBeLessThan(0);
+        // Nearer the range, the stronger the effect.
+        expect(shadow[3]).toBeGreaterThan(shadow[1]);
+    });
+
+    it("does nothing on a map with no ranges", () => {
+        expect(rainShadow([0, 0, 0], 3, 1, { x: 0, y: 1 })).toEqual([0, 0, 0]);
+    });
+});
+
+describe("mainlandOf", () => {
+    it("accepts the largest body of land — lakes and rivers included — and rejects an offshore island", () => {
+        const field: TerrainField = { columns: 7, rows: 1, tileSize: 2, codes: "ggrggog" };
+        const onMainland = mainlandOf(field);
+        expect(onMainland({ x: 1, y: 1 })).toBe(true);
+        expect(onMainland({ x: 5, y: 1 })).toBe(true); // the river tile joins the two sides
+        expect(onMainland({ x: 11, y: 1 })).toBe(false); // ocean
+        expect(onMainland({ x: 13, y: 1 })).toBe(false); // the island past it
     });
 });
 
