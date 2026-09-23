@@ -10,7 +10,7 @@ export interface KingdomBuilderUnitDefinition {
     name: string;
     icon: string;
     role: string;
-    /** §6.2: a stack moves at the pace of its slowest unit. PR 14 turns this into ticks per edge. */
+    /** §6.2: a stack moves at the pace of its slowest unit. PR 19 turns this into a pace over the tiles (§3.8). */
     speed: "slow" | "medium" | "fast";
     /** Paid in full when the unit is queued. */
     cost: KingdomBuilderResources;
