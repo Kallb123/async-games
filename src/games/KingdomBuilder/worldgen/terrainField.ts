@@ -315,7 +315,9 @@ export function connectedRegions(columns: number, rows: number, include: (index:
  */
 export function mainlandOf(field: TerrainField): (point: Point) => boolean {
     const { component, sizes } = connectedRegions(field.columns, field.rows, index => field.codes[index] !== OCEAN_CODE);
-    const largest = sizes.indexOf(Math.max(0, ...sizes));
+    // A world with no land has no mainland — not every ocean tile, which is what a -1 match against unlabelled tiles would give.
+    if (sizes.length === 0) return () => false;
+    const largest = sizes.indexOf(Math.max(...sizes));
     return point => {
         const { col, row } = tileAt(field, point);
         return component[tileIndex(field, col, row)] === largest;

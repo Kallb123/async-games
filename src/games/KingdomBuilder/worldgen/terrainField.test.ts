@@ -116,6 +116,11 @@ describe("mainlandOf", () => {
         expect(onMainland({ x: 11, y: 1 })).toBe(false); // ocean
         expect(onMainland({ x: 13, y: 1 })).toBe(false); // the island past it
     });
+
+    it("finds no mainland at all in a world of sea", () => {
+        const field: TerrainField = { columns: 3, rows: 1, tileSize: 2, codes: "ooo" };
+        expect(mainlandOf(field)({ x: 1, y: 1 })).toBe(false);
+    });
 });
 
 describe("runBeachPass", () => {

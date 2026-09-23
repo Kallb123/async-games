@@ -30,6 +30,7 @@ const { values: args } = parseArgs({
     },
 });
 const count = Number(args.count);
+if (!Number.isInteger(count) || count < 1) throw new Error(`--count must be a whole number of worlds, at least 1 (got "${args.count}")`);
 const sheetColumns = Math.min(count, Number(args.columns));
 const scale = Number(args.scale);
 const GUTTER = 4;
