@@ -1,0 +1,5 @@
+/* Drawn in the owner's colour, which ArmyLayer sets as `color` on its group. */
+.route { fill: none; stroke: currentColor; stroke-width: 0.45; stroke-opacity: 0.85; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.preview { stroke-dasharray: 1 0.8; stroke-opacity: 1; }
+.army { fill: currentColor; stroke: var(--ag-dark); stroke-width: 0.3; }
+.selected { stroke: var(--ag-gold); stroke-width: 0.5; }

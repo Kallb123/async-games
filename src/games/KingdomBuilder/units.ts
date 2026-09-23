@@ -8,12 +8,22 @@ export type KingdomBuilderUnitType = typeof KINGDOM_BUILDER_UNIT_TYPES[number];
 
 export type KingdomBuilderGarrison = Record<KingdomBuilderUnitType, number>;
 
+export type KingdomBuilderSpeed = "slow" | "medium" | "fast";
+
+/**
+ * How much path cost (tilePath.ts) an army spends a tick at each speed (§6.2).
+ * A straight step over grass costs 2 — a tile is 2 world units across — so a
+ * slow stack walks open ground at a tile a tick, 15 minutes a tile, and a road
+ * or a mountain pass scales that the way its weight says. First-pass numbers (§12).
+ */
+export const KINGDOM_BUILDER_PACES: Record<KingdomBuilderSpeed, number> = { slow: 2, medium: 3, fast: 4 };
+
 export interface KingdomBuilderUnitDefinition {
     name: string;
     icon: string;
     role: string;
-    /** §6.2: a stack moves at the pace of its slowest unit. PR 19 turns this into a pace over the tiles (§3.8). */
-    speed: "slow" | "medium" | "fast";
+    /** §6.2: a stack moves at the pace of its slowest unit — `KINGDOM_BUILDER_PACES` over the tiles (§3.8). */
+    speed: KingdomBuilderSpeed;
     /** Paid in full when the unit is queued. Priced in economy.ts, beside the buildings. */
     cost: KingdomBuilderResources;
     /** Ticks to train at the barracks level that unlocks it; each level above that takes one off. */
@@ -76,6 +86,13 @@ export function garrisonOf(garrison?: Partial<KingdomBuilderGarrison>): KingdomB
     return Object.fromEntries(
         KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, garrison?.[unitType] ?? 0]),
     ) as KingdomBuilderGarrison;
+}
+
+/** "2 militia · 1 cavalry", skipping what the stack has none of. */
+export function formatUnits(units: Partial<KingdomBuilderGarrison>): string {
+    return KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => (units[unitType] ?? 0) > 0)
+        .map(unitType => `${units[unitType]} ${KINGDOM_BUILDER_UNITS[unitType].name.toLowerCase()}`)
+        .join(" · ");
 }
 
 /**

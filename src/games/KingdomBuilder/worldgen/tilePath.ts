@@ -1,5 +1,5 @@
 // Travel over the tile grid (GDD §3.8): the one pathfinder the generator, the
-// fairness score and — from PR 19 — armies all use. Movement is eight-way;
+// fairness score and armies (PR 19) all use. Movement is eight-way;
 // a step's cost is its length times the average weight of the two tiles it
 // joins (half the step is spent in each), so a path costs the same in either
 // direction and prices ground exactly as §3.5.4's straight-line walk did — a
@@ -124,13 +124,21 @@ function stepCost(grid: TravelGrid, from: number, to: number, diagonal: boolean)
  * changed under it since it was found, as a road laid along it does.
  */
 export function pathCost(grid: TravelGrid, tiles: readonly number[]): number {
-    let cost = 0;
+    return costsAlong(grid, tiles).at(-1) ?? 0;
+}
+
+/**
+ * What a path has cost by each of its tiles — 0 at the first, the whole cost
+ * at the last. An army marching it (§6.2) is spending exactly these, tile by tile.
+ */
+export function costsAlong(grid: TravelGrid, tiles: readonly number[]): number[] {
+    const costs = tiles.length ? [0] : [];
     for (let step = 1; step < tiles.length; step++) {
         const from = tiles[step - 1], to = tiles[step];
         const diagonal = from % grid.columns !== to % grid.columns && Math.floor(from / grid.columns) !== Math.floor(to / grid.columns);
-        cost += stepCost(grid, from, to, diagonal);
+        costs.push(costs[step - 1] + stepCost(grid, from, to, diagonal));
     }
-    return cost;
+    return costs;
 }
 
 /** A binary min-heap of tiles keyed by priority — the frontier both searches below share. */

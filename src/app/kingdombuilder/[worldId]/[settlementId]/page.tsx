@@ -26,6 +26,7 @@ import {
     trainingTicksFor,
     type KingdomBuilderUnitType,
 } from "@/games/KingdomBuilder/units";
+import { formatTicks } from "@/games/KingdomBuilder/tick";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -68,10 +69,6 @@ function priceFor(cost: KingdomBuilderResources, stores: KingdomBuilderResources
         affordable,
         label: affordable ? formatResources(cost) : `${formatResources(cost)} (short ${formatResources(shortfallFor(stores, cost))})`,
     };
-}
-
-function ticks(count: number): string {
-    return `${count} tick${count === 1 ? "" : "s"}`;
 }
 
 export default function KingdomBuilderSettlementPage({
@@ -203,7 +200,7 @@ export default function KingdomBuilderSettlementPage({
                                                 name={BUILDING_DETAILS[buildingType].name}
                                                 cost={barren
                                                     ? `This settlement's land has no ${produces}`
-                                                    : `${price.label} · ${ticks(buildTicksFor(1))} · ${role}`}
+                                                    : `${price.label} · ${formatTicks(buildTicksFor(1))} · ${role}`}
                                                 tag={pending === buildingType ? "Queuing…" : barren ? `No ${produces}` : price.affordable ? "Build" : "Can't afford"}
                                                 tagMuted={barren || !price.affordable}
                                                 disabled={selectedTile === null || barren || !price.affordable || isPending}
@@ -223,7 +220,7 @@ export default function KingdomBuilderSettlementPage({
                             <p className={styles.status}>
                                 {trainingQueue.length === 0
                                     ? "Nothing in training. Units are paid for when queued and join the garrison as each one finishes."
-                                    : `Training ${KINGDOM_BUILDER_UNITS[trainingQueue[0].unitType].name.toLowerCase()} — ${ticks(trainingQueue[0].ticksRemaining)} left`
+                                    : `Training ${KINGDOM_BUILDER_UNITS[trainingQueue[0].unitType].name.toLowerCase()} — ${formatTicks(trainingQueue[0].ticksRemaining)} left`
                                         + (trainingQueue.length > 1 ? `, then ${trainingQueue.length - 1} more (${trainingQueue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".")}
                             </p>
                             <div className="ag-build-list">
@@ -231,7 +228,7 @@ export default function KingdomBuilderSettlementPage({
                                     <BuildRow
                                         icon={BUILDING_DETAILS.barracks.icon}
                                         name={`Upgrade to level ${barracksLevel + 1}`}
-                                        cost={`${upgradePrice.label} · ${ticks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units and trains faster`}
+                                        cost={`${upgradePrice.label} · ${formatTicks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units and trains faster`}
                                         tag={construction ? "Busy" : pending === "upgrade" ? "Queuing…" : upgradePrice.affordable ? "Upgrade" : "Can't afford"}
                                         tagMuted={!!construction || !upgradePrice.affordable}
                                         disabled={!!construction || !upgradePrice.affordable || isPending}
@@ -257,6 +254,7 @@ export default function KingdomBuilderSettlementPage({
 
                     {data && (
                         <Section label="Garrison">
+                            <p className={styles.status}>Send units out as an army from the world map. An army that marches back here rejoins the garrison.</p>
                             <div className={`ag-stat-row ${styles.garrison}`}>
                                 {KINGDOM_BUILDER_UNIT_TYPES.map(unitType => (
                                     <Stat key={unitType} value={data.garrison[unitType]} label={KINGDOM_BUILDER_UNITS[unitType].name} />
@@ -291,7 +289,7 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
             name={unit.name}
             cost={trainTicks === null
                 ? `${unit.role} · needs a level ${unit.barracksLevel} barracks`
-                : `${price.label} · ${ticks(trainTicks)} · ${unit.speed}`}
+                : `${price.label} · ${formatTicks(trainTicks)} · ${unit.speed}`}
             tag={pending ? "Queuing…" : blocker ?? "Train"}
             tagMuted={!!blocker}
             disabled={!!blocker || disabled}

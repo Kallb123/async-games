@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 
 import { LOBBY_MAX_TTL_MS } from "@/utils/games/lobby";
 
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
@@ -127,6 +128,7 @@ export async function removeWorld(worldId: string): Promise<void> {
     if (!world) return;
     if (!world.endedAt) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "Only an ended world can be removed");
     await KingdomBuilderSettlementModel.deleteMany({ worldId });
+    await KingdomBuilderArmyModel.deleteMany({ worldId });
     await KingdomBuilderInvitationModel.deleteMany({ worldId });
     await KingdomBuilderWorldModel.deleteOne({ _id: worldId, endedAt: { $ne: null } });
 }
@@ -161,7 +163,16 @@ export async function removeEndedWorlds(now: Date, limit: number, deadline: numb
 }
 
 /**
- * A player leaves a world (§9.1): their settlements go, their roster seat
+ * Everything a leaver holds in the world: their settlements, and their armies
+ * in the field, which disband where they stand (§9.1, PR 19).
+ */
+async function removeHoldings(worldId: string, userId: string) {
+    await KingdomBuilderSettlementModel.deleteMany({ worldId, ownerId: userId });
+    await KingdomBuilderArmyModel.deleteMany({ worldId, ownerId: userId });
+}
+
+/**
+ * A player leaves a world (§9.1): their settlements and armies go, their roster seat
  * and start site are freed, the host passes to the longest-seated player if
  * it was theirs, and the world ends if nobody is left.
  *
@@ -186,13 +197,15 @@ export async function leaveWorld(worldId: string, userId: string): Promise<void>
             // only by its settlements, so leaving it ends it. A player with
             // settlements but no seat in a rostered world is a leave that died
             // before its last delete: finish it.
-            if (!await KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId })) throw notFound();
+            const holdsAnything = await KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId })
+                || await KingdomBuilderArmyModel.exists({ worldId, ownerId: userId });
+            if (!holdsAnything) throw notFound();
             if (roster.length === 0) await markEnded(worldId, {}, "abandoned");
-            await KingdomBuilderSettlementModel.deleteMany({ worldId, ownerId: userId });
+            await removeHoldings(worldId, userId);
             return;
         }
 
-        await KingdomBuilderSettlementModel.deleteMany({ worldId, ownerId: userId });
+        await removeHoldings(worldId, userId);
         const successor = roster.find(seat => seat.userId !== userId)?.userId;
         const pull = { $pull: { roster: { userId } } };
         const [filter, update] = !successor
@@ -203,7 +216,7 @@ export async function leaveWorld(worldId: string, userId: string): Promise<void>
         const left = await KingdomBuilderWorldModel.updateOne({ ...filter, _id: worldId, endedAt: null }, update);
         if (left.modifiedCount !== 1) continue;
 
-        await KingdomBuilderSettlementModel.deleteMany({ worldId, ownerId: userId });
+        await removeHoldings(worldId, userId);
         if (!successor) {
             await revokeInvitation(worldId);
         } else {

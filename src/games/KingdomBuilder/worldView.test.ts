@@ -9,6 +9,7 @@ vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
 
 import { buildUserDirectory } from "@/utils/users/clerk";
 
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
@@ -30,7 +31,14 @@ function mockWorld(world: object | null) {
     } as never);
 }
 
-beforeEach(() => vi.mocked(liveWorldInvitation).mockResolvedValue({ joinCode: "PLUM", expiresAt: "2026-09-29T00:00:00.000Z", openSeats: 2 }));
+function mockArmies(armies: object[]) {
+    return vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ lean: vi.fn().mockResolvedValue(armies) }) } as never);
+}
+
+beforeEach(() => {
+    vi.mocked(liveWorldInvitation).mockResolvedValue({ joinCode: "PLUM", expiresAt: "2026-09-29T00:00:00.000Z", openSeats: 2 });
+    mockArmies([]);
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe("Kingdom Builder world view", () => {
@@ -111,7 +119,8 @@ describe("Kingdom Builder world view", () => {
 
         const wire = JSON.stringify(await worldView(worldId, "owner"));
 
-        for (const secret of ["user_RIVALSECRET", "97531", "86420", "1357", "barracks", "walls", "cavalry", "2468", "13579", rivalSettlementId.toString()]) {
+        // Not "cavalry": the viewer's own garrison names every unit type. The rival's queue is "2468".
+        for (const secret of ["user_RIVALSECRET", "97531", "86420", "1357", "barracks", "walls", "2468", "13579", rivalSettlementId.toString()]) {
             expect(wire).not.toContain(secret);
         }
     });
@@ -178,5 +187,40 @@ describe("Kingdom Builder world view", () => {
         mockWorld({ ...oldWorld, nodes: [{ ...oldWorld.nodes[0], tile: 0 }] });
         await worldView(worldId, "owner");
         expect(save).not.toHaveBeenCalled();
+    });
+
+    it("reads the viewer's own armies and nobody else's, with where each stands and how long it has left", async () => {
+        const worldId = new Types.ObjectId().toString();
+        const armyId = new Types.ObjectId();
+        mockSettlements([
+            { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", garrison: { militia: 2 } },
+            { _id: new Types.ObjectId(), ownerId: "rival", nodeId: "other", garrison: { militia: 9 } },
+        ]);
+        mockWorld({
+            hostId: "owner",
+            roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }, { userId: "rival", siteId: "other", joinedAt: new Date() }],
+        });
+        const find = mockArmies([
+            {
+                _id: armyId, ownerId: "owner", units: { militia: 3 }, path: [5, 6, 7, 8], pathCosts: [0, 2, 4, 6], travelled: 2,
+                fromNodeId: "start", targetNodeId: "camp",
+            },
+            {
+                _id: new Types.ObjectId(), ownerId: "owner", units: { scout: 1 }, path: [1, 2], pathCosts: [0, 2], travelled: 2,
+                fromNodeId: "start", targetNodeId: "lookout", arrivedAtTick: 7,
+            },
+        ]);
+
+        const view = await worldView(worldId, "owner");
+
+        expect(find).toHaveBeenCalledWith({ worldId, ownerId: "owner" });
+        expect(view.armies[0]).toEqual({
+            armyId: armyId.toString(), units: { militia: 3, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
+            tile: 6, route: [6, 7, 8], fromNodeId: "start", targetNodeId: "camp", ticksToArrive: 2,
+        });
+        expect(view.armies[1]).toMatchObject({ tile: 2, route: [2], ticksToArrive: 0, arrivedAtTick: 7 });
+        // A garrison is its owner's to see: the rival's settlement carries none.
+        expect(view.settlements.find(settlement => settlement.isMine)?.garrison?.militia).toBe(2);
+        expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("garrison");
     });
 });

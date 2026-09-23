@@ -6,8 +6,9 @@ Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 8), the area registry and generated ground (PR 9), the overlay
 vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
-building costs (PR 17, §4.5) and wheat with land-driven production (PR 18,
-§4.6) are shipped. PR 19 (army dispatch and movement) comes next; §11.3 is the plan for the
+building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
+§4.6) and army dispatch and movement (PR 19, §6.2) are shipped. PR 20 (fog of
+war and its reveal paths) comes next; §11.3 is the plan for the
 rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -1817,9 +1818,9 @@ third.
 - **Any other player leaves.** Leaving removes that player's settlements and
   frees their roster seat and site, so the site is claimable by the next
   joiner. If the host leaves, the host passes to the longest-seated player; if
-  the last player leaves, the world is ended. (Once armies exist, PR 19 must say
-  what happens to a leaver's armies in the field; the obvious rule is that they
-  disband where they stand.)
+  the last player leaves, the world is ended. A leaver's armies in the field
+  disband where they stand (PR 19), and removing a world removes its armies with
+  its settlements.
 - **Ended worlds are removed.** The world, its settlements and its invitation
   are deleted a fixed time after `endedAt` (first pass: seven days — the
   lobby's longest code lifetime), by a step in the existing tick cron rather
@@ -2464,13 +2465,47 @@ reduced-motion rule in `ag-theme.css`.
   building its land can't hold on screen, disabled, saying why; the world
   map's ground legend names what each area yields. Upkeep stays open (§12). No
   `whatsNew.ts` line.
-- **PR 19 — Army dispatch and movement.** A command to send a garrison (or
+- **PR 19 — Army dispatch and movement.** Shipped. A command to send a garrison (or
   part of it) toward another node, pathed over the tiles by PR 16's
   pathfinder, and a movement step in the tick engine spending §6.2's terrain
   multipliers tile by tile. Arrival does nothing special yet — this PR is
   purely "can an army cross the generated map." It also answers PR 14's
   leftover question: a player who leaves a world disbands their armies in the
   field.
+
+  How it landed: an army is its own document (`KingdomBuilderArmyModel`),
+  not a field on the world, so PR 20 has one collection to redact. It stores its
+  units, its `path` (every tile, both ends included), `pathCosts` (what the path
+  has cost by each tile, from `costsAlong` beside the one pathfinder), how much
+  it has `travelled`, the node it set out from and the one it is bound for, and
+  `arrivedAtTick` once it gets there. `armies.ts` is the pure half, shared with
+  the world map so the ETA it previews is the one the tick keeps: a stack's pace
+  is its slowest unit's (`KINGDOM_BUILDER_PACES` in `units.ts` — 2, 3 and 4 path
+  cost a tick, where a straight grass step costs 2), and each tick it spends that
+  pace against the route, standing on the last tile it has paid for. The cost is
+  fixed at dispatch, so the ETA never moves under a march. `applyTick` marches
+  armies after the settlements' own work; the cron loads only the ones still on
+  the road (`arrivedAtTick: null`) and saves them with the tick's own
+  transaction. Arrival camps the army — except at one of its owner's own
+  settlements, where it rejoins that garrison the tick it arrives and the army
+  document is deleted, which is how reinforcing another settlement and coming
+  home both work. The march command is `action: "march"` on the world route:
+  units out of a garrison (spent and the army created in one transaction,
+  conditional on the garrison still holding them), or new orders for an army
+  already out — onward from its camp, or turned round from the tile it stands
+  on, guarded on it not having moved since it was read. Twenty armies a player
+  a world at most, counted inside the dispatch's transaction behind a write to
+  the world (`armiesDispatched`), so two dispatches at once conflict rather
+  than both slipping under the limit. The settlement or army is looked up with the caller as owner
+  before anything about the world is read, so a stranger's order learns nothing.
+  `worldView` carries the viewer's own armies and their own garrisons only —
+  the query names the owner, so nobody else's army is ever read (§6.3). The
+  world map draws each army and the road it has left in the owner's colour,
+  mustering from a garrison or tapping an army opens a draft, and any node on
+  the map is then a destination, with the route previewed dashed and its length
+  in ticks. Leaving a world disbands the leaver's armies with their
+  settlements, and removing a world removes its armies. No upkeep yet (§12). No
+  `whatsNew.ts` line.
 - **PR 20 — Fog of war.** Redact in-transit armies from `worldView(worldId,
   userId)` — Kingdom Builder's own per-viewer response, which the shared
   `CreateDataResponse` guard does not cover — for everyone but the owner — a `croupier`
@@ -2709,7 +2744,13 @@ guessed at here:
   to build against, and still want the numbers pass once armies can be fielded.
 - Unit upkeep (§4.6): should units eat wheat every tick they exist, and if so
   what happens at zero — desertion, a combat penalty, or simply no new
-  training? Deferred until armies are in the field (PR 19).
+  training? Armies are in the field since PR 19, which still charges nothing to
+  keep one there; this wants the numbers pass beside the paces below.
+- Army paces (§6.2): first pass 2, 3 and 4 path cost a tick for slow, medium and
+  fast stacks (`KINGDOM_BUILDER_PACES`) — a slow stack crosses open grass at a
+  tile a tick (15 minutes), so a neighbour two dozen grass tiles off is six hours
+  away for militia and three for cavalry, before hills and passes. Whether that is the right scale for a
+  world that runs for weeks is a playtest question.
 - Overlapping catchments (§4.6): two settlements close together share tiles.
   Does a woodland tile count for both, for the nearer, or split between them?
   "Both" is simplest and rewards clustering; "nearer" is fairer to a rival

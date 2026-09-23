@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
-import { endWorld, foundExpansion, KingdomBuilderPersistenceError, leaveWorld, worldView } from "@/games/KingdomBuilder";
+import { endWorld, foundExpansion, KingdomBuilderPersistenceError, leaveWorld, marchArmy, worldView } from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -11,7 +11,7 @@ interface RouteParams {
 
 function errorResponse(error: unknown) {
     if (!(error instanceof KingdomBuilderPersistenceError)) throw error;
-    const status = error.code === "WORLD_NOT_FOUND" || error.code === "SITE_NOT_FOUND" ? 404
+    const status = error.code === "WORLD_NOT_FOUND" || error.code === "SITE_NOT_FOUND" || error.code === "ARMY_NOT_FOUND" ? 404
         : error.code === "FORBIDDEN" ? 403
             : error.code === "INVALID_INPUT" ? 400 : 409;
     return NextResponse.json({ error: error.message }, { status });
@@ -39,7 +39,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { siteId, action, deleteNow } = await readJsonBody<{ siteId: string; action: string; deleteNow: boolean }>(request);
+    const { siteId, action, deleteNow, targetNodeId, settlementId, units, armyId } = await readJsonBody<{
+        siteId: string; action: string; deleteNow: boolean; targetNodeId: unknown; settlementId: unknown; units: unknown; armyId: unknown;
+    }>(request);
     try {
         // GDD §9.1: the host ends the world (and may remove it outright);
         // anyone leaves it. A body with neither founds an expansion.
@@ -50,6 +52,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (action === "leave") {
             await leaveWorld(context.worldId, context.userId);
             return NextResponse.json({ left: true });
+        }
+        // GDD §6.2: an army out of a garrison, or new orders for one already in the field.
+        if (action === "march") {
+            return NextResponse.json(await marchArmy(context.worldId, context.userId, { targetNodeId, settlementId, units, armyId }));
         }
         if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
         return NextResponse.json(await foundExpansion(context.worldId, context.userId, siteId));
