@@ -4,8 +4,11 @@
 Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
-vocabulary (PR 12), and barracks and units (PR 13) are shipped. PR 14 (army
-dispatch and movement) is next; §11.3 is the plan for the rest.
+vocabulary (PR 12), and barracks and units (PR 13) are shipped. PRs 14–18 —
+ending a world, the map-shape overhaul (§3.7), travel over the tiles (§3.8),
+building costs (§4.5) and wheat with land-driven production (§4.6) — come
+next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
+rest.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
 **Session shape:** a long-running "world" spanning days to weeks, checked in on
@@ -33,11 +36,15 @@ movement — build on those two decisions rather than re-opening them.
    - 3.4 [Barbarian villages](#34-barbarian-villages)
    - 3.5 [Terrain areas, overlays and the tiled map](#35-terrain-areas-overlays-and-the-tiled-map)
    - 3.6 [World size](#36-world-size)
+   - 3.7 [Map shape: ranges, not a central massif](#37-map-shape-ranges-not-a-central-massif)
+   - 3.8 [The tiles are the roads: travel over the grid](#38-the-tiles-are-the-roads-travel-over-the-grid)
 4. [Settlements](#4-settlements)
    - 4.1 [Layout](#41-layout)
    - 4.2 [Buildings](#42-buildings)
    - 4.3 [The economy loop](#43-the-economy-loop)
    - 4.4 [Founding new settlements](#44-founding-new-settlements)
+   - 4.5 [Building costs and the starting stockpile](#45-building-costs-and-the-starting-stockpile)
+   - 4.6 [Wheat, and the land around a settlement](#46-wheat-and-the-land-around-a-settlement)
 5. [Time model: turns vs. ticks](#5-time-model-turns-vs-ticks)
    - 5.1 [Option A — strict sequential turns](#51-option-a--strict-sequential-turns)
    - 5.2 [Option B — simultaneous ("WEGO") turns](#52-option-b--simultaneous-wego-turns)
@@ -58,6 +65,7 @@ movement — build on those two decisions rather than re-opening them.
    - 7.6 [Decision, and future scope](#76-decision-and-future-scope)
 8. [Sieges in detail](#8-sieges-in-detail)
 9. [Victory, seasons, and catch-up](#9-victory-seasons-and-catch-up)
+   - 9.1 [Ending a world early](#91-ending-a-world-early)
 10. [Fit with the existing engine](#10-fit-with-the-existing-engine)
 11. [Implementation plan](#11-implementation-plan)
     - 11.1 [Principles](#111-principles)
@@ -107,6 +115,13 @@ theirs.*
 ## 3. The world map
 
 ### 3.1 Representation
+
+> **Superseded for movement by §3.8.** The graph below is how the map was first
+> built and how it is drawn through PR 13. From PR 16 on, places are nodes that
+> sit *on* a tile of the §3.5 grid, and armies travel over the tiles rather
+> than along edges; edges survive only as derived, drawn routes. The rest of
+> this section is kept because the reasoning — uneven resources, reuse of the
+> map components — still holds.
 
 A **node-and-edge graph**, not a hex or square grid: each settlement site and
 each notable terrain feature (a forest, a mountain pass, a river crossing) is
@@ -694,6 +709,175 @@ fairness reach) are unchanged, which is what keeps the density the same.
 Worlds generated before the change keep their stored 100 × 70 dimensions; the
 map screen reads its viewBox off the stored landmass, so both sizes draw.
 
+### 3.7 Map shape: ranges, not a central massif
+
+Every generated world today has the same silhouette: an island with **one
+block of mountains in the middle**, hills ringing it, and grass and woodland
+around the coast. That is not bad luck — it is the generator doing exactly what
+it was written to do, and worth diagnosing precisely before redesigning:
+
+- `generateLandmass` computes one value per cell as
+  `islandFalloff × (0.58 + noise × 0.42)`. The falloff is a radial term, 1 at
+  the centre and 0 at the coast, so the **same number is both "how far from the
+  sea" and "how high"**.
+- The area registry (§3.5.2) reads that number as elevation: hills from 0.52,
+  mountains from 0.66. The only cells that can reach 0.66 are the ones where
+  the falloff is still near 1 — the middle of the map. The noise term only
+  wobbles the edge of the blob; it can't move it.
+- Rivers are traced downhill from high ground (§3.5.2), so they all start at
+  that one massif and radiate outward like spokes, which is the second thing
+  that makes every world look alike.
+
+The consequence is also a gameplay one, not just a looks one: a single central
+wall of ×3.5 ground sits between every pair of opposite starts, so the
+"interesting chokepoint" of §3.2 degenerates into "walk round the edge", the
+same for every world.
+
+**The fix is to separate land from height.** The landmass stays what decides
+land versus sea; elevation becomes its own field, built from features that are
+placed on purpose rather than falling out of the coast:
+
+1. **Coastline.** Keep the island falloff, but only as the land mask, and warp
+   it (domain warping: offset each sample by a second, low-frequency noise
+   before reading the falloff) so the coast grows bays, peninsulas and the odd
+   offshore island rather than a rounded blob. A small set of seeded **shape
+   presets** — one continent, two continents joined by an isthmus, a large
+   island with an archipelago — picked per world, give worlds a different
+   overall read without any of them being a special case in the code.
+2. **Mountain ranges as ridge lines.** Seed two to five ranges per world
+   (scaled by `WORLD_AREA_SCALE`, like every other count). A range is a short
+   polyline — a random walk with a bounded turn per step, 20–60 world units
+   long — placed anywhere on land, **with no bias toward the centre**. Elevation
+   near a range is a ridged profile of distance to the polyline, so a range is
+   long and thin, has foothills (the hills band) on both flanks, and ends
+   rather than filling a region.
+3. **Passes are placed, not hoped for.** Each range longer than a threshold
+   gets one or two gaps cut into its ridge — a notch in the profile that drops
+   to the hills band — at points chosen along the range. A pass is where
+   movement cost funnels, which is the chokepoint §3.2 wanted; now the
+   generator puts one in every range deliberately instead of it depending on
+   where an edge happened to be drawn.
+4. **Rolling ground everywhere else.** A low-amplitude noise field gives the
+   lowlands their hills and hollows, so hills are not *only* foothills and a
+   plain is not perfectly flat.
+5. **Moisture from the ranges.** The existing moisture field gains a
+   rain-shadow term: one side of a range (fixed per world, the "prevailing
+   wind") is wetter, the other drier. Woodland and marsh then cluster on the
+   windward side and grass on the lee — a reason for the land to vary that a
+   player can learn to read, and a cheap source of the "wood belt" §3.1 always
+   promised.
+6. **Rivers from every range.** With several high points instead of one,
+   the downhill trace (§3.5.2) naturally starts rivers in several places and
+   sends them to different coasts.
+
+**Composition bands, checked like fairness.** A hand-tuned generator drifts, so
+the shape is asserted, not trusted. After generation, measure the share of land
+in each area and reject-and-retry (the same loop §3.3 already runs, under the
+same retry cap) when a world falls outside the bands. First-pass bands, for
+tuning by the "generate worlds and look at them" pass §12 already calls for:
+
+| Area | Share of land |
+|---|---|
+| Mountains | 5–10% |
+| Hills | 10–18% |
+| Woodland | 18–30% |
+| Grass + fields | 30–50% |
+| Marsh | 0–6% |
+| Lakes and rivers | 2–8% |
+
+Plus two shape rules that are the direct answer to "one block in the middle":
+
+- **No single mountain region holds more than 40% of the world's mountain
+  tiles** (measured as connected components of mountain tiles).
+- **The mountains' centre of mass is not the map's centre**, averaged over a
+  test run: the guard test generates twenty worlds and asserts the mountain
+  tiles are spread across the map (for example, at least three of the map's
+  3 × 3 ninths hold mountains in most worlds) rather than every world stacking
+  them in the middle ninth.
+
+Two more pieces make this reviewable rather than a matter of taste:
+
+- **A contact sheet.** A dev-only script (`npm run kb-worlds`, beside
+  `npm run icons`) writes a PNG grid of N seeded worlds drawn in the registry's
+  fallback colours. A change to the generator is reviewed by looking at the
+  before-and-after sheets in the PR, not by reading noise maths.
+- **Everything still goes through the registry.** Ranges, passes and rain
+  shadow change the *inputs* to the elevation and moisture windows; they do not
+  add a `switch` on area names. A new area stays one `AREAS` entry.
+
+Existing worlds are not regenerated — the same rule as §3.5.6: a live world's
+ground doesn't change under its players. With §9.1 a tester can end an old
+world and start a new one instead.
+
+### 3.8 The tiles are the roads: travel over the grid
+
+§3.1 made the map a graph, and §3.5 then gave it real ground — but the two
+were never merged. An edge is still a straight line between two nodes, and its
+cost is a walk of the tiles that line happens to cross (§3.5.4). The ground
+only *prices* a route that the graph already chose. That shows up in play:
+a route drawn straight over a mountain range can exist while an obvious valley
+beside it doesn't, because nobody drew that edge; and an army can only ever be
+"on edge X, some way along", never "in that forest".
+
+**Decision: the tile grid is the travel network.** Nodes stop being the
+places things connect *between* and become things that sit *on* a tile:
+
+- **Every node owns a tile.** A settlement site, a terrain node, later a
+  barbarian village or an army's camp: each has a `tile` (row-major index into
+  the field) and its drawn `x`/`y` is that tile's centre. Generation snaps
+  every node to a passable tile (the nearest one if the noise put it in water)
+  and no two nodes share one.
+- **Movement is a path over tiles.** Neighbours are the eight surrounding
+  tiles; a diagonal step costs √2 of its tile's weight and may not cut the
+  corner between two impassable tiles. A step's cost is the tile's area weight,
+  or the overlay's where one overrides it (bridge, ford, road — §3.5.3), which
+  is exactly the rule §3.5.4 already uses per tile, so no weight changes
+  meaning. The route between two places is the cheapest such path —
+  Dijkstra, or A\* with straight-line distance × the cheapest land weight as
+  the heuristic. At 100 × 70 = 7,000 tiles that is a sub-millisecond search on
+  the server, run once per dispatch, not per tick.
+- **An army's position is a tile.** A dispatched army stores its path (the
+  tile list) and how far along it is; the tick engine advances it by its
+  speed, spending each tile's cost. §6.2's "slowest unit sets the pace" and
+  the terrain multipliers are unchanged — they now apply to tiles the player
+  can see the army cross, which is what §3.5.4 was reaching for.
+- **Edges become derived routes.** The world still wants lines on the map:
+  "how would I get from here to there" is the question the map answers. So
+  the generator keeps producing edges, but an edge's shape is now the
+  cheapest tile path between its two nodes (drawn as that path, not a straight
+  line), and its `movementCost` is that path's cost. They are for reading the
+  map and for §3.3's fairness scoring; nothing *moves* along an edge.
+  `MapEdges` draws a straight segment, so a route drawn as a path is a
+  polyline mode added to it (or its own small component, if the caveman
+  prefers), not a second map component.
+- **Crossings follow the paths.** Bridges and fords (§3.5.3) are derived from
+  where routes cross water today. With tiles as the network, the crossing pass
+  runs over rivers themselves: each river gets a crossing at least every N
+  tiles of its length, at its narrowest points, plus one wherever a site-to-site
+  route would otherwise detour by more than a threshold. The rule that a
+  derived overlay can't disagree with movement (§3.5.3) holds for free: a
+  bridge is a tile with a passable weight, so the pathfinder uses it simply
+  because it is there.
+- **Roads follow the paths too.** Roads (PR 12) are laid under the route tiles
+  between occupied settlements, and cap those tiles' weight — so a road is a
+  real shortcut an army's pathfinder will choose, not a decoration on a line.
+
+What this changes for fairness (§3.3): reachability is already measured as
+time-weighted cost (PR 9); it becomes a Dijkstra flood from each candidate
+start over the tiles — the same function the armies will use — rather than a
+walk over edges. One function for "how far is it" everywhere is the point.
+
+What this means for hidden information (§6.3): an army's stored path is
+exactly the thing fog of war must not send an opponent, which PR 20 then
+enforces. It is simpler to guard a single `path` field than a route inferred
+from edges.
+
+**Old worlds.** A world generated since PR 9 has a terrain field, so it can
+use tile movement directly: its nodes are snapped to their tiles on read, and
+its stored straight-line edges are simply redrawn as paths. A world from before
+PR 9 has no field and can't; those are testing worlds, and §9.1 is how they
+get cleared out rather than carried forward.
+
 ---
 
 ## 4. Settlements
@@ -712,7 +896,8 @@ the settlement falls.
 |---|---|---|
 | **Lumber camp** | Produces wood per turn/tick | |
 | **Quarry** | Produces stone per turn/tick | |
-| **Mine** | Produces iron per turn/tick | Typically only buildable where the settlement is adjacent to an ore node — ties the settlement economy back to the world map rather than making all 8 tiles interchangeable |
+| **Mine** | Produces iron per turn/tick | Only buildable where the settlement's surrounding land has hills or mountains in it (§4.6) — ties the settlement economy back to the world map rather than making all 8 tiles interchangeable |
+| **Farm** | Produces wheat per turn/tick | Added with wheat (§4.6); best on grass, fields and river land |
 | **Barracks** | Trains army units | Queue-based; higher levels unlock stronger unit types and shorten training time |
 | **Market** | Converts one resource to another at a rate, and/or lists trade offers to other players | Gives a player short on iron but flush with wood a way out that isn't "wait" |
 | **Walls** | Passive defence bonus; the thing a siege wears down (§8) | Occupies a tile like anything else — a maxed-out economy settlement really is choosing not to have walls |
@@ -727,9 +912,10 @@ higher town-centre levels unlocking parallel queues — this is the main
 lever for making the town centre feel like progress rather than a plaque.
 
 A settlement's site also grants a **terrain bonus** to whichever production
-building matches its neighbouring terrain — a lumber camp built next to a
-forest node outproduces the same-level lumber camp in a settlement with no
-forest nearby. This is what makes §3.3's "parity on total value, not on
+building matches its neighbouring terrain — a lumber camp in a settlement
+surrounded by woodland outproduces the same-level lumber camp in one with no
+woodland nearby. §4.6 makes this concrete: the bonus is read off the tiles
+around the settlement, not off the nearest terrain node. This is what makes §3.3's "parity on total value, not on
 flavour" rule matter in practice: no site is simply better, but a wood-heavy
 site and an iron-heavy site call for different opening builds.
 
@@ -746,7 +932,8 @@ no separate soft/hard currency — and it is spent on exactly three things:
    short, at a rate that should be worse than producing it directly (so the
    market is a release valve, not a way to dodge the tech tree).
 
-This is intentionally a small, closed loop: three resources, three sinks.
+This is intentionally a small, closed loop: four resources — wood, stone,
+iron and, from PR 18, wheat (§4.6) — and three sinks.
 Depth is meant to come from *when* and *where* to spend (build up an economy
 vs. rush an army; defend in depth vs. expand the border) rather than from a
 sprawling resource list.
@@ -767,6 +954,138 @@ settlement, and the two are meant to pull a player in different directions:
 a settler is slower to arrange but risk-free beyond the settler itself,
 while a barbarian conquest is faster and immediately productive but costs an
 army and forecloses that army from anything else in the meantime.
+
+### 4.5 Building costs and the starting stockpile
+
+Through PR 13 a building costs only time: `queuePrototypeBuilding` checks the tile and
+the queue, never the stores, so a new settlement can fill all eight tiles on
+day one and resources are only ever spent on units. That makes the economy
+loop of §4.3 a loop with no first step, and it's the thing to fix before armies
+(and so trade-offs between armies and buildings) arrive.
+
+**Every building level has a price.** The rule is the one PR 13 already set for
+units: the whole cost is taken when the level is queued, by one conditional
+update that repeats every check (owner, tile, queue room, and now the stores),
+so a tick or a second tab in between fails the write rather than overdrawing.
+Buildings and units share one `cost` shape, one "can I afford this" helper and
+one way of showing it: the `BuildRow` already names "what it costs" under each
+choice, and an unaffordable row is shown disabled with its shortfall rather
+than hidden, so a player can see what they are saving for.
+
+First-pass prices (numbers for the §12 tuning pass, not a contract):
+
+| Building | Level 1 | Each level after |
+|---|---|---|
+| Lumber camp | 15 wood | Level 1 × the target level |
+| Quarry | 15 wood | Level 1 × the target level |
+| Farm (§4.6) | 10 wood, 5 stone | Level 1 × the target level |
+| Mine | 20 wood, 10 stone | Level 1 × the target level |
+| Barracks | 30 wood, 20 stone, 10 iron | Level 1 × the target level |
+
+Linear in level, matching `buildTicksFor`'s linear build time, so both curves
+are one number to retune rather than a formula to reverse-engineer.
+
+**The starting stockpile.** A player's *first* settlement is founded with
+enough in store to build the starter camps and make one real choice:
+
+| Resource | Starting stock |
+|---|---|
+| Wood | 40 |
+| Stone | 20 |
+| Iron | 0 |
+| Wheat (from PR 18) | 20 |
+
+That buys a lumber camp and a quarry (30 wood) with 10 wood and 20 stone left
+over — not yet enough for a mine or a farm, so the first decision is what to
+wait for, and which camp to level first. Only the first settlement gets it: a
+second settlement founded for free (PR 6) with its own stockpile would be a
+stockpile printer. Later settlements start empty until settlers (PR 24) can
+carry cargo from the settlement that trained them.
+
+**A settlement can never be stuck.** Once buildings cost, a settlement with no
+production buildings and not enough in store for the cheapest one would have
+no way forward. The town centre therefore produces a small trickle of its own —
+first pass: 1 wood and 1 wheat a tick — independent of buildings. It is the
+softlock guard, and it also covers every settlement from before this change
+without a migration: an old settlement that has built nothing starts earning
+wood the tick after this ships. (Settlements that already built for free keep
+their buildings; nothing is charged retroactively.)
+
+### 4.6 Wheat, and the land around a settlement
+
+Two related changes: a fourth resource, and production that depends on the
+ground a settlement is built on.
+
+**Wheat.** Armies have to eat. Wheat joins wood, stone and iron in
+`KingdomBuilderResources`, produced by a new **farm** building and spent on
+**units**: every unit's training cost gains a wheat price (first pass: scout 3,
+militia 5, infantry 8, siege engine 10, cavalry 15 — horses eat), and so will
+the settler (PR 24). That gives the economy a resource that belongs to the
+military side the way iron does, and makes grassland worth holding rather than
+being the empty space between the interesting tiles. A document from before it
+has no `wheat` field and reads as zero, the same pattern PR 13 used for the
+queue and garrison.
+
+Upkeep — units eating wheat every tick while they exist, not only when they are
+trained — is the obvious next step and deliberately *not* in this change: it
+brings starvation rules (what happens at zero) that want designing with armies
+in the field (PR 19) rather than guessed at now. §12 keeps it open.
+
+**The catchment.** Each settlement looks at the tiles within a fixed radius of
+its own tile (§3.8) — first pass: 4 tiles, so a 9 × 9 square minus corners,
+about 60 tiles. The share of that catchment in each kind of ground sets a
+**yield tier** for each resource:
+
+| Share of catchment yielding the resource | Tier | Output per building level |
+|---|---|---|
+| None | — | The building can't be built here |
+| Under 15% | Poor | 1 |
+| 15–35% | Good | 2 |
+| Over 35% | Rich | 3 |
+
+Tiers rather than a smooth curve, because "Rich woodland" is something a player
+can read on the settlement screen and plan around, and whole numbers keep
+resources integers with no fractional carry to store. (Base output moves from 1
+to 2 per level for a *Good* site, so the typical economy runs at roughly twice
+the PR 13 rate; the price table above is pitched against that.)
+
+Which ground yields what is **a field on the area registry**, never a branch on
+an area's name (§3.5.2's rule):
+
+| Area | Yields |
+|---|---|
+| Woodland | Wood |
+| Hills | Stone |
+| Mountains | Stone, iron |
+| Grass, fields | Wheat |
+| Marsh | Wheat (counts as half a tile) |
+| River and lake tiles | Nothing directly; each one *beside* a grass or fields tile makes that tile count double for wheat |
+| Beach, ocean | Nothing |
+
+A future area — desert, tundra — declares its yields in its own entry and the
+catchment picks it up.
+
+Two things follow from where this lives:
+
+- **The catchment is computed once and stored.** The ground never changes
+  under a world (§3.5.6), so a settlement's tiers are worked out when it's
+  founded and written on the settlement document, and `applyTick` reads a tier
+  rather than re-walking 60 tiles for every settlement every fifteen minutes.
+  Settlements from before this change are backfilled once from their world's
+  stored field; one on a world with no field (pre-PR 9) gets *Good* in
+  everything but iron, which stays buildable wherever a mine already stands.
+- **It supersedes the terrain-node bonus.** §4.2 promised "a lumber camp next to
+  a forest node outproduces one without"; the catchment is that promise made
+  concrete and visible. Terrain nodes stay on the map as landmarks for now;
+  whether they retire or become rich deposits that bump a tier is left to §12.
+
+**Fairness.** §3.3 scores starting sites on total reachable value; the score's
+inputs become the catchment's tiers, and it gains one hard rule: **every
+player start has at least a Poor tier in all four resources**, because a start
+with no wheat or no iron can never train a single unit. Composition, not total, is still allowed to differ — a Rich
+woodland start and a Rich mountain start are both fair — which is exactly the
+"parity on total value, not on flavour" rule §3.3 already states. §3.7's
+composition bands are what keep that rule satisfiable on most seeds.
 
 ---
 
@@ -921,6 +1240,11 @@ exercise:
 | **Scout** | Reveals a target's garrison/defences before committing | Fast | Cheap, disposable, answers "is this worth attacking" |
 
 ### 6.2 Dispatch and travel time
+
+> From PR 16, "distance" below means the cost of the cheapest path over the
+> tiles (§3.8), not a count of edges; the multipliers are per tile, as they
+> already are since PR 9. The rules — slowest unit sets the pace, terrain
+> multiplies, the ETA is known — are unchanged.
 
 An army's base travel time is the graph distance (in edges) divided by the
 **speed of its slowest unit** — mixing a scout into a siege train doesn't
@@ -1218,6 +1542,51 @@ position from being a foregone conclusion for the rest of the season:
   heads is common knowledge — this is what makes the diminishing-returns
   rule actionable rather than just a footnote nobody checks.
 
+### 9.1 Ending a world early
+
+A season ending on schedule is PR 26. Before that there is no way for a world to
+end at all: every other game here has `/api/game/end`, but a world is not a
+`GameData` (§10), so that route can't see it. During testing that is a real
+problem — each generator change (§3.7, §3.8) makes older worlds unrepresentative,
+and they sit on the dashboard ticking forever. So a world needs two ways out,
+both designed now so that the season's end reuses them rather than growing a
+third.
+
+- **The host ends the world.** From the world screen, behind a
+  confirmation that names the world and how many other players are in it.
+  Ending sets `endedAt` on the world with one conditional write (only if it is
+  still unset). From that moment the tick sweep skips it (its query filters on
+  `endedAt`), no command against it is accepted, its invitation code is revoked
+  so nobody can join a finished world, and it leaves every player's dashboard
+  row list and `AppRail` switcher. `endedAt` is the same field PR 26 writes when
+  a season ends, so "ended by hand" and "ended by the clock" differ only in the
+  reason recorded beside it.
+- **Any other player leaves.** Leaving removes that player's settlements and
+  frees their roster seat and site, so the site is claimable by the next
+  joiner. If the host leaves, the host passes to the longest-seated player; if
+  the last player leaves, the world is ended. (Once armies exist, PR 19 must say
+  what happens to a leaver's armies in the field; the obvious rule is that they
+  disband where they stand.)
+- **Ended worlds are removed.** The world, its settlements and its invitation
+  are deleted a fixed time after `endedAt` (first pass: seven days — the
+  lobby's longest code lifetime), by a step in the existing tick cron rather
+  than a new cron. The host can also choose "delete now" at the confirmation,
+  which during testing will be the usual choice. Deletion removes the
+  settlements first and the world last, so a sweep that dies partway leaves
+  a world that still has `endedAt` set and is simply finished by the next
+  sweep; nothing is ever an orphaned settlement pointing at a missing world.
+- **Worlds with no host.** Worlds from before PR 8 have no `hostId`. For those,
+  the owner of the world's first settlement counts as host. Beyond that, an
+  admin can end or delete any world from a small `/admin/kingdombuilder-worlds`
+  page — a list of worlds with their seed, player count, tick and age — which
+  is the tool for clearing out abandoned test worlds nobody will come back to
+  end themselves.
+
+What this deliberately isn't: a result. An ended-by-hand world records no
+`GameResult` and no stats, because there is no scoring to record until PR 26;
+at that point ending early can decide whether a hand-ended world scores or is
+simply void.
+
 ---
 
 ## 10. Fit with the existing engine
@@ -1376,13 +1745,13 @@ one player, no map, no armies.
 Each PR below is additive on top of the shipped prototype — new fields, new
 routes, new commands — so the same non-disruption property holds: none of
 them changes what Milestone A already does for a settlement sitting alone.
-Four of them reach outside Kingdom Builder's own files, and they are
-deliberately the only four: **PR 7** touches the home dashboard and the app
+Five of them reach outside Kingdom Builder's own files, and they are
+deliberately the only five: **PR 7** touches the home dashboard and the app
 rail, **PR 8** the shared invitation flow (`acceptSeat`, the lobby routes, the
 join-code card and seat-count hook it shares with every setup screen),
-**PR 11** adds a page to `/admin` and its entry in the admin-tools doc, and
-**PR 22** the push-notification plumbing. Everything else stays inside
-`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 23's
+**PR 11** and **PR 14** each add a page to `/admin` and its entry in the
+admin-tools doc, and **PR 27** the push-notification plumbing. Everything else stays inside
+`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 28's
 one-line entries in the guide and tutorial registries.
 
 - **PR 6 — World map view and multiple settlements.** Shipped. Render the
@@ -1428,7 +1797,7 @@ one-line entries in the guide and tutorial registries.
   fair `player-start` sites since PR 1 (§3.3) and `foundSettlement` has taken
   a `userId` since PR 2, but only ever one is claimed:
   `/api/newgame/kingdombuilder` founds the host's settlement and the other
-  nine sites sit empty. Everything from PR 14 on is about doing something to
+  nine sites sit empty. Everything from PR 19 on is about doing something to
   somebody, so this is the PR that supplies the somebody.
   1. A roster on the world document — a seat per player, with the site they
      claimed and when they joined — plus the join code and the `expiresAt`
@@ -1455,7 +1824,7 @@ one-line entries in the guide and tutorial registries.
      one-settlement-per-owner are security boundaries now, not just data
      rules), `croupier` (the moment a world holds two players, the map
      response has to decide what each may see of the other; the fog-of-war
-     contract of PR 15 effectively starts here, before any army exists to
+     contract of PR 20 effectively starts here, before any army exists to
      hide), `gremlin` (ten players claiming sites at once, and a seat filling
      while a tick is mid-sweep), `rulebook` (the setup screen should now look
      like every other setup screen).
@@ -1590,7 +1959,7 @@ one-line entries in the guide and tutorial registries.
 
   How it landed: `units.ts` is the roster — §6.1's five units, each with a
   cost in all three resources, a base training time, the §6.2 speed label
-  PR 14 will turn into ticks per edge, and the barracks level that unlocks it.
+  PR 19 will turn into a pace over the tiles, and the barracks level that unlocks it.
   "Levels" are the barracks' own: a settlement may hold one barracks, the one
   building a player can raise a level (to 3, each level taking longer to
   build), which unlocks infantry at 2 and cavalry and the siege engine at 3
@@ -1605,52 +1974,167 @@ one-line entries in the guide and tutorial registries.
   finishes at most one unit a tick into the `garrison` counts. A document from
   before this PR has neither field and reads as an empty queue and garrison.
   Both stay on the owner's own settlement screen: nothing in the world map or
-  the dashboard carries them, which is PR 15's fog-of-war contract holding
-  before there is an army to hide. Buildings still cost nothing to raise — a
-  building price is not in any PR yet. No `whatsNew.ts` line on this branch.
-- **PR 14 — Army dispatch and movement.** A command to send a garrison (or
-  part of it) toward another node, and a movement step in the tick engine
-  using §6.2's terrain multipliers. Arrival does nothing special yet — this
-  PR is purely "can an army cross the generated graph."
-- **PR 15 — Fog of war.** Redact in-transit armies from `worldView(worldId,
+  the dashboard carries them, which is PR 20's fog-of-war contract holding
+  before there is an army to hide. Buildings still cost nothing to raise — PR 17
+  prices them. No `whatsNew.ts` line on this branch.
+- **PR 14 — End, leave and remove a world.** §9.1. First of the new five
+  because it is what makes the others testable: each of PRs 15–18 changes what
+  a *new* world or settlement looks like, and without this every tester is left
+  playing, or looking past, the worlds generated before it.
+  1. `endedAt` (and an `endReason`) on the world document, and a conditional
+     `endWorld(worldId, userId)` that sets it only for the host — or, on a
+     world with no `hostId`, the owner of its first settlement — and only once.
+  2. `leaveWorld(worldId, userId)`: delete the player's settlements, pull their
+     roster seat (freeing the site), hand the host on if it was theirs, and end
+     the world if the roster is now empty.
+  3. The tick sweep's query, `worldSummaries`, `worldView` and every Kingdom
+     Builder command route learn `endedAt`: an ended world never ticks, never
+     takes a command, never lists on a dashboard, and its invitation code is
+     revoked in the same write that ends it.
+  4. A removal step at the end of the tick cron: worlds ended more than the
+     retention window ago lose their settlements, invitation and then
+     themselves, a bounded batch per run, each world in its own try so one
+     failure doesn't stop the rest. "Delete now" is the same removal run
+     inline for one world.
+  5. The world screen gains "End world" (host) or "Leave world"
+     (everyone else), behind a confirmation that names what will happen to
+     the other players.
+  6. `/admin/kingdombuilder-worlds` behind `AdminPage`: every world, newest
+     first, with seed, seats, tick, age and an end/delete control — documented
+     in `docs/admin-tools.md` beside the tile mapper.
+  7. Reviewers: `locksmith` (a stranger ending someone else's world, a
+     non-host ending it, a leaver deleting settlements that aren't theirs, the
+     admin gate), `gremlin` (ending mid-sweep, a removal that dies partway, two
+     players leaving at once so nobody is host, a bounded batch), `caveman`
+     (the confirmation and the admin list should be existing pieces).
+  8. One `whatsNew.ts` line: hosts can end a world, and players can leave one.
+- **PR 15 — Map shape: ranges, not a central massif.** §3.7. Generator-only;
+  existing worlds are untouched.
+  1. Split the landmass: the falloff becomes only the land mask (with domain
+     warping and the seeded shape presets); elevation becomes its own field.
+  2. `mountainRanges.ts` in `worldgen/`: seeded ridge polylines anywhere on
+     land, their ridged elevation profile, and the passes cut into each one —
+     pure and unit tested like every other generator file.
+  3. Rolling lowland noise, and the moisture field's rain-shadow term.
+  4. The composition bands and the two shape rules (largest mountain
+     component, mountains spread across the map) added to §3.3's
+     reject-and-retry loop, under its existing cap, and asserted by the
+     "generate 20 worlds" test.
+  5. `npm run kb-worlds` — the contact-sheet script — with before-and-after
+     sheets attached to the PR for review.
+  6. Reviewers: `gremlin` (more rejection criteria means more retries; what
+     happens at the cap, and how long generation now takes at the p99 seed),
+     `rulebook` (still no branch on an area name; the new script documented).
+  7. One `whatsNew.ts` line: new worlds have mountain ranges, passes and
+     varied coasts.
+- **PR 16 — The tiles are the roads.** §3.8. Lands before PR 19 so armies
+  never move along edges at all.
+  1. `tile` on every node; generation snaps nodes to distinct passable tiles,
+     and a world from before this snaps its nodes on read.
+  2. `tilePath.ts`: eight-neighbour Dijkstra/A\* over the field with the
+     §3.5.4 per-tile weights and overlay overrides, no corner cutting past
+     impassable tiles — plus a flood-fill variant for "cost to everywhere from
+     here". Unit tested against hand-built fields (a river with one bridge,
+     a pass through a range, a road beside rough ground).
+  3. Edges re-derived as tile paths: each edge stores its path and its cost is
+     that path's cost; connectivity asks "is there a path" rather than
+     "does a straight line avoid the sea".
+  4. The crossing pass rewritten over rivers themselves (a crossing every N
+     tiles, at narrow points, and wherever a site-to-site route would detour
+     too far), and roads laid under route tiles between occupied settlements.
+  5. §3.3's fairness reachability switched to the flood fill.
+  6. The map draws routes as paths — a polyline mode for `MapEdges` (or a
+     sibling component), not a new map renderer.
+  7. Reviewers: `caveman` (one pathfinder, used by the generator, fairness and
+     — from PR 19 — armies), `gremlin` (a node on an island with no path, a
+     search over a malformed field, how long the flood takes over ten
+     starts), `croupier` (a stored path is exactly what fog of war must hide
+     once armies carry one — agree now where it lives).
+  8. One `whatsNew.ts` line: routes on the map follow the land.
+- **PR 17 — Buildings cost resources.** §4.5.
+  1. A `cost(type, level)` beside `buildTicksFor` in `buildings.ts`, with the
+     first-pass table, shared by client and server.
+  2. `queuePrototypeBuilding`'s conditional update gains the stores check and the
+     deduction, the same single-write pattern units use since PR 13.
+  3. The starting stockpile on a player's first settlement only, in
+     `foundSettlement(…, "first")`.
+  4. The town centre's trickle in `applyTick` — the softlock guard, which is
+     also what rescues every existing settlement that built nothing.
+  5. The settlement screen's building rows show their cost through
+     `BuildRow`, disabled with the shortfall when unaffordable — one
+     affordability helper shared with the unit rows.
+  6. Reviewers: `locksmith` (queueing the same level from two tabs; queueing
+     on a settlement that isn't yours now also spends someone else's stores),
+     `gremlin` (a tick landing between the read and the conditional write),
+     `caveman` (building and unit costs should be one shape and one helper).
+  7. One `whatsNew.ts` line: buildings now cost resources, and every kingdom
+     starts with enough for its first camps.
+- **PR 18 — Wheat, farms, and land-driven production.** §4.6.
+  1. `wheat` in `KingdomBuilderResources` (absent reads as zero), the farm
+     building, wheat in every unit's cost and in the starting stockpile.
+  2. `yields` on the `AREAS` registry entries, with the registry guard test
+     extended so every entry declares them (even if "nothing").
+  3. `catchment.ts`: the tiles within the radius of a settlement's tile, the
+     shares and the tiers — computed at founding and stored on the settlement,
+     plus a one-off backfill for existing settlements from their world's field.
+  4. `applyTick` reads the tier for each production building; a building
+     whose resource has no tier can't be queued.
+  5. §3.3's fairness score reads catchment tiers, with the "at least Poor in
+     all four" rule for player starts.
+  6. The settlement screen shows the four tiers ("Rich woodland") near the
+     resource counts, and the world map shows wheat beside the rest.
+  7. Reviewers: `rulebook` (a new field on a registry and its test; the
+     schema change and its backfill), `gremlin` (the backfill over every
+     settlement, a world with no field), `caveman` (tiers read off the
+     registry, never a switch on area name).
+  8. One `whatsNew.ts` line: wheat and farms arrive, and a settlement's land
+     now decides what it's good at producing.
+- **PR 19 — Army dispatch and movement.** A command to send a garrison (or
+  part of it) toward another node, pathed over the tiles by PR 16's
+  pathfinder, and a movement step in the tick engine spending §6.2's terrain
+  multipliers tile by tile. Arrival does nothing special yet — this PR is
+  purely "can an army cross the generated map." It also answers PR 14's
+  leftover question: a player who leaves a world disbands their armies in the
+  field.
+- **PR 20 — Fog of war.** Redact in-transit armies from `worldView(worldId,
   userId)` — Kingdom Builder's own per-viewer response, which the shared
   `CreateDataResponse` guard does not cover — for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
-- **PR 16 — Automatic siege on arrival.** Arrival at a hostile settlement
+- **PR 21 — Automatic siege on arrival.** Arrival at a hostile settlement
   opens a siege (§6.4/§8): debuffs, the grace period, and the two new
   player actions, "push the attack" and "sally out" — both stubbed to a
   placeholder resolution for now.
-- **PR 17 — Combat resolution.** The deterministic multi-round attrition
+- **PR 22 — Combat resolution.** The deterministic multi-round attrition
   engine with unit-type counters (§7.3/§7.6) as a pure function with its own
-  matchup-table test suite, then wired into the two actions PR 16 stubbed.
-- **PR 18 — Barbarian villages.** Generator gains barbarian site placement
-  (§3.4); combat resolution from PR 17 applies directly on arrival, no
+  matchup-table test suite, then wired into the two actions PR 21 stubbed.
+- **PR 23 — Barbarian villages.** Generator gains barbarian site placement
+  (§3.4); combat resolution from PR 22 applies directly on arrival, no
   siege phase, per §3.4's rule.
-- **PR 19 — Settlers and a second settlement.** The settler unit and a
+- **PR 24 — Settlers and a second settlement.** The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
-  type once PRs 6–14's map/movement/dispatch already exist.
-- **PR 20 — Market and trade.** Resource conversion and player-to-player
+  type once PRs 6–19's map/movement/dispatch already exist.
+- **PR 25 — Market and trade.** Resource conversion and player-to-player
   trade offers (§4.3) — a pure economy addition with no combat interaction.
-- **PR 21 — Victory, seasons, catch-up.** Season length, scoring, new-player
+- **PR 26 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
-- **PR 22 — Push notifications.** Siege-onset, attack-resolved and
+- **PR 27 — Push notifications.** Siege-onset, attack-resolved and
   construction-complete pushes over the app's existing FCM plumbing (§10).
   Held deliberately until last, since it's the one PR reaching into shared
   notification infrastructure, and it benefits from every event type above
   already existing to notify about.
-- **PR 23 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
+- **PR 28 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
   the `og-game-kingdombuilder.png` share card, and a final full five-reviewer
   pass — the "most games also want a guide/tutorial" convention in
   AGENTS.md, deliberately last rather than first since it documents
-  mechanics that were still moving through PRs 6–22.
+  mechanics that were still moving through PRs 6–27.
 
 ### 11.4 Ordering constraints
 
 Most of Milestone B can be resequenced to fit priorities without breaking
-anything — trade (PR 20) and seasons (PR 21) don't depend on each other, for
-instance, and either could move earlier or later freely. Five orderings
+anything — trade (PR 25) and seasons (PR 26) don't depend on each other, for
+instance, and either could move earlier or later freely. Eight orderings
 are not negotiable, because each is a hard dependency rather than a
 priority call:
 
@@ -1658,19 +2142,19 @@ priority call:
   nothing to turn on before the prototype exists, and it's also the last
   point at which every PR before it was, by construction, invisible to a
   player.
-- **PR 8 (more than one player) must land before or alongside PR 15 (fog of
-  war), PR 16 (siege) and PR 21 (seasons).** An army cannot be hidden from
+- **PR 8 (more than one player) must land before or alongside PR 20 (fog of
+  war), PR 21 (siege) and PR 26 (seasons).** An army cannot be hidden from
   nobody, a player cannot lay siege to their own town, and scoring,
   new-player protection and a leaderboard are all comparisons between
   players — each of the three is untestable, not merely unexciting, in a
   world of one. The PRs either side of them are genuinely fine solo: a
   barracks trains and an army marches on an empty site without an opponent
-  (PRs 13–14), and PR 18's barbarians are neutral rather than player-owned, so
+  (PRs 13 and 19), and PR 23's barbarians are neutral rather than player-owned, so
   none of those forces the ordering on its own.
-- **PR 9 (the area registry) and PR 12's roads must land before PR 14
+- **PR 9 (the area registry) and PR 12's roads must land before PR 19
   (dispatch and movement).** PR 9 is where an edge's cost stops being a guess
   at the nearest node and starts being the ground it crosses (§3.5.4), and
-  PR 14 is the first thing to *spend* those costs. Shipping movement first
+  PR 19 is the first thing to *spend* those costs. Shipping movement first
   means shipping travel times that are about to change, and then changing them
   under players who have learned them — and roads are the one overlay that
   moves a cost, so they belong on the same side of that line. PRs 10 and 11 —
@@ -1679,19 +2163,42 @@ priority call:
   existing, which is why the flat-colour map of PR 10 is a separate, shippable
   step rather than the first half of PR 11. PR 12's landmarks have no ordering
   constraint at all beyond needing the mapper from PR 11 to author their art.
-- **PR 15 (fog of war) must land before or alongside PR 16 (siege).** Siege
+- **PR 20 (fog of war) must land before or alongside PR 21 (siege).** Siege
   is only the game's warning system per §6.4 if armies were already hidden
   before it — shipping siege first would briefly make army movement visible
   by omission, which is a hidden-information regression even if temporary.
-- **PR 17 (combat resolution) must land before or alongside PR 18
+- **PR 22 (combat resolution) must land before or alongside PR 23
   (barbarians).** A barbarian village resolves combat immediately on
   arrival with no siege phase (§3.4), so it has nothing to call until the
   combat engine exists.
+- **PR 16 (tiles as the travel network) must land before PR 19 (dispatch and
+  movement).** The same argument as PR 9's, one level up: PR 19 is the first
+  thing to move along the network, and moving armies along edges first would
+  mean stored armies with an edge-based position to migrate, and travel times
+  players have learned changing under them. Landing PR 16 first means no army
+  ever has a position that isn't a tile.
+- **PR 15 (map shape) must land before PR 18 (land-driven production).** PR
+  18's fairness rule — every start at least Poor in all four resources — is
+  only satisfiable on most seeds once §3.7's composition bands guarantee the
+  map has enough of each kind of ground; on today's single-massif map, starts
+  far from the middle routinely have no hills or mountains at all, and the
+  reject-and-retry loop would spend its whole cap failing them.
+- **PR 17 (building costs) must land before or alongside PR 19.** Once armies
+  exist, the choice between spending on buildings and spending on units is the
+  economy; shipping armies onto an economy where buildings are free means
+  every playtest of dispatch starts from a fully built settlement, and
+  measures nothing.
 
 PR 7 is the one with no hard dependency at all — it could sit anywhere in
 Milestone B, or could have sat alongside Milestone A. It leads the remaining
 work because it is what makes everything after it testable by a real player
 over real days, rather than by whoever still has the URL in their history.
+PR 14 (ending a world) is the same kind of PR and leads PRs 15–18 for the
+same reason: each of them changes what a *new* world or settlement looks like,
+so being able to end yesterday's test world and start a fresh one is what
+makes them testable at all. PR 15 before PR 16 is a preference rather than a
+dependency — the pathfinder works on any field — but tuning passes and
+crossings is easier on the map shape they'll actually ship on.
 
 ---
 
@@ -1726,6 +2233,20 @@ guessed at here:
   of question, and cheap to change late by design. Whether a lake is ever
   crossable by anything but a bridge or ford (a boat, a winter freeze) is a
   rules question left with them.
-- Exact resource/time cost curves for buildings and units — deliberately
-  left as "increases with level" above; needs a numbers pass once the
-  above structural questions are settled, not before.
+- Exact resource/time cost curves for buildings and units. §4.5 and §4.6 now
+  give first-pass numbers (linear in level, a 40/20/0/20 starting stockpile,
+  tiered output of 1/2/3 per level); they exist so PRs 17–18 have something
+  to build against, and still want the numbers pass once armies can be fielded.
+- Unit upkeep (§4.6): should units eat wheat every tick they exist, and if so
+  what happens at zero — desertion, a combat penalty, or simply no new
+  training? Deferred until armies are in the field (PR 19).
+- Overlapping catchments (§4.6): two settlements close together share tiles.
+  Does a woodland tile count for both, for the nearer, or split between them?
+  "Both" is simplest and rewards clustering; "nearer" is fairer to a rival
+  who settles next door. Minimum site separation keeps this rare for now.
+- Terrain nodes after §4.6: once production reads the tiles, do forest,
+  quarry and ore nodes retire, stay as pure landmarks, or become rich deposits
+  that raise the tier of a catchment they fall inside?
+- Map-shape presets (§3.7): which shapes the launch set ships with, and
+  whether the host should pick one on the setup screen or it stays a seeded
+  surprise.
