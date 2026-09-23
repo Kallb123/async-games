@@ -7,9 +7,9 @@ Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
-§4.6) and army dispatch and movement (PR 19, §6.2) are shipped. PR 20 (fog of
-war and its reveal paths) comes next; §11.3 is the plan for the
-rest, including two presentation PRs for the ground — transparent-backed tiles
+§4.6), army dispatch and movement (PR 19, §6.2) and fog of war (PR 20, §6.3)
+are shipped. PR 21 (automatic siege on arrival) comes next; §11.3 is the plan
+for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
 **Genre:** Asynchronous 4X / persistent-world empire builder
@@ -1532,6 +1532,17 @@ behind to still be defended."
 
 ### 6.3 Visibility and scouting
 
+> As shipped in PR 20: settlements are public — where each stands and whose it
+> is — and it is **armies** that are fogged. Sight is a circle of tiles around
+> everything a player owns: a settlement watches 3 tiles (5 and 7 at barracks
+> levels 2 and 3 — the detection upgrade), an army 4, and an army with a scout
+> in it 8. A rival army inside any of those circles is seen live — its owner,
+> the tile it stands on and what it holds, never its road, destination or ETA —
+> and one outside them is not sent at all. A scouting army within sight of a
+> rival town also reads its garrison, live while it stays there rather than the
+> snapshot sketched below. Having your own army nearby is therefore itself a
+> way to scout another.
+
 An army in transit is **hidden** by default — an opponent cannot see that it
 has been dispatched, its route, its composition, or its size. This is
 deliberate, not an oversight to patch later: it's what makes siege (§8) the
@@ -2506,11 +2517,31 @@ reduced-motion rule in `ag-theme.css`.
   in ticks. Leaving a world disbands the leaver's armies with their
   settlements, and removing a world removes its armies. No upkeep yet (§12). No
   `whatsNew.ts` line.
-- **PR 20 — Fog of war.** Redact in-transit armies from `worldView(worldId,
+- **PR 20 — Fog of war.** Shipped. Redact in-transit armies from `worldView(worldId,
   userId)` — Kingdom Builder's own per-viewer response, which the shared
   `CreateDataResponse` guard does not cover — for everyone but the owner — a `croupier`
   concern, verified with the `trace-hidden-state` skill — plus the scout
   unit and detection upgrade as the two reveal paths from §6.3.
+
+  How it landed: settlements stay public and armies are what the fog hides,
+  camped or marching alike. `sight.ts` is the pure half: a sight is a tile and a
+  radius in tiles, measured centre to centre by column and row. Every settlement
+  of the viewer's watches `KINGDOM_BUILDER_SETTLEMENT_SIGHT[barracksLevel]` (3,
+  3, 5, 7 — the detection upgrade), every army of theirs 4, or 8 with a scout
+  in it. `worldView` builds the viewer's sights from their own settlements and
+  armies, then reads everyone else's armies with a projection that takes only
+  what finding a tile needs (owner, units, path, costs, travelled) and sends a
+  `sightings` row — seat, tile, units — for each one inside a sight, ordered by
+  seat and tile rather than by when it set out; nothing about an army out of
+  sight reaches the wire, and no army id, road, destination or ETA ever does.
+  A rival settlement carries its `garrison` only while a scouting army of the
+  viewer's can see its tile — a live read rather than §6.3's snapshot, which
+  needed a report stored per scout and bought nothing a camped scout doesn't.
+  The view also sends the viewer's own `sight` circles, which the world map
+  shades outside of (the fog dims the ground, never a settlement); it draws
+  each sighting in its owner's colour with no road, and an "In sight" list
+  names each rival army near the closest place on the map and each garrison a
+  scout is counting. First-pass radii (§12). No `whatsNew.ts` line.
 - **PR 21 — Automatic siege on arrival.** Arrival at a hostile settlement
   opens a siege (§6.4/§8): debuffs, the grace period, and the two new
   player actions, "push the attack" and "sally out" — both stubbed to a
@@ -2716,9 +2747,12 @@ guessed at here:
   proposed. Whether build and travel times should be retuned to match — a
   two-tick building now finishes in half an hour — is part of the numbers
   pass below.
-- Exact terrain movement-cost multipliers (§6.2) and exact scout/detection
-  parameters (§6.3) — range, reliability, whether detection is guaranteed or
-  itself a chance — need numbers, not just relative ordering.
+- Exact terrain movement-cost multipliers (§6.2) need numbers, not just
+  relative ordering. Sight (§6.3) has first-pass radii since PR 20 — 4 tiles
+  for an army, 8 with a scout, 3/5/7 for a settlement by barracks level — and
+  detection is guaranteed inside them; whether those are the right distances
+  against the paces below, and whether a scout's garrison read should become a
+  stored snapshot once sieges make a stale read matter, are playtest questions.
 - Barbarian village specifics (§3.4): does a conquered site ever respawn a
   new one elsewhere so the map doesn't run out of soft targets over a
   multi-week season, and does garrison strength scale continuously with

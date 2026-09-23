@@ -6,9 +6,11 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
-import { garrisonOf, type KingdomBuilderGarrison } from "./units";
+import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
+import { barracksLevelOf, garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
+import type { KingdomBuilderMarch } from "./armies";
 import { ensureFirstSettlement } from "./roster";
 import { liveWorldInvitation, reconcileWorldInvitation } from "./worldInvitation";
 import { completedBuildLevels } from "./worldSummaryTypes";
@@ -45,15 +47,27 @@ export interface KingdomBuilderWorldView {
         isMine: boolean;
         /** The owner's index in `players`. */
         seat: number;
-        /** Yours only: the units stationed there, which an army is drawn from (§6.2). */
+        /**
+         * The units stationed there: always on yours, which an army is drawn
+         * from (§6.2), and on someone else's only while an army of yours with a
+         * scout in it can see the town (§6.1, §6.3) — a live read, gone again
+         * the moment the scout moves off.
+         */
         garrison?: KingdomBuilderGarrison;
     }>;
-    /**
-     * Your own armies in the field (§6.2), and nobody else's: an army on the
-     * march is hidden from everyone but its owner (§6.3), and until PR 20's
-     * scouts there is no way to see anyone else's.
-     */
+    /** Your own armies in the field (§6.2), with their roads and orders — nobody else's army appears here. */
     armies: KingdomBuilderArmyView[];
+    /**
+     * Everything of yours that can see (§6.3): your settlements and your
+     * armies, each with how far. The map fogs whatever lies outside them.
+     */
+    sight: KingdomBuilderSight[];
+    /**
+     * Other players' armies inside that sight — where each stands, whose it is
+     * and what it holds, and nothing else: not its road, not where it is bound,
+     * not when it gets there. One out of sight is not sent at all (§6.3).
+     */
+    sightings: KingdomBuilderArmySighting[];
     /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
 }
@@ -71,6 +85,14 @@ export interface KingdomBuilderArmyView {
     ticksToArrive: number;
     /** The tick it arrived on, once it has. */
     arrivedAtTick?: number;
+}
+
+export interface KingdomBuilderArmySighting {
+    /** The owner's index in `players`. */
+    seat: number;
+    /** The tile it stands on now. */
+    tile: number;
+    units: KingdomBuilderGarrison;
 }
 
 function validateWorldId(worldId: string) {
@@ -104,6 +126,26 @@ async function readArmies(worldId: string, userId: string): Promise<KingdomBuild
             ...(arrivedAtTick === undefined ? {} : { arrivedAtTick }),
         };
     });
+}
+
+type RivalArmyRow = Pick<KingdomBuilderMarch, "ownerId" | "units" | "path" | "pathCosts" | "travelled">;
+
+/**
+ * Other players' armies, as far as the viewer's sight reaches (§6.3). The read
+ * takes only what finding the army's tile needs — never its orders — and the
+ * reply carries only the tile, the owner's seat and the units, of the armies
+ * in sight. Ordered by seat and tile rather than by when each set out.
+ */
+async function readSightings(worldId: string, userId: string, field: Pick<TerrainField, "columns"> | undefined, sights: readonly KingdomBuilderSight[], seatOf: ReadonlyMap<string, number>): Promise<KingdomBuilderArmySighting[]> {
+    if (!field || sights.length === 0) return [];
+    const armies = await KingdomBuilderArmyModel.find({ worldId, ownerId: { $ne: userId } })
+        .select({ ownerId: 1, units: 1, path: 1, pathCosts: 1, travelled: 1 })
+        .lean<RivalArmyRow[]>();
+    return armies.flatMap(army => {
+        const seat = seatOf.get(army.ownerId);
+        const tile = armyTile(army);
+        return seat === undefined || tile === undefined || !isInSight(field, sights, tile) ? [] : [{ seat, tile, units: garrisonOf(army.units) }];
+    }).sort((a, b) => a.seat - b.seat || a.tile - b.tile);
 }
 
 export async function worldView(worldId: string, userId: string): Promise<KingdomBuilderWorldView> {
@@ -156,6 +198,22 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             : undefined,
     ]);
 
+    // What the viewer can see (§6.3): each settlement's watch, then each army's.
+    const field = world.terrainField;
+    const tileOf = new Map(onTiles.nodes.map(node => [node.id, node.tile]));
+    const sight: KingdomBuilderSight[] = !field ? [] : [
+        ...settlements.flatMap(settlement => {
+            const tile = tileOf.get(settlement.nodeId);
+            return settlement.ownerId !== userId || tile === undefined ? [] : [settlementSight(tile, barracksLevelOf(settlement.tiles ?? []))];
+        }),
+        ...armies.map(army => armySight(army.tile, army.units)),
+    ];
+    const sightings = await readSightings(worldId, userId, field, sight, seatOf);
+    const isScouted = (nodeId: string) => {
+        const tile = tileOf.get(nodeId);
+        return !!field && tile !== undefined && isInSight(field, sight, tile, true);
+    };
+
     return {
         worldId,
         currentTick: world.currentTick,
@@ -182,10 +240,12 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                 nodeId: settlement.nodeId,
                 isMine: settlement.ownerId === userId,
                 seat: ownerSeat,
-                ...(settlement.ownerId === userId ? { garrison: garrisonOf(settlement.garrison) } : {}),
+                ...(settlement.ownerId === userId || isScouted(settlement.nodeId) ? { garrison: garrisonOf(settlement.garrison) } : {}),
             }];
         }),
         armies,
+        sight,
+        sightings,
         ...(invite ? { invite } : {}),
     };
 }

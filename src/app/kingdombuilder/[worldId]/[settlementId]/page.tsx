@@ -228,7 +228,7 @@ export default function KingdomBuilderSettlementPage({
                                     <BuildRow
                                         icon={BUILDING_DETAILS.barracks.icon}
                                         name={`Upgrade to level ${barracksLevel + 1}`}
-                                        cost={`${upgradePrice.label} · ${formatTicks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units and trains faster`}
+                                        cost={`${upgradePrice.label} · ${formatTicks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units, trains faster and watches farther`}
                                         tag={construction ? "Busy" : pending === "upgrade" ? "Queuing…" : upgradePrice.affordable ? "Upgrade" : "Can't afford"}
                                         tagMuted={!!construction || !upgradePrice.affordable}
                                         disabled={!!construction || !upgradePrice.affordable || isPending}

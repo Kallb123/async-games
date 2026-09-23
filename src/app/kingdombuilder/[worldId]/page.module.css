@@ -15,4 +15,5 @@
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--legend-colour); }
 .legendOpen { --legend-colour: var(--ag-surface); }
 .legendTerrain { --legend-colour: var(--ag-success); }
+.legendFog { --legend-colour: var(--ag-dark); }
 .legendGround::before { border-radius: 3px; }

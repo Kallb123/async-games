@@ -38,7 +38,7 @@ export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilde
         cost: tunedResources("unitCosts.militia", economy.unitCosts.militia), trainTicks: 2, barracksLevel: 1,
     },
     scout: {
-        name: "Scout", icon: "🔭", role: "Reveals a target before you commit", speed: "fast",
+        name: "Scout", icon: "🔭", role: "Sees farther, and counts a rival town's garrison", speed: "fast",
         cost: tunedResources("unitCosts.scout", economy.unitCosts.scout), trainTicks: 2, barracksLevel: 1,
     },
     infantry: {
