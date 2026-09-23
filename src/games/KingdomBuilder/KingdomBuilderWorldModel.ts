@@ -5,6 +5,14 @@ import type { Landmass, WorldEdge, WorldNode } from "./worldgen/landmass";
 import type { OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 
+/**
+ * A node as stored. A world generated before PR 16 has no `tile` on its
+ * nodes until worldView stands them on one and saves it (§3.8, worldTiles.ts).
+ */
+export type StoredWorldNode = {
+    [Kind in WorldNode["kind"]]: Omit<Extract<WorldNode, { kind: Kind }>, "tile"> & { tile?: number };
+}[WorldNode["kind"]];
+
 /** One player's place in a world (§11.3 PR 8): who, the start site they claimed, and when. */
 export interface KingdomBuilderSeat {
     userId: string;
@@ -31,7 +39,7 @@ export interface IKingdomBuilderWorld {
     terrainField?: TerrainField;
     /** The derived, load-bearing overlays (bridges, fords) the connectivity pass wrote (§3.5.3). */
     overlays?: OverlayPlacement[];
-    nodes: WorldNode[];
+    nodes: StoredWorldNode[];
     edges: WorldEdge[];
     fairness: FairnessReport;
     currentTick: number;
@@ -86,6 +94,8 @@ const WorldEdgeSchema = new Schema<WorldEdge>({
     terrain: { type: String, enum: ["plains", "forest", "hill", "mountain-pass", "river-crossing"], required: true },
     movementCost: { type: Number, required: true, min: 0 },
     chokepoint: { type: Boolean, required: true },
+    // Absent on a world generated before PR 16 until worldView re-draws it (§3.8).
+    path: { type: [Number], default: undefined },
 }, { _id: false });
 
 const FairnessSchema = new Schema<FairnessReport>({

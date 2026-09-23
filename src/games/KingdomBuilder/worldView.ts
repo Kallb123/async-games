@@ -9,6 +9,7 @@ import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } f
 import { ensureFirstSettlement } from "./roster";
 import { liveWorldInvitation, reconcileWorldInvitation } from "./worldInvitation";
 import { completedBuildLevels } from "./worldSummaryTypes";
+import { worldOnTiles } from "./worldTiles";
 
 /** One seat in a world, as every member sees it (§11.3 PR 8). */
 export interface KingdomBuilderWorldPlayer {
@@ -89,6 +90,16 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         ? roster.map(entry => entry.userId)
         : [...new Set(settlements.map(settlement => settlement.ownerId))];
     const seatOf = new Map(memberIds.map((memberId, index) => [memberId, index]));
+    const onTiles = worldOnTiles(world);
+    if (onTiles.changed && world.terrainField) {
+        // Once per world from before PR 16 (§3.8): the snap and the re-drawn
+        // routes are the same on every read, so the first viewer saves them.
+        // Guarded on the nodes still lacking tiles, so a second viewer racing
+        // the first writes nothing; a failure here only means the next view
+        // works them out again.
+        await KingdomBuilderWorldModel.updateOne({ _id: worldId, "nodes.tile": { $exists: false } }, { $set: { nodes: onTiles.nodes, edges: onTiles.edges } })
+            .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
+    }
     const hostId = world.hostId ?? memberIds[0];
     const [directory, invite] = await Promise.all([
         buildUserDirectory(memberIds),
@@ -108,8 +119,8 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         landmass: world.landmass,
         terrainField: world.terrainField,
         overlays: world.overlays,
-        nodes: world.nodes,
-        edges: world.edges,
+        nodes: onTiles.nodes,
+        edges: onTiles.edges,
         seatCount: Math.max(world.seatCount ?? 1, memberIds.length),
         players: memberIds.map((memberId, index) => ({
             seat: index,

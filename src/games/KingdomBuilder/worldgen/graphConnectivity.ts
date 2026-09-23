@@ -2,7 +2,7 @@ import { pointDistance, type EdgeTerrain, type WorldEdge, type WorldNode } from 
 import type { RandomSource } from "./random";
 import { areaWeightForCode } from "./areas";
 import type { TerrainField } from "./terrainField";
-import { findTilePath, tileCostsFrom, type TravelGrid } from "./tilePath";
+import { findTilePath, tileCostsFrom, type TilePath, type TravelGrid } from "./tilePath";
 
 const edgeKey = (a: string, b: string): string => [a, b].sort().join("|");
 
@@ -38,6 +38,12 @@ export function routeTerrain(field: TerrainField, path: readonly number[]): Edge
     return edgeTerrainForWeight(dominant[0]);
 }
 
+/** An edge's route and everything read off it: the path, what it costs, what it crosses, and whether that makes it a chokepoint. */
+export function routeFields(field: TerrainField, route: TilePath): Pick<WorldEdge, "terrain" | "movementCost" | "chokepoint" | "path"> {
+    const terrain = routeTerrain(field, route.tiles);
+    return { terrain, movementCost: route.cost, chokepoint: terrain === "mountain-pass" || terrain === "river-crossing", path: route.tiles };
+}
+
 /**
  * Builds the world's routes (§3.8): a minimum spanning tree over the nodes by
  * straight-line distance (so nothing is left out), then extra edges for
@@ -58,17 +64,8 @@ export function connectWorldGraph(nodes: readonly WorldNode[], field: TerrainFie
     const addEdge = (from: WorldNode, to: WorldNode): void => {
         const route = findTilePath(grid, from.tile, to.tile);
         if (!route) throw new Error("Unable to connect world graph");
-        const terrain = routeTerrain(field, route.tiles);
         keys.add(edgeKey(from.id, to.id));
-        edges.push({
-            id: `edge-${edges.length}`,
-            from: from.id,
-            to: to.id,
-            terrain,
-            movementCost: route.cost,
-            chokepoint: terrain === "mountain-pass" || terrain === "river-crossing",
-            path: route.tiles,
-        });
+        edges.push({ id: `edge-${edges.length}`, from: from.id, to: to.id, ...routeFields(field, route) });
     };
 
     // Prim's algorithm: each node outside the tree remembers its nearest link
