@@ -34,11 +34,14 @@ export const KingdomBuilderArmySchema = new Schema<IKingdomBuilderArmyDocument>(
     fromNodeId: { type: String, required: true },
     targetNodeId: { type: String, required: true },
     arrivedAtTick: Number,
+    besiegingSince: Number,
 }, { timestamps: true });
 
 // A world's own armies — the tick reads the ones still marching, a view the viewer's own.
 KingdomBuilderArmySchema.index({ worldId: 1, ownerId: 1 });
 KingdomBuilderArmySchema.index({ worldId: 1, arrivedAtTick: 1 });
+// The armies camped at a settlement — the sieges on it (§8).
+KingdomBuilderArmySchema.index({ worldId: 1, targetNodeId: 1 });
 
 export const KingdomBuilderArmyModel = models.KingdomBuilderArmy
     || model<IKingdomBuilderArmyDocument, IKingdomBuilderArmyModel>("KingdomBuilderArmy", KingdomBuilderArmySchema);

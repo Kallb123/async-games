@@ -38,8 +38,8 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
         MAX_CATCH_UP_TICKS,
         Math.floor((now.getTime() - scheduledTick.getTime()) / KINGDOM_BUILDER_TICK_INTERVAL_MS) + 1,
     );
-    // Only the armies still on the road: one that has arrived just waits (PR 19).
-    const armies = await KingdomBuilderArmyModel.find({ worldId, arrivedAtTick: null }).session(session).lean();
+    // Every army, camped ones included: a camp at someone else's settlement is a siege on it (PR 21).
+    const armies = await KingdomBuilderArmyModel.find({ worldId }).session(session).lean();
     let ticked = { currentTick: world.currentTick, settlements, armies };
     for (let tick = 0; tick < elapsedTicks; tick++) ticked = applyTick(ticked);
 
@@ -70,20 +70,30 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
             };
         }), { session });
     }
-    if (armies.length) {
-        // An army missing from the ticked list marched home and rejoined its garrison, saved above.
-        const marched = new Map(ticked.armies.map(army => [army._id.toString(), army]));
-        await KingdomBuilderArmyModel.bulkWrite(armies.map(army => {
-            const next = marched.get(army._id.toString());
-            if (!next) return { deleteOne: { filter: { _id: army._id, worldId } } };
-            return {
-                updateOne: {
-                    filter: { _id: army._id, worldId },
-                    update: { $set: { travelled: next.travelled, ...(next.arrivedAtTick === undefined ? {} : { arrivedAtTick: next.arrivedAtTick }) } },
+    // An army missing from the ticked list marched home and rejoined its
+    // garrison, saved above; one that neither moved nor began or ended a siege
+    // is left alone.
+    const marched = new Map(ticked.armies.map(army => [army._id.toString(), army]));
+    const armyWrites = armies.flatMap(army => {
+        const next = marched.get(army._id.toString());
+        if (!next) return [{ deleteOne: { filter: { _id: army._id, worldId } } }];
+        const besiegingSince = next.besiegingSince ?? undefined;
+        if (next.travelled === army.travelled && next.arrivedAtTick === army.arrivedAtTick && besiegingSince === (army.besiegingSince ?? undefined)) return [];
+        return [{
+            updateOne: {
+                filter: { _id: army._id, worldId },
+                update: {
+                    $set: {
+                        travelled: next.travelled,
+                        ...(next.arrivedAtTick === undefined ? {} : { arrivedAtTick: next.arrivedAtTick }),
+                        ...(besiegingSince === undefined ? {} : { besiegingSince }),
+                    },
+                    ...(besiegingSince === undefined && army.besiegingSince != null ? { $unset: { besiegingSince: 1 } } : {}),
                 },
-            };
-        }), { session });
-    }
+            },
+        }];
+    });
+    if (armyWrites.length) await KingdomBuilderArmyModel.bulkWrite(armyWrites, { session });
     return true;
 }
 

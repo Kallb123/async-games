@@ -137,7 +137,7 @@ async function orderArmy(worldId: string, userId: string, order: KingdomBuilderM
         { _id: order.armyId, worldId, ownerId: userId, travelled: army.travelled, targetNodeId: army.targetNodeId },
         {
             $set: { ...route, travelled: 0, targetNodeId: order.targetNodeId, fromNodeId: camped ? army.targetNodeId : army.fromNodeId },
-            $unset: { arrivedAtTick: 1 },
+            $unset: { arrivedAtTick: 1, besiegingSince: 1 },
         },
     );
     if (moved.modifiedCount !== 1) throw new KingdomBuilderPersistenceError("ARMY_BUSY", "The army moved before the order reached it");
