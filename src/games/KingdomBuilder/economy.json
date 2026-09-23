@@ -1,0 +1,10 @@
+{
+    "buildingCosts": {
+        "lumber-camp": { "wood": 15 },
+        "quarry": { "wood": 15 },
+        "mine": { "wood": 20, "stone": 10 },
+        "barracks": { "wood": 30, "stone": 20, "iron": 10 }
+    },
+    "startingStockpile": { "wood": 40, "stone": 20 },
+    "townCentreTrickle": { "wood": 1 }
+}

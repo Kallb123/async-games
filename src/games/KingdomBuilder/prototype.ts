@@ -5,10 +5,12 @@ import {
     KINGDOM_BUILDER_TOWN_CENTRE_INDEX,
     KingdomBuilderSettlementModel,
     type KingdomBuilderBuildingType,
+    type KingdomBuilderResources,
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
+import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford } from "./resources";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -61,6 +63,19 @@ async function assertWorldLive(worldId: string) {
     if (!await KingdomBuilderWorldModel.exists({ _id: worldId, endedAt: null })) {
         throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
     }
+}
+
+/**
+ * The filter clauses and `$inc` that take a whole cost out of the stores in
+ * the same conditional write that queues what it pays for (§4.5), so a tick or
+ * a second tab landing after the pre-check fails the write rather than
+ * overdrawing.
+ */
+function spend(cost: KingdomBuilderResources) {
+    return {
+        filter: Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [`resources.${resource}`, { $gte: cost[resource] }])),
+        $inc: Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [`resources.${resource}`, -cost[resource]])),
+    };
 }
 
 export async function settlementView(worldId: string, settlementId: string, userId: string): Promise<KingdomBuilderSettlementView> {
@@ -117,7 +132,7 @@ export async function queuePrototypeBuilding(
     await assertWorldLive(worldId);
 
     const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
-        .select({ ownerId: 1, construction: 1, tiles: 1 })
+        .select({ ownerId: 1, construction: 1, tiles: 1, resources: 1 })
         .lean();
     if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
@@ -136,6 +151,11 @@ export async function queuePrototypeBuilding(
     }
 
     const targetLevel = upgrading ? current.level + 1 : 1;
+    const cost = buildingCostFor(buildingType as KingdomBuilderPrototypeBuilding, targetLevel);
+    if (!canAfford(existing.resources, cost)) {
+        throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
+    }
+    const { filter: canPay, $inc } = spend(cost);
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
@@ -148,8 +168,9 @@ export async function queuePrototypeBuilding(
                     tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
                     ...(buildingType === "barracks" ? { "tiles.building.type": { $ne: "barracks" } } : {}),
                 }),
+            ...canPay,
         },
-        { $set: { construction: { tilePosition, buildingType, targetLevel, ticksRemaining: buildTicksFor(targetLevel) } } },
+        { $set: { construction: { tilePosition, buildingType, targetLevel, ticksRemaining: buildTicksFor(targetLevel) } }, $inc },
         { new: true },
     ).lean();
     if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this building could be queued");
@@ -183,14 +204,14 @@ export async function queueUnitTraining(
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
         throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The barracks' queue is full");
     }
-    const { cost } = unit;
-    if (existing.resources.wood < cost.wood || existing.resources.stone < cost.stone || existing.resources.iron < cost.iron) {
+    if (!canAfford(existing.resources, unit.cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough resources to train ${unit.name.toLowerCase()}`);
     }
 
     // Every check above is repeated in the filter, so a tick or a second tab
     // landing in between fails this write rather than overdrawing the stores,
     // overfilling the queue, or pricing the unit at a barracks level it lost.
+    const { filter: canPay, $inc } = spend(unit.cost);
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
@@ -198,12 +219,10 @@ export async function queueUnitTraining(
             ownerId: userId,
             tiles: { $elemMatch: { "building.type": "barracks", "building.level": barracksLevel } },
             [`trainingQueue.${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT - 1}`]: { $exists: false },
-            "resources.wood": { $gte: cost.wood },
-            "resources.stone": { $gte: cost.stone },
-            "resources.iron": { $gte: cost.iron },
+            ...canPay,
         },
         {
-            $inc: { "resources.wood": -cost.wood, "resources.stone": -cost.stone, "resources.iron": -cost.iron },
+            $inc,
             $push: { trainingQueue: { unitType, ticksRemaining } },
         },
         { new: true },

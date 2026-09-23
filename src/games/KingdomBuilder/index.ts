@@ -9,3 +9,4 @@ export * from "./worldSummaries";
 export * from "./worldSummaryTypes";
 export * from "./units";
 export * from "./buildings";
+export * from "./resources";

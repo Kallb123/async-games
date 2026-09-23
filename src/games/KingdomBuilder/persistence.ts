@@ -2,6 +2,7 @@ import { Types, type ClientSession } from "mongoose";
 
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
+import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
@@ -106,7 +107,9 @@ export async function foundSettlement(
         nodeId: siteId,
         settlementNumber: kind === "first" ? 0 : 1,
         tiles: createStartingTiles(),
-        resources: { wood: 0, stone: 0, iron: 0 },
+        // Only a first settlement gets the stockpile (§4.5): a free second one
+        // carrying its own would print resources.
+        resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : { wood: 0, stone: 0, iron: 0 },
     };
     if (!session) return KingdomBuilderSettlementModel.create(values);
     const [settlement] = await KingdomBuilderSettlementModel.create([values], { session });
