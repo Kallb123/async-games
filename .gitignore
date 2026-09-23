@@ -48,3 +48,6 @@ next-env.d.ts
 # GOOGLE_SERVICES_JSON secret, and downloaded from the Firebase console for a
 # local build — one source of truth, rather than a copy in here going stale.
 /android/app/google-services.json
+
+# `npm run kb-worlds` writes its contact sheet here by default.
+/kb-worlds.png
