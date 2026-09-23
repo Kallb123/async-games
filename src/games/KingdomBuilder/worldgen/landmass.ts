@@ -11,6 +11,11 @@ export interface Point {
 
 interface BaseWorldNode extends Point {
     id: string;
+    /**
+     * The tile the node stands on (§3.8), row-major into the terrain field —
+     * passable, and nobody else's. `x`/`y` are that tile's centre.
+     */
+    tile: number;
 }
 
 export interface TerrainNode extends BaseWorldNode {
@@ -33,6 +38,12 @@ export interface WorldEdge {
     terrain: EdgeTerrain;
     movementCost: number;
     chokepoint: boolean;
+    /**
+     * The route this edge draws (§3.8): the cheapest tile path between its two
+     * nodes, both of their tiles included, and what `movementCost` is the cost
+     * of. Absent only on a world old enough to have no terrain field to path.
+     */
+    path?: number[];
 }
 
 export interface Landmass {

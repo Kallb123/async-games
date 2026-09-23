@@ -952,7 +952,9 @@ description or theme colour is exactly what those two files exist to prevent.
     placeholders and its empty message). The node-and-edge map boards (World
     Domination, Outbreak) share a kit here too: `ClickableMapNode`,
     `MapLabel`, `MapEdges` (the adjacency lines, with cross-map edges drawn
-    as labelled stubs off each map edge rather than a line across the board) and
+    as labelled stubs off each map edge rather than a line across the board,
+    and an edge given `waypoints` drawn as a polyline through them — Kingdom
+    Builder's routes, which follow the tiles they take) and
     `MapLabelLayer` (every name a board prints on its art, placed in one pass so
     that no two names, and no name and marker, overlap — Train Time shares this
     one as well). `BoardZoom` sits outside that kit, because any board too big

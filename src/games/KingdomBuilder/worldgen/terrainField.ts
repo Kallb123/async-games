@@ -35,6 +35,28 @@ export function tileCentre(col: number, row: number): Point {
     return { x: col * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2, y: row * TERRAIN_FIELD_TILE_SIZE + TERRAIN_FIELD_TILE_SIZE / 2 };
 }
 
+/** The centre of a tile given by its row-major index, on any grid of `tileSize` squares — a node's own position (§3.8), and each bend of a route drawn on the map. */
+export function tileIndexCentre(grid: Pick<TerrainField, "columns" | "tileSize">, tile: number): Point {
+    return { x: (tile % grid.columns + 0.5) * grid.tileSize, y: (Math.floor(tile / grid.columns) + 0.5) * grid.tileSize };
+}
+
+/**
+ * The tiles exactly `ring` squares out from (col, row) — the square ring a
+ * search outward walks one at a time — in a fixed order, off the grid left
+ * out. Ring 0 is the tile itself.
+ */
+export function tilesInRing(grid: Pick<TerrainField, "columns" | "rows">, col: number, row: number, ring: number): number[] {
+    const tiles: number[] = [];
+    for (let dr = -ring; dr <= ring; dr++) {
+        for (let dc = -ring; dc <= ring; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+            const c = col + dc, r = row + dr;
+            if (c >= 0 && c < grid.columns && r >= 0 && r < grid.rows) tiles.push(r * grid.columns + c);
+        }
+    }
+    return tiles;
+}
+
 export function tileIndex(field: Pick<TerrainField, "columns">, col: number, row: number): number {
     return row * field.columns + col;
 }
@@ -330,50 +352,4 @@ export function applySitesToTerrainField(field: TerrainField, sites: readonly Po
     runFieldsPass(codes, field.columns, field.rows, sites);
     runSmoothingPass(codes, field.columns, field.rows);
     return { ...field, codes: codes.join("") };
-}
-
-export interface TileLineSegment {
-    col: number;
-    row: number;
-    /** How much of the line's length falls inside this tile, in world units. */
-    length: number;
-}
-
-/**
- * Walks the tiles a straight edge crosses, supercover-style (§3.5.4): every
- * tile the line passes through, with the exact length of line inside each —
- * no diagonal slips between two tiles sharing only a corner.
- */
-export function walkTileLine(field: TerrainField, from: Point, to: Point): TileLineSegment[] {
-    const segments: TileLineSegment[] = [];
-    const x0 = from.x / field.tileSize, y0 = from.y / field.tileSize;
-    const x1 = to.x / field.tileSize, y1 = to.y / field.tileSize;
-    const dx = x1 - x0, dy = y1 - y0;
-    // `t` below is a fraction of the path (0 to 1), invariant to the tile-space
-    // scaling; the length each segment contributes is that fraction of the
-    // line's real, world-unit length.
-    const worldDistance = Math.hypot(to.x - from.x, to.y - from.y);
-    if (dx === 0 && dy === 0) return segments;
-
-    let col = Math.max(0, Math.min(field.columns - 1, Math.floor(x0)));
-    let row = Math.max(0, Math.min(field.rows - 1, Math.floor(y0)));
-    const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
-    const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
-    const tDeltaX = stepX !== 0 ? Math.abs(1 / dx) : Infinity;
-    const tDeltaY = stepY !== 0 ? Math.abs(1 / dy) : Infinity;
-    let tMaxX = stepX > 0 ? (col + 1 - x0) / dx : stepX < 0 ? (col - x0) / dx : Infinity;
-    let tMaxY = stepY > 0 ? (row + 1 - y0) / dy : stepY < 0 ? (row - y0) / dy : Infinity;
-    let t = 0;
-
-    for (let guard = 0; guard < field.columns + field.rows + 4; guard++) {
-        const nextT = Math.min(tMaxX, tMaxY, 1);
-        const segmentLength = (nextT - t) * worldDistance;
-        if (segmentLength > 1e-9 && col >= 0 && col < field.columns && row >= 0 && row < field.rows) {
-            segments.push({ col, row, length: segmentLength });
-        }
-        if (nextT >= 1) break;
-        if (tMaxX < tMaxY) { col += stepX; tMaxX += tDeltaX; } else { row += stepY; tMaxY += tDeltaY; }
-        t = nextT;
-    }
-    return segments;
 }

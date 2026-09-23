@@ -1,14 +1,25 @@
 import { WORLD_AREA_SCALE, isLand, pointDistance, type Landmass, type Point, type SettlementNode, type TerrainNode, type WorldEdge } from "./landmass";
 import type { RandomSource } from "./random";
-import { graphDistances, weightedGraphDistances } from "./graphConnectivity";
+import { graphDistances } from "./graphConnectivity";
+import type { TerrainField } from "./terrainField";
+import { snapToTiles, tileCostsFrom, travelGridFor, type TravelGrid } from "./tilePath";
 
 export interface SettlementOptions {
     playerStarts?: number;
     expansionSites?: number;
     minimumStartHops?: number;
-    resourceHops?: number;
+    /** How far a start's resource score looks, in travel cost over the tiles (§3.8) — the units an edge's `movementCost` is in. */
+    resourceReach?: number;
     parityTolerance?: number;
 }
+
+/**
+ * Roughly three typical routes' worth of travel (a route costs about eight) —
+ * the "three hops" this score used to count. Before §3.8 the reach was the
+ * bare number 3 in cost units, which reached no resource at all from almost
+ * any start, so every score was zero and the parity band never bit.
+ */
+const DEFAULT_RESOURCE_REACH = 24;
 
 export interface FairnessReport {
     valid: boolean;
@@ -16,9 +27,13 @@ export interface FairnessReport {
     reasons: string[];
 }
 
-/** Places settlement candidates on the mainland; topology later decides which become starts. */
+/**
+ * Places settlement candidates on the mainland, each on a tile of its own that
+ * no terrain node stands on (§3.8); topology later decides which become starts.
+ */
 export function placeSettlementSites(
     landmass: Landmass,
+    field: TerrainField,
     onMainland: (point: Point) => boolean,
     terrainNodes: readonly TerrainNode[],
     random: RandomSource,
@@ -40,37 +55,36 @@ export function placeSettlementSites(
     }
     if (candidates.length < total) throw new Error(`Could only find ${candidates.length} settlement candidates`);
 
-    return random.shuffle(candidates).slice(0, total).map((point, index): SettlementNode => ({
+    const sites = random.shuffle(candidates).slice(0, total).map((point, index): Omit<SettlementNode, "tile"> => ({
         id: `settlement-site-${index}`, kind: "settlement", siteType: "expansion", ...point,
     }));
+    return snapToTiles(sites, travelGridFor(field), new Set(terrainNodes.map(node => node.tile)));
 }
 
 /**
- * Total yield reachable within a travel-cost budget (§3.3/§3.5.4) — measured
- * in the same weighted cost §6.2's travel time resolves to, not hop count,
- * now that an edge's cost comes from the ground it actually crosses.
+ * Total yield reachable within a travel-cost budget (§3.3) — a flood over the
+ * tiles from the site's own (§3.8), the same search an army will make, rather
+ * than a walk of the edges someone happened to draw.
  */
-function resourceScore(costDistances: ReadonlyMap<string, number>, terrainNodes: readonly TerrainNode[], resourceReach: number): number {
-    return terrainNodes.reduce((total, node) => {
-        const cost = costDistances.get(node.id);
-        return total + (cost !== undefined && cost <= resourceReach ? node.resourceYield : 0);
-    }, 0);
+function resourceScore(grid: TravelGrid, site: SettlementNode, terrainNodes: readonly TerrainNode[], resourceReach: number): number {
+    const costs = tileCostsFrom(grid, site.tile, resourceReach);
+    return terrainNodes.reduce((total, node) => total + (costs[node.tile] <= resourceReach ? node.resourceYield : 0), 0);
 }
 
 export function checkSettlementFairness(
     sites: readonly SettlementNode[],
     terrainNodes: readonly TerrainNode[],
     edges: readonly WorldEdge[],
-    options: Pick<SettlementOptions, "minimumStartHops" | "resourceHops" | "parityTolerance"> = {},
+    grid: TravelGrid,
+    options: Pick<SettlementOptions, "minimumStartHops" | "resourceReach" | "parityTolerance"> = {},
 ): FairnessReport {
     const minimumHops = options.minimumStartHops ?? 3;
-    const resourceReach = options.resourceHops ?? 3;
+    const resourceReach = options.resourceReach ?? DEFAULT_RESOURCE_REACH;
     const parityTolerance = options.parityTolerance ?? 0.35;
     const starts = sites.filter(site => site.siteType === "player-start");
     // Separation and cornering are topology (how many edges apart), so they stay hop-based; only the resource score is time-weighted.
     const hopMaps = new Map(starts.map(site => [site.id, graphDistances(site.id, edges)]));
-    const costMaps = new Map(starts.map(site => [site.id, weightedGraphDistances(site.id, edges)]));
-    const scores = Object.fromEntries(starts.map(site => [site.id, resourceScore(costMaps.get(site.id)!, terrainNodes, resourceReach)]));
+    const scores = Object.fromEntries(starts.map(site => [site.id, resourceScore(grid, site, terrainNodes, resourceReach)]));
     const ordered = Object.values(scores).sort((a, b) => a - b);
     const median = ordered[Math.floor(ordered.length / 2)] ?? 0;
     const reasons: string[] = [];
@@ -93,16 +107,16 @@ export function assignFairStartingSites(
     sites: readonly SettlementNode[],
     terrainNodes: readonly TerrainNode[],
     edges: readonly WorldEdge[],
+    grid: TravelGrid,
     random: RandomSource,
     playerStarts = 10,
-    options: Pick<SettlementOptions, "minimumStartHops" | "resourceHops" | "parityTolerance"> = {},
+    options: Pick<SettlementOptions, "minimumStartHops" | "resourceReach" | "parityTolerance"> = {},
 ): { sites: SettlementNode[]; fairness: FairnessReport } | undefined {
-    const resourceReach = options.resourceHops ?? 3;
+    const resourceReach = options.resourceReach ?? DEFAULT_RESOURCE_REACH;
     const tolerance = options.parityTolerance ?? 0.35;
     const minimumHops = options.minimumStartHops ?? 3;
     const distances = new Map(sites.map(site => [site.id, graphDistances(site.id, edges)]));
-    const costDistances = new Map(sites.map(site => [site.id, weightedGraphDistances(site.id, edges)]));
-    const candidateScores = new Map(sites.map(site => [site.id, resourceScore(costDistances.get(site.id)!, terrainNodes, resourceReach)]));
+    const candidateScores = new Map(sites.map(site => [site.id, resourceScore(grid, site, terrainNodes, resourceReach)]));
     const orderedScores = [...candidateScores.values()].sort((a, b) => a - b);
     const median = orderedScores[Math.floor(orderedScores.length / 2)] ?? 0;
     const eligible = sites.filter(site => median === 0 || Math.abs(candidateScores.get(site.id)! - median) / median <= tolerance);
@@ -119,7 +133,7 @@ export function assignFairStartingSites(
             ...site,
             siteType: selected.has(site.id) ? "player-start" : "expansion",
         }));
-        const fairness = checkSettlementFairness(classified, terrainNodes, edges, options);
+        const fairness = checkSettlementFairness(classified, terrainNodes, edges, grid, options);
         if (fairness.valid) return { sites: classified, fairness };
     }
     return undefined;

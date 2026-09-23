@@ -2306,7 +2306,7 @@ reduced-motion rule in `ag-theme.css`.
   6. Reviewers: `gremlin` (more rejection criteria means more retries; what
      happens at the cap, and how long generation now takes at the p99 seed),
      `rulebook` (still no branch on an area name; the new script documented).
-- **PR 16 — The tiles are the roads.** §3.8. Lands before PR 19 so armies
+- **PR 16 — The tiles are the roads.** Shipped. §3.8. Lands before PR 19 so armies
   never move along edges at all.
   1. `tile` on every node; generation snaps nodes to distinct passable tiles,
      and a world from before this snaps its nodes on read.
@@ -2329,6 +2329,40 @@ reduced-motion rule in `ag-theme.css`.
      search over a malformed field, how long the flood takes over ten
      starts), `croupier` (a stored path is exactly what fog of war must hide
      once armies carry one — agree now where it lives).
+
+  How it landed: `worldgen/tilePath.ts` is the one pathfinder — `travelGridFor`
+  (each tile's area weight, a bridge or ford's multiplier on its own water, a
+  road capping the ground at its weight), `findTilePath` (A\* with the octile
+  distance × the cheapest weight), `tileCostsFrom` (the bounded flood),
+  `pathCost` and `snapToTiles`. A step costs its length × the mean of its two
+  tiles' weights, so a route costs the same both ways; a diagonal may not pass
+  the corner of any impassable tile. Terrain nodes and sites are snapped as
+  they are placed. `worldgen/crossings.ts` runs before anything is pathed: a
+  crossing every 12 tiles of each river (`RIVER_CROSSING_SPACING`, the first
+  half that in), at the shortest straight span with dry ground at both ends —
+  up to two tiles, because a river traced four-connected is a staircase, and
+  no single tile of a staircase crosses it — then the detour rule over each
+  site's three nearest neighbours, bridging or fording wherever the dry route
+  costs more than 1.6× one that may cross water. `connectWorldGraph` keeps the
+  MST-plus-extras shape by straight-line distance, but connectivity is one
+  flood from the first node and each edge is `findTilePath` between its nodes,
+  storing `path`. Roads are laid along the paths of edges between occupied
+  settlements and those edges re-priced with `pathCost`. The fairness score
+  floods from each site to its reach — which is now 24, not 3: the old reach
+  was the hop count carried into cost units, reached no resource from almost
+  any start, and so every score was zero and the parity band never bit. With
+  a real reach every one of 40 seeds still passes by its fourth attempt, and
+  generation got faster — p50 about 180 ms, down from the best part of a
+  second, since the straight-line walk of every pair of nodes is gone.
+  `walkTileLine`, `edgeCostFor` and `weightedGraphDistances` went with it. A
+  world from before this has its nodes snapped and its edges re-pathed on read
+  (`worldTiles.ts`, about 25 ms for a full world), which `worldView` saves
+  once, guarded on the nodes still lacking tiles; a world from before PR 9 gets
+  the tile under each node and keeps straight edges. The map draws each route
+  through its tiles with `MapEdges`' new `waypoints`. Every node's `tile` and
+  every edge's `path` are public map data; an army's route (PR 19) belongs on
+  the army, not the world, so PR 20 has one field to redact. No `whatsNew.ts`
+  line.
 - **PR 17 — Buildings cost resources.** §4.5.
   1. A `cost(type, level)` beside `buildTicksFor` in `buildings.ts`, with the
      first-pass table, shared by client and server.

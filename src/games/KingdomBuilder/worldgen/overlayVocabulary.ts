@@ -18,9 +18,10 @@
 import type { Point, SettlementSiteType, WorldEdge, WorldNode } from "./landmass";
 import { WORLD_AREA_SCALE, pointDistance } from "./landmass";
 import type { RandomSource } from "./random";
-import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, HILLS_CODE, MOUNTAINS_CODE, OCEAN_CODE, WOODLAND_CODE, areaWeightForCode } from "./areas";
-import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./overlays";
-import { tileAt, tileCentre, tileIndex, walkTileLine, type TerrainField } from "./terrainField";
+import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, HILLS_CODE, MOUNTAINS_CODE, OCEAN_CODE, WOODLAND_CODE } from "./areas";
+import type { OverlayPlacement } from "./overlays";
+import { tileAt, tileCentre, tileIndex, tilesInRing, type TerrainField } from "./terrainField";
+import { pathCost, travelGridFor } from "./tilePath";
 
 const ROAD_CODE = "R";
 const PIER_CODE = "P";
@@ -34,57 +35,38 @@ function isOccupiedSettlement(node: WorldNode | undefined): node is WorldNode {
 }
 
 /**
- * Roads (§3.5.3): the tiles under an edge between two occupied settlements,
- * at the Road registry entry's own weight — which is always ≤ any passable
- * area's own weight (the registry entry's comment is the guard for this), so
- * a road can only ever match or improve the ground it's laid on, never make
- * it slower. Tiles a bridge or ford already claims keep that overlay and its
- * own cost untouched; a road never overwrites one.
+ * Roads (§3.5.3, §3.8): the tiles along the route of an edge between two
+ * occupied settlements, at the Road registry entry's own weight — which is
+ * always ≤ any passable area's own weight (the registry entry's comment is the
+ * guard for this), so a road can only ever match or improve the ground it's
+ * laid on. Every tile the road improves is one the pathfinder will now prefer,
+ * so a road is a real shortcut, and the edge's cost is its route re-priced
+ * with the road down. A tile some other overlay already claims — a bridge, a
+ * ford — keeps it; a road never overwrites one.
  */
 export function deriveRoadOverlays(
     field: TerrainField,
     nodesById: ReadonlyMap<string, WorldNode>,
     edges: readonly WorldEdge[],
-    existingOverlayByTile: ReadonlyMap<number, string>,
+    existingOverlays: readonly OverlayPlacement[],
 ): { edges: WorldEdge[]; overlays: OverlayPlacement[] } {
-    const roadMovement = overlayForCode(ROAD_CODE)!.movement;
-    const roadWeight = roadMovement.kind === "weight" ? roadMovement.multiplier : 1;
+    const claimed = new Set(existingOverlays.map(overlay => overlay.tile));
     const roadTiles = new Map<number, OverlayPlacement>();
-
-    const updatedEdges = edges.map((edge): WorldEdge => {
-        const from = nodesById.get(edge.from);
-        const to = nodesById.get(edge.to);
-        if (!isOccupiedSettlement(from) || !isOccupiedSettlement(to)) return edge;
-
-        let cost = 0;
-        for (const segment of walkTileLine(field, from, to)) {
-            const tile = tileIndex(field, segment.col, segment.row);
-            const code = field.codes[tile];
-            const weight = areaWeightForCode(code);
-            const claimedBy = existingOverlayByTile.get(tile);
-
-            if (weight === "impassable") {
-                // Already a bridge or ford — every impassable tile on an edge
-                // this graph offered at all is one, so this is never absent.
-                const crossing = claimedBy ? overlayForCode(claimedBy) : undefined;
-                const multiplier = crossing?.movement.kind === "passable" ? crossing.movement.multiplier : 1;
-                cost += multiplier * segment.length;
-                continue;
-            }
-            if (claimedBy) {
-                // Some other overlay (a pier, a signpost) already owns this
-                // tile — leave its ground cost alone rather than draw two
-                // overlays on one square.
-                cost += weight * segment.length;
-                continue;
-            }
-            cost += Math.min(weight, roadWeight) * segment.length;
-            if (!roadTiles.has(tile)) roadTiles.set(tile, { tile, code: ROAD_CODE });
+    const roadEdges = edges.filter(edge => edge.path && isOccupiedSettlement(nodesById.get(edge.from)) && isOccupiedSettlement(nodesById.get(edge.to)));
+    for (const edge of roadEdges) {
+        for (const tile of edge.path!) {
+            if (!claimed.has(tile) && !roadTiles.has(tile)) roadTiles.set(tile, { tile, code: ROAD_CODE });
         }
-        return { ...edge, movementCost: cost };
-    });
+    }
+    if (roadTiles.size === 0) return { edges: [...edges], overlays: [] };
 
-    return { edges: updatedEdges, overlays: [...roadTiles.values()] };
+    const overlays = [...roadTiles.values()];
+    const grid = travelGridFor(field, [...existingOverlays, ...overlays]);
+    const repriced = new Set(roadEdges);
+    return {
+        edges: edges.map(edge => (repriced.has(edge) ? { ...edge, movementCost: pathCost(grid, edge.path!) } : edge)),
+        overlays,
+    };
 }
 
 /**
@@ -95,15 +77,8 @@ export function deriveRoadOverlays(
  */
 function findInRings(field: TerrainField, col: number, row: number, radius: number, accept: (tile: number) => boolean): number | undefined {
     for (let ring = 0; ring <= radius; ring++) {
-        for (let dr = -ring; dr <= ring; dr++) {
-            for (let dc = -ring; dc <= ring; dc++) {
-                if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-                const c = col + dc, r = row + dr;
-                if (c < 0 || c >= field.columns || r < 0 || r >= field.rows) continue;
-                const tile = tileIndex(field, c, r);
-                if (accept(tile)) return tile;
-            }
-        }
+        const found = tilesInRing(field, col, row, ring).find(accept);
+        if (found !== undefined) return found;
     }
     return undefined;
 }
@@ -267,7 +242,7 @@ export function applyOverlayVocabulary(
     const nodesById = new Map(nodes.map(node => [node.id, node]));
     const claimed = new Set(existingOverlays.map(overlay => overlay.tile));
 
-    const roads = deriveRoadOverlays(field, nodesById, edges, overlayCodesByTile(existingOverlays));
+    const roads = deriveRoadOverlays(field, nodesById, edges, existingOverlays);
     for (const overlay of roads.overlays) claimed.add(overlay.tile);
 
     const piers = derivePierOverlays(field, nodes, claimed);

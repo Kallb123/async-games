@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { generateWorld } from "./generateWorld";
-import { connectWorldGraph, edgeCostFor, isConnected } from "./graphConnectivity";
+import { connectWorldGraph, isConnected, routeTerrain } from "./graphConnectivity";
+import { findTilePath, isPassableTile, travelGridFor } from "./tilePath";
 import { createRandom } from "./random";
 import { checkSettlementFairness } from "./settlementSites";
-import { generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
+import { generateBaseTerrainField, mainlandOf, tileCentre, type TerrainField } from "./terrainField";
 import { WORLD_AREA_SCALE, generateLandmass, isLand } from "./landmass";
 import { placeTerrainNodes } from "./terrainNodes";
 import { MOUNTAINS_CODE } from "./areas";
@@ -36,7 +37,7 @@ describe("Kingdom Builder world generation", () => {
         }
     });
 
-    it("places separated terrain nodes only on land, matching the ground beneath them", () => {
+    it("places separated terrain nodes only on land, matching the ground beneath them, each on a tile of its own", () => {
         const random = createRandom("terrain");
         const landmass = generateLandmass(random);
         const { field } = generateBaseTerrainField(landmass, random);
@@ -44,7 +45,12 @@ describe("Kingdom Builder world generation", () => {
         expect(nodes).toHaveLength(20);
         expect(nodes.every(node => isLand(landmass, node))).toBe(true);
         expect(new Set(nodes.map(node => node.terrain))).toEqual(new Set(["forest", "quarry", "ore"]));
-        for (const node of nodes) expect(nodes.filter(other => Math.hypot(node.x - other.x, node.y - other.y) < 5)).toHaveLength(1);
+        expect(new Set(nodes.map(node => node.tile)).size).toBe(20);
+        for (const node of nodes) {
+            expect(node).toMatchObject(tileCentre(node.tile % field.columns, Math.floor(node.tile / field.columns)));
+            // Standing a node on its tile's centre moves it at most half a tile's diagonal.
+            expect(nodes.filter(other => Math.hypot(node.x - other.x, node.y - other.y) < 5 - 2 * Math.SQRT2)).toHaveLength(1);
+        }
     });
 
     it("connects every node with a real, terrain-derived movement cost", () => {
@@ -52,6 +58,21 @@ describe("Kingdom Builder world generation", () => {
         expect(isConnected(world.nodes, world.edges)).toBe(true);
         expect(world.edges.length).toBeGreaterThanOrEqual(world.nodes.length - 1);
         for (const edge of world.edges) expect(edge.movementCost).toBeGreaterThan(0);
+    });
+
+    it("stands every node on its own passable tile, and runs every edge's path from one node's tile to the other's", () => {
+        const world = generateWorld("on-the-tiles");
+        const grid = travelGridFor(world.terrainField, world.overlays);
+        const tileOf = new Map(world.nodes.map(node => [node.id, node.tile]));
+        expect(new Set(tileOf.values()).size).toBe(world.nodes.length);
+        for (const node of world.nodes) expect(isPassableTile(grid, node.tile), node.id).toBe(true);
+        for (const edge of world.edges) {
+            expect(edge.path![0]).toBe(tileOf.get(edge.from));
+            expect(edge.path![edge.path!.length - 1]).toBe(tileOf.get(edge.to));
+            expect(edge.path!.every(tile => isPassableTile(grid, tile)), edge.id).toBe(true);
+            // Roads only ever make a route cheaper than the path it was found as.
+            expect(edge.movementCost).toBeLessThanOrEqual(findTilePath(travelGridFor(world.terrainField, world.overlays.filter(o => o.code !== "R")), edge.path![0], edge.path![edge.path!.length - 1])!.cost + 1e-9);
+        }
     });
 
     it("still connects every world once water can veto an edge", () => {
@@ -68,68 +89,53 @@ describe("Kingdom Builder world generation", () => {
         expect(() => generateWorld("budget-exhausted", { budgetMs: 0 })).toThrow(/timed out after 0 attempts/);
     });
 
-    it("derives route terrain from the ground the line actually crosses", () => {
-        const field = fieldOf(5, 1, "wwwww");
-        const result = edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 });
-        expect(result).toMatchObject({ terrain: "forest", passable: true });
-        expect(result.cost).toBeCloseTo(8 * 1.5, 6);
+    it("reads a route's terrain off the ground its path actually crosses", () => {
+        expect(routeTerrain(fieldOf(5, 1, "wwwww"), [0, 1, 2, 3, 4])).toBe("forest");
+        expect(routeTerrain(fieldOf(5, 1, "ggrgg"), [0, 1, 2, 3, 4])).toBe("river-crossing");
+        // An unknown code (a rolling deploy reading a newer world) reads as grass rather than throwing.
+        expect(routeTerrain(fieldOf(5, 1, "gg?gg"), [0, 1, 2, 3, 4])).toBe("plains");
     });
 
-    it("never throws on an unrecognised area code — a rolling deploy can read a world a newer instance generated", () => {
-        const field = fieldOf(5, 1, "gg?gg");
-        expect(() => edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 })).not.toThrow();
-        // An unknown code renders at grass weight, so the route is unaffected.
-        expect(edgeCostFor(field, { x: 1, y: 1 }, { x: 9, y: 1 })).toMatchObject({ terrain: "plains", passable: true, cost: 8 });
-    });
-
-    it("crosses a river only through a bridge it writes on the crossing tile", () => {
+    it("draws each edge as the cheapest tile path between its nodes, costing what that path costs", () => {
+        const field = fieldOf(5, 3, "ggggg" + "rrrrr" + "ggggg");
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
+            { id: "north", kind: "settlement", siteType: "expansion", x: 1, y: 1, tile: 0 },
+            { id: "south", kind: "settlement", siteType: "expansion", x: 1, y: 5, tile: 10 },
         ];
-        const field = fieldOf(5, 1, "ggrgg");
-        const { edges, overlays } = connectWorldGraph(nodes, field, createRandom("river"), 0);
-        expect(edges[0]).toMatchObject({ terrain: "river-crossing", chokepoint: true });
-        // Tiles crossed (world x 1→9 over 2-unit tiles): 1 unit of grass, 2 of
-        // grass, 2 of river at the bridge's ×2.5, then 2 and 1 more of grass.
-        expect(edges[0].movementCost).toBeCloseTo(1 * 1 + 2 * 1 + 2 * 2.5 + 2 * 1 + 1 * 1, 6);
-        // The crossing runs east–west (west and east sit on the same row), so
-        // the bridge's own orientation key follows the direction of travel,
-        // not the river it crosses (§3.5.5).
-        expect(overlays).toEqual([{ tile: 2, code: "B", orientation: "ew" }]);
+        const bridge = [{ tile: 9, code: "B", orientation: "ns" }];
+        const grid = travelGridFor(field, bridge);
+        const [edge] = connectWorldGraph(nodes, field, grid, createRandom("river"), 0);
+        // Round by the bridge at the far end, not straight over the river.
+        expect(edge.path).toContain(9);
+        expect(edge.path![0]).toBe(0);
+        expect(edge.path![edge.path!.length - 1]).toBe(10);
+        expect(edge.movementCost).toBeCloseTo(findTilePath(grid, 0, 10)!.cost, 9);
+        expect(edge).toMatchObject({ terrain: "river-crossing", chokepoint: true });
     });
 
-    it("orients a bridge/ford by the direction of travel across it, not the water's own direction", () => {
-        const northSouth: SettlementNode[] = [
-            { id: "north", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "south", kind: "settlement", siteType: "expansion", x: 1, y: 9 },
-        ];
-        const field = fieldOf(1, 5, "grrrg");
-        const { overlays } = connectWorldGraph(northSouth, field, createRandom("river-ns"), 0);
-        expect(overlays.every(overlay => overlay.orientation === "ns")).toBe(true);
-    });
-
-    it("never crosses open ocean, with or without an extra edge to try", () => {
+    it("refuses a world where some node has no path to the rest", () => {
         const nodes: SettlementNode[] = [
-            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1 },
-            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1 },
+            { id: "west", kind: "settlement", siteType: "expansion", x: 1, y: 1, tile: 0 },
+            { id: "east", kind: "settlement", siteType: "expansion", x: 9, y: 1, tile: 4 },
         ];
         const field = fieldOf(5, 1, "ggogg");
-        expect(() => connectWorldGraph(nodes, field, createRandom("no-crossing"), 0)).toThrow("Unable to connect world graph");
+        expect(() => connectWorldGraph(nodes, field, travelGridFor(field), createRandom("no-crossing"), 0)).toThrow("Unable to connect world graph");
     });
 
     it("reports graph-hop separation, parity, and cornering violations from a fixed fixture", () => {
         const starts: SettlementNode[] = ["a", "b", "c", "d"].map((id, index) => ({
-            id, kind: "settlement", siteType: "player-start", x: index, y: 0,
+            id, kind: "settlement", siteType: "player-start", x: index, y: 0, tile: index,
         }));
         const terrain: TerrainNode[] = ["a", "b", "c"].map((owner, index) => ({
-            id: `ore-${owner}`, kind: "terrain", terrain: "ore", resourceYield: 10, x: index, y: 1,
+            id: `ore-${owner}`, kind: "terrain", terrain: "ore", resourceYield: 10, x: index, y: 1, tile: 4 + index,
         }));
         const pairs = [["a", "b"], ["a", "c"], ["a", "d"], ["a", "ore-a"], ["b", "ore-b"], ["c", "ore-c"]];
         const edges: WorldEdge[] = pairs.map(([from, to], index) => ({
             id: `e${index}`, from, to, terrain: "plains", movementCost: 1, chokepoint: false,
         }));
-        const report = checkSettlementFairness(starts, terrain, edges, { minimumStartHops: 2, resourceHops: 1, parityTolerance: 0.2 });
+        // Starts on the top row, their ore just below, on grass: one step (cost 2) apart.
+        const grid = travelGridFor(fieldOf(4, 2, "gggggggg"));
+        const report = checkSettlementFairness(starts, terrain, edges, grid, { minimumStartHops: 2, resourceReach: 2, parityTolerance: 0.2 });
         expect(report.reasons).toContain("a and b are too close");
         expect(report.reasons).toContain("a is cornered by other starts");
         expect(report.reasons.some(reason => reason.includes("resource-parity band"))).toBe(true);
@@ -152,7 +158,7 @@ describe("Kingdom Builder world generation", () => {
             middleNinthShare += ninths[4] / mountains / 20;
             const terrain = world.nodes.filter((node): node is TerrainNode => node.kind === "terrain");
             const sites = world.nodes.filter((node): node is SettlementNode => node.kind === "settlement");
-            const report = checkSettlementFairness(sites, terrain, world.edges);
+            const report = checkSettlementFairness(sites, terrain, world.edges, travelGridFor(world.terrainField, world.overlays));
             expect(report.reasons, `seed fairness-${index}, attempt ${world.generationAttempt}`).toEqual([]);
             expect(sites.filter(site => site.siteType === "player-start")).toHaveLength(10);
             expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(14 * WORLD_AREA_SCALE);

@@ -1,3 +1,4 @@
+import { deriveCrossings } from "./crossings";
 import { connectWorldGraph, isConnected } from "./graphConnectivity";
 import { generateLandmass, type Landmass, type WorldEdge, type WorldNode } from "./landmass";
 import type { OverlayPlacement } from "./overlays";
@@ -6,6 +7,7 @@ import { createRandom } from "./random";
 import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
 import { applySitesToTerrainField, generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { placeTerrainNodes, type TerrainNodeOptions } from "./terrainNodes";
+import { travelGridFor } from "./tilePath";
 import { checkWorldShape } from "./worldShape";
 
 export interface GeneratedWorld {
@@ -59,7 +61,7 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
             const onMainland = mainlandOf(baseField);
             const terrainNodes = placeTerrainNodes(landmass, baseField, onMainland, random, options.terrain);
             const requestedStarts = options.settlements?.playerStarts ?? 10;
-            const settlementSites = placeSettlementSites(landmass, onMainland, terrainNodes, random, options.settlements);
+            const settlementSites = placeSettlementSites(landmass, baseField, onMainland, terrainNodes, random, options.settlements);
             const terrainField = applySitesToTerrainField(baseField, settlementSites);
             // §3.7's composition bands and mountain-region rule, checked
             // before the graph — the expensive step — so a world whose ground
@@ -69,13 +71,18 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
                 lastFailure = `map shape: ${shapeFailures.join("; ")}`;
                 continue;
             }
+            // Crossings first (§3.8): a bridge has to exist before anything
+            // can be pathed over it, so they come from the rivers and the
+            // sites, not from routes that don't exist yet.
+            const overlays = deriveCrossings(terrainField, settlementSites);
+            const grid = travelGridFor(terrainField, overlays);
             const nodes = [...terrainNodes, ...settlementSites];
-            const { edges, overlays } = connectWorldGraph(nodes, terrainField, random);
+            const edges = connectWorldGraph(nodes, terrainField, grid, random);
             if (!isConnected(nodes, edges)) {
                 lastFailure = "graph was disconnected";
                 continue;
             }
-            const assignment = assignFairStartingSites(settlementSites, terrainNodes, edges, random, requestedStarts, options.settlements);
+            const assignment = assignFairStartingSites(settlementSites, terrainNodes, edges, grid, random, requestedStarts, options.settlements);
             if (!assignment) {
                 lastFailure = "no starting-site assignment passed the fairness constraints";
                 continue;

@@ -10,23 +10,36 @@ function fieldOf(columns: number, rows: number, codes: string): TerrainField {
 }
 
 function settlement(id: string, x: number, y: number, siteType: SettlementNode["siteType"] = "player-start"): SettlementNode {
-    return { id, kind: "settlement", siteType, x, y };
+    return { id, kind: "settlement", siteType, x, y, tile: Math.floor(x / 2) };
 }
 
 describe("deriveRoadOverlays", () => {
-    it("lays a road between two occupied settlements, cutting a marsh edge down to the road's own weight", () => {
+    const straightAcross = [0, 1, 2, 3, 4];
+
+    it("lays a road along the route between two occupied settlements, re-pricing it at the road's own weight", () => {
         const field = fieldOf(5, 1, "sssss"); // marsh, weight 2.5
         const nodesById = new Map<string, WorldNode>([
             ["west", settlement("west", 1, 1)],
             ["east", settlement("east", 9, 1)],
         ]);
-        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "plains", movementCost: 8 * 2.5, chokepoint: false }];
+        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "plains", movementCost: 8 * 2.5, chokepoint: false, path: straightAcross }];
 
-        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, new Map());
+        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, []);
 
         expect(updated[0].movementCost).toBeCloseTo(8 * 1, 6); // never more than the road's own weight
         expect(overlays.map(o => o.code)).toEqual(["R", "R", "R", "R", "R"]);
-        expect(new Set(overlays.map(o => o.tile)).size).toBe(5);
+        expect(overlays.map(o => o.tile)).toEqual(straightAcross);
+    });
+
+    it("follows the route's own bends, not a straight line between its ends", () => {
+        const field = fieldOf(3, 2, "gggggg");
+        const nodesById = new Map<string, WorldNode>([
+            ["west", settlement("west", 1, 1)],
+            ["east", settlement("east", 5, 1)],
+        ]);
+        const bent = [0, 4, 2]; // down to the middle of the lower row and back up
+        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "plains", movementCost: 4 * Math.SQRT2, chokepoint: false, path: bent }];
+        expect(deriveRoadOverlays(field, nodesById, edges, []).overlays.map(o => o.tile)).toEqual(bent);
     });
 
     it("never touches an edge with an expansion site at either end — roads are for occupied settlements only", () => {
@@ -35,26 +48,25 @@ describe("deriveRoadOverlays", () => {
             ["west", settlement("west", 1, 1, "player-start")],
             ["east", settlement("east", 9, 1, "expansion")],
         ]);
-        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "plains", movementCost: 20, chokepoint: false }];
+        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "plains", movementCost: 20, chokepoint: false, path: straightAcross }];
 
-        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, new Map());
+        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, []);
         expect(updated[0].movementCost).toBe(20);
         expect(overlays).toEqual([]);
     });
 
     it("leaves a bridge or ford's own tile and cost alone rather than overwriting it with a road", () => {
-        const field = fieldOf(5, 1, "ggrgg"); // river in the middle, same fixture shape as the connectivity test
+        const field = fieldOf(5, 1, "ggrgg");
         const nodesById = new Map<string, WorldNode>([
             ["west", settlement("west", 1, 1)],
             ["east", settlement("east", 9, 1)],
         ]);
-        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "river-crossing", movementCost: 1 + 2 + 2 * 2.5 + 2 + 1, chokepoint: true }];
-        const existingOverlayByTile = new Map([[2, "B"]]);
+        const edges: WorldEdge[] = [{ id: "e0", from: "west", to: "east", terrain: "river-crossing", movementCost: 2 + 2 * 3.5 + 2, chokepoint: true, path: straightAcross }];
 
-        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, existingOverlayByTile);
-        expect(updated[0].movementCost).toBeCloseTo(1 + 2 + 2 * 2.5 + 2 + 1, 6); // the bridge tile's cost is untouched
-        expect(overlays.some(o => o.tile === 2)).toBe(false); // no second overlay drawn on the bridge's own tile
-        expect(overlays.map(o => o.tile).sort()).toEqual([0, 1, 3, 4]);
+        const { edges: updated, overlays } = deriveRoadOverlays(field, nodesById, edges, [{ tile: 2, code: "B", orientation: "ew" }]);
+        // Grass under road costs what grass did; the two half-steps onto the bridge keep its ×2.5.
+        expect(updated[0].movementCost).toBeCloseTo(2 + 2 * 3.5 + 2, 6);
+        expect(overlays.map(o => o.tile)).toEqual([0, 1, 3, 4]); // no second overlay drawn on the bridge's own tile
     });
 });
 
@@ -124,7 +136,8 @@ describe("applyOverlayVocabulary", () => {
     it("never lets two of its own passes claim the same tile", () => {
         const field = fieldOf(16, 16, "g".repeat(16 * 16));
         const nodes: WorldNode[] = [settlement("a", 1, 1), settlement("b", 29, 1)];
-        const edges: WorldEdge[] = [{ id: "e0", from: "a", to: "b", terrain: "plains", movementCost: 28, chokepoint: false }];
+        const path = Array.from({ length: 15 }, (_, col) => col);
+        const edges: WorldEdge[] = [{ id: "e0", from: "a", to: "b", terrain: "plains", movementCost: 28, chokepoint: false, path }];
 
         const { overlays } = applyOverlayVocabulary(field, nodes, edges, [], createRandom("no-collision"));
         const tiles = overlays.map(o => o.tile);

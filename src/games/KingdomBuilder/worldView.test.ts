@@ -142,4 +142,41 @@ describe("Kingdom Builder world view", () => {
         expect(view.players.map(player => [player.isMe, player.isHost])).toEqual([[true, true]]);
         expect(view.seatCount).toBe(1);
     });
+
+    it("stands a world from before tile travel on its tiles, and saves that once, guarded on it not being done yet", async () => {
+        const worldId = new Types.ObjectId().toString();
+        mockSettlements([{ _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start" }]);
+        mockWorld({
+            terrainField: { columns: 3, rows: 1, tileSize: 2, codes: "ggg" },
+            nodes: [{ id: "start", kind: "settlement", siteType: "player-start", x: 1, y: 1 }, { id: "ore", kind: "terrain", terrain: "ore", resourceYield: 4, x: 5, y: 1 }],
+            edges: [{ id: "edge-0", from: "start", to: "ore", terrain: "plains", movementCost: 4, chokepoint: false }],
+        });
+        const save = vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({} as never);
+
+        const view = await worldView(worldId, "owner");
+
+        expect(view.nodes.map(node => node.tile)).toEqual([0, 2]);
+        expect(view.edges[0].path).toEqual([0, 1, 2]);
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(save).toHaveBeenCalledWith({ _id: worldId, "nodes.tile": { $exists: false } }, { $set: { nodes: view.nodes, edges: view.edges } });
+    });
+
+    it("still answers when saving the tiles fails, and never saves a world already on them", async () => {
+        const worldId = new Types.ObjectId().toString();
+        const oldWorld = {
+            terrainField: { columns: 3, rows: 1, tileSize: 2, codes: "ggg" },
+            nodes: [{ id: "start", kind: "settlement", siteType: "player-start", x: 1, y: 1 }],
+        };
+        const save = vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockRejectedValue(new Error("write conflict"));
+        vi.spyOn(console, "error").mockImplementation(() => undefined);
+        mockSettlements([{ _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start" }]);
+        mockWorld(oldWorld);
+        expect((await worldView(worldId, "owner")).nodes[0].tile).toBe(0);
+
+        save.mockClear();
+        mockSettlements([{ _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start" }]);
+        mockWorld({ ...oldWorld, nodes: [{ ...oldWorld.nodes[0], tile: 0 }] });
+        await worldView(worldId, "owner");
+        expect(save).not.toHaveBeenCalled();
+    });
 });

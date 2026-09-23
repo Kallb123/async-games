@@ -70,7 +70,9 @@ out. A second copy is the signal to extract the first one.
   a figure) and keeps nothing else. The node-and-edge map
   boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
   `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
-  as labelled stubs off each edge rather than a line across the whole board).
+  as labelled stubs off each edge rather than a line across the whole board,
+  and an edge given `waypoints` as a polyline through them — how Kingdom
+  Builder draws a route along the tiles it takes).
   Any board too big for the column — map or not — wears `BoardZoom`: the pill
   stepping fit → in → a deeper step a board may set with `maxWidth`, plus pinch
   and ctrl-wheel zoom, both anchored so the part of the board under the fingers
