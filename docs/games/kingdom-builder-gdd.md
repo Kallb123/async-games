@@ -1201,7 +1201,7 @@ army and forecloses that army from anything else in the meantime.
 
 ### 4.5 Building costs and the starting stockpile
 
-> PR 17 shipped this section; the prices, the starting stockpile and the town
+> PR 17 shipped this section; the prices (units' too), the starting stockpile and the town
 > centre's trickle are read from `src/games/KingdomBuilder/economy.json`, so a
 > tuning pass edits that file rather than code. The farm and wheat rows wait on
 > PR 18.
@@ -2386,10 +2386,11 @@ reduced-motion rule in `ag-theme.css`.
      `caveman` (building and unit costs should be one shape and one helper).
 
   How it landed: the numbers are data, not code — `economy.json` beside
-  `buildings.ts` holds each building's level-one price, the first settlement's
+  `buildings.ts` holds each building's level-one price, every unit's training
+  price (moved out of `units.ts`, so both are tuned in one place), the first settlement's
   stockpile and the town centre's trickle, a resource left out of an entry
   reading as none, and a guard test fails on an unknown resource, a fraction, a
-  negative, or a building missing from (or extra to) the price list.
+  negative, or a building or unit missing from (or extra to) its price list.
   `buildingCostFor(type, level)` is the level-one price × the target level.
   `resources.ts` is the one affordability vocabulary — `canAfford`,
   `shortfallFor`, `formatResources` — used by the server's pre-checks and the

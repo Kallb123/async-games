@@ -7,12 +7,14 @@ import {
     buildingCostFor,
 } from "./buildings";
 import economy from "./economy.json";
+import { KINGDOM_BUILDER_UNIT_TYPES } from "./units";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor } from "./resources";
 
 describe("Kingdom Builder economy.json", () => {
     // A tuning pass edits this file by hand, so a typo should fail here rather than in a player's stores.
     const entries = [
         ...Object.entries(economy.buildingCosts).map(([name, amounts]) => [`buildingCosts.${name}`, amounts] as const),
+        ...Object.entries(economy.unitCosts).map(([name, amounts]) => [`unitCosts.${name}`, amounts] as const),
         ["startingStockpile", economy.startingStockpile] as const,
         ["townCentreTrickle", economy.townCentreTrickle] as const,
     ];
@@ -26,6 +28,10 @@ describe("Kingdom Builder economy.json", () => {
 
     it("prices exactly the buildings a player can raise", () => {
         expect(Object.keys(economy.buildingCosts).toSorted()).toEqual([...KINGDOM_BUILDER_PROTOTYPE_BUILDINGS].toSorted());
+    });
+
+    it("prices exactly the units a barracks can train", () => {
+        expect(Object.keys(economy.unitCosts).toSorted()).toEqual([...KINGDOM_BUILDER_UNIT_TYPES].toSorted());
     });
 
     it("never gives a building away, so the trickle is what gets a settlement started", () => {

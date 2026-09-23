@@ -3,7 +3,7 @@
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import economy from "./economy.json";
-import { resourcesOf } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf } from "./resources";
 
 export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "mine", "barracks"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
@@ -14,7 +14,7 @@ export function buildTicksFor(targetLevel: number): number {
     return KINGDOM_BUILDER_PROTOTYPE_BUILD_TICKS * targetLevel;
 }
 
-// The prices, the first settlement's stockpile and the town centre's trickle
+// The prices (units' too, read by units.ts), the first settlement's stockpile and the town centre's trickle
 // (GDD §4.5) live in economy.json so a tuning pass edits numbers, not code.
 // A resource left out of an entry costs (or grants) none.
 const LEVEL_ONE_COSTS: Record<KingdomBuilderPrototypeBuilding, KingdomBuilderResources> = Object.fromEntries(
@@ -33,5 +33,5 @@ export const KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE: KingdomBuilderResources = reso
  */
 export function buildingCostFor(type: KingdomBuilderPrototypeBuilding, targetLevel: number): KingdomBuilderResources {
     const levelOne = LEVEL_ONE_COSTS[type];
-    return resourcesOf({ wood: levelOne.wood * targetLevel, stone: levelOne.stone * targetLevel, iron: levelOne.iron * targetLevel });
+    return resourcesOf(Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [resource, levelOne[resource] * targetLevel])));
 }

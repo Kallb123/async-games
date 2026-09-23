@@ -5,6 +5,13 @@
         "mine": { "wood": 20, "stone": 10 },
         "barracks": { "wood": 30, "stone": 20, "iron": 10 }
     },
+    "unitCosts": {
+        "militia": { "wood": 10, "iron": 5 },
+        "scout": { "wood": 8, "iron": 4 },
+        "infantry": { "wood": 10, "iron": 15 },
+        "cavalry": { "wood": 20, "iron": 25 },
+        "siege-engine": { "wood": 40, "stone": 20, "iron": 15 }
+    },
     "startingStockpile": { "wood": 40, "stone": 20 },
     "townCentreTrickle": { "wood": 1 }
 }
