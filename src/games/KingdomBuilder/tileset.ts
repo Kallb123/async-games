@@ -178,13 +178,6 @@ export function isMaskArt(art: TileArt): art is Extract<TileArt, { layout: MaskL
     return isMaskLayout(art.layout);
 }
 
-
-        mountains: { path: "/art/kingdombuilder/overworld-mountains.png", tileWidth: 32, tileHeight: 32, margin: 0, spacing: 0 },
-
-export const AREA_ART: Readonly<Record<string, TileArt>> = {
-    m: { layout: "mask16", tiles: [{ sheet: "mountains", index: 7 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 12 }, { sheet: "mountains", index: 1 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 0 }, { sheet: "mountains", index: 6 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 14 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 13 }, { sheet: "mountains", index: 2 }, { sheet: "mountains", index: 8 }, { sheet: "mountains", index: 1 }, { sheet: "mountains", index: 7 }] },
-};
-
 export const TILESET: TilesetManifest = {
     sheets: {
         // https://opengameart.org/content/worldmapoverworld-tileset
