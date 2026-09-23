@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Pinch to zoom feels like a map app now",
+                detail: "Zooming a board — the pill or a pinch — now zooms inside its frame instead of stretching the page, so everything around the board stays put. A pinch follows your fingers: whatever was under them stays under them as you spread and slide, on every board with a zoom pill.",
+            },
+            {
                 title: "Your Kingdom Builder worlds are always within reach",
                 detail: "Return to every world from your home dashboard or the game switcher, with its current tick and your settlement count shown at a glance.",
                 game: "kingdombuilder",
@@ -118,10 +122,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Settlements & Cities boards are balanced now",
                 detail: "The numbers are dealt the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is still shuffled, so the island is different every time. Want the old free-for-all? Switch Totally random tiles on when you set up a game and the numbers are dealt with no rules at all, unbalanced map and all.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Add or change your password from Settings",
-                detail: "Signed in with Google or Microsoft? You can now add a password too, so you're never locked out if that account changes. Already have one? Change it from the same place — under Settings › Password.",
             },
         ],
     },
