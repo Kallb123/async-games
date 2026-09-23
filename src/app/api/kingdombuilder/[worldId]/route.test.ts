@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
     userId: "owner" as string | null,
     foundExpansion: vi.fn(),
     worldView: vi.fn(),
+    endWorld: vi.fn(),
+    leaveWorld: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId: mocks.userId }) }));
@@ -15,6 +17,8 @@ vi.mock("@/games/KingdomBuilder", () => ({
     },
     foundExpansion: mocks.foundExpansion,
     worldView: mocks.worldView,
+    endWorld: mocks.endWorld,
+    leaveWorld: mocks.leaveWorld,
 }));
 
 import { KingdomBuilderPersistenceError } from "@/games/KingdomBuilder";
@@ -58,5 +62,28 @@ describe("/api/kingdombuilder/[worldId]", () => {
         const response = await POST(request("POST", JSON.stringify({ siteId: "open-1" })), { params });
         expect(response.status).toBe(200);
         expect(mocks.foundExpansion).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", "open-1");
+    });
+
+    it("ends the world for its host, removing it only when asked to", async () => {
+        const response = await POST(request("POST", JSON.stringify({ action: "end", deleteNow: "yes" })), { params });
+        expect(response.status).toBe(200);
+        expect(mocks.endWorld).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", { deleteNow: false });
+
+        await POST(request("POST", JSON.stringify({ action: "end", deleteNow: true })), { params });
+        expect(mocks.endWorld).toHaveBeenLastCalledWith("0123456789abcdef01234567", "owner", { deleteNow: true });
+        expect(mocks.foundExpansion).not.toHaveBeenCalled();
+    });
+
+    it("maps a member who isn't the host to 403", async () => {
+        mocks.endWorld.mockRejectedValueOnce(new KingdomBuilderPersistenceError("FORBIDDEN", "Only the host can end this world"));
+        expect((await POST(request("POST", JSON.stringify({ action: "end" })), { params })).status).toBe(403);
+    });
+
+    it("leaves the world, and refuses an action it doesn't know", async () => {
+        expect((await POST(request("POST", JSON.stringify({ action: "leave" })), { params })).status).toBe(200);
+        expect(mocks.leaveWorld).toHaveBeenCalledWith("0123456789abcdef01234567", "owner");
+
+        expect((await POST(request("POST", JSON.stringify({ action: "explode" })), { params })).status).toBe(400);
+        expect(mocks.foundExpansion).not.toHaveBeenCalled();
     });
 });

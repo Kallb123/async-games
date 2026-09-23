@@ -56,14 +56,21 @@ function validateIds(worldId: string, settlementId: string) {
     }
 }
 
+/** No command lands on an ended world (GDD §9.1) — it reads as gone, like a missing one. */
+async function assertWorldLive(worldId: string) {
+    if (!await KingdomBuilderWorldModel.exists({ _id: worldId, endedAt: null })) {
+        throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
+    }
+}
+
 export async function settlementView(worldId: string, settlementId: string, userId: string): Promise<KingdomBuilderSettlementView> {
     validateIds(worldId, settlementId);
     const settlement = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId }).lean();
     if (!settlement) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
     if (settlement.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
 
-    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1 }).lean();
-    if (!world) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
+    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
+    if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
     const ownerSettlements = await KingdomBuilderSettlementModel.find({ worldId, ownerId: userId })
         .select({ tiles: 1 })
         .lean();
@@ -107,6 +114,7 @@ export async function queuePrototypeBuilding(
         || !KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.includes(buildingType as KingdomBuilderPrototypeBuilding)) {
         throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose an empty outer tile and a production building");
     }
+    await assertWorldLive(worldId);
 
     const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
         .select({ ownerId: 1, construction: 1, tiles: 1 })
@@ -158,6 +166,7 @@ export async function queueUnitTraining(
 ): Promise<KingdomBuilderSettlementView> {
     validateIds(worldId, settlementId);
     if (!isUnitType(unitType)) throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose a unit to train");
+    await assertWorldLive(worldId);
 
     const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
         .select({ ownerId: 1, tiles: 1, resources: 1, trainingQueue: 1 })

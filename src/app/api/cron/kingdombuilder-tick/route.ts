@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ClientSession } from "mongoose";
 
-import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick } from "@/games/KingdomBuilder";
+import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, removeEndedWorlds } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -12,12 +12,15 @@ export const maxDuration = 60;
 export const KINGDOM_BUILDER_TICK_INTERVAL_MS = 15 * 60 * 1000;
 const SWEEP_BUDGET_MS = (maxDuration - 10) * 1000;
 const SWEEP_CANDIDATE_LIMIT = 100;
+// Ended worlds removed per run (GDD §9.1) — a backlog drains over a few runs
+// rather than eating the tick sweep's budget in one.
+const REMOVAL_LIMIT = 20;
 // At most a year of missed ticks is caught up in one sweep.
 const MAX_CATCH_UP_TICKS = 365 * 24 * (60 * 60 * 1000 / KINGDOM_BUILDER_TICK_INTERVAL_MS);
 
 async function tickWorld(worldId: string, now: Date, session: ClientSession): Promise<boolean> {
-    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1 }).session(session).lean();
-    if (!world) return false;
+    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).session(session).lean();
+    if (!world || world.endedAt) return false;
     if (world.nextTickAt > now) return false;
 
     const settlements = await KingdomBuilderSettlementModel.find({ worldId }).session(session).lean();
@@ -31,7 +34,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
 
     const nextTickAt = new Date(scheduledTick.getTime() + elapsedTicks * KINGDOM_BUILDER_TICK_INTERVAL_MS);
     const claimed = await KingdomBuilderWorldModel.updateOne(
-        { _id: worldId, currentTick: world.currentTick, nextTickAt: scheduledTick },
+        { _id: worldId, currentTick: world.currentTick, nextTickAt: scheduledTick, endedAt: null },
         { $set: { currentTick: ticked.currentTick, nextTickAt } },
         { session },
     );
@@ -67,7 +70,7 @@ async function runTick(request: NextRequest) {
     const database = await dbConnect();
     const now = new Date();
     const deadline = Date.now() + SWEEP_BUDGET_MS;
-    const candidates = await KingdomBuilderWorldModel.find({ nextTickAt: { $lte: now } })
+    const candidates = await KingdomBuilderWorldModel.find({ nextTickAt: { $lte: now }, endedAt: null })
         .sort({ nextTickAt: 1, currentTick: 1 })
         .limit(SWEEP_CANDIDATE_LIMIT + 1)
         .select({ _id: 1 })
@@ -96,7 +99,19 @@ async function runTick(request: NextRequest) {
         }
     }
 
-    return NextResponse.json({ scanned: worlds.length - Math.max(0, unswept - (capped ? 1 : 0)), ticked, skipped, failed, unswept, capped });
+    // Last, and only with budget to spare: a world waiting to be removed is
+    // already inert, so it can always wait for the next run.
+    let removal = { removed: 0, failed: 0 };
+    try {
+        removal = await removeEndedWorlds(now, REMOVAL_LIMIT, deadline);
+    } catch (error) {
+        console.error("Kingdom Builder: listing ended worlds to remove failed", error);
+    }
+
+    return NextResponse.json({
+        scanned: worlds.length - Math.max(0, unswept - (capped ? 1 : 0)), ticked, skipped, failed, unswept, capped,
+        removed: removal.removed, removalFailed: removal.failed,
+    });
 }
 
 // Vercel invokes configured crons with GET; POST remains available for the

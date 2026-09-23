@@ -43,6 +43,6 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
         const response = await POST(request("Bearer cron-secret"));
 
         expect(response.status).toBe(200);
-        await expect(response.json()).resolves.toEqual({ scanned: 0, ticked: 0, skipped: 0, failed: 0, unswept: 0, capped: false });
+        await expect(response.json()).resolves.toEqual({ scanned: 0, ticked: 0, skipped: 0, failed: 0, unswept: 0, capped: false, removed: 0, removalFailed: 0 });
     });
 });

@@ -64,8 +64,8 @@ export async function joinWorld(worldId: string, userId: string): Promise<void> 
     }
 
     for (let attempt = 0; attempt < MAX_JOIN_ATTEMPTS; attempt++) {
-        const world = await KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, roster: 1, seatCount: 1 }).lean();
-        if (!world) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
+        const world = await KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, roster: 1, seatCount: 1, endedAt: 1 }).lean();
+        if (!world || world.endedAt) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
 
         const roster: KingdomBuilderSeat[] = world.roster ?? [];
         const seat = roster.find(entry => entry.userId === userId);
@@ -87,6 +87,7 @@ export async function joinWorld(worldId: string, userId: string): Promise<void> 
         const claimed = await KingdomBuilderWorldModel.updateOne(
             {
                 _id: worldId,
+                endedAt: null,
                 "roster.userId": { $ne: userId },
                 "roster.siteId": { $ne: site.id },
                 [`roster.${seatCount - 1}`]: { $exists: false },

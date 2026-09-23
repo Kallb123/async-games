@@ -45,6 +45,7 @@ describe("joinWorld", () => {
         const [filter, update] = updateOne.mock.calls[0];
         expect(filter).toEqual({
             _id: worldId,
+            endedAt: null,
             "roster.userId": { $ne: "guest" },
             "roster.siteId": { $ne: "start-b" },
             "roster.2": { $exists: false },
