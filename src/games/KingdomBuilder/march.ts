@@ -8,7 +8,7 @@ import mongoose, { Types } from "mongoose";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_ARMY_LIMIT, armyTile, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
+import { KINGDOM_BUILDER_ARMY_LIMIT, armyTile, isCamped, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_UNIT_TYPES, garrisonOf, isUnitType, type KingdomBuilderGarrison } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
@@ -129,7 +129,7 @@ async function orderArmy(worldId: string, userId: string, order: KingdomBuilderM
     const army = await KingdomBuilderArmyModel.findOne({ _id: order.armyId, worldId, ownerId: userId }).lean();
     if (!army) throw new KingdomBuilderPersistenceError("ARMY_NOT_FOUND", "Army not found");
     const ground = await marchingGround(worldId);
-    const camped = army.arrivedAtTick !== undefined && army.arrivedAtTick !== null;
+    const camped = isCamped(army);
     if (camped && order.targetNodeId === army.targetNodeId) throw invalid("The army is already there");
     const route = ground.route(armyTile(army), ground.tileOf(order.targetNodeId));
 

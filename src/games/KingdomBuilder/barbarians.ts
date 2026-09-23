@@ -5,7 +5,7 @@
 // Won, the village becomes the attacker's settlement — or, for a player who
 // already holds two, is burnt, leaving open ground anyone can found on.
 
-import { addUnits, unitCount, type KingdomBuilderMarch } from "./armies";
+import { addUnits, isCamped, unitCount, type KingdomBuilderMarch } from "./armies";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
@@ -76,10 +76,6 @@ export interface KingdomBuilderVillageAssault<T extends KingdomBuilderMarch> {
     armies: T[];
     captures: KingdomBuilderVillageCapture[];
     battles: KingdomBuilderVillageBattle[];
-}
-
-function isCamped(army: KingdomBuilderMarch): boolean {
-    return army.arrivedAtTick !== undefined && army.arrivedAtTick !== null;
 }
 
 /**

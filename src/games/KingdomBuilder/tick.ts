@@ -3,7 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { addUnits, advanceMarch, type KingdomBuilderMarch } from "./armies";
+import { addUnits, advanceMarch, isCamped, type KingdomBuilderMarch } from "./armies";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { besiegedProduction, siegeOf, siegeStage } from "./siege";
@@ -140,7 +140,7 @@ function withJoining<T extends { garrison: KingdomBuilderMarch["units"] }>(train
  * settlement there any more — its owner left the world — it ends.
  */
 function withSiege<T extends KingdomBuilderMarch>(march: T, ownerThere: string | undefined, tick: number): T {
-    const camped = march.arrivedAtTick !== undefined && march.arrivedAtTick !== null;
+    const camped = isCamped(march);
     const hostile = camped && ownerThere !== undefined && ownerThere !== march.ownerId;
     const dated = march.besiegingSince !== undefined && march.besiegingSince !== null;
     if (hostile && !dated) return { ...march, besiegingSince: tick };

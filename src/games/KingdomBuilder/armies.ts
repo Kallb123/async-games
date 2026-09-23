@@ -37,6 +37,11 @@ export interface KingdomBuilderMarch {
     besiegingSince?: number;
 }
 
+/** Whether the army has reached `targetNodeId` and camped there. A stored army reads a missing tick as null. */
+export function isCamped(march: { arrivedAtTick?: number | null }): boolean {
+    return march.arrivedAtTick !== undefined && march.arrivedAtTick !== null;
+}
+
 /** A route an army could take, and what it would cost it tile by tile. */
 export interface KingdomBuilderRoute {
     path: number[];
