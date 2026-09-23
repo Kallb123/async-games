@@ -15,6 +15,7 @@ import MapLabelLayer from "@/components/ui/MapLabelLayer";
 import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
+import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
 import { AREAS, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -206,6 +207,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                     {openSites.length === 0 && data && <div className="ag-empty">Every expansion site has been claimed.</div>}
                     {message && <div className="ag-callout" role="alert">{message}</div>}
                 </Section>
+                {data && <WorldExitSection endpoint={endpoint} players={players} />}
             </>}
         </main>
     );

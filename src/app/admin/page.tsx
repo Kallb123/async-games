@@ -26,6 +26,9 @@ export default function Admin() {
                     <Link href="/admin/kingdombuilder-tiles" className="ag-btn ag-btn--light ag-btn--block">
                         Kingdom Builder tile mapper
                     </Link>
+                    <Link href="/admin/kingdombuilder-worlds" className="ag-btn ag-btn--light ag-btn--block">
+                        Kingdom Builder worlds
+                    </Link>
                 </div>
             </Section>
         </AdminPage>

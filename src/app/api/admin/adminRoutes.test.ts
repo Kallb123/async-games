@@ -1,10 +1,11 @@
-// The admin tooling's three routes (docs/admin-tools.md), and mostly the gate
-// on them: one hands out a list of accounts, another hands out a way *into*
-// one, and the third hands out an aggregate count of registered devices — so
-// who may call them, whose account may be minted for, and that the aggregate
-// never carries a user id are the things worth holding down with tests.
+// The admin tooling's routes (docs/admin-tools.md), and mostly the gate on
+// them: one hands out a list of accounts, another hands out a way *into* one,
+// the third hands out an aggregate count of registered devices, and the fourth
+// ends or deletes a Kingdom Builder world — so who may call them, whose account
+// may be minted for, and that the aggregate never carries a user id are the
+// things worth holding down with tests.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
@@ -14,6 +15,9 @@ vi.mock('@/utils/rateLimit', async () => (await import('@/utils/testing/apiRoute
 import { GET } from './guests/route';
 import { POST } from './guests/resume/route';
 import { GET as getAnalytics } from './analytics/route';
+import { GET as getWorlds, POST as postWorld } from './kingdombuilder-worlds/route';
+import * as kingdomBuilder from '@/games/KingdomBuilder';
+import * as adminWorlds from '@/games/KingdomBuilder/adminWorlds';
 import {
     ANN,
     BOB,
@@ -281,5 +285,42 @@ describe('GET /api/admin/analytics', () => {
 
         expect(JSON.stringify(body)).not.toContain(DAVE.id);
         expect(JSON.stringify(body)).not.toContain('tok_1');
+    });
+});
+
+describe('/api/admin/kingdombuilder-worlds', () => {
+    const worldId = '0123456789abcdef01234567';
+    afterEach(() => vi.restoreAllMocks());
+
+    it('refuses anyone who is not an admin, before touching a world', async () => {
+        const end = vi.spyOn(kingdomBuilder, 'adminEndWorld');
+        expect((await getWorlds(get('/api/admin/kingdombuilder-worlds'))).status).toBe(403);
+
+        signIn({ ...ANN, publicMetadata: { unlocked: true } });
+        expect((await getWorlds(get('/api/admin/kingdombuilder-worlds'))).status).toBe(403);
+        expect((await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { worldId, action: 'delete' }))).status).toBe(403);
+        expect(end).not.toHaveBeenCalled();
+    });
+
+    it('refuses a body without a world or a known action', async () => {
+        signIn(ADMIN);
+        const end = vi.spyOn(kingdomBuilder, 'adminEndWorld');
+
+        expect((await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { action: 'end' }))).status).toBe(400);
+        expect((await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { worldId, action: 'explode' }))).status).toBe(400);
+        expect(end).not.toHaveBeenCalled();
+    });
+
+    it('ends or deletes a world for an admin, and answers the fresh list', async () => {
+        signIn(ADMIN);
+        const end = vi.spyOn(kingdomBuilder, 'adminEndWorld').mockResolvedValue();
+        vi.spyOn(adminWorlds, 'listAdminWorlds').mockResolvedValue({ worlds: [] });
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        const response = await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { worldId, action: 'delete' }));
+
+        expect(response.status).toBe(200);
+        expect(end).toHaveBeenCalledWith(worldId, { deleteNow: true });
+        await expect(response.json()).resolves.toEqual({ worlds: [] });
     });
 });

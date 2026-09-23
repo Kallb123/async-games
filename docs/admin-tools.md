@@ -1,9 +1,9 @@
 # Admin tools
 
-Support tooling for whoever runs the app, at `/admin`. Three jobs today:
-getting a guest back into their game when the link they were given is gone,
-a look at what platforms players are actually on, and a build-time editor for
-authoring Race Cars circuits onto their art.
+Support tooling for whoever runs the app, at `/admin`. Getting a guest back
+into their game when the link they were given is gone, a look at what
+platforms players are actually on, build-time editors for Race Cars circuits
+and Kingdom Builder tilesets, and a way to clear out Kingdom Builder worlds.
 
 ## The problem it solves
 
@@ -482,6 +482,31 @@ instead of keeping the old one's.
 ### No "What's new" entry
 
 Same reasoning as the track editor's: admin-only tooling a player never sees.
+
+## Game tools: Kingdom Builder worlds
+
+`/admin` → **Kingdom Builder worlds** → `/admin/kingdombuilder-worlds`
+
+A Kingdom Builder world isn't a `GameData`, so `/api/game/end` can't see it,
+and a world nobody plays keeps ticking and keeps its place on its players'
+dashboards. Its host can end it and anyone can leave it (GDD §9.1), but a test
+world whose players have moved on will never be ended by them — this is the
+tool for those.
+
+- **The list** is every world, newest first, capped at 50: its seed, its
+  players against its seats, its tick, how long ago it was opened and — for
+  one that has ended — when and why (by its host, its last player leaving, or
+  an admin).
+- **End** on a live world does what the host's own "End world" does: sets
+  `endedAt`, so it stops ticking, takes no command, leaves every dashboard and
+  revokes its join code. It is removed by the tick cron seven days later.
+- **Delete** on an ended world removes it now — settlements, invitation, then
+  the world — rather than waiting the seven days.
+
+Both sit behind a confirm, and both go through
+`POST /api/admin/kingdombuilder-worlds` (body `{ worldId, action: "end" |
+"delete" }`), which opens with `requireAdmin()` and logs the admin who asked,
+since either is final for every player in the world.
 
 ## Adding another admin tool
 
