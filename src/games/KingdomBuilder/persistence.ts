@@ -2,6 +2,7 @@ import { Types, type ClientSession } from "mongoose";
 
 import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
+import { barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { catchmentForSettlement } from "./land";
 import { resourcesOf } from "./resources";
@@ -45,7 +46,7 @@ export async function createWorld(seed: string, session?: ClientSession, host?: 
             roster: [{ userId: host.userId, siteId: site.id, joinedAt: new Date() }],
         };
     }
-    const values = { ...generated, currentTick: 0, ...hosting };
+    const values = { ...generated, barbarians: barbarianVillagesFor(generated.nodes), currentTick: 0, ...hosting };
     if (!session) return KingdomBuilderWorldModel.create(values);
     const [world] = await KingdomBuilderWorldModel.create([values], { session });
     return world;
@@ -57,7 +58,8 @@ export function freePlayerStarts(nodes: readonly WorldNode[], roster: readonly P
     return nodes.filter((node): node is SettlementNode => node.kind === "settlement" && node.siteType === "player-start" && !taken.has(node.id));
 }
 
-function createStartingTiles(): KingdomBuilderTile[] {
+/** A new settlement's grid: its town centre, and eight empty tiles. */
+export function startingTiles(): KingdomBuilderTile[] {
     return Array.from({ length: KINGDOM_BUILDER_GRID_SIZE }, (_, position) => ({
         position,
         ...(position === KINGDOM_BUILDER_TOWN_CENTRE_INDEX
@@ -82,7 +84,7 @@ export async function foundSettlement(
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
     }
 
-    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, terrainField: 1, endedAt: 1 });
+    const query = KingdomBuilderWorldModel.findById(worldId).select({ nodes: 1, terrainField: 1, endedAt: 1, barbarians: 1 });
     const world = await (session ? query.session(session) : query).lean();
     if (!world || world.endedAt) {
         throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
@@ -92,8 +94,10 @@ export async function foundSettlement(
     if (!site || site.kind !== "settlement") {
         throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement site not found in this world");
     }
-    const requiredSiteType = kind === "first" ? "player-start" : "expansion";
-    if (site.siteType !== requiredSiteType) {
+    // A barbarian site is open ground once its village has been burnt (§3.4).
+    const villages: KingdomBuilderBarbarianVillage[] = world.barbarians ?? [];
+    const isOpen = site.siteType === "expansion" || (site.siteType === "barbarian" && !villages.some(village => village.nodeId === siteId));
+    if (kind === "first" ? site.siteType !== "player-start" : !isOpen) {
         throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", `The site is not available for ${kind === "first" ? "a first" : "an expansion"} settlement`);
     }
 
@@ -108,7 +112,7 @@ export async function foundSettlement(
         ownerId: userId.trim(),
         nodeId: siteId,
         settlementNumber: kind === "first" ? 0 : 1,
-        tiles: createStartingTiles(),
+        tiles: startingTiles(),
         // Only a first settlement gets the stockpile (§4.5): a free second one
         // carrying its own would print resources.
         resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : resourcesOf(),

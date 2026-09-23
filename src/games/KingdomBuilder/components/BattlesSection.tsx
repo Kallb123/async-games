@@ -19,6 +19,7 @@ const OUTCOMES: Record<KingdomBuilderBattleReport["outcome"], string> = { won: "
 const unitsOrNone = (units: Partial<KingdomBuilderGarrison>) => unitCount(units) > 0 ? formatUnits(units) : "nothing";
 
 function titleOf(report: KingdomBuilderBattleReport, place: string): string {
+    if (report.kind === "barbarian") return "Your attack on a barbarian village";
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
     return report.started ? "Your sally out" : `A sally against your siege of ${place}`;
 }
@@ -32,7 +33,7 @@ function titleOf(report: KingdomBuilderBattleReport, place: string): string {
 export default function BattlesSection({ view, placeName }: BattlesSectionProps) {
     return (
         <ListSection label="Battles" isLoading={false} skeletonRows={0}
-            hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia.">
+            hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia. An army at a barbarian village fights it every tick until one side is gone.">
             {view.battles.map(report => (
                 <ListRow key={report.battleId} icon={report.started ? "⚔️" : "🛡️"}
                     title={titleOf(report, placeName(report.nodeId))}

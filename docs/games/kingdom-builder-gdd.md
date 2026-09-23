@@ -8,8 +8,9 @@ vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
 §4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
-automatic siege on arrival (PR 21, §8) and combat resolution (PR 22, §7.6) are
-shipped. PR 23 (barbarian villages) comes next; §11.3 is the plan
+automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6) and
+barbarian villages (PR 23, §3.4) are shipped. PR 24 (settlers) comes next;
+§11.3 is the plan
 for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -227,6 +228,21 @@ spawns in a resource desert. Concrete constraints:
   resource type, or "fair" quietly collapses into "identical."
 
 ### 3.4 Barbarian villages
+
+> As shipped in PR 23: a quarter of the open expansion sites — 16 on a new
+> world — are barbarian villages, chosen once the starts are fixed. Their
+> garrisons are ranked by distance from the nearest player start rather than
+> from the map centre, which §3.7's ranges no longer make meaningful: the
+> nearest third hold 4 militia, the middle third 6 militia and 3 infantry, the
+> farthest 8 militia, 6 infantry and 2 cavalry. An army camped at a standing
+> village fights it on the tick it arrives, the village fortified as a town is,
+> and — since a stand-off isn't a siege either — again every tick until one
+> side is gone or the army is ordered away. Won, the village becomes the
+> winner's settlement: a fresh town centre on the site's own land, garrisoned by
+> the survivors. A player already holding two settlements burns it instead, and
+> the site is open ground anyone can found on. The villages are public; what is
+> left of a garrison is not, and shows only to a scouting army in sight (§6.3).
+> First-pass numbers (§12).
 
 Scattered across the map alongside player and expansion sites are
 **barbarian villages**: NPC-held settlements that exist from world
@@ -2654,9 +2670,40 @@ reduced-motion rule in `ag-theme.css`.
   Sieges — each battle with what went in, what each side lost, and a round by
   round log to unfold — and Sieges' hint says what the defences do. No
   `whatsNew.ts` line.
-- **PR 23 — Barbarian villages.** Generator gains barbarian site placement
+- **PR 23 — Barbarian villages.** Shipped. Generator gains barbarian site placement
   (§3.4); combat resolution from PR 22 applies directly on arrival, no
   siege phase, per §3.4's rule.
+
+  How it landed: `assignBarbarianVillages` hands a quarter of the open expansion
+  sites (`4 × WORLD_AREA_SCALE`, at most half of them) to barbarians once the
+  starts are fixed, before the overlay vocabulary — which already counted a
+  barbarian site as occupied for its roads. `barbarians.ts` is the pure half:
+  `barbarianVillagesFor` garrisons each village by its rank in distance from the
+  nearest player start, in thirds (§3.4 has the numbers), and `assaultVillages`
+  fights every army camped at a standing village. A player's armies there go in
+  together, fortified against; two players' go in one after the other, oldest
+  army first, each against what the last left. The world stores the standing
+  villages and their garrisons (`barbarians`), written by the world's first
+  generation and never backfilled — a world from before this has no barbarian
+  sites either. The tick cron runs the assault after the sweep's ticks, so a
+  sweep catching up several ticks fights once, on its last: it writes the
+  villages with its claim on the world, creates a settlement for each village
+  taken (in the owner's free slot, on the site's own land, the survivors its
+  garrison) and a `barbarian` battle for each fight — attacker only,
+  `defenderIds` empty — and writes each army that fought to what it has left,
+  deleting any with nothing. A win by a player who already holds two settlements
+  burns the village, and `foundSettlement` then takes a barbarian site with no
+  village as open ground. A capture racing the same player's own "Found here" for their
+  second slot loses to the unique index and fails that world's tick once; the
+  next sweep sees the two settlements and burns the village. The sweep drops
+  Milestone A's one-settlement-per-owner index before it starts, since a capture
+  can be the first second settlement a database has seen. Anyone else camped at a village when it is taken is
+  camped at a player's town, and the next tick dates their siege. `worldView`
+  sends every standing village's node, and its garrison only while a scouting
+  army of the viewer's can see it. The map draws villages in their own colour
+  as "Barbarians", the Armies section says an army at one is fighting it, the
+  Battles section reports the fight, and In sight lists what a scout has
+  counted. No `whatsNew.ts` line.
 - **PR 24 — Settlers and a second settlement.** The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
   type once PRs 6–19's map/movement/dispatch already exist.

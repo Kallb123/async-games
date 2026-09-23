@@ -317,6 +317,28 @@ describe("Kingdom Builder world view", () => {
             expect(scouted.settlements.find(settlement => !settlement.isMine)?.garrison?.militia).toBe(24680);
         });
 
+        it("names every standing barbarian village, and counts one's garrison only for a scout in sight of it", async () => {
+            const village = { id: "village", kind: "settlement", siteType: "barbarian", x: 33, y: 5, tile: at(16, 2) };
+            const withVillages = () => {
+                setUp();
+                mockWorld({
+                    hostId: "owner", terrainField: FIELD, nodes: [...NODES, village],
+                    roster: [{ userId: "owner", siteId: "start", joinedAt: new Date() }, { userId: "rival", siteId: "other", joinedAt: new Date() }],
+                    barbarians: [{ nodeId: "village", garrison: { militia: 86420 } }, { nodeId: "far", garrison: { militia: 75319 } }],
+                });
+            };
+            withVillages();
+            mockArmies([ownArmy(at(14, 2), { militia: 1 })]);
+            const unscouted = await worldView(worldId, "owner");
+            expect(unscouted.barbarians).toEqual([{ nodeId: "village" }, { nodeId: "far" }]);
+            expect(JSON.stringify(unscouted)).not.toMatch(/86420|75319/);
+
+            withVillages();
+            mockArmies([ownArmy(at(14, 2), { scout: 1 })]);
+            const scouted = await worldView(worldId, "owner");
+            expect(scouted.barbarians).toEqual([{ nodeId: "village", garrison: { militia: 86420, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 } }, { nodeId: "far" }]);
+        });
+
         it("tells the viewer their own town is besieged, and since when — and tells nobody else of anyone's", async () => {
             setUp();
             const camps = [

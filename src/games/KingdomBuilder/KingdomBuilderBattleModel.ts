@@ -4,6 +4,10 @@ import type { KingdomBuilderBattleRound } from "./combat";
 import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
 import type { KingdomBuilderGarrison } from "./units";
 
+/** How a battle came about: a push or a sally at a siege (§8), or an army against a barbarian village (§3.4). */
+export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian"] as const;
+export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
+
 /**
  * A battle fought at a siege (GDD §7.6, §8, §11.3 PR 22), kept so both sides
  * can read how it went — the side that didn't start it included, who would
@@ -14,10 +18,10 @@ export interface IKingdomBuilderBattle {
     worldId: Types.ObjectId;
     /** The tick it was fought on. */
     tick: number;
-    kind: "push" | "sally";
-    /** The settlement's node it was fought at. */
+    kind: KingdomBuilderBattleKind;
+    /** The settlement's (or village's) node it was fought at. */
     nodeId: string;
-    /** Who fought on each side: the pusher or the sallying garrison's owner attacks. */
+    /** Who fought on each side: the pusher or the sallying garrison's owner attacks. Barbarians are nobody, so a village's side is empty. */
     attackerIds: string[];
     defenderIds: string[];
     /** What went in on each side, all its owners' together. */
@@ -58,7 +62,7 @@ const ShareSchema = new Schema<KingdomBuilderBattleShare>({
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     tick: { type: Number, required: true, min: 0 },
-    kind: { type: String, enum: ["push", "sally"], required: true },
+    kind: { type: String, enum: KINGDOM_BUILDER_BATTLE_KINDS, required: true },
     nodeId: { type: String, required: true },
     attackerIds: { type: [String], required: true },
     defenderIds: { type: [String], required: true },

@@ -37,6 +37,11 @@ export interface KingdomBuilderMarch {
     besiegingSince?: number;
 }
 
+/** Whether the army has reached `targetNodeId` and camped there. A stored army reads a missing tick as null. */
+export function isCamped(march: { arrivedAtTick?: number | null }): boolean {
+    return march.arrivedAtTick !== undefined && march.arrivedAtTick !== null;
+}
+
 /** A route an army could take, and what it would cost it tile by tile. */
 export interface KingdomBuilderRoute {
     path: number[];
@@ -103,6 +108,12 @@ export function advanceMarch<T extends KingdomBuilderMarch>(march: T, tick: numb
 export function addUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Partial<KingdomBuilderGarrison>): KingdomBuilderGarrison {
     const left = garrisonOf(a), right = garrisonOf(b);
     return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, left[unitType] + right[unitType]])));
+}
+
+/** Whether two stacks hold the same units, reading a missing count as none. */
+export function sameUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Partial<KingdomBuilderGarrison> | undefined): boolean {
+    const left = garrisonOf(a), right = garrisonOf(b);
+    return KINGDOM_BUILDER_UNIT_TYPES.every(unitType => left[unitType] === right[unitType]);
 }
 
 /** What is left of a stack once another is taken out of it, reading a missing count as none. */

@@ -65,10 +65,11 @@ function landPath(view: KingdomBuilderWorldView): string {
     }).join("");
 }
 
-/** The name under a settlement site: whose town it is, or what is still free there. */
-function settlementLabel(settlement: KingdomBuilderWorldView["settlements"][number] | undefined, node: SettlementNode, ownerName: (seat: number) => string): string {
+/** The name under a settlement site: whose town it is, the barbarians holding it, or what is still free there. */
+function settlementLabel(settlement: KingdomBuilderWorldView["settlements"][number] | undefined, node: SettlementNode, ownerName: (seat: number) => string, isVillage: boolean): string {
     if (settlement) return settlement.isMine ? "Your town" : ownerName(settlement.seat);
-    return node.siteType === "expansion" ? "Open site" : "Start";
+    if (isVillage) return "Barbarians";
+    return node.siteType === "player-start" ? "Start" : "Open site";
 }
 
 export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ worldId: string }> }) {
@@ -139,7 +140,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     // proportionally deeper steps to put its pieces at the same size on screen.
     const zoomWidth = 240 * Math.max(1, (data?.landmass.width ?? 100) / 100);
     const occupiedByNode = new Map(data?.settlements.map(settlement => [settlement.nodeId, settlement]) ?? []);
-    const openSites = data?.nodes.filter((node): node is SettlementNode => node.kind === "settlement" && node.siteType === "expansion" && !occupiedByNode.has(node.id)) ?? [];
+    const villages = new Set(data?.barbarians.map(village => village.nodeId));
+    // An expansion site nobody holds — or a barbarian one whose village has been burnt (§3.4).
+    const isOpenSite = (node: SettlementNode) => node.siteType !== "player-start" && !occupiedByNode.has(node.id) && !villages.has(node.id);
+    const openSites = data?.nodes.filter((node): node is SettlementNode => node.kind === "settlement" && isOpenSite(node)) ?? [];
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
     const players = data?.players ?? [];
     const ownerName = (seat: number) => players[seat]?.name ?? "Another player";
@@ -148,7 +152,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const placeName = (nodeId: string) => {
         const node = data?.nodes.find(entry => entry.id === nodeId);
         if (!node) return "somewhere";
-        return node.kind === "terrain" ? TERRAIN[node.terrain].name : settlementLabel(occupiedByNode.get(node.id), node, ownerName);
+        return node.kind === "terrain" ? TERRAIN[node.terrain].name : settlementLabel(occupiedByNode.get(node.id), node, ownerName, villages.has(node.id));
     };
 
     return (
@@ -160,7 +164,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         <>
                             <p className={styles.hint}>{march
                                 ? "Tap anywhere on the map to send the army there."
-                                : <>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</>}</p>
+                                : <>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement. Send an army against the barbarians to take their village instead.</>}</p>
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
@@ -179,7 +183,8 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
-                                            const isOpen = node.siteType === "expansion" && !settlement;
+                                            const isOpen = isOpenSite(node);
+                                            const isVillage = villages.has(node.id);
                                             const isTarget = !!march && node.id !== marchOrigin;
                                             const isSelected = march ? march.targetNodeId === node.id : selectedSite === node.id;
                                             // No ring: ClickableMapNode's default ring offset is sized for World
@@ -191,11 +196,11 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={march ? isTarget : isOpen || isMine} isSelected={isSelected} showRing={false}
                                                 onClick={march ? () => isTarget && marchTo(node.id)
                                                     : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
-                                                title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isOpen ? "Open settlement site" : "Free starting site"}>
+                                                title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isVillage ? "Barbarian village" : isOpen ? "Open settlement site" : "Free starting site"}>
                                                 {/* Every settlement wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. */}
-                                                <circle className={`${styles.site} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
+                                                <circle className={`${styles.site} ${isVillage ? styles.barbarian : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
                                                     style={settlement && !isSelected ? { fill: playerColour(settlement.seat) } : undefined} />
-                                                {settlement && <text className={styles.keep} x={node.x} y={node.y}>♜</text>}
+                                                {(settlement || isVillage) && <text className={styles.keep} x={node.x} y={node.y}>{isVillage ? "⚑" : "♜"}</text>}
                                             </ClickableMapNode>;
                                         })}
                                         {data.terrainField && (
@@ -212,13 +217,14 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8} strokeWidth={0.4}
                                             labels={data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => ({
                                                 key: node.id, x: node.x, y: node.y, radius: SETTLEMENT_RADIUS,
-                                                text: settlementLabel(occupiedByNode.get(node.id), node, ownerName),
+                                                text: settlementLabel(occupiedByNode.get(node.id), node, ownerName, villages.has(node.id)),
                                             }))} />
                                     </svg>
                                 </BoardZoom>
                             </div>
                             <div className={styles.legend} aria-label="Map legend">
                                 <span className={styles.legendOpen}>Open site</span><span className={styles.legendTerrain}>Resource terrain</span>
+                                {villages.size > 0 && <span className={styles.legendBarbarian}>Barbarian village</span>}
                                 {players.length > 1 && <span className={styles.legendFog}>Shaded: out of sight</span>}
                                 {players.map(player => (
                                     <span key={player.seat} style={{ "--legend-colour": playerColour(player.seat) } as CSSProperties}>{player.isMe ? "You" : player.name}</span>
@@ -240,7 +246,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 {data && <SiegesSection endpoint={endpoint} view={data} placeName={placeName} onFought={setData} />}
                 {data && <BattlesSection view={data} placeName={placeName} />}
                 {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
-                {data && players.length > 1 && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
+                {data && (players.length > 1 || data.barbarians.some(village => village.garrison)) && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
                 {data?.invite && (
                     <JoinCodeCard joinCode={data.invite.joinCode} gameFriendlyName={GAME_META.kingdombuilder.name} expiresAt={data.invite.expiresAt}
                         expiryConsequence="the open seats close" />

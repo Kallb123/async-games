@@ -7,6 +7,8 @@
 .quarry { fill: var(--ag-ink-soft); }
 .ore { fill: var(--ag-gold); }
 .site { fill: var(--ag-surface); stroke: var(--ag-dark); stroke-width: 0.5; }
+/* A barbarian village (§3.4): nobody's seat colour, so it reads as a threat rather than a player. */
+.barbarian { fill: var(--ag-danger); }
 /* The one settlement state a label can't say by itself — "you've picked this one, tap Found here to confirm" — so it still gets its own look now that the oversized ring is gone. */
 .selected { fill: var(--ag-gold); stroke: var(--ag-terracotta-deep); stroke-width: 0.6; }
 .keep { fill: var(--ag-on-dark); font: 800 2.6px/1 var(--ag-font); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
@@ -16,4 +18,5 @@
 .legendOpen { --legend-colour: var(--ag-surface); }
 .legendTerrain { --legend-colour: var(--ag-success); }
 .legendFog { --legend-colour: var(--ag-dark); }
+.legendBarbarian { --legend-colour: var(--ag-danger); }
 .legendGround::before { border-radius: 3px; }

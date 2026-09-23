@@ -10,8 +10,8 @@ import type { TerrainField } from "./worldgen/terrainField";
 
 afterEach(() => vi.restoreAllMocks());
 
-function mockWorldNodes(nodes: WorldNode[], terrainField?: TerrainField) {
-    const lean = vi.fn().mockResolvedValue({ nodes, terrainField });
+function mockWorldNodes(nodes: WorldNode[], terrainField?: TerrainField, barbarians?: object[]) {
+    const lean = vi.fn().mockResolvedValue({ nodes, terrainField, barbarians });
     const select = vi.fn().mockReturnValue({ lean });
     vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({ select } as never);
     vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue(null);
@@ -25,6 +25,10 @@ describe("Kingdom Builder persistence", () => {
 
         expect(create).toHaveBeenCalledOnce();
         expect(create.mock.calls[0][0]).toMatchObject({ seed: "repeatable-world", currentTick: 0 });
+        // Every barbarian site starts with a garrison (§3.4).
+        const villages = create.mock.calls[0][0].nodes.filter((node: WorldNode) => node.kind === "settlement" && node.siteType === "barbarian");
+        expect(villages.length).toBeGreaterThan(0);
+        expect(create.mock.calls[0][0].barbarians.map((village: { nodeId: string }) => village.nodeId).sort()).toEqual(villages.map((node: WorldNode) => node.id).sort());
         expect(create.mock.calls[0][0].nodes.length).toBeGreaterThan(0);
         expect(create.mock.calls[0][0].edges.length).toBeGreaterThan(0);
     });
@@ -78,6 +82,21 @@ describe("Kingdom Builder persistence", () => {
         expect(create.mock.calls[0][0]).toMatchObject({
             ownerId: "user-1", nodeId: "expansion-1", settlementNumber: 1, resources: { wood: 0, stone: 0, iron: 0, wheat: 0 },
         });
+    });
+
+    it("founds on a barbarian site only once its village has been burnt", async () => {
+        const worldId = new Types.ObjectId().toString();
+        const site: WorldNode = { id: "village", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "barbarian" };
+        mockWorldNodes([site], undefined, [{ nodeId: "village", garrison: { militia: 4 } }]);
+        await expect(foundSettlement(worldId, "user-1", "village", undefined, "expansion")).rejects.toEqual(
+            expect.objectContaining<Partial<KingdomBuilderPersistenceError>>({ code: "SITE_NOT_AVAILABLE" }),
+        );
+
+        vi.restoreAllMocks();
+        mockWorldNodes([site], undefined, []);
+        const create = vi.spyOn(KingdomBuilderSettlementModel, "create").mockImplementation(async (value) => value as never);
+        await foundSettlement(worldId, "user-1", "village", undefined, "expansion");
+        expect(create.mock.calls[0][0]).toMatchObject({ ownerId: "user-1", nodeId: "village", settlementNumber: 1 });
     });
 
     it("stores the land's tiers once, at founding, read off the ground round the site (§4.6)", async () => {

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ClientSession } from "mongoose";
 
-import { KingdomBuilderArmyModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, catchmentForSettlement, removeEndedWorlds } from "@/games/KingdomBuilder";
+import {
+    KingdomBuilderArmyModel, KingdomBuilderBattleModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel,
+    applyTick, assaultVillages, catchmentForSettlement, prepareMultipleSettlementsIndex, removeEndedWorlds, resourcesOf, sameUnits, startingTiles,
+} from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -19,19 +22,21 @@ const REMOVAL_LIMIT = 20;
 const MAX_CATCH_UP_TICKS = 365 * 24 * (60 * 60 * 1000 / KINGDOM_BUILDER_TICK_INTERVAL_MS);
 
 async function tickWorld(worldId: string, now: Date, session: ClientSession): Promise<boolean> {
-    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).session(session).lean();
+    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1, barbarians: 1 }).session(session).lean();
     if (!world || world.endedAt) return false;
     if (world.nextTickAt > now) return false;
 
     let settlements = await KingdomBuilderSettlementModel.find({ worldId }).session(session).lean();
+    // The ground is only loaded for a world that needs it.
+    let ground: Parameters<typeof catchmentForSettlement>[0] | undefined;
+    const groundOf = async () => ground ??= (await KingdomBuilderWorldModel.findById(worldId).select({ terrainField: 1, nodes: 1 }).session(session).lean()) ?? { nodes: [] };
     if (settlements.some(settlement => !settlement.catchment)) {
         // Once per world from before PR 18 (§4.6): its settlements' land,
-        // read off the stored field and saved with the tick below. The ground
-        // is only loaded for a world that needs it.
-        const ground = await KingdomBuilderWorldModel.findById(worldId).select({ terrainField: 1, nodes: 1 }).session(session).lean();
+        // read off the stored field and saved with the tick below.
+        const land = await groundOf();
         settlements = settlements.map(settlement => settlement.catchment
             ? settlement
-            : { ...settlement, catchment: catchmentForSettlement(ground ?? { nodes: [] }, settlement) });
+            : { ...settlement, catchment: catchmentForSettlement(land, settlement) });
     }
     const scheduledTick = world.nextTickAt;
     const elapsedTicks = Math.min(
@@ -39,14 +44,18 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
         Math.floor((now.getTime() - scheduledTick.getTime()) / KINGDOM_BUILDER_TICK_INTERVAL_MS) + 1,
     );
     // Every army, camped ones included: a camp at someone else's settlement is a siege on it (PR 21).
-    const armies = await KingdomBuilderArmyModel.find({ worldId }).session(session).lean();
+    // Oldest first, which is the order two players' armies at one barbarian village fight it in.
+    const armies = await KingdomBuilderArmyModel.find({ worldId }).sort({ createdAt: 1, _id: 1 }).session(session).lean();
     let ticked = { currentTick: world.currentTick, settlements, armies };
     for (let tick = 0; tick < elapsedTicks; tick++) ticked = applyTick(ticked);
+    // Then every army camped at a barbarian village fights it (§3.4, PR 23) —
+    // once a sweep, on its last tick, however many ticks it caught up.
+    const assault = assaultVillages(world.barbarians ?? [], ticked.settlements, ticked.armies);
 
     const nextTickAt = new Date(scheduledTick.getTime() + elapsedTicks * KINGDOM_BUILDER_TICK_INTERVAL_MS);
     const claimed = await KingdomBuilderWorldModel.updateOne(
         { _id: worldId, currentTick: world.currentTick, nextTickAt: scheduledTick, endedAt: null },
-        { $set: { currentTick: ticked.currentTick, nextTickAt } },
+        { $set: { currentTick: ticked.currentTick, nextTickAt, ...(assault.battles.length ? { barbarians: assault.villages } : {}) } },
         { session },
     );
     if (claimed.modifiedCount !== 1) return false;
@@ -70,21 +79,37 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
             };
         }), { session });
     }
-    // An army missing from the ticked list marched home and rejoined its
-    // garrison, saved above; one that neither moved nor began or ended a siege
-    // is left alone.
-    const marched = new Map(ticked.armies.map(army => [army._id.toString(), army]));
+    if (assault.captures.length) {
+        const land = await groundOf();
+        await KingdomBuilderSettlementModel.create(assault.captures.map(capture => ({
+            worldId, ...capture, tiles: startingTiles(), resources: resourcesOf(),
+            catchment: catchmentForSettlement(land, { nodeId: capture.nodeId }),
+        })), { session, ordered: true });
+    }
+    if (assault.battles.length) {
+        await KingdomBuilderBattleModel.create(assault.battles.map(battle => ({
+            worldId, tick: ticked.currentTick, kind: "barbarian", nodeId: battle.nodeId,
+            attackerIds: [battle.ownerId], defenderIds: [], attacker: battle.attacker, defender: battle.defender, rounds: battle.rounds,
+            shares: [{ ownerId: battle.ownerId, sent: battle.attacker, left: battle.left }],
+        })), { session, ordered: true });
+    }
+    // An army missing from the list marched home and rejoined its garrison,
+    // saved above, or fell at (or took) a barbarian village; one that neither
+    // moved, fought, nor began or ended a siege is left alone.
+    const marched = new Map(assault.armies.map(army => [army._id.toString(), army]));
     const armyWrites = armies.flatMap<Parameters<typeof KingdomBuilderArmyModel.bulkWrite>[0][number]>(army => {
         const next = marched.get(army._id.toString());
         if (!next) return [{ deleteOne: { filter: { _id: army._id, worldId } } }];
         const besiegingSince = next.besiegingSince ?? undefined;
-        if (next.travelled === army.travelled && next.arrivedAtTick === army.arrivedAtTick && besiegingSince === (army.besiegingSince ?? undefined)) return [];
+        const fought = !sameUnits(next.units, army.units);
+        if (next.travelled === army.travelled && next.arrivedAtTick === army.arrivedAtTick && besiegingSince === (army.besiegingSince ?? undefined) && !fought) return [];
         return [{
             updateOne: {
                 filter: { _id: army._id, worldId },
                 update: {
                     $set: {
                         travelled: next.travelled,
+                        ...(fought ? { units: next.units } : {}),
                         ...(next.arrivedAtTick === undefined ? {} : { arrivedAtTick: next.arrivedAtTick }),
                         ...(besiegingSince === undefined ? {} : { besiegingSince }),
                     },
@@ -104,6 +129,13 @@ async function runTick(request: NextRequest) {
     }
 
     const database = await dbConnect();
+    // A barbarian village taken in the sweep can be a player's second
+    // settlement (§3.4), so Milestone A's one-per-owner index has to be gone
+    // first — dropped here, outside any world's transaction, whose own locks
+    // the drop would otherwise wait on. A failure is only logged: the index is
+    // long gone on any database that has seen an expansion, and a capture it
+    // still refuses fails that world's tick alone, to be retried next run.
+    await prepareMultipleSettlementsIndex().catch(error => console.error("Kingdom Builder: could not drop the one-settlement index", error));
     const now = new Date();
     const deadline = Date.now() + SWEEP_BUDGET_MS;
     const candidates = await KingdomBuilderWorldModel.find({ nextTickAt: { $lte: now }, endedAt: null })
