@@ -2693,7 +2693,11 @@ reduced-motion rule in `ag-theme.css`.
   `defenderIds` empty — and writes each army that fought to what it has left,
   deleting any with nothing. A win by a player who already holds two settlements
   burns the village, and `foundSettlement` then takes a barbarian site with no
-  village as open ground. Anyone else camped at a village when it is taken is
+  village as open ground. A capture racing the same player's own "Found here" for their
+  second slot loses to the unique index and fails that world's tick once; the
+  next sweep sees the two settlements and burns the village. The sweep drops
+  Milestone A's one-settlement-per-owner index before it starts, since a capture
+  can be the first second settlement a database has seen. Anyone else camped at a village when it is taken is
   camped at a player's town, and the next tick dates their siege. `worldView`
   sends every standing village's node, and its garrison only while a scouting
   army of the viewer's can see it. The map draws villages in their own colour

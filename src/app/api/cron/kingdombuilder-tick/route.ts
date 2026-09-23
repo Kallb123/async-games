@@ -3,7 +3,7 @@ import type { ClientSession } from "mongoose";
 
 import {
     KingdomBuilderArmyModel, KingdomBuilderBattleModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel,
-    applyTick, assaultVillages, catchmentForSettlement, removeEndedWorlds, resourcesOf, sameUnits, startingTiles,
+    applyTick, assaultVillages, catchmentForSettlement, prepareMultipleSettlementsIndex, removeEndedWorlds, resourcesOf, sameUnits, startingTiles,
 } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
@@ -129,6 +129,13 @@ async function runTick(request: NextRequest) {
     }
 
     const database = await dbConnect();
+    // A barbarian village taken in the sweep can be a player's second
+    // settlement (§3.4), so Milestone A's one-per-owner index has to be gone
+    // first — dropped here, outside any world's transaction, whose own locks
+    // the drop would otherwise wait on. A failure is only logged: the index is
+    // long gone on any database that has seen an expansion, and a capture it
+    // still refuses fails that world's tick alone, to be retried next run.
+    await prepareMultipleSettlementsIndex().catch(error => console.error("Kingdom Builder: could not drop the one-settlement index", error));
     const now = new Date();
     const deadline = Date.now() + SWEEP_BUDGET_MS;
     const candidates = await KingdomBuilderWorldModel.find({ nextTickAt: { $lte: now }, endedAt: null })

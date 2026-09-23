@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/utils/mongodb/mongodb", () => ({
@@ -16,6 +16,8 @@ afterAll(() => {
     if (originalSecret === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = originalSecret;
 });
+// Milestone A's one-settlement index, dropped before every sweep (a capture can be a second settlement).
+beforeEach(() => { vi.spyOn(KingdomBuilderSettlementModel.collection, "dropIndex").mockResolvedValue(undefined as never); });
 afterEach(() => vi.restoreAllMocks());
 
 function request(authorization?: string) {
