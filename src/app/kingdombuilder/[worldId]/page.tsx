@@ -31,8 +31,11 @@ import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 
 import styles from "./page.module.css";
 
-const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
-const TERRAIN_NAMES = { forest: "Forest", quarry: "Quarry", ore: "Ore" } as const;
+const TERRAIN = {
+    forest: { mark: "♣", name: "Forest" },
+    quarry: { mark: "◆", name: "Quarry" },
+    ore: { mark: "●", name: "Ore" },
+} as const;
 // Smaller than World Domination or Outbreak's own node radii because Kingdom
 // Builder's world packs many more nodes into its viewBox (200×140 for a new
 // world, 100×70 for one generated before it grew) — the original sizes
@@ -141,7 +144,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const placeName = (nodeId: string) => {
         const node = data?.nodes.find(entry => entry.id === nodeId);
         if (!node) return "somewhere";
-        return node.kind === "terrain" ? TERRAIN_NAMES[node.terrain] : settlementLabel(occupiedByNode.get(node.id), node, ownerName);
+        return node.kind === "terrain" ? TERRAIN[node.terrain].name : settlementLabel(occupiedByNode.get(node.id), node, ownerName);
     };
 
     return (
@@ -163,9 +166,9 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march} isSelected={march?.targetNodeId === node.id} showRing={false}
-                                                onClick={() => marchTo(node.id)} title={TERRAIN_NAMES[node.terrain]}>
+                                                onClick={() => marchTo(node.id)} title={TERRAIN[node.terrain].name}>
                                                 <circle className={`${styles.terrain} ${styles[node.terrain]} ${march?.targetNodeId === node.id ? styles.selected : ""}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
-                                                <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN_MARKS[node.terrain]}</text>
+                                                <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN[node.terrain].mark}</text>
                                             </ClickableMapNode>
                                         ))}
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
