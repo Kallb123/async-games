@@ -20,7 +20,7 @@ import { WORLD_AREA_SCALE, pointDistance } from "./landmass";
 import type { RandomSource } from "./random";
 import { BEACH_CODE, FIELDS_CODE, GRASS_CODE, HILLS_CODE, MOUNTAINS_CODE, OCEAN_CODE, WOODLAND_CODE } from "./areas";
 import type { OverlayPlacement } from "./overlays";
-import { tileAt, tileCentre, tileIndex, type TerrainField } from "./terrainField";
+import { tileAt, tileCentre, tileIndex, tilesInRing, type TerrainField } from "./terrainField";
 import { pathCost, travelGridFor } from "./tilePath";
 
 const ROAD_CODE = "R";
@@ -77,15 +77,8 @@ export function deriveRoadOverlays(
  */
 function findInRings(field: TerrainField, col: number, row: number, radius: number, accept: (tile: number) => boolean): number | undefined {
     for (let ring = 0; ring <= radius; ring++) {
-        for (let dr = -ring; dr <= ring; dr++) {
-            for (let dc = -ring; dc <= ring; dc++) {
-                if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-                const c = col + dc, r = row + dr;
-                if (c < 0 || c >= field.columns || r < 0 || r >= field.rows) continue;
-                const tile = tileIndex(field, c, r);
-                if (accept(tile)) return tile;
-            }
-        }
+        const found = tilesInRing(field, col, row, ring).find(accept);
+        if (found !== undefined) return found;
     }
     return undefined;
 }

@@ -40,6 +40,23 @@ export function tileIndexCentre(grid: Pick<TerrainField, "columns" | "tileSize">
     return { x: (tile % grid.columns + 0.5) * grid.tileSize, y: (Math.floor(tile / grid.columns) + 0.5) * grid.tileSize };
 }
 
+/**
+ * The tiles exactly `ring` squares out from (col, row) — the square ring a
+ * search outward walks one at a time — in a fixed order, off the grid left
+ * out. Ring 0 is the tile itself.
+ */
+export function tilesInRing(grid: Pick<TerrainField, "columns" | "rows">, col: number, row: number, ring: number): number[] {
+    const tiles: number[] = [];
+    for (let dr = -ring; dr <= ring; dr++) {
+        for (let dc = -ring; dc <= ring; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+            const c = col + dc, r = row + dr;
+            if (c >= 0 && c < grid.columns && r >= 0 && r < grid.rows) tiles.push(r * grid.columns + c);
+        }
+    }
+    return tiles;
+}
+
 export function tileIndex(field: Pick<TerrainField, "columns">, col: number, row: number): number {
     return row * field.columns + col;
 }

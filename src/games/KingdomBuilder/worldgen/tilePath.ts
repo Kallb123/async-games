@@ -8,7 +8,7 @@
 import { areaWeightForCode } from "./areas";
 import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./overlays";
 import type { Point } from "./landmass";
-import { tileIndexCentre, type TerrainField } from "./terrainField";
+import { tileIndexCentre, tilesInRing, type TerrainField } from "./terrainField";
 
 export interface TravelGrid {
     columns: number;
@@ -79,17 +79,11 @@ export function snapToTiles<T extends Point>(points: readonly T[], grid: TravelG
         // Rings are square, so the nearest free tile by straight-line distance
         // can sit one ring further out than the first ring with any at all.
         for (let ring = 0; ring <= SNAP_SEARCH_RINGS && (best === undefined || ring <= best.distance / grid.tileSize + 1); ring++) {
-            for (let dr = -ring; dr <= ring; dr++) {
-                for (let dc = -ring; dc <= ring; dc++) {
-                    if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-                    const c = col + dc, r = row + dr;
-                    if (c < 0 || c >= grid.columns || r < 0 || r >= grid.rows) continue;
-                    const tile = r * grid.columns + c;
-                    if (taken.has(tile) || grid.weights[tile] === Infinity) continue;
-                    const centre = tileIndexCentre(grid, tile);
-                    const distance = Math.hypot(centre.x - point.x, centre.y - point.y);
-                    if (!best || distance < best.distance) best = { tile, distance };
-                }
+            for (const tile of tilesInRing(grid, col, row, ring)) {
+                if (taken.has(tile) || grid.weights[tile] === Infinity) continue;
+                const centre = tileIndexCentre(grid, tile);
+                const distance = Math.hypot(centre.x - point.x, centre.y - point.y);
+                if (!best || distance < best.distance) best = { tile, distance };
             }
         }
         if (!best) throw new Error(`No free passable tile near (${point.x.toFixed(1)}, ${point.y.toFixed(1)})`);
