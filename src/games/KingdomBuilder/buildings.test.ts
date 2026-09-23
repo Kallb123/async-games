@@ -7,7 +7,7 @@ import {
     buildingCostFor,
 } from "./buildings";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, tunedResources } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, resourcesOf, shortfallFor, tunedResources } from "./resources";
 
 describe("Kingdom Builder economy.ts", () => {
     // Its types already demand a price for every building and unit; this is
@@ -33,7 +33,7 @@ describe("Kingdom Builder economy.ts", () => {
     it("refuses a bad entry when the file loads, rather than failing open", () => {
         expect(() => tunedResources("test", { wood: -15 })).toThrow("bad wood");
         expect(() => tunedResources("test", { wood: 1.5 })).toThrow("bad wood");
-        expect(tunedResources("test", { stone: 3 })).toEqual({ wood: 0, stone: 3, iron: 0 });
+        expect(tunedResources("test", { stone: 3 })).toEqual({ wood: 0, stone: 3, iron: 0, wheat: 0 });
     });
 
     it("lets the starting stockpile buy at least one building", () => {
@@ -44,14 +44,18 @@ describe("Kingdom Builder economy.ts", () => {
 describe("Kingdom Builder building costs", () => {
     it("scales the level-one price linearly with the target level", () => {
         const levelOne = buildingCostFor("barracks", 1);
-        expect(buildingCostFor("barracks", 3)).toEqual({ wood: levelOne.wood * 3, stone: levelOne.stone * 3, iron: levelOne.iron * 3 });
+        expect(buildingCostFor("barracks", 3)).toEqual({ wood: levelOne.wood * 3, stone: levelOne.stone * 3, iron: levelOne.iron * 3, wheat: 0 });
     });
 
     it("reads what the stores are short of, and prints only what is owed", () => {
-        const cost = { wood: 20, stone: 10, iron: 0 };
-        expect(shortfallFor({ wood: 25, stone: 4, iron: 0 }, cost)).toEqual({ wood: 0, stone: 6, iron: 0 });
-        expect(canAfford({ wood: 20, stone: 10, iron: 0 }, cost)).toBe(true);
-        expect(canAfford({ wood: 19, stone: 10, iron: 0 }, cost)).toBe(false);
-        expect(formatResources(cost)).toBe("20 wood · 10 stone");
+        const cost = { wood: 20, stone: 10, iron: 0, wheat: 5 };
+        expect(shortfallFor({ wood: 25, stone: 4, iron: 0, wheat: 5 }, cost)).toEqual({ wood: 0, stone: 6, iron: 0, wheat: 0 });
+        expect(canAfford({ wood: 20, stone: 10, iron: 0, wheat: 5 }, cost)).toBe(true);
+        expect(canAfford({ wood: 20, stone: 10, iron: 0, wheat: 4 }, cost)).toBe(false);
+        expect(formatResources(cost)).toBe("20 wood · 10 stone · 5 wheat");
+    });
+
+    it("reads a stored settlement with no wheat, from before it existed, as holding none", () => {
+        expect(resourcesOf({ wood: 3, stone: 2, iron: 1 })).toEqual({ wood: 3, stone: 2, iron: 1, wheat: 0 });
     });
 });

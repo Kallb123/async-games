@@ -9,8 +9,9 @@ import {
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford } from "./resources";
+import { KINGDOM_BUILDER_BUILDING_PRODUCES, KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
+import { catchmentOfSettlement } from "./land";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -22,6 +23,7 @@ import {
     type KingdomBuilderGarrison,
     type KingdomBuilderTrainingOrder,
 } from "./units";
+import type { KingdomBuilderCatchment } from "./worldgen/catchment";
 import { completedBuildLevels } from "./worldSummaryTypes";
 
 export interface KingdomBuilderSettlementView {
@@ -31,7 +33,9 @@ export interface KingdomBuilderSettlementView {
     currentTick: number;
     nextTickAt: string;
     completedBuildLevels: number;
-    resources: { wood: number; stone: number; iron: number };
+    resources: KingdomBuilderResources;
+    /** How well the settlement's land yields each resource (§4.6). Anyone could work it out from the public map; it is here so the screen needn't. */
+    catchment: KingdomBuilderCatchment;
     tiles: Array<{
         position: number;
         building?: { type: KingdomBuilderBuildingType; level: number };
@@ -44,7 +48,7 @@ export interface KingdomBuilderSettlementView {
 
 export class KingdomBuilderPrototypeError extends Error {
     constructor(
-        public readonly code: "INVALID_INPUT" | "NOT_FOUND" | "FORBIDDEN" | "QUEUE_BUSY" | "TILE_OCCUPIED" | "NO_BARRACKS" | "LOCKED" | "CANNOT_AFFORD",
+        public readonly code: "INVALID_INPUT" | "NOT_FOUND" | "FORBIDDEN" | "QUEUE_BUSY" | "TILE_OCCUPIED" | "NO_BARRACKS" | "LOCKED" | "CANNOT_AFFORD" | "NO_YIELD",
         message: string,
     ) {
         super(message);
@@ -72,9 +76,12 @@ async function assertWorldLive(worldId: string) {
  * overdrawing.
  */
 function spend(cost: KingdomBuilderResources) {
+    // Only what the cost asks for: a settlement stored before wheat existed
+    // has no wheat field, which `$gte: 0` would refuse — though it holds none.
+    const priced = KINGDOM_BUILDER_RESOURCE_TYPES.filter(resource => cost[resource] > 0);
     return {
-        filter: Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [`resources.${resource}`, { $gte: cost[resource] }])),
-        $inc: Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [`resources.${resource}`, -cost[resource]])),
+        filter: Object.fromEntries(priced.map(resource => [`resources.${resource}`, { $gte: cost[resource] }])),
+        $inc: Object.fromEntries(priced.map(resource => [`resources.${resource}`, -cost[resource]])),
     };
 }
 
@@ -86,9 +93,10 @@ export async function settlementView(worldId: string, settlementId: string, user
 
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
     if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
-    const ownerSettlements = await KingdomBuilderSettlementModel.find({ worldId, ownerId: userId })
-        .select({ tiles: 1 })
-        .lean();
+    const [ownerSettlements, catchment] = await Promise.all([
+        KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1 }).lean(),
+        catchmentOfSettlement(worldId, settlement),
+    ]);
 
     return {
         worldId,
@@ -100,7 +108,8 @@ export async function settlementView(worldId: string, settlementId: string, user
             (total, ownerSettlement) => total + completedBuildLevels(ownerSettlement.tiles ?? []),
             0,
         ),
-        resources: settlement.resources,
+        resources: resourcesOf(settlement.resources),
+        catchment,
         tiles: settlement.tiles.map((tile: KingdomBuilderTile) => ({
             position: tile.position,
             ...(tile.building ? { building: tile.building } : {}),
@@ -132,7 +141,7 @@ export async function queuePrototypeBuilding(
     await assertWorldLive(worldId);
 
     const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
-        .select({ ownerId: 1, construction: 1, tiles: 1, resources: 1 })
+        .select({ ownerId: 1, nodeId: 1, construction: 1, tiles: 1, resources: 1, catchment: 1 })
         .lean();
     if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
@@ -150,9 +159,16 @@ export async function queuePrototypeBuilding(
         throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", "This settlement already has a barracks");
     }
 
+    // Land that yields none of a building's resource can't hold it (§4.6).
+    // The tiers never change once stored, so the write below needn't repeat this.
+    const produces = KINGDOM_BUILDER_BUILDING_PRODUCES[buildingType as KingdomBuilderPrototypeBuilding];
+    if (produces && (await catchmentOfSettlement(worldId, existing))[produces] === "none") {
+        throw new KingdomBuilderPrototypeError("NO_YIELD", `There is no ${produces} in this settlement's land`);
+    }
+
     const targetLevel = upgrading ? current.level + 1 : 1;
     const cost = buildingCostFor(buildingType as KingdomBuilderPrototypeBuilding, targetLevel);
-    if (!canAfford(existing.resources, cost)) {
+    if (!canAfford(resourcesOf(existing.resources), cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
     }
     const { filter: canPay, $inc } = spend(cost);
@@ -204,7 +220,7 @@ export async function queueUnitTraining(
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
         throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The barracks' queue is full");
     }
-    if (!canAfford(existing.resources, unit.cost)) {
+    if (!canAfford(resourcesOf(existing.resources), unit.cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough resources to train ${unit.name.toLowerCase()}`);
     }
 

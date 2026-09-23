@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ClientSession } from "mongoose";
 
-import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, removeEndedWorlds } from "@/games/KingdomBuilder";
+import { KingdomBuilderSettlementModel, KingdomBuilderWorldModel, applyTick, catchmentForSettlement, removeEndedWorlds } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -23,7 +23,16 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     if (!world || world.endedAt) return false;
     if (world.nextTickAt > now) return false;
 
-    const settlements = await KingdomBuilderSettlementModel.find({ worldId }).session(session).lean();
+    let settlements = await KingdomBuilderSettlementModel.find({ worldId }).session(session).lean();
+    if (settlements.some(settlement => !settlement.catchment)) {
+        // Once per world from before PR 18 (§4.6): its settlements' land,
+        // read off the stored field and saved with the tick below. The ground
+        // is only loaded for a world that needs it.
+        const ground = await KingdomBuilderWorldModel.findById(worldId).select({ terrainField: 1, nodes: 1 }).session(session).lean();
+        settlements = settlements.map(settlement => settlement.catchment
+            ? settlement
+            : { ...settlement, catchment: catchmentForSettlement(ground ?? { nodes: [] }, settlement) });
+    }
     const scheduledTick = world.nextTickAt;
     const elapsedTicks = Math.min(
         MAX_CATCH_UP_TICKS,
@@ -47,6 +56,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
                 resources: settlement.resources,
                 trainingQueue: settlement.trainingQueue,
                 garrison: settlement.garrison,
+                catchment: settlement.catchment,
             };
             return {
                 updateOne: {

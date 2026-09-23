@@ -3,34 +3,39 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE } from "./buildings";
+import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
+import { addResources, resourcesOf } from "./resources";
 import { advanceTraining } from "./units";
+import { groundlessCatchment, type KingdomBuilderCatchment } from "./worldgen/catchment";
 
 export interface KingdomBuilderTickWorld {
     currentTick: number;
     settlements: readonly IKingdomBuilderSettlement[];
 }
 
-const EMPTY_PRODUCTION: KingdomBuilderResources = { wood: 0, stone: 0, iron: 0 };
-
 /**
- * Returns the resources produced by the settlement's completed buildings. The
- * town centre's trickle comes whatever else stands, so a settlement too poor
- * for its cheapest building still earns its way to one (§4.5).
+ * Returns the resources produced by the settlement's completed buildings: each
+ * production building its level × what its land's tier pays (§4.6). The town
+ * centre's trickle comes whatever else stands, so a settlement too poor for
+ * its cheapest building still earns its way to one (§4.5).
  */
-export function productionFor(tiles: readonly KingdomBuilderTile[]): KingdomBuilderResources {
+export function productionFor(tiles: readonly KingdomBuilderTile[], catchment: KingdomBuilderCatchment): KingdomBuilderResources {
     return tiles.reduce<KingdomBuilderResources>((production, tile) => {
         const building = tile.building;
-        if (building?.type === "town-centre") {
-            production.wood += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.wood;
-            production.stone += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.stone;
-            production.iron += KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE.iron;
-        }
-        if (building?.type === "lumber-camp") production.wood += building.level;
-        if (building?.type === "quarry") production.stone += building.level;
-        if (building?.type === "mine") production.iron += building.level;
+        if (building?.type === "town-centre") return addResources(production, KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE);
+        const output = building && buildingOutputFor(building.type, building.level, catchment);
+        if (output) production[output.resource] += output.amount;
         return production;
-    }, { ...EMPTY_PRODUCTION });
+    }, resourcesOf());
+}
+
+/**
+ * A settlement's stored land, or — for one the tick cron hasn't backfilled
+ * (it does so before ticking) — the groundless fallback, so no path through
+ * the engine produces nothing for want of a field it didn't get.
+ */
+function catchmentOf(settlement: IKingdomBuilderSettlement): KingdomBuilderCatchment {
+    return settlement.catchment ?? groundlessCatchment(settlement.tiles);
 }
 
 /**
@@ -44,7 +49,7 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
         ...world,
         currentTick: world.currentTick + 1,
         settlements: world.settlements.map(settlement => {
-            const production = productionFor(settlement.tiles);
+            const production = productionFor(settlement.tiles, catchmentOf(settlement));
             const construction = settlement.construction;
             const ticksRemaining = construction ? construction.ticksRemaining - 1 : undefined;
             const tiles = settlement.tiles.map(tile => ({
@@ -58,11 +63,7 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
             return {
                 ...settlement,
                 tiles,
-                resources: {
-                    wood: settlement.resources.wood + production.wood,
-                    stone: settlement.resources.stone + production.stone,
-                    iron: settlement.resources.iron + production.iron,
-                },
+                resources: addResources(settlement.resources, production),
                 ...advanceTraining(settlement.trainingQueue, settlement.garrison),
                 ...(construction && ticksRemaining !== 0
                     ? { construction: { ...construction, ticksRemaining: ticksRemaining! } }

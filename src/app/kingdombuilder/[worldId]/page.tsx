@@ -175,7 +175,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             {terrain.href && (
                                 <div className={styles.legend} aria-label="Ground legend">
                                     {AREAS.map(area => (
-                                        <span key={area.code} className={styles.legendGround} style={{ "--legend-colour": area.fallbackColour } as CSSProperties}>{area.name}</span>
+                                        <span key={area.code} className={styles.legendGround} style={{ "--legend-colour": area.fallbackColour } as CSSProperties}>
+                                            {/* What a settlement's land gains from it (§4.6) — wheat beside the rest. */}
+                                            {[area.name, ...Object.keys(area.yields)].join(" · ")}
+                                        </span>
                                     ))}
                                 </div>
                             )}

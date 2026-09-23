@@ -5,9 +5,9 @@ Milestone A's prototype (PRs 1–5), the world map and multiple settlements
 (PR 6), worlds on the dashboard (PR 7), more than one player in a world
 (PR 8), the area registry and generated ground (PR 9), the overlay
 vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
-map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8) and
-building costs (PR 17, §4.5) are shipped. PR 18 — wheat with land-driven
-production (§4.6) — comes next, ahead of PR 19 (army dispatch and movement); §11.3 is the plan for the
+map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
+building costs (PR 17, §4.5) and wheat with land-driven production (PR 18,
+§4.6) are shipped. PR 19 (army dispatch and movement) comes next; §11.3 is the plan for the
 rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
 their art is ready.
@@ -191,7 +191,8 @@ not merely random, or some player spawns next to three iron nodes and another
 spawns in a resource desert. Concrete constraints:
 
 - **Resource parity radius.** Every candidate starting site is scored on the
-  total resource yield reachable within N edges (e.g. 3 travel-turns/ticks).
+  total resource yield of its land — from PR 18, the sum of its catchment's
+  yield tiers (§4.6), and every start must yield all four resources.
   Only sites within a tight band of the map's median score are eligible to
   be starting sites at all; everything outside the band becomes a
   contestable neutral/expansion site instead.
@@ -1177,7 +1178,7 @@ no separate soft/hard currency — and it is spent on exactly three things:
    market is a release valve, not a way to dodge the tech tree).
 
 This is intentionally a small, closed loop: four resources — wood, stone,
-iron and, from PR 18, wheat (§4.6) — and three sinks.
+iron and wheat (§4.6) — and three sinks.
 Depth is meant to come from *when* and *where* to spend (build up an economy
 vs. rush an army; defend in depth vs. expand the border) rather than from a
 sprawling resource list.
@@ -1203,8 +1204,7 @@ army and forecloses that army from anything else in the meantime.
 
 > PR 17 shipped this section; the prices (units' too), the starting stockpile and the town
 > centre's trickle are read from `src/games/KingdomBuilder/economy.ts`, so a
-> tuning pass edits that one file. The farm and wheat rows wait on
-> PR 18.
+> tuning pass edits that one file. PR 18 added the farm and wheat rows.
 
 Through PR 13 a building costs only time: `queuePrototypeBuilding` checks the tile and
 the queue, never the stores, so a new settlement can fill all eight tiles on
@@ -1242,7 +1242,7 @@ enough in store to build the starter camps and make one real choice:
 | Wood | 40 |
 | Stone | 20 |
 | Iron | 0 |
-| Wheat (from PR 18) | 20 |
+| Wheat | 20 |
 
 That buys a lumber camp and a quarry (30 wood) with 10 wood and 20 stone left
 over — not yet enough for a mine or a farm, so the first decision is what to
@@ -1261,6 +1261,10 @@ wood the tick after this ships. (Settlements that already built for free keep
 their buildings; nothing is charged retroactively.)
 
 ### 4.6 Wheat, and the land around a settlement
+
+> PR 18 shipped this section. The radius, the tier bands and what each tier
+> pays live in `economy.ts` beside the prices; what each area yields lives on
+> its `AREAS` entry.
 
 Two related changes: a fourth resource, and production that depends on the
 ground a settlement is built on.
@@ -2407,7 +2411,7 @@ reduced-motion rule in `ag-theme.css`.
   upgrade and training rows all print their price, and an unaffordable one
   stays on screen, disabled, with "short 5 wood" beside the price. The farm and
   wheat wait on PR 18. No `whatsNew.ts` line.
-- **PR 18 — Wheat, farms, and land-driven production.** §4.6.
+- **PR 18 — Wheat, farms, and land-driven production.** Shipped. §4.6.
   1. `wheat` in `KingdomBuilderResources` (absent reads as zero), the farm
      building, wheat in every unit's cost and in the starting stockpile.
   2. `yields` on the `AREAS` registry entries, with the registry guard test
@@ -2425,6 +2429,41 @@ reduced-motion rule in `ag-theme.css`.
      schema change and its backfill), `gremlin` (the backfill over every
      settlement, a world with no field), `caveman` (tiers read off the
      registry, never a switch on area name).
+
+  How it landed: `wheat` is the fourth entry in `KINGDOM_BUILDER_RESOURCE_TYPES`,
+  and everything that loops over resources picked it up; a document with no
+  wheat field reads as zero through `resourcesOf`, and the `spend` filter now
+  checks only the resources a price asks for, since `$gte: 0` refuses a field
+  that isn't there. The farm costs 10 wood and 5 stone; units carry §4.6's
+  wheat prices, the first stockpile 20 wheat and the trickle 1 wheat.
+  Each `AREAS` entry declares `yields` (a share of a tile per resource, `{}`
+  for nothing), grass and fields add `irrigated` (what they yield beside
+  water) and river and lake `irrigates`; the guard test holds every entry to
+  known resources and sane amounts, and every resource to some ground.
+  `worldgen/catchment.ts` is the pure part — the radius-4 disc (69 tiles, a
+  9 × 9 square with its corners cut, off-map tiles left out and sea counted),
+  the shares, the tiers, what each pays per level (0–3) and the groundless
+  fallback; the radius and bands are `catchmentRadius` and `yieldTiers` in
+  `economy.ts`. Irrigation is the four orthogonal neighbours and doesn't stack.
+  `land.ts` stands a settlement on its site — the tile under a node from before
+  PR 16 — and `foundSettlement` stores the tiers. Older settlements are
+  backfilled by the tick cron, once per world, from the stored field and saved
+  with the tick's own write; the settlement screen and the queue command
+  backfill any it hasn't reached yet, guarded on the field still being absent.
+  A world with no field gets Good in everything bar iron, which is Good only
+  where a mine already stands. `productionFor` pays level × the tier's output,
+  so a mine standing on land with no iron makes nothing, and
+  `queuePrototypeBuilding` refuses a production building on land with no tier
+  (`NO_YIELD`) before it spends anything. The fairness score is now the sum of
+  a site's tier outputs (terrain nodes stay on the map as landmarks and no
+  longer count), eligible starts are drawn only from sites yielding all four,
+  and `checkSettlementFairness` names any start that doesn't. About half of
+  all sites qualify, and generation over 40 seeds needed exactly the attempts
+  it did before. The settlement screen shows each count over its tier ("Rich
+  woodland"), prints each building's output on this land, and keeps a
+  building its land can't hold on screen, disabled, saying why; the world
+  map's ground legend names what each area yields. Upkeep stays open (§12). No
+  `whatsNew.ts` line.
 - **PR 19 — Army dispatch and movement.** A command to send a garrison (or
   part of it) toward another node, pathed over the tiles by PR 16's
   pathfinder, and a movement step in the tick engine spending §6.2's terrain

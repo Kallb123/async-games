@@ -3,12 +3,15 @@
 // season's theme wants) is meant to cost — one entry here plus one block of
 // art — so nothing outside this file may branch on an area by name. The
 // generator (terrainField.ts) walks `placement`, the cost walk
-// (graphConnectivity.ts) reads `weight`, and the eventual renderer and legend
-// (PR10) read `priority` and the manifest.
+// (graphConnectivity.ts) reads `weight`, a settlement's catchment
+// (catchment.ts) reads `yields`, and the eventual renderer and legend (PR10)
+// read `priority` and the manifest.
 //
 // Same "registry-and-its-test" shape the repo already uses for game guides
 // and themes (see src/utils/ui/gameThemes.ts) — this file only declares the
 // data, and areas.test.ts is the guard.
+
+import type { KingdomBuilderResourceType } from "../resources";
 
 /** A production/travel multiplier, or "impassable" without a compatible overlay. */
 export type AreaWeight = number | "impassable";
@@ -35,6 +38,13 @@ export interface AreaPassPlacement {
 
 export type AreaPlacement = AreaWindowPlacement | AreaPassPlacement;
 
+/**
+ * What one tile of an area counts for in a settlement's catchment (§4.6), per
+ * resource: 1 is a whole tile's worth, a fraction a part of one. `{}` is
+ * ground that yields nothing.
+ */
+export type AreaYields = Partial<Record<KingdomBuilderResourceType, number>>;
+
 export interface AreaDefinition {
     /** One character. This is the persisted wire format — see the storage rule below. */
     code: string;
@@ -48,6 +58,12 @@ export interface AreaDefinition {
     fallbackColour: string;
     /** How the generator decides a tile is this area. */
     placement: AreaPlacement;
+    /** What a tile of it counts for in a settlement's catchment (§4.6). Every entry declares it, even as `{}`. */
+    yields: AreaYields;
+    /** What a tile of it counts for instead when it lies beside water that `irrigates` — grass by a river. */
+    irrigated?: AreaYields;
+    /** Water that doubles the wheat of the farmland beside it without yielding anything itself. */
+    irrigates?: true;
 }
 
 /**
@@ -68,6 +84,7 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 0,
         fallbackColour: "#2f6f8f",
         placement: { kind: "pass", name: "water-split" },
+        yields: {},
     },
     {
         code: "l",
@@ -76,6 +93,8 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 1,
         fallbackColour: "#3f7fa0",
         placement: { kind: "pass", name: "water-split" },
+        yields: {},
+        irrigates: true,
     },
     {
         code: "r",
@@ -84,6 +103,8 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 2,
         fallbackColour: "#4a90b8",
         placement: { kind: "pass", name: "river-trace" },
+        yields: {},
+        irrigates: true,
     },
     {
         code: "b",
@@ -92,6 +113,7 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 3,
         fallbackColour: "#e8d9ae",
         placement: { kind: "pass", name: "beach-band" },
+        yields: {},
     },
     {
         code: "g",
@@ -102,6 +124,8 @@ export const AREAS: readonly AreaDefinition[] = [
         // The baseline: middling elevation, middling moisture — and also the
         // catch-all for any land tile no more specific window claims.
         placement: { kind: "window", elevation: [0, 1] },
+        yields: { wheat: 1 },
+        irrigated: { wheat: 2 },
     },
     {
         code: "f",
@@ -110,6 +134,8 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 5,
         fallbackColour: "#b9d17a",
         placement: { kind: "pass", name: "fields-radius" },
+        yields: { wheat: 1 },
+        irrigated: { wheat: 2 },
     },
     {
         code: "w",
@@ -118,6 +144,7 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 6,
         fallbackColour: "#4f8f52",
         placement: { kind: "window", elevation: [0, 0.52], moisture: [0.55, 1] },
+        yields: { wood: 1 },
     },
     {
         code: "h",
@@ -126,6 +153,7 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 7,
         fallbackColour: "#b98f5a",
         placement: { kind: "window", elevation: [0.52, 0.66] },
+        yields: { stone: 1 },
     },
     {
         code: "m",
@@ -134,6 +162,7 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 8,
         fallbackColour: "#9a9a9a",
         placement: { kind: "window", elevation: [0.66, 1] },
+        yields: { stone: 1, iron: 1 },
     },
     {
         code: "s",
@@ -142,6 +171,8 @@ export const AREAS: readonly AreaDefinition[] = [
         priority: 9,
         fallbackColour: "#6f8f6a",
         placement: { kind: "window", elevation: [0, 0.41], moisture: [0.68, 1] },
+        // Soggy farmland: half a tile of wheat, and already too wet to gain from a river.
+        yields: { wheat: 0.5 },
     },
 ];
 
