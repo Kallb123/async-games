@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KingdomBuilderPrototypeError, queuePrototypeBuilding } from "./prototype";
+import { KingdomBuilderPrototypeError, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
 const settlementId = new Types.ObjectId().toString();
@@ -63,7 +63,130 @@ describe("Kingdom Builder prototype construction", () => {
             { $set: { construction: { tilePosition: 0, buildingType: "mine", targetLevel: 1, ticksRemaining: 2 } } },
             { new: true },
         );
-        expect(view.tiles[0].construction).toEqual({ buildingType: "mine", ticksRemaining: 2 });
+        expect(view.tiles[0].construction).toEqual({ buildingType: "mine", targetLevel: 1, ticksRemaining: 2 });
         expect(view.completedBuildLevels).toBe(1);
+    });
+});
+
+function withBarracks(level: number) {
+    return tiles.map(tile => tile.position === 0 ? { position: 0, building: { type: "barracks" as const, level } } : tile);
+}
+
+/** Stubs the pre-check read, the conditional write, and the view read after it. */
+function stubSettlement(existing: object, updated: object | null = { _id: settlementId }) {
+    const findOne = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
+    findOne.mockReturnValueOnce({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(existing) }) } as never);
+    findOne.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ nodeId: "start", resources: { wood: 0, stone: 0, iron: 0 }, ...existing }) } as never);
+    const update = vi.spyOn(KingdomBuilderSettlementModel, "findOneAndUpdate")
+        .mockReturnValue({ lean: vi.fn().mockResolvedValue(updated) } as never);
+    vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({
+        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ currentTick: 3, nextTickAt: new Date("2030-01-01T00:00:00Z") }) }),
+    } as never);
+    vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({
+        select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }),
+    } as never);
+    return update;
+}
+
+describe("Kingdom Builder barracks", () => {
+    it("allows one barracks per settlement", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1) });
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 1, "barracks"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("guards a new barracks against one being queued in another tab", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 1, "barracks");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ "tiles.building.type": { $ne: "barracks" } }),
+            { $set: { construction: { tilePosition: 1, buildingType: "barracks", targetLevel: 1, ticksRemaining: 2 } } },
+            { new: true },
+        );
+    });
+
+    it("upgrades the barracks a level at a time, up to its cap", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(2) });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 0, "barracks");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ tiles: { $elemMatch: { position: 0, "building.type": "barracks", "building.level": 2 } } }),
+            { $set: { construction: { tilePosition: 0, buildingType: "barracks", targetLevel: 3, ticksRemaining: 6 } } },
+            { new: true },
+        );
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(3) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "barracks"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+    });
+
+    it("never upgrades a production building", async () => {
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "mine"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+    });
+});
+
+describe("Kingdom Builder training", () => {
+    const rich = { wood: 100, stone: 100, iron: 100 };
+
+    it("refuses forged units and somebody else's barracks", async () => {
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "dragon"))
+            .rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+
+        const update = stubSettlement({ ownerId: "actual-owner", tiles: withBarracks(3), resources: rich });
+        await expect(queueUnitTraining(worldId, settlementId, "intruder", "militia"))
+            .rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("needs a barracks, the level that unlocks the unit, room in the queue and the resources", async () => {
+        stubSettlement({ ownerId: "owner", tiles, resources: rich });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "NO_BARRACKS" }));
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "cavalry")).rejects.toEqual(expect.objectContaining({ code: "LOCKED" }));
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich,
+            trainingQueue: Array.from({ length: 20 }, () => ({ unitType: "militia", ticksRemaining: 2 })) });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: { wood: 100, stone: 100, iron: 4 } });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
+    });
+
+    it("pays up front and queues atomically against the same checks", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(3), resources: rich });
+
+        const view = await queueUnitTraining(worldId, settlementId, "owner", "militia");
+
+        expect(update).toHaveBeenCalledWith(
+            {
+                _id: settlementId, worldId, ownerId: "owner",
+                tiles: { $elemMatch: { "building.type": "barracks", "building.level": 3 } },
+                "trainingQueue.19": { $exists: false },
+                "resources.wood": { $gte: 10 }, "resources.stone": { $gte: 0 }, "resources.iron": { $gte: 5 },
+            },
+            {
+                $inc: { "resources.wood": -10, "resources.stone": -0, "resources.iron": -5 },
+                $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1 } },
+            },
+            { new: true },
+        );
+        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 });
+    });
+
+    it("reports a lost race instead of overdrawing", async () => {
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich }, null);
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
     });
 });
