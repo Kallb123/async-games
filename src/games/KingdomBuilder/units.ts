@@ -88,6 +88,13 @@ export function garrisonOf(garrison?: Partial<KingdomBuilderGarrison>): KingdomB
     ) as KingdomBuilderGarrison;
 }
 
+/** "2 militia · 1 cavalry", skipping what the stack has none of. */
+export function formatUnits(units: Partial<KingdomBuilderGarrison>): string {
+    return KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => (units[unitType] ?? 0) > 0)
+        .map(unitType => `${units[unitType]} ${KINGDOM_BUILDER_UNITS[unitType].name.toLowerCase()}`)
+        .join(" · ");
+}
+
 /**
  * One tick of training: only the unit at the head of the queue advances, and
  * it joins the garrison on the tick its count reaches zero, so a barracks

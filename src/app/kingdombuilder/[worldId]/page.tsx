@@ -15,9 +15,12 @@ import MapLabelLayer from "@/components/ui/MapLabelLayer";
 import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
+import { paceOf, routeBetween, ticksToArrive } from "@/games/KingdomBuilder/armies";
+import ArmiesSection, { type MarchDraft, type MarchPreview } from "@/games/KingdomBuilder/components/ArmiesSection";
+import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
-import { AREAS, tileIndexCentre, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
+import { AREAS, tileIndexCentre, travelGridFor, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -29,6 +32,7 @@ import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 import styles from "./page.module.css";
 
 const TERRAIN_MARKS = { forest: "♣", quarry: "◆", ore: "●" } as const;
+const TERRAIN_NAMES = { forest: "Forest", quarry: "Quarry", ore: "Ore" } as const;
 // Smaller than World Domination or Outbreak's own node radii because Kingdom
 // Builder's world packs many more nodes into its viewBox (200×140 for a new
 // world, 100×70 for one generated before it grew) — the original sizes
@@ -69,6 +73,8 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const terrain = useTerrainImage(data ?? {});
     const [selectedSite, setSelectedSite] = useState<string | null>(null);
     const { submit, isPending: founding, message } = useJsonMutation<KingdomBuilderWorldView>(endpoint, "That site could not be claimed.");
+    // An army being sent (§6.2): while one is drafted, a tap on the map picks where it goes.
+    const [march, setMarch] = useState<MarchDraft | null>(null);
 
     useEffect(() => {
         if (data) writeStoredValue(worldBuildsStorageKey(worldId), String(data.completedBuildLevels));
@@ -92,6 +98,26 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
         };
     }, [data]);
 
+    // The same pathfinder and pace the server uses, so the ETA shown is the one the tick keeps.
+    const grid = useMemo(() => (data?.terrainField ? travelGridFor(data.terrainField, data.overlays) : null), [data]);
+    const marchRoute = useMemo(() => {
+        if (!data || !grid || !march?.targetNodeId) return undefined;
+        const tileOf = (nodeId: string) => data.nodes.find(node => node.id === nodeId)?.tile;
+        const army = "armyId" in march ? data.armies.find(entry => entry.armyId === march.armyId) : undefined;
+        const from = army ? army.tile : "settlementId" in march ? tileOf(data.settlements.find(settlement => settlement.settlementId === march.settlementId)?.nodeId ?? "") : undefined;
+        const to = tileOf(march.targetNodeId);
+        const units = "units" in march ? march.units : army?.units;
+        if (from === undefined || to === undefined || !units) return undefined;
+        const route = routeBetween(grid, from, to);
+        return { route, ticks: route ? ticksToArrive({ ...route, travelled: 0 }, paceOf(units) ?? 1) : 0 };
+    }, [data, grid, march]);
+    const preview: MarchPreview = !marchRoute ? null : marchRoute.route ? { ticks: Math.max(1, marchRoute.ticks) } : "no-route";
+    const startMarch = (draft: MarchDraft | null) => {
+        setSelectedSite(null);
+        setMarch(draft);
+    };
+    const marchTo = (nodeId: string) => march && setMarch({ ...march, targetNodeId: nodeId });
+
     const found = async () => {
         if (!selectedSite) return;
         const body = await submit({ siteId: selectedSite });
@@ -110,6 +136,13 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
     const players = data?.players ?? [];
     const ownerName = (seat: number) => players[seat]?.name ?? "Another player";
+    const myColour = playerColour(players.find(player => player.isMe)?.seat ?? 0);
+    const marchOrigin = march && "settlementId" in march ? data?.settlements.find(settlement => settlement.settlementId === march.settlementId)?.nodeId : undefined;
+    const placeName = (nodeId: string) => {
+        const node = data?.nodes.find(entry => entry.id === nodeId);
+        if (!node) return "somewhere";
+        return node.kind === "terrain" ? TERRAIN_NAMES[node.terrain] : settlementLabel(occupiedByNode.get(node.id), node, ownerName);
+    };
 
     return (
         <main>
@@ -118,7 +151,9 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 <Section label="World" isLoading={isLoading} action={data && <span className="ag-tag">Tick {data.currentTick}</span>}>
                     {isLoading ? <Skeleton width="100%" height={320} radius={14} /> : data && map && (
                         <>
-                            <p className={styles.hint}>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</p>
+                            <p className={styles.hint}>{march
+                                ? "Tap anywhere on the map to send the army there."
+                                : <>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement.</>}</p>
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
@@ -127,24 +162,27 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
-                                            <g key={node.id}>
-                                                <circle className={`${styles.terrain} ${styles[node.terrain]}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
+                                            <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march} isSelected={march?.targetNodeId === node.id} showRing={false}
+                                                onClick={() => marchTo(node.id)} title={TERRAIN_NAMES[node.terrain]}>
+                                                <circle className={`${styles.terrain} ${styles[node.terrain]} ${march?.targetNodeId === node.id ? styles.selected : ""}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
                                                 <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN_MARKS[node.terrain]}</text>
-                                            </g>
+                                            </ClickableMapNode>
                                         ))}
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
                                             const isOpen = node.siteType === "expansion" && !settlement;
-                                            const isSelected = selectedSite === node.id;
+                                            const isTarget = !!march && node.id !== marchOrigin;
+                                            const isSelected = march ? march.targetNodeId === node.id : selectedSite === node.id;
                                             // No ring: ClickableMapNode's default ring offset is sized for World
                                             // Domination's/Outbreak's much bigger nodes, and at this board's tight
                                             // scale it dwarfed the map on a site-dense world. What a site is —
                                             // "Open site", "Your town", "Claimed" — is already the label under it;
                                             // "selected" is the one state a label can't say, so it gets its own
                                             // fill on the site's own dot instead (see .selected).
-                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={isOpen || isMine} isSelected={isSelected} showRing={false}
-                                                onClick={isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
+                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={march ? isTarget : isOpen || isMine} isSelected={isSelected} showRing={false}
+                                                onClick={march ? () => isTarget && marchTo(node.id)
+                                                    : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isOpen ? "Open settlement site" : "Free starting site"}>
                                                 {/* Every settlement wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. */}
                                                 <circle className={`${styles.site} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
@@ -152,6 +190,11 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                                 {settlement && <text className={styles.keep} x={node.x} y={node.y}>♜</text>}
                                             </ClickableMapNode>;
                                         })}
+                                        {data.terrainField && (
+                                            <ArmyLayer field={data.terrainField} armies={data.armies} colour={myColour} preview={marchRoute?.route?.path}
+                                                selectedArmyId={march && "armyId" in march ? march.armyId : undefined}
+                                                onSelect={march ? undefined : armyId => startMarch({ armyId })} />
+                                        )}
                                         {/* MapLabel's own default strokeWidth (3) is tuned for boards that
                                             draw at fontSize 9+ (Outbreak, Train Time) — at this board's fontSize
                                             of 1.8 it outweighed the glyphs themselves, so every label's outline
@@ -185,6 +228,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         </>
                     )}
                 </Section>
+                {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
                 {data?.invite && (
                     <JoinCodeCard joinCode={data.invite.joinCode} gameFriendlyName={GAME_META.kingdombuilder.name} expiresAt={data.invite.expiresAt}
                         expiryConsequence="the open seats close" />

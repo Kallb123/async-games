@@ -19,6 +19,11 @@ export interface KingdomBuilderTickWorld {
     armies?: readonly KingdomBuilderMarch[];
 }
 
+/** "1 tick", "5 ticks" — how every screen counts time in a world (§5.5). */
+export function formatTicks(count: number): string {
+    return `${count} tick${count === 1 ? "" : "s"}`;
+}
+
 /**
  * Returns the resources produced by the settlement's completed buildings: each
  * production building its level × what its land's tier pays (§4.6). The town
