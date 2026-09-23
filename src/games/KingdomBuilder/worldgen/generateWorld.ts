@@ -4,7 +4,7 @@ import { generateLandmass, type Landmass, type WorldEdge, type WorldNode } from 
 import type { OverlayPlacement } from "./overlays";
 import { applyOverlayVocabulary } from "./overlayVocabulary";
 import { createRandom } from "./random";
-import { assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
+import { assignBarbarianVillages, assignFairStartingSites, placeSettlementSites, type FairnessReport, type SettlementOptions } from "./settlementSites";
 import { applySitesToTerrainField, generateBaseTerrainField, mainlandOf, type TerrainField } from "./terrainField";
 import { placeTerrainNodes, type TerrainNodeOptions } from "./terrainNodes";
 import { travelGridFor } from "./tilePath";
@@ -87,10 +87,11 @@ export function generateWorld(seed: string, options: GenerateWorldOptions = {}):
                 lastFailure = "no starting-site assignment passed the fairness constraints";
                 continue;
             }
-            const finalNodes = [...terrainNodes, ...assignment.sites];
+            // Barbarians take some of the open ground left once the starts are fixed (§3.4).
+            const finalNodes = [...terrainNodes, ...assignBarbarianVillages(assignment.sites, random, options.settlements?.barbarianVillages)];
             // The overlay vocabulary (§3.5.3, PR 12) runs last: piers, roads
             // and signposts all read the *final* site types and graph, which
-            // only exist once the fairness assignment above has succeeded.
+            // only exist once the fairness assignment and the barbarians have.
             const vocabulary = applyOverlayVocabulary(terrainField, finalNodes, edges, overlays, random);
             return {
                 seed,

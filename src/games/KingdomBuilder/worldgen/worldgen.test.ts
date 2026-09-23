@@ -161,7 +161,8 @@ describe("Kingdom Builder world generation", () => {
             // Every start yields all four resources (§4.6) — checkSettlementFairness says so if one doesn't.
             expect(report.reasons, `seed fairness-${index}, attempt ${world.generationAttempt}`).toEqual([]);
             expect(sites.filter(site => site.siteType === "player-start")).toHaveLength(10);
-            expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(14 * WORLD_AREA_SCALE);
+            expect(sites.filter(site => site.siteType === "expansion")).toHaveLength(10 * WORLD_AREA_SCALE);
+            expect(sites.filter(site => site.siteType === "barbarian")).toHaveLength(4 * WORLD_AREA_SCALE);
         }
         // §3.7's answer to "one block in the middle": mountains in at least
         // three of the map's ninths in most worlds, and the middle ninth

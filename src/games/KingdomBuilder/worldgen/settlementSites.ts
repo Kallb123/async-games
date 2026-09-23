@@ -10,6 +10,8 @@ export interface SettlementOptions {
     expansionSites?: number;
     minimumStartHops?: number;
     parityTolerance?: number;
+    /** How many of the expansion sites barbarians hold from the start (§3.4). */
+    barbarianVillages?: number;
 }
 
 type FairnessOptions = Pick<SettlementOptions, "minimumStartHops" | "parityTolerance">;
@@ -135,4 +137,16 @@ export function assignFairStartingSites(
         if (fairness.valid) return { sites: classified, fairness };
     }
     return undefined;
+}
+
+/**
+ * Hands some of the open expansion sites to barbarians (§3.4, §11.3 PR 23):
+ * NPC villages standing from the start, which a player takes with an army
+ * rather than founds. Chosen once the starts are fixed, so a start is never
+ * one, and at most half the open ground goes — the rest stays open to found on.
+ */
+export function assignBarbarianVillages(sites: readonly SettlementNode[], random: RandomSource, count = 4 * WORLD_AREA_SCALE): SettlementNode[] {
+    const open = sites.filter(site => site.siteType === "expansion");
+    const held = new Set(random.shuffle(open).slice(0, Math.min(count, Math.floor(open.length / 2))).map(site => site.id));
+    return sites.map(site => (held.has(site.id) ? { ...site, siteType: "barbarian" } : site));
 }

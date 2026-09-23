@@ -1,5 +1,7 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 
+import type { KingdomBuilderBarbarianVillage } from "./barbarians";
+import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
 import type { FairnessReport } from "./worldgen/settlementSites";
 import type { Landmass, WorldEdge, WorldNode } from "./worldgen/landmass";
 import type { OverlayPlacement } from "./worldgen/overlays";
@@ -72,6 +74,12 @@ export interface IKingdomBuilderWorld {
      * battle over the same world, rather than fight a garrison that has moved.
      */
     battlesFought?: number;
+    /**
+     * The barbarian villages still standing (§3.4, PR 23), each with what is
+     * left of its garrison; a village taken or burnt drops out. Absent on a
+     * world generated before them, which has no barbarian sites either.
+     */
+    barbarians?: KingdomBuilderBarbarianVillage[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -129,6 +137,11 @@ const SeatSchema = new Schema<KingdomBuilderSeat>({
     joinedAt: { type: Date, required: true },
 }, { _id: false });
 
+const BarbarianVillageSchema = new Schema<KingdomBuilderBarbarianVillage>({
+    nodeId: { type: String, required: true },
+    garrison: { type: KingdomBuilderGarrisonSchema, required: true },
+}, { _id: false });
+
 const OverlayPlacementSchema = new Schema<OverlayPlacement>({
     tile: { type: Number, required: true },
     code: { type: String, required: true },
@@ -153,6 +166,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
     armiesDispatched: { type: Number, min: 0 },
     battlesFought: { type: Number, min: 0 },
+    barbarians: { type: [BarbarianVillageSchema], required: false, default: undefined },
 }, { timestamps: true });
 
 KingdomBuilderWorldSchema.index({ seed: 1 });

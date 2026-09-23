@@ -1,6 +1,6 @@
 import type { Types } from "mongoose";
 
-import { KingdomBuilderBattleModel, type IKingdomBuilderBattle } from "./KingdomBuilderBattleModel";
+import { KingdomBuilderBattleModel, type IKingdomBuilderBattle, type KingdomBuilderBattleKind } from "./KingdomBuilderBattleModel";
 import { subtractUnits, unitCount } from "./armies";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 
@@ -13,9 +13,9 @@ export const KINGDOM_BUILDER_BATTLE_REPORTS = 5;
  */
 export interface KingdomBuilderBattleReport {
     battleId: string;
-    kind: "push" | "sally";
+    kind: KingdomBuilderBattleKind;
     tick: number;
-    /** The settlement's node it was fought at. */
+    /** The settlement's (or barbarian village's) node it was fought at. */
     nodeId: string;
     /** The reader's side started it: pushed the attack, or sallied out. */
     started: boolean;

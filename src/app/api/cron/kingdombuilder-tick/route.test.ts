@@ -7,7 +7,7 @@ vi.mock("@/utils/mongodb/mongodb", () => ({
     }),
 }));
 
-import { KingdomBuilderArmyModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel } from "@/games/KingdomBuilder";
+import { KingdomBuilderArmyModel, KingdomBuilderBattleModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel } from "@/games/KingdomBuilder";
 import { POST } from "./route";
 
 const originalSecret = process.env.CRON_SECRET;
@@ -69,7 +69,7 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             resources: { wood: 0, stone: 0, iron: 0 },
         }] }) } as never);
         const bulkWrite = vi.spyOn(KingdomBuilderSettlementModel, "bulkWrite").mockResolvedValue({} as never);
-        vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ session: () => ({ lean: async () => [] }) } as never);
+        vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => [] }) }) } as never);
 
         const response = await POST(request("Bearer cron-secret"));
 
@@ -102,14 +102,14 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             _id: id, worldId, ownerId: "owner", units: { militia: 2, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
             path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "somewhere", targetNodeId, ...camped,
         });
-        const armyFind = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ session: () => ({ lean: async () => [
+        const armyFind = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => [
             army("a1", "home"), army("a2", "camp"),
             // Camped at the owner's town since before sieges existed, and camped on open ground.
             army("a3", "home", { ownerId: "rival", travelled: 2, arrivedAtTick: 2 }),
             army("a4", "camp", { travelled: 2, arrivedAtTick: 2 }),
             // Besieging a town that has since gone — its owner left the world.
             army("a5", "camp", { travelled: 2, arrivedAtTick: 2, besiegingSince: 3 }),
-        ] }) } as never);
+        ] }) }) } as never);
         const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
 
         const response = await POST(request("Bearer cron-secret"));
@@ -124,5 +124,50 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             { updateOne: { filter: { _id: "a3", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2, besiegingSince: 6 } } } },
             { updateOne: { filter: { _id: "a5", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2 }, $unset: { besiegingSince: 1 } } } },
         ]);
+    });
+
+    it("fights a barbarian village the tick an army reaches it, and turns it into the winner's settlement", async () => {
+        process.env.CRON_SECRET = "cron-secret";
+        const worldId = "64b000000000000000000003";
+        const lean = vi.fn().mockResolvedValueOnce([{ _id: worldId }]).mockResolvedValue([]);
+        const chain = { sort: () => chain, limit: () => chain, select: () => chain, lean };
+        vi.spyOn(KingdomBuilderWorldModel, "find").mockReturnValue(chain as never);
+        const world = {
+            currentTick: 5, nextTickAt: new Date(Date.now() - 1000),
+            barbarians: [{ nodeId: "village", garrison: { militia: 4 } }, { nodeId: "far", garrison: { militia: 8 } }],
+        };
+        const ground = {
+            terrainField: { columns: 12, rows: 1, tileSize: 2, codes: "g".repeat(12) },
+            nodes: [{ id: "village", kind: "settlement", siteType: "barbarian", x: 5, y: 1, tile: 2 }],
+        };
+        vi.spyOn(KingdomBuilderWorldModel, "findById")
+            .mockReturnValueOnce({ select: () => ({ session: () => ({ lean: async () => world }) }) } as never)
+            .mockReturnValueOnce({ select: () => ({ session: () => ({ lean: async () => ground }) }) } as never);
+        const claim = vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ session: () => ({ lean: async () => [{
+            _id: "s1", worldId, ownerId: "owner", nodeId: "home", settlementNumber: 0,
+            tiles: [{ position: 4, building: { type: "town-centre", level: 1 } }],
+            resources: { wood: 0, stone: 0, iron: 0, wheat: 0 },
+            catchment: { wood: "none", stone: "none", iron: "none", wheat: "none" },
+        }] }) } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "bulkWrite").mockResolvedValue({} as never);
+        const created = vi.spyOn(KingdomBuilderSettlementModel, "create").mockResolvedValue([] as never);
+        const battles = vi.spyOn(KingdomBuilderBattleModel, "create").mockResolvedValue([] as never);
+        vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => [{
+            _id: "a1", worldId, ownerId: "owner", units: { militia: 10, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
+            path: [0, 1, 2], pathCosts: [0, 2, 4], travelled: 2, fromNodeId: "home", targetNodeId: "village",
+        }] }) }) } as never);
+        const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
+
+        const response = await POST(request("Bearer cron-secret"));
+
+        expect(response.status).toBe(200);
+        expect(claim.mock.calls[0][1]).toMatchObject({ $set: { currentTick: 6, barbarians: [{ nodeId: "far", garrison: { militia: 8 } }] } });
+        const [[capture]] = created.mock.calls[0] as unknown as [[Record<string, unknown>]];
+        expect(capture).toMatchObject({ worldId, ownerId: "owner", nodeId: "village", settlementNumber: 1, catchment: { wheat: "rich" } });
+        expect((capture.garrison as { militia: number }).militia).toBeGreaterThan(0);
+        const [[battle]] = battles.mock.calls[0] as unknown as [[Record<string, unknown>]];
+        expect(battle).toMatchObject({ worldId, tick: 6, kind: "barbarian", nodeId: "village", attackerIds: ["owner"], defenderIds: [] });
+        expect(armyWrites.mock.calls[0][0]).toEqual([{ deleteOne: { filter: { _id: "a1", worldId } } }]);
     });
 });

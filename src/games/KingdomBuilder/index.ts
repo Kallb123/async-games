@@ -20,3 +20,4 @@ export * from "./siege";
 export * from "./assault";
 export * from "./combat";
 export * from "./battleReports";
+export * from "./barbarians";
