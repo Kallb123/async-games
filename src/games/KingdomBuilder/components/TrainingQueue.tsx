@@ -20,23 +20,25 @@ export default function TrainingQueue({ queue, pending, disabled, onCancel, clas
         <div className={`ag-chips${className ? ` ${className}` : ""}`} role="list" aria-label="Training queue">
             {queue.map((order, index) => {
                 const unit = KINGDOM_BUILDER_UNITS[order.unitType];
-                const key = `cancel-${index}`;
+                const key = `cancel-${order.orderId}`;
                 const training = index === 0;
                 return (
                     <span
                         role="listitem"
-                        // Orders carry no id; the place is what the server matches on too.
-                        key={index}
+                        key={order.orderId ?? index}
                         className={`ag-person-chip${training ? " ag-person-chip--you" : ""}${pending === key ? " ag-pending-skin" : ""}`}
                     >
                         <span aria-hidden>{unit.icon}</span>
                         {training ? `${unit.name} · ${formatTicks(order.ticksRemaining)}` : unit.name}
-                        <button
-                            type="button"
-                            aria-label={`Cancel ${unit.name.toLowerCase()}${training ? " in training" : ""} and refund it`}
-                            disabled={disabled}
-                            onClick={() => onCancel(key, { action: "cancel-training", index, unitType: order.unitType, ticksRemaining: order.ticksRemaining })}
-                        >✕</button>
+                        {/* An order queued before cancelling existed has no id to cancel it by. */}
+                        {order.orderId && (
+                            <button
+                                type="button"
+                                aria-label={`Cancel ${unit.name.toLowerCase()}${training ? " in training" : ""} and refund it`}
+                                disabled={disabled}
+                                onClick={() => onCancel(key, { action: "cancel-training", orderId: order.orderId })}
+                            >✕</button>
+                        )}
                     </span>
                 );
             })}

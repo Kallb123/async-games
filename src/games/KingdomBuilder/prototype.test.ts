@@ -280,7 +280,7 @@ describe("Kingdom Builder training", () => {
             },
             {
                 $inc: { "resources.wood": -10, "resources.iron": -5, "resources.wheat": -5 },
-                $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1 } },
+                $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1, orderId: expect.any(String) } },
             },
             { new: true },
         );
@@ -294,45 +294,45 @@ describe("Kingdom Builder training", () => {
 });
 
 describe("Kingdom Builder cancelling training", () => {
-    const order = { index: 1, unitType: "militia", ticksRemaining: 2 };
+    const orderId = new Types.ObjectId().toString();
+    const queue = [
+        { unitType: "militia", ticksRemaining: 1, orderId: new Types.ObjectId().toString() },
+        { unitType: "militia", ticksRemaining: 2, orderId },
+        { unitType: "militia", ticksRemaining: 2, orderId: new Types.ObjectId().toString() },
+    ];
 
     it("refuses forged orders and somebody else's queue, before writing anything", async () => {
-        const update = stubSettlement({ ownerId: "actual-owner" });
-        for (const forged of [
-            { ...order, index: -1 }, { ...order, index: 20 }, { ...order, index: 1.5 }, { ...order, index: "1" },
-            { ...order, unitType: "dragon" }, { ...order, ticksRemaining: 0 },
-        ]) {
+        const update = stubSettlement({ ownerId: "actual-owner", trainingQueue: queue });
+        for (const forged of [undefined, 1, "not-an-id", { $ne: null }]) {
             await expect(cancelUnitTraining(worldId, settlementId, "owner", forged)).rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
         }
-        await expect(cancelUnitTraining(worldId, settlementId, "intruder", order)).rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        await expect(cancelUnitTraining(worldId, settlementId, "intruder", orderId)).rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
         expect(update).not.toHaveBeenCalled();
     });
 
-    it("removes only the order still at that place, refunding its whole cost in the same write", async () => {
-        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1) });
+    it("pulls only the named order, refunding its whole cost in the same write", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue });
 
-        await cancelUnitTraining(worldId, settlementId, "owner", order);
+        await cancelUnitTraining(worldId, settlementId, "owner", orderId);
 
         expect(update).toHaveBeenCalledWith(
+            { _id: settlementId, worldId, ownerId: "owner", trainingQueue: { $elemMatch: { orderId, unitType: "militia" } } },
             {
-                _id: settlementId, worldId, ownerId: "owner",
-                "trainingQueue.1.unitType": "militia", "trainingQueue.1.ticksRemaining": 2,
+                $pull: { trainingQueue: { orderId } },
+                $inc: { "resources.wood": 10, "resources.iron": 5, "resources.wheat": 5 },
             },
-            [{
-                $set: {
-                    trainingQueue: { $concatArrays: [{ $slice: ["$trainingQueue", 1] }, { $slice: ["$trainingQueue", 2, 20] }] },
-                    "resources.wood": { $add: [{ $ifNull: ["$resources.wood", 0] }, 10] },
-                    "resources.iron": { $add: [{ $ifNull: ["$resources.iron", 0] }, 5] },
-                    "resources.wheat": { $add: [{ $ifNull: ["$resources.wheat", 0] }, 5] },
-                },
-            }],
-            { new: true, updatePipeline: true },
+            { new: true },
         );
     });
 
-    it("reports a queue that moved on instead of cancelling the wrong unit", async () => {
-        stubSettlement({ ownerId: "owner", tiles: withBarracks(1) }, null);
-        await expect(cancelUnitTraining(worldId, settlementId, "owner", order)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    it("refuses an order that has left the queue instead of refunding it", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue.filter(order => order.orderId !== orderId) });
+        await expect(cancelUnitTraining(worldId, settlementId, "owner", orderId)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+        expect(update).not.toHaveBeenCalled();
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue }, null);
+        await expect(cancelUnitTraining(worldId, settlementId, "owner", orderId)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
     });
 });
 
@@ -372,7 +372,7 @@ describe("Kingdom Builder town centre and settlers (PR 24)", () => {
         await queueUnitTraining(worldId, settlementId, "owner", "settler");
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ tiles: { $elemMatch: { "building.type": "town-centre", "building.level": 2 } } }),
-            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4 } } }),
+            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4, orderId: expect.any(String) } } }),
             { new: true },
         );
     });

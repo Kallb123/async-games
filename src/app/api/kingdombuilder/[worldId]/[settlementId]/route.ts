@@ -49,9 +49,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { tilePosition, buildingType, unitType, action, give, get, amount, index, ticksRemaining } = await readJsonBody<{
+    const { tilePosition, buildingType, unitType, action, give, get, amount, orderId } = await readJsonBody<{
         tilePosition: number; buildingType: string; unitType: string; action: string; give: unknown; get: unknown; amount: unknown;
-        index: unknown; ticksRemaining: unknown;
+        orderId: unknown;
     }>(request);
 
     try {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
         if (action === "caravan") return NextResponse.json(await buyCaravan(context.worldId, context.settlementId, context.userId));
         if (action === "cancel-training") {
-            return NextResponse.json(await cancelUnitTraining(context.worldId, context.settlementId, context.userId, { index, unitType, ticksRemaining }));
+            return NextResponse.json(await cancelUnitTraining(context.worldId, context.settlementId, context.userId, orderId));
         }
         if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
         // A body naming a unit trains it at the barracks; anything else queues a building.

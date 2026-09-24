@@ -81,6 +81,12 @@ export interface KingdomBuilderTrainingOrder {
     unitType: KingdomBuilderUnitType;
     /** Fixed when queued, so upgrading the barracks speeds up what is queued after it, not before. */
     ticksRemaining: number;
+    /**
+     * Names this order when the player cancels it — two militia queued back to
+     * back are otherwise identical. Missing on an order queued before cancelling
+     * existed, which can't be cancelled and simply trains out.
+     */
+    orderId?: string;
 }
 
 export function isUnitType(value: unknown): value is KingdomBuilderUnitType {
