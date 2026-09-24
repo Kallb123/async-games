@@ -99,15 +99,21 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
             shares: [{ ownerId: battle.ownerId, sent: battle.attacker, left: battle.left }],
         })), { session, ordered: true });
     }
-    // Caravans taken on the road (§4.7) are told to both sides as a raid:
+    // Caravans and settlers taken on the road (§4.7) are told to both sides as a raid:
     // the taker learns what they took, the loser only that it is gone.
     if (seized.length) {
         await KingdomBuilderBattleModel.create(seized.map(raid => ({
             worldId, tick: raid.tick, kind: "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
             attackerIds: [raid.captorId], defenderIds: [raid.ownerId], attacker: garrisonOf(), defender: garrisonOf(), rounds: [],
             shares: [
-                { ownerId: raid.captorId, sent: raid.captor, left: raid.captor, caravansTaken: raid.caravans },
-                { ownerId: raid.ownerId, sent: garrisonOf(), left: garrisonOf(), caravansLost: raid.caravans },
+                {
+                    ownerId: raid.captorId, sent: raid.captor, left: raid.captor,
+                    ...(raid.caravans ? { caravansTaken: raid.caravans } : {}), ...(raid.settlers ? { settlersTaken: raid.settlers } : {}),
+                },
+                {
+                    ownerId: raid.ownerId, sent: garrisonOf(), left: garrisonOf(),
+                    ...(raid.caravans ? { caravansLost: raid.caravans } : {}), ...(raid.settlers ? { settlersLost: raid.settlers } : {}),
+                },
             ],
         })), { session, ordered: true });
     }

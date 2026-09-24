@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { buildUserDirectory } from "@/utils/users/clerk";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
-import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderResources, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderSettlementModel, type KingdomBuilderResources, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
@@ -15,7 +15,7 @@ import { resourcesOf } from "./resources";
 import type { KingdomBuilderSiege } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
 import { barracksLevelOf, garrisonOf, type KingdomBuilderGarrison } from "./units";
-import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
+import { KingdomBuilderPersistenceError } from "./persistence";
 import type { Landmass, OverlayPlacement, TerrainField, WorldEdge, WorldNode } from "./worldgen";
 import type { KingdomBuilderMarch } from "./armies";
 import { ensureFirstSettlement } from "./roster";
@@ -323,22 +323,4 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         offers,
         ...(invite ? { invite } : {}),
     };
-}
-
-export async function foundExpansion(worldId: string, userId: string, siteId: unknown): Promise<KingdomBuilderWorldView> {
-    validateWorldId(worldId);
-    if (typeof siteId !== "string" || !siteId.trim()) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "Choose a settlement site");
-    const isMember = await KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId });
-    if (!isMember) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
-
-    try {
-        await prepareMultipleSettlementsIndex();
-        await foundSettlement(worldId, userId, siteId, undefined, "expansion");
-    } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-            throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "That site is unavailable or you already have two settlements");
-        }
-        throw error;
-    }
-    return worldView(worldId, userId);
 }

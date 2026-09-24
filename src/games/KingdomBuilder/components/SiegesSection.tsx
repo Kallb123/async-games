@@ -7,7 +7,7 @@ import ListRow from "@/components/ui/ListRow";
 import Section from "@/components/ui/Section";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 
-import { formatStack, unitCount } from "../armies";
+import { formatStack, militaryCount, unitCount } from "../armies";
 import { describeSiege } from "../siege";
 import { formatUnits } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
@@ -61,7 +61,7 @@ export default function SiegesSection({ endpoint, view, placeName, onFought }: S
                     return (
                         <ListRow key={settlement.nodeId} icon="🔥" title={`Settlement ${mySettlements.indexOf(settlement) + 1} is under siege`}
                             sub={`${describeSiege(settlement.siege!, view.currentTick)} Garrison: ${unitCount(garrison) > 0 ? formatUnits(garrison) : "none"}.`}
-                            action={button({ action: "sally", settlementId: settlement.settlementId! }, "Sally out", unitCount(garrison) === 0)} />
+                            action={button({ action: "sally", settlementId: settlement.settlementId! }, "Sally out", militaryCount(garrison) === 0)} />
                     );
                 })}
                 {besieging.map(army => (

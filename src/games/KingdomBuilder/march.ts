@@ -75,10 +75,10 @@ async function marchingGround(worldId: string) {
     const tileOf = new Map(nodes.map(node => [node.id, node.tile]));
     const villages = new Set((world.barbarians ?? []).map((village: KingdomBuilderBarbarianVillage) => village.nodeId));
     return {
-        /** Caravans alone would only be plundered at a barbarian village (§3.4): they don't go. */
+        /** Caravans or settlers alone would only be cut down at a barbarian village (§3.4): they don't go. */
         assertCanGo: (escorted: boolean, nodeId: unknown) => {
             if (!escorted && typeof nodeId === "string" && villages.has(nodeId)) {
-                throw invalid("Caravans can't go to a barbarian village without units to guard them");
+                throw invalid("Caravans and settlers can't go to a barbarian village without soldiers to guard them");
             }
         },
         tileOf: (nodeId: unknown): number => {
@@ -121,7 +121,7 @@ async function dispatchFromSettlement(worldId: string, userId: string, order: Ki
     if (resourcesIn(cargo).some(resource => cargo[resource] > stores[resource])) {
         throw new KingdomBuilderPersistenceError("ARMY_BUSY", "The stores don't hold that much to load");
     }
-    ground.assertCanGo(unitCount(units) > 0, order.targetNodeId);
+    ground.assertCanGo(isEscorted({ units }), order.targetNodeId);
     const route = ground.route(ground.tileOf(settlement.nodeId), ground.tileOf(order.targetNodeId));
 
     const sent = KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => units[unitType] > 0);
@@ -204,7 +204,7 @@ export async function marchArmy(worldId: string, userId: string, order: KingdomB
  * interleave with one moving or fighting the same stacks — and the stacks it
  * reads inside its transaction are the ones it writes. Refuses an ended world.
  */
-async function inCamp<T>(worldId: string, work: (session: ClientSession) => Promise<T>): Promise<T> {
+export async function inCamp<T>(worldId: string, work: (session: ClientSession) => Promise<T>): Promise<T> {
     return mongoose.connection.transaction(async session => {
         const live = await KingdomBuilderWorldModel.updateOne({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session });
         if (live.modifiedCount !== 1) throw new KingdomBuilderPersistenceError("WORLD_NOT_FOUND", "Kingdom Builder world not found");
@@ -212,7 +212,8 @@ async function inCamp<T>(worldId: string, work: (session: ClientSession) => Prom
     });
 }
 
-function campedArmy(worldId: string, userId: string, armyId: unknown, session: ClientSession) {
+/** One of the player's stacks, read inside a camp command's transaction. */
+export function campedArmy(worldId: string, userId: string, armyId: unknown, session: ClientSession) {
     if (typeof armyId !== "string" || !Types.ObjectId.isValid(armyId)) throw invalid("Choose an army");
     return KingdomBuilderArmyModel.findOne({ _id: armyId, worldId, ownerId: userId }).session(session).lean();
 }

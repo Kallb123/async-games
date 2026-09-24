@@ -8,8 +8,10 @@ import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 
 import type { KingdomBuilderResources } from "../KingdomBuilderSettlementModel";
 import { formatStack, isCamped, isEscorted, unitCount } from "../armies";
+import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "../buildings";
 import { KINGDOM_BUILDER_CARAVAN_CAPACITY, caravanCapacityOf, resourceTotal } from "../market";
 import { formatResources, resourcesOf } from "../resources";
+import { KINGDOM_BUILDER_SETTLEMENT_LIMIT, openSites } from "../sites";
 import { formatTicks } from "../tick";
 import { KINGDOM_BUILDER_UNIT_TYPES, KINGDOM_BUILDER_UNITS, garrisonOf, type KingdomBuilderGarrison } from "../units";
 import type { KingdomBuilderArmyView, KingdomBuilderWorldView } from "../worldView";
@@ -40,8 +42,14 @@ interface ArmiesSectionProps {
     onMarched: (view: KingdomBuilderWorldView) => void;
 }
 
-/** What a stack of caravans does where it has camped (PR 25), each its own command on the world route. */
-type CampAction = { action: "detach" } | { action: "unload" } | { action: "join"; intoArmyId: string };
+/** What a stack does where it has camped (PR 25, PR 24), each its own command on the world route. */
+type CampAction = { action: "detach" } | { action: "unload" } | { action: "join"; intoArmyId: string } | { action: "settle" };
+
+/** How a stack reads in a list: soldiers march, settlers and caravans travel. */
+function stackIcon(army: KingdomBuilderArmyView): string {
+    if (!isEscorted(army)) return army.units.settler > 0 ? KINGDOM_BUILDER_UNITS.settler.icon : "🐪";
+    return army.arrivedAtTick === undefined ? "⚔️" : army.besiegingSince === undefined ? "⛺" : "🏹";
+}
 
 /**
  * The player's armies and the one being sent (§6.2): each army with where
@@ -107,7 +115,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
             {view.armies.length > 0 && (
                 <div className="ag-list">
                     {view.armies.map(army => (
-                        <ListRow key={army.armyId} icon={!isEscorted(army) ? "🐪" : army.arrivedAtTick === undefined ? "⚔️" : army.besiegingSince === undefined ? "⛺" : "🏹"} title={formatStack(army)}
+                        <ListRow key={army.armyId} icon={stackIcon(army)} title={formatStack(army)}
                             sub={army.arrivedAtTick === undefined
                                 ? `Marching to ${placeName(army.targetNodeId)} — ${formatTicks(army.ticksToArrive)}`
                                 : villages.has(army.targetNodeId)
@@ -132,7 +140,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                     );
                 })}
             </div>
-            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns. Caravans left with no escort are taken by any rival army that meets them.</p>}
+            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns. A settler from a town centre founds a new town on the open site it camps at. Caravans and settlers left with no escort are taken by any rival army that meets them.</p>}
         </Section>
     );
 }
@@ -168,8 +176,9 @@ function LoadCaravans({ march, caravansReady, stores, onChange }: {
 
 /**
  * What an army can do where it has camped (PR 25): split its caravans off,
- * join another of the player's stacks camped with it, or unload into the town
- * there — each offered only when it would go through.
+ * join another of the player's stacks camped with it, unload into the town
+ * there, or — with a settler, on an open site — found a town (PR 24). Each is
+ * offered only when it would go through.
  */
 function CampActions({ army, view, placeName, disabled, onAction }: {
     army: KingdomBuilderArmyView;
@@ -183,9 +192,14 @@ function CampActions({ army, view, placeName, disabled, onAction }: {
     const others = view.armies.filter(other => other.armyId !== army.armyId && isCamped(other) && other.targetNodeId === army.targetNodeId);
     const canDetach = army.caravans > 0 && isEscorted(army) && !villages.has(army.targetNodeId);
     const canUnload = resourceTotal(army.cargo) > 0 && army.besiegingSince === undefined && view.settlements.some(settlement => settlement.nodeId === army.targetNodeId);
-    if (!canDetach && !canUnload && others.length === 0) return null;
+    const canSettle = army.units.settler > 0 && openSites(view).some(node => node.id === army.targetNodeId)
+        && view.settlements.filter(settlement => settlement.isMine).length < KINGDOM_BUILDER_SETTLEMENT_LIMIT;
+    if (!canDetach && !canUnload && !canSettle && others.length === 0) return null;
     return (
         <div className="ag-build-list">
+            {canSettle && <BuildRow icon={KINGDOM_BUILDER_UNITS.settler.icon} name="Found a town here"
+                cost={`Spends a settler, who brings ${formatResources(KINGDOM_BUILDER_STARTING_STOCKPILE)}; everything of yours camped here moves in`}
+                tag="Found" disabled={disabled} onClick={() => onAction({ action: "settle" })} />}
             {canUnload && <BuildRow icon="📦" name={`Unload at ${placeName(army.targetNodeId)}`} cost={`${formatResources(army.cargo)} into their stores`}
                 tag="Unload" disabled={disabled} onClick={() => onAction({ action: "unload" })} />}
             {canDetach && <BuildRow icon="🐪" name="Detach the caravans" cost="They camp here on their own, to send on or unload"

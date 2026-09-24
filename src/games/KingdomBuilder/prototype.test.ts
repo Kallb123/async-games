@@ -284,12 +284,54 @@ describe("Kingdom Builder training", () => {
             },
             { new: true },
         );
-        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 });
+        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0 });
     });
 
     it("reports a lost race instead of overdrawing", async () => {
         stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich }, null);
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
+
+function withTownCentre(level: number) {
+    return tiles.map(tile => tile.position === 4 ? { position: 4, building: { type: "town-centre" as const, level } } : tile);
+}
+
+describe("Kingdom Builder town centre and settlers (PR 24)", () => {
+    it("raises the town centre where it stands, to its cap, and builds nothing else on its tile", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 4, "town-centre");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ tiles: { $elemMatch: { position: 4, "building.type": "town-centre", "building.level": 1 } } }),
+            {
+                $set: { construction: { tilePosition: 4, buildingType: "town-centre", targetLevel: 2, ticksRemaining: 4 } },
+                $inc: { "resources.wood": -60, "resources.stone": -60, "resources.iron": -20 },
+            },
+            { new: true },
+        );
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withTownCentre(2) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 4, "town-centre"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "town-centre"))
+            .rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+    });
+
+    it("trains a settler only at a level-two town centre, with no barracks needed", async () => {
+        stubSettlement({ ownerId: "owner", tiles, resources: plenty });
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "settler")).rejects.toEqual(expect.objectContaining({ code: "LOCKED" }));
+
+        vi.restoreAllMocks();
+        const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), resources: plenty });
+        await queueUnitTraining(worldId, settlementId, "owner", "settler");
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ tiles: { $elemMatch: { "building.type": "town-centre", "building.level": 2 } } }),
+            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4 } } }),
+            { new: true },
+        );
     });
 });
 

@@ -9,7 +9,7 @@ import {
     resolveBattle,
     shareSurvivors,
 } from "./combat";
-import { KINGDOM_BUILDER_UNITS, KINGDOM_BUILDER_UNIT_TYPES, garrisonOf, type KingdomBuilderGarrison } from "./units";
+import { KINGDOM_BUILDER_UNITS, KINGDOM_BUILDER_MILITARY_UNIT_TYPES, KINGDOM_BUILDER_UNIT_TYPES, garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { KINGDOM_BUILDER_ECONOMY } from "./economy";
 
 const open = { fortified: false };
@@ -48,8 +48,8 @@ describe("the matchup table (§7.3)", () => {
         expect(resolveBattle({ cavalry: 1 }, { militia: 3 }, open).attackerWon).toBe(false);
     });
 
-    it("gives every unit a counter above ×1 against something, and none below it", () => {
-        for (const unitType of KINGDOM_BUILDER_UNIT_TYPES) {
+    it("gives every fighting unit a counter above ×1 against something, and none below it", () => {
+        for (const unitType of KINGDOM_BUILDER_MILITARY_UNIT_TYPES) {
             const counters = KINGDOM_BUILDER_UNIT_TYPES.map(target => counterOf(unitType, target));
             expect(Math.max(...counters), KINGDOM_BUILDER_UNITS[unitType].name).toBeGreaterThan(1);
             expect(Math.min(...counters)).toBe(1);

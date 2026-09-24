@@ -9,7 +9,7 @@ import { KingdomBuilderArmyModel, type IKingdomBuilderArmyDocument } from "./Kin
 import { KingdomBuilderBattleModel, type KingdomBuilderBattleShare } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderSettlementModel, type KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { addUnits, combineCaravans, unitCount } from "./armies";
+import { addUnits, combineCaravans, subtractUnits, unitCount } from "./armies";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
@@ -147,7 +147,7 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
 }
 
 /**
- * The defender sallies out (§8): the settlement's whole garrison goes out
+ * The defender sallies out (§8): the settlement's whole garrison — its settlers aside — goes out
  * against every army besieging it, in the open, without its town's defences.
  * Won, the besiegers are destroyed and the siege is lifted, and their
  * caravans and load are brought in. Otherwise
@@ -164,7 +164,9 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
         const settlement = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId, ownerId: userId })
             .select({ nodeId: 1, garrison: 1 }).session(session).lean();
         if (!settlement) throw new KingdomBuilderPersistenceError("SITE_NOT_FOUND", "Settlement not found");
-        const sent = garrisonOf(settlement.garrison);
+        // Settlers stay home (PR 24): a sally is the soldiers' fight.
+        const home = garrisonOf({ settler: garrisonOf(settlement.garrison).settler });
+        const sent = subtractUnits(settlement.garrison, home);
         if (unitCount(sent) === 0) throw new KingdomBuilderPersistenceError("ARMY_BUSY", "There is no garrison to sally out with");
         const besiegers = await campsAt({ worldId, targetNodeId: settlement.nodeId, ownerId: { $ne: userId } }, session);
         if (besiegers.length === 0) throw new KingdomBuilderPersistenceError("NO_SIEGE", "This settlement isn't under siege");
@@ -172,7 +174,7 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
         const battle = resolveBattle(sent, faced, { fortified: false });
         const { shares: besiegerShares, spoils } = await returnSurvivors(worldId, besiegers, battle.defender, session);
         await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, {
-            $set: { garrison: battle.attacker },
+            $set: { garrison: addUnits(battle.attacker, home) },
             ...(spoils.caravans ? { $inc: plundered(spoils) } : {}),
         }, { session });
         return {

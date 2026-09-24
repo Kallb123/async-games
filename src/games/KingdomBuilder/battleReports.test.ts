@@ -93,6 +93,22 @@ describe("reportFor a raid (§4.7)", () => {
         expect(JSON.stringify(report)).not.toContain('"cavalry":2');
     });
 
+    it("tells each side of settlers taken only their own half, and the loser nothing of the taker (PR 24)", () => {
+        const settlers = {
+            ...raid,
+            shares: [
+                { ownerId: "raider", sent: garrisonOf({ cavalry: 2 }), left: garrisonOf({ cavalry: 2 }), settlersTaken: 1 },
+                { ownerId: "trader", sent: garrisonOf(), left: garrisonOf(), settlersLost: 1 },
+            ],
+        };
+        expect(reportFor(settlers, "raider")).toMatchObject({ settlersTaken: 1 });
+        expect(reportFor(settlers, "raider")).not.toHaveProperty("settlersLost");
+        const lost = reportFor(settlers, "trader");
+        expect(lost).toMatchObject({ outcome: "lost", settlersLost: 1 });
+        expect(lost).not.toHaveProperty("settlersTaken");
+        expect(JSON.stringify(lost)).not.toContain('"cavalry":2');
+    });
+
     it("names no place for a raid on the road", () => {
         const { nodeId: _, ...onTheRoad } = raid;
         expect(reportFor(onTheRoad, "raider")).not.toHaveProperty("nodeId");

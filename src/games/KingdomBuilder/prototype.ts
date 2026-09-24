@@ -17,6 +17,7 @@ import {
     buildingCostFor,
     buildingLevelOf,
     type KingdomBuilderPrototypeBuilding,
+    type KingdomBuilderUpgradableBuilding,
 } from "./buildings";
 import { siegesOn } from "./besiegers";
 import { catchmentOfSettlement } from "./land";
@@ -26,9 +27,9 @@ import { canAfford, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
     KINGDOM_BUILDER_UNITS,
-    barracksLevelOf,
     garrisonOf,
     isUnitType,
+    trainingLevelFor,
     trainingTicksFor,
     type KingdomBuilderGarrison,
     type KingdomBuilderTrainingOrder,
@@ -136,10 +137,13 @@ export async function queuePrototypeBuilding(
     buildingType: string,
 ): Promise<KingdomBuilderSettlementView> {
     validateIds(worldId, settlementId);
-    if (!Number.isInteger(tilePosition) || tilePosition < 0 || tilePosition > 8 || tilePosition === KINGDOM_BUILDER_TOWN_CENTRE_INDEX
-        || !KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.includes(buildingType as KingdomBuilderPrototypeBuilding)) {
+    // The town centre is never built, only raised a level where it stands (PR 24).
+    const isTownCentre = buildingType === "town-centre" && tilePosition === KINGDOM_BUILDER_TOWN_CENTRE_INDEX;
+    if (!isTownCentre && (!Number.isInteger(tilePosition) || tilePosition < 0 || tilePosition > 8 || tilePosition === KINGDOM_BUILDER_TOWN_CENTRE_INDEX
+        || !KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.includes(buildingType as KingdomBuilderPrototypeBuilding))) {
         throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose an empty outer tile and a production building");
     }
+    const type = buildingType as KingdomBuilderUpgradableBuilding;
     await assertWorldLive(worldId);
 
     const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
@@ -149,29 +153,29 @@ export async function queuePrototypeBuilding(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     if (existing.construction) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "Finish the current building first");
 
-    // The barracks and the market are the buildings a player can raise a
-    // level (§4.2), and a settlement holds only one of each, so the barracks'
-    // training queue has one home and the market one rate.
-    const maxLevel = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[buildingType as KingdomBuilderPrototypeBuilding];
+    // The barracks, the market and the town centre are the buildings a player
+    // can raise a level (§4.2), and a settlement holds only one of each, so
+    // each level has one home and the market one rate.
+    const maxLevel = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type];
     const current = existing.tiles.find((tile: KingdomBuilderTile) => tile.position === tilePosition)?.building;
     const upgrading = maxLevel !== undefined && current?.type === buildingType;
     if (current && !upgrading) throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", "That tile already has a building");
     if (upgrading && current.level >= maxLevel) {
         throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", `The ${buildingType} is already at its highest level`);
     }
-    if (!current && maxLevel !== undefined && buildingLevelOf(existing.tiles, buildingType as KingdomBuilderPrototypeBuilding) > 0) {
+    if (!current && maxLevel !== undefined && buildingLevelOf(existing.tiles, type) > 0) {
         throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", `This settlement already has a ${buildingType}`);
     }
 
     // Land that yields none of a building's resource can't hold it (§4.6).
     // The tiers never change once stored, so the write below needn't repeat this.
-    const produces = KINGDOM_BUILDER_BUILDING_PRODUCES[buildingType as KingdomBuilderPrototypeBuilding];
+    const produces = KINGDOM_BUILDER_BUILDING_PRODUCES[type];
     if (produces && (await catchmentOfSettlement(worldId, existing))[produces] === "none") {
         throw new KingdomBuilderPrototypeError("NO_YIELD", `There is no ${produces} in this settlement's land`);
     }
 
     const targetLevel = upgrading ? current.level + 1 : 1;
-    const cost = buildingCostFor(buildingType as KingdomBuilderPrototypeBuilding, targetLevel);
+    const cost = buildingCostFor(type, targetLevel);
     if (!canAfford(resourcesOf(existing.resources), cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
     }
@@ -198,7 +202,11 @@ export async function queuePrototypeBuilding(
     return settlementView(worldId, settlementId, userId);
 }
 
-/** Queues one unit at the settlement's barracks, paying its whole cost up front (§4.3). */
+/**
+ * Queues one unit where it trains — a soldier at the barracks, a settler at the
+ * town centre (PR 24) — paying its whole cost up front (§4.3). Both join the
+ * settlement's one training queue.
+ */
 export async function queueUnitTraining(
     worldId: string,
     settlementId: string,
@@ -214,15 +222,16 @@ export async function queueUnitTraining(
         .lean();
     if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
-    const barracksLevel = barracksLevelOf(existing.tiles);
-    if (barracksLevel === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", "Build a barracks first");
     const unit = KINGDOM_BUILDER_UNITS[unitType];
-    const ticksRemaining = trainingTicksFor(unitType, barracksLevel);
+    const { building } = unit.trainedAt;
+    const level = trainingLevelFor(unitType, existing.tiles);
+    if (level === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", "Build a barracks first");
+    const ticksRemaining = trainingTicksFor(unitType, level);
     if (ticksRemaining === null) {
-        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.barracksLevel} barracks`);
+        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.trainedAt.level} ${building === "barracks" ? "barracks" : "town centre"}`);
     }
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
-        throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The barracks' queue is full");
+        throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The training queue is full");
     }
     if (!canAfford(resourcesOf(existing.resources), unit.cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough resources to train ${unit.name.toLowerCase()}`);
@@ -230,14 +239,14 @@ export async function queueUnitTraining(
 
     // Every check above is repeated in the filter, so a tick or a second tab
     // landing in between fails this write rather than overdrawing the stores,
-    // overfilling the queue, or pricing the unit at a barracks level it lost.
+    // overfilling the queue, or pricing the unit at a level it lost.
     const { filter: canPay, $inc } = spendFrom(unit.cost);
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
             worldId,
             ownerId: userId,
-            tiles: { $elemMatch: { "building.type": "barracks", "building.level": barracksLevel } },
+            tiles: { $elemMatch: { "building.type": building, "building.level": level } },
             [`trainingQueue.${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT - 1}`]: { $exists: false },
             ...canPay,
         },

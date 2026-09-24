@@ -9,8 +9,8 @@ map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
 §4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
 automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6),
-barbarian villages (PR 23, §3.4) and the market, trade and caravans (PR 25,
-§4.7) are shipped. PR 24 (settlers) comes next;
+barbarian villages (PR 23, §3.4), settlers (PR 24, §4.4) and the market,
+trade and caravans (PR 25, §4.7) are shipped. PR 26 (seasons) comes next;
 §11.3 is the plan
 for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
@@ -1205,6 +1205,20 @@ sprawling resource list.
 
 ### 4.4 Founding new settlements
 
+> As shipped in PR 24: the town centre gains a second level (60 wood, 60 stone,
+> 20 iron), and at it trains a **settler** (60 wood, 40 stone, 10 iron, 40
+> wheat, 4 ticks) into the settlement's one training queue. A settler is a unit
+> like any other — slow, carried in a stack, and killed in a battle it is
+> caught in — but a civilian: it strikes no blow, guards nothing, lays no siege,
+> stays home from a sally, and walks into no barbarian village without soldiers.
+> Camped at an open site — an expansion site nobody holds, or a barbarian one
+> whose village has burnt — it founds a town there, bringing a first
+> settlement's stockpile (40 wood, 20 stone, 20 wheat) from the town that
+> trained it; every other stack of the player's camped there moves in with it.
+> A player still holds two settlements at most. Unguarded settlers are taken on
+> the road like caravans (§4.7), and found towns for whoever took them. The free
+> "Found here" of PR 6 is gone. First-pass numbers (§12).
+
 A player is not capped at one settlement forever. Once a town centre reaches
 a threshold level, it can train a **settler** unit (costing all three
 resources, and vulnerable to attack in transit like any other unit) and send
@@ -1268,8 +1282,10 @@ That buys a lumber camp and a quarry (30 wood) with 10 wood and 20 stone left
 over — not yet enough for a mine or a farm, so the first decision is what to
 wait for, and which camp to level first. Only the first settlement gets it: a
 second settlement founded for free (PR 6) with its own stockpile would be a
-stockpile printer. Later settlements start empty until settlers (PR 24) can
-carry cargo from the settlement that trained them.
+stockpile printer. A settlement a settler founds (PR 24) gets the same
+stockpile, carried from the town that trained it — which paid more than that
+for the settler, so it prints nothing either. A barbarian village taken starts
+with only what its conquerors' caravans brought.
 
 **A settlement can never be stuck.** Once buildings cost, a settlement with no
 production buildings and not enough in store for the cheapest one would have
@@ -2790,9 +2806,39 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   as "Barbarians", the Armies section says an army at one is fighting it, the
   Battles section reports the fight, and In sight lists what a scout has
   counted. No `whatsNew.ts` line.
-- **PR 24 — Settlers and a second settlement.** The settler unit and a
+- **PR 24 — Settlers and a second settlement.** Shipped. The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
   type once PRs 6–19's map/movement/dispatch already exist.
+
+  How it landed: `settler` joins `KINGDOM_BUILDER_UNIT_TYPES`, so it lives in a
+  garrison, a stack, a battle and a report like any unit, with no field of its
+  own. A unit definition now says where it trains (`trainedAt`, the barracks or
+  the town centre, and the level that unlocks it) and whether it is `civilian`;
+  `KINGDOM_BUILDER_MILITARY_UNIT_TYPES` is the rest, and `militaryCount` is what
+  `isEscorted` now counts, so everything that asked "has this stack an escort?"
+  — the siege, the barbarian assault, the caravan raid, the march's barbarian
+  refusal — treats a settler as it does a caravan without being touched. It
+  fights with no attack and 4 health, and a sally leaves it at home. The town
+  centre joins `KINGDOM_BUILDER_UPGRADABLE_BUILDINGS` (to level 2, priced in
+  `economy.ts` like the rest), raised by `queuePrototypeBuilding` on its own
+  tile; `queueUnitTraining` reads the level of whichever building a unit trains
+  at. `seizeCaravans` takes an unguarded stack's settlers along with its
+  caravans, into the taker's units, and the raid's shares gain
+  `settlersTaken`/`settlersLost`, each read by its own owner only.
+  `settlers.ts` is the found command — `action: "settle"` with an army id on
+  the world route — which claims the world like every camp command, refuses a
+  stack with no settler, one still marching, and a player already at
+  `KINGDOM_BUILDER_SETTLEMENT_LIMIT` (`sites.ts`, which barbarian captures now
+  read too), and calls `foundSettlement(…, "expansion")` with the stack as its
+  stock: the stockpile plus what its caravans carried, its soldiers and the
+  rest of its settlers as the garrison, its caravans in the yard. Every stack
+  of the player's camped there goes in with it, since a player's stack never
+  camps at a town of their own. The unique indexes still decide a race for the
+  site or the slot. The bare `siteId` POST that founded a town for free is
+  gone. The world map's Armies section offers "Found a town here" among a
+  camped stack's orders, `openSites` (`sites.ts`) is how both it and the map
+  decide a site is open, and the settlement screen gains a Town centre section
+  with its upgrade and the settler. No `whatsNew.ts` line.
 - **PR 25 — Market and trade.** Shipped, ahead of PR 24 (§11.4 leaves it free
   to move). Resource conversion and player-to-player trade offers (§4.3), and
   caravans to carry stores by road (§4.7).

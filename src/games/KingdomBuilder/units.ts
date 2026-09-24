@@ -3,8 +3,8 @@ import { KINGDOM_BUILDER_UPGRADABLE_BUILDINGS, buildingLevelOf } from "./buildin
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { tunedResources } from "./resources";
 
-/** GDD §6.1's roster, in the order the barracks unlocks them. */
-export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "infantry", "cavalry", "siege-engine"] as const;
+/** GDD §6.1's roster, in the order the barracks unlocks them — and the settler (§4.4, PR 24), which the town centre trains. */
+export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "infantry", "cavalry", "siege-engine", "settler"] as const;
 export type KingdomBuilderUnitType = typeof KINGDOM_BUILDER_UNIT_TYPES[number];
 
 export type KingdomBuilderGarrison = Record<KingdomBuilderUnitType, number>;
@@ -27,37 +27,54 @@ export interface KingdomBuilderUnitDefinition {
     speed: KingdomBuilderSpeed;
     /** Paid in full when the unit is queued. Priced in economy.ts, beside the buildings. */
     cost: KingdomBuilderResources;
-    /** Ticks to train at the barracks level that unlocks it; each level above that takes one off. */
+    /** Ticks to train at the level that unlocks it; each level above that takes one off. */
     trainTicks: number;
-    /** The barracks level that unlocks it (§4.2). */
-    barracksLevel: number;
+    /**
+     * Where it trains, and the level of that building that unlocks it: the
+     * barracks for the army (§4.2), the town centre for the settler (§4.4).
+     * Either way it joins the settlement's one training queue.
+     */
+    trainedAt: { building: "barracks" | "town-centre"; level: number };
+    /**
+     * A settler fights no better than a caravan (§4.4): it guards nothing, lays
+     * no siege and goes into no barbarian village alone — though it dies like
+     * any unit in a battle it is caught in.
+     */
+    civilian?: true;
 }
 
 export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilderUnitDefinition> = {
     militia: {
         name: "Militia", icon: "🛡️", role: "Cheap garrison filler", speed: "slow",
-        cost: tunedResources("unitCosts.militia", economy.unitCosts.militia), trainTicks: 2, barracksLevel: 1,
+        cost: tunedResources("unitCosts.militia", economy.unitCosts.militia), trainTicks: 2, trainedAt: { building: "barracks", level: 1 },
     },
     scout: {
         name: "Scout", icon: "🔭", role: "Sees farther, and counts a rival town's garrison", speed: "fast",
-        cost: tunedResources("unitCosts.scout", economy.unitCosts.scout), trainTicks: 2, barracksLevel: 1,
+        cost: tunedResources("unitCosts.scout", economy.unitCosts.scout), trainTicks: 2, trainedAt: { building: "barracks", level: 1 },
     },
     infantry: {
         name: "Infantry", icon: "⚔️", role: "The main attacking stack", speed: "medium",
-        cost: tunedResources("unitCosts.infantry", economy.unitCosts.infantry), trainTicks: 3, barracksLevel: 2,
+        cost: tunedResources("unitCosts.infantry", economy.unitCosts.infantry), trainTicks: 3, trainedAt: { building: "barracks", level: 2 },
     },
     cavalry: {
         name: "Cavalry", icon: "🐎", role: "Fast raids and reinforcement", speed: "fast",
-        cost: tunedResources("unitCosts.cavalry", economy.unitCosts.cavalry), trainTicks: 4, barracksLevel: 3,
+        cost: tunedResources("unitCosts.cavalry", economy.unitCosts.cavalry), trainTicks: 4, trainedAt: { building: "barracks", level: 3 },
     },
     "siege-engine": {
         name: "Siege engine", icon: "🪓", role: "Breaks walls", speed: "slow",
-        cost: tunedResources("unitCosts.siege-engine", economy.unitCosts["siege-engine"]), trainTicks: 6, barracksLevel: 3,
+        cost: tunedResources("unitCosts.siege-engine", economy.unitCosts["siege-engine"]), trainTicks: 6, trainedAt: { building: "barracks", level: 3 },
+    },
+    settler: {
+        name: "Settler", icon: "🧺", role: "Founds a new town on an open site", speed: "slow",
+        cost: tunedResources("unitCosts.settler", economy.unitCosts.settler), trainTicks: 4, trainedAt: { building: "town-centre", level: 2 }, civilian: true,
     },
 };
 
+/** The units that fight for a stack — every one but the settler. */
+export const KINGDOM_BUILDER_MILITARY_UNIT_TYPES = KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => !KINGDOM_BUILDER_UNITS[unitType].civilian);
+
 export const KINGDOM_BUILDER_BARRACKS_MAX_LEVEL = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.barracks!;
-/** Units waiting at one barracks, the one in training included. */
+/** Units waiting in one settlement's training queue, the one in training included. */
 export const KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT = 20;
 
 export interface KingdomBuilderTrainingOrder {
@@ -75,11 +92,16 @@ export function barracksLevelOf(tiles: readonly KingdomBuilderTile[]): number {
     return buildingLevelOf(tiles, "barracks");
 }
 
-/** Ticks one unit takes at this barracks level, or null while the level has not unlocked it. */
-export function trainingTicksFor(unitType: KingdomBuilderUnitType, barracksLevel: number): number | null {
-    const unit = KINGDOM_BUILDER_UNITS[unitType];
-    if (barracksLevel < unit.barracksLevel) return null;
-    return Math.max(1, unit.trainTicks - (barracksLevel - unit.barracksLevel));
+/** The level of the building a unit trains at in this settlement — its barracks, or its town centre — or 0 without one. */
+export function trainingLevelFor(unitType: KingdomBuilderUnitType, tiles: readonly KingdomBuilderTile[]): number {
+    return buildingLevelOf(tiles, KINGDOM_BUILDER_UNITS[unitType].trainedAt.building);
+}
+
+/** Ticks one unit takes at this level of the building it trains at, or null while the level has not unlocked it. */
+export function trainingTicksFor(unitType: KingdomBuilderUnitType, level: number): number | null {
+    const { trainTicks, trainedAt } = KINGDOM_BUILDER_UNITS[unitType];
+    if (level < trainedAt.level) return null;
+    return Math.max(1, trainTicks - (level - trainedAt.level));
 }
 
 /** A complete garrison, reading a missing count (a document from before PR 13) as none. */

@@ -1,5 +1,5 @@
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
-import type { KingdomBuilderPrototypeBuilding } from "./buildings";
+import type { KingdomBuilderUpgradableBuilding } from "./buildings";
 import type { KingdomBuilderUnitType } from "./units";
 
 // The economy's numbers (GDD §4.5), in one place so a tuning pass edits this
@@ -13,11 +13,20 @@ import type { KingdomBuilderUnitType } from "./units";
 type Amounts = Partial<KingdomBuilderResources>;
 
 interface Economy {
-    /** Level-one price of each building; level N costs N times this, like its build time. */
-    buildingCosts: Record<KingdomBuilderPrototypeBuilding, Amounts>;
+    /**
+     * Level-one price of each building; level N costs N times this, like its
+     * build time. The town centre is never bought at level one — every
+     * settlement is founded with it — so its entry prices the levels after.
+     */
+    buildingCosts: Record<KingdomBuilderUpgradableBuilding, Amounts>;
     /** Training price of one unit, paid in full when it is queued. */
     unitCosts: Record<KingdomBuilderUnitType, Amounts>;
-    /** What a player's first settlement is founded with. Later ones start empty — a free second settlement with its own stock would print resources. */
+    /**
+     * What a player's first settlement is founded with — and one a settler
+     * founds (PR 24), which carries it from the town that trained it and costs
+     * more than it. A barbarian village taken starts with only what came with
+     * its conquerors.
+     */
     startingStockpile: Amounts;
     /** What every town centre produces each tick on its own, so a settlement too poor for its cheapest building still earns its way to one. */
     townCentreTrickle: Amounts;
@@ -51,6 +60,8 @@ export const KINGDOM_BUILDER_ECONOMY = {
         mine: { wood: 20, stone: 10 },
         barracks: { wood: 30, stone: 20, iron: 10 },
         market: { wood: 25, stone: 15 },
+        // Level two, the settler's threshold (§4.4), is twice this: 60 wood, 60 stone, 20 iron.
+        "town-centre": { wood: 30, stone: 30, iron: 10 },
     },
     // Armies eat (§4.6): every unit's price carries wheat, cavalry most — horses eat.
     unitCosts: {
@@ -59,6 +70,9 @@ export const KINGDOM_BUILDER_ECONOMY = {
         infantry: { wood: 10, iron: 15, wheat: 8 },
         cavalry: { wood: 20, iron: 25, wheat: 15 },
         "siege-engine": { wood: 40, stone: 20, iron: 15, wheat: 10 },
+        // Every resource (§4.4), and more than the stockpile it carries to the
+        // town it founds — so a settler never prints resources.
+        settler: { wood: 60, stone: 40, iron: 10, wheat: 40 },
     },
     // Buys a lumber camp and a quarry with 10 wood and 20 stone over — not yet
     // a mine or a farm, so the first decision is what to wait for.
