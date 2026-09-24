@@ -557,6 +557,19 @@ describe('POST /api/game/command', () => {
 });
 
 describe('POST /api/game/end', () => {
+    it('refuses a player the game dropped for going quiet', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders({
+            currentTurn: BOB.id,
+            gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [], droppedPlayers: [ANN.id] },
+        });
+
+        const response = await end(jsonPost('/api/game/end', { gameId: 'game_1' }));
+
+        expect(response.status).toBe(403);
+        expect(storedGame('game_1')!.complete).toBe(false);
+    });
+
     it('ends the game, records the result and leaves nobody to play', async () => {
         signIn(ANN);
         seedSnakesAndLadders();

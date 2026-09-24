@@ -4,6 +4,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { finishGame } from '@/utils/games/finishGame';
+import { isDropped } from '@/utils/games/playerDropout';
 
 export async function POST(request: NextRequest) {
   const { gameId } = await readJsonBody(request);
@@ -24,6 +25,13 @@ export async function POST(request: NextRequest) {
 
   if (!gameData.userIdList.includes(userId)) {
     return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A player dropped for going quiet stays in userIdList (so the finished game
+  // is theirs to see), but the game carries on without them — ending it for
+  // everyone still playing is exactly what dropping them was meant to avoid.
+  if (isDropped(gameData, userId)) {
+    return NextResponse.json({ success: false, message: 'You have left this game' }, { status: 403 });
   }
 
   if (gameData.complete) {

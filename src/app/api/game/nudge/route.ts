@@ -1,5 +1,6 @@
 import { readJsonBody } from '@/utils/api/requestBody';
 import { requireLiveGame } from '@/utils/games/liveGame';
+import { isDropped } from '@/utils/games/playerDropout';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildNudgeNotification } from '@/utils/firebase/notificationContent';
 import { readableName } from '@/utils/ui/players';
@@ -42,6 +43,12 @@ export async function POST(request: NextRequest) {
 
   if (!gameData.userIdList.includes(userId)) {
     return NextResponse.json({}, {status: 403, statusText: "Not a player in this game"});
+  }
+
+  // A player dropped for going quiet has left: they don't get to hurry the
+  // table they walked away from.
+  if (isDropped(gameData, userId)) {
+    return NextResponse.json({}, {status: 403, statusText: "You have left this game"});
   }
 
   if (gameData.currentTurn === userId) {
