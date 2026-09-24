@@ -181,7 +181,11 @@ export async function POST(request: NextRequest) {
   // which is how they know nothing has run since. A client that chose its own
   // ids could give a later command the anchor's id, keep the anchor matching,
   // and undo past it: buy a development card, see what it was, and put it
-  // back. It is also the key a history line's reactions join on.
+  // back. The same comparison decides whether a turn-ending move holds the turn
+  // open for its undo window (`sacFinishTurn`, `raceCarsFinishTurn`), so a
+  // reused id could also hold one open that should have ended — a Race Cars
+  // leg that rolled for oil, say. It is also the key a history line's
+  // reactions join on.
   commandRequest.id = uuidv4() as uuidString;
 
   // Checks whether the turn should be progressed and actions it if so
