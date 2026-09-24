@@ -72,6 +72,21 @@ describe("Kingdom Builder armies", () => {
             expect(result.seized).toEqual([{ tick: 7, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 2 }]);
         });
 
+        it("takes settlers with no soldiers to guard them, alone or with caravans, and guards nothing with them (PR 24)", () => {
+            const rival = escort("rival");
+            const settlers = caravans({ units: garrisonOf({ settler: 1 }), caravans: undefined, cargo: undefined });
+            const alone = seizeCaravans([settlers, rival], 4);
+            expect(alone.armies).toEqual([{ ...rival, units: garrisonOf({ militia: 2, settler: 1 }), caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }]);
+            expect(alone.seized).toEqual([{ tick: 4, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 0, settlers: 1 }]);
+
+            // A settler is no escort: the caravans beside it are taken, and it with them.
+            const withCaravans = seizeCaravans([caravans({ units: garrisonOf({ settler: 2 }) }), rival], 4);
+            expect(withCaravans.armies).toEqual([{ ...rival, units: garrisonOf({ militia: 2, settler: 2 }), caravans: 2, cargo: { wood: 0, stone: 0, iron: 30, wheat: 0 } }]);
+
+            // Nor does a rival's lone settler take anything.
+            expect(seizeCaravans([caravans(), escort("rival", { units: garrisonOf({ settler: 1 }) })], 4).seized).toEqual([]);
+        });
+
         it("meets them on the road too, wherever the two stacks stand, and names no place for it", () => {
             // Two tiles into a route that has the rival camped on tile 1.
             const onTheRoad = caravans({ travelled: 2, arrivedAtTick: undefined });

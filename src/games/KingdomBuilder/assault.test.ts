@@ -164,6 +164,23 @@ describe("sallyOut", () => {
         });
     });
 
+    it("leaves the settlers at home — a sally is the soldiers' fight (PR 24)", async () => {
+        besieged({ infantry: 6, settler: 2 }, [{ _id: armyId, ownerId: "one", units: { militia: 1 } }]);
+        const battle = resolveBattle({ infantry: 6 }, { militia: 1 }, { fortified: false });
+
+        await sallyOut(worldId, "defender", settlementId.toString());
+
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith(
+            { _id: settlementId.toString(), worldId, ownerId: "defender" }, { $set: { garrison: { ...battle.attacker, settler: 2 } } }, { session },
+        );
+        expect(kept()[0]).toMatchObject({ shares: [{ ownerId: "defender", sent: garrisonOf({ infantry: 6 }) }, expect.anything()] });
+    });
+
+    it("has no one to sally out with when only settlers are home", async () => {
+        besieged({ settler: 3 }, [{ _id: armyId, ownerId: "one", units: { militia: 1 } }]);
+        await expect(sallyOut(worldId, "defender", settlementId.toString())).rejects.toMatchObject({ code: "ARMY_BUSY" });
+    });
+
     it("brings in the caravans of the besiegers it destroys, and keeps a survivor's with it", async () => {
         besieged({ infantry: 6 }, [
             { _id: armyId, ownerId: "one", units: { militia: 1 }, caravans: 1, cargo: { wood: 30 } },
