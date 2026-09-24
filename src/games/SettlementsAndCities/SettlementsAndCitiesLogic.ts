@@ -8,6 +8,8 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
+import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { randomFloat, randomInt } from "@/utils/games/random";
 
@@ -315,9 +317,7 @@ function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
             ps.newDevCards[k] = 0;
         }
     }
-    const order = sacData.gameState.turnOrder;
-    const currentIndex = order.findIndex(t => t === sacData.currentTurn);
-    sacData.currentTurn = order[(currentIndex + 1) % order.length];
+    sacData.currentTurn = nextActivePlayer(sacData, sacData.currentTurn);
 }
 
 // Opens the Special Build Phase after the active player ends their main turn:
@@ -330,7 +330,8 @@ function sacStartSpecialBuild(sacData: ISettlementsAndCitiesGameData): boolean {
     const activeIndex = order.findIndex(t => t === sacData.currentTurn);
     const queue: string[] = [];
     for (let i = 1; i < order.length; i++) {
-        queue.push(order[(activeIndex + i) % order.length]);
+        const seat = order[(activeIndex + i) % order.length];
+        if (!isDropped(sacData, seat)) queue.push(seat);
     }
     if (queue.length === 0) return false;
 
@@ -1205,3 +1206,37 @@ export class SACUndo implements IGameCommand {
         return { validMove: true, turnOver: false };
     }
 }
+
+// A player who stops turning up leaves their settlements, cities and roads on
+// the board — they were built, and they still take the spaces and cut the
+// roads they cut — but the player leaves the game: with their state gone, a
+// roll pays them nothing, the robber can't pick them, the scoreboard and the
+// win check stop counting them, and the Special Build Phase stops offering
+// them a turn. Longest Road and Largest Army are re-awarded among the players
+// still at the table, since a card held by nobody playing would block the
+// rest from ever taking it off them.
+//
+// The undo stack goes too: its snapshots are whole states from before the
+// drop, and restoring one would seat them again.
+//
+// Only in the main phase. The setup draft's snake order is walked by
+// position (`sacAdvanceSetup`), and a board with a seat that never placed its
+// starting settlements isn't one the rest of the rules expect.
+registerPlayerDropoutAdapter({
+    className: "SettlementsAndCitiesGameType",
+    minPlayers: 2,
+    canDrop(gameData) {
+        return (gameData as ISettlementsAndCitiesGameData).specificGameState.phase === 'main';
+    },
+    dropPlayer(gameData, userId) {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        deleteFromMongoMap(gs.playerStates, userId);
+        gs.specialBuildQueue = gs.specialBuildQueue.filter(id => id !== userId);
+        if (gs.longestRoadOwner === userId) gs.longestRoadOwner = null;
+        if (gs.largestArmyOwner === userId) gs.largestArmyOwner = null;
+        sacUpdateLongestRoad(sacData);
+        sacUpdateLargestArmy(sacData);
+        sacClearUndo(gs);
+    },
+});
