@@ -6,7 +6,8 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { mongoMap } from "@/utils/games/mongoMaps";
+import { deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
+import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
 import { coinChangeParts, type DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
@@ -81,9 +82,7 @@ export class DiceCitiesGameType implements IGameType {
         }
 
         if (commandOutcome.turnOver) {
-            const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
-            const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
-            gameData.currentTurn = nextTurn;
+            gameData.currentTurn = nextActivePlayer(gameData, gameData.currentTurn);
         }
 
         return;
@@ -1320,3 +1319,20 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
     }
     return outcome;
 }
+
+// A player who stops turning up takes their city with them. Every payout walks
+// `playerStates`, so a city left standing would keep collecting from the bank
+// and — through its restaurants — from every roller at the table, for a
+// player who will never spend it. Their coins go back to the bank's fixed
+// supply, and with their state gone every Stadium, TV Station and Business
+// Centre stops being able to name them as well.
+registerPlayerDropoutAdapter({
+    className: "DiceCitiesGameType",
+    minPlayers: 2,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IDiceCitiesGameData).specificGameState;
+        const ps = mongoMap(gs.playerStates).get(userId);
+        if (ps) gs.bankMoney += ps.money;
+        deleteFromMongoMap(gs.playerStates, userId);
+    },
+});

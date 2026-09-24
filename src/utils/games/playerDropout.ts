@@ -136,6 +136,9 @@ export class PlayerDropped implements IGameCommand {
 
         gameData.gameState.droppedPlayers = [...droppedPlayersOf(gameData), this.senderId];
         adapter.dropPlayer(gameData, this.senderId);
+        // Every adapter edits specificGameState in place, often deep inside a
+        // Map; a replay's plain object has no markModified to call.
+        (gameData as { markModified?: (path: string) => void }).markModified?.('specificGameState');
         gameData.gameState.history.unshift(playerHistory(this.senderId,
             `missed ${MAX_CONSECUTIVE_MISSED_TURNS} turns in a row and has left the game — play carries on without them`));
 

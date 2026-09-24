@@ -37,3 +37,13 @@ export function clonePlayerStates<T>(
     }
     return cloned;
 }
+
+/**
+ * Removes `key` from a stored map however Mongoose handed it over — the write
+ * half of `mongoMap`, which reads a plain object back as a fresh Map that a
+ * delete would never reach.
+ */
+export function deleteFromMongoMap<T>(map: Map<string, T> | Record<string, T>, key: string): void {
+    if (map instanceof Map) map.delete(key);
+    else delete map[key];
+}
