@@ -37,6 +37,14 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
             body: "Everyone's place and race number, with their gear and what's left of their 🛞 tyres, 🛑 brakes and ⚙️ gearbox. Nothing refills those — they have to last the whole race.",
         },
         {
+            // One sentence a pool rather than §13's usual two: the three are
+            // spent three different ways, and each is a line a driver will
+            // want to find again (docs/games/race-cars.md §11).
+            anchor: "scoreboard",
+            title: "Wear and tear",
+            body: "🛞 Tyres go when you overshoot a corner, one a space, or when traffic stops you short. 🛑 Brakes you spend on purpose, a space off your roll each — plus one if a tow carries you into a corner. ⚙️ Gearbox pays for dropping more than one gear in a turn.",
+        },
+        {
             anchor: "rc-stats",
             title: "Your race",
             body: "Your lap, how far you are off the lead, and the corner that matters most right now: how far away it is, or the stops you've banked in it.",
