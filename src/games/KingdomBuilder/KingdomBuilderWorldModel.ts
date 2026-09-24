@@ -77,6 +77,13 @@ export interface IKingdomBuilderWorld {
      */
     battlesFought?: number;
     /**
+     * How many trade offers have been posted, taken or withdrawn (PR 25), for
+     * the same reason again: each bumps it, so two posts at once can't both
+     * slip under the offer limit, and a trade conflicts with the tick rather
+     * than paying into stores the tick is rewriting.
+     */
+    tradesMade?: number;
+    /**
      * The barbarian villages still standing (§3.4, PR 23), each with what is
      * left of its garrison; a village taken or burnt drops out. Absent on a
      * world generated before them, which has no barbarian sites either.
@@ -168,6 +175,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
     armiesDispatched: { type: Number, min: 0 },
     battlesFought: { type: Number, min: 0 },
+    tradesMade: { type: Number, min: 0 },
     barbarians: { type: [BarbarianVillageSchema], required: false, default: undefined },
 }, { timestamps: true });
 

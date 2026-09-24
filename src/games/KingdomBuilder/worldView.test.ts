@@ -7,6 +7,7 @@ vi.mock("@/utils/users/clerk", () => ({
 vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn(), reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
 vi.mock("./battleReports", () => ({ recentBattles: vi.fn(async () => []) }));
+vi.mock("./tradeBoard", () => ({ tradeOffersIn: vi.fn(async () => []) }));
 
 import { buildUserDirectory } from "@/utils/users/clerk";
 

@@ -10,6 +10,7 @@ import type { KingdomBuilderBarbarianVillage } from "./barbarians";
 import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
 import { siegesOn } from "./besiegers";
 import { marketLevelOf } from "./market";
+import { tradeOffersIn, type KingdomBuilderTradeOfferView } from "./tradeBoard";
 import { resourcesOf } from "./resources";
 import type { KingdomBuilderSiege } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
@@ -98,6 +99,8 @@ export interface KingdomBuilderWorldView {
      * own side. Nobody else's battle appears here.
      */
     battles: KingdomBuilderBattleReport[];
+    /** The world's trade board (PR 25): every open offer, oldest first, whoever posted it. */
+    offers: KingdomBuilderTradeOfferView[];
     /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
 }
@@ -237,7 +240,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
     }
     const hostId = world.hostId ?? memberIds[0];
-    const [directory, invite, armies, sieges, battles] = await Promise.all([
+    const [directory, invite, armies, sieges, battles, offers] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
         readArmies(worldId, userId),
@@ -245,6 +248,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         // A history, not the board: a failed read shows no battles rather than no world.
         recentBattles(worldId, userId).catch(error => {
             console.error(`Kingdom Builder: could not read the battles in world ${worldId}`, error);
+            return [];
+        }),
+        // The market, not the board: a failed read shows an empty board rather than no world.
+        tradeOffersIn(worldId, userId, seatOf).catch(error => {
+            console.error(`Kingdom Builder: could not read the trade offers in world ${worldId}`, error);
             return [];
         }),
         // The repair for a leave that died before handing the invitation on (§9.1).
@@ -312,6 +320,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         sight,
         sightings,
         battles,
+        offers,
         ...(invite ? { invite } : {}),
     };
 }

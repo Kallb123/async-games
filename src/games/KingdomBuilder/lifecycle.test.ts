@@ -5,6 +5,7 @@ vi.mock("./worldInvitation", () => ({ reconcileWorldInvitation: vi.fn().mockReso
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
+import { KingdomBuilderTradeOfferModel } from "./KingdomBuilderTradeOfferModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
@@ -35,6 +36,7 @@ function mockDeletes() {
         settlements: vi.spyOn(KingdomBuilderSettlementModel, "deleteMany").mockResolvedValue({} as never),
         armies: vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({} as never),
         battles: vi.spyOn(KingdomBuilderBattleModel, "deleteMany").mockResolvedValue({} as never),
+        offers: vi.spyOn(KingdomBuilderTradeOfferModel, "deleteMany").mockResolvedValue({} as never),
         armyExists: vi.spyOn(KingdomBuilderArmyModel, "exists").mockResolvedValue(null),
         invitations: vi.spyOn(KingdomBuilderInvitationModel, "deleteMany").mockResolvedValue({} as never),
         world: vi.spyOn(KingdomBuilderWorldModel, "deleteOne").mockResolvedValue({} as never),
@@ -143,6 +145,8 @@ describe("leaveWorld", () => {
         expect(deletes.settlements).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
         // Their armies in the field disband where they stand (§9.1).
         expect(deletes.armies).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
+        // So do their trade offers, with the stores they were held from (PR 25).
+        expect(deletes.offers).toHaveBeenCalledWith({ worldId, ownerId: "guest" });
         expect(reconcileWorldInvitation).toHaveBeenCalledWith(worldId, "host", ["host"]);
     });
 
@@ -231,7 +235,7 @@ describe("removeWorld", () => {
         expect(deletes.settlements).not.toHaveBeenCalled();
     });
 
-    it("removes settlements, armies and battles, then the invitation, then the world", async () => {
+    it("removes settlements, armies, battles and trade offers, then the invitation, then the world", async () => {
         mockWorldReads({ endedAt: new Date() });
         const deletes = mockDeletes();
 
@@ -239,7 +243,8 @@ describe("removeWorld", () => {
 
         expect(deletes.armies).toHaveBeenCalledWith({ worldId });
         expect(deletes.battles).toHaveBeenCalledWith({ worldId });
-        const order = [deletes.settlements, deletes.armies, deletes.battles, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
+        expect(deletes.offers).toHaveBeenCalledWith({ worldId });
+        const order = [deletes.settlements, deletes.armies, deletes.battles, deletes.offers, deletes.invitations, deletes.world].map(spy => spy.mock.invocationCallOrder[0]);
         expect(order).toEqual([...order].sort((a, b) => a - b));
     });
 });

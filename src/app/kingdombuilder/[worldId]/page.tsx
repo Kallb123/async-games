@@ -22,6 +22,7 @@ import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
 import FogLayer from "@/games/KingdomBuilder/components/FogLayer";
 import SiegesSection from "@/games/KingdomBuilder/components/SiegesSection";
 import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection";
+import TradeSection from "@/games/KingdomBuilder/components/TradeSection";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
 import { AREAS, tileIndexCentre, travelGridFor, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
@@ -246,6 +247,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 {data && <SiegesSection endpoint={endpoint} view={data} placeName={placeName} onFought={setData} />}
                 {data && <BattlesSection view={data} placeName={placeName} />}
                 {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
+                {data && <TradeSection endpoint={endpoint} view={data} ownerName={ownerName} onTraded={setData} />}
                 {data && (players.length > 1 || data.barbarians.some(village => village.garrison)) && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
                 {data?.invite && (
                     <JoinCodeCard joinCode={data.invite.joinCode} gameFriendlyName={GAME_META.kingdombuilder.name} expiresAt={data.invite.expiresAt}
