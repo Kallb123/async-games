@@ -9,9 +9,9 @@ map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
 §4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
 automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6),
-barbarian villages (PR 23, §3.4), settlers (PR 24, §4.4) and the market,
-trade and caravans (PR 25, §4.7) are shipped. PR 26 (commanders and the
-tavern, §6.5) comes next, then PR 27 (seasons); §11.3 is the plan for the rest, including two presentation PRs for the ground — transparent-backed tiles
+barbarian villages (PR 23, §3.4), settlers (PR 24, §4.4), the market,
+trade and caravans (PR 25, §4.7) and commanders and the tavern (PR 26, §6.5)
+are shipped. PR 27 (seasons) comes next; §11.3 is the plan for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 30, §3.5.7) and animated tiles (PR 31, §3.5.8) — which can land whenever
 their art is ready.
 **Genre:** Asynchronous 4X / persistent-world empire builder
@@ -1164,7 +1164,7 @@ the settlement falls.
 | **Mine** | Produces iron per turn/tick | Only buildable where the settlement's surrounding land has hills or mountains in it (§4.6) — ties the settlement economy back to the world map rather than making all 8 tiles interchangeable |
 | **Farm** | Produces wheat per turn/tick | Added with wheat (§4.6); best on grass, fields and river land |
 | **Barracks** | Trains army units | Queue-based; higher levels unlock stronger unit types and shorten training time |
-| **Tavern** | Recruits commanders, one per tavern level (§6.5) | Planned for PR 26. A settlement holds one, and it can never stand a level above the town centre — the second reason to raise the town centre |
+| **Tavern** | Recruits commanders, one per tavern level (§6.5) | Shipped in PR 26. A settlement holds one, and it can never stand a level above the town centre — the second reason to raise the town centre |
 | **Market** | Converts one resource to another at a rate, lists trade offers to other players, and sells caravans | Gives a player short on iron but flush with wood a way out that isn't "wait" (§4.7) |
 | **Walls** | Passive defence bonus; the thing a siege wears down (§8) | Occupies a tile like anything else — a maxed-out economy settlement really is choosing not to have walls |
 | **Town centre** (fixed) | Caps the settlement's overall level, unlocks more building slots (if the design allows more than 8) or higher tiers of the tiles above | Its own upgrade track, gated behind resource cost + time like everything else |
@@ -1612,7 +1612,7 @@ exercise:
 | **Cavalry** | Fast raiding/reinforcement | Fast | Expensive; sets a stack's speed if mixed in (see below) |
 | **Siege engine** | Needed to meaningfully damage walls | Slow | An attack without one against a walled settlement mostly just fails to break in |
 | **Scout** | Reveals a target's garrison/defences before committing | Fast | Cheap, disposable, answers "is this worth attacking" |
-| **Commander** | Leads an army out of a settlement | Fast | Planned for PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers other than scouts that leaves a town |
+| **Commander** | Leads an army out of a settlement | Fast | Shipped in PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers other than scouts that leaves a town |
 
 ### 6.2 Dispatch and travel time
 
@@ -1715,7 +1715,12 @@ not before, but it does arrive before anything is destroyed.
 
 ### 6.5 Commanders and the tavern
 
-> Planned for PR 26 (§11.3). First-pass numbers (§12).
+> Shipped in PR 26 (§11.3), as below. First-pass numbers (§12). The pure half
+> is `commanders.ts`; the cap is refused as "All N commanders recruited — raise
+> a tavern to recruit another", and a raid that only killed a commander reads to
+> its taker as "An unguarded party cut down", since `commandersLost` is the
+> loser's alone. Armies already in the field when it shipped had no commander,
+> and so could only come home.
 
 Through PR 25 a garrison can empty itself onto the road one unit at a time:
 twenty armies of one militia each are as easy to send as one army of twenty.
@@ -2981,7 +2986,7 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   battle share gains `caravansTaken` and `caravansLost`, each read by its own
   owner only. No
   `whatsNew.ts` line.
-- **PR 26 — Commanders and the tavern.** Next. §6.5. An army needs a
+- **PR 26 — Commanders and the tavern.** Shipped. §6.5. An army needs a
   commander to leave a settlement, and commanders come from a new building, the
   tavern: one per tavern level, and a tavern never stands above its town
   centre. It comes before seasons because it changes what an army is, and
@@ -3129,7 +3134,7 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
      - `rulebook`: the enum, the economy entry and this document's §4.2,
        §6.5 and §12.
   9. No `whatsNew.ts` line, since the game is pre-release (§11.1).
-- **PR 27 — Victory, seasons, catch-up.** Season length, scoring, new-player
+- **PR 27 — Victory, seasons, catch-up.** Next. Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
 - **PR 28 — Push notifications.** Siege-onset, attack-resolved and
