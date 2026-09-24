@@ -644,10 +644,23 @@ enforcement job. It:
     Fires Out's Advance Fire, Banned Islet's draw and flood — doesn't get to
     skip that by going quiet, and
     `CheckEndTurn` moves the turn on; a game that registers nothing gets the
-    plain `currentTurn` advance. Either way the timer resets (or, once that
-    player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game is
-    abandoned through the shared `finishGame()` — §5 — which records the result
-    and tells the table). An adapter may also answer that it *can't* resolve
+    plain `currentTurn` advance (`nextActivePlayer`, which steps over dropped
+    seats). Either way the timer resets. Once that player has missed
+    `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game either **drops** them or
+    is **abandoned**: a game that registers an `IPlayerDropoutAdapter`
+    (`src/utils/games/playerDropout.ts`) and would still have its `minPlayers`
+    without them has their last turn played out as above and then runs the
+    server-only `PlayerDropped` command — recorded on `commandHistory` like any
+    move, so a replay drops them at the same moment. The seat stays in
+    `turnOrder` (it is the seat order colours and replays key on) and is added
+    to `gameState.droppedPlayers`; the game's own adapter takes it out of
+    `specificGameState` (a city leaves the table, a car retires, a co-op's
+    figures pass round the crew), and its rotation walks past it. A dropped
+    player is refused by the command route, leaves their dashboard's live list,
+    and takes a loss in their stats (`GameResult.droppedPlayers`). Every other
+    game — two left, Smartthink, Solitaire, a setup phase the game can't
+    reshape — is abandoned through the shared `finishGame()` (§5), which
+    records the result and tells the table. An adapter may also answer that it *can't* resolve
     this turn, and the two ways it can say so are handled differently: a game
     shape it declines to play automatically (nothing ran) keeps the turn where
     it is, but still banks the missed turn and restarts the timer, so the
@@ -660,7 +673,7 @@ enforcement job. It:
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
   game rather than the rest of the run;
 - stops itself before the request deadline rather than being cut off mid-game,
-  and returns `{ processed, expired, warned, abandoned, skipped, declined,
+  and returns `{ processed, expired, dropped, warned, abandoned, skipped, declined,
   stuck, failed, unswept, capped }` — `declined`/`stuck` being the two
   unresolved-turn cases above, and the last two saying what it didn't get to.
   Candidates
@@ -1193,6 +1206,11 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
+   *(Also optional, and worth deciding on purpose)* Register an
+   `IPlayerDropoutAdapter` (`src/utils/games/playerDropout.ts`) at the foot of
+   the rules module if the game can carry on when a player goes quiet, and walk
+   the rotation with `nextActivePlayer` — see §7. Without one, a player who
+   misses three turns in a row ends the game for everyone.
 7. *(Optional)* Add a `guide.ts` exporting a `GameGuide` for the how-to-play
    popup, and wire it into `GAME_GUIDES` in `src/utils/ui/gameGuides.ts`. The
    board screen's `useGameIntro('<game>')` call and its `guide`/`intro` props
