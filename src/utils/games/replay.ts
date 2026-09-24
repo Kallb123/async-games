@@ -224,8 +224,10 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "BannedIsletGameType",
     buildInitialSpecificGameState: (gameData) => buildInitialBannedIsletStateFromGameData(gameData as IBannedIsletGameData),
-    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
-        bannedIsletStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // canUndo needs the anchor to still match the tail of commandHistory, not
+    // just the stack's own owner — see gameStateToModel's lastCommandId.
+    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory) =>
+        bannedIsletStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null),
     // docs/games/banned-islet.md §21.5: the route planner is a PR of its own
     // and needs the cross-player opt-in that doesn't exist yet, so nothing is
     // plannable here. When it does arrive, BannedIsletAction is the whole safe

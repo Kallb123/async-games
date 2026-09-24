@@ -11,6 +11,7 @@ import {
     HAND_LIMIT,
     LOSING_WATER_LEVEL,
     PIER_TILE,
+    UNDO_STACK_DEPTH,
     BannedIsletCardId,
     BannedIsletTileId,
     cardName,
@@ -22,6 +23,7 @@ import {
 import {
     applyFloodCard,
     capturableTreasureAt,
+    cloneBannedIsletState,
     floodRateFor,
     isEscapeReady,
     isPierLoss,
@@ -201,6 +203,41 @@ function applyCapture(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerS
     return `captured the ${treasureName(treasure)} at ${tileName(gs.positions[ps.position].tile)}`;
 }
 
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The third game to take a move back, after Settlements & Cities and Race
+// Cars, and the simplest of the three: nothing a player does in the action
+// phase is random, and nothing in it ends a turn — only BannedIsletEndTurn
+// does, and it is the draw. So there is no ten-second hold (§5) to build: the
+// turn is already waiting on the player, and Undo is simply there until they
+// do something that isn't undoable.
+//
+// Undoable: every BannedIsletAction (a move, a shore up, a give, a capture, a
+// role ability, even a pass), and a special card played in the action phase.
+// Never: BannedIsletEndTurn and BannedIsletDiscard, which draw and flood; a
+// special played mid-discard, which can close the turn and run the flood; and
+// the Helicopter Lift that wins, which ends the game outside
+// `specificGameState` where no snapshot can reach.
+
+/** The pre-move state, taken before a command's first mutation and pushed only once it has succeeded. */
+function undoSnapshot(data: IBannedIsletGameData): IBannedIsletSpecificGameState {
+    return cloneBannedIsletState(data.specificGameState, data.gameState.turnOrder);
+}
+
+/**
+ * Pushes a snapshot `undoSnapshot` took and moves the anchor onto `command`.
+ * Capped at UNDO_STACK_DEPTH — dropping the oldest only ever costs reach, never
+ * correctness, because the anchor is what decides whether a snapshot can still
+ * be restored.
+ */
+function commitUndo(data: IBannedIsletGameData, command: IGameCommand, preState: IBannedIsletSpecificGameState): void {
+    const gs = data.specificGameState;
+    gs.undoStack ??= [];
+    gs.undoStack.push({ by: command.senderId, state: preState });
+    if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
+    gs.undoAnchorId = command.id;
+}
+
 @serializable
 export class BannedIsletGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
@@ -215,6 +252,12 @@ export class BannedIsletGameType implements IGameType {
         const data = gameData as IBannedIsletGameData;
         const next = nextActivePlayer(data, data.currentTurn);
         data.currentTurn = next;
+
+        // Nothing on the stack can be restored past a draw anyway (the anchor
+        // sees to that), so it goes with the turn rather than riding along on
+        // every save until the next action happens to push it out.
+        data.specificGameState.undoStack = [];
+        data.specificGameState.undoAnchorId = null;
 
         // §21.4: `actionsLeft` refills at the *start* of the new current
         // player's turn, not the end of the previous one — what lets a plan
@@ -276,6 +319,8 @@ export class BannedIsletAction implements IGameCommand {
     /** giveCard: which treasure card moves. A capture names no card — four of the tile's own is the only possible payment (§8). */
     cardId: BannedIsletCardId | null = null;
     readonly className = 'BannedIsletAction';
+    // No kind of action draws, floods or ends the turn (docs/undo.md, above).
+    readonly undoable = true;
 
     // Player-facing summary for the turn-review scrubber (TurnNavControls),
     // shown next to the sender's name so it reads as "<name> · <this>". Built
@@ -305,6 +350,9 @@ export class BannedIsletAction implements IGameCommand {
         // can still act — the phase arrives with the draw, in PR 5.
         if (gs.phase !== 'actions') return INVALID;
         if (ps.actionsLeft <= 0) return INVALID;
+
+        // Before the first mutation, pushed only once the action is legal.
+        const preUndoState = undoSnapshot(data);
 
         let historyLine: string | null;
         switch (this.kind) {
@@ -339,6 +387,7 @@ export class BannedIsletAction implements IGameCommand {
         // this catalogue differs from Outbreak's.
         ps.actionsLeft = this.kind === 'pass' ? 0 : ps.actionsLeft - 1;
         data.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+        commitUndo(data, this, preUndoState);
 
         // Never ends the turn itself, even on the third action (§21.4): only
         // BannedIsletEndTurn may, and it is the only command in the game that
@@ -890,6 +939,9 @@ export class BannedIsletPlayCard implements IGameCommand {
      */
     recordedFloodShuffles?: BannedIsletTileId[][];
     readonly className = 'BannedIsletPlayCard';
+    // Only when played in the action phase and it didn't win — enforced in
+    // Execute, not here (docs/undo.md, above).
+    readonly undoable = true;
 
     myString() {
         return this.cardId ? `played ${cardName(this.cardId)}` : 'played a special card';
@@ -908,6 +960,12 @@ export class BannedIsletPlayCard implements IGameCommand {
         // is collected rather than played (§8), and Waters Rise! is never in a
         // hand to begin with (§10).
         if (!card || !isPlayableCard(card) || !ps.hand.includes(card)) return INVALID;
+
+        // Before the first mutation. Read now because the phase is what decides
+        // whether this card is undoable at all: mid-discard it can close the
+        // turn and run the flood, and a flood is never taken back.
+        const preUndoState = undoSnapshot(data);
+        const inActionPhase = gs.phase === 'actions';
 
         const passengers = Array.isArray(this.userIds) ? this.userIds : [];
         const historyLine = card === 'sandbags'
@@ -930,6 +988,10 @@ export class BannedIsletPlayCard implements IGameCommand {
             return floodPhaseOutcome(true, []);
         }
 
+        // Played in the action phase this ends nothing and touches no deck, so
+        // it can be taken back like an action.
+        if (inActionPhase) commitUndo(data, this, preUndoState);
+
         // Played in the action phase this ends nothing; played to duck the hand
         // limit it is what finally lets the island take its turn (§10).
         const shuffleFlood = recordedShuffler<BannedIsletTileId>(
@@ -937,6 +999,44 @@ export class BannedIsletPlayCard implements IGameCommand {
             orders => { this.recordedFloodShuffles = orders; },
         );
         return maybeFinishFloodPhase(data, ps, shuffleFlood);
+    }
+}
+
+// ─── BannedIsletUndo (docs/undo.md) ─────────────────────────────────────────
+
+@serializable
+export class BannedIsletUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'BannedIsletUndo';
+
+    myString() { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IBannedIsletGameData;
+        const gs = data.specificGameState;
+
+        // A snapshot is only good for the command directly behind it: refused
+        // once anything else has run since it was pushed — an End turn above
+        // all, whose draw and flood no snapshot may rewind (docs/undo.md §4).
+        const lastCommand = data.gameState.commandHistory.at(-1);
+        if (!lastCommand || gs.undoAnchorId !== lastCommand.id) return INVALID;
+
+        const entry = (gs.undoStack ?? []).at(-1);
+        if (!entry || entry.by !== this.senderId) return INVALID;
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        // No `currentTurn` to put back, unlike Race Cars: nothing undoable here
+        // ever ends a turn, so the turn is still the sender's.
+        data.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -958,5 +1058,9 @@ registerPlayerDropoutAdapter({
         const ps = gs.players.get(userId);
         if (ps) gs.treasureDiscard.push(...ps.hand);
         deleteFromMongoMap(gs.players, userId);
+        // Every snapshot is a whole state taken before the drop, so restoring
+        // one would put the pawn that left back on the island.
+        gs.undoStack = [];
+        gs.undoAnchorId = null;
     },
 });

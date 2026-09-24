@@ -8,7 +8,7 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { BannedIsletGameType, type IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IReplayStep } from "@/utils/games/replay";
 import { shuffle } from "@/utils/games/shuffle";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import {
@@ -36,7 +36,7 @@ import {
     tileName,
     treasureName,
 } from "./board";
-import { IBannedIsletPosition, positionOfTile } from "./rules";
+import { IBannedIsletPosition, cloneBannedIsletState, positionOfTile } from "./rules";
 import { meta } from "./meta";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -147,41 +147,28 @@ export interface IBannedIsletSpecificGameState {
     floodDiscard: BannedIsletTileId[];  // public, and the most-read thing on screen
     players: Map<string, IBannedIsletPlayerState>;
     phase: BannedIsletPhase;
+    /**
+     * Snapshots of the whole state, newest last, pushed by the undoable
+     * commands (docs/undo.md) — every BannedIsletAction, and a special played
+     * in the action phase — before they change anything. `by` is whose move
+     * it was. Never sent: it carries both deck orders. Capped at
+     * UNDO_STACK_DEPTH and emptied on every hand-off.
+     */
+    undoStack: { by: string, state: IBannedIsletSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot.
+     * BannedIsletUndo refuses unless it is the tail of commandHistory, which is
+     * how the stack goes stale the moment anything else is played — a draw
+     * above all — without every other command having to clear it.
+     */
+    undoAnchorId: string | null;
 }
 
-function clonePlayerState(ps: IBannedIsletPlayerState): IBannedIsletPlayerState {
-    return {
-        hand: [...ps.hand],
-        position: ps.position,
-        role: ps.role,
-        pilotFlightUsed: ps.pilotFlightUsed,
-        actionsLeft: ps.actionsLeft,
-    };
-}
-
-// Deep-clones a Banned Islet state into independent plain objects, rebuilding
-// the player map in `userIdList` order (see clonePlayerStates) — the same call
-// Outbreak's cloneOutbreakState makes, and for the same reason: the tile
-// layout, both decks and the role deal are all randomised at creation and
-// cannot be reconstructed later, so turn recap replays from a persisted
-// snapshot instead (§21.4, "Recorded randomness").
-export function cloneBannedIsletState(
-    gs: IBannedIsletSpecificGameState,
-    userIdList: string[],
-): IBannedIsletSpecificGameState {
-    return {
-        difficulty: gs.difficulty,
-        positions: gs.positions.map(p => ({ tile: p.tile, state: p.state })),
-        waterLevel: gs.waterLevel,
-        treasures: { ...gs.treasures },
-        treasureDeck: [...gs.treasureDeck],
-        treasureDiscard: [...gs.treasureDiscard],
-        floodDeck: [...gs.floodDeck],
-        floodDiscard: [...gs.floodDiscard],
-        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
-        phase: gs.phase,
-    };
-}
+// `cloneBannedIsletState` moved to rules.ts (docs/undo.md): the undo command in
+// BannedIsletLogic.ts needs it too, and rules.ts is the one file both it and
+// this one already import without the two of them importing each other.
+// Re-exported so nothing that already imports it from here has to change.
+export { cloneBannedIsletState };
 
 /**
  * The opening island of §6, every shuffle of it recorded into the state it
@@ -258,6 +245,8 @@ export function buildInitialBannedIsletState(
         floodDiscard,
         players,
         phase: 'actions',
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 
@@ -305,6 +294,9 @@ function makeBannedIsletStateSchemaDef() {
             },
         },
         phase: String,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
     };
 }
 
@@ -335,23 +327,34 @@ BannedIsletGameDataSchema.methods.CreateDataResponse = async function(viewerId: 
         // Which of §4.2's four losses it was — 'teamloss' alone doesn't say.
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToModel(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            doc.gameState.commandHistory.at(-1)?.id ?? null,
+        ),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
-// `_viewerId` is unused: §2 makes every hand public, so — unlike World
-// Domination's cards or Train Time's tickets — nothing here is redacted per
-// viewer. What *is* redacted is redacted from everybody: both deck orders go
-// over the wire as counts, because which tile drowns next is the one thing the
-// whole design is about not knowing (§21.4). Both discards stay public, and
-// must be rendered rather than hidden — reading the flood discard is the skill
-// §14.2 rewards. Kept in the signature to match the shared
-// CreateDataResponse contract (see GameData.ts).
+// §2 makes every hand public, so — unlike World Domination's cards or Train
+// Time's tickets — nothing here is redacted per viewer. What *is* redacted is
+// redacted from everybody: both deck orders go over the wire as counts, because
+// which tile drowns next is the one thing the whole design is about not knowing
+// (§21.4) — and the undo stack, which holds a copy of both, does not go at all.
+// Both discards stay public, and must be rendered rather than hidden — reading
+// the flood discard is the skill §14.2 rewards.
+//
+// `viewerId` is read for one thing only: `canUndo`, which answers "have *you*
+// got a move you can still take back". `lastCommandId` (commandHistory's real
+// tail) is what makes it the same test BannedIsletUndo runs on itself — the
+// stack's owner alone would still say yes after an End turn that left the
+// stack untouched (docs/undo.md §7).
 export function gameStateToModel(
     gs: IBannedIsletSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    _viewerId: string | null,
+    viewerId: string | null,
+    lastCommandId: string | null = null,
 ): IBannedIsletSpecificGameStateResponse {
     const playerStates: IBannedIsletSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of mongoMap(gs.players)) {
@@ -377,6 +380,9 @@ export function gameStateToModel(
         floodDiscard: [...gs.floodDiscard],
         playerStates,
         phase: gs.phase,
+        // Absent (`?? []`) on a game that predates the stack; false for every
+        // viewer but the mover, and for a viewerless replay.
+        canUndo: (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
 }
 

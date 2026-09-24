@@ -106,12 +106,15 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     // docs/games/banned-islet.md §21.6: PR 2 added BannedIsletGameType and a
     // skeleton BannedIsletAction; PR 5 added BannedIsletEndTurn and
     // BannedIsletDiscard, and PR 8 added BannedIsletPlayCard — §21.4's four
-    // command classes, all four now listed.
+    // command classes, all four now listed. docs/undo.md adds the fifth,
+    // BannedIsletUndo: taking back an action or a special card played in the
+    // action phase.
     BannedIsletGameType: [
         "BannedIsletAction",
         "BannedIsletEndTurn",
         "BannedIsletDiscard",
         "BannedIsletPlayCard",
+        "BannedIsletUndo",
     ],
     // docs/games/race-cars.md §23.7: PR 2 added RaceCarsGameType and a
     // skeleton RaceCarsShift; PR 3 filled that in and added RaceCarsMove, and

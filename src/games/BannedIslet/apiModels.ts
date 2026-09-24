@@ -52,6 +52,12 @@ export interface IBannedIsletSpecificGameStateResponse {
     // username for display.
     playerStates: { [userId: string]: IBannedIsletPlayerStateResponse };
     phase: BannedIsletPhase;
+    /**
+     * True when the viewer has a move of their own they can still take back
+     * (docs/undo.md). The only per-viewer field here; the stack it reads is
+     * never sent.
+     */
+    canUndo: boolean;
 }
 
 export interface IBannedIsletGameDataResponse extends IGameDataResponse {

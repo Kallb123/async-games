@@ -161,8 +161,9 @@ describe("gameStateToModel — what reaches the client (§21.4)", () => {
         // guard can't be "this tile name never appears". It's that the response
         // carries no field able to hold a deck order at all: an allowlist, so a
         // field added later fails here rather than shipping the forecast.
+        // `canUndo` is a boolean, never the undo stack it reads (docs/undo.md).
         expect(Object.keys(wire).sort()).toEqual([
-            "difficulty", "floodDeckCount", "floodDiscard", "phase", "playerStates",
+            "canUndo", "difficulty", "floodDeckCount", "floodDiscard", "phase", "playerStates",
             "positions", "treasureDeckCount", "treasureDiscard", "treasures", "waterLevel",
         ]);
         expect(Object.keys(wire.playerStates.u1).sort()).toEqual([

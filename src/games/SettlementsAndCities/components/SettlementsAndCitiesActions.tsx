@@ -8,6 +8,7 @@ import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI } from '@/gam
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
+import UndoButton from '@/components/ui/UndoButton';
 import PendingTag from '@/components/ui/PendingTag';
 import ReadOnlyPanel from '@/components/ui/ReadOnlyPanel';
 import { useToast } from '@/components/ToastContext';
@@ -143,14 +144,7 @@ export default function SettlementsAndCitiesActions({
     }
 
     const undoButton = canUndo ? (
-        <ActionButton
-            className="ag-btn ag-btn--light"
-            pending={pendingTarget === 'undo'}
-            pendingLabel="Undoing…"
-            onClick={() => submit(new SACUndo(), 'undo')}
-        >
-            ↩ Undo
-        </ActionButton>
+        <UndoButton pending={pendingTarget === 'undo'} onClick={() => submit(new SACUndo(), 'undo')} />
     ) : null;
 
     const countdownHint = holdDeadline !== null && countdown !== null ? (

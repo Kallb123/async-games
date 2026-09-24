@@ -385,6 +385,14 @@ export const TILES_FLOODED_AT_SETUP = 6;
 /** §6 step 5: two cards each, dealt with the Waters Rise! cards set aside. */
 export const STARTING_HAND_SIZE = 2;
 
+/**
+ * How many snapshots the undo stack keeps (docs/undo.md): one per action, so a
+ * player can take back all three of a turn's actions one at a time. A special
+ * played in between takes a slot too, which only ever costs reach — the anchor
+ * is what keeps an older entry from being restored, not the cap.
+ */
+export const UNDO_STACK_DEPTH = ACTIONS_PER_TURN;
+
 // ─── The water meter (§11, §13) ─────────────────────────────────────────────
 
 /**

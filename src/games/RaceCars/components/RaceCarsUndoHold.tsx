@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
+import UndoButton from '@/components/ui/UndoButton';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { useUndoHold } from '@/utils/hooks/useUndoHold';
 import { RaceCarsEndTurn, RaceCarsUndo } from '@/utils/apiModels/GameLogic';
@@ -60,14 +61,7 @@ export default function RaceCarsUndoHold({ holdDeadline, canUndo, submitCommand,
                 </ActionButton>
             )}
             {canUndo && (
-                <ActionButton
-                    className="ag-btn ag-btn--light"
-                    pending={pendingTarget === 'undo'}
-                    pendingLabel="Undoing…"
-                    onClick={() => submitCommand(new RaceCarsUndo(), undefined, 'undo')}
-                >
-                    ↩ Undo
-                </ActionButton>
+                <UndoButton pending={pendingTarget === 'undo'} onClick={() => submitCommand(new RaceCarsUndo(), undefined, 'undo')} />
             )}
         </div>
     );
