@@ -504,18 +504,21 @@ function findSweepCandidatesFromStore(filter: Record<string, unknown>) {
 }
 
 // The two queries over the whole game store: the dashboard's every live game a
-// player is in — find({ userIdList: userId, complete: false }).exec() — and
-// the turn-timer sweep's candidate read above, which is the one with an $or.
+// player is in and hasn't been dropped from —
+// find({ userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } }).exec()
+// — and the turn-timer sweep's candidate read above, which is the one with an $or.
 function findManyFromStore(filter: Record<string, unknown>) {
     if (filter?.$or) return findSweepCandidatesFromStore(filter);
 
     const userId = filter?.userIdList;
     const complete = filter?.complete;
-    if (typeof userId !== 'string' || typeof complete !== 'boolean' || Object.keys(filter).length !== 2) {
-        throw new Error(`The test game store only searches many by userIdList and complete, not ${JSON.stringify(filter)}`);
+    const notDropped = (filter?.['gameState.droppedPlayers'] as { $ne?: unknown } | undefined)?.$ne;
+    if (typeof userId !== 'string' || typeof complete !== 'boolean' || notDropped !== userId || Object.keys(filter).length !== 3) {
+        throw new Error(`The test game store only searches many by userIdList, complete and not-dropped, not ${JSON.stringify(filter)}`);
     }
     const matches = [...games.values()].filter(stored =>
-        (stored.userIdList as string[]).includes(userId) && stored.complete === complete);
+        (stored.userIdList as string[]).includes(userId) && stored.complete === complete
+        && !((stored.gameState as { droppedPlayers?: string[] } | undefined)?.droppedPlayers ?? []).includes(userId));
     return { exec: async () => matches.map(hydrate) };
 }
 
