@@ -10,6 +10,13 @@ export type KingdomBuilderResourceType = typeof KINGDOM_BUILDER_RESOURCE_TYPES[n
 export const KINGDOM_BUILDER_RESOURCE_ICONS: Record<KingdomBuilderResourceType, string> = { wood: "🪵", stone: "🪨", iron: "⚙️", wheat: "🌾" };
 
 /**
+ * What an admin boost adds to each resource in every settlement of a world
+ * (docs/admin-tools.md). Here rather than beside `adminBoostWorld` so the admin
+ * screen can name it without importing the models.
+ */
+export const KINGDOM_BUILDER_ADMIN_BOOST = 100;
+
+/**
  * A complete set of resources, reading a missing one as none — which is also
  * how a settlement stored before wheat existed (§4.6) reads its stores.
  */

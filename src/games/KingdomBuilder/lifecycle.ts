@@ -9,6 +9,7 @@ import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderTradeOfferModel } from "./KingdomBuilderTradeOfferModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
+import { KINGDOM_BUILDER_ADMIN_BOOST, KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
 import { KINGDOM_BUILDER_MAX_SEATS } from "./roster";
 import { reconcileWorldInvitation } from "./worldInvitation";
 
@@ -117,6 +118,25 @@ export async function adminEndWorld(worldId: string, { deleteNow = false } = {})
     if (!await KingdomBuilderWorldModel.exists({ _id: worldId })) throw notFound();
     await markEnded(worldId, {}, "admin");
     if (deleteNow) await removeWorld(worldId);
+}
+
+/**
+ * An admin tops up every settlement in a live world with
+ * `KINGDOM_BUILDER_ADMIN_BOOST` of each resource (docs/admin-tools.md) — a
+ * testing aid for reaching the late game without waiting out the ticks. One
+ * `$inc`, so it adds to whatever the stores hold at that moment rather than
+ * writing back a stale read. Answers how many settlements it reached.
+ */
+export async function adminBoostWorld(worldId: string): Promise<number> {
+    validateWorldId(worldId);
+    const world = await KingdomBuilderWorldModel.findById(worldId).select({ endedAt: 1 }).lean();
+    if (!world) throw notFound();
+    if (world.endedAt) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "An ended world can't be boosted");
+    const boosted = await KingdomBuilderSettlementModel.updateMany(
+        { worldId },
+        { $inc: Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [`resources.${resource}`, KINGDOM_BUILDER_ADMIN_BOOST])) },
+    );
+    return boosted.modifiedCount;
 }
 
 /**

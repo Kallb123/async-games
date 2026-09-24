@@ -10,7 +10,7 @@ import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { reconcileWorldInvitation } from "./worldInvitation";
-import { adminEndWorld, endWorld, KINGDOM_BUILDER_ENDED_RETENTION_MS, leaveWorld, removeEndedWorlds, removeWorld } from "./lifecycle";
+import { adminBoostWorld, adminEndWorld, endWorld, KINGDOM_BUILDER_ENDED_RETENTION_MS, leaveWorld, removeEndedWorlds, removeWorld } from "./lifecycle";
 
 const worldId = new Types.ObjectId().toString();
 
@@ -127,6 +127,30 @@ describe("adminEndWorld", () => {
         await adminEndWorld(worldId);
 
         expect(updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $set: { endedAt: expect.any(Date), endReason: "admin" } });
+    });
+});
+
+describe("adminBoostWorld", () => {
+    it("adds 100 of each resource to every settlement in a live world, in one write", async () => {
+        mockWorldReads({});
+        const updateMany = vi.spyOn(KingdomBuilderSettlementModel, "updateMany").mockResolvedValue({ modifiedCount: 3 } as never);
+
+        await expect(adminBoostWorld(worldId)).resolves.toBe(3);
+
+        expect(updateMany).toHaveBeenCalledWith(
+            { worldId },
+            { $inc: { "resources.wood": 100, "resources.stone": 100, "resources.iron": 100, "resources.wheat": 100 } },
+        );
+    });
+
+    it("refuses a world that has ended, or doesn't exist, without touching a settlement", async () => {
+        const updateMany = vi.spyOn(KingdomBuilderSettlementModel, "updateMany");
+
+        mockWorldReads({ endedAt: new Date() }, null);
+        await expect(adminBoostWorld(worldId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(adminBoostWorld(worldId)).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
+        await expect(adminBoostWorld("not-an-id")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        expect(updateMany).not.toHaveBeenCalled();
     });
 });
 

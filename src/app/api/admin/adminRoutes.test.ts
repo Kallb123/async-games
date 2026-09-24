@@ -1,7 +1,7 @@
 // The admin tooling's routes (docs/admin-tools.md), and mostly the gate on
 // them: one hands out a list of accounts, another hands out a way *into* one,
 // the third hands out an aggregate count of registered devices, and the fourth
-// ends or deletes a Kingdom Builder world — so who may call them, whose account
+// ends, deletes or boosts a Kingdom Builder world — so who may call them, whose account
 // may be minted for, and that the aggregate never carries a user id are the
 // things worth holding down with tests.
 
@@ -321,6 +321,23 @@ describe('/api/admin/kingdombuilder-worlds', () => {
 
         expect(response.status).toBe(200);
         expect(end).toHaveBeenCalledWith(worldId, { deleteNow: true });
+        await expect(response.json()).resolves.toEqual({ worlds: [] });
+    });
+
+    it('boosts a world for an admin, and nobody else', async () => {
+        const boost = vi.spyOn(kingdomBuilder, 'adminBoostWorld').mockResolvedValue(2);
+        vi.spyOn(adminWorlds, 'listAdminWorlds').mockResolvedValue({ worlds: [] });
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        signIn({ ...ANN, publicMetadata: { unlocked: true } });
+        expect((await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { worldId, action: 'boost' }))).status).toBe(403);
+        expect(boost).not.toHaveBeenCalled();
+
+        signIn(ADMIN);
+        const response = await postWorld(jsonPost('/api/admin/kingdombuilder-worlds', { worldId, action: 'boost' }));
+
+        expect(response.status).toBe(200);
+        expect(boost).toHaveBeenCalledWith(worldId);
         await expect(response.json()).resolves.toEqual({ worlds: [] });
     });
 });

@@ -502,11 +502,16 @@ tool for those.
   revokes its join code. It is removed by the tick cron seven days later.
 - **Delete** on an ended world removes it now — settlements, invitation, then
   the world — rather than waiting the seven days.
+- **Boost** on a live world adds 100 of each resource (wood, stone, iron,
+  wheat) to every player's settlement in it (a barbarian village isn't a settlement
+  until it is taken) in one `$inc`, so it adds to what the stores hold at that
+  moment. A testing aid for reaching buildings and armies without waiting out
+  the ticks; an ended world refuses it.
 
-Both sit behind a confirm, and both go through
+All three sit behind a confirm, and all go through
 `POST /api/admin/kingdombuilder-worlds` (body `{ worldId, action: "end" |
-"delete" }`), which opens with `requireAdmin()` and logs the admin who asked,
-since either is final for every player in the world.
+"delete" | "boost" }`), which opens with `requireAdmin()` and logs the admin
+who asked, since each changes the world for every player in it.
 
 ## Adding another admin tool
 
