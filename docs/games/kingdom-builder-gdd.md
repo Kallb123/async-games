@@ -1419,9 +1419,25 @@ resources of any mix, and stands empty in the market yard until it is sent:
 Caravans follow the rules of the stack they are in: an **unescorted** stack
 lays no siege (§8), never fights, and is refused at a barbarian village, where
 it would simply be plundered. An **escorted** one shares its escort's fate: if
-a push, a sally or a village wipes the escort out, its caravans and load are
-lost with it; if the escort takes a barbarian village, the caravans and their
-load stock the new settlement. A rival who can see a stack (§6.3) sees how
+the escort takes a barbarian village, the caravans and their load stock the
+new settlement.
+
+Caravans are never simply lost to another player — they change hands:
+
+- **Taken on the road.** At the end of every tick, an unescorted stack on the
+  same tile as a rival's stack with units — marching or camped, anywhere on
+  the map — is taken by it, unless a stack of its own owner's with units
+  stands on that tile too. The caravans and their load join the taker's stack
+  (the oldest, if several could), which carries them on wherever it was
+  going. A rival's caravans alone take nothing, and a town's garrison takes
+  nothing that camps at its gate: that is how a delivery is made.
+- **Left on the field.** If a push or a sally wipes an escort out, its caravans
+  and load go to the town that beat it — into its yard and its stores. Only a
+  barbarian village, which is nobody, still plunders them outright.
+
+Both sides are told, in their Battles list (§7.6): the taker how many
+caravans it took, the loser how many it lost — and, after a raid on the road,
+nothing of the army that took them. A rival who can see a stack (§6.3) sees how
 many caravans it has — a covered cart shows it is one — but never what it
 carries.
 
@@ -2807,7 +2823,17 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   takes a player's offers with it, and removing one removes its board. Outside
   Kingdom Builder, `Stepper` gains a `step` (a load is picked five at a time)
   and `.ag-trade-grid` lays its options out a column apiece, so the market's
-  four resources reuse the Settlements & Cities bank-trade picker. No
+  four resources reuse the Settlements & Cities bank-trade picker.
+
+  Caravans change hands rather than being lost (§4.7): `seizeCaravans`
+  (`armies.ts`) runs in `applyTick` once the armies have moved, folding an
+  unguarded stack into the first rival escort on its tile and listing the
+  raid in the tick's `seized`, which the cron keeps as a `raid` battle with no
+  rounds and no attacker units, so the loser learns nothing of the taker. A
+  push or sally's `returnSurvivors` hands back the caravans of the armies it
+  disbands, and the winning town `$inc`s them into its yard and stores. A
+  battle share gains `caravansTaken` and `caravansLost`, each read by its own
+  owner only. No
   `whatsNew.ts` line.
 - **PR 26 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
@@ -3031,11 +3057,10 @@ guessed at here:
   crossable by anything but a bridge or ford (a boat, a winter freeze) is a
   rules question left with them.
 - Market and caravan numbers (§4.7): whether 4/3/2 for 1 is too generous next
-  to a Poor site's own output, whether a caravan's 50 is the right load against
-  the stores a mid-game town holds, and whether an escort that is wiped out
-  should lose its caravans' load or hand it to whoever won. Whether a caravan
-  on the road can be raided by a rival army that meets it — there is no field
-  combat to do it with yet — is the same question one step on.
+  to a Poor site's own output, and whether a caravan's 50 is the right load against
+  the stores a mid-game town holds. Whether an escorted caravan on the road
+  can be raided by a rival army that meets it waits on field combat; one with
+  no escort already can (§4.7).
 - Exact resource/time cost curves for buildings and units. §4.5 and §4.6 now
   give first-pass numbers (linear in level, a 40/20/0/20 starting stockpile,
   tiered output of 1/2/3 per level); they exist so PRs 17–18 have something

@@ -3,7 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { addUnits, advanceMarch, isCamped, isEscorted, type KingdomBuilderMarch } from "./armies";
+import { addUnits, advanceMarch, isCamped, isEscorted, seizeCaravans, type KingdomBuilderMarch, type KingdomBuilderSeizure } from "./armies";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { besiegedProduction, siegeOf, siegeStage } from "./siege";
@@ -20,6 +20,11 @@ export interface KingdomBuilderTickWorld {
      * hold the camped armies as well as the marching ones.
      */
     armies?: readonly KingdomBuilderMarch[];
+    /**
+     * The caravans taken this tick (PR 25) — set by `applyTick` alongside the
+     * armies, for the caller to tell both sides of; each tick replaces it.
+     */
+    seized?: readonly KingdomBuilderSeizure[];
 }
 
 /** "1 tick", "5 ticks" — how every screen counts time in a world (§5.5). */
@@ -62,13 +67,15 @@ function catchmentOf(settlement: IKingdomBuilderSettlement): KingdomBuilderCatch
  * as the tick begins — produces half, and once the siege's grace period is
  * over, its building and training stop where they are too.
  */
-export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
+export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T & Pick<KingdomBuilderTickWorld, "seized"> {
     const currentTick = world.currentTick + 1;
-    const { armies, joining } = marchArmies(world, currentTick);
+    const { armies: marched, joining } = marchArmies(world, currentTick);
+    // Where the armies stand once they have moved is where unguarded caravans are taken (§4.7).
+    const { armies, seized } = seizeCaravans(marched, currentTick);
     return {
         ...world,
         currentTick,
-        ...(world.armies ? { armies } : {}),
+        ...(world.armies ? { armies, seized } : {}),
         settlements: world.settlements.map(settlement => {
             const siege = siegeOf(settlement, world.armies ?? []);
             const halted = siege !== undefined && siegeStage(siege, currentTick) === "full";

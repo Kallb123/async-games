@@ -3,7 +3,8 @@ import type { ClientSession } from "mongoose";
 
 import {
     KingdomBuilderArmyModel, KingdomBuilderBattleModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel,
-    applyTick, assaultVillages, catchmentForSettlement, prepareMultipleSettlementsIndex, removeEndedWorlds, sameUnits, startingTiles,
+    applyTick, assaultVillages, catchmentForSettlement, garrisonOf, prepareMultipleSettlementsIndex, removeEndedWorlds, sameUnits, startingTiles,
+    type KingdomBuilderSeizure,
 } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
@@ -46,8 +47,12 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     // Every army, camped ones included: a camp at someone else's settlement is a siege on it (PR 21).
     // Oldest first, which is the order two players' armies at one barbarian village fight it in.
     const armies = await KingdomBuilderArmyModel.find({ worldId }).sort({ createdAt: 1, _id: 1 }).session(session).lean();
-    let ticked = { currentTick: world.currentTick, settlements, armies };
-    for (let tick = 0; tick < elapsedTicks; tick++) ticked = applyTick(ticked);
+    let ticked: { currentTick: number; settlements: typeof settlements; armies: typeof armies; seized?: readonly KingdomBuilderSeizure[] } = { currentTick: world.currentTick, settlements, armies };
+    const seized: KingdomBuilderSeizure[] = [];
+    for (let tick = 0; tick < elapsedTicks; tick++) {
+        ticked = applyTick(ticked);
+        seized.push(...ticked.seized ?? []);
+    }
     // Then every army camped at a barbarian village fights it (§3.4, PR 23) —
     // once a sweep, on its last tick, however many ticks it caught up.
     const assault = assaultVillages(world.barbarians ?? [], ticked.settlements, ticked.armies);
@@ -94,17 +99,31 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
             shares: [{ ownerId: battle.ownerId, sent: battle.attacker, left: battle.left }],
         })), { session, ordered: true });
     }
+    // Caravans taken on the road (§4.7) are told to both sides as a raid:
+    // the taker learns what they took, the loser only that it is gone.
+    if (seized.length) {
+        await KingdomBuilderBattleModel.create(seized.map(raid => ({
+            worldId, tick: raid.tick, kind: "raid", nodeId: raid.nodeId,
+            attackerIds: [raid.captorId], defenderIds: [raid.ownerId], attacker: garrisonOf(), defender: garrisonOf(), rounds: [],
+            shares: [
+                { ownerId: raid.captorId, sent: raid.captor, left: raid.captor, caravansTaken: raid.caravans },
+                { ownerId: raid.ownerId, sent: garrisonOf(), left: garrisonOf(), caravansLost: raid.caravans },
+            ],
+        })), { session, ordered: true });
+    }
     // An army missing from the list marched home and rejoined its garrison,
-    // saved above, or fell at (or took) a barbarian village — its caravans and
-    // their load with it, unloaded at home or into the town it took; one that neither
-    // moved, fought, nor began or ended a siege is left alone.
+    // saved above, fell at (or took) a barbarian village — its caravans and
+    // their load with it, unloaded at home or into the town it took — or was
+    // caravans taken by a rival's army, which now carries them; one that
+    // neither moved, fought, took caravans, nor began or ended a siege is left alone.
     const marched = new Map(assault.armies.map(army => [army._id.toString(), army]));
     const armyWrites = armies.flatMap<Parameters<typeof KingdomBuilderArmyModel.bulkWrite>[0][number]>(army => {
         const next = marched.get(army._id.toString());
         if (!next) return [{ deleteOne: { filter: { _id: army._id, worldId } } }];
         const besiegingSince = next.besiegingSince ?? undefined;
         const fought = !sameUnits(next.units, army.units);
-        if (next.travelled === army.travelled && next.arrivedAtTick === army.arrivedAtTick && besiegingSince === (army.besiegingSince ?? undefined) && !fought) return [];
+        const raided = (next.caravans ?? 0) !== (army.caravans ?? 0);
+        if (next.travelled === army.travelled && next.arrivedAtTick === army.arrivedAtTick && besiegingSince === (army.besiegingSince ?? undefined) && !fought && !raided) return [];
         return [{
             updateOne: {
                 filter: { _id: army._id, worldId },
@@ -112,6 +131,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
                     $set: {
                         travelled: next.travelled,
                         ...(fought ? { units: next.units } : {}),
+                        ...(raided ? { caravans: next.caravans, cargo: next.cargo } : {}),
                         ...(next.arrivedAtTick === undefined ? {} : { arrivedAtTick: next.arrivedAtTick }),
                         ...(besiegingSince === undefined ? {} : { besiegingSince }),
                     },

@@ -4,6 +4,7 @@
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_CARAVAN_SPEED } from "./market";
+import { addResources, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_PACES,
     KINGDOM_BUILDER_UNITS,
@@ -142,4 +143,56 @@ export function sameUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Par
 export function subtractUnits(a: Partial<KingdomBuilderGarrison> | undefined, b: Partial<KingdomBuilderGarrison>): KingdomBuilderGarrison {
     const left = garrisonOf(a), right = garrisonOf(b);
     return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, left[unitType] - right[unitType]])));
+}
+
+/** Caravans that changed hands on the road (PR 25): whose they were, who took them, and where they had been bound. */
+export interface KingdomBuilderSeizure {
+    tick: number;
+    /** Where the taken stack was going — the place its report is named for. */
+    nodeId: string;
+    ownerId: string;
+    captorId: string;
+    /** The escort that took them — its owner is told, and nobody else. */
+    captor: KingdomBuilderGarrison;
+    caravans: number;
+}
+
+/**
+ * Caravans with nobody to guard them are taken by a rival's escorted stack on
+ * the same tile (§4.7): they and their load join the first such stack — the
+ * oldest, in the order given — which drives them on wherever it is going. A
+ * stack of their owner's with units on the tile guards them instead.
+ */
+export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[], tick: number): { armies: T[]; seized: KingdomBuilderSeizure[] } {
+    const guards = new Map<number, T[]>();
+    for (const army of armies) {
+        if (!isEscorted(army)) continue;
+        const tile = armyTile(army);
+        guards.set(tile, [...(guards.get(tile) ?? []), army]);
+    }
+    const taken = new Map<T, T[]>();
+    const seized: KingdomBuilderSeizure[] = [];
+    for (const army of armies) {
+        if (isEscorted(army) || !army.caravans) continue;
+        const here = guards.get(armyTile(army)) ?? [];
+        const captor = here.some(guard => guard.ownerId === army.ownerId) ? undefined : here[0];
+        if (!captor) continue;
+        taken.set(captor, [...(taken.get(captor) ?? []), army]);
+        seized.push({ tick, nodeId: army.targetNodeId, ownerId: army.ownerId, captorId: captor.ownerId, captor: garrisonOf(captor.units), caravans: army.caravans });
+    }
+    if (seized.length === 0) return { armies: [...armies], seized };
+    const gone = new Set([...taken.values()].flat());
+    return {
+        armies: armies.flatMap(army => {
+            if (gone.has(army)) return [];
+            const spoils = taken.get(army);
+            if (!spoils) return [army];
+            return [{
+                ...army,
+                caravans: spoils.reduce((total, stack) => total + (stack.caravans ?? 0), army.caravans ?? 0),
+                cargo: spoils.reduce<KingdomBuilderResources>((load, stack) => addResources(load, stack.cargo ?? {}), resourcesOf(army.cargo)),
+            }];
+        }),
+        seized,
+    };
 }

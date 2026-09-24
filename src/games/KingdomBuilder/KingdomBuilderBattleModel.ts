@@ -4,8 +4,12 @@ import type { KingdomBuilderBattleRound } from "./combat";
 import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
 import type { KingdomBuilderGarrison } from "./units";
 
-/** How a battle came about: a push or a sally at a siege (§8), or an army against a barbarian village (§3.4). */
-export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian"] as const;
+/**
+ * How a battle came about: a push or a sally at a siege (§8), an army against
+ * a barbarian village (§3.4), or a rival's army taking caravans left with no
+ * escort (§4.7) — a raid, which has no rounds, since nobody fights it.
+ */
+export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid"] as const;
 export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
 
 /**
@@ -43,6 +47,9 @@ export interface KingdomBuilderBattleShare {
     ownerId: string;
     sent: KingdomBuilderGarrison;
     left: KingdomBuilderGarrison;
+    /** Caravans this player took from the other side, or lost to it (§4.7) — absent when none changed hands. */
+    caravansTaken?: number;
+    caravansLost?: number;
 }
 
 export interface IKingdomBuilderBattleDocument extends IKingdomBuilderBattle, Document {}
@@ -57,6 +64,8 @@ const ShareSchema = new Schema<KingdomBuilderBattleShare>({
     ownerId: { type: String, required: true },
     sent: { type: KingdomBuilderGarrisonSchema, required: true },
     left: { type: KingdomBuilderGarrisonSchema, required: true },
+    caravansTaken: { type: Number, min: 0 },
+    caravansLost: { type: Number, min: 0 },
 }, { _id: false });
 
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({

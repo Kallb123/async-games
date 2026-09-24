@@ -72,6 +72,28 @@ describe("reportFor", () => {
     });
 });
 
+describe("reportFor a raid (§4.7)", () => {
+    const raid = {
+        _id: battleId, kind: "raid" as const, tick: 9, nodeId: "town", attackerIds: ["raider"], defenderIds: ["trader"],
+        attacker: garrisonOf(), defender: garrisonOf(), rounds: [],
+        shares: [
+            { ownerId: "raider", sent: garrisonOf({ cavalry: 2 }), left: garrisonOf({ cavalry: 2 }), caravansTaken: 3 },
+            { ownerId: "trader", sent: garrisonOf(), left: garrisonOf(), caravansLost: 3 },
+        ],
+    };
+
+    it("tells the taker they won the caravans", () => {
+        expect(reportFor(raid, "raider")).toMatchObject({ kind: "raid", started: true, outcome: "won", caravansTaken: 3 });
+    });
+
+    it("tells the loser their caravans are gone, and nothing of the army that took them", () => {
+        const report = reportFor(raid, "trader");
+        expect(report).toMatchObject({ started: false, outcome: "lost", caravansLost: 3, faced: garrisonOf() });
+        expect(report).not.toHaveProperty("caravansTaken");
+        expect(JSON.stringify(report)).not.toContain('"cavalry":2');
+    });
+});
+
 describe("recentBattles", () => {
     it("reads only the viewer's own battles, from either side, newest first and a handful at most", async () => {
         const limit = vi.fn(() => ({ select: () => ({ lean: async () => [battle] }) }));

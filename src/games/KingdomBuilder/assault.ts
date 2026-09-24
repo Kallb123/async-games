@@ -7,11 +7,12 @@ import mongoose, { Types, type AnyBulkWriteOperation, type ClientSession } from 
 
 import { KingdomBuilderArmyModel, type IKingdomBuilderArmyDocument } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderBattleModel, type KingdomBuilderBattleShare } from "./KingdomBuilderBattleModel";
-import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderSettlementModel, type KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { addUnits, unitCount } from "./armies";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, addResources, resourcesOf } from "./resources";
 import { combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
@@ -59,21 +60,29 @@ async function runBattle(worldId: string, userId: string, kind: "push" | "sally"
     return worldView(worldId, userId);
 }
 
-type Camp = { _id: Types.ObjectId; ownerId: string; units: KingdomBuilderGarrison };
+type Camp = { _id: Types.ObjectId; ownerId: string; units: KingdomBuilderGarrison; caravans?: number; cargo?: Partial<KingdomBuilderResources> };
 
 /** The armies camped at a settlement that fought as one side, oldest first so their survivors are shared the same way every time. */
 function campsAt(filter: Record<string, unknown>, session: ClientSession) {
     return KingdomBuilderArmyModel.find({ ...filter, besiegingSince: { $ne: null } })
-        .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1 }).session(session).lean<Camp[]>();
+        .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1, caravans: 1, cargo: 1 }).session(session).lean<Camp[]>();
+}
+
+/** Caravans and their load, left behind by an escort that fell (§4.7). */
+interface Spoils {
+    caravans: number;
+    cargo: KingdomBuilderResources;
 }
 
 /**
  * Leaves each army that fought with its share of what survived — and disbands
- * it if that is nothing. Returns what each owner brought and kept, so each can
- * be told their own and nobody else's.
+ * it if that is nothing, leaving its caravans to the other side. Returns what
+ * each owner brought and kept, so each can be told their own and nobody
+ * else's, and the caravans left behind.
  */
-async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession): Promise<KingdomBuilderBattleShare[]> {
+async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession): Promise<{ shares: KingdomBuilderBattleShare[]; spoils: Spoils }> {
     const kept = shareSurvivors(camps.map(camp => camp.units), survivors);
+    let spoils: Spoils = { caravans: 0, cargo: resourcesOf() };
     const writes: AnyBulkWriteOperation<IKingdomBuilderArmyDocument>[] = camps.map((camp, index) => unitCount(kept[index]) === 0
         ? { deleteOne: { filter: { _id: camp._id, worldId } } }
         : { updateOne: { filter: { _id: camp._id, worldId }, update: { $set: { units: kept[index] } } } });
@@ -81,13 +90,25 @@ async function returnSurvivors(worldId: string, camps: readonly Camp[], survivor
     const byOwner = new Map<string, KingdomBuilderBattleShare>();
     camps.forEach((camp, index) => {
         const share = byOwner.get(camp.ownerId);
+        const lost = unitCount(kept[index]) === 0 ? camp.caravans ?? 0 : 0;
+        const caravansLost = (share?.caravansLost ?? 0) + lost;
+        if (lost > 0) spoils = { caravans: spoils.caravans + lost, cargo: addResources(spoils.cargo, camp.cargo ?? {}) };
         byOwner.set(camp.ownerId, {
             ownerId: camp.ownerId,
             sent: addUnits(share?.sent, camp.units),
             left: addUnits(share?.left, kept[index]),
+            ...(caravansLost ? { caravansLost } : {}),
         });
     });
-    return [...byOwner.values()];
+    return { shares: [...byOwner.values()], spoils };
+}
+
+/** What a town takes off the besiegers it beat: their caravans into its yard, their load into its stores. */
+function plundered(spoils: Spoils): Record<string, number> {
+    return {
+        caravans: spoils.caravans,
+        ...Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.filter(resource => spoils.cargo[resource] > 0).map(resource => [`resources.${resource}`, spoils.cargo[resource]])),
+    };
 }
 
 /**
@@ -96,7 +117,7 @@ async function returnSurvivors(worldId: string, camps: readonly Camp[], survivor
  * behind its town's defences. Won, the garrison is destroyed and the siege
  * goes on — taking a settlement is a later rule. Otherwise whatever is left
  * of the armies keeps up the siege, and whatever is left of the garrison
- * stays home.
+ * stays home — with the caravans of any army that fell, and their load.
  */
 export async function pushAttack(worldId: string, userId: string, armyId: unknown): Promise<KingdomBuilderWorldView> {
     if (!Types.ObjectId.isValid(worldId)) throw invalid("A valid world is required");
@@ -118,9 +139,12 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         const sent = combinedUnits(attackers.map(attacker => attacker.units));
         const faced = garrisonOf(target.garrison);
         const battle = resolveBattle(sent, faced, { fortified: true });
-        await KingdomBuilderSettlementModel.updateOne({ _id: target._id, worldId }, { $set: { garrison: battle.defender } }, { session });
-        const shares = await returnSurvivors(worldId, attackers, battle.attacker, session);
-        shares.push({ ownerId: target.ownerId, sent: faced, left: battle.defender });
+        const { shares, spoils } = await returnSurvivors(worldId, attackers, battle.attacker, session);
+        await KingdomBuilderSettlementModel.updateOne({ _id: target._id, worldId }, {
+            $set: { garrison: battle.defender },
+            ...(spoils.caravans ? { $inc: plundered(spoils) } : {}),
+        }, { session });
+        shares.push({ ownerId: target.ownerId, sent: faced, left: battle.defender, ...(spoils.caravans ? { caravansTaken: spoils.caravans } : {}) });
         return { nodeId: army.targetNodeId, attackerIds: [userId], defenderIds: [target.ownerId], attacker: sent, defender: faced, shares, battle };
     });
 }
@@ -128,7 +152,8 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
 /**
  * The defender sallies out (§8): the settlement's whole garrison goes out
  * against every army besieging it, in the open, without its town's defences.
- * Won, the besiegers are destroyed and the siege is lifted. Otherwise
+ * Won, the besiegers are destroyed and the siege is lifted, and their
+ * caravans and load are brought in. Otherwise
  * whatever is left of the garrison comes home, and whatever is left of the
  * besiegers keeps up the siege.
  */
@@ -148,11 +173,14 @@ export async function sallyOut(worldId: string, userId: string, settlementId: un
         if (besiegers.length === 0) throw new KingdomBuilderPersistenceError("NO_SIEGE", "This settlement isn't under siege");
         const faced = combinedUnits(besiegers.map(besieger => besieger.units));
         const battle = resolveBattle(sent, faced, { fortified: false });
-        await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, { $set: { garrison: battle.attacker } }, { session });
-        const besiegerShares = await returnSurvivors(worldId, besiegers, battle.defender, session);
+        const { shares: besiegerShares, spoils } = await returnSurvivors(worldId, besiegers, battle.defender, session);
+        await KingdomBuilderSettlementModel.updateOne({ _id: settlementId, worldId, ownerId: userId }, {
+            $set: { garrison: battle.attacker },
+            ...(spoils.caravans ? { $inc: plundered(spoils) } : {}),
+        }, { session });
         return {
             nodeId: settlement.nodeId, attackerIds: [userId], defenderIds: besiegerShares.map(share => share.ownerId), attacker: sent, defender: faced,
-            shares: [{ ownerId: userId, sent, left: battle.attacker }, ...besiegerShares], battle,
+            shares: [{ ownerId: userId, sent, left: battle.attacker, ...(spoils.caravans ? { caravansTaken: spoils.caravans } : {}) }, ...besiegerShares], battle,
         };
     });
 }

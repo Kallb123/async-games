@@ -132,7 +132,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                     );
                 })}
             </div>
-            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns.</p>}
+            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns. Caravans left with no escort are taken by any rival army that meets them.</p>}
         </Section>
     );
 }

@@ -40,6 +40,9 @@ export interface KingdomBuilderBattleReport {
      * they would say what the reader's fellow besiegers had.
      */
     rounds: { lost?: KingdomBuilderGarrison; killed: KingdomBuilderGarrison }[];
+    /** The reader's own caravans that changed hands in it (§4.7) — absent when none did. */
+    caravansTaken?: number;
+    caravansLost?: number;
 }
 
 type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "defenderIds" | "attacker" | "defender" | "rounds" | "shares">;
@@ -69,6 +72,8 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         faced: garrisonOf(battle[theirs]),
         faceLeft,
         rounds: battle.rounds.map(round => ({ ...(alone ? { lost: garrisonOf(round[mine]) } : {}), killed: garrisonOf(round[theirs]) })),
+        ...(share?.caravansTaken ? { caravansTaken: share.caravansTaken } : {}),
+        ...(share?.caravansLost ? { caravansLost: share.caravansLost } : {}),
     };
 }
 
