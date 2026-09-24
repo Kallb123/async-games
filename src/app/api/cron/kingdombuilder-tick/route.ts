@@ -3,7 +3,7 @@ import type { ClientSession } from "mongoose";
 
 import {
     KingdomBuilderArmyModel, KingdomBuilderBattleModel, KingdomBuilderSettlementModel, KingdomBuilderWorldModel,
-    applyTick, assaultVillages, catchmentForSettlement, prepareMultipleSettlementsIndex, removeEndedWorlds, resourcesOf, sameUnits, startingTiles,
+    applyTick, assaultVillages, catchmentForSettlement, prepareMultipleSettlementsIndex, removeEndedWorlds, sameUnits, startingTiles,
 } from "@/games/KingdomBuilder";
 import { isAuthorisedCron } from "@/utils/cronAuth";
 import { dbConnect } from "@/utils/mongodb/mongodb";
@@ -67,6 +67,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
                 resources: settlement.resources,
                 trainingQueue: settlement.trainingQueue,
                 garrison: settlement.garrison,
+                caravans: settlement.caravans,
                 catchment: settlement.catchment,
             };
             return {
@@ -82,7 +83,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     if (assault.captures.length) {
         const land = await groundOf();
         await KingdomBuilderSettlementModel.create(assault.captures.map(capture => ({
-            worldId, ...capture, tiles: startingTiles(), resources: resourcesOf(),
+            worldId, ...capture, tiles: startingTiles(),
             catchment: catchmentForSettlement(land, { nodeId: capture.nodeId }),
         })), { session, ordered: true });
     }
@@ -94,7 +95,8 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
         })), { session, ordered: true });
     }
     // An army missing from the list marched home and rejoined its garrison,
-    // saved above, or fell at (or took) a barbarian village; one that neither
+    // saved above, or fell at (or took) a barbarian village — its caravans and
+    // their load with it, unloaded at home or into the town it took; one that neither
     // moved, fought, nor began or ended a siege is left alone.
     const marched = new Map(assault.armies.map(army => [army._id.toString(), army]));
     const armyWrites = armies.flatMap<Parameters<typeof KingdomBuilderArmyModel.bulkWrite>[0][number]>(army => {

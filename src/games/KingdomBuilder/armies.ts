@@ -2,6 +2,8 @@
 // them in the tick and the world map previews a march with the same helpers,
 // so the ETA a player is shown is the one the tick will keep.
 
+import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
+import { KINGDOM_BUILDER_CARAVAN_SPEED } from "./market";
 import {
     KINGDOM_BUILDER_PACES,
     KINGDOM_BUILDER_UNITS,
@@ -35,6 +37,18 @@ export interface KingdomBuilderMarch {
      * a tick later rather than at arrival.
      */
     besiegingSince?: number;
+    /**
+     * Caravans travelling with it (PR 25), and what they carry between them.
+     * Absent on a stack with none. A stack of caravans and no units is
+     * unescorted: it lays no siege, and walks into no barbarian village.
+     */
+    caravans?: number;
+    cargo?: Partial<KingdomBuilderResources>;
+}
+
+/** Whether the stack has any units to guard it — one that is only caravans has none. */
+export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): boolean {
+    return unitCount(march.units) > 0;
 }
 
 /** Whether the army has reached `targetNodeId` and camped there. A stored army reads a missing tick as null. */
@@ -53,11 +67,12 @@ export function unitCount(units: Partial<KingdomBuilderGarrison>): number {
     return KINGDOM_BUILDER_UNIT_TYPES.reduce((total, unitType) => total + (units[unitType] ?? 0), 0);
 }
 
-/** A stack's pace a tick — its slowest unit's (§6.2) — or null for an empty one. */
-export function paceOf(units: Partial<KingdomBuilderGarrison>): number | null {
+/** A stack's pace a tick — its slowest unit's or caravan's (§6.2) — or null for an empty one. */
+export function paceOf(units: Partial<KingdomBuilderGarrison>, caravans = 0): number | null {
     const paces = KINGDOM_BUILDER_UNIT_TYPES
         .filter(unitType => (units[unitType] ?? 0) > 0)
         .map(unitType => KINGDOM_BUILDER_PACES[KINGDOM_BUILDER_UNITS[unitType].speed]);
+    if (caravans > 0) paces.push(KINGDOM_BUILDER_PACES[KINGDOM_BUILDER_CARAVAN_SPEED]);
     return paces.length ? Math.min(...paces) : null;
 }
 
@@ -97,7 +112,7 @@ export function armyTile(march: Pick<KingdomBuilderMarch, "path" | "pathCosts" |
  */
 export function advanceMarch<T extends KingdomBuilderMarch>(march: T, tick: number, homeNodes: ReadonlySet<string>): { march: T; joins?: string } {
     if (march.arrivedAtTick !== undefined) return { march };
-    const pace = paceOf(march.units) ?? 0;
+    const pace = paceOf(march.units, march.caravans) ?? 0;
     const travelled = Math.min(totalCost(march), march.travelled + pace);
     if (travelled < totalCost(march)) return { march: { ...march, travelled } };
     if (homeNodes.has(march.targetNodeId)) return { march: { ...march, travelled }, joins: march.targetNodeId };

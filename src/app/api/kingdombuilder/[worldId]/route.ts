@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
-import { endWorld, foundExpansion, KingdomBuilderPersistenceError, leaveWorld, marchArmy, pushAttack, sallyOut, worldView } from "@/games/KingdomBuilder";
+import {
+    detachCaravans, endWorld, foundExpansion, joinArmies, KingdomBuilderPersistenceError, leaveWorld, marchArmy, pushAttack, sallyOut, unloadCaravans, worldView,
+} from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
 import { dbConnect } from "@/utils/mongodb/mongodb";
 
@@ -39,8 +41,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { siteId, action, deleteNow, targetNodeId, settlementId, units, armyId } = await readJsonBody<{
-        siteId: string; action: string; deleteNow: boolean; targetNodeId: unknown; settlementId: unknown; units: unknown; armyId: unknown;
+    const { siteId, action, deleteNow, targetNodeId, settlementId, units, caravans, cargo, armyId, intoArmyId } = await readJsonBody<{
+        siteId: string; action: string; deleteNow: boolean; targetNodeId: unknown; settlementId: unknown; units: unknown;
+        caravans: unknown; cargo: unknown; armyId: unknown; intoArmyId: unknown;
     }>(request);
     try {
         // GDD §9.1: the host ends the world (and may remove it outright);
@@ -55,8 +58,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
         // GDD §6.2: an army out of a garrison, or new orders for one already in the field.
         if (action === "march") {
-            return NextResponse.json(await marchArmy(context.worldId, context.userId, { targetNodeId, settlementId, units, armyId }));
+            return NextResponse.json(await marchArmy(context.worldId, context.userId, { targetNodeId, settlementId, units, caravans, cargo, armyId }));
         }
+        // PR 25: caravans split off an army, stacks joined where they camp, and a load unloaded into the town there.
+        if (action === "detach") return NextResponse.json(await detachCaravans(context.worldId, context.userId, armyId));
+        if (action === "join") return NextResponse.json(await joinArmies(context.worldId, context.userId, armyId, intoArmyId));
+        if (action === "unload") return NextResponse.json(await unloadCaravans(context.worldId, context.userId, armyId));
         // GDD §8: a siege comes to blows — the besieger pushes, or the defender sallies out.
         if (action === "push") return NextResponse.json(await pushAttack(context.worldId, context.userId, armyId));
         if (action === "sally") return NextResponse.json(await sallyOut(context.worldId, context.userId, settlementId));

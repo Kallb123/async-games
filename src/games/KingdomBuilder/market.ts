@@ -6,6 +6,7 @@ import type { KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuild
 import { KINGDOM_BUILDER_UPGRADABLE_BUILDINGS, buildingLevelOf } from "./buildings";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources, type KingdomBuilderResourceType } from "./resources";
+import type { KingdomBuilderSpeed } from "./units";
 
 function tunedCount(name: string, value: number): number {
     if (!Number.isInteger(value) || value < 1) throw new Error(`economy.ts: ${name} must be a whole number above zero (${value})`);
@@ -20,6 +21,8 @@ export const KINGDOM_BUILDER_CARAVAN_COST: KingdomBuilderResources = tunedResour
 /** How much one caravan carries, every resource together. */
 export const KINGDOM_BUILDER_CARAVAN_CAPACITY = tunedCount("caravanCapacity", economy.caravanCapacity);
 export const KINGDOM_BUILDER_TRADE_OFFER_LIMIT = tunedCount("tradeOfferLimit", economy.tradeOfferLimit);
+/** Caravans are ox-carts: whatever they travel with goes at a slow stack's pace (§6.2). */
+export const KINGDOM_BUILDER_CARAVAN_SPEED: KingdomBuilderSpeed = "slow";
 /** The most of one resource a request may name — far past any store, so it only turns away nonsense. */
 export const KINGDOM_BUILDER_MAX_AMOUNT = 100_000;
 

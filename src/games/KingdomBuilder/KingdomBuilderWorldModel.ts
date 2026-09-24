@@ -65,7 +65,9 @@ export interface IKingdomBuilderWorld {
     /**
      * How many armies have ever set out (PR 19). Nothing reads it: bumping it is
      * the write that makes two dispatches at once conflict, so the army limit
-     * is counted in a transaction that can't miss the other's army.
+     * is counted in a transaction that can't miss the other's army. A caravan
+     * split off, two stacks joined or a load unloaded (PR 25) bumps it too, so
+     * each conflicts with the tick rather than rewriting a stack it has moved.
      */
     armiesDispatched?: number;
     /**

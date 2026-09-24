@@ -1,7 +1,7 @@
 import { Document, Model, Schema, Types, model, models } from "mongoose";
 
 import type { KingdomBuilderMarch } from "./armies";
-import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderGarrisonSchema, KingdomBuilderResourcesSchema } from "./KingdomBuilderSettlementModel";
 
 /**
  * A stack of units away from its garrison (GDD §6.2, §11.3 PR 19). Its route
@@ -30,6 +30,8 @@ export const KingdomBuilderArmySchema = new Schema<IKingdomBuilderArmyDocument>(
     targetNodeId: { type: String, required: true },
     arrivedAtTick: Number,
     besiegingSince: Number,
+    caravans: { type: Number, min: 0 },
+    cargo: KingdomBuilderResourcesSchema,
 }, { timestamps: true });
 
 // A world's own armies — the tick reads the ones still marching, a view the viewer's own.

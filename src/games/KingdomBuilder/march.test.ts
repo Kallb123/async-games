@@ -7,7 +7,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KINGDOM_BUILDER_ARMY_LIMIT } from "./armies";
-import { marchArmy } from "./march";
+import { detachCaravans, joinArmies, marchArmy, unloadCaravans } from "./march";
 import { garrisonOf } from "./units";
 
 const worldId = new Types.ObjectId().toString();
@@ -173,5 +173,157 @@ describe("marchArmy — an army already out", () => {
         found.mockReturnValue({ lean: async () => army } as never);
         vi.spyOn(KingdomBuilderArmyModel, "updateOne").mockResolvedValue({ modifiedCount: 0 } as never);
         await expect(marchArmy(worldId, "owner", { armyId, targetNodeId: "start" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+    });
+});
+
+describe("marchArmy — caravans (PR 25)", () => {
+    const market = { ...home, caravans: 2, resources: { wood: 60, stone: 0, iron: 30, wheat: 5 } };
+
+    it("loads caravans from the stores in the same write that spends the garrison", async () => {
+        mockWorld();
+        mockSettlement(market);
+        const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
+
+        await marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, caravans: 2, cargo: { wood: 60, iron: 30 }, targetNodeId: "camp" });
+
+        expect(spend).toHaveBeenCalledWith(
+            {
+                _id: settlementId, worldId, ownerId: "owner", "garrison.militia": { $gte: 1 },
+                caravans: { $gte: 2 }, "resources.wood": { $gte: 60 }, "resources.iron": { $gte: 30 },
+            },
+            { $inc: { "garrison.militia": -1, caravans: -2, "resources.wood": -60, "resources.iron": -30 } },
+            { session: {} },
+        );
+        expect(create.mock.calls[0][0]).toEqual([expect.objectContaining({ caravans: 2, cargo: { wood: 60, stone: 0, iron: 30, wheat: 0 } })]);
+    });
+
+    it("sends caravans alone, at a caravan's pace", async () => {
+        mockWorld();
+        mockSettlement(market);
+        vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
+
+        await marchArmy(worldId, "owner", { settlementId, caravans: 1, cargo: { wheat: 5 }, targetNodeId: "camp" });
+
+        expect(create.mock.calls[0][0]).toEqual([expect.objectContaining({ units: garrisonOf(), caravans: 1 })]);
+    });
+
+    it("refuses a load past what the caravans carry, more caravans or stores than there are, and caravans alone to a barbarian village", async () => {
+        mockSettlement(market);
+        const world = mockWorld();
+        const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne");
+
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: 1, cargo: { wood: 51 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: 1, cargo: { gold: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: -1, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: 3, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: 1, cargo: { wheat: 6 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+
+        world.mockReturnValue({ select: () => ({ lean: async () => ({ ...WORLD, barbarians: [{ nodeId: "camp", garrison: garrisonOf({ militia: 4 }) }] }) }) } as never);
+        await expect(marchArmy(worldId, "owner", { settlementId, caravans: 1, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        expect(spend).not.toHaveBeenCalled();
+    });
+});
+
+describe("caravans where a stack has camped (PR 25)", () => {
+    const camped = {
+        _id: new Types.ObjectId(armyId), ownerId: "owner", units: garrisonOf({ militia: 2 }), caravans: 1, cargo: { wood: 40 },
+        path: [0, 1, 2, 3, 4], pathCosts: [0, 2, 4, 6, 8], travelled: 8, fromNodeId: "start", targetNodeId: "camp", arrivedAtTick: 3,
+    };
+
+    function mockArmies(...found: (object | null)[]) {
+        const lean = vi.fn();
+        for (const army of found) lean.mockResolvedValueOnce(army);
+        return vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue({ session: () => ({ lean }) } as never);
+    }
+
+    function mockBarbarians(barbarians: object[] = []) {
+        vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({ select: () => ({ session: () => ({ lean: async () => ({ barbarians }) }) }) } as never);
+    }
+
+    it("splits an army's caravans off into a stack of their own, camped where it stands", async () => {
+        mockArmies(camped);
+        mockBarbarians();
+        const strip = vi.spyOn(KingdomBuilderArmyModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
+
+        await detachCaravans(worldId, "owner", armyId);
+
+        expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session: {} });
+        expect(strip).toHaveBeenCalledWith({ _id: camped._id, worldId }, { $unset: { caravans: 1, cargo: 1 } }, { session: {} });
+        expect(create).toHaveBeenCalledWith([{
+            worldId, ownerId: "owner", units: garrisonOf(), caravans: 1, cargo: { wood: 40, stone: 0, iron: 0, wheat: 0 },
+            path: [4], pathCosts: [0], travelled: 0, fromNodeId: "camp", targetNodeId: "camp", arrivedAtTick: 3,
+        }], { session: {} });
+    });
+
+    it("won't split caravans off on the march, at a barbarian village, from a stack of caravans alone, or past the army limit", async () => {
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create");
+        mockArmies({ ...camped, travelled: 4, arrivedAtTick: undefined });
+        await expect(detachCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies({ ...camped, units: garrisonOf() });
+        await expect(detachCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies(camped);
+        mockBarbarians([{ nodeId: "camp" }]);
+        await expect(detachCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies(camped);
+        mockBarbarians();
+        vi.mocked(KingdomBuilderArmyModel.countDocuments).mockReturnValue({ session: async () => KINGDOM_BUILDER_ARMY_LIMIT } as never);
+        await expect(detachCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        mockArmies(null);
+        await expect(detachCaravans(worldId, "rival", armyId)).rejects.toMatchObject({ code: "ARMY_NOT_FOUND" });
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it("joins caravans to an army camped at the same place, keeping the earlier siege", async () => {
+        const intoId = new Types.ObjectId();
+        const caravans = { ...camped, units: garrisonOf(), caravans: 2, cargo: { wood: 10, wheat: 5 }, besiegingSince: undefined };
+        mockArmies(caravans, { ...camped, _id: intoId, caravans: 1, cargo: { wood: 40 }, besiegingSince: 4 });
+        const merge = vi.spyOn(KingdomBuilderArmyModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const remove = vi.spyOn(KingdomBuilderArmyModel, "deleteOne").mockResolvedValue({} as never);
+
+        await joinArmies(worldId, "owner", armyId, intoId.toString());
+
+        expect(merge).toHaveBeenCalledWith({ _id: intoId, worldId }, {
+            $set: { units: garrisonOf({ militia: 2 }), caravans: 3, cargo: { wood: 50, stone: 0, iron: 0, wheat: 5 }, besiegingSince: 4 },
+        }, { session: {} });
+        expect(remove).toHaveBeenCalledWith({ _id: camped._id, worldId }, { session: {} });
+    });
+
+    it("joins only two different stacks of the caller's camped at one place", async () => {
+        const remove = vi.spyOn(KingdomBuilderArmyModel, "deleteOne");
+        await expect(joinArmies(worldId, "owner", armyId, armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies(camped, { ...camped, targetNodeId: "start" });
+        await expect(joinArmies(worldId, "owner", armyId, new Types.ObjectId().toString())).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies(camped, null);
+        await expect(joinArmies(worldId, "owner", armyId, new Types.ObjectId().toString())).rejects.toMatchObject({ code: "ARMY_NOT_FOUND" });
+        expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("unloads a load into the town where the caravans have camped", async () => {
+        mockArmies({ ...camped, units: garrisonOf() });
+        const deliver = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const empty = vi.spyOn(KingdomBuilderArmyModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+
+        await unloadCaravans(worldId, "owner", armyId);
+
+        expect(deliver).toHaveBeenCalledWith({ worldId, nodeId: "camp" }, { $inc: { "resources.wood": 40 } }, { session: {} });
+        expect(empty).toHaveBeenCalledWith({ _id: camped._id, worldId }, { $unset: { cargo: 1 } }, { session: {} });
+    });
+
+    it("won't unload from a besieger, on the march, with nothing aboard, or where there is no town", async () => {
+        const deliver = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 0 } as never);
+        const empty = vi.spyOn(KingdomBuilderArmyModel, "updateOne");
+        mockArmies({ ...camped, besiegingSince: 4 });
+        await expect(unloadCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies({ ...camped, arrivedAtTick: undefined, travelled: 4 });
+        await expect(unloadCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies({ ...camped, cargo: undefined });
+        await expect(unloadCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        mockArmies(camped);
+        await expect(unloadCaravans(worldId, "owner", armyId)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        expect(deliver).toHaveBeenCalledTimes(1);
+        expect(empty).not.toHaveBeenCalled();
     });
 });
