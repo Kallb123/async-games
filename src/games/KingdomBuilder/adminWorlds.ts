@@ -21,7 +21,7 @@ export interface AdminKingdomBuilderWorldsResponse {
 
 export interface AdminKingdomBuilderWorldRequest {
     worldId: string;
-    action: "end" | "delete";
+    action: "end" | "delete" | "boost";
 }
 
 /** Every world, newest first, with enough to tell a live one from an abandoned test world. */
