@@ -10,10 +10,9 @@ building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
 §4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
 automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6),
 barbarian villages (PR 23, §3.4), settlers (PR 24, §4.4) and the market,
-trade and caravans (PR 25, §4.7) are shipped. PR 26 (seasons) comes next;
-§11.3 is the plan
-for the rest, including two presentation PRs for the ground — transparent-backed tiles
-(PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
+trade and caravans (PR 25, §4.7) are shipped. PR 26 (commanders and the
+tavern, §6.5) comes next, then PR 27 (seasons); §11.3 is the plan for the rest, including two presentation PRs for the ground — transparent-backed tiles
+(PR 30, §3.5.7) and animated tiles (PR 31, §3.5.8) — which can land whenever
 their art is ready.
 **Genre:** Asynchronous 4X / persistent-world empire builder
 **Players:** up to 10 per world, competitive, no elimination-by-turn-order
@@ -63,6 +62,7 @@ movement — build on those two decisions rather than re-opening them.
    - 6.2 [Dispatch and travel time](#62-dispatch-and-travel-time)
    - 6.3 [Visibility and scouting](#63-visibility-and-scouting)
    - 6.4 [Arrival: siege begins automatically](#64-arrival-siege-begins-automatically)
+   - 6.5 [Commanders and the tavern](#65-commanders-and-the-tavern)
 7. [Combat resolution](#7-combat-resolution)
    - 7.1 [Option 1 — deterministic power comparison](#71-option-1--deterministic-power-comparison)
    - 7.2 [Option 2 — randomised dice/CRT resolution](#72-option-2--randomised-dicecrt-resolution)
@@ -1164,6 +1164,7 @@ the settlement falls.
 | **Mine** | Produces iron per turn/tick | Only buildable where the settlement's surrounding land has hills or mountains in it (§4.6) — ties the settlement economy back to the world map rather than making all 8 tiles interchangeable |
 | **Farm** | Produces wheat per turn/tick | Added with wheat (§4.6); best on grass, fields and river land |
 | **Barracks** | Trains army units | Queue-based; higher levels unlock stronger unit types and shorten training time |
+| **Tavern** | Recruits commanders, one per tavern level (§6.5) | Planned for PR 26. A settlement holds one, and it can never stand a level above the town centre — the second reason to raise the town centre |
 | **Market** | Converts one resource to another at a rate, lists trade offers to other players, and sells caravans | Gives a player short on iron but flush with wood a way out that isn't "wait" (§4.7) |
 | **Walls** | Passive defence bonus; the thing a siege wears down (§8) | Occupies a tile like anything else — a maxed-out economy settlement really is choosing not to have walls |
 | **Town centre** (fixed) | Caps the settlement's overall level, unlocks more building slots (if the design allows more than 8) or higher tiers of the tiles above | Its own upgrade track, gated behind resource cost + time like everything else |
@@ -1192,7 +1193,8 @@ no separate soft/hard currency — and it is spent on exactly three things:
 
 1. **Construction** — building a new structure on an empty tile, or
    upgrading an existing one.
-2. **Recruitment** — training army units at the barracks.
+2. **Recruitment** — training army units at the barracks, and commanders at
+   the tavern (§6.5).
 3. **Trade** — via the market, converting a resource surplus into whatever's
    short, at a rate that should be worse than producing it directly (so the
    market is a release valve, not a way to dodge the tech tree).
@@ -1610,6 +1612,7 @@ exercise:
 | **Cavalry** | Fast raiding/reinforcement | Fast | Expensive; sets a stack's speed if mixed in (see below) |
 | **Siege engine** | Needed to meaningfully damage walls | Slow | An attack without one against a walled settlement mostly just fails to break in |
 | **Scout** | Reveals a target's garrison/defences before committing | Fast | Cheap, disposable, answers "is this worth attacking" |
+| **Commander** | Leads an army out of a settlement | Fast | Planned for PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers that leaves a town |
 
 ### 6.2 Dispatch and travel time
 
@@ -1709,6 +1712,83 @@ first concrete signal either the defender or their allies get that this
 particular attack is happening at all — which is exactly the "losing is
 visible, not sudden" pillar in practice: the visibility arrives at siege,
 not before, but it does arrive before anything is destroyed.
+
+### 6.5 Commanders and the tavern
+
+> Planned for PR 26 (§11.3). First-pass numbers (§12).
+
+Through PR 25 a garrison can empty itself onto the road one unit at a time:
+twenty armies of one militia each are as easy to send as one army of twenty.
+Nothing makes a player choose *which* march matters. A **commander** is that
+choice. It's a scarce unit that an army needs before it can leave a
+settlement, and the **tavern** is where commanders are recruited.
+
+**The rule.** A stack with any soldier in it — any unit `militaryCount`
+counts, scouts included — can't be sent out of a settlement unless it takes
+at least one commander with it. Caravans and settlers travelling on their own
+aren't an army, so they still leave without one, unguarded as they are today
+(§4.7, §4.4). A commander travelling alone to another of its owner's towns is
+allowed too, and is just as unguarded.
+
+**The tavern.** A new building, one per settlement, raised a level at a time
+like the barracks and the market. Two rules cap it:
+
+- **One commander per tavern level.** A player's commanders — in a garrison,
+  in the field, or in a training queue — can never outnumber the levels of all
+  their taverns added together. A tavern recruits only while the player is
+  under that total. The cap is pooled across the realm rather than tied to
+  one tavern, because a commander marches between towns and joins whichever
+  garrison it reaches (PR 19). Pinning each one to the tavern that recruited it
+  would mean storing where every commander came from, and a unit count would
+  stop being a count. On a single settlement the two rules are the same.
+- **Never above the town centre.** A tavern can be raised only to a level its
+  settlement's town centre has already reached. The built level counts, not
+  one still under construction. So the town centre's cap is the tavern's cap
+  (`KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.tavern` is read from the town
+  centre's entry, not written down twice). Today that is 2 levels, and so 2
+  commanders a settlement and 4 for a player holding the two-settlement limit.
+  A future town-centre level raises all three at once.
+
+A player who loses a town, or a tavern with it, can end up holding more
+commanders than their taverns now allow. They keep them, but can't recruit
+another until they are back under the cap. Nothing is disbanded.
+
+**The unit.** A commander is a unit type like the others (`commander` in
+`KINGDOM_BUILDER_UNIT_TYPES`), so garrisons, stacks, battles, sightings and
+reports carry it without new fields. It trains at the tavern (`trainedAt: {
+building: "tavern", level: 1 }`) into the settlement's one training queue.
+It moves at the fast pace, so it never slows the army it leads. It fights like
+a veteran soldier and can be killed like one. It isn't counted as an escort:
+`militaryCount` leaves it out, as it does the settler, so a commander alone
+lays no siege, goes into no barbarian village, and is fair game for a rival
+escort on the road. Unlike a settler, a commander caught unguarded is killed,
+not taken. A captured commander would let the captor go over their own cap.
+
+| | First pass |
+|---|---|
+| Tavern, level 1 | 25 wood, 15 stone, 10 wheat — level N costs N × this, like every building |
+| Commander | 10 wood, 20 iron, 25 wheat; 4 ticks to train at a level-1 tavern, one fewer each level above |
+| Combat | attack 3, health 12; no counters for or against it |
+
+**Leaderless armies.** A commander can die in a battle that its soldiers
+survive. An army left with soldiers but no commander is **leaderless**. That
+isn't stored anywhere: it's read off the stack. A leaderless army can only
+march to one of its owner's own settlements, and can't push the attack on a
+siege. It can still be joined by a led army where both have camped, and the
+joined stack is led again. A push goes ahead if any one of the caller's
+besieging armies has a commander; that commander leads all of them.
+
+**What stays as it is.** A sally has the garrison fight at its own gate and
+come straight back, so it needs no commander. Any commanders in the garrison
+go out with it, and can die in it, like the soldiers. A garrison defending
+against a push fights with its commanders in it. Settling (§4.4) needs none.
+
+**What the others see.** A commander is a unit, so a rival sees one in a
+sighted stack's units and in a battle report, exactly as they would a
+cavalryman. That's no new leak: whatever PR 20 lets them see of a stack now
+includes whether it's led. A player's tavern levels, the capacity they add up
+to, and how many commanders the player holds stay on the player's own
+settlement screen.
 
 ---
 
@@ -1963,7 +2043,7 @@ position from being a foregone conclusion for the rest of the season:
 
 ### 9.1 Ending a world early
 
-A season ending on schedule is PR 26. Before that there is no way for a world to
+A season ending on schedule is PR 27. Before that there is no way for a world to
 end at all: every other game here has `/api/game/end`, but a world is not a
 `GameData` (§10), so that route can't see it. During testing that is a real
 problem — each generator change (§3.7, §3.8) makes older worlds unrepresentative,
@@ -1977,7 +2057,7 @@ third.
   still unset). From that moment the tick sweep skips it (its query filters on
   `endedAt`), no command against it is accepted, its invitation code is revoked
   so nobody can join a finished world, and it leaves every player's dashboard
-  row list and `AppRail` switcher. `endedAt` is the same field PR 26 writes when
+  row list and `AppRail` switcher. `endedAt` is the same field PR 27 writes when
   a season ends, so "ended by hand" and "ended by the clock" differ only in the
   reason recorded beside it.
 - **Any other player leaves.** Leaving removes that player's settlements and
@@ -2002,7 +2082,7 @@ third.
   end themselves.
 
 What this deliberately isn't: a result. An ended-by-hand world records no
-`GameResult` and no stats, because there is no scoring to record until PR 26;
+`GameResult` and no stats, because there is no scoring to record until PR 27;
 at that point ending early can decide whether a hand-ended world scores or is
 simply void.
 
@@ -2175,10 +2255,10 @@ deliberately the only five: **PR 7** touches the home dashboard and the app
 rail, **PR 8** the shared invitation flow (`acceptSeat`, the lobby routes, the
 join-code card and seat-count hook it shares with every setup screen),
 **PR 11** and **PR 14** each add a page to `/admin` and its entry in the
-admin-tools doc, and **PR 27** the push-notification plumbing. Everything else stays inside
-`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 28's
-one-line entries in the guide and tutorial registries, PRs 29 and 30's lines
-in the tile mapper's existing admin-tools entry, and PR 30's
+admin-tools doc, and **PR 28** the push-notification plumbing. Everything else stays inside
+`src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 29's
+one-line entries in the guide and tutorial registries, PRs 30 and 31's lines
+in the tile mapper's existing admin-tools entry, and PR 31's
 reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
 `Stepper` and one-column-per-option `.ag-trade-grid`, both for the market's pickers.
 
@@ -2887,27 +2967,165 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   battle share gains `caravansTaken` and `caravansLost`, each read by its own
   owner only. No
   `whatsNew.ts` line.
-- **PR 26 — Victory, seasons, catch-up.** Season length, scoring, new-player
+- **PR 26 — Commanders and the tavern.** Next. §6.5. An army needs a
+  commander to leave a settlement, and commanders come from a new building, the
+  tavern: one per tavern level, and a tavern never stands above its town
+  centre. It comes before seasons because it changes what an army is, and
+  PR 27's "army value" should score the armies players will actually field.
+  Everything stays inside `src/games/KingdomBuilder/`, Kingdom Builder's own
+  routes and its two screens. There's no new route, no new collection and no
+  schema change beyond two enum values and one counter. Commits, in order, each
+  building green:
+  1. **The tavern, and its cap.** `tavern` joins
+     `KINGDOM_BUILDER_BUILDING_TYPES` (the settlement model's enum) and
+     `KINGDOM_BUILDER_PROTOTYPE_BUILDINGS`. In
+     `KINGDOM_BUILDER_UPGRADABLE_BUILDINGS` it is set to the town centre's own
+     entry, so the two can't drift apart. It's priced in `economy.ts`
+     (`buildingCosts.tavern`, §6.5's numbers). `queuePrototypeBuilding` gains
+     one check, inside the conditional update it already runs: a tavern's
+     target level may not exceed the town centre's *built* level. The error
+     says "Raise the town centre to level N first". A pure
+     `tavernLevelCapFor(tiles)` in `buildings.ts` holds the rule, so the
+     settlement screen shows the same limit the server enforces. Tests in
+     `prototype.test.ts` and `buildings.test.ts`:
+     - a first tavern builds at town-centre level 1;
+     - level 2 is refused at town-centre level 1, and so is level 2 while the
+       town centre's own level 2 is still queued;
+     - level 2 is accepted once the town centre has reached level 2;
+     - the cap follows the town centre's maximum when that changes.
+  2. **The commander unit.** `commander` joins `KINGDOM_BUILDER_UNIT_TYPES`
+     at `trainedAt: { building: "tavern", level: 1 }`, with a fast pace, its
+     price in `economy.ts` and its stats in `KINGDOM_BUILDER_COMBAT_STATS`. It
+     has no counters. A new `leader?: true` flag on the unit definition keeps
+     it out of `KINGDOM_BUILDER_MILITARY_UNIT_TYPES` the way `civilian` keeps
+     out the settler. Then `militaryCount`, `isEscorted`, the tick's
+     `withSiege`, `assaultVillages` and the march's barbarian refusal all treat
+     a lone commander as unescorted without being touched.
+     `trainingLevelFor` already reads the level of whatever building a unit
+     trains at, so the tavern's level speeds up recruitment for free. A garrison
+     or army document from before this PR has no `commander` count, and
+     `garrisonOf` reads the missing count as 0. Tests in `units.test.ts`
+     (the roster and training ticks) and `combat.test.ts` (matchup rows: a
+     commander adds its weight to a stack, and dies in one that is wiped out).
+  3. **The pool.** `commanders.ts` is the pure half:
+     - `commanderCapacityOf(settlements)` adds up the tavern levels;
+     - `commandersHeld({ settlements, armies })` counts commanders in
+       garrisons, in training queues and in the field;
+     - `isLeaderless(stack)` is true for a stack with soldiers but no commander.
+
+     `queueUnitTraining`, for a commander only, first runs the count inside a
+     transaction. That transaction starts by bumping a new world counter,
+     `commandersRecruited`, the same way PR 19 bumps `armiesDispatched`, so
+     two tabs recruiting at once conflict rather than both slipping under the
+     cap. Every other unit keeps its one conditional update. Cancelling a
+     queued commander frees its place, as the refund already does. The
+     comment in `KingdomBuilderWorldModel.ts` that still calls seasons "PR 26"
+     is renumbered in the same commit, since that file gains the counter.
+     Tests in `commanders.test.ts`:
+     - capacity across two towns;
+     - held counts in each of the three places a commander can be;
+     - a recruit at the cap refused;
+     - a recruit freed by a death, and one freed by a cancel;
+     - a player over the cap after losing a town keeps their commanders but
+       recruits none;
+     - two concurrent recruits at cap − 1: exactly one goes through.
+  4. **The march rule.** In `march.ts`:
+     - A dispatch out of a garrison with `militaryCount > 0` and no commander
+       is refused with "An army needs a commander to lead it out — recruit one
+       at a tavern".
+     - Caravans alone, settlers alone and a commander alone are all still
+       allowed.
+     - New orders for an army in the field that `isLeaderless` must target a
+       node holding one of the caller's own settlements ("Without a commander
+       this army can only march home").
+     - `join` and `settle` are unchanged, and a leaderless stack joined by a
+       led one is led again.
+
+     Armies already in the field when this ships have no commander, so they are
+     leaderless: they can come home and nothing else. There is no migration,
+     since the game is pre-release (§11.1). The PR description says so, for
+     anyone with a test world mid-siege. Tests in `march.test.ts`:
+     - each refusal, and each case still allowed;
+     - a leaderless army turned round toward home;
+     - a leaderless army refused a rival town;
+     - a dispatch racing a recruit reads a consistent garrison.
+  5. **Battles and the road.** In `assault.ts`, a push needs at least one of
+     the caller's besieging armies to have a commander ("No commander to lead
+     the attack"). A sally is unchanged, and commanders in the garrison go out
+     with it. In `armies.ts`, `seizeCaravans` treats a commander in an
+     unguarded stack as something the raid reaches. The commander is killed,
+     never folded into the captor's units, and the seizure and its `raid`
+     battle share gain `commandersLost`, read by its owner only.
+     `battleReports.ts` needs nothing new: a commander is a unit type in what
+     each side brought and lost. Tests:
+     - in `assault.test.ts`, a push refused with no commander, and a push by
+       two armies with one commander between them;
+     - in `armies.test.ts`, a lone commander on the road killed by a rival
+       escort, and one beside its owner's escort left alone;
+     - in `battleReports.test.ts`, a `commandersLost` that the captor's
+       report never carries.
+  6. **The settlement screen.** A Tavern section under Barracks, built from
+     `Section`, an `ag-tag` for its level and `BuildRow`s like its
+     neighbours. It has:
+     - the commander row, disabled with its shortfall when the player can't
+       afford it, or with "All N commanders recruited — raise a tavern" at the
+       cap;
+     - the upgrade row, disabled with "Needs town centre level N" above the
+       cap;
+     - one line, "Commanders: 2 of 3 across your realm".
+
+     The Build list gains the tavern, and the Garrison list shows commanders
+     like any unit. The settlement's view gains `commanders: { held, capacity
+     }` on the owner's own response only.
+  7. **The world map.** In `ArmiesSection`:
+     - the muster's Send is disabled with the march rule's own wording while
+       a stack of soldiers has no commander picked, and the commander stepper
+       defaults to 1 when the garrison holds one;
+     - a leaderless army carries a "No commander" `ag-tag`;
+     - a leaderless army's orders offer only its owner's towns as
+       destinations: the draft greys every other node, as it already does
+       for a barbarian village a caravan can't enter.
+
+     In `SiegesSection`, Push the attack is disabled with its reason when
+     every besieging army is leaderless. No new component: these are states
+     of rows that already exist.
+  8. Reviewers:
+     - `locksmith`: the march and push refusals are server-side and not just
+       a disabled button; the recruit's cap can't be raced from two tabs or
+       two settlements.
+     - `gremlin`: the recruit transaction against a tick or a dispatch; an
+       old document with no `commander` count or no tavern tile; a player over
+       the cap; a stack whose last commander dies mid-siege.
+     - `croupier`: `commandersLost` read by its owner only; `commanders: {
+       held, capacity }` never on a rival's settlement; a sighting's units
+       carrying a commander count and nothing more.
+     - `caveman`: the Tavern section reuses the Barracks section's rows
+       rather than copying them; leaderless and the cap are one pure helper
+       each, read by both screens and the server.
+     - `rulebook`: the enum, the economy entry and this document's §4.2,
+       §6.5 and §12.
+  9. No `whatsNew.ts` line, since the game is pre-release (§11.1).
+- **PR 27 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
-- **PR 27 — Push notifications.** Siege-onset, attack-resolved and
+- **PR 28 — Push notifications.** Siege-onset, attack-resolved and
   construction-complete pushes over the app's existing FCM plumbing (§10).
   Held deliberately until last, since it's the one PR reaching into shared
   notification infrastructure, and it benefits from every event type above
   already existing to notify about.
-- **PR 28 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
+- **PR 29 — Guide, tutorial, share card, polish.** `guide.ts`, `tutorial.ts`,
   the `og-game-kingdombuilder.png` share card, and a final full five-reviewer
   pass — the "most games also want a guide/tutorial" convention in
   AGENTS.md, deliberately last rather than first since it documents
-  mechanics that were still moving through PRs 6–27.
+  mechanics that were still moving through PRs 6–28.
 
 Two presentation PRs were planned after the list above was drawn up, and are
 numbered after it for that reason only. Neither depends on anything past
 PR 11, neither touches a rule, a cost or the wire format, and both can land
-whenever their art is ready — before PR 28 included, since a guide describes
+whenever their art is ready — before PR 29 included, since a guide describes
 mechanics and these change none.
 
-- **PR 29 — Transparent-backed tiles.** §3.5.7. Lets an area's art say
+- **PR 30 — Transparent-backed tiles.** §3.5.7. Lets an area's art say
   "whatever is next door shows through here" instead of assuming grass.
   1. `backing?: "baked" | "transparent"` on area art entries in `tileset.ts`,
      defaulting to `"baked"`, so the shipped manifest is unchanged byte for byte.
@@ -2944,7 +3162,7 @@ mechanics and these change none.
      and its guard, the art pipeline, the admin-tools doc).
   8. One `whatsNew.ts` enhancement line: different kinds of ground on the
      world map now meet cleanly, without a strip of grass between them.
-- **PR 30 — Animated tiles.** §3.5.8. Water, fire and wind.
+- **PR 31 — Animated tiles.** §3.5.8. Water, fire and wind.
   1. `animation?: { frames, frameMs, offset, phase? }` on area and overlay art
      entries in `tileset.ts`, and a pure `animatedSquares(field, overlays)` that
      resolves every map square drawing animated art to its distinct
@@ -2952,7 +3170,7 @@ mechanics and these change none.
      from, and it is unit tested without a DOM: a field of one animated area
      yields one group per phase however large it is, and a mixed field yields
      exactly the distinct slots used.
-  2. The composite leaves animated squares at their underlay (PR 29's wedges
+  2. The composite leaves animated squares at their underlay (PR 30's wedges
      for a transparent entry, the fallback colour for a baked one) instead of
      drawing frame 0.
   3. The frame atlas: every frame of every distinct animated square baked into
@@ -2984,14 +3202,14 @@ mechanics and these change none.
      mid-bake), `rulebook` (the manifest field and its guard, the CSS in the
      theme file, the admin-tools doc).
   10. One `whatsNew.ts` enhancement line: the world map now moves, with water
-      and fire animating. If PR 29's line hasn't shipped to players yet, and
+      and fire animating. If PR 30's line hasn't shipped to players yet, and
       the two land close together, widen that line instead of adding a second
       one, per AGENTS.md.
 
 ### 11.4 Ordering constraints
 
 Most of Milestone B can be resequenced to fit priorities without breaking
-anything — trade (PR 25) and seasons (PR 26) don't depend on each other, for
+anything — trade (PR 25) and seasons (PR 27) don't depend on each other, for
 instance, and either could move earlier or later freely. Eight orderings
 are not negotiable, because each is a hard dependency rather than a
 priority call:
@@ -3001,7 +3219,7 @@ priority call:
   point at which every PR before it was, by construction, invisible to a
   player.
 - **PR 8 (more than one player) must land before or alongside PR 20 (fog of
-  war), PR 21 (siege) and PR 26 (seasons).** An army cannot be hidden from
+  war), PR 21 (siege) and PR 27 (seasons).** An army cannot be hidden from
   nobody, a player cannot lay siege to their own town, and scoring,
   new-player protection and a leaderboard are all comparisons between
   players — each of the three is untestable, not merely unexciting, in a
@@ -3058,11 +3276,18 @@ makes them testable at all. PR 15 before PR 16 is a preference rather than a
 dependency — the pathfinder works on any field — but tuning passes and
 crossings is easier on the map shape they'll actually ship on.
 
-PRs 29 and 30 (transparent and animated tiles) have no hard dependency on
+PR 26 (commanders) has no hard dependency on anything after PR 22 and PR 24,
+whose battles and settlers it has to account for. It leads PR 27 as a
+preference: seasons score army value, and that should be measured on armies
+that need a commander to take the field, not on ones that don't. It also has
+to land before PR 29's guide and tutorial, which would otherwise teach a
+dispatch that no longer works.
+
+PRs 30 and 31 (transparent and animated tiles) have no hard dependency on
 anything after PR 11, and none on each other: animated baked art works
-without PR 29, and an animated square simply sits on its fallback colour
-rather than a four-wedge underlay. PR 29 first is still the preference. It
-means PR 30's "the composite draws only the underlay" rule has a real underlay
+without PR 30, and an animated square simply sits on its fallback colour
+rather than a four-wedge underlay. PR 30 first is still the preference. It
+means PR 31's "the composite draws only the underlay" rule has a real underlay
 to draw from day one, and it means animated water can be drawn transparent at
 the shoreline from its first sheet, rather than being redrawn later.
 
@@ -3134,11 +3359,20 @@ guessed at here:
   quarry and ore nodes retire, stay as pure landmarks, or become rich deposits
   that raise the tier of a catchment they fall inside?
 - Animated tiles (§3.5.8): whether the fully zoomed-out map can afford to
-  animate on a mid-range phone, or only from the first zoom step in — PR 30
+  animate on a mid-range phone, or only from the first zoom step in — PR 31
   measures it rather than guessing. Also whether players get their own
   "still map" toggle (through `useStoredValue`) beyond `prefers-reduced-motion`,
   and whether seasonal themes (§9) should swap in their own animated art, such
   as snowfall over a winter world.
+- Commanders (§6.5): first-pass prices and stats, and one commander per
+  tavern level, pooled across the realm. Open questions for playtesting:
+  - Should a lone scout be exempt from the march rule? Today it needs a
+    commander like any army, which makes cheap scouting a real cost.
+  - Should a commander give its army a bonus: a combat edge, sight, or pace?
+  - Should the cap be per tavern rather than pooled, if players find the
+    pool hard to read?
+  - A future third town-centre level would bring a third tavern level with
+    it.
 - Map-shape presets (§3.7): which shapes the launch set ships with, and
   whether the host should pick one on the setup screen or it stays a seeded
   surprise.
