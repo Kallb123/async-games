@@ -42,8 +42,8 @@ function positions(saved: Record<string, unknown>): Record<string, { position: n
 }
 
 /** The match-history log as the stored game holds it: tokens, not names. */
-function storedHistory(saved: Record<string, unknown>): { text: string, actorId?: string }[] {
-    return (saved.gameState as { history: { text: string, actorId?: string }[] }).history;
+function storedHistory(saved: Record<string, unknown>): { text: string, actorId?: string, commandId?: string }[] {
+    return (saved.gameState as { history: { text: string, actorId?: string, commandId?: string }[] }).history;
 }
 
 /** The moves the stored game has recorded — its private replay log. */
@@ -292,6 +292,26 @@ describe('POST /api/game/command', () => {
         expect(response.status).toBe(200);
         const history: { commandId?: string, reactions?: { reaction: string, actorId: string, actorUsername: string }[] }[] = (await response.json()).gameData.gameState.history;
         expect(history.find(entry => entry.commandId === 'earlier-command')?.reactions).toEqual([{ reaction: '😱', actorId: 'user_reactor', actorUsername: 'Reactor' }]);
+    });
+
+    it('mints its own command id, whatever id the request brought with it', async () => {
+        // Undo trusts the id at the tail of commandHistory to say nothing has
+        // run since its snapshot was pushed, so a client that reused an id
+        // could undo past a move it had already seen the outcome of.
+        signIn(ANN);
+        seedSnakesAndLadders();
+        await command(jsonPost('/api/game/command', diceRoll()));
+        signIn(BOB);
+        await command(jsonPost('/api/game/command', diceRoll({ senderId: BOB.id, senderUsername: 'bob' })));
+
+        const saved = storedGame('game_1')!;
+        const ids = (commandHistory(saved) as { id: string }[]).map(stored => stored.id);
+        expect(ids).toHaveLength(2);
+        expect(ids).not.toContain(diceRoll().id);
+        expect(new Set(ids).size).toBe(2);
+        // The id the history line carries — what a reaction joins on — is the
+        // one the server minted.
+        expect(storedHistory(saved).map(entry => entry.commandId).sort()).toEqual([...ids].sort());
     });
 
     it('rolls its own dice, whatever roll the request brought with it', async () => {

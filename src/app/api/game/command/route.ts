@@ -13,7 +13,8 @@ import { isDropped } from '@/utils/games/playerDropout';
 import { finishGame } from '@/utils/games/finishGame';
 import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
-import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
+import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
+import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
 
 export interface ICommandResponse {
@@ -174,6 +175,14 @@ export async function POST(request: NextRequest) {
   // hand-played ones on their own clocks would make "which clock stamped this"
   // a way of telling the two apart.
   commandRequest.timestamp = new Date().toISOString();
+  // And the id. Undo trusts it to be unique: SAC's and Race Cars' undo take a
+  // move back only while `undoAnchorId` — the id of the undoable command that
+  // pushed the snapshot — is still the id at the tail of `commandHistory`,
+  // which is how they know nothing has run since. A client that chose its own
+  // ids could give a later command the anchor's id, keep the anchor matching,
+  // and undo past it: buy a development card, see what it was, and put it
+  // back. It is also the key a history line's reactions join on.
+  commandRequest.id = uuidv4() as uuidString;
 
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
