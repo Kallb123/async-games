@@ -3,7 +3,7 @@
 import ClickableMapNode from "@/components/ui/ClickableMapNode";
 import { playerColour } from "@/utils/ui/playerColours";
 
-import { formatUnits } from "../units";
+import { formatStack } from "../armies";
 import type { KingdomBuilderArmySighting, KingdomBuilderArmyView } from "../worldView";
 import { tileIndexCentre, type TerrainField } from "../worldgen/terrainField";
 
@@ -53,7 +53,7 @@ export default function ArmyLayer({ field, armies, colour, sightings = [], owner
                 const { x, y } = tileIndexCentre(field, sighting.tile);
                 return (
                     <g key={`sighting-${index}`} style={{ color: playerColour(sighting.seat) }}>
-                        <title>{`${ownerName?.(sighting.seat) ?? "Another player"}'s army: ${formatUnits(sighting.units)}`}</title>
+                        <title>{`${ownerName?.(sighting.seat) ?? "Another player"}'s army: ${formatStack(sighting)}`}</title>
                         <ArmyMarker x={x} y={y} />
                     </g>
                 );
@@ -68,7 +68,7 @@ export default function ArmyLayer({ field, armies, colour, sightings = [], owner
                     return (
                         <ClickableMapNode key={army.armyId} x={x} y={y} radius={ARMY_RADIUS} isValid={!!onSelect} isSelected={army.armyId === selectedArmyId} showRing={false}
                             onClick={onSelect && (() => onSelect(army.armyId))}
-                            title={`Your army: ${formatUnits(army.units)}`}>
+                            title={`Your army: ${formatStack(army)}`}>
                             <ArmyMarker x={x} y={y} isSelected={army.armyId === selectedArmyId} />
                         </ClickableMapNode>
                     );

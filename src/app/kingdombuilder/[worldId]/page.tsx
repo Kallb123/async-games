@@ -114,10 +114,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
         const army = "armyId" in march ? data.armies.find(entry => entry.armyId === march.armyId) : undefined;
         const from = army ? army.tile : "settlementId" in march ? tileOf(data.settlements.find(settlement => settlement.settlementId === march.settlementId)?.nodeId ?? "") : undefined;
         const to = tileOf(march.targetNodeId);
-        const units = "units" in march ? march.units : army?.units;
-        if (from === undefined || to === undefined || !units) return undefined;
+        const stack = "units" in march ? march : army;
+        if (from === undefined || to === undefined || !stack) return undefined;
         const route = routeBetween(grid, from, to);
-        return { route, ticks: route ? ticksToArrive({ ...route, travelled: 0 }, paceOf(units) ?? 1) : 0 };
+        return { route, ticks: route ? ticksToArrive({ ...route, travelled: 0 }, paceOf(stack.units, stack.caravans) ?? 1) : 0 };
     }, [data, grid, march]);
     const preview: MarchPreview = !marchRoute ? null : marchRoute.route ? { ticks: Math.max(1, marchRoute.ticks) } : "no-route";
     const startMarch = (draft: MarchDraft | null) => {

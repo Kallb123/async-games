@@ -8,6 +8,7 @@ import {
     KINGDOM_BUILDER_PACES,
     KINGDOM_BUILDER_UNITS,
     KINGDOM_BUILDER_UNIT_TYPES,
+    formatUnits,
     garrisonOf,
     type KingdomBuilderGarrison,
 } from "./units";
@@ -49,6 +50,12 @@ export interface KingdomBuilderMarch {
 /** Whether the stack has any units to guard it — one that is only caravans has none. */
 export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): boolean {
     return unitCount(march.units) > 0;
+}
+
+/** "2 militia · 1 caravan" — a stack as every list names it, caravans and all. */
+export function formatStack(stack: { units: Partial<KingdomBuilderGarrison>; caravans?: number }): string {
+    const caravans = stack.caravans ?? 0;
+    return [formatUnits(stack.units), caravans > 0 ? `${caravans} caravan${caravans === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
 }
 
 /** Whether the army has reached `targetNodeId` and camped there. A stored army reads a missing tick as null. */
