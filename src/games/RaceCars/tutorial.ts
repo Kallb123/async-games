@@ -52,7 +52,7 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
         {
             anchor: "board",
             title: "The circuit",
-            body: "Each corner owes stops — turns you must end inside it before leaving. Leave early and it costs a tyre a space, or a spin if you can't pay.",
+            body: "You must stop in each corner, sometimes morë than once. Leave early and it costs a tyre per space, or a spin if you can't pay.",
         },
         {
             anchor: "rc-sheet",
@@ -86,7 +86,7 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
         {
             anchor: "rc-sheet",
             title: "Slipstream",
-            body: "Finish right behind another car, both in 4th or higher, and you're offered a free three-space tow here. Take it or wave it away.",
+            body: "Finish right behind another car, both in 4th or higher, and you're offered a free three-space tow here. This is optional.",
         },
         {
             anchor: "menu",
