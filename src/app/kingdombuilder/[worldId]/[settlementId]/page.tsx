@@ -21,6 +21,7 @@ import {
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, type KingdomBuilderResourceType } from "@/games/KingdomBuilder/resources";
 import type { KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
 import MarketSection from "@/games/KingdomBuilder/components/MarketSection";
+import TrainingQueue from "@/games/KingdomBuilder/components/TrainingQueue";
 import {
     KINGDOM_BUILDER_MILITARY_UNIT_TYPES,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -68,7 +69,8 @@ function outputOf(type: KingdomBuilderBuildingType, level: number, catchment: Ki
 function trainingStatus(queue: readonly KingdomBuilderTrainingOrder[]): string {
     if (queue.length === 0) return "Nothing in training. Units are paid for when queued and join the garrison as each one finishes.";
     return `Training ${KINGDOM_BUILDER_UNITS[queue[0].unitType].name.toLowerCase()} — ${formatTicks(queue[0].ticksRemaining)} left`
-        + (queue.length > 1 ? `, then ${queue.length - 1} more (${queue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".");
+        + (queue.length > 1 ? `, then ${queue.length - 1} more (${queue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".")
+        + " Tap ✕ on a unit to cancel it for a full refund.";
 }
 
 /**
@@ -135,6 +137,7 @@ export default function KingdomBuilderSettlementPage({
         <UpgradeRow type={type} tilePosition={tile.position} level={tile.building.level} effect={effect} resources={data.resources}
             busy={!!construction} pending={pending === `upgrade-${type}`} disabled={isPending} onUpgrade={send} />
     );
+    const trainingQueueChips = <TrainingQueue className={styles.queue} queue={trainingQueue} pending={pending} disabled={isPending} onCancel={send} />;
     const unitRow = (unitType: KingdomBuilderUnitType, level: number) => data && (
         <UnitRow key={unitType} unitType={unitType} level={level} resources={data.resources} queueFull={queueFull}
             pending={pending === unitType} disabled={isPending} onTrain={() => send(unitType, { unitType })} />
@@ -245,6 +248,7 @@ export default function KingdomBuilderSettlementPage({
                     {data && barracks && (
                         <Section label="Barracks" action={<span className="ag-tag">Level {barracksLevel}</span>}>
                             <p className={styles.status}>{trainingStatus(trainingQueue)}</p>
+                            {trainingQueueChips}
                             <div className="ag-build-list">
                                 {upgradeRow("barracks", barracks, "unlocks stronger units, trains faster and watches farther")}
                                 {KINGDOM_BUILDER_MILITARY_UNIT_TYPES.map(unitType => unitRow(unitType, barracksLevel))}
@@ -258,6 +262,7 @@ export default function KingdomBuilderSettlementPage({
                                 {barracks ? "Settlers share the barracks' training queue. " : `${trainingStatus(trainingQueue)} `}
                                 March a settler to an open site on the world map to found a new town there.
                             </p>
+                            {!barracks && trainingQueueChips}
                             <div className="ag-build-list">
                                 {upgradeRow("town-centre", townCentre, "trains settlers")}
                                 {unitRow("settler", townCentre.building.level)}

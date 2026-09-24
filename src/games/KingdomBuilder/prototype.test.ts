@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KingdomBuilderPrototypeError, buyCaravan, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
+import { KingdomBuilderPrototypeError, buyCaravan, cancelUnitTraining, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
 const settlementId = new Types.ObjectId().toString();
@@ -280,7 +280,7 @@ describe("Kingdom Builder training", () => {
             },
             {
                 $inc: { "resources.wood": -10, "resources.iron": -5, "resources.wheat": -5 },
-                $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1 } },
+                $push: { trainingQueue: { unitType: "militia", ticksRemaining: 1, orderId: expect.any(String) } },
             },
             { new: true },
         );
@@ -290,6 +290,49 @@ describe("Kingdom Builder training", () => {
     it("reports a lost race instead of overdrawing", async () => {
         stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich }, null);
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
+
+describe("Kingdom Builder cancelling training", () => {
+    const orderId = new Types.ObjectId().toString();
+    const queue = [
+        { unitType: "militia", ticksRemaining: 1, orderId: new Types.ObjectId().toString() },
+        { unitType: "militia", ticksRemaining: 2, orderId },
+        { unitType: "militia", ticksRemaining: 2, orderId: new Types.ObjectId().toString() },
+    ];
+
+    it("refuses forged orders and somebody else's queue, before writing anything", async () => {
+        const update = stubSettlement({ ownerId: "actual-owner", trainingQueue: queue });
+        for (const forged of [undefined, 1, "not-an-id", { $ne: null }]) {
+            await expect(cancelUnitTraining(worldId, settlementId, "owner", forged)).rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+        }
+        await expect(cancelUnitTraining(worldId, settlementId, "intruder", orderId)).rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("pulls only the named order, refunding its whole cost in the same write", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue });
+
+        await cancelUnitTraining(worldId, settlementId, "owner", orderId);
+
+        expect(update).toHaveBeenCalledWith(
+            { _id: settlementId, worldId, ownerId: "owner", trainingQueue: { $elemMatch: { orderId, unitType: "militia" } } },
+            {
+                $pull: { trainingQueue: { orderId } },
+                $inc: { "resources.wood": 10, "resources.iron": 5, "resources.wheat": 5 },
+            },
+            { new: true },
+        );
+    });
+
+    it("refuses an order that has left the queue instead of refunding it", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue.filter(order => order.orderId !== orderId) });
+        await expect(cancelUnitTraining(worldId, settlementId, "owner", orderId)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+        expect(update).not.toHaveBeenCalled();
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1), trainingQueue: queue }, null);
+        await expect(cancelUnitTraining(worldId, settlementId, "owner", orderId)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
     });
 });
 
@@ -329,7 +372,7 @@ describe("Kingdom Builder town centre and settlers (PR 24)", () => {
         await queueUnitTraining(worldId, settlementId, "owner", "settler");
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ tiles: { $elemMatch: { "building.type": "town-centre", "building.level": 2 } } }),
-            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4 } } }),
+            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4, orderId: expect.any(String) } } }),
             { new: true },
         );
     });

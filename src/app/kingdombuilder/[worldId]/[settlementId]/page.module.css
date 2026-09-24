@@ -28,6 +28,7 @@ button.tile { cursor: pointer; }
 .name { font-size: 11px; line-height: 1.15; font-weight: 800; }
 .note { font-size: 9px; line-height: 1.15; font-weight: 600; color: var(--ag-ink-soft); }
 .status { margin: 0 0 10px; font: 600 12px/1.4 var(--ag-font); color: var(--ag-ink-soft); }
+.queue { margin-bottom: 12px; }
 .garrison { flex-wrap: wrap; }
 .garrison > * { min-width: 88px; }
 .land { display: block; font-weight: 700; color: var(--ag-ink-soft); }

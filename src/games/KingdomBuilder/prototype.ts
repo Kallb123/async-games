@@ -22,7 +22,7 @@ import {
 import { siegesOn } from "./besiegers";
 import { catchmentOfSettlement } from "./land";
 import type { KingdomBuilderSiege } from "./siege";
-import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
+import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, depositTo, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
 import { canAfford, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -122,7 +122,9 @@ export async function settlementView(worldId: string, settlementId: string, user
                 } }
                 : {}),
         })),
-        trainingQueue: (settlement.trainingQueue ?? []).map(({ unitType, ticksRemaining }: KingdomBuilderTrainingOrder) => ({ unitType, ticksRemaining })),
+        trainingQueue: (settlement.trainingQueue ?? []).map(({ unitType, ticksRemaining, orderId }: KingdomBuilderTrainingOrder) => ({
+            unitType, ticksRemaining, ...(orderId ? { orderId } : {}),
+        })),
         garrison: garrisonOf(settlement.garrison),
         caravans: settlement.caravans ?? 0,
         ...(siege ? { siege } : {}),
@@ -252,11 +254,49 @@ export async function queueUnitTraining(
         },
         {
             $inc,
-            $push: { trainingQueue: { unitType, ticksRemaining } },
+            $push: { trainingQueue: { unitType, ticksRemaining, orderId: new Types.ObjectId().toString() } },
         },
         { new: true },
     ).lean();
     if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
+
+    return settlementView(worldId, settlementId, userId);
+}
+
+/**
+ * Takes one unit back out of the training queue — the one in training
+ * included — and refunds its whole cost, since it was paid for in full when
+ * it was queued. The order is named by its id, so a retried request or a
+ * second tab can't take out a second, identical unit queued behind it.
+ */
+export async function cancelUnitTraining(
+    worldId: string,
+    settlementId: string,
+    userId: string,
+    orderId: unknown,
+): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    if (typeof orderId !== "string" || !Types.ObjectId.isValid(orderId)) {
+        throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose a unit in the queue to cancel");
+    }
+    await assertWorldLive(worldId);
+
+    const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
+        .select({ ownerId: 1, trainingQueue: 1 })
+        .lean();
+    if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
+    if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
+    const order: KingdomBuilderTrainingOrder | undefined = existing.trainingQueue?.find((queued: KingdomBuilderTrainingOrder) => queued.orderId === orderId);
+    if (!order) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "That unit is no longer in the queue");
+
+    // The filter repeats the order, so one that finished training in between
+    // fails this write rather than being refunded after it joined the garrison.
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        { _id: settlementId, worldId, ownerId: userId, trainingQueue: { $elemMatch: { orderId, unitType: order.unitType } } },
+        { $pull: { trainingQueue: { orderId } }, $inc: depositTo(KINGDOM_BUILDER_UNITS[order.unitType].cost) },
+        { new: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "That unit is no longer in the queue");
 
     return settlementView(worldId, settlementId, userId);
 }
