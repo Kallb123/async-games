@@ -11,6 +11,7 @@
 // not editing a shared object literal.
 
 import { tutorial as diceCitiesTutorial } from "@/games/DiceCities/tutorial";
+import { tutorial as raceCarsTutorial } from "@/games/RaceCars/tutorial";
 import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
 
 /**
@@ -66,6 +67,7 @@ export interface GameTutorial<S extends string = string> {
 // guards the "seen guide" list.
 export const GAME_TUTORIALS: Record<string, GameTutorial> = {
     dicecities: diceCitiesTutorial,
+    racecars: raceCarsTutorial,
     settlementsandcities: settlementsAndCitiesTutorial,
 };
 

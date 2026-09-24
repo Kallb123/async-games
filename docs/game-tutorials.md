@@ -1,10 +1,12 @@
 # Interactive game tutorials
 
-**Status: built, live on Dice Cities and Settlements & Cities.** PRs 1 and 2
-of §12 are in: `GameShell` owns the game guide, and the tutorial machinery
-(`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`) exists, wired up
-for Dice Cities. Settlements & Cities' tour has already landed too, as PR 3's
-first commit. PR 3 carries the tour to the five games still left — Fires Out!,
+**Status: built, live on Dice Cities, Settlements & Cities and Race Cars.**
+PRs 1 and 2 of §12 are in: `GameShell` owns the game guide, and the tutorial
+machinery (`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`) exists,
+wired up for Dice Cities. Settlements & Cities' tour has already landed too, as
+PR 3's first commit, and Race Cars — which §12 predates — has its own, which
+holds the game's full-screen move reveals back while the tour is open rather
+than let them unmount it mid-step. PR 3 carries the tour to the five games still left — Fires Out!,
 Banned Islet, Outbreak, World Domination and Train Time; PR 4 (a tour from the
 setup screen, per-node board anchors) stays a follow-up, not required for the
 feature to be complete.

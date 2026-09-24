@@ -14,6 +14,7 @@ import { moveOptions, slipstreamMoveOptions, unavoidableOilDestinations } from "
 import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { cornerStat, positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import { guide as raceCarsGuide } from "@/games/RaceCars/guide";
+import { tutorial as raceCarsTutorial } from "@/games/RaceCars/tutorial";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -34,6 +35,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { pluralize } from "@/utils/ui/text";
 
 /**
@@ -101,8 +103,9 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // wires it (see useTurnRecap).
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
-    // The how-to-play popup, shown the first time this account opens a race and
-    // from the ⋮ menu after that (see GameShell's `guide`/`intro` props).
+    // The first-race welcome — the guided tour, with the how-to-play popup
+    // behind it in the ⋮ menu (see GameShell's `guide`/`tutorial`/`intro`
+    // props).
     const gameIntro = useGameIntro('racecars');
 
     // The turn sheet is pinned to the bottom of the screen (§19.2's board is a
@@ -186,6 +189,24 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         command.brake = appliedBrake;
         submitCommand(command, undefined, `move:${row}:${lane}`);
     }
+
+    // The tour's signals (src/games/RaceCars/tutorial.ts says what each one
+    // means). The step list freezes on whichever of them hold when the tour
+    // opens; after that only the current step's `advanceOn` is watched.
+    const canDrive = isMyTurn && !holdOpen && (me?.phase === 'start' || me?.phase === 'shift' || me?.phase === 'move');
+    const tutorial = tutorialRun(raceCarsTutorial, {
+        canLaunch: isMyTurn && me?.phase === 'start',
+        hasLaunched: !!me && me.phase !== 'start',
+        canShift: isMyTurn && !holdOpen && me?.phase === 'shift',
+        hasShifted: !!me && me.phase !== 'shift',
+        hasMoved: !canDrive,
+        waiting: !isMyTurn,
+    }, { active: nav.isLive && !complete });
+    // A getaway or a move taken during the tour would otherwise swap the whole
+    // board — tour and all — for its reveal, and the tour would start over when
+    // the board came back. The reveal waits instead, and shows when the tour
+    // closes: the turn sheet says everything it would have in the meantime.
+    const touring = tutorial.active && gameIntro.tutorialOpen;
 
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);
@@ -273,11 +294,11 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         );
     }
 
-    if (reveal?.start && gs && nav.isLive) {
+    if (reveal?.start && gs && nav.isLive && !touring) {
         return <RaceCarsStartScreen start={reveal.start} onDismiss={dismissReveal} />;
     }
 
-    if (reveal?.arrival && gs && nav.isLive) {
+    if (reveal?.arrival && gs && nav.isLive && !touring) {
         const arrival = reveal.arrival;
         return (
             <RaceCarsEndMoveScreen
@@ -303,6 +324,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--racecars"
             guide={raceCarsGuide}
+            tutorial={tutorial}
             intro={gameIntro}
         >
             <FcmTokenComp />
@@ -310,7 +332,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {gs && me && (
-                <div className="ag-stat-row">
+                <div className="ag-stat-row" data-tour="rc-stats">
                     {/* Clamped at both ends: a grid drawn behind the finish line
                         seats the field a lap short (§15, `startingLaps`), so before
                         its first crossing `lapsCompleted` is −1 and the lap a driver
@@ -354,7 +376,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                     </div>
 
                     {nav.isLive && !complete && (
-                        <div className="ag-dock ag-actions-dock" ref={measureActionsDock}>
+                        <div className="ag-dock ag-actions-dock" ref={measureActionsDock} data-tour="rc-sheet">
                             <RaceCarsActions
                                 gs={gs}
                                 myUserId={myUserId}
