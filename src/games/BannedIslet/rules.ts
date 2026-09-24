@@ -32,6 +32,8 @@ import {
     BannedIsletTileState,
     BannedIsletTreasureId,
 } from "./board";
+import type { IBannedIsletPlayerState, IBannedIsletSpecificGameState } from "./BannedIsletModels";
+import { clonePlayerStates } from "@/utils/games/mongoMaps";
 
 /** One grid position of §21.4's `positions` array: which tile was shuffled into it, and what state that tile is in. */
 export interface IBannedIsletPosition {
@@ -595,4 +597,44 @@ export function isEscapeReady(
     if (isPierLoss(island)) return false;
     const pier = pierPosition(island);
     return pawns.length > 0 && pawns.every(p => p === pier);
+}
+
+// ─── Cloning the state (§21.4, docs/undo.md) ────────────────────────────────
+
+function clonePlayerState(ps: IBannedIsletPlayerState): IBannedIsletPlayerState {
+    return {
+        hand: [...ps.hand],
+        position: ps.position,
+        role: ps.role,
+        pilotFlightUsed: ps.pilotFlightUsed,
+        actionsLeft: ps.actionsLeft,
+    };
+}
+
+// Deep-clones a Banned Islet state into independent plain objects, rebuilding
+// the player map in `userIdList` order (see clonePlayerStates) — the same call
+// Outbreak's cloneOutbreakState makes, and for the same reason: the tile
+// layout, both decks and the role deal are all randomised at creation and
+// cannot be reconstructed later, so turn recap replays from a persisted
+// snapshot instead (§21.4, "Recorded randomness").
+export function cloneBannedIsletState(
+    gs: IBannedIsletSpecificGameState,
+    userIdList: string[],
+): IBannedIsletSpecificGameState {
+    return {
+        difficulty: gs.difficulty,
+        positions: gs.positions.map(p => ({ tile: p.tile, state: p.state })),
+        waterLevel: gs.waterLevel,
+        treasures: { ...gs.treasures },
+        treasureDeck: [...gs.treasureDeck],
+        treasureDiscard: [...gs.treasureDiscard],
+        floodDeck: [...gs.floodDeck],
+        floodDiscard: [...gs.floodDiscard],
+        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
+        phase: gs.phase,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing,
+        // and BannedIsletUndo leaves the live stack where it is anyway.
+        undoStack: [],
+        undoAnchorId: null,
+    };
 }

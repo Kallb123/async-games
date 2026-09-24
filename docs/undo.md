@@ -9,7 +9,9 @@ the hold, the board's Undo button and countdown, and this documentation. The
 pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
-someone opts it in a line at a time (§14, §16).
+someone opts it in a line at a time (§14, §16). Two more games have since
+opted in by hand: Race Cars (§16, "The second game") and Banned Islet (§16,
+"The third game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -1128,3 +1130,55 @@ does in SAC, and that difference is the whole story below.
   consumed randomness to `consumedRandomness` — a change to the shared
   convention, not a one-game fix, and worth raising with whoever builds
   Race Cars' own hold-countdown UI before it is built on top of this gap.
+
+### The third game: Banned Islet
+
+Also written by hand, per the trigger above — and the one that behaves most
+like the pattern §4-§8 describe, because nothing Banned Islet asks for in its
+action phase is random and none of it ends a turn.
+
+- **What is undoable.** Every `BannedIsletAction` — a move, a shore up, a
+  give, a capture, the Pilot's flight, the Navigator's push, and a pass — and a
+  `BannedIsletPlayCard` played in the action phase (Sandbags, or a Helicopter
+  Lift that doesn't win). Both declare `readonly undoable = true`; the source
+  scan in `src/games/BannedIslet/undo.test.ts` holds that list to exactly those
+  two, and the guard beside it holds them to no `recorded…` field.
+- **What is not.** `BannedIsletEndTurn` draws two treasure cards and floods;
+  `BannedIsletDiscard` always closes the turn and floods. A special played
+  mid-discard can close the turn and run the flood too, so `BannedIsletPlayCard`
+  only pushes when it was played in the action phase — the same "sometimes I
+  push, sometimes I don't" shape as Race Cars' oil check, decided by the phase
+  it starts in rather than by what the command rolled. The Helicopter Lift that
+  wins sets `complete` outside `specificGameState` and pushes nothing, like a
+  Race Cars leg that crosses the line.
+- **No hold (§5).** A Banned Islet turn has never ended itself: only
+  `BannedIsletEndTurn` hands off, and the player sends it. So there is no
+  `autoEndTurnAt`, no countdown and no "Pass now" — Undo simply stays available
+  until the player does something that isn't undoable. For the same reason
+  `BannedIsletUndo` has no `currentTurn` to put back, unlike `RaceCarsUndo`.
+- **Depth three.** `UNDO_STACK_DEPTH` is `ACTIONS_PER_TURN`, so a player can take
+  all three of a turn's actions back one at a time. `CheckEndTurn` empties the
+  stack on every hand-off — nothing on it could be restored past a draw anyway
+  — and the dropout adapter empties it too, because a snapshot taken before a
+  player left would put their pawn back on the island.
+- **The cloner moved.** `cloneBannedIsletState` moved from
+  `BannedIsletModels.ts` to `rules.ts`, for the same reason Race Cars' did: the
+  undo command needs it, and `rules.ts` is the one file both it and the models
+  import without importing each other. `BannedIsletModels.ts` re-exports it.
+- **Hidden information.** The snapshot carries both deck orders — the one thing
+  this game hides — and is never sent: `gameStateToModel` builds its return
+  field by field, and its allowlist test now names `canUndo` and nothing else
+  new. `canUndo` is the same expression Race Cars and Settlements & Cities use.
+- **Recap.** Plain moves and shore-ups earn no recap row, so undoing one earns
+  none either. A capture does, so taking one back adds a `bi_uncapture` row and
+  nets it out of the summary.
+- **The button.** Three games showing the same Undo button was the signal to
+  extract it: `src/components/ui/UndoButton.tsx`, which Settlements & Cities and
+  Race Cars now use too. It sits beside End turn once the actions are spent, and
+  above Pass while they aren't.
+
+Diffing `BannedIsletUndo.Execute` against `SACUndo`'s and `RaceCarsUndo`'s: the
+anchor check, the owner check, the pop and the restore are line for line the
+same, and it differs from Race Cars' only by *not* restoring `currentTurn`. The
+per-game differences live in the pushing commands — whether they push, and
+whether a hold follows — which is where §16 predicted they would stay.

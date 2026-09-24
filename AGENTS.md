@@ -106,6 +106,9 @@ out. A second copy is the signal to extract the first one.
   whether the row arms the board for a tap, fires a command outright, or picks
   one card out of a list. Wrap a run of them in `.ag-build-list` yourself, and
   don't hand-write that markup again.
+  A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`
+  — one child of an `.ag-action-grid` row beside whatever it shares the row
+  with — rather than another hand-built "↩ Undo".
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `gameThemes.ts` (the themes each game can be
   played in — see [`docs/game-themes.md`](./docs/game-themes.md)),

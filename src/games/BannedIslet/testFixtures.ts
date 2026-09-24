@@ -107,5 +107,7 @@ export function baseState(
         floodDiscard: [],
         players: playerStates,
         phase: 'actions',
+        undoStack: [],
+        undoAnchorId: null,
     };
 }

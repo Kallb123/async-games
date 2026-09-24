@@ -3,9 +3,10 @@ import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import BuildRow, { BuildRowProps } from '@/components/ui/BuildRow';
 import PendingTag from '@/components/ui/PendingTag';
+import UndoButton from '@/components/ui/UndoButton';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { useResettingState } from '@/utils/hooks/useResettingState';
-import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn, BannedIsletPlayCard } from '@/utils/apiModels/GameLogic';
+import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn, BannedIsletPlayCard, BannedIsletUndo } from '@/utils/apiModels/GameLogic';
 import type { IBannedIsletSpecificGameStateResponse } from '@/games/BannedIslet/apiModels';
 import {
     CARDS_TO_CAPTURE,
@@ -318,6 +319,18 @@ export default function BannedIsletActions({
         submitCommand(cmd, undefined, target);
     }
 
+    // Taking back the last action or special (docs/undo.md). `canUndo` is only
+    // ever true for the player who made the move, and never once End turn has
+    // drawn — so the two sheets that can show it are the two a turn spends its
+    // actions in, and the discard picker never does.
+    const undoButton = gs.canUndo ? (
+        <UndoButton
+            pending={pendingTarget === 'undo'}
+            disabled={submitting}
+            onClick={() => submitCommand(new BannedIsletUndo(), () => onPickChange(null), 'undo')}
+        />
+    ) : null;
+
     // ── §10's two playable specials, built before any of the sheets below
     //     because all three of them offer these: they cost no action (§8), so
     //     neither an empty action counter nor the hand-limit discard takes
@@ -420,15 +433,18 @@ export default function BannedIsletActions({
                 <p className="ag-action-hint" style={{ marginTop: 0 }}>
                     ⏭ Out of actions — end your turn to draw two cards and let the sea take its turn.
                 </p>
-                <ActionButton
-                    className="ag-btn ag-btn--primary ag-btn--block"
-                    disabled={submitting}
-                    pending={pendingTarget === 'endTurn'}
-                    pendingLabel="Ending turn…"
-                    onClick={() => submitCommand(new BannedIsletEndTurn(), undefined, 'endTurn')}
-                >
-                    End turn
-                </ActionButton>
+                <div className="ag-action-grid">
+                    {undoButton}
+                    <ActionButton
+                        className="ag-btn ag-btn--primary"
+                        disabled={submitting}
+                        pending={pendingTarget === 'endTurn'}
+                        pendingLabel="Ending turn…"
+                        onClick={() => submitCommand(new BannedIsletEndTurn(), undefined, 'endTurn')}
+                    >
+                        End turn
+                    </ActionButton>
+                </div>
                 <SpecialCards rows={specialRows} hint="🃏 These cost no action — you can still play one." />
             </div>
         );
@@ -640,6 +656,8 @@ export default function BannedIsletActions({
             <ActionRows rows={rows} />
 
             <SpecialCards rows={specialRows} hint="🃏 Special cards cost no action — play one whenever it is your turn." />
+
+            {undoButton && <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div>}
 
             <ActionButton
                 className="ag-btn ag-btn--light ag-btn--block"
