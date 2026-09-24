@@ -69,8 +69,12 @@ export default function PlayerHands({
     // to the seats themselves so a hand still draws before turnOrder lands.
     const order = seatOrderFrom(turnOrder.length ? turnOrder : seats.map(s => s.userId), myUserId);
     const activeSeat = activeUserId ? turnOrder.indexOf(activeUserId) : -1;
-    const nextUserId = activeSeat >= 0 && turnOrder.length > 1
-        ? turnOrder[(activeSeat + 1) % turnOrder.length]
+    // The next seat that still has a hand: a player dropped for going quiet
+    // keeps their place in turnOrder but has no seat here, and never gets the
+    // turn again.
+    const seated = new Set(seats.map(seat => seat.userId));
+    const nextUserId = activeSeat >= 0
+        ? turnOrder.slice(activeSeat + 1).concat(turnOrder.slice(0, activeSeat)).find(userId => seated.has(userId)) ?? null
         : null;
 
     return (
