@@ -30,7 +30,8 @@ function titleOf(report: KingdomBuilderBattleReport, place: string | undefined):
     if (report.kind === "barbarian") return "Your attack on a barbarian village";
     if (report.kind === "raid") {
         const where = place ? ` at ${place}` : " on the road";
-        const what = report.caravansTaken || report.caravansLost ? "caravans" : "settlers";
+        const what = [report.caravansTaken || report.caravansLost ? "caravans" : "", report.settlersTaken || report.settlersLost ? "settlers" : ""]
+            .filter(Boolean).join(" and ");
         return report.started ? `${what[0].toUpperCase()}${what.slice(1)} taken${where}` : `Your ${what}, taken${where}`;
     }
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
