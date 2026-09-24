@@ -56,6 +56,8 @@ export interface KingdomBuilderBattleShare {
     /** Settlers taken or lost the same way (PR 24) — absent when none were. */
     settlersTaken?: number;
     settlersLost?: number;
+    /** Commanders killed on the road with no escort (PR 26) — on their owner's share only, and absent when none were. */
+    commandersLost?: number;
 }
 
 export interface IKingdomBuilderBattleDocument extends IKingdomBuilderBattle, Document {}
@@ -74,6 +76,7 @@ const ShareSchema = new Schema<KingdomBuilderBattleShare>({
     caravansLost: { type: Number, min: 0 },
     settlersTaken: { type: Number, min: 0 },
     settlersLost: { type: Number, min: 0 },
+    commandersLost: { type: Number, min: 0 },
 }, { _id: false });
 
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({

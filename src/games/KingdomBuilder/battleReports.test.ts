@@ -109,6 +109,20 @@ describe("reportFor a raid (§4.7)", () => {
         expect(JSON.stringify(lost)).not.toContain('"cavalry":2');
     });
 
+    it("tells only the loser of the commanders killed with no escort, and the taker nothing of them (PR 26)", () => {
+        const commanders = {
+            ...raid,
+            shares: [
+                { ownerId: "raider", sent: garrisonOf({ cavalry: 2 }), left: garrisonOf({ cavalry: 2 }), caravansTaken: 1 },
+                { ownerId: "trader", sent: garrisonOf(), left: garrisonOf(), caravansLost: 1, commandersLost: 1 },
+            ],
+        };
+        const taker = reportFor(commanders, "raider");
+        expect(taker).not.toHaveProperty("commandersLost");
+        expect(JSON.stringify(taker)).not.toContain("commander\":1");
+        expect(reportFor(commanders, "trader")).toMatchObject({ outcome: "lost", commandersLost: 1 });
+    });
+
     it("names no place for a raid on the road", () => {
         const { nodeId: _, ...onTheRoad } = raid;
         expect(reportFor(onTheRoad, "raider")).not.toHaveProperty("nodeId");

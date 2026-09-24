@@ -99,8 +99,9 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
             shares: [{ ownerId: battle.ownerId, sent: battle.attacker, left: battle.left }],
         })), { session, ordered: true });
     }
-    // Caravans and settlers taken on the road (§4.7) are told to both sides as a raid:
-    // the taker learns what they took, the loser only that it is gone.
+    // Caravans and settlers taken on the road (§4.7), and commanders killed there
+    // (§6.5), are told to both sides as a raid: the taker learns what they took,
+    // the loser only that it is gone — and only the loser how many commanders.
     if (seized.length) {
         await KingdomBuilderBattleModel.create(seized.map(raid => ({
             worldId, tick: raid.tick, kind: "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
@@ -113,6 +114,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
                 {
                     ownerId: raid.ownerId, sent: garrisonOf(), left: garrisonOf(),
                     ...(raid.caravans ? { caravansLost: raid.caravans } : {}), ...(raid.settlers ? { settlersLost: raid.settlers } : {}),
+                    ...(raid.commandersLost ? { commandersLost: raid.commandersLost } : {}),
                 },
             ],
         })), { session, ordered: true });

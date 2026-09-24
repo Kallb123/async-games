@@ -41,3 +41,11 @@ export function needsCommander(units: Partial<KingdomBuilderGarrison>): boolean 
 export function isLeaderless(stack: { units: Partial<KingdomBuilderGarrison> }): boolean {
     return needsCommander(stack.units) && (stack.units.commander ?? 0) === 0;
 }
+
+/** Why a push can't go in: none of the caller's besieging armies has a commander to lead it (§6.5). */
+export const KINGDOM_BUILDER_NO_PUSH_COMMANDER = "No commander to lead the attack";
+
+/** Whether any of these stacks has a commander — which is all a push needs, since one leads every army the caller has at the gate. */
+export function hasCommander(stacks: readonly { units: Partial<KingdomBuilderGarrison> }[]): boolean {
+    return stacks.some(stack => (stack.units.commander ?? 0) > 0);
+}

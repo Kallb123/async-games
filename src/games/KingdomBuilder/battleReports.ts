@@ -46,6 +46,8 @@ export interface KingdomBuilderBattleReport {
     /** The reader's own settlers taken or lost on the road (PR 24) — absent when none were. */
     settlersTaken?: number;
     settlersLost?: number;
+    /** The reader's own commanders killed on the road (PR 26) — only ever on their own report. */
+    commandersLost?: number;
 }
 
 type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "defenderIds" | "attacker" | "defender" | "rounds" | "shares">;
@@ -79,6 +81,7 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         ...(share?.caravansLost ? { caravansLost: share.caravansLost } : {}),
         ...(share?.settlersTaken ? { settlersTaken: share.settlersTaken } : {}),
         ...(share?.settlersLost ? { settlersLost: share.settlersLost } : {}),
+        ...(share?.commandersLost ? { commandersLost: share.commandersLost } : {}),
     };
 }
 
