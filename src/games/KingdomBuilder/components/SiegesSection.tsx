@@ -8,6 +8,7 @@ import Section from "@/components/ui/Section";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 
 import { formatStack, militaryCount, unitCount } from "../armies";
+import { KINGDOM_BUILDER_NO_PUSH_COMMANDER, hasCommander } from "../commanders";
 import { describeSiege } from "../siege";
 import { formatUnits } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
@@ -64,15 +65,19 @@ export default function SiegesSection({ endpoint, view, placeName, onFought }: S
                             action={button({ action: "sally", settlementId: settlement.settlementId! }, "Sally out", militaryCount(garrison) === 0)} />
                     );
                 })}
-                {besieging.map(army => (
-                    <ListRow key={army.armyId} icon="🏹" title={`Besieging ${placeName(army.targetNodeId)}`}
-                        sub={`${formatStack(army)} · since tick ${army.besiegingSince}`}
-                        action={button({ action: "push", armyId: army.armyId }, "Push the attack")} />
-                ))}
+                {besieging.map(army => {
+                    // One commander among the armies at this gate leads them all in (§6.5).
+                    const led = hasCommander(besieging.filter(other => other.targetNodeId === army.targetNodeId));
+                    return (
+                        <ListRow key={army.armyId} icon="🏹" title={`Besieging ${placeName(army.targetNodeId)}`}
+                            sub={`${formatStack(army)} · since tick ${army.besiegingSince}${led ? "" : ` · ${KINGDOM_BUILDER_NO_PUSH_COMMANDER}`}`}
+                            action={button({ action: "push", armyId: army.armyId }, "Push the attack", !led)} />
+                    );
+                })}
             </div>
             <p className="ag-hint">
                 A siege halves the town&apos;s production, and after a short grace period stops its building and training too.
-                Pushing the attack sends every army you have at the town against its garrison; sallying out sends the whole garrison against every army at the gate.
+                Pushing the attack sends every army you have at the town against its garrison, and needs a commander among them to lead it; sallying out sends the whole garrison against every army at the gate.
                 Behind its defences the garrison takes less from every blow, which siege engines break down; out in the open it gets no such help.
             </p>
             {message && <div className="ag-callout" role="alert">{message}</div>}

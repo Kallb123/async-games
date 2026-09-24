@@ -21,6 +21,9 @@ export function commandersHeld({ settlements, armies }: {
     return stationed + armies.reduce((total, army) => total + (army.units?.commander ?? 0), 0);
 }
 
+/** Where a leaderless army may go — the server's refusal, and the map's hint while one is given orders. */
+export const KINGDOM_BUILDER_HOME_ONLY = "Without a commander this army can only march home";
+
 /** Why a stack of soldiers with no commander can't leave a settlement — the server's refusal, and the muster's disabled Send. */
 export const KINGDOM_BUILDER_NEEDS_COMMANDER = "An army needs a commander to lead it out — recruit one at a tavern";
 

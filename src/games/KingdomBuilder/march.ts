@@ -15,7 +15,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KINGDOM_BUILDER_ARMY_LIMIT, addUnits, armyTile, combineCaravans, isCamped, isEscorted, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
-import { KINGDOM_BUILDER_NEEDS_COMMANDER, isLeaderless } from "./commanders";
+import { KINGDOM_BUILDER_HOME_ONLY, KINGDOM_BUILDER_NEEDS_COMMANDER, isLeaderless } from "./commanders";
 import { amountsFrom, caravanCapacityOf, depositTo, resourceTotal, resourcesIn, spendFrom } from "./market";
 import { addResources, resourcesOf } from "./resources";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
@@ -182,7 +182,7 @@ async function orderArmy(worldId: string, userId: string, order: KingdomBuilderM
     ground.assertCanGo(isEscorted(army), order.targetNodeId);
     // An army that has lost its commander can only come home (§6.5).
     if (isLeaderless(army) && !await KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId, nodeId: order.targetNodeId })) {
-        throw invalid("Without a commander this army can only march home");
+        throw invalid(KINGDOM_BUILDER_HOME_ONLY);
     }
     const route = ground.route(armyTile(army), ground.tileOf(order.targetNodeId));
 

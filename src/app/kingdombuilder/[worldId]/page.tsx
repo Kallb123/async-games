@@ -16,6 +16,7 @@ import Section from "@/components/ui/Section";
 import Skeleton from "@/components/ui/Skeleton";
 import type { KingdomBuilderWorldView } from "@/games/KingdomBuilder";
 import { paceOf, routeBetween, ticksToArrive } from "@/games/KingdomBuilder/armies";
+import { KINGDOM_BUILDER_HOME_ONLY, isLeaderless } from "@/games/KingdomBuilder/commanders";
 import ArmiesSection, { type MarchDraft, type MarchPreview } from "@/games/KingdomBuilder/components/ArmiesSection";
 import BattlesSection from "@/games/KingdomBuilder/components/BattlesSection";
 import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
@@ -133,6 +134,9 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const ownerName = (seat: number) => players[seat]?.name ?? "Another player";
     const myColour = playerColour(players.find(player => player.isMe)?.seat ?? 0);
     const marchOrigin = march && "settlementId" in march ? data?.settlements.find(settlement => settlement.settlementId === march.settlementId)?.nodeId : undefined;
+    // An army that has lost its commander can only march home (§6.5): every other node is greyed.
+    const orderedArmy = march && "armyId" in march ? data?.armies.find(army => army.armyId === march.armyId) : undefined;
+    const homeOnly = !!orderedArmy && isLeaderless(orderedArmy);
     const placeName = (nodeId: string) => {
         const node = data?.nodes.find(entry => entry.id === nodeId);
         if (!node) return "somewhere";
@@ -147,7 +151,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                     {isLoading ? <Skeleton width="100%" height={320} radius={14} /> : data && map && (
                         <>
                             <p className={styles.hint}>{march
-                                ? "Tap anywhere on the map to send the army there."
+                                ? homeOnly ? `${KINGDOM_BUILDER_HOME_ONLY} — tap one of your towns.` : "Tap anywhere on the map to send the army there."
                                 : <>Tap one of your castles to open it. March a settler to an &quot;Open site&quot; to found your next settlement there, or send an army against the barbarians to take their village instead.</>}</p>
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
@@ -158,8 +162,8 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.terrainField && players.length > 1 && <FogLayer field={data.terrainField} width={data.landmass.width} height={data.landmass.height} sight={data.sight} />}
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
-                                            <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march} isSelected={march?.targetNodeId === node.id} showRing={false}
-                                                onClick={() => marchTo(node.id)} title={TERRAIN[node.terrain].name}>
+                                            <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march && !homeOnly} isSelected={march?.targetNodeId === node.id} showRing={false}
+                                                onClick={() => !homeOnly && marchTo(node.id)} title={TERRAIN[node.terrain].name}>
                                                 <circle className={`${styles.terrain} ${styles[node.terrain]} ${march?.targetNodeId === node.id ? styles.selected : ""}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
                                                 <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN[node.terrain].mark}</text>
                                             </ClickableMapNode>
@@ -169,7 +173,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             const isMine = settlement?.isMine ?? false;
                                             const isOpen = open.has(node.id);
                                             const isVillage = villages.has(node.id);
-                                            const isTarget = !!march && node.id !== marchOrigin;
+                                            const isTarget = !!march && node.id !== marchOrigin && (!homeOnly || isMine);
                                             const isSelected = march?.targetNodeId === node.id;
                                             // No ring: ClickableMapNode's default ring offset is sized for World
                                             // Domination's/Outbreak's much bigger nodes, and at this board's tight
