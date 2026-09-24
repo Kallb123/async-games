@@ -43,6 +43,8 @@ import {
     IBannedIsletSwim,
 } from "@/games/BannedIslet/rules";
 import { playerHistory, userToken } from "@/utils/games/history";
+import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
+import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
 
@@ -211,8 +213,7 @@ export class BannedIsletGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IBannedIsletGameData;
-        const order = data.gameState.turnOrder;
-        const next = order[(order.indexOf(data.currentTurn) + 1) % order.length];
+        const next = nextActivePlayer(data, data.currentTurn);
         data.currentTurn = next;
 
         // §21.4: `actionsLeft` refills at the *start* of the new current
@@ -938,3 +939,24 @@ export class BannedIsletPlayCard implements IGameCommand {
         return maybeFinishFloodPhase(data, ps, shuffleFlood);
     }
 }
+
+// A co-op table plays on when a teammate stops turning up: better a smaller
+// team with a chance than a shared loss nobody chose. Their pawn leaves the
+// island with its role, and their hand goes to the treasure discard — the
+// deck reshuffles it back in like any other discard, so no treasure becomes
+// uncollectable. The escape (§4.1) asks for everyone still on the island at
+// Fools' Landing, which is everyone left in `players`, so the pawn that left
+// isn't one the team has to wait for.
+//
+// One player is still a team: the last explorer can still gather the
+// treasures and fly off alone.
+registerPlayerDropoutAdapter({
+    className: "BannedIsletGameType",
+    minPlayers: 1,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IBannedIsletGameData).specificGameState;
+        const ps = gs.players.get(userId);
+        if (ps) gs.treasureDiscard.push(...ps.hand);
+        deleteFromMongoMap(gs.players, userId);
+    },
+});

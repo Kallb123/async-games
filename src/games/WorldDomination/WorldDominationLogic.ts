@@ -16,6 +16,7 @@ import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { playerHistory, userToken } from "@/utils/games/history";
+import { isDropped, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  WORLD DOMINATION
@@ -39,7 +40,7 @@ function worldDominationNextActivePlayer(riskData: IWorldDominationGameData): st
     for (let step = 1; step <= order.length; step++) {
         const candidate = order[(idx + step) % order.length];
         const cps = gs.playerStates.get(candidate);
-        if (cps && !cps.eliminated) return candidate;
+        if (cps && !cps.eliminated && !isDropped(riskData, candidate)) return candidate;
     }
     return riskData.currentTurn;
 }
@@ -489,3 +490,23 @@ export class WorldDominationSkipFortify implements IGameCommand {
         return { validMove: true, turnOver: true };
     }
 }
+
+// A player who stops turning up stops taking turns, and nothing else changes:
+// their armies stay where they stand, holding their territories against
+// whoever comes for them — they just never reinforce, attack or fortify again.
+// Conquest is still the only way off the map. Taking their last territory
+// eliminates them the usual way, cards and all, and the game still ends when
+// one player holds the world.
+//
+// Not during setup, whose hand-off walks `turnOrder` seat by seat to deal out
+// the starting allotments: a seat that stopped placing would leave the board
+// short of the armies setup is dealing. That's the one phase that still ends
+// the game.
+registerPlayerDropoutAdapter({
+    className: "WorldDominationGameType",
+    minPlayers: 2,
+    canDrop(gameData) {
+        return (gameData as IWorldDominationGameData).specificGameState.phase !== 'setup';
+    },
+    dropPlayer() {},
+});

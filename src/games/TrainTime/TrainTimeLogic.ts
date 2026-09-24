@@ -31,6 +31,8 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { playerHistory } from "@/utils/games/history";
+import { activeTurnOrder, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
+import { deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TRAIN TIME
@@ -114,7 +116,7 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string): void {
 
     if (sender && sender.trains <= FINAL_ROUND_TRAIN_THRESHOLD) {
         // Everyone, the trigger included, gets exactly one more turn.
-        gs.finalRoundPending = [...trainData.gameState.turnOrder];
+        gs.finalRoundPending = activeTurnOrder(trainData);
         trainData.gameState.history.unshift(playerHistory(
             senderId,
             `is down to ${sender.trains} trains — last lap, everyone gets one more turn`,
@@ -169,9 +171,7 @@ export class TrainTimeGameType implements IGameType {
 
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
-        const order = gameData.gameState.turnOrder;
-        const idx = order.indexOf(gameData.currentTurn);
-        gameData.currentTurn = order[(idx + 1) % order.length];
+        gameData.currentTurn = nextActivePlayer(gameData, gameData.currentTurn);
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -537,3 +537,33 @@ export class TrainTimePassTurn implements IGameCommand {
         return { validMove: true, turnOver: true };
     }
 }
+
+// A player who stops turning up leaves their track on the map — it was built,
+// and it still blocks the routes it took — but leaves the scoring: their
+// state goes, so the final tally, the Long Haul race and the deadlock check
+// only count the players still at the table. Their carriage cards go to the
+// discard and every ticket they held (kept or still on offer) to the bottom
+// of the ticket deck, the way a returned ticket always goes. On the last lap,
+// they no longer owe a turn; if they were the last who did, the game ends.
+//
+// `playerCount` for the double-route rule deliberately stays the seat count:
+// which twins are open was fixed when the table sat down, and reopening a
+// twin mid-game would hand whoever is next a route the board had shut.
+registerPlayerDropoutAdapter({
+    className: "TrainTimeGameType",
+    minPlayers: 2,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as ITrainTimeGameData).specificGameState;
+        const ps = mongoMap(gs.playerStates).get(userId);
+        if (ps) {
+            gs.discard.push(...ps.hand);
+            gs.ticketDeck.push(...ps.tickets, ...ps.pendingTickets);
+        }
+        deleteFromMongoMap(gs.playerStates, userId);
+        if (gs.finalRoundPending) {
+            gs.finalRoundPending = gs.finalRoundPending.filter(id => id !== userId);
+            if (gs.finalRoundPending.length === 0) gs.gameOver = true;
+        }
+        markDirty(gameData);
+    },
+});

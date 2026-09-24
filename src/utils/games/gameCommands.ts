@@ -132,6 +132,22 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     ],
 };
 
+/**
+ * Commands the server runs itself and no client may send. They belong to no
+ * game's list above, so `isCommandForGameType` refuses every one of them at
+ * the command route — which is the point: `PlayerDropped` removes a seat from
+ * the game (utils/games/playerDropout.ts), and only the turn-timer cron gets
+ * to decide that.
+ */
+const SERVER_ONLY_COMMANDS: readonly string[] = [
+    "PlayerDropped",
+];
+
+/** The server-only commands, for the test that guards the registry. */
+export function serverOnlyCommandClassNames(): string[] {
+    return [...SERVER_ONLY_COMMANDS];
+}
+
 /** The game types this map knows, for the test that guards it. */
 export function registeredGameTypeClassNames(): string[] {
     return Object.keys(COMMANDS_BY_GAME_TYPE);

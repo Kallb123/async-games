@@ -9,6 +9,7 @@ import { ICommandOutcome, IGameCommand, IGameType, ignoresTurnGate, serializeOut
 import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
+import { isDropped } from '@/utils/games/playerDropout';
 import { finishGame } from '@/utils/games/finishGame';
 import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
@@ -134,6 +135,13 @@ export async function POST(request: NextRequest) {
   // the anchor check that actually decides it.
   if (userId !== gameData.currentTurn && !ignoresTurnGate(commandRequest)) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
+  }
+
+  // A player the turn-timer cron dropped for going quiet has left the game
+  // (utils/games/playerDropout.ts). Their seat never gets the turn again, but
+  // a command that skips the turn gate would otherwise still reach Execute.
+  if (isDropped(gameData, userId)) {
+    return NextResponse.json({}, {status: 400, statusText: "You have left this game"});
   }
 
   if (userId !== commandRequest.senderId) {

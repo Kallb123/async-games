@@ -8,6 +8,7 @@ import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { readJsonBody } from '@/utils/api/requestBody';
 import { getTurnTimeoutAdapter } from '@/utils/games/turnTimeout';
+import { nextActivePlayer } from '@/utils/games/playerDropout';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
@@ -56,9 +57,7 @@ export async function POST(request: NextRequest) {
     gameData.missedTurnCounts.set(gameData.currentTurn, 0);
   }
 
-  const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
-  const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
-  gameData.currentTurn = nextTurn;
+  gameData.currentTurn = nextActivePlayer(gameData, gameData.currentTurn);
   gameData.lastTurnTimestamp = new Date().toISOString();
   gameData.timerWarningNotificationSent = false;
 

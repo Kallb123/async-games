@@ -39,6 +39,7 @@ import {
     VehicleId,
 } from "@/games/FiresOut/rules";
 import { playerHistory } from "@/utils/games/history";
+import { activeTurnOrder, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -683,3 +684,32 @@ export class FiresOutAction implements IGameCommand {
         return outcome;
     }
 }
+
+// A crew doesn't need one firefighter per player — §1's solo crew is one
+// player holding every figure — so a player who stops turning up hands their
+// figures to the rest of the crew rather than ending the game. Each goes to
+// the next seat still playing after theirs, round the table, so a crew that
+// lost one of four spreads the extra figures rather than piling them on one
+// player. The figures keep their place, AP and specialist; only who moves
+// them changes, and the running order of figures (`activeFirefighter`) is
+// untouched, so the turn stays exactly where it was.
+//
+// One player left is enough: that is the solo game.
+registerPlayerDropoutAdapter({
+    className: "FiresOutGameType",
+    minPlayers: 1,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IFiresOutGameData).specificGameState;
+        const order = gameData.gameState.turnOrder;
+        const heirs = activeTurnOrder(gameData);
+        const seat = order.indexOf(userId);
+        // Heirs in seat order starting after the dropped seat.
+        const after = [...heirs.filter(id => order.indexOf(id) > seat), ...heirs.filter(id => order.indexOf(id) < seat)];
+        let next = 0;
+        for (const ff of gs.firefighters) {
+            if (ff.ownerId !== userId) continue;
+            ff.ownerId = after[next % after.length];
+            next++;
+        }
+    },
+});

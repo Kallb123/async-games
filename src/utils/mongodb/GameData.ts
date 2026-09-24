@@ -10,7 +10,11 @@ export interface IGameState {
     // Newest first. Player mentions are stored as {{userId}} tokens and
     // resolved on the way out — see utils/games/history.ts.
     history: IHistoryEntry[],
-    commandHistory: IGameCommand[]
+    commandHistory: IGameCommand[],
+    // Players the turn-timer cron dropped for going quiet, in the order they
+    // went — see utils/games/playerDropout.ts. They stay in turnOrder (it is
+    // the seat order), and the rotation steps over them.
+    droppedPlayers?: string[]
 }
 
 // The response-safe view of a game's shared state: turn order and the plain-text
@@ -33,7 +37,11 @@ export function publicGameState(
     gameState: IGameState,
     userIdNameMap: { [key: string]: string }
 ): IGameDataResponse['gameState'] {
-    return { turnOrder: gameState.turnOrder, history: resolveHistory(gameState.history, userIdNameMap) };
+    return {
+        turnOrder: gameState.turnOrder,
+        history: resolveHistory(gameState.history, userIdNameMap),
+        droppedPlayers: gameState.droppedPlayers ?? [],
+    };
 }
 
 export interface IGameData {
@@ -132,7 +140,8 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
             //     senderId: String,
             //     className: String
             // }
-        ]
+        ],
+        droppedPlayers: { type: [String], default: undefined }
     },
     inviteId: String,
     complete: Boolean,

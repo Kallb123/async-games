@@ -48,6 +48,8 @@ import {
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
 import { playerHistory, userToken } from "@/utils/games/history";
+import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
+import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -354,8 +356,7 @@ export class OutbreakGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const outbreakData = gameData as IOutbreakGameData;
-        const order = outbreakData.gameState.turnOrder;
-        const next = order[(order.indexOf(outbreakData.currentTurn) + 1) % order.length];
+        const next = nextActivePlayer(outbreakData, outbreakData.currentTurn);
         outbreakData.currentTurn = next;
 
         // actionsLeft refills at the *start* of the new current player's turn,
@@ -1158,3 +1159,24 @@ export class OutbreakPlayEvent implements IGameCommand {
         return infectionPhaseOutcome(turnOver, infectionLog);
     }
 }
+
+// A co-op table plays on when a teammate stops turning up: better a smaller
+// team with a chance than a shared loss nobody chose. Their pawn leaves the
+// board with its role — a Medic stops clearing, a Quarantine Specialist
+// stops protecting — and their hand goes to the player discard, where the
+// cards it held are as gone as they would be to any other discard. Every
+// rule already reads the team off `players`, so with their entry gone
+// nobody can share knowledge with them, dispatch them or airlift them.
+//
+// One player is still a team: the deck, the epidemics and the infection rate
+// don't depend on the table's size, so the last one standing can play it out.
+registerPlayerDropoutAdapter({
+    className: "OutbreakGameType",
+    minPlayers: 1,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IOutbreakGameData).specificGameState;
+        const ps = gs.players.get(userId);
+        if (ps) gs.playerDiscard.push(...ps.hand);
+        deleteFromMongoMap(gs.players, userId);
+    },
+});

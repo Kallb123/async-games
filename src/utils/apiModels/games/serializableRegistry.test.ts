@@ -13,7 +13,7 @@ import { walkFiles } from "@/utils/testing/walkFiles";
 // command route / replay engine would silently fail to reconstruct them. The
 // type checker can't catch that (it's a runtime registration), so we assert it.
 import { registeredClassNames } from "../Serialisable";
-import { allRegisteredCommandClassNames, registeredGameTypeClassNames } from "@/utils/games/gameCommands";
+import { allRegisteredCommandClassNames, registeredGameTypeClassNames, serverOnlyCommandClassNames } from "@/utils/games/gameCommands";
 import "../GameLogic";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -74,8 +74,9 @@ describe("serialisable registry", () => {
         const gameTypes = new Set(registeredGameTypeClassNames());
         const commands = allRegisteredCommandClassNames();
         const commandSet = new Set(commands);
+        const serverOnly = new Set(serverOnlyCommandClassNames());
 
-        const missing = declared.filter(({ name }) => !gameTypes.has(name) && !commandSet.has(name));
+        const missing = declared.filter(({ name }) => !gameTypes.has(name) && !commandSet.has(name) && !serverOnly.has(name));
         expect(
             missing,
             `These @serializable classes are in no game's entry in ` +
@@ -90,7 +91,12 @@ describe("serialisable registry", () => {
 
         // And nothing listed that no longer exists.
         const declaredNames = new Set(declared.map(({ name }) => name));
-        const unknown = [...gameTypes, ...commands].filter((name) => !declaredNames.has(name));
+        // A server-only command is one no game may claim: claiming it would
+        // let a client send it.
+        const claimed = [...serverOnly].filter((name) => commandSet.has(name));
+        expect(claimed, `Server-only commands listed under a game: ${claimed.join(", ")}`).toEqual([]);
+
+        const unknown = [...gameTypes, ...commands, ...serverOnly].filter((name) => !declaredNames.has(name));
         expect(unknown, `Listed in gameCommands.ts but not a @serializable class: ${unknown.join(", ")}`).toEqual([]);
     });
 });

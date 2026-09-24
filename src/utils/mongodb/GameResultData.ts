@@ -130,6 +130,10 @@ export interface IGameResultData {
     // game document it came from is gone.
     endDetail?: string,
     forfeitedBy?: string,
+    // Players the game dropped for going quiet and finished without — see
+    // utils/games/playerDropout.ts. Each takes a loss, whatever the rest of
+    // the table went on to do.
+    droppedPlayers?: string[],
     endedAt: string,
     // How long the game ran: turns for a game with opponents, moves for a solo
     // game (Solitaire) that has no turns. Read it back with the matching unit
@@ -170,6 +174,7 @@ export var GameResultSchema = new Schema<IGameResultDataDocument>({
     endReason: String,
     endDetail: String,
     forfeitedBy: String,
+    droppedPlayers: { type: [String], default: undefined },
     endedAt: String,
     totalTurns: Number,
     unclaimedPlayerIds: { type: [String], default: () => [] },
@@ -544,6 +549,7 @@ export interface IMatchResult {
     winner?: string;
     endReason?: GameEndReason;
     forfeitedBy?: string;
+    droppedPlayers?: string[];
 }
 
 // What one finished game was, for one player.
@@ -558,12 +564,17 @@ export interface IMatchResult {
 // everyone else in that game gets, since we don't know who'd have won among
 // the players who were still there.
 //
+// A player the game dropped for going quiet (`droppedPlayers`) left before
+// the end, so they take a loss ahead of everything else — including a co-op
+// table's shared win, which they weren't there for.
+//
 // This is the *only* place the rule lives. getPlayerStats below counts wins,
 // losses and draws by folding through this function rather than re-encoding it
 // as Mongo `$cond` branches, which is what it used to do: two copies of the
 // rule, so a co-op table would have had the right chip in "recent form" and a
 // silently wrong W/L/D on every profile.
 export function outcomeFor(result: IMatchResult, userId: string): MatchOutcome {
+    if (result.droppedPlayers?.includes(userId)) return "loss";
     if (result.endReason === 'teamwin') return "win";
     if (result.endReason === 'teamloss') return "loss";
     if (result.winner === userId) return "win";
@@ -624,6 +635,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
                 ], default: SOMEBODY_ELSE } },
                 endReason: '$endReason',
                 forfeitedBy: { $cond: [{ $eq: ['$forfeitedBy', userId] }, userId, null] },
+                droppedPlayers: { $cond: [{ $in: [userId, { $ifNull: ['$droppedPlayers', []] }] }, [userId], []] },
             },
             total: { $sum: 1 },
         } },
@@ -669,6 +681,7 @@ export async function recordGameResult(
         endReason: gameData.endReason,
         endDetail: gameData.endDetail,
         forfeitedBy: gameData.forfeitedBy,
+        droppedPlayers: gameData.gameState.droppedPlayers?.length ? [...gameData.gameState.droppedPlayers] : undefined,
         endedAt: new Date().toISOString(),
         // Turns for a game with opponents; moves for a solo game (Solitaire),
         // which has no turns to count — read back with the matching unit via

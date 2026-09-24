@@ -46,7 +46,8 @@ import {
     IRaceCarsSlick,
 } from "@/games/RaceCars/rules";
 import { arrivalClauses, RaceCarsArrivalSummary, RaceCarsStartSummary, startLine } from "@/games/RaceCars/narration";
-import { mongoMap } from "@/utils/games/mongoMaps";
+import { deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
+import { registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 
@@ -1015,3 +1016,26 @@ export class RaceCarsUndo implements IGameCommand {
         return { validMove: true, turnOver: false };
     }
 }
+
+// A driver who stops turning up retires: their car leaves the track, taking
+// its space with it, and leaves the running order. `recomputeRoundOrder`
+// already drops an id with no car, so the next round is built without them;
+// this round loses their slot here, with `roundIndex` stepped back if their
+// slot came before it so it still names the driver who holds the turn.
+//
+// The undo stack goes too. Its snapshots are whole states taken before the
+// drop, so restoring one would put the retired car back on the road.
+registerPlayerDropoutAdapter({
+    className: "RaceCarsGameType",
+    minPlayers: 2,
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IRaceCarsGameData).specificGameState;
+        deleteFromMongoMap(gs.players, userId);
+        const slot = gs.roundOrder.indexOf(userId);
+        if (slot >= 0) {
+            gs.roundOrder = gs.roundOrder.filter(id => id !== userId);
+            if (slot < gs.roundIndex) gs.roundIndex -= 1;
+        }
+        gs.undoStack = [];
+    },
+});

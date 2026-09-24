@@ -5,6 +5,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { playerHistory } from "@/utils/games/history";
+import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export const SNAKES_AND_LADDERS_LADDERS: Record<number, number> = {
@@ -53,9 +54,7 @@ export class SnakesAndLaddersGameType implements IGameType {
             if (slGameData.specificGameState) {
                 slGameData.specificGameState.hasRolled = false;
             }
-            const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
-            const nextTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
-            gameData.currentTurn = nextTurn;
+            gameData.currentTurn = nextActivePlayer(gameData, gameData.currentTurn);
         }
     }
 
@@ -173,3 +172,12 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
         return outcome;
     }
 }
+
+// A race to square 100 with nothing shared between the counters, so a player
+// who stops turning up simply stops rolling: their counter stays where it is,
+// short of 100 (or the game would be over), and the rest race on.
+registerPlayerDropoutAdapter({
+    className: "SnakesAndLaddersGameType",
+    minPlayers: 2,
+    dropPlayer() {},
+});

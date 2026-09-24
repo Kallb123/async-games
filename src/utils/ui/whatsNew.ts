@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "One quiet player no longer ends the game for everyone",
+                detail: "Miss three turns in a row and, in most games, you now leave the game rather than ending it: everyone else plays on without you. In a race your counter or car drops out, in Dice Cities and Settlements & Cities your city stops collecting, Train Time keeps your track on the map but not in the scores, World Domination leaves your armies standing to be conquered, and the co-op teams share out or discard what you held and carry on — even down to one player. Two-player games, Smartthink and Solitaire still end as before.",
+            },
+            {
                 title: "Pinch to zoom feels like a map app now",
                 detail: "Zooming a board — the pill or a pinch — now zooms inside its frame instead of stretching the page, so everything around the board stays put. A pinch follows your fingers: whatever was under them stays under them as you spread and slide, on every board with a zoom pill.",
             },
@@ -117,11 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Every game shows when it's waiting",
                 detail: "The \"Sending\" badge in a game's top bar is now a pulsing bar along the bottom edge of it — and it lights up for everything the game is waiting on, not just the move you have made: your move going out, an opponent's move coming back, and the match review being built. It sits inside the bar, so nothing on screen shifts when it comes and goes.",
-            },
-            {
-                title: "Settlements & Cities boards are balanced now",
-                detail: "The numbers are dealt the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is still shuffled, so the island is different every time. Want the old free-for-all? Switch Totally random tiles on when you set up a game and the numbers are dealt with no rules at all, unbalanced map and all.",
-                game: "settlementsandcities",
             },
         ],
     },

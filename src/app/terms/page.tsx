@@ -72,7 +72,8 @@ export default function Terms() {
                 Every game has a turn timer, chosen when the game is set up. If you
                 don&apos;t take your turn before it expires, the service may take a
                 default action for you, skip your turn, or — if you miss several turns
-                in a row — end the game. That&apos;s how games with an absent player
+                in a row — remove you from the game so the others can play on, or end
+                the game where it can&apos;t continue without you. That&apos;s how games with an absent player
                 keep moving; it isn&apos;t a fault.
             </p>
             <p>
