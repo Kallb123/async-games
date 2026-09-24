@@ -176,7 +176,7 @@ describe("Banned Islet recap adapter — Waters Rise! and captures", () => {
         const undone = bannedIsletRecapAdapter.toEvents(
             snap(state({ treasures: captured })),
             snap(state()),
-            cmd({ id: "c2", className: "BannedIsletUndo" }),
+            cmd({ id: "c2" as IGameCommand["id"], className: "BannedIsletUndo" }),
             { validMove: true, turnOver: false },
         );
 
