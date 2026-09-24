@@ -129,6 +129,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Every join link shows a picture when you share it",
+                detail: "Sharing a join link for a game that didn't have its own preview image yet — Kingdom Builder, for one — unfurled in the chat with a broken picture or none at all. A game without its own card now shows the general Async Games one instead.",
+            },
+            {
                 title: "Kingdom Builder's world map no longer hides its own ground art",
                 detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, and every tappable site on top of that in a thick gold ring sized for a much bigger board — between the two, a site-dense map was more circle than art. Both are gone in favour of a small dot and the \"Open site\"/\"Your town\" label already sitting next to it, whose own text used to render as an illegible dark blob. A big field of grass now draws from several tiles instead of repeating one, so the map reads as a picture again.",
                 game: "kingdombuilder",
@@ -166,11 +170,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A lobby that closed stops saying a game is starting",
                 detail: "If the host cancelled your lobby while you were sitting on it, or it ran out of time, you were told \"Game is starting! Look for it on your home screen.\" — and then found nothing there, because nothing had started. It now says the lobby isn't open any more. Opening an old lobby link after the game has already begun takes you to the board instead of turning you away.",
-            },
-            {
-                title: "A Settlements & Cities turn that ends itself gives nothing away",
-                detail: "When your turn ended on its own because there was nothing left to build, buy or trade, the match log told everyone exactly that — so the table could work out you couldn't afford a road and were short of every resource. An automatic ending now reads as \"ended their turn\", the same as tapping the button — in the log, in the notification others get, and in the match review. You still see your own roll held on screen with the note explaining it.",
-                game: "settlementsandcities",
             },
         ],
     },
