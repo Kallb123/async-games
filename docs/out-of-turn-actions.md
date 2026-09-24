@@ -543,10 +543,9 @@ rewritten (Sandbags' "loses the most" note updated to what it now recovers and
 what it still can't); guide; tutorial; its own What's new line — *"Banned
 Islet: call the Helicopter Lift or throw Sandbags on a teammate's turn"*.
 
-PRs 4 and 5 can land as **one branch with one What's new line** covering both
-co-ops, if the extra line would evict something still worth showing. The
-`AGENTS.md` rule is one line per branch, and two games is a judgement call
-either way.
+PRs 4 and 5 stay **separate branches, each with its own What's new line** —
+decided, for smaller reviews. PR 5 reuses whatever shared hook PR 4 extracted
+for the off-turn card pick rather than growing its own.
 
 Crew: `rulebook`, `croupier`, `caveman`, `gremlin`.
 
@@ -563,20 +562,26 @@ Crew: `rulebook`, `croupier`, `caveman`, `gremlin`.
 
 ---
 
-## 7. Open questions
+## 7. Decisions and open questions
 
-1. **Is an interrupt allowed during the active player's `discard` phase?**
-   The plan says yes: a teammate's card doesn't touch the discard, and the
-   invariants stop it closing the phase. The alternative — `actions` only — is
-   simpler to explain, and costs little.
-2. **Should an interrupt appear in the active player's "since you were last
+**Decided:**
+
+- **An interrupt is allowed during the active player's `discard` phase**, as
+  well as their `actions` phase. A teammate's card doesn't touch the discard,
+  and invariant 1 (§5.2) plus the games' own "never finish a phase out of
+  turn" rule (§5.5) stop it from closing the phase.
+- **Outbreak and Banned Islet ship as two PRs** (§6, PRs 4 and 5).
+
+**Open:**
+
+1. **Should an interrupt appear in the active player's "since you were last
    here" feed on their *next* turn?** It will, as an ordinary event. If that
    reads oddly ("Bea played Airlift" during your own turn), the recap adapter
    can drop events that happened within the viewer's own turn.
-3. **Rate.** Out-of-turn plays are bounded by the cards in a hand, so no rate
+2. **Rate.** Out-of-turn plays are bounded by the cards in a hand, so no rate
    limit is proposed. A future out-of-turn command that isn't a spend-once
    card (a trade offer, a chat-like ping) will need one.
-4. **Forecast out of turn**, via a variant that resolves in one command (the
+3. **Forecast out of turn**, via a variant that resolves in one command (the
    player submits the new order along with the play, having seen the six cards
    in a preview)? That would need the preview to be a read-only route that
    reveals the top of the infection deck to one player — a hidden-information
