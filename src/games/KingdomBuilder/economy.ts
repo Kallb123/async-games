@@ -60,6 +60,8 @@ export const KINGDOM_BUILDER_ECONOMY = {
         mine: { wood: 20, stone: 10 },
         barracks: { wood: 30, stone: 20, iron: 10 },
         market: { wood: 25, stone: 15 },
+        // Recruits commanders (§6.5): one per level, up to the town centre's.
+        tavern: { wood: 25, stone: 15, wheat: 10 },
         // Level two, the settler's threshold (§4.4), is twice this: 60 wood, 60 stone, 20 iron.
         "town-centre": { wood: 30, stone: 30, iron: 10 },
     },

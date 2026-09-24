@@ -4,7 +4,9 @@ import {
     KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
     KINGDOM_BUILDER_STARTING_STOCKPILE,
     KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE,
+    KINGDOM_BUILDER_UPGRADABLE_BUILDINGS,
     buildingCostFor,
+    tavernLevelCapFor,
 } from "./buildings";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, resourcesOf, shortfallFor, tunedResources } from "./resources";
@@ -57,5 +59,20 @@ describe("Kingdom Builder building costs", () => {
 
     it("reads a stored settlement with no wheat, from before it existed, as holding none", () => {
         expect(resourcesOf({ wood: 3, stone: 2, iron: 1 })).toEqual({ wood: 3, stone: 2, iron: 1, wheat: 0 });
+    });
+});
+
+describe("Kingdom Builder tavern cap (§6.5)", () => {
+    const withTownCentre = (level: number) => [{ position: 4, building: { type: "town-centre" as const, level } }];
+
+    it("never lets a tavern stand above the town centre's built level", () => {
+        expect(tavernLevelCapFor(withTownCentre(1))).toBe(1);
+        expect(tavernLevelCapFor(withTownCentre(2))).toBe(2);
+    });
+
+    it("follows the town centre's highest level, read from its entry rather than written down twice", () => {
+        expect(KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.tavern).toBe(KINGDOM_BUILDER_UPGRADABLE_BUILDINGS["town-centre"]);
+        const top = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS["town-centre"]!;
+        expect(tavernLevelCapFor(withTownCentre(top + 1))).toBe(top);
     });
 });

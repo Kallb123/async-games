@@ -49,6 +49,7 @@ const BUILDING_DETAILS: Record<string, { name: string; icon: string; role?: stri
     mine: { name: "Mine", icon: "⛏️" },
     barracks: { name: "Barracks", icon: "🏯", role: "trains army units" },
     market: { name: "Market", icon: "⚖️", role: "exchanges resources and sells caravans" },
+    tavern: { name: "Tavern", icon: "🍺", role: "recruits commanders to lead armies" },
 };
 
 /** What the land is called when it yields each resource — "Rich woodland" (§4.6). */

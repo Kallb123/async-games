@@ -16,6 +16,7 @@ import {
     buildTicksFor,
     buildingCostFor,
     buildingLevelOf,
+    tavernLevelCapFor,
     type KingdomBuilderPrototypeBuilding,
     type KingdomBuilderUpgradableBuilding,
 } from "./buildings";
@@ -155,7 +156,7 @@ export async function queuePrototypeBuilding(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     if (existing.construction) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "Finish the current building first");
 
-    // The barracks, the market and the town centre are the buildings a player
+    // The barracks, the market, the tavern and the town centre are the buildings a player
     // can raise a level (§4.2), and a settlement holds only one of each, so
     // each level has one home and the market one rate.
     const maxLevel = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type];
@@ -177,23 +178,31 @@ export async function queuePrototypeBuilding(
     }
 
     const targetLevel = upgrading ? current.level + 1 : 1;
+    // A tavern never stands above its town centre's built level (§6.5).
+    if (type === "tavern" && targetLevel > tavernLevelCapFor(existing.tiles)) {
+        throw new KingdomBuilderPrototypeError("LOCKED", `Raise the town centre to level ${targetLevel} first`);
+    }
     const cost = buildingCostFor(type, targetLevel);
     if (!canAfford(resourcesOf(existing.resources), cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
     }
     const { filter: canPay, $inc } = spendFrom(cost);
+    const onTile = upgrading
+        ? { tiles: { $elemMatch: { position: tilePosition, "building.type": buildingType, "building.level": current.level } } }
+        : {
+            tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
+            ...(maxLevel !== undefined ? { "tiles.building.type": { $ne: buildingType } } : {}),
+        };
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
             worldId,
             ownerId: userId,
             construction: { $exists: false },
-            ...(upgrading
-                ? { tiles: { $elemMatch: { position: tilePosition, "building.type": buildingType, "building.level": current.level } } }
-                : {
-                    tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
-                    ...(maxLevel !== undefined ? { "tiles.building.type": { $ne: buildingType } } : {}),
-                }),
+            // The tavern's cap is repeated here, so a town centre that changed since the read can't be built past.
+            ...(type === "tavern"
+                ? { $and: [onTile, { tiles: { $elemMatch: { "building.type": "town-centre", "building.level": { $gte: targetLevel } } } }] }
+                : onTile),
             ...canPay,
         },
         { $set: { construction: { tilePosition, buildingType, targetLevel, ticksRemaining: buildTicksFor(targetLevel) } }, $inc },
