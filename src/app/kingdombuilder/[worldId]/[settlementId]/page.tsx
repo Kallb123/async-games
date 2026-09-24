@@ -12,6 +12,7 @@ import {
     KINGDOM_BUILDER_BUILDING_PRODUCES,
     KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
     KINGDOM_BUILDER_UPGRADABLE_BUILDINGS,
+    tavernLevelCapFor,
     buildTicksFor,
     buildingCostFor,
     buildingOutputFor,
@@ -129,20 +130,25 @@ export default function KingdomBuilderSettlementPage({
     const barracks = tileOf("barracks");
     const barracksLevel = barracks?.building?.level ?? 0;
     const market = tileOf("market");
+    const tavern = tileOf("tavern");
+    const tavernLevel = tavern?.building?.level ?? 0;
+    const commanders = data?.commanders;
     const townCentre = tileOf("town-centre");
     // A barracks or a market is built once and levelled after (§4.2).
     const buildableTypes = KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type] === undefined || (!tileOf(type) && !construction));
     const trainingQueue = data?.trainingQueue ?? [];
     const queueFull = trainingQueue.length >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT;
-    const upgradeRow = (type: KingdomBuilderUpgradableBuilding, tile: typeof barracks, effect: string) => data && tile?.building && (
+    const upgradeRow = (type: KingdomBuilderUpgradableBuilding, tile: typeof barracks, effect: string, locked?: string) => data && tile?.building && (
         <UpgradeRow type={type} tilePosition={tile.position} level={tile.building.level} effect={effect} resources={data.resources}
-            busy={!!construction} pending={pending === `upgrade-${type}`} disabled={isPending} onUpgrade={send} />
+            busy={!!construction} locked={locked} pending={pending === `upgrade-${type}`} disabled={isPending} onUpgrade={send} />
     );
     const trainingQueueChips = <TrainingQueue className={styles.queue} queue={trainingQueue} pending={pending} disabled={isPending} onCancel={send} />;
-    const unitRow = (unitType: KingdomBuilderUnitType, level: number) => data && (
-        <UnitRow key={unitType} unitType={unitType} level={level} resources={data.resources} queueFull={queueFull}
+    const unitRow = (unitType: KingdomBuilderUnitType, level: number, locked?: string) => data && (
+        <UnitRow key={unitType} unitType={unitType} level={level} resources={data.resources} queueFull={queueFull} locked={locked}
             pending={pending === unitType} disabled={isPending} onTrain={() => send(unitType, { unitType })} />
     );
+    // A tavern never stands above its town centre (§6.5), and a player's commanders never outnumber their taverns' levels.
+    const tavernCap = data ? tavernLevelCapFor(data.tiles) : 0;
 
     return (
         <main>
@@ -257,6 +263,21 @@ export default function KingdomBuilderSettlementPage({
                         </Section>
                     )}
 
+                    {data && commanders && tavern?.building && (
+                        <Section label="Tavern" action={<span className="ag-tag">Level {tavernLevel}</span>}>
+                            <p className={styles.status}>
+                                Commanders: {commanders.held} of {commanders.capacity} across your realm. Soldiers march out only behind one;
+                                scouts, caravans and settlers go without. {barracks ? "Commanders share the barracks' training queue." : "Commanders share the town centre's training queue."}
+                            </p>
+                            <div className="ag-build-list">
+                                {upgradeRow("tavern", tavern, "recruits one more commander",
+                                    tavernLevel >= tavernCap ? `Needs town centre level ${tavernLevel + 1}` : undefined)}
+                                {unitRow("commander", tavernLevel,
+                                    commanders.held >= commanders.capacity ? `All ${commanders.capacity} commanders recruited — raise a tavern` : undefined)}
+                            </div>
+                        </Section>
+                    )}
+
                     {data && townCentre?.building && (
                         <Section label="Town centre" action={<span className="ag-tag">Level {townCentre.building.level}</span>}>
                             <p className={styles.status}>
@@ -294,12 +315,14 @@ export default function KingdomBuilderSettlementPage({
     );
 }
 
-function UnitRow({ unitType, level, resources, queueFull, pending, disabled, onTrain }: {
+function UnitRow({ unitType, level, resources, queueFull, locked, pending, disabled, onTrain }: {
     unitType: KingdomBuilderUnitType;
-    /** The level of the building it trains at — the barracks, or the town centre for a settler. */
+    /** The level of the building it trains at — the barracks, the town centre for a settler, the tavern for a commander. */
     level: number;
     resources: KingdomBuilderSettlementView["resources"];
     queueFull: boolean;
+    /** Why it can't be trained now whatever the stores hold — a commander at the realm's cap. */
+    locked?: string;
     pending: boolean;
     disabled: boolean;
     onTrain: () => void;
@@ -307,14 +330,14 @@ function UnitRow({ unitType, level, resources, queueFull, pending, disabled, onT
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const trainTicks = trainingTicksFor(unitType, level);
     const price = priceFor(unit.cost, resources);
-    const blocker = trainTicks === null ? `Level ${unit.trainedAt.level}` : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
+    const blocker = trainTicks === null ? `Level ${unit.trainedAt.level}` : locked ? "Locked" : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
     return (
         <BuildRow
             icon={unit.icon}
             name={unit.name}
             cost={trainTicks === null
                 ? `${unit.role} · needs a level ${unit.trainedAt.level} ${BUILDING_DETAILS[unit.trainedAt.building].name.toLowerCase()}`
-                : `${price.label} · ${formatTicks(trainTicks)} · ${unit.speed}`}
+                : locked ?? `${price.label} · ${formatTicks(trainTicks)} · ${unit.speed}`}
             tag={pending ? "Queuing…" : blocker ?? "Train"}
             tagMuted={!!blocker}
             disabled={!!blocker || disabled}
@@ -324,8 +347,8 @@ function UnitRow({ unitType, level, resources, queueFull, pending, disabled, onT
     );
 }
 
-/** Raises a barracks, a market or the town centre a level (§4.2) — gone once it is at its highest. */
-function UpgradeRow({ type, tilePosition, level, effect, resources, busy, pending, disabled, onUpgrade }: {
+/** Raises a barracks, a market, a tavern or the town centre a level (§4.2) — gone once it is at its highest. */
+function UpgradeRow({ type, tilePosition, level, effect, resources, busy, locked, pending, disabled, onUpgrade }: {
     type: KingdomBuilderUpgradableBuilding;
     tilePosition: number;
     level: number;
@@ -334,6 +357,8 @@ function UpgradeRow({ type, tilePosition, level, effect, resources, busy, pendin
     resources: KingdomBuilderSettlementView["resources"];
     /** Something else is being built. */
     busy: boolean;
+    /** Why the next level can't be built yet — a tavern waiting on its town centre (§6.5). */
+    locked?: string;
     pending: boolean;
     disabled: boolean;
     onUpgrade: (key: string, request: object) => void;
@@ -344,10 +369,10 @@ function UpgradeRow({ type, tilePosition, level, effect, resources, busy, pendin
         <BuildRow
             icon={BUILDING_DETAILS[type].icon}
             name={`Upgrade to level ${level + 1}`}
-            cost={`${price.label} · ${formatTicks(buildTicksFor(level + 1))} · ${effect}`}
-            tag={busy ? "Busy" : pending ? "Queuing…" : price.affordable ? "Upgrade" : "Can't afford"}
-            tagMuted={busy || !price.affordable}
-            disabled={busy || !price.affordable || disabled}
+            cost={locked ?? `${price.label} · ${formatTicks(buildTicksFor(level + 1))} · ${effect}`}
+            tag={locked ? "Locked" : busy ? "Busy" : pending ? "Queuing…" : price.affordable ? "Upgrade" : "Can't afford"}
+            tagMuted={!!locked || busy || !price.affordable}
+            disabled={!!locked || busy || !price.affordable || disabled}
             pending={pending}
             onClick={() => onUpgrade(`upgrade-${type}`, { tilePosition, buildingType: type })}
         />

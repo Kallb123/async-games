@@ -113,8 +113,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("recruiting a commander", () => {
     it("counts inside a transaction that bumps the world's recruit counter first", async () => {
-        await queueUnitTraining(worldId, settlementId, "owner", "commander");
+        const view = await queueUnitTraining(worldId, settlementId, "owner", "commander");
 
+        expect(view.commanders).toEqual({ held: 1, capacity: 1 });
         expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { commandersRecruited: 1 } }, { session: {} });
         expect(player.trainingQueue).toEqual([expect.objectContaining({ unitType: "commander", ticksRemaining: 4 })]);
     });

@@ -62,6 +62,12 @@ export interface KingdomBuilderSettlementView {
     caravans: number;
     /** The siege on it (§8), if another player's army is camped there. */
     siege?: KingdomBuilderSiege;
+    /**
+     * The owner's commanders across their whole realm (§6.5): how many they
+     * hold — stationed, in training and in the field — and how many their
+     * taverns allow. Only ever on the owner's own settlement.
+     */
+    commanders: { held: number; capacity: number };
 }
 
 export class KingdomBuilderPrototypeError extends Error {
@@ -95,8 +101,9 @@ export async function settlementView(worldId: string, settlementId: string, user
 
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
     if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
-    const [ownerSettlements, catchment, sieges] = await Promise.all([
-        KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1 }).lean(),
+    const [ownerSettlements, ownerArmies, catchment, sieges] = await Promise.all([
+        KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1, garrison: 1, trainingQueue: 1 }).lean(),
+        KingdomBuilderArmyModel.find({ worldId, ownerId: userId }).select({ units: 1 }).lean(),
         catchmentOfSettlement(worldId, settlement),
         siegesOn(worldId, [settlement]),
     ]);
@@ -131,6 +138,10 @@ export async function settlementView(worldId: string, settlementId: string, user
         garrison: garrisonOf(settlement.garrison),
         caravans: settlement.caravans ?? 0,
         ...(siege ? { siege } : {}),
+        commanders: {
+            held: commandersHeld({ settlements: ownerSettlements, armies: ownerArmies }),
+            capacity: commanderCapacityOf(ownerSettlements),
+        },
     };
 }
 
