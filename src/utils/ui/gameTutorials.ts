@@ -121,6 +121,15 @@ export function tutorialRun<S extends string>(
 }
 
 /**
+ * Whether the tour is on screen right now — the one rule `GameShell` draws
+ * the overlay by, for a page that has to hold something back (or bring
+ * something forward) while it is. `intro` is the page's `useGameIntro`.
+ */
+export function tourOnScreen(run: TutorialRun | undefined, intro: { tutorialOpen: boolean } | undefined): boolean {
+    return !!run?.active && !!intro?.tutorialOpen;
+}
+
+/**
  * The steps a run actually shows, in order. `when` filters the list once —
  * it is not re-checked as signals change later — and a step whose
  * `advanceOn` signal is already true is dropped outright rather than shown

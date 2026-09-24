@@ -4,7 +4,8 @@ import type { GameTutorial } from "@/utils/ui/gameTutorials";
 // account in place of the guide's auto-show (see docs/game-tutorials.md).
 // Same shape as Dice Cities' tour: narration steps on the real board, and a
 // do-it step for each thing a turn asks of the driver — the round-one getaway,
-// the gear, and the space to stop on.
+// the gear, and the space to stop on — then the tow, which the turn sheet
+// offers only sometimes, so it is narrated rather than waited on.
 //
 // Circuit-agnostic for the same reason the guide is: the host picks the track,
 // so no step names a corner. The board prints those.
@@ -13,9 +14,10 @@ import type { GameTutorial } from "@/utils/ui/gameTutorials";
 // them (page.tsx derives each off the driver's own `phase`):
 // - `canLaunch` / `canShift` — the round-one d20 or a gear is this driver's to
 //   pick right now. Mutually exclusive: a car is in one phase at a time.
-// - `hasLaunched` / `hasShifted` — the phase that step waits on has moved on.
-//   Read off the phase alone, not the turn: a stalled getaway ends the turn,
-//   and a step waiting on "still my turn" would never advance.
+// - `hasLaunched` — the d20 has been thrown. Read off the recorded roll rather
+//   than the phase: a stalled car stays in `start` with its turn over, and a
+//   step waiting on the phase would never advance.
+// - `hasShifted` — the gear is picked, so the phase has moved on from `shift`.
 // - `hasMoved` — nothing is left to drive this turn (the move is made, the
 //   tow is on offer, the undo hold is counting down, or it isn't this driver's
 //   turn at all). The "pick a space" step waits on it, and so drops out of a
@@ -42,12 +44,12 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
         {
             anchor: "board",
             title: "The circuit",
-            body: "Each corner owes stops — turns you have to end inside it before you may leave. Race out with a stop still owed and you pay a tyre for every space past it, or spin if you can't.",
+            body: "Each corner owes stops — turns you must end inside it before leaving. Leave early and it costs a tyre a space, or a spin if you can't pay.",
         },
         {
             anchor: "rc-sheet",
             title: "Your turn",
-            body: "Your turn happens down here: a gear to pick, or the d20 getaway on round one. Until it's your go it's read-only, but it still shows what each gear could reach from where you are.",
+            body: "Your turn happens down here: the d20 getaway on round one, a gear to pick after that. It's read-only until your go.",
             when: "waiting",
         },
         {
@@ -61,7 +63,7 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
         {
             anchor: "rc-sheet",
             title: "Pick a gear",
-            body: "Every gear rolls its own die, so you're choosing a range, not a number — each row says what it rolls and where that lands against the next corner. The die is thrown the moment you pick.",
+            body: "Each gear rolls its own die, so you pick a range, not a number. Every row says where that range lands against the next corner.",
             when: "canShift",
             advanceOn: "hasShifted",
             hint: "Tap a gear",
@@ -69,9 +71,14 @@ export const tutorial: GameTutorial<RaceCarsSignal> = {
         {
             anchor: "board",
             title: "Choose where to stop",
-            body: "The highlighted spaces are where the roll can finish. Too far for the corner ahead? Spend brake points on the turn sheet first to take spaces off it.",
+            body: "The highlighted spaces are where the roll can finish. Too far for the corner? Spend brake points first to take spaces off it.",
             advanceOn: "hasMoved",
             hint: "Tap a highlighted space",
+        },
+        {
+            anchor: "rc-sheet",
+            title: "Slipstream",
+            body: "Finish right behind another car, both in 4th or higher, and you're offered a free three-space tow here. Take it or wave it away.",
         },
         {
             anchor: "menu",

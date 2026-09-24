@@ -35,7 +35,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
-import { tutorialRun } from "@/utils/ui/gameTutorials";
+import { tourOnScreen, tutorialRun } from "@/utils/ui/gameTutorials";
 import { pluralize } from "@/utils/ui/text";
 
 /**
@@ -193,20 +193,21 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // The tour's signals (src/games/RaceCars/tutorial.ts says what each one
     // means). The step list freezes on whichever of them hold when the tour
     // opens; after that only the current step's `advanceOn` is watched.
-    const canDrive = isMyTurn && !holdOpen && (me?.phase === 'start' || me?.phase === 'shift' || me?.phase === 'move');
+    // `livePhase` is the phase this driver can act in right now, if any.
+    const livePhase = isMyTurn && !holdOpen ? me?.phase : undefined;
     const tutorial = tutorialRun(raceCarsTutorial, {
-        canLaunch: isMyTurn && me?.phase === 'start',
-        hasLaunched: !!me && me.phase !== 'start',
-        canShift: isMyTurn && !holdOpen && me?.phase === 'shift',
+        canLaunch: livePhase === 'start',
+        hasLaunched: me?.startRoll != null,
+        canShift: livePhase === 'shift',
         hasShifted: !!me && me.phase !== 'shift',
-        hasMoved: !canDrive,
+        hasMoved: livePhase !== 'start' && livePhase !== 'shift' && livePhase !== 'move',
         waiting: !isMyTurn,
     }, { active: nav.isLive && !complete });
     // A getaway or a move taken during the tour would otherwise swap the whole
     // board — tour and all — for its reveal, and the tour would start over when
     // the board came back. The reveal waits instead, and shows when the tour
     // closes: the turn sheet says everything it would have in the meantime.
-    const touring = tutorial.active && gameIntro.tutorialOpen;
+    const touring = tourOnScreen(tutorial, gameIntro);
 
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);

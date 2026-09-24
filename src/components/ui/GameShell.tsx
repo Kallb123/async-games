@@ -13,7 +13,7 @@ import { useGameChat } from '@/utils/hooks/useGameChat';
 import { GameIntro } from '@/utils/hooks/useGameIntro';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
 import { GameGuide } from '@/utils/ui/gameGuides';
-import { TutorialRun } from '@/utils/ui/gameTutorials';
+import { tourOnScreen, TutorialRun } from '@/utils/ui/gameTutorials';
 
 /** What a game hands `GameShell`'s `chat` prop: the game and its roster. The
  *  roster pair (parallel arrays, seat order) is how a message gets a name and a
@@ -190,7 +190,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 {busy && <span className="ag-pending-bar ag-pending-bar--topbar" role="progressbar" aria-label="Loading" />}
             </div>
             {guide && intro?.guideOpen && <GameGuideModal guide={guide} onClose={intro.close} />}
-            {tutorial?.active && intro?.tutorialOpen && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
+            {tutorial && intro && tourOnScreen(tutorial, intro) && <GameTutorialOverlay run={tutorial} onClose={intro.close} />}
             {children}
             {log && (showLog ? (
                 <div ref={logPanelRef}>

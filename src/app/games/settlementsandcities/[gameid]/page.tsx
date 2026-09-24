@@ -18,7 +18,7 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities/guide";
 import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
-import { tutorialRun } from "@/utils/ui/gameTutorials";
+import { tourOnScreen, tutorialRun } from "@/utils/ui/gameTutorials";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -133,7 +133,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // preview is already on screen a few steps before "Your turn" explains
     // it, but cheaper than piping the current step back out of the shell
     // for one game's sake.
-    const tutorialPreview = tutorial.active && gameIntro.tutorialOpen && tutorialSetupPlacing;
+    const tutorialPreview = tourOnScreen(tutorial, gameIntro) && tutorialSetupPlacing;
 
     // owner userId → colour, following the persistent userIdList ordering.
     // playerColourForId already answers a null/unknown owner with the neutral
