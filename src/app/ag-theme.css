@@ -2112,7 +2112,8 @@ a.ag-list-row, a.ag-list-row-main {
     color: var(--ag-ink-soft);
     margin-bottom: 7px;
 }
-.ag-trade-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+/* One row, a column per option — five resources in Settlements & Cities, four in Kingdom Builder. */
+.ag-trade-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
 .ag-trade-opt {
     display: flex;
     flex-direction: column;

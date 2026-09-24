@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KingdomBuilderPrototypeError, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
+import { KingdomBuilderPrototypeError, buyCaravan, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
 const settlementId = new Types.ObjectId().toString();
@@ -290,5 +290,98 @@ describe("Kingdom Builder training", () => {
     it("reports a lost race instead of overdrawing", async () => {
         stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich }, null);
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
+
+function withMarket(level: number) {
+    return tiles.map(tile => tile.position === 1 ? { position: 1, building: { type: "market" as const, level } } : tile);
+}
+
+describe("Kingdom Builder market", () => {
+    it("builds one market, and raises it a level at a time up to its cap", async () => {
+        let update = stubSettlement({ ownerId: "owner", tiles: withMarket(1) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 2, "market"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+        expect(update).not.toHaveBeenCalled();
+
+        vi.restoreAllMocks();
+        update = stubSettlement({ ownerId: "owner", tiles: withMarket(1) });
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 1, "market");
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ tiles: { $elemMatch: { position: 1, "building.type": "market", "building.level": 1 } } }),
+            {
+                $set: { construction: { tilePosition: 1, buildingType: "market", targetLevel: 2, ticksRemaining: 4 } },
+                $inc: { "resources.wood": -50, "resources.stone": -30 },
+            },
+            { new: true },
+        );
+
+        vi.restoreAllMocks();
+        update = stubSettlement({ ownerId: "owner", tiles: withMarket(3) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 1, "market"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("exchanges at the market's rate, repeating its level and the stores in the write", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withMarket(2), resources: { ...plenty, wood: 9 } });
+
+        await exchangeAtMarket(worldId, settlementId, "owner", { give: "wood", get: "iron", amount: 3 });
+
+        expect(update).toHaveBeenCalledWith(
+            {
+                _id: settlementId, worldId, ownerId: "owner",
+                tiles: { $elemMatch: { "building.type": "market", "building.level": 2 } },
+                "resources.wood": { $gte: 9 },
+            },
+            { $inc: { "resources.wood": -9, "resources.iron": 3 } },
+            { new: true },
+        );
+    });
+
+    it("refuses an exchange with no market, one the stores can't cover, or a forged one", async () => {
+        let update = stubSettlement({ ownerId: "owner", tiles });
+        await expect(exchangeAtMarket(worldId, settlementId, "owner", { give: "wood", get: "iron", amount: 1 }))
+            .rejects.toEqual(expect.objectContaining({ code: "NO_MARKET" }));
+
+        vi.restoreAllMocks();
+        update = stubSettlement({ ownerId: "owner", tiles: withMarket(1), resources: { ...plenty, wood: 7 } });
+        await expect(exchangeAtMarket(worldId, settlementId, "owner", { give: "wood", get: "iron", amount: 2 }))
+            .rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
+
+        for (const forged of [
+            { give: "wood", get: "wood", amount: 1 },
+            { give: "gold", get: "iron", amount: 1 },
+            { give: "wood", get: "iron", amount: 0 },
+            { give: "wood", get: "iron", amount: 1.5 },
+            { give: "wood", get: "iron", amount: "1" },
+        ]) {
+            await expect(exchangeAtMarket(worldId, settlementId, "owner", forged)).rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+        }
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("refuses somebody else's market", async () => {
+        let update = stubSettlement({ ownerId: "actual-owner", tiles: withMarket(1) });
+        await expect(exchangeAtMarket(worldId, settlementId, "intruder", { give: "wood", get: "iron", amount: 1 }))
+            .rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        expect(update).not.toHaveBeenCalled();
+
+        vi.restoreAllMocks();
+        update = stubSettlement({ ownerId: "actual-owner", tiles: withMarket(1) });
+        await expect(buyCaravan(worldId, settlementId, "intruder")).rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("sells a caravan at the market, paid for in the same write that adds it", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withMarket(1) });
+
+        await buyCaravan(worldId, settlementId, "owner");
+
+        expect(update).toHaveBeenCalledWith(
+            { _id: settlementId, worldId, ownerId: "owner", "tiles.building.type": "market", "resources.wood": { $gte: 20 }, "resources.wheat": { $gte: 10 } },
+            { $inc: { "resources.wood": -20, "resources.wheat": -10, caravans: 1 } },
+            { new: true },
+        );
     });
 });

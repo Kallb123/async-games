@@ -7,6 +7,8 @@ interface StepperProps {
     onChange: (value: number) => void;
     /** Names what is being counted for a screen reader — "armies", "brake points". */
     label?: string;
+    /** How far one press moves the value — 1 unless counting in bigger lots, like a cart's load. */
+    step?: number;
 }
 
 /**
@@ -24,15 +26,15 @@ interface StepperProps {
  * clamp is what makes a held key or a stale render unable to walk the value
  * out of range.
  */
-export default function Stepper({ value, min, max, onChange, label }: StepperProps) {
+export default function Stepper({ value, min, max, onChange, label, step = 1 }: StepperProps) {
     return (
         <div className="ag-stepper">
             <button
                 type="button"
                 className="ag-btn ag-btn--light ag-stepper-btn"
-                aria-label={label ? `One fewer ${label}` : 'One fewer'}
+                aria-label={step === 1 ? (label ? `One fewer ${label}` : 'One fewer') : `${step} fewer${label ? ` ${label}` : ''}`}
                 disabled={value <= min}
-                onClick={() => onChange(Math.max(min, value - 1))}
+                onClick={() => onChange(Math.max(min, value - step))}
             >
                 −
             </button>
@@ -40,9 +42,9 @@ export default function Stepper({ value, min, max, onChange, label }: StepperPro
             <button
                 type="button"
                 className="ag-btn ag-btn--light ag-stepper-btn"
-                aria-label={label ? `One more ${label}` : 'One more'}
+                aria-label={step === 1 ? (label ? `One more ${label}` : 'One more') : `${step} more${label ? ` ${label}` : ''}`}
                 disabled={value >= max}
-                onClick={() => onChange(Math.min(max, value + 1))}
+                onClick={() => onChange(Math.min(max, value + step))}
             >
                 +
             </button>

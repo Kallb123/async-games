@@ -6,6 +6,9 @@ import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 export const KINGDOM_BUILDER_RESOURCE_TYPES = ["wood", "stone", "iron", "wheat"] as const;
 export type KingdomBuilderResourceType = typeof KINGDOM_BUILDER_RESOURCE_TYPES[number];
 
+/** The glyph each resource wears wherever a screen picks one out — the market's exchange, a caravan's load, a trade offer. */
+export const KINGDOM_BUILDER_RESOURCE_ICONS: Record<KingdomBuilderResourceType, string> = { wood: "🪵", stone: "🪨", iron: "⚙️", wheat: "🌾" };
+
 /**
  * A complete set of resources, reading a missing one as none — which is also
  * how a settlement stored before wheat existed (§4.6) reads its stores.

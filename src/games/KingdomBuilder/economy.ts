@@ -29,6 +29,18 @@ interface Economy {
      * the land yields it — the building can't be built at all.
      */
     yieldTiers: Record<"poor" | "good" | "rich", { fromShare: number; outputPerLevel: number }>;
+    /**
+     * What a market asks for one of any other resource, indexed by its level
+     * less one — so its length is the market's highest level. Always worse than
+     * producing it (§4.3): the market is a release valve, not a way round the land.
+     */
+    marketRates: readonly number[];
+    /** What one caravan costs at the market (PR 25). */
+    caravanCost: Amounts;
+    /** How much one caravan carries, all resources together. */
+    caravanCapacity: number;
+    /** Trade offers one player may have open in a world at once. */
+    tradeOfferLimit: number;
 }
 
 export const KINGDOM_BUILDER_ECONOMY = {
@@ -38,6 +50,7 @@ export const KINGDOM_BUILDER_ECONOMY = {
         farm: { wood: 10, stone: 5 },
         mine: { wood: 20, stone: 10 },
         barracks: { wood: 30, stone: 20, iron: 10 },
+        market: { wood: 25, stone: 15 },
     },
     // Armies eat (§4.6): every unit's price carries wheat, cavalry most — horses eat.
     unitCosts: {
@@ -60,4 +73,10 @@ export const KINGDOM_BUILDER_ECONOMY = {
         good: { fromShare: 0.15, outputPerLevel: 2 },
         rich: { fromShare: 0.35, outputPerLevel: 3 },
     },
+    // 4 for 1 at a new market, 2 for 1 at the top — even a rich site's own
+    // level-one building out-earns a level-three market's conversion.
+    marketRates: [4, 3, 2],
+    caravanCost: { wood: 20, wheat: 10 },
+    caravanCapacity: 50,
+    tradeOfferLimit: 5,
 } satisfies Economy;
