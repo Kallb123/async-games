@@ -31,6 +31,8 @@ import {
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
 import { race } from '@/games/RaceCars/testFixtures';
+import { makeState, player } from '@/games/SettlementsAndCities/testFixtures';
+import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import { mongoMap } from '@/utils/games/mongoMaps';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
@@ -42,8 +44,8 @@ function positions(saved: Record<string, unknown>): Record<string, { position: n
 }
 
 /** The match-history log as the stored game holds it: tokens, not names. */
-function storedHistory(saved: Record<string, unknown>): { text: string, actorId?: string }[] {
-    return (saved.gameState as { history: { text: string, actorId?: string }[] }).history;
+function storedHistory(saved: Record<string, unknown>): { text: string, actorId?: string, commandId?: string }[] {
+    return (saved.gameState as { history: { text: string, actorId?: string, commandId?: string }[] }).history;
 }
 
 /** The moves the stored game has recorded — its private replay log. */
@@ -292,6 +294,78 @@ describe('POST /api/game/command', () => {
         expect(response.status).toBe(200);
         const history: { commandId?: string, reactions?: { reaction: string, actorId: string, actorUsername: string }[] }[] = (await response.json()).gameData.gameState.history;
         expect(history.find(entry => entry.commandId === 'earlier-command')?.reactions).toEqual([{ reaction: '😱', actorId: 'user_reactor', actorUsername: 'Reactor' }]);
+    });
+
+    it('mints its own command id, whatever id the request brought with it', async () => {
+        // Undo trusts the id at the tail of commandHistory to say nothing has
+        // run since its snapshot was pushed, so a client that reused an id
+        // could undo past a move it had already seen the outcome of.
+        signIn(ANN);
+        seedSnakesAndLadders();
+        await command(jsonPost('/api/game/command', diceRoll()));
+        signIn(BOB);
+        await command(jsonPost('/api/game/command', diceRoll({ senderId: BOB.id, senderUsername: 'bob' })));
+
+        const saved = storedGame('game_1')!;
+        const ids = (commandHistory(saved) as { id: string }[]).map(stored => stored.id);
+        expect(ids).toHaveLength(2);
+        expect(ids).not.toContain(diceRoll().id);
+        expect(new Set(ids).size).toBe(2);
+        // The id the history line carries — what a reaction joins on — is the
+        // one the server minted.
+        expect(storedHistory(saved).map(entry => entry.commandId).sort()).toEqual([...ids].sort());
+    });
+
+    it("won't let a reused id undo past a move made after the undoable one", async () => {
+        // The attack the server-minted id closes: build a road (undoable, so it
+        // anchors the undo), then trade under the road's id so the anchor still
+        // matches the tail of commandHistory, then undo — taking back the trade
+        // along with the road. With a development card in place of the trade,
+        // that was seeing the card and putting it back.
+        signIn(ANN);
+        const gs = makeState({
+            hexes: HEX_POSITIONS.map(() => ({ terrain: 'desert', numberToken: null })),
+            vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
+            edges: Array.from({ length: BOARD_TOPOLOGY.numEdges }, () => ({ hasRoad: false, owner: null })),
+        });
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
+        gs.vertices[vertexId] = { building: 'settlement', owner: ANN.id };
+        // Enough ore to trade twice, so neither the road nor the trade leaves
+        // her with nothing to do and holds the turn (docs/undo.md §5).
+        gs.playerStates.set(ANN.id, player({ resources: { brick: 1, lumber: 1, ore: 8 } }));
+        gs.playerStates.set(BOB.id, player());
+        seedGame({
+            gameId: 'game_1',
+            gameType: {
+                gameId: 'gametype_1', gameType: 'SettlementsAndCities', friendlyName: 'Settlements & Cities',
+                icon: '', url: 'settlementsandcities', className: 'SettlementsAndCitiesGameType'
+            },
+            kind: 'SettlementsAndCitiesGameData',
+            userIdList: [ANN.id, BOB.id],
+            turnTimer: '1 day',
+            currentTurn: ANN.id,
+            lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
+            complete: false,
+            winner: '',
+            specificGameState: { ...gs, playerStates: Object.fromEntries(gs.playerStates) },
+        });
+        const sameId = '55555555-5555-5555-5555-555555555555';
+        const as = (className: string, extra: Record<string, unknown> = {}) => jsonPost('/api/game/command', {
+            id: sameId, timestamp: '2026-01-01T00:00:01.000Z', gameId: 'game_1',
+            senderId: ANN.id, senderUsername: 'ann', className, ...extra,
+        });
+
+        expect((await command(as('SACBuildRoad', { edgeId }))).status).toBe(200);
+        expect((await command(as('SACMaritimeTrade', { offerResource: 'ore', wantResource: 'wool' }))).status).toBe(200);
+        const undo = await command(as('SACUndo'));
+
+        expect(undo.status).toBe(401);
+        const saved = storedGame('game_1')!.specificGameState as { playerStates: Record<string, { resources: Record<string, number> }>, edges: { hasRoad: boolean }[] };
+        expect(saved.edges[edgeId].hasRoad).toBe(true);
+        expect(saved.playerStates[ANN.id].resources).toMatchObject({ ore: 4, wool: 1 });
     });
 
     it("refuses a move off the player's turn, whatever turn-gate exemption the request claims", async () => {
