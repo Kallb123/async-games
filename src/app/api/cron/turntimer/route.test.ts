@@ -141,4 +141,69 @@ describe('GET /api/cron/turntimer', () => {
         expect(saved.forfeitedBy).toBe(ANN.id);
         expect(recordGameResult).toHaveBeenCalledTimes(1);
     });
+
+    describe('a player who has missed MAX_CONSECUTIVE_MISSED_TURNS in a row', () => {
+        const CAT = { id: 'user_cat', username: 'cat' };
+
+        /** Snakes & Ladders registers a dropout adapter: a three-seat race can lose one. */
+        function seedThreeSeatRace(overrides: Record<string, unknown> = {}) {
+            seedSnakesAndLadders({
+                userIdList: [ANN.id, BOB.id, CAT.id],
+                turnTimer: '10m',
+                lastTurnTimestamp: STALE,
+                gameState: { turnOrder: [ANN.id, BOB.id, CAT.id], history: [], commandHistory: [] },
+                missedTurnCounts: { [ANN.id]: 2 },
+                ...overrides,
+            }, { [ANN.id]: 10, [BOB.id]: 20, [CAT.id]: 30 });
+        }
+
+        beforeEach(() => stubClerkUsers(ANN, BOB, CAT));
+
+        it('is dropped, and the game carries on without them, when their game allows it', async () => {
+            seedThreeSeatRace();
+
+            const response = await GET(cronRequest());
+
+            expect(await response.json()).toMatchObject({ processed: 1, dropped: 1, abandoned: 0 });
+            const saved = storedGame('game_1')!;
+            expect(saved.complete).toBe(false);
+            expect(saved.currentTurn).toBe(BOB.id);
+            const gameState = saved.gameState as { turnOrder: string[], droppedPlayers: string[], commandHistory: { className: string, senderId: string }[] };
+            // The seat order is untouched; the seat is marked instead.
+            expect(gameState.turnOrder).toEqual([ANN.id, BOB.id, CAT.id]);
+            expect(gameState.droppedPlayers).toEqual([ANN.id]);
+            // Recorded like any other command, so a replay drops them too.
+            expect(gameState.commandHistory.at(-1)).toMatchObject({ className: 'PlayerDropped', senderId: ANN.id });
+            // Their ladder is spent rather than left to climb.
+            expect(saved.missedTurnCounts).toEqual({});
+            expect(saved.lastTurnTimestamp).not.toBe(STALE);
+            expect(sentPushes.map(push => push.userIds)).toEqual([[BOB.id]]);
+            expect(recordGameResult).not.toHaveBeenCalled();
+        });
+
+        it('is stepped over by the rotation from then on', async () => {
+            seedThreeSeatRace({
+                currentTurn: CAT.id,
+                missedTurnCounts: {},
+                gameState: { turnOrder: [ANN.id, BOB.id, CAT.id], history: [], commandHistory: [], droppedPlayers: [ANN.id] },
+            });
+
+            await GET(cronRequest());
+
+            // Cat's turn expired; the seat after hers is Ann's, who has left.
+            expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+        });
+
+        it('abandons the game when dropping them would leave too few players', async () => {
+            seedSnakesAndLadders({ turnTimer: '10m', lastTurnTimestamp: STALE, missedTurnCounts: { [ANN.id]: 2 } });
+
+            const response = await GET(cronRequest());
+
+            expect(await response.json()).toMatchObject({ processed: 1, abandoned: 1, dropped: 0 });
+            const saved = storedGame('game_1')!;
+            expect(saved.complete).toBe(true);
+            expect(saved.endReason).toBe('abandoned');
+            expect(saved.forfeitedBy).toBe(ANN.id);
+        });
+    });
 });

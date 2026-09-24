@@ -16,6 +16,12 @@ describe('outcomeFor', () => {
         expect(outcomeFor({ winner: ANN, endReason: 'win' }, BOB)).toBe('loss');
     });
 
+    it('gives a player the game dropped a loss, even when the team they left went on to win', () => {
+        expect(outcomeFor({ winner: '', endReason: 'teamwin', droppedPlayers: [BOB] }, BOB)).toBe('loss');
+        expect(outcomeFor({ winner: '', endReason: 'teamwin', droppedPlayers: [BOB] }, ANN)).toBe('win');
+        expect(outcomeFor({ winner: BOB, endReason: 'win', droppedPlayers: [ANN] }, ANN)).toBe('loss');
+    });
+
     it('reads a game nobody won as a draw', () => {
         expect(outcomeFor({ winner: '', endReason: 'ended' }, ANN)).toBe('draw');
     });
