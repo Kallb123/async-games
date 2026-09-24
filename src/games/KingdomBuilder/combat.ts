@@ -16,7 +16,9 @@ export interface KingdomBuilderCombatStats {
 /**
  * Each unit's weight in a fight. Militia are cheap and brittle, infantry the
  * sturdy line, cavalry hit hardest, and a siege engine is next to useless in
- * the open — what it is for is a town's defences. First-pass numbers (§12).
+ * the open — what it is for is a town's defences. A settler strikes no blow at
+ * all, but takes its share of them like anyone in the stack. First-pass
+ * numbers (§12).
  */
 export const KINGDOM_BUILDER_COMBAT_STATS: Record<KingdomBuilderUnitType, KingdomBuilderCombatStats> = {
     militia: { attack: 2, health: 6 },
@@ -24,6 +26,7 @@ export const KINGDOM_BUILDER_COMBAT_STATS: Record<KingdomBuilderUnitType, Kingdo
     infantry: { attack: 4, health: 10 },
     cavalry: { attack: 7, health: 12 },
     "siege-engine": { attack: 1, health: 10 },
+    settler: { attack: 0, health: 4 },
 };
 
 /**

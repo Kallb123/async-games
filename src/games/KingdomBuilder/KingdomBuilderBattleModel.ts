@@ -6,8 +6,8 @@ import type { KingdomBuilderGarrison } from "./units";
 
 /**
  * How a battle came about: a push or a sally at a siege (§8), an army against
- * a barbarian village (§3.4), or a rival's army taking caravans left with no
- * escort (§4.7) — a raid, which has no rounds, since nobody fights it.
+ * a barbarian village (§3.4), or a rival's army taking caravans or settlers
+ * left with no escort (§4.7) — a raid, which has no rounds, since nobody fights it.
  */
 export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid"] as const;
 export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
@@ -53,6 +53,9 @@ export interface KingdomBuilderBattleShare {
     /** Caravans this player took from the other side, or lost to it (§4.7) — absent when none changed hands. */
     caravansTaken?: number;
     caravansLost?: number;
+    /** Settlers taken or lost the same way (PR 24) — absent when none were. */
+    settlersTaken?: number;
+    settlersLost?: number;
 }
 
 export interface IKingdomBuilderBattleDocument extends IKingdomBuilderBattle, Document {}
@@ -69,6 +72,8 @@ const ShareSchema = new Schema<KingdomBuilderBattleShare>({
     left: { type: KingdomBuilderGarrisonSchema, required: true },
     caravansTaken: { type: Number, min: 0 },
     caravansLost: { type: Number, min: 0 },
+    settlersTaken: { type: Number, min: 0 },
+    settlersLost: { type: Number, min: 0 },
 }, { _id: false });
 
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({

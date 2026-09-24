@@ -25,9 +25,9 @@ import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection
 import TradeSection from "@/games/KingdomBuilder/components/TradeSection";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
+import { KINGDOM_BUILDER_SETTLEMENT_LIMIT, openSites } from "@/games/KingdomBuilder/sites";
 import { AREAS, tileIndexCentre, travelGridFor, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
-import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { GAME_META } from "@/utils/ui/games";
 import { playerColour } from "@/utils/ui/playerColours";
@@ -80,8 +80,6 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const endpoint = `/api/kingdombuilder/${worldId}`;
     const { data, setData, isLoading, status } = useRefreshableData<KingdomBuilderWorldView>(endpoint, []);
     const terrain = useTerrainImage(data ?? {});
-    const [selectedSite, setSelectedSite] = useState<string | null>(null);
-    const { submit, isPending: founding, message } = useJsonMutation<KingdomBuilderWorldView>(endpoint, "That site could not be claimed.");
     // An army being sent (§6.2): while one is drafted, a tap on the map picks where it goes.
     const [march, setMarch] = useState<MarchDraft | null>(null);
 
@@ -121,20 +119,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
         return { route, ticks: route ? ticksToArrive({ ...route, travelled: 0 }, paceOf(stack.units, stack.caravans) ?? 1) : 0 };
     }, [data, grid, march]);
     const preview: MarchPreview = !marchRoute ? null : marchRoute.route ? { ticks: Math.max(1, marchRoute.ticks) } : "no-route";
-    const startMarch = (draft: MarchDraft | null) => {
-        setSelectedSite(null);
-        setMarch(draft);
-    };
     const marchTo = (nodeId: string) => march && setMarch({ ...march, targetNodeId: nodeId });
-
-    const found = async () => {
-        if (!selectedSite) return;
-        const body = await submit({ siteId: selectedSite });
-        if (body) {
-            setData(body);
-            setSelectedSite(null);
-        }
-    };
 
     const unavailable = status === 404;
     // The zoom steps were tuned on a 100-unit-wide world; a wider one needs
@@ -142,9 +127,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     const zoomWidth = 240 * Math.max(1, (data?.landmass.width ?? 100) / 100);
     const occupiedByNode = new Map(data?.settlements.map(settlement => [settlement.nodeId, settlement]) ?? []);
     const villages = new Set(data?.barbarians.map(village => village.nodeId));
-    // An expansion site nobody holds — or a barbarian one whose village has been burnt (§3.4).
-    const isOpenSite = (node: SettlementNode) => node.siteType !== "player-start" && !occupiedByNode.has(node.id) && !villages.has(node.id);
-    const openSites = data?.nodes.filter((node): node is SettlementNode => node.kind === "settlement" && isOpenSite(node)) ?? [];
+    const open = new Set(data ? openSites(data).map(node => node.id) : []);
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
     const players = data?.players ?? [];
     const ownerName = (seat: number) => players[seat]?.name ?? "Another player";
@@ -165,7 +148,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                         <>
                             <p className={styles.hint}>{march
                                 ? "Tap anywhere on the map to send the army there."
-                                : <>Tap one of your castles to open it, or an &quot;Open site&quot; to start your next settlement. Send an army against the barbarians to take their village instead.</>}</p>
+                                : <>Tap one of your castles to open it. March a settler to an &quot;Open site&quot; to found your next settlement there, or send an army against the barbarians to take their village instead.</>}</p>
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
@@ -184,19 +167,19 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
-                                            const isOpen = isOpenSite(node);
+                                            const isOpen = open.has(node.id);
                                             const isVillage = villages.has(node.id);
                                             const isTarget = !!march && node.id !== marchOrigin;
-                                            const isSelected = march ? march.targetNodeId === node.id : selectedSite === node.id;
+                                            const isSelected = march?.targetNodeId === node.id;
                                             // No ring: ClickableMapNode's default ring offset is sized for World
                                             // Domination's/Outbreak's much bigger nodes, and at this board's tight
                                             // scale it dwarfed the map on a site-dense world. What a site is —
                                             // "Open site", "Your town", "Claimed" — is already the label under it;
                                             // "selected" is the one state a label can't say, so it gets its own
                                             // fill on the site's own dot instead (see .selected).
-                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={march ? isTarget : isOpen || isMine} isSelected={isSelected} showRing={false}
+                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={march ? isTarget : isMine} isSelected={isSelected} showRing={false}
                                                 onClick={march ? () => isTarget && marchTo(node.id)
-                                                    : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : isOpen ? () => setSelectedSite(node.id) : undefined}
+                                                    : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isVillage ? "Barbarian village" : isOpen ? "Open settlement site" : "Free starting site"}>
                                                 {/* Every settlement wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. */}
                                                 <circle className={`${styles.site} ${isVillage ? styles.barbarian : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
@@ -207,7 +190,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         {data.terrainField && (
                                             <ArmyLayer field={data.terrainField} armies={data.armies} colour={myColour} sightings={data.sightings} ownerName={ownerName} preview={marchRoute?.route?.path}
                                                 selectedArmyId={march && "armyId" in march ? march.armyId : undefined}
-                                                onSelect={march ? undefined : armyId => startMarch({ armyId })} />
+                                                onSelect={march ? undefined : armyId => setMarch({ armyId })} />
                                         )}
                                         {/* MapLabel's own default strokeWidth (3) is tuned for boards that
                                             draw at fontSize 9+ (Outbreak, Train Time) — at this board's fontSize
@@ -246,7 +229,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                 </Section>
                 {data && <SiegesSection endpoint={endpoint} view={data} placeName={placeName} onFought={setData} />}
                 {data && <BattlesSection view={data} placeName={placeName} />}
-                {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={startMarch} preview={preview} placeName={placeName} onMarched={setData} />}
+                {data && <ArmiesSection endpoint={endpoint} view={data} march={march} onMarchChange={setMarch} preview={preview} placeName={placeName} onMarched={setData} />}
                 {data && <TradeSection endpoint={endpoint} view={data} ownerName={ownerName} onTraded={setData} />}
                 {data && (players.length > 1 || data.barbarians.some(village => village.garrison)) && <SightingsSection view={data} ownerName={ownerName} placeName={placeName} />}
                 {data?.invite && (
@@ -270,13 +253,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             </button>
                         ))}
                     </div>
-                    {selectedSite && <div className="ag-btn-row">
-                        <button type="button" className="ag-btn ag-btn--ghost" onClick={() => setSelectedSite(null)}>Cancel</button>
-                        <button type="button" className="ag-btn ag-btn--primary" disabled={founding} onClick={found}>{founding ? "Founding…" : "Found here"}</button>
-                    </div>}
-                    {!selectedSite && openSites.length > 0 && <p className={styles.hint}>Choose an &quot;Open site&quot; on the map to expand your kingdom.</p>}
-                    {openSites.length === 0 && data && <div className="ag-empty">Every expansion site has been claimed.</div>}
-                    {message && <div className="ag-callout" role="alert">{message}</div>}
+                    {open.size > 0 && mySettlements.length < KINGDOM_BUILDER_SETTLEMENT_LIMIT && (
+                        <p className={styles.hint}>Raise a town centre to level 2 to train a settler, then march it to an &quot;Open site&quot; to found your next settlement.</p>
+                    )}
+                    {open.size === 0 && data && <div className="ag-empty">Every expansion site has been claimed.</div>}
                 </Section>
                 {data && <WorldExitSection endpoint={endpoint} players={players} />}
             </>}

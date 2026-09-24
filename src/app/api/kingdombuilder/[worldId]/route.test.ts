@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
     userId: "owner" as string | null,
-    foundExpansion: vi.fn(),
+    foundWithSettler: vi.fn(),
     worldView: vi.fn(),
     endWorld: vi.fn(),
     leaveWorld: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("@/games/KingdomBuilder", () => ({
     KingdomBuilderPersistenceError: class KingdomBuilderPersistenceError extends Error {
         constructor(public code: string, message: string) { super(message); }
     },
-    foundExpansion: mocks.foundExpansion,
+    foundWithSettler: mocks.foundWithSettler,
     worldView: mocks.worldView,
     endWorld: mocks.endWorld,
     leaveWorld: mocks.leaveWorld,
@@ -55,19 +55,19 @@ describe("/api/kingdombuilder/[worldId]", () => {
         expect(mocks.worldView).toHaveBeenCalledWith("0123456789abcdef01234567", "owner");
     });
 
-    it("maps invalid and conflicting expansion requests", async () => {
-        mocks.foundExpansion.mockRejectedValueOnce(new KingdomBuilderPersistenceError("INVALID_INPUT", "Choose a site"));
-        expect((await POST(request("POST", "{}"), { params })).status).toBe(400);
+    it("founds a town with the caller's settler, mapping a claimed site to 409", async () => {
+        mocks.foundWithSettler.mockResolvedValueOnce({ worldId: "world", settlements: [{ nodeId: "open-1", isMine: true }] });
+        const response = await POST(request("POST", JSON.stringify({ action: "settle", armyId: "army-1", ownerId: "someone-else" })), { params });
+        expect(response.status).toBe(200);
+        expect(mocks.foundWithSettler).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", "army-1");
 
-        mocks.foundExpansion.mockRejectedValueOnce(new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "Claimed"));
-        expect((await POST(request("POST", JSON.stringify({ siteId: "open-1" })), { params })).status).toBe(409);
+        mocks.foundWithSettler.mockRejectedValueOnce(new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "Claimed"));
+        expect((await POST(request("POST", JSON.stringify({ action: "settle", armyId: "army-1" })), { params })).status).toBe(409);
     });
 
-    it("returns the updated map after founding", async () => {
-        mocks.foundExpansion.mockResolvedValue({ worldId: "world", settlements: [{ nodeId: "open-1", isMine: true }] });
-        const response = await POST(request("POST", JSON.stringify({ siteId: "open-1" })), { params });
-        expect(response.status).toBe(200);
-        expect(mocks.foundExpansion).toHaveBeenCalledWith("0123456789abcdef01234567", "owner", "open-1");
+    it("no longer founds a town for free from a bare site id", async () => {
+        expect((await POST(request("POST", JSON.stringify({ siteId: "open-1" })), { params })).status).toBe(400);
+        expect(mocks.foundWithSettler).not.toHaveBeenCalled();
     });
 
     it("ends the world for its host, removing it only when asked to", async () => {
@@ -77,7 +77,7 @@ describe("/api/kingdombuilder/[worldId]", () => {
 
         await POST(request("POST", JSON.stringify({ action: "end", deleteNow: true })), { params });
         expect(mocks.endWorld).toHaveBeenLastCalledWith("0123456789abcdef01234567", "owner", { deleteNow: true });
-        expect(mocks.foundExpansion).not.toHaveBeenCalled();
+        expect(mocks.foundWithSettler).not.toHaveBeenCalled();
     });
 
     it("maps a member who isn't the host to 403", async () => {
@@ -90,7 +90,7 @@ describe("/api/kingdombuilder/[worldId]", () => {
         expect(mocks.leaveWorld).toHaveBeenCalledWith("0123456789abcdef01234567", "owner");
 
         expect((await POST(request("POST", JSON.stringify({ action: "explode" })), { params })).status).toBe(400);
-        expect(mocks.foundExpansion).not.toHaveBeenCalled();
+        expect(mocks.foundWithSettler).not.toHaveBeenCalled();
     });
 
     it("passes a march order on as the caller's, and answers a missing army with 404", async () => {

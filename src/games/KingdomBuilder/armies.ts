@@ -6,6 +6,7 @@ import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_CARAVAN_SPEED } from "./market";
 import { addResources, resourcesOf } from "./resources";
 import {
+    KINGDOM_BUILDER_MILITARY_UNIT_TYPES,
     KINGDOM_BUILDER_PACES,
     KINGDOM_BUILDER_UNITS,
     KINGDOM_BUILDER_UNIT_TYPES,
@@ -41,16 +42,22 @@ export interface KingdomBuilderMarch {
     besiegingSince?: number;
     /**
      * Caravans travelling with it (PR 25), and what they carry between them.
-     * Absent on a stack with none. A stack of caravans and no units is
-     * unescorted: it lays no siege, and walks into no barbarian village.
+     * Absent on a stack with none. A stack of caravans and no units — or none
+     * but settlers — is unescorted: it lays no siege, and walks into no
+     * barbarian village.
      */
     caravans?: number;
     cargo?: Partial<KingdomBuilderResources>;
 }
 
-/** Whether the stack has any units to guard it — one that is only caravans has none. */
+/** How many of the stack's units fight — all of them but its settlers (PR 24). */
+export function militaryCount(units: Partial<KingdomBuilderGarrison>): number {
+    return KINGDOM_BUILDER_MILITARY_UNIT_TYPES.reduce((total, unitType) => total + (units[unitType] ?? 0), 0);
+}
+
+/** Whether the stack has any units to guard it — one that is only caravans and settlers has none. */
 export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): boolean {
-    return unitCount(march.units) > 0;
+    return militaryCount(march.units) > 0;
 }
 
 /** "1 caravan", "3 caravans". */
@@ -158,7 +165,7 @@ export function subtractUnits(a: Partial<KingdomBuilderGarrison> | undefined, b:
     return garrisonOf(Object.fromEntries(KINGDOM_BUILDER_UNIT_TYPES.map(unitType => [unitType, left[unitType] - right[unitType]])));
 }
 
-/** Caravans that changed hands on the road (PR 25): whose they were, who took them, and where they had been bound. */
+/** Caravans (PR 25) and settlers (PR 24) that changed hands on the road: whose they were, who took them, and where they had been bound. */
 export interface KingdomBuilderSeizure {
     tick: number;
     /**
@@ -172,13 +179,16 @@ export interface KingdomBuilderSeizure {
     /** The escort that took them — its owner is told, and nobody else. */
     captor: KingdomBuilderGarrison;
     caravans: number;
+    /** Settlers taken with them, or alone — absent when there were none. */
+    settlers?: number;
 }
 
 /**
- * Caravans with nobody to guard them are taken by a rival's escorted stack on
- * the same tile (§4.7): they and their load join the first such stack — the
- * oldest, in the order given — which drives them on wherever it is going. A
- * stack of their owner's with units on the tile guards them instead.
+ * Caravans and settlers with nobody to guard them are taken by a rival's
+ * escorted stack on the same tile (§4.7): they and their load join the first
+ * such stack — the oldest, in the order given — which drives them on wherever
+ * it is going, and whose settlers they now are. A stack of their owner's with
+ * fighting units on the tile guards them instead.
  */
 export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[], tick: number): { armies: T[]; seized: KingdomBuilderSeizure[] } {
     const guards = new Map<number, T[]>();
@@ -190,12 +200,16 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
     const taken = new Map<T, T[]>();
     const seized: KingdomBuilderSeizure[] = [];
     for (const army of armies) {
-        if (isEscorted(army) || !army.caravans) continue;
+        const settlers = army.units.settler ?? 0;
+        if (isEscorted(army) || (!army.caravans && !settlers)) continue;
         const here = guards.get(armyTile(army)) ?? [];
         const captor = here.some(guard => guard.ownerId === army.ownerId) ? undefined : here[0];
         if (!captor) continue;
         taken.set(captor, [...(taken.get(captor) ?? []), army]);
-        seized.push({ tick, ...(isCamped(army) ? { nodeId: army.targetNodeId } : {}), ownerId: army.ownerId, captorId: captor.ownerId, captor: garrisonOf(captor.units), caravans: army.caravans });
+        seized.push({
+            tick, ...(isCamped(army) ? { nodeId: army.targetNodeId } : {}), ownerId: army.ownerId, captorId: captor.ownerId,
+            captor: garrisonOf(captor.units), caravans: army.caravans ?? 0, ...(settlers ? { settlers } : {}),
+        });
     }
     if (seized.length === 0) return { armies: [...armies], seized };
     const gone = new Set([...taken.values()].flat());
@@ -203,7 +217,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         armies: armies.flatMap(army => {
             if (gone.has(army)) return [];
             const spoils = taken.get(army);
-            return spoils ? [{ ...army, ...combineCaravans([army, ...spoils]) }] : [army];
+            return spoils ? [{ ...army, units: spoils.reduce((units, spoil) => addUnits(units, spoil.units), army.units), ...combineCaravans([army, ...spoils]) }] : [army];
         }),
         seized,
     };

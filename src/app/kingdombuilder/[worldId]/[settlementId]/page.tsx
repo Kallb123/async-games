@@ -16,15 +16,18 @@ import {
     buildingCostFor,
     buildingOutputFor,
     type KingdomBuilderPrototypeBuilding,
+    type KingdomBuilderUpgradableBuilding,
 } from "@/games/KingdomBuilder/buildings";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, type KingdomBuilderResourceType } from "@/games/KingdomBuilder/resources";
 import type { KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
 import MarketSection from "@/games/KingdomBuilder/components/MarketSection";
 import {
+    KINGDOM_BUILDER_MILITARY_UNIT_TYPES,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
     KINGDOM_BUILDER_UNIT_TYPES,
     KINGDOM_BUILDER_UNITS,
     trainingTicksFor,
+    type KingdomBuilderTrainingOrder,
     type KingdomBuilderUnitType,
 } from "@/games/KingdomBuilder/units";
 import { describeSiege } from "@/games/KingdomBuilder/siege";
@@ -59,6 +62,13 @@ function landLabel(resource: KingdomBuilderResourceType, catchment: KingdomBuild
 function outputOf(type: KingdomBuilderBuildingType, level: number, catchment: KingdomBuilderCatchment): string | null {
     const output = buildingOutputFor(type, level, catchment);
     return output ? `+${output.amount} ${output.resource}` : null;
+}
+
+/** Where the training queue has got to — the one queue soldiers and settlers wait in. */
+function trainingStatus(queue: readonly KingdomBuilderTrainingOrder[]): string {
+    if (queue.length === 0) return "Nothing in training. Units are paid for when queued and join the garrison as each one finishes.";
+    return `Training ${KINGDOM_BUILDER_UNITS[queue[0].unitType].name.toLowerCase()} — ${formatTicks(queue[0].ticksRemaining)} left`
+        + (queue.length > 1 ? `, then ${queue.length - 1} more (${queue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".");
 }
 
 /**
@@ -112,17 +122,22 @@ export default function KingdomBuilderSettlementPage({
     const unavailable = status === 403 || status === 404;
     const construction = data?.tiles.find(tile => tile.construction)?.construction;
     const emptyTiles = data?.tiles.filter(tile => !tile.building && !tile.construction) ?? [];
-    const tileOf = (type: KingdomBuilderPrototypeBuilding) => data?.tiles.find(tile => tile.building?.type === type);
+    const tileOf = (type: KingdomBuilderUpgradableBuilding) => data?.tiles.find(tile => tile.building?.type === type);
     const barracks = tileOf("barracks");
     const barracksLevel = barracks?.building?.level ?? 0;
     const market = tileOf("market");
+    const townCentre = tileOf("town-centre");
     // A barracks or a market is built once and levelled after (§4.2).
     const buildableTypes = KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type] === undefined || (!tileOf(type) && !construction));
     const trainingQueue = data?.trainingQueue ?? [];
     const queueFull = trainingQueue.length >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT;
-    const upgradeRow = (type: KingdomBuilderPrototypeBuilding, tile: typeof barracks, effect: string) => data && tile?.building && (
+    const upgradeRow = (type: KingdomBuilderUpgradableBuilding, tile: typeof barracks, effect: string) => data && tile?.building && (
         <UpgradeRow type={type} tilePosition={tile.position} level={tile.building.level} effect={effect} resources={data.resources}
             busy={!!construction} pending={pending === `upgrade-${type}`} disabled={isPending} onUpgrade={send} />
+    );
+    const unitRow = (unitType: KingdomBuilderUnitType, level: number) => data && (
+        <UnitRow key={unitType} unitType={unitType} level={level} resources={data.resources} queueFull={queueFull}
+            pending={pending === unitType} disabled={isPending} onTrain={() => send(unitType, { unitType })} />
     );
 
     return (
@@ -229,26 +244,23 @@ export default function KingdomBuilderSettlementPage({
 
                     {data && barracks && (
                         <Section label="Barracks" action={<span className="ag-tag">Level {barracksLevel}</span>}>
-                            <p className={styles.status}>
-                                {trainingQueue.length === 0
-                                    ? "Nothing in training. Units are paid for when queued and join the garrison as each one finishes."
-                                    : `Training ${KINGDOM_BUILDER_UNITS[trainingQueue[0].unitType].name.toLowerCase()} — ${formatTicks(trainingQueue[0].ticksRemaining)} left`
-                                        + (trainingQueue.length > 1 ? `, then ${trainingQueue.length - 1} more (${trainingQueue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".")}
-                            </p>
+                            <p className={styles.status}>{trainingStatus(trainingQueue)}</p>
                             <div className="ag-build-list">
                                 {upgradeRow("barracks", barracks, "unlocks stronger units, trains faster and watches farther")}
-                                {KINGDOM_BUILDER_UNIT_TYPES.map(unitType => (
-                                    <UnitRow
-                                        key={unitType}
-                                        unitType={unitType}
-                                        barracksLevel={barracksLevel}
-                                        resources={data.resources}
-                                        queueFull={queueFull}
-                                        pending={pending === unitType}
-                                        disabled={isPending}
-                                        onTrain={() => send(unitType, { unitType })}
-                                    />
-                                ))}
+                                {KINGDOM_BUILDER_MILITARY_UNIT_TYPES.map(unitType => unitRow(unitType, barracksLevel))}
+                            </div>
+                        </Section>
+                    )}
+
+                    {data && townCentre?.building && (
+                        <Section label="Town centre" action={<span className="ag-tag">Level {townCentre.building.level}</span>}>
+                            <p className={styles.status}>
+                                {barracks ? "Settlers share the barracks' training queue. " : `${trainingStatus(trainingQueue)} `}
+                                March a settler to an open site on the world map to found a new town there.
+                            </p>
+                            <div className="ag-build-list">
+                                {upgradeRow("town-centre", townCentre, "trains settlers")}
+                                {unitRow("settler", townCentre.building.level)}
                             </div>
                         </Section>
                     )}
@@ -276,9 +288,10 @@ export default function KingdomBuilderSettlementPage({
     );
 }
 
-function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disabled, onTrain }: {
+function UnitRow({ unitType, level, resources, queueFull, pending, disabled, onTrain }: {
     unitType: KingdomBuilderUnitType;
-    barracksLevel: number;
+    /** The level of the building it trains at — the barracks, or the town centre for a settler. */
+    level: number;
     resources: KingdomBuilderSettlementView["resources"];
     queueFull: boolean;
     pending: boolean;
@@ -286,15 +299,15 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
     onTrain: () => void;
 }) {
     const unit = KINGDOM_BUILDER_UNITS[unitType];
-    const trainTicks = trainingTicksFor(unitType, barracksLevel);
+    const trainTicks = trainingTicksFor(unitType, level);
     const price = priceFor(unit.cost, resources);
-    const blocker = trainTicks === null ? `Level ${unit.barracksLevel}` : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
+    const blocker = trainTicks === null ? `Level ${unit.trainedAt.level}` : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
     return (
         <BuildRow
             icon={unit.icon}
             name={unit.name}
             cost={trainTicks === null
-                ? `${unit.role} · needs a level ${unit.barracksLevel} barracks`
+                ? `${unit.role} · needs a level ${unit.trainedAt.level} ${BUILDING_DETAILS[unit.trainedAt.building].name.toLowerCase()}`
                 : `${price.label} · ${formatTicks(trainTicks)} · ${unit.speed}`}
             tag={pending ? "Queuing…" : blocker ?? "Train"}
             tagMuted={!!blocker}
@@ -305,9 +318,9 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
     );
 }
 
-/** Raises a barracks or a market a level (§4.2) — gone once it is at its highest. */
+/** Raises a barracks, a market or the town centre a level (§4.2) — gone once it is at its highest. */
 function UpgradeRow({ type, tilePosition, level, effect, resources, busy, pending, disabled, onUpgrade }: {
-    type: KingdomBuilderPrototypeBuilding;
+    type: KingdomBuilderUpgradableBuilding;
     tilePosition: number;
     level: number;
     /** What the next level brings. */

@@ -3,7 +3,7 @@
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
 
-import { formatStack, unitCount } from "../armies";
+import { formatStack, isEscorted, unitCount } from "../armies";
 import { formatUnits, type KingdomBuilderGarrison } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
 import { tileIndexCentre } from "../worldgen/terrainField";
@@ -41,7 +41,7 @@ export default function SightingsSection({ view, ownerName, placeName }: Sightin
             {view.sightings.map((sighting, index) => {
                 const place = nearestPlace(sighting.tile);
                 return (
-                    <ListRow key={`army-${index}`} icon={unitCount(sighting.units) > 0 ? "⚔️" : "🐪"} title={`${ownerName(sighting.seat)}'s ${unitCount(sighting.units) > 0 ? "army" : "caravans"}`}
+                    <ListRow key={`army-${index}`} icon={isEscorted(sighting) ? "⚔️" : "🐪"} title={`${ownerName(sighting.seat)}'s ${isEscorted(sighting) ? "army" : sighting.caravans ? "caravans" : "settlers"}`}
                         sub={`${formatStack(sighting)}${place ? ` · near ${place}` : ""}`} />
                 );
             })}

@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-    acceptTradeOffer, detachCaravans, endWorld, foundExpansion, joinArmies, KingdomBuilderPersistenceError, leaveWorld, marchArmy, postTradeOffer,
+    acceptTradeOffer, detachCaravans, endWorld, foundWithSettler, joinArmies, KingdomBuilderPersistenceError, leaveWorld, marchArmy, postTradeOffer,
     pushAttack, sallyOut, unloadCaravans, withdrawTradeOffer, worldView,
 } from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
@@ -42,13 +42,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { siteId, action, deleteNow, targetNodeId, settlementId, units, caravans, cargo, armyId, intoArmyId, offerId, gives, wants } = await readJsonBody<{
-        siteId: string; action: string; deleteNow: boolean; targetNodeId: unknown; settlementId: unknown; units: unknown;
+    const { action, deleteNow, targetNodeId, settlementId, units, caravans, cargo, armyId, intoArmyId, offerId, gives, wants } = await readJsonBody<{
+        action: string; deleteNow: boolean; targetNodeId: unknown; settlementId: unknown; units: unknown;
         caravans: unknown; cargo: unknown; armyId: unknown; intoArmyId: unknown; offerId: unknown; gives: unknown; wants: unknown;
     }>(request);
     try {
         // GDD §9.1: the host ends the world (and may remove it outright);
-        // anyone leaves it. A body with neither founds an expansion.
+        // anyone leaves it.
         if (action === "end") {
             await endWorld(context.worldId, context.userId, { deleteNow: deleteNow === true });
             return NextResponse.json({ ended: true });
@@ -65,6 +65,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (action === "detach") return NextResponse.json(await detachCaravans(context.worldId, context.userId, armyId));
         if (action === "join") return NextResponse.json(await joinArmies(context.worldId, context.userId, armyId, intoArmyId));
         if (action === "unload") return NextResponse.json(await unloadCaravans(context.worldId, context.userId, armyId));
+        // PR 24: a settler founds a town on the open site its stack has camped at.
+        if (action === "settle") return NextResponse.json(await foundWithSettler(context.worldId, context.userId, armyId));
         // PR 25: trade offers posted, taken and withdrawn at the players' markets.
         if (action === "offer") return NextResponse.json(await postTradeOffer(context.worldId, context.userId, { settlementId, gives, wants }));
         if (action === "accept") return NextResponse.json(await acceptTradeOffer(context.worldId, context.userId, { offerId, settlementId }));
@@ -72,8 +74,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // GDD §8: a siege comes to blows — the besieger pushes, or the defender sallies out.
         if (action === "push") return NextResponse.json(await pushAttack(context.worldId, context.userId, armyId));
         if (action === "sally") return NextResponse.json(await sallyOut(context.worldId, context.userId, settlementId));
-        if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
-        return NextResponse.json(await foundExpansion(context.worldId, context.userId, siteId));
+        return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     } catch (error) {
         return errorResponse(error);
     }

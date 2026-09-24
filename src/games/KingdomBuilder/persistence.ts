@@ -1,11 +1,14 @@
 import { Types, type ClientSession } from "mongoose";
 
-import { KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
+import {
+    KingdomBuilderSettlementModel, KINGDOM_BUILDER_GRID_SIZE, KINGDOM_BUILDER_TOWN_CENTRE_INDEX, type KingdomBuilderResources, type KingdomBuilderTile,
+} from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { catchmentForSettlement } from "./land";
 import { resourcesOf } from "./resources";
+import type { KingdomBuilderGarrison } from "./units";
 import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
 
@@ -69,10 +72,18 @@ export function startingTiles(): KingdomBuilderTile[] {
     }));
 }
 
+/** What a settler's stack brings to the town it founds (PR 24): its stores, its garrison and the caravans in its yard. */
+export interface KingdomBuilderSettlementStock {
+    resources: KingdomBuilderResources;
+    garrison: KingdomBuilderGarrison;
+    caravans: number;
+}
+
 /**
  * Claims either a player's starting slot or their one expansion slot. Unique
  * world/node and world/owner/settlement-number indexes arbitrate concurrent
  * claims, so neither a site nor a player's second-settlement slot can race.
+ * An expansion is founded by a settler (PR 24), whose stack is its `stock`.
  */
 export async function foundSettlement(
     worldId: string,
@@ -80,6 +91,7 @@ export async function foundSettlement(
     siteId: string,
     session?: ClientSession,
     kind: KingdomBuilderSettlementKind = "first",
+    stock?: KingdomBuilderSettlementStock,
 ) {
     if (!Types.ObjectId.isValid(worldId) || !userId.trim() || !siteId.trim()) {
         throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world, user and site are required");
@@ -114,9 +126,10 @@ export async function foundSettlement(
         nodeId: siteId,
         settlementNumber: kind === "first" ? 0 : 1,
         tiles: startingTiles(),
-        // Only a first settlement gets the stockpile (§4.5): a free second one
-        // carrying its own would print resources.
-        resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : resourcesOf(),
+        // A first settlement gets the stockpile (§4.5); an expansion only what
+        // its settler brought, which paid for its own.
+        resources: kind === "first" ? { ...KINGDOM_BUILDER_STARTING_STOCKPILE } : resourcesOf(stock?.resources),
+        ...(stock ? { garrison: stock.garrison, ...(stock.caravans ? { caravans: stock.caravans } : {}) } : {}),
         // Worked out once, here: the ground never changes under a world (§4.6).
         catchment: catchmentForSettlement(world, { nodeId: siteId }),
     };

@@ -18,13 +18,20 @@ const OUTCOMES: Record<KingdomBuilderBattleReport["outcome"], string> = { won: "
 
 const unitsOrNone = (units: Partial<KingdomBuilderGarrison>) => unitCount(units) > 0 ? formatUnits(units) : "nothing";
 
-const caravansOf = (count: number) => `${formatCaravans(count)} and ${count === 1 ? "its" : "their"} load`;
+/** "2 caravans and their load and 1 settler" — whatever changed hands in a raid, or off a fallen escort. */
+function changedHands(caravans = 0, settlers = 0): string {
+    return [
+        caravans ? `${formatCaravans(caravans)} and ${caravans === 1 ? "its" : "their"} load` : "",
+        settlers ? `${settlers} settler${settlers === 1 ? "" : "s"}` : "",
+    ].filter(Boolean).join(" and ");
+}
 
 function titleOf(report: KingdomBuilderBattleReport, place: string | undefined): string {
     if (report.kind === "barbarian") return "Your attack on a barbarian village";
     if (report.kind === "raid") {
         const where = place ? ` at ${place}` : " on the road";
-        return report.started ? `Caravans taken${where}` : `Your caravans, taken${where}`;
+        const what = report.caravansTaken || report.caravansLost ? "caravans" : "settlers";
+        return report.started ? `${what[0].toUpperCase()}${what.slice(1)} taken${where}` : `Your ${what}, taken${where}`;
     }
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
     return report.started ? "Your sally out" : `A sally against your siege of ${place}`;
@@ -32,11 +39,13 @@ function titleOf(report: KingdomBuilderBattleReport, place: string | undefined):
 
 /** What went in and what was lost — or, for a raid nobody fought, only what changed hands. */
 function detailOf(report: KingdomBuilderBattleReport): string {
-    const taken = report.caravansTaken ? ` You took ${caravansOf(report.caravansTaken)}.` : "";
-    const lost = report.caravansLost ? ` You lost ${caravansOf(report.caravansLost)}.` : "";
+    const took = changedHands(report.caravansTaken, report.settlersTaken);
+    const gone = changedHands(report.caravansLost, report.settlersLost);
+    const taken = took ? ` You took ${took}.` : "";
+    const lost = gone ? ` You lost ${gone}.` : "";
     if (report.kind === "raid") {
         return report.started
-            ? `Tick ${report.tick} · your ${unitsOrNone(report.sent)} came on caravans with no escort.${taken}`
+            ? `Tick ${report.tick} · your ${unitsOrNone(report.sent)} came on ${report.caravansTaken ? "caravans" : "settlers"} with no escort.${taken}`
             : `Tick ${report.tick} · a rival's army came on them with no escort.${lost}`;
     }
     return `Tick ${report.tick} · you sent ${unitsOrNone(report.sent)} against ${unitsOrNone(report.faced)}.`
@@ -52,7 +61,7 @@ function detailOf(report: KingdomBuilderBattleReport): string {
 export default function BattlesSection({ view, placeName }: BattlesSectionProps) {
     return (
         <ListSection label="Battles" isLoading={false} skeletonRows={0}
-            hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia. An army at a barbarian village fights it every tick until one side is gone. Caravans with no escort are taken by any rival army that meets them, and an escort that falls leaves its caravans to whoever beat it.">
+            hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia. An army at a barbarian village fights it every tick until one side is gone. Caravans and settlers with no escort are taken by any rival army that meets them, and an escort that falls leaves its caravans to whoever beat it.">
             {view.battles.map(report => (
                 <ListRow key={report.battleId} icon={report.started ? "⚔️" : "🛡️"}
                     title={titleOf(report, report.nodeId === undefined ? undefined : placeName(report.nodeId))}

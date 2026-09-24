@@ -7,6 +7,7 @@
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { addUnits, combineCaravans, isCamped, isEscorted, unitCount, type KingdomBuilderMarch } from "./armies";
+import { KINGDOM_BUILDER_SETTLEMENT_LIMIT } from "./sites";
 import { addResources, resourcesOf } from "./resources";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { combinedUnits } from "./siege";
@@ -30,8 +31,8 @@ export const KINGDOM_BUILDER_BARBARIAN_GARRISONS: readonly KingdomBuilderGarriso
     garrisonOf({ militia: 8, infantry: 6, cavalry: 2 }),
 ];
 
-/** Settlements a player may hold — a village taken by someone already at the limit is burnt instead. */
-const SETTLEMENT_SLOTS = [0, 1] as const;
+/** The slots a player's settlements fill — a village taken by someone already at the limit is burnt instead. */
+const SETTLEMENT_SLOTS = Array.from({ length: KINGDOM_BUILDER_SETTLEMENT_LIMIT }, (_, slot) => slot);
 
 /**
  * Every barbarian site's starting garrison. The villages are ranked by how far
