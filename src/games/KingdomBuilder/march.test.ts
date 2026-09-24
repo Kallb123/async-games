@@ -6,7 +6,8 @@ vi.mock("./worldView", () => ({ worldView: vi.fn(async () => ({ worldId: "view" 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_ARMY_LIMIT } from "./armies";
+import { KINGDOM_BUILDER_ARMY_LIMIT, addUnits } from "./armies";
+import { isLeaderless } from "./commanders";
 import { detachCaravans, joinArmies, marchArmy, unloadCaravans } from "./march";
 import { garrisonOf } from "./units";
 
@@ -34,7 +35,7 @@ function mockSettlement(settlement: object | null) {
     return vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue({ select: () => ({ lean: async () => settlement }) } as never);
 }
 
-const home = { _id: settlementId, nodeId: "start", garrison: garrisonOf({ militia: 3, cavalry: 1 }) };
+const home = { _id: settlementId, nodeId: "start", garrison: garrisonOf({ militia: 3, cavalry: 1, commander: 1 }) };
 
 beforeEach(() => {
     vi.spyOn(mongoose.connection, "transaction").mockImplementation((async (callback: (session: object) => Promise<unknown>) => callback({})) as never);
@@ -50,15 +51,15 @@ describe("marchArmy — out of a garrison", () => {
         const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
         const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
 
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 2 }, targetNodeId: "camp" })).resolves.toEqual({ worldId: "view" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 2, commander: 1 }, targetNodeId: "camp" })).resolves.toEqual({ worldId: "view" });
 
         expect(spend).toHaveBeenCalledWith(
-            { _id: settlementId, worldId, ownerId: "owner", "garrison.militia": { $gte: 2 } },
-            { $inc: { "garrison.militia": -2 } },
+            { _id: settlementId, worldId, ownerId: "owner", "garrison.militia": { $gte: 2 }, "garrison.commander": { $gte: 1 } },
+            { $inc: { "garrison.militia": -2, "garrison.commander": -1 } },
             { session: {} },
         );
         expect(create).toHaveBeenCalledWith([{
-            worldId, ownerId: "owner", units: garrisonOf({ militia: 2 }),
+            worldId, ownerId: "owner", units: garrisonOf({ militia: 2, commander: 1 }),
             path: [0, 1, 2, 3, 4], pathCosts: [0, 2, 4, 6, 8], travelled: 0,
             fromNodeId: "start", targetNodeId: "camp",
         }], { session: {} });
@@ -68,7 +69,7 @@ describe("marchArmy — out of a garrison", () => {
         const world = mockWorld();
         mockSettlement(null);
 
-        await expect(marchArmy(worldId, "stranger", { settlementId, units: { militia: 1 }, targetNodeId: "camp" }))
+        await expect(marchArmy(worldId, "stranger", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" }))
             .rejects.toMatchObject({ code: "SITE_NOT_FOUND" });
         expect(world).not.toHaveBeenCalled();
     });
@@ -88,32 +89,32 @@ describe("marchArmy — out of a garrison", () => {
         mockSettlement(home);
         const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne");
 
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { cavalry: 2 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "start" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "nowhere" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { cavalry: 2, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "start" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "nowhere" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
         expect(spend).not.toHaveBeenCalled();
     });
 
     it("refuses a march with no way across the land, one past the army limit, and a world that has ended or has no ground", async () => {
         mockSettlement(home);
         const world = mockWorld();
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "isle" })).rejects.toMatchObject({ code: "NO_ROUTE" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "isle" })).rejects.toMatchObject({ code: "NO_ROUTE" });
 
         const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne");
         vi.mocked(KingdomBuilderArmyModel.countDocuments).mockReturnValue({ session: async () => KINGDOM_BUILDER_ARMY_LIMIT } as never);
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
         // Counted inside the transaction, behind a write to the world that makes two dispatches at once conflict.
         expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session: {} });
         expect(spend).not.toHaveBeenCalled();
 
         vi.mocked(KingdomBuilderWorldModel.updateOne).mockResolvedValue({ modifiedCount: 0 } as never);
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
         vi.mocked(KingdomBuilderWorldModel.updateOne).mockResolvedValue({ modifiedCount: 1 } as never);
 
         world.mockReturnValue({ select: () => ({ lean: async () => ({ ...WORLD, endedAt: new Date() }) }) } as never);
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "WORLD_NOT_FOUND" });
         world.mockReturnValue({ select: () => ({ lean: async () => ({ ...WORLD, terrainField: undefined }) }) } as never);
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     });
 
     it("creates no army when the garrison changed under the order", async () => {
@@ -122,14 +123,14 @@ describe("marchArmy — out of a garrison", () => {
         vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 0 } as never);
         const create = vi.spyOn(KingdomBuilderArmyModel, "create");
 
-        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 3 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 3, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
         expect(create).not.toHaveBeenCalled();
     });
 });
 
 describe("marchArmy — an army already out", () => {
     const army = {
-        _id: armyId, ownerId: "owner", units: garrisonOf({ militia: 2 }),
+        _id: armyId, ownerId: "owner", units: garrisonOf({ militia: 2, commander: 1 }),
         path: [0, 1, 2, 3, 4], pathCosts: [0, 2, 4, 6, 8], travelled: 4, fromNodeId: "start", targetNodeId: "camp",
     };
 
@@ -185,14 +186,14 @@ describe("marchArmy — caravans (PR 25)", () => {
         const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
         const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
 
-        await marchArmy(worldId, "owner", { settlementId, units: { militia: 1 }, caravans: 2, cargo: { wood: 60, iron: 30 }, targetNodeId: "camp" });
+        await marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, caravans: 2, cargo: { wood: 60, iron: 30 }, targetNodeId: "camp" });
 
         expect(spend).toHaveBeenCalledWith(
             {
-                _id: settlementId, worldId, ownerId: "owner", "garrison.militia": { $gte: 1 },
+                _id: settlementId, worldId, ownerId: "owner", "garrison.militia": { $gte: 1 }, "garrison.commander": { $gte: 1 },
                 caravans: { $gte: 2 }, "resources.wood": { $gte: 60 }, "resources.iron": { $gte: 30 },
             },
-            { $inc: { "garrison.militia": -1, caravans: -2, "resources.wood": -60, "resources.iron": -30 } },
+            { $inc: { "garrison.militia": -1, "garrison.commander": -1, caravans: -2, "resources.wood": -60, "resources.iron": -30 } },
             { session: {} },
         );
         expect(create.mock.calls[0][0]).toEqual([expect.objectContaining({ caravans: 2, cargo: { wood: 60, stone: 0, iron: 30, wheat: 0 } })]);
@@ -223,6 +224,85 @@ describe("marchArmy — caravans (PR 25)", () => {
         world.mockReturnValue({ select: () => ({ lean: async () => ({ ...WORLD, barbarians: [{ nodeId: "camp", garrison: garrisonOf({ militia: 4 }) }] }) }) } as never);
         await expect(marchArmy(worldId, "owner", { settlementId, caravans: 1, targetNodeId: "camp" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
         expect(spend).not.toHaveBeenCalled();
+    });
+});
+
+describe("marchArmy — commanders (PR 26)", () => {
+    const tavernTown = {
+        ...home, garrison: garrisonOf({ militia: 3, infantry: 1, scout: 2, settler: 1, commander: 1 }), caravans: 1, resources: { wood: 10, stone: 0, iron: 0, wheat: 0 },
+    };
+
+    it.each<[string, object]>([
+        ["militia", { militia: 2 }],
+        ["infantry with scouts", { infantry: 1, scout: 2 }],
+        ["a settler with militia to guard it", { settler: 1, militia: 1 }],
+    ])("refuses %s with no commander to lead them, before anything is read", async (_, units) => {
+        const settlement = mockSettlement(tavernTown);
+
+        await expect(marchArmy(worldId, "owner", { settlementId, units, targetNodeId: "camp" }))
+            .rejects.toMatchObject({ code: "INVALID_INPUT", message: "An army needs a commander to lead it out — recruit one at a tavern" });
+        expect(settlement).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, object]>([
+        ["a lone scout", { units: { scout: 1 } }],
+        ["scouts with caravans among them", { units: { scout: 2 }, caravans: 1, cargo: { wood: 10 } }],
+        ["caravans alone", { caravans: 1 }],
+        ["a settler alone", { units: { settler: 1 } }],
+        ["a commander alone", { units: { commander: 1 } }],
+        ["soldiers behind a commander", { units: { militia: 3, infantry: 1, commander: 1 } }],
+    ])("still sends %s", async (_, order) => {
+        mockWorld();
+        mockSettlement(tavernTown);
+        vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create").mockResolvedValue([] as never);
+
+        await marchArmy(worldId, "owner", { settlementId, targetNodeId: "camp", ...order });
+        expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends the commander in the same conditional write as its soldiers, so one a tick or a second tab took can't lead two armies", async () => {
+        mockWorld();
+        mockSettlement(tavernTown);
+        const spend = vi.spyOn(KingdomBuilderSettlementModel, "updateOne").mockResolvedValue({ modifiedCount: 0 } as never);
+        const create = vi.spyOn(KingdomBuilderArmyModel, "create");
+
+        await expect(marchArmy(worldId, "owner", { settlementId, units: { militia: 1, commander: 1 }, targetNodeId: "camp" })).rejects.toMatchObject({ code: "ARMY_BUSY" });
+        expect(spend.mock.calls[0][0]).toMatchObject({ "garrison.commander": { $gte: 1 } });
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    const leaderless = {
+        _id: armyId, ownerId: "owner", units: garrisonOf({ militia: 2 }),
+        path: [0, 1, 2, 3, 4], pathCosts: [0, 2, 4, 6, 8], travelled: 8, fromNodeId: "start", targetNodeId: "camp", arrivedAtTick: 3,
+    };
+
+    it("turns a leaderless army round toward one of its owner's towns", async () => {
+        mockWorld();
+        vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue({ lean: async () => leaderless } as never);
+        const ours = vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue({ _id: settlementId } as never);
+        const move = vi.spyOn(KingdomBuilderArmyModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+
+        await marchArmy(worldId, "owner", { armyId, targetNodeId: "start" });
+
+        expect(ours).toHaveBeenCalledWith({ worldId, ownerId: "owner", nodeId: "start" });
+        expect(move).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses a leaderless army anywhere but home — a rival's town included", async () => {
+        mockWorld();
+        vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue({ lean: async () => ({ ...leaderless, travelled: 0, targetNodeId: "start", arrivedAtTick: 1 }) } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue(null);
+        const move = vi.spyOn(KingdomBuilderArmyModel, "updateOne");
+
+        await expect(marchArmy(worldId, "owner", { armyId, targetNodeId: "camp" }))
+            .rejects.toMatchObject({ code: "INVALID_INPUT", message: "Without a commander this army can only march home" });
+        expect(move).not.toHaveBeenCalled();
+    });
+
+    it("leads a leaderless stack again once a commander's stack joins it, and makes a party of scouts joined by militia leaderless", () => {
+        expect(isLeaderless({ units: addUnits(leaderless.units, { commander: 1 }) })).toBe(false);
+        expect(isLeaderless({ units: addUnits({ scout: 3 }, { militia: 2 }) })).toBe(true);
     });
 });
 

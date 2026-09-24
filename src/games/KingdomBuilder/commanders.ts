@@ -21,6 +21,9 @@ export function commandersHeld({ settlements, armies }: {
     return stationed + armies.reduce((total, army) => total + (army.units?.commander ?? 0), 0);
 }
 
+/** Why a stack of soldiers with no commander can't leave a settlement — the server's refusal, and the muster's disabled Send. */
+export const KINGDOM_BUILDER_NEEDS_COMMANDER = "An army needs a commander to lead it out — recruit one at a tavern";
+
 /**
  * The march rule (§6.5): a stack with any soldier in it other than a scout
  * can't leave a settlement without a commander. Scouts, caravans, settlers and
