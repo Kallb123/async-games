@@ -3,7 +3,12 @@ import { buildTurnExpiringNotification, buildYourTurnNotification } from '@/util
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IGameDataDocument, ISweepCandidate, SWEEP_CANDIDATE_LIMIT, findSweepCandidates, trySave } from '@/utils/mongodb/GameData';
 import { finishGame } from '@/utils/games/finishGame';
-import { resolveStalledTurn } from '@/utils/games/turnTimeout';
+import { resolveStalledTurn, TurnTimeoutOutcome } from '@/utils/games/turnTimeout';
+import { activeTurnOrder, canDropPlayer, getPlayerDropoutAdapter, nextActivePlayer, PlayerDropped } from '@/utils/games/playerDropout';
+import { runCommand } from '@/utils/games/commandPipeline';
+import { deserializeJSON } from '@/utils/apiModels/Serialisable';
+import { IGameType } from '@/utils/apiModels/gameCommand';
+import { User } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { formatRemainingTime, hasAbandonedGame, isExpired, needsSweeping } from '@/utils/games/TurnTimer';
 import { requireLiveGame } from '@/utils/games/liveGame';
@@ -24,14 +29,15 @@ import { readableName } from '@/utils/ui/players';
  * is; `stuck` is an adapter that ran commands and still didn't finish the
  * turn, where nothing is kept at all.
  */
-type SweepOutcome = 'expired' | 'abandoned' | 'warned' | 'skipped' | 'declined' | 'stuck';
+type SweepOutcome = 'expired' | 'dropped' | 'abandoned' | 'warned' | 'skipped' | 'declined' | 'stuck';
 
 /**
  * Ends a game whose current player has stopped turning up.
  *
- * We can't assume the remaining players still make a fair game (turnOrder,
- * scoring and every game's own state all assume the original roster), so the
- * game ends for everyone rather than continuing without them.
+ * The answer for a game that can't carry on without them — one that registers
+ * no dropout adapter (utils/games/playerDropout.ts), because its rules assume
+ * the whole roster, or one that would be left with too few players. Every
+ * other game drops the player instead: see `dropPlayer`.
  */
 async function abandonGame(gameData: IGameDataDocument, missingPlayerId: string): Promise<SweepOutcome> {
     // A player may have taken their turn concurrently with this cron run —
@@ -63,28 +69,9 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
     const userList = await usersById(gameData.userIdList);
     const timedOutName = readableName(userList.find(u => u.id === timedOutPlayerId), 'The last player');
 
-    const resolution = await resolveStalledTurn(gameData, timedOutPlayerId, timedOutName);
+    const resolution = await playOutStalledTurn(gameData, timedOutPlayerId, timedOutName);
 
-    if (resolution === 'gameOver') {
-        // How it ended is the game's to say: a co-op game records 'teamwin' or
-        // 'teamloss' on the way through CheckGameOver, and the `?? "win"` here
-        // only fills in for a game that named no reason of its own (see the
-        // same call in the command route). A player may also have taken their
-        // turn concurrently with this cron run — finishGame leaves their move
-        // alone rather than clobbering it with a stale expiry.
-        const finished = await finishGame(gameData, {
-            winner: gameData.winner,
-            endReason: gameData.endReason ?? "win",
-        });
-        if (!finished.saved) return 'skipped';
-        await finished.announce();
-        return 'expired';
-    }
-
-    if (resolution === 'noAdapter') {
-        const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === timedOutPlayerId);
-        gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
-    }
+    if (resolution === 'gameOver') return finishPlayedOut(gameData, 'expired');
 
     if (resolution === 'stuck') {
         // Commands ran and the turn still didn't end, which is an adapter bug
@@ -129,22 +116,124 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
 
     if (resolution === 'declined') return 'declined';
 
-    // The turn arrived because the previous player ran out of time, not
-    // because they moved — say so, it's the more useful headline.
+    await tellNextPlayer(gameData, userList, timedOutName);
+    return 'expired';
+}
+
+/**
+ * Runs a timed-out player's turn to its end: through the game's own
+ * turn-timeout adapter where it has one (turnTimeout.ts), or the plain step to
+ * the next seat still playing where it doesn't. Mutates `gameData`; saving it
+ * is the caller's call, since a 'stuck' turn must not be saved at all.
+ */
+async function playOutStalledTurn(gameData: IGameDataDocument, timedOutPlayerId: string, timedOutName: string): Promise<TurnTimeoutOutcome> {
+    const resolution = await resolveStalledTurn(gameData, timedOutPlayerId, timedOutName);
+    if (resolution === 'noAdapter') {
+        gameData.currentTurn = nextActivePlayer(gameData, timedOutPlayerId);
+    }
+    return resolution;
+}
+
+/**
+ * Saves and announces a game that a forced command ended. How it ended is the
+ * game's to say: a co-op game records 'teamwin' or 'teamloss' on the way
+ * through CheckGameOver, and the `?? "win"` here only fills in for a game that
+ * named no reason of its own (see the same call in the command route). A
+ * player may also have taken their turn concurrently with this cron run —
+ * finishGame leaves their move alone rather than clobbering it with a stale
+ * expiry.
+ */
+async function finishPlayedOut(gameData: IGameDataDocument, outcome: SweepOutcome): Promise<SweepOutcome> {
+    const finished = await finishGame(gameData, {
+        winner: gameData.winner,
+        endReason: gameData.endReason ?? "win",
+    });
+    if (!finished.saved) return 'skipped';
+    await finished.announce();
+    return outcome;
+}
+
+/**
+ * Tells whoever now holds the turn that it's theirs. The turn arrived because
+ * the previous player ran out of time, not because they moved — say so, it's
+ * the more useful headline.
+ */
+async function tellNextPlayer(gameData: IGameDataDocument, userList: User[], timedOutName: string): Promise<void> {
     const turnUser = userList.find(u => u.id === gameData.currentTurn);
-    if (turnUser) {
-        await sendPushToUsers([turnUser], {
-            event: 'YourTurn',
-            gameId: gameData.gameId,
-            link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
-        }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList), {
-            timedOutName
-        }), {
-            channel: 'yourTurn'
-        });
+    if (!turnUser) return;
+    await sendPushToUsers([turnUser], {
+        event: 'YourTurn',
+        gameId: gameData.gameId,
+        link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
+    }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList), {
+        timedOutName
+    }), {
+        channel: 'yourTurn'
+    });
+}
+
+/**
+ * Whether a player who has just run out their last missed turn can be dropped
+ * while the game carries on, judged before their turn is played out: the game
+ * registers a dropout adapter, is happy to lose them in its current phase, and
+ * still has enough players without them. `PlayerDropped` asks all of this
+ * again once the turn has passed; this is only whether to try.
+ */
+function mayDropInsteadOfAbandon(gameData: IGameDataDocument, userId: string): boolean {
+    const adapter = getPlayerDropoutAdapter(gameData.gameType.className);
+    if (!adapter) return false;
+    if (activeTurnOrder(gameData).length - 1 < adapter.minPlayers) return false;
+    return adapter.canDrop?.(gameData, userId) ?? true;
+}
+
+/**
+ * Takes a player who has stopped turning up out of a game that can carry on
+ * without them, rather than ending it for everybody.
+ *
+ * Their stalled turn is played out first, exactly as `passTurnOn` would — so
+ * the board gets the draw, the infection or the fire their turn owed it, and
+ * the turn lands on the next player with that player's own turn set up by the
+ * game's own CheckEndTurn. Only then is the seat dropped, through the
+ * `PlayerDropped` command, once somebody else holds the turn. Whatever stops
+ * that — a turn the game can't play for them, or a drop the game refuses once
+ * it gets there — falls back to abandoning the game, which is what reaching
+ * the end of the ladder always did.
+ */
+async function dropPlayer(gameData: IGameDataDocument, missingPlayerId: string): Promise<SweepOutcome> {
+    const userList = await usersById(gameData.userIdList);
+    const missingName = readableName(userList.find(u => u.id === missingPlayerId), 'The last player');
+
+    const resolution = await playOutStalledTurn(gameData, missingPlayerId, missingName);
+    if (resolution === 'gameOver') return finishPlayedOut(gameData, 'expired');
+    if (resolution === 'stuck') {
+        console.error(`Turn-timeout adapter for game ${gameData.gameId} ran commands without finishing ${missingPlayerId}'s stalled turn; discarding them`);
+        return 'stuck';
     }
 
-    return 'expired';
+    const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
+    const drop = new PlayerDropped();
+    drop.gameId = gameData.gameId;
+    drop.senderId = missingPlayerId;
+    drop.senderUsername = missingName;
+    // Asked here, not only inside Execute: a refused command is recorded
+    // nowhere, and a turn the game couldn't pass on ('declined') is still the
+    // missing player's, which PlayerDropped won't take from them.
+    if (!canDropPlayer(gameData, missingPlayerId)) return abandonGame(gameData, missingPlayerId);
+
+    const { outcome, gameOver } = await runCommand(gameData, gameType, drop);
+    if (!outcome.validMove) return abandonGame(gameData, missingPlayerId);
+    gameData.markModified('gameState.commandHistory');
+    // Their ladder is spent; nothing else will ever count against them here.
+    gameData.missedTurnCounts.delete(missingPlayerId);
+
+    if (gameOver) return finishPlayedOut(gameData, 'dropped');
+
+    gameData.lastTurnTimestamp = new Date().toISOString();
+    gameData.timerWarningNotificationSent = false;
+    if (!(await trySave(gameData))) return 'skipped';
+
+    await tellNextPlayer(gameData, userList, missingName);
+    return 'dropped';
 }
 
 /** Warns the current player that their turn is nearly up, once per turn. */
@@ -197,9 +286,10 @@ async function sweepGame(gameId: string): Promise<SweepOutcome> {
         const missedCount = (gameData.missedTurnCounts.get(currentTurn) ?? 0) + 1;
         gameData.missedTurnCounts.set(currentTurn, missedCount);
 
-        return hasAbandonedGame(missedCount)
-            ? abandonGame(gameData, currentTurn)
-            : passTurnOn(gameData, currentTurn);
+        if (!hasAbandonedGame(missedCount)) return passTurnOn(gameData, currentTurn);
+        return mayDropInsteadOfAbandon(gameData, currentTurn)
+            ? dropPlayer(gameData, currentTurn)
+            : abandonGame(gameData, currentTurn);
     }
 
     // needsSweeping said yes and the turn hasn't run out, so the only thing
@@ -230,7 +320,7 @@ export async function GET(request: NextRequest) {
     const deadline = Date.now() + SWEEP_BUDGET_MS;
     const candidates: ISweepCandidate[] = await findSweepCandidates();
 
-    const tally: Record<SweepOutcome, number> = { expired: 0, abandoned: 0, warned: 0, skipped: 0, declined: 0, stuck: 0 };
+    const tally: Record<SweepOutcome, number> = { expired: 0, dropped: 0, abandoned: 0, warned: 0, skipped: 0, declined: 0, stuck: 0 };
     let failed = 0;
     let unswept = 0;
 
@@ -266,6 +356,9 @@ export async function GET(request: NextRequest) {
         // the tally or as a failure.
         processed: Object.values(tally).reduce((sum, count) => sum + count, 0) + failed,
         expired: tally.expired,
+        // Players who ran out their missed turns in a game that carries on
+        // without them (utils/games/playerDropout.ts), rather than ending it.
+        dropped: tally.dropped,
         warned: tally.warned,
         abandoned: tally.abandoned,
         skipped: tally.skipped,

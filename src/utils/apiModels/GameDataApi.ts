@@ -314,7 +314,9 @@ export interface IGameDataResponse {
         turnOrder: string[],
         // Newest first, with every {{userId}} token already resolved to a name
         // — ready to render. `actorId` says whose line it is.
-        history: IHistoryEntryResponse[]
+        history: IHistoryEntryResponse[],
+        // Seats dropped for going quiet — still in turnOrder, out of the game.
+        droppedPlayers?: string[]
     },
     complete: boolean,
     winner: string,

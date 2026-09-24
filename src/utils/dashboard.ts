@@ -124,7 +124,9 @@ export async function buildDashboard(userId: string): Promise<IDashboardResponse
     // over the same set of invitations — splitting in memory is both cheaper
     // and the thing that makes the snapshot consistent.
     const [games, invites, results] = await Promise.all([
-        GameDataModel.find({ userIdList: userId, complete: false }).exec() as Promise<IGameDataDocument[]>,
+        // A game that dropped this player for going quiet carries on without
+        // them; it is theirs again, as a loss, once it finishes.
+        GameDataModel.find({ userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } }).exec() as Promise<IGameDataDocument[]>,
         InvitationModel.find({
             $or: [{ senderId: userId }, { "userIdList.userId": userId }]
         }).exec() as Promise<IInvitationDataDocument[]>,
