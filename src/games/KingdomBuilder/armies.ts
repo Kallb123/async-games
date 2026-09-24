@@ -50,12 +50,12 @@ export interface KingdomBuilderMarch {
     cargo?: Partial<KingdomBuilderResources>;
 }
 
-/** How many of the stack's units fight — all of them but its settlers (PR 24). */
+/** How many of the stack's units guard it — all of them but its settlers (PR 24) and its commanders (PR 26). */
 export function militaryCount(units: Partial<KingdomBuilderGarrison>): number {
     return KINGDOM_BUILDER_MILITARY_UNIT_TYPES.reduce((total, unitType) => total + (units[unitType] ?? 0), 0);
 }
 
-/** Whether the stack has any units to guard it — one that is only caravans and settlers has none. */
+/** Whether the stack has any units to guard it — one that is only caravans, settlers and commanders has none. */
 export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): boolean {
     return militaryCount(march.units) > 0;
 }

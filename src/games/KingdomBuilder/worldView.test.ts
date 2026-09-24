@@ -236,7 +236,7 @@ describe("Kingdom Builder world view", () => {
 
         expect(find).toHaveBeenCalledWith({ worldId, ownerId: "owner" });
         expect(view.armies[0]).toEqual({
-            armyId: armyId.toString(), units: { militia: 3, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0 },
+            armyId: armyId.toString(), units: { militia: 3, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 },
             tile: 6, route: [6, 7, 8], fromNodeId: "start", targetNodeId: "camp", ticksToArrive: 2,
             caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 },
         });
@@ -299,7 +299,7 @@ describe("Kingdom Builder world view", () => {
             const view = await worldView(worldId, "owner");
 
             expect(view.sight).toEqual([{ tile: at(2, 2), radius: 3 }]);
-            expect(view.sightings).toEqual([{ seat: 1, tile: at(4, 3), units: { militia: 0, scout: 0, infantry: 0, cavalry: 2, "siege-engine": 0, settler: 0 } }]);
+            expect(view.sightings).toEqual([{ seat: 1, tile: at(4, 3), units: { militia: 0, scout: 0, infantry: 0, cavalry: 2, "siege-engine": 0, settler: 0, commander: 0 } }]);
         });
 
         it("says a rival stack in sight has caravans, and never what they carry", async () => {
@@ -353,7 +353,7 @@ describe("Kingdom Builder world view", () => {
             withVillages();
             mockArmies([ownArmy(at(14, 2), { scout: 1 })]);
             const scouted = await worldView(worldId, "owner");
-            expect(scouted.barbarians).toEqual([{ nodeId: "village", garrison: { militia: 86420, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0 } }, { nodeId: "far" }]);
+            expect(scouted.barbarians).toEqual([{ nodeId: "village", garrison: { militia: 86420, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 } }, { nodeId: "far" }]);
         });
 
         it("tells the viewer their own town is besieged, and since when — and tells nobody else of anyone's", async () => {

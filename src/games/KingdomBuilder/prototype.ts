@@ -215,8 +215,8 @@ export async function queuePrototypeBuilding(
 
 /**
  * Queues one unit where it trains — a soldier at the barracks, a settler at the
- * town centre (PR 24) — paying its whole cost up front (§4.3). Both join the
- * settlement's one training queue.
+ * town centre (PR 24), a commander at the tavern (PR 26) — paying its whole
+ * cost up front (§4.3). All of them join the settlement's one training queue.
  */
 export async function queueUnitTraining(
     worldId: string,
@@ -235,11 +235,12 @@ export async function queueUnitTraining(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const { building } = unit.trainedAt;
+    const buildingName = building.replace("-", " ");
     const level = trainingLevelFor(unitType, existing.tiles);
-    if (level === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", "Build a barracks first");
+    if (level === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", `Build a ${buildingName} first`);
     const ticksRemaining = trainingTicksFor(unitType, level);
     if (ticksRemaining === null) {
-        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.trainedAt.level} ${building === "barracks" ? "barracks" : "town centre"}`);
+        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.trainedAt.level} ${buildingName}`);
     }
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
         throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The training queue is full");
