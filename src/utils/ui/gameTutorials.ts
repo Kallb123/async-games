@@ -11,6 +11,7 @@
 // not editing a shared object literal.
 
 import { tutorial as diceCitiesTutorial } from "@/games/DiceCities/tutorial";
+import { tutorial as raceCarsTutorial } from "@/games/RaceCars/tutorial";
 import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
 
 /**
@@ -66,6 +67,7 @@ export interface GameTutorial<S extends string = string> {
 // guards the "seen guide" list.
 export const GAME_TUTORIALS: Record<string, GameTutorial> = {
     dicecities: diceCitiesTutorial,
+    racecars: raceCarsTutorial,
     settlementsandcities: settlementsAndCitiesTutorial,
 };
 
@@ -116,6 +118,15 @@ export function tutorialRun<S extends string>(
     opts: { active: boolean },
 ): TutorialRun {
     return { tutorial, signals, active: opts.active };
+}
+
+/**
+ * Whether the tour is on screen right now — the one rule `GameShell` draws
+ * the overlay by, for a page that has to hold something back (or bring
+ * something forward) while it is. `intro` is the page's `useGameIntro`.
+ */
+export function tourOnScreen(run: TutorialRun | undefined, intro: { tutorialOpen: boolean } | undefined): boolean {
+    return !!run?.active && !!intro?.tutorialOpen;
 }
 
 /**
