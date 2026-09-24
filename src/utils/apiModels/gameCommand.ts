@@ -114,47 +114,6 @@ export function consumedRandomness(command: IGameCommand): boolean {
     return Object.keys(fields).some(key => key.startsWith("recorded") && key !== RECORDED_FOLLOW_UP_TO_ID);
 }
 
-// An explicit opt-in (`readonly ignoresTurnGate = true`), the same
-// per-class-marker shape `undoable` uses below, checked in exactly one place:
-// /api/game/command's own "is it your turn" gate. Every command answers that
-// gate by default; a command that opts out is not acting on the live turn at
-// all and is trusted to police its own authority inside `Execute` instead.
-//
-// docs/undo.md's RaceCarsUndo is the first: its authority is the undo anchor,
-// which `CheckEndTurn` advancing `currentTurn` to the next driver does not
-// invalidate, so without this a driver could never reach `RaceCarsUndo.Execute`
-// at all for the ordinary case — a move or tow that ended their own turn —
-// because the very next request they send already fails the gate. Settlements
-// & Cities' own `SACUndo` does not opt in: its one turn-ending placement is
-// deliberately left for its own hold (docs/undo.md §5) to close instead, and
-// giving another game's Undo command this exemption for free is a call for
-// whoever builds that game's own pilot, not a default it inherits.
-//
-// Nothing here checks that a command declaring this flag actually carries an
-// equivalent authority check inside its own `Execute` — this gate is the
-// *only* membership-adjacent test most commands get from the route, so an
-// opt-out with no real check behind it would be reachable by anyone in the
-// game, on any turn, for any player's state. `ignoresTurnGate.test.ts`'s
-// source scan is the tripwire: it fails the build the moment a second
-// command's class starts declaring the flag, forcing whoever added it to
-// show their check to a reviewer rather than inheriting this one's trust
-// silently.
-//
-// Read off a fresh instance of the command's class, never off the command
-// itself. The command is a request body rehydrated by `deserializeJSON`, whose
-// reviver `Object.assign`s every posted property onto the new instance — and
-// `readonly` is compile-time only — so a body posting
-// `{"className": "SACRollDice", "ignoresTurnGate": true, …}` carried the flag
-// on an instance of a class that never declared it, and rolled the dice on
-// somebody else's turn. `constructor` is one of the keys the reviver refuses
-// to copy (Serialisable.ts), so it is always the class that was really
-// constructed, and a fresh instance of it carries only what that class
-// declares.
-export function ignoresTurnGate(command: IGameCommand): boolean {
-    const declaringClass = (command as object).constructor as new () => unknown;
-    return (new declaringClass() as Record<string, unknown>).ignoresTurnGate === true;
-}
-
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,
 // keyed by userId) can't survive `NextResponse.json`: a Map has no own
 // enumerable properties, so plain JSON.stringify sends it over as `{}`. Every

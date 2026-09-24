@@ -1,7 +1,7 @@
 # Out-of-turn actions
 
-**Status: proposal.** Nothing here is built yet, apart from the security fix in
-§3.1, which ships alongside this document.
+**Status: proposal.** Nothing here is built yet. The PR that adds this document
+also removes the one turn-gate exemption the app had, which is why §3 exists.
 
 Every command in the app today is played by the player whose turn it is. That
 rule is enforced in one place (the command route's turn gate) and *assumed* in
@@ -55,8 +55,8 @@ Each row is a thing the recommended design has to answer.
 
 | # | Where | What it assumes | Consequence if ignored |
 |---|---|---|---|
-| 1 | `src/app/api/game/command/route.ts` — the `currentTurn` gate | Only the active player sends commands. It is also the only membership check most commands get: being `currentTurn` implies being seated. | The obvious one. Note that the existing `ignoresTurnGate` bypass skips membership too; an out-of-turn path must check it explicitly. |
-| 2 | `ignoresTurnGate` in `src/utils/apiModels/gameCommand.ts` | The flag is the class's to declare. | It wasn't — see §3.1. Fixed in this PR. |
+| 1 | `src/app/api/game/command/route.ts` — the `currentTurn` gate | Only the active player sends commands. It has no exceptions (§3), and it is also the only membership check most commands get: being `currentTurn` implies being seated. | The obvious one. An out-of-turn path must check membership explicitly. |
+| 2 | Every command's `Execute` | The gate already ran, so nothing re-checks whose turn it is. `SACRollDice.Execute` is typical. | A way past the gate is a way past every rule that relies on it — which is what §3's exemption turned out to be. |
 | 3 | `src/utils/games/replay.ts`, `applyCommands` | `state.currentTurn = command.senderId` before every command: *"Every command was executed on its sender's turn."* | A replayed interrupt makes the interrupter the active player for that step. If it is the last command, the review's "live" snapshot names the wrong active player; if any `Execute` or `CheckEndTurn` reads `currentTurn`, the replay diverges from the live game with no test failing. SAC §10.4 calls this "the landmine". |
 | 4 | `replay.ts`, `replayTurnByTurn` | A change of `senderId` between consecutive commands is a new turn. | An interrupt splits one turn into three on the result page's per-turn charts, and misplaces event markers (Outbreak's epidemic icons). |
 | 5 | `src/utils/games/recap.ts`, `buildEventFeed` | "Since you were last here" is everything after the viewer's own last event. | An interrupt the viewer played counts as "being here", and hides everything before it. Arguably right (they *were* here) — but a decision, not an accident. §5.6. |
@@ -84,38 +84,42 @@ Things that **don't** need to change, checked:
 
 ---
 
-## 3. What this PR already does
+## 3. What this PR already does: remove `ignoresTurnGate`
 
-### 3.1 Security fix: `ignoresTurnGate` could be claimed by a request body
+Until this PR the turn gate had one exemption. A command class could declare
+`readonly ignoresTurnGate = true`, and the route let it through from a player
+who wasn't `currentTurn`, trusting its `Execute` to police its own authority.
+`RaceCarsUndo` was the only one: when it was written, an undoable Race Cars
+move handed the turn off at once, so its driver's undo arrived off turn.
 
-`ignoresTurnGate(command)` read `command.ignoresTurnGate` off the command
-instance. That instance is the request body, rehydrated by `deserializeJSON`,
-whose reviver `Object.assign`s every posted property onto a fresh instance of
-the named class (`readonly` is compile-time only). So any seated player could
-post
+**It no longer did anything useful.** Once `docs/undo.md` §5's ten-second hold
+landed on Race Cars, an undoable leg stopped handing the turn off, so its
+driver's undo arrives while they are still `currentTurn` and passes the
+ordinary gate. The only legs that still hand off outright — oil or the line —
+are never undoable, and `RaceCarsUndo.Execute`'s anchor check refuses them
+anyway. The exemption let no legitimate request through that would otherwise
+have been refused; at most it turned a 400 into a 401.
+
+**And it was a hole.** The route read the flag off the command instance, and
+that instance is the request body, rehydrated by `deserializeJSON`, whose
+reviver `Object.assign`s every posted property onto a fresh instance of the
+named class (`readonly` is compile-time only). So any seated player could post
 
 ```json
 { "className": "SACRollDice", "gameId": "…", "senderId": "<me>", "ignoresTurnGate": true }
 ```
 
-and pass the turn gate with **any** command class, not only `RaceCarsUndo`.
-`SACRollDice.Execute` never checks whose turn it is — it relies on the gate,
-as the architecture intends — so that body rolls the dice on another player's
-turn. The same goes for every command in every game that trusts the gate. The
-route test added alongside the fix fails on the old code (the forged roll is
-accepted on the other player's turn) and passes on the new.
+and play **any** command on another player's turn. `SACRollDice.Execute` never
+checks whose turn it is — it relies on the gate, as the architecture intends
+(§2 row 2) — so that body rolled the dice on someone else's turn. SAC §10.3
+predicted exactly this for a body-controlled `offTurn` field.
 
-This is exactly the hole SAC §10.3 predicted for a body-controlled `offTurn`
-field. The shipped flag had it.
+**So it's gone:** the flag, its helper, the route's exception and its
+tripwire test. The gate has no exceptions. A route test keeps a request that
+*claims* the flag refused, so the exemption can't quietly come back.
 
-**The fix** reads the flag off a *fresh* instance of `command.constructor`.
-`constructor` is one of the three keys `Serialisable.ts` refuses to copy, so it
-is always the class that was really constructed, and a fresh instance carries
-only what that class declares. The existing `readonly ignoresTurnGate = true`
-declarations and the source-scan tripwire test are unchanged.
-
-Every class-declared marker the route reads **must** be read this way. §5.1
-factors it into one helper so the out-of-turn flag can't repeat the mistake.
+**The lesson for §5**, which does add an exemption: a marker the route trusts
+must be read off the command's **class**, never off the command. §5.1 says how.
 
 ---
 
@@ -127,8 +131,8 @@ The shape suggested in the brief: specific commands take a different logical
 path through the same `POST /api/game/command` when the sender isn't
 `currentTurn`.
 
-- A command class declares `readonly playableOutOfTurn = true`, read through the
-  same fresh-instance helper as `ignoresTurnGate`.
+- A command class declares `readonly playableOutOfTurn = true`, read off the
+  class rather than the request body (§3, §5.1).
 - The route, seeing a sender who isn't `currentTurn`, lets the command through
   only if its class declares the flag, and only after an explicit membership
   check.
@@ -249,28 +253,30 @@ flood card and the sink when anyone else's command could land. Under A:
 
 ### 5.1 The declaration
 
-`gameCommand.ts` gets one helper that every class-declared marker goes through:
+A command class declares `readonly playableOutOfTurn = true`. The route reads it
+off a **fresh instance of the command's class**, never off the command it was
+sent (§3):
 
 ```ts
-/** A marker only the command's class can set — never the request body (see §3.1). */
-function declaredByClass(command: IGameCommand, marker: string): boolean {
+/** Whether the command's class declares it playable out of turn — never the request body's say (§3). */
+export function playableOutOfTurn(command: IGameCommand): boolean {
     const declaringClass = (command as object).constructor as new () => unknown;
-    return (new declaringClass() as Record<string, unknown>)[marker] === true;
+    return (new declaringClass() as Record<string, unknown>).playableOutOfTurn === true;
 }
-
-export const ignoresTurnGate    = (c: IGameCommand) => declaredByClass(c, "ignoresTurnGate");
-export const playableOutOfTurn  = (c: IGameCommand) => declaredByClass(c, "playableOutOfTurn");
 ```
 
-`playableOutOfTurn` is deliberately **not** the same flag as `ignoresTurnGate`.
-`RaceCarsUndo` isn't an interrupt: it acts on the turn it is undoing, it
-*restores* `currentTurn`, and it is trusted to police its own authority
-entirely. An out-of-turn command is the opposite — a genuine act by a player
-who isn't holding the turn, which must leave the turn exactly where it was.
-The route treats them differently (§5.2), so they are declared differently.
+`constructor` is one of the three keys `Serialisable.ts` refuses to copy, so it
+is always the class that was really constructed, and a fresh instance carries
+only what that class declares. Every registered class already constructs with
+no arguments and no side effects — `@serializable` does exactly this at module
+load.
 
-A tripwire test like `ignoresTurnGate.test.ts` lists every class declaring
-`playableOutOfTurn`, so adding one needs a reviewer to see its `Execute` gate.
+A tripwire test lists every class that answers true, built the way the route
+asks: construct every `registeredClassNames()` entry and keep the ones
+`playableOutOfTurn` accepts. A source scan for the literal declaration would
+miss an inherited flag or a getter. Adding a class to the list needs a
+reviewer to look at its `Execute` gate. The test also posts the flag on a class
+that doesn't declare it and expects it to be ignored.
 
 SAC's trading proposal calls the same idea `offTurn` and suggests a route-side
 allowlist. Both are safe; the class declaration keeps the route free of game
@@ -283,11 +289,9 @@ allowlist. SAC §10.3 should be updated to point here when trading is built.
 auth → readCommand → stripRecordedRandomness → requireLiveGame
 const onTurn = userId === gameData.currentTurn
 if (!onTurn):
-    if ignoresTurnGate(cmd)              → as today (RaceCarsUndo)
-    else if playableOutOfTurn(cmd):
-        userId ∉ userIdList              → 403 "Not a player in this game"   ← new
-        → out-of-turn path
-    else                                 → 400 "Not your turn in this game"
+    if !playableOutOfTurn(cmd)           → 400 "Not your turn in this game"  ← as today
+    if userId ∉ userIdList               → 403 "Not a player in this game"   ← new
+    → out-of-turn path
 isDropped / senderId / isCommandForGameType checks                          ← unchanged
 cmd.recordedOutOfTurn = !onTurn && playableOutOfTurn(cmd)                   ← server-stamped
 runCommand(gameData, gameType, cmd, { outOfTurn: cmd.recordedOutOfTurn })
@@ -454,13 +458,14 @@ Each PR is independently shippable and leaves `main` green. Commits are listed
 in order. Every code PR runs `npm run build`, `npx tsc --noEmit`,
 `npm run lint` and `npm test`, plus the review crew named against it.
 
-### PR 1 — Security fix and this plan *(this PR)*
+### PR 1 — Remove `ignoresTurnGate`, and this plan *(this PR)*
 
-1. **Read `ignoresTurnGate` off the command's class, not the request body.**
-   `gameCommand.ts`; `ignoresTurnGate.test.ts` rewritten to use real rehydrated
-   commands, and its tripwire now also asks every registered class the way the
-   route does; a route test that a forged flag gets "Not your turn" and nothing
-   is recorded.
+1. **Remove the turn-gate exemption (§3).** The flag on `RaceCarsUndo`, the
+   helper in `gameCommand.ts`, the route's exception and the tripwire test go.
+   A route test posts a claimed exemption off turn and expects "Not your turn"
+   with nothing recorded. The Race Cars route test for a non-owner's undo now
+   expects the gate's 400 rather than `Execute`'s 401. `docs/undo.md` notes the
+   removal.
 2. **Docs: plan out-of-turn actions.** This document.
 
 Crew: `locksmith`.
@@ -470,9 +475,8 @@ What's new: none — a fix to a hole no player should have been using.
 
 No game uses it yet, so nothing a player can see changes.
 
-1. **Factor class-declared markers through `declaredByClass`.** `ignoresTurnGate`
-   moves onto it; `playableOutOfTurn` is added. Unit tests for both, including
-   forged-body cases.
+1. **Add `playableOutOfTurn`** (§5.1): the helper, read off the class; unit
+   tests including a forged body.
 2. **Add `recordedOutOfTurn`.** The constant, its exclusion in
    `consumedRandomness`, tests.
 3. **`runCommand`'s `outOfTurn` option.** Skip `CheckEndTurn` and follow-ups;
@@ -489,7 +493,7 @@ No game uses it yet, so nothing a player can see changes.
    and `replayTurnByTurn`. Tests: a timeline with an interrupt last ends on the
    right `currentTurn`; per-turn stats count one turn, not three.
 6. **Recap: window on the viewer's last on-turn event.** Tests.
-7. **Tripwire test** for `playableOutOfTurn` (initially empty list).
+7. **Tripwire test** for `playableOutOfTurn` (§5.1; initially an empty list).
 8. **Docs.** `ARCHITECTURE.md` §4 and §6 (the pipeline steps), the replay line
    in `turn-recap-and-planning.md` ("Every command was executed on its sender's
    turn" stops being true), and a pointer from SAC §10.3–10.4 to here.

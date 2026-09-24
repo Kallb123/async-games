@@ -5,7 +5,7 @@ import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { ICommandOutcome, IGameCommand, IGameType, ignoresTurnGate, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
+import { ICommandOutcome, IGameCommand, IGameType, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
 import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
@@ -128,18 +128,19 @@ export async function POST(request: NextRequest) {
   }
   const gameData = found.game;
 
-  // A command that opts out (see `ignoresTurnGate`) is trusted to police its
-  // own authority inside `Execute` — docs/undo.md's RaceCarsUndo, whose
-  // ordinary case is a move or tow that already ended the sender's own turn,
-  // and so would fail this gate on every real request before ever reaching
-  // the anchor check that actually decides it.
-  if (userId !== gameData.currentTurn && !ignoresTurnGate(commandRequest)) {
+  // No exceptions: every command is played by the player whose turn it is.
+  // This is the only membership-adjacent check most commands get, and their
+  // Execute relies on it rather than re-checking whose turn it is — so an
+  // exemption belongs here only once a design has worked through what it
+  // costs (docs/out-of-turn-actions.md).
+  if (userId !== gameData.currentTurn) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
   }
 
   // A player the turn-timer cron dropped for going quiet has left the game
-  // (utils/games/playerDropout.ts). Their seat never gets the turn again, but
-  // a command that skips the turn gate would otherwise still reach Execute.
+  // (utils/games/playerDropout.ts). Their seat never gets the turn again, so
+  // the gate above already refuses them; this stays so that an out-of-turn
+  // path, once there is one, can't forget them (docs/out-of-turn-actions.md).
   if (isDropped(gameData, userId)) {
     return NextResponse.json({}, {status: 400, statusText: "You have left this game"});
   }
