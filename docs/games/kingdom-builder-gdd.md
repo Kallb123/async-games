@@ -1436,8 +1436,10 @@ Caravans are never simply lost to another player — they change hands:
   barbarian village, which is nobody, still plunders them outright.
 
 Both sides are told, in their Battles list (§7.6): the taker how many
-caravans it took, the loser how many it lost — and, after a raid on the road,
-nothing of the army that took them. A rival who can see a stack (§6.3) sees how
+caravans it took, the loser how many it lost — and, after a raid, nothing of
+the army that took them. A raid is named for the place it happened when the
+caravans were camped there; one on the open road names nowhere, since where
+they were bound is their owner's business (§6.3). A rival who can see a stack (§6.3) sees how
 many caravans it has — a covered cart shows it is one — but never what it
 carries.
 
@@ -2829,7 +2831,11 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   (`armies.ts`) runs in `applyTick` once the armies have moved, folding an
   unguarded stack into the first rival escort on its tile and listing the
   raid in the tick's `seized`, which the cron keeps as a `raid` battle with no
-  rounds and no attacker units, so the loser learns nothing of the taker. A
+  rounds and no attacker units, so the loser learns nothing of the taker, and
+  with no `nodeId` when it happened on the road, so the taker learns nothing
+  of where the caravans were bound. `combineCaravans` is the one place stacks'
+  caravans and loads are added up — joined, taken, brought home, or stocking
+  a captured village. A
   push or sally's `returnSurvivors` hands back the caravans of the armies it
   disbands, and the winning town `$inc`s them into its yard and stores. A
   battle share gains `caravansTaken` and `caravansLost`, each read by its own

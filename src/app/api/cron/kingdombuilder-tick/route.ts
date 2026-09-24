@@ -103,7 +103,7 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     // the taker learns what they took, the loser only that it is gone.
     if (seized.length) {
         await KingdomBuilderBattleModel.create(seized.map(raid => ({
-            worldId, tick: raid.tick, kind: "raid", nodeId: raid.nodeId,
+            worldId, tick: raid.tick, kind: "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
             attackerIds: [raid.captorId], defenderIds: [raid.ownerId], attacker: garrisonOf(), defender: garrisonOf(), rounds: [],
             shares: [
                 { ownerId: raid.captorId, sent: raid.captor, left: raid.captor, caravansTaken: raid.caravans },

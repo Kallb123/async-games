@@ -9,10 +9,10 @@ import { KingdomBuilderArmyModel, type IKingdomBuilderArmyDocument } from "./Kin
 import { KingdomBuilderBattleModel, type KingdomBuilderBattleShare } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderSettlementModel, type KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { addUnits, unitCount } from "./armies";
+import { addUnits, combineCaravans, unitCount } from "./armies";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, addResources, resourcesOf } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
 import { combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
@@ -69,10 +69,7 @@ function campsAt(filter: Record<string, unknown>, session: ClientSession) {
 }
 
 /** Caravans and their load, left behind by an escort that fell (§4.7). */
-interface Spoils {
-    caravans: number;
-    cargo: KingdomBuilderResources;
-}
+type Spoils = ReturnType<typeof combineCaravans>;
 
 /**
  * Leaves each army that fought with its share of what survived — and disbands
@@ -82,7 +79,6 @@ interface Spoils {
  */
 async function returnSurvivors(worldId: string, camps: readonly Camp[], survivors: KingdomBuilderGarrison, session: ClientSession): Promise<{ shares: KingdomBuilderBattleShare[]; spoils: Spoils }> {
     const kept = shareSurvivors(camps.map(camp => camp.units), survivors);
-    let spoils: Spoils = { caravans: 0, cargo: resourcesOf() };
     const writes: AnyBulkWriteOperation<IKingdomBuilderArmyDocument>[] = camps.map((camp, index) => unitCount(kept[index]) === 0
         ? { deleteOne: { filter: { _id: camp._id, worldId } } }
         : { updateOne: { filter: { _id: camp._id, worldId }, update: { $set: { units: kept[index] } } } });
@@ -92,7 +88,6 @@ async function returnSurvivors(worldId: string, camps: readonly Camp[], survivor
         const share = byOwner.get(camp.ownerId);
         const lost = unitCount(kept[index]) === 0 ? camp.caravans ?? 0 : 0;
         const caravansLost = (share?.caravansLost ?? 0) + lost;
-        if (lost > 0) spoils = { caravans: spoils.caravans + lost, cargo: addResources(spoils.cargo, camp.cargo ?? {}) };
         byOwner.set(camp.ownerId, {
             ownerId: camp.ownerId,
             sent: addUnits(share?.sent, camp.units),
@@ -100,6 +95,8 @@ async function returnSurvivors(worldId: string, camps: readonly Camp[], survivor
             ...(caravansLost ? { caravansLost } : {}),
         });
     });
+    // The fallen armies' caravans are the other side's now.
+    const spoils = combineCaravans(camps.filter((camp, index) => unitCount(kept[index]) === 0));
     return { shares: [...byOwner.values()], spoils };
 }
 

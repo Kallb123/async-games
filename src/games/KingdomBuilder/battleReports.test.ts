@@ -92,6 +92,11 @@ describe("reportFor a raid (§4.7)", () => {
         expect(report).not.toHaveProperty("caravansTaken");
         expect(JSON.stringify(report)).not.toContain('"cavalry":2');
     });
+
+    it("names no place for a raid on the road", () => {
+        const { nodeId: _, ...onTheRoad } = raid;
+        expect(reportFor(onTheRoad, "raider")).not.toHaveProperty("nodeId");
+    });
 });
 
 describe("recentBattles", () => {

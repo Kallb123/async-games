@@ -53,10 +53,23 @@ export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): b
     return unitCount(march.units) > 0;
 }
 
+/** "1 caravan", "3 caravans". */
+export function formatCaravans(count: number): string {
+    return `${count} caravan${count === 1 ? "" : "s"}`;
+}
+
 /** "2 militia · 1 caravan" — a stack as every list names it, caravans and all. */
 export function formatStack(stack: { units: Partial<KingdomBuilderGarrison>; caravans?: number }): string {
     const caravans = stack.caravans ?? 0;
-    return [formatUnits(stack.units), caravans > 0 ? `${caravans} caravan${caravans === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+    return [formatUnits(stack.units), caravans > 0 ? formatCaravans(caravans) : ""].filter(Boolean).join(" · ");
+}
+
+/** Stacks' caravans and loads as one — however stacks come together: joined, taken, brought home or into a town. */
+export function combineCaravans(stacks: readonly { caravans?: number; cargo?: Partial<KingdomBuilderResources> }[]): { caravans: number; cargo: KingdomBuilderResources } {
+    return {
+        caravans: stacks.reduce((total, stack) => total + (stack.caravans ?? 0), 0),
+        cargo: stacks.reduce<KingdomBuilderResources>((load, stack) => addResources(load, stack.cargo ?? {}), resourcesOf()),
+    };
 }
 
 /** Whether the army has reached `targetNodeId` and camped there. A stored army reads a missing tick as null. */
@@ -148,8 +161,12 @@ export function subtractUnits(a: Partial<KingdomBuilderGarrison> | undefined, b:
 /** Caravans that changed hands on the road (PR 25): whose they were, who took them, and where they had been bound. */
 export interface KingdomBuilderSeizure {
     tick: number;
-    /** Where the taken stack was going — the place its report is named for. */
-    nodeId: string;
+    /**
+     * The place the taken stack was camped at, which the taker stands at too.
+     * One taken on the road names nowhere: where it was bound is its owner's
+     * business alone (§6.3), and the taker would learn it from the report.
+     */
+    nodeId?: string;
     ownerId: string;
     captorId: string;
     /** The escort that took them — its owner is told, and nobody else. */
@@ -178,7 +195,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         const captor = here.some(guard => guard.ownerId === army.ownerId) ? undefined : here[0];
         if (!captor) continue;
         taken.set(captor, [...(taken.get(captor) ?? []), army]);
-        seized.push({ tick, nodeId: army.targetNodeId, ownerId: army.ownerId, captorId: captor.ownerId, captor: garrisonOf(captor.units), caravans: army.caravans });
+        seized.push({ tick, ...(isCamped(army) ? { nodeId: army.targetNodeId } : {}), ownerId: army.ownerId, captorId: captor.ownerId, captor: garrisonOf(captor.units), caravans: army.caravans });
     }
     if (seized.length === 0) return { armies: [...armies], seized };
     const gone = new Set([...taken.values()].flat());
@@ -186,12 +203,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         armies: armies.flatMap(army => {
             if (gone.has(army)) return [];
             const spoils = taken.get(army);
-            if (!spoils) return [army];
-            return [{
-                ...army,
-                caravans: spoils.reduce((total, stack) => total + (stack.caravans ?? 0), army.caravans ?? 0),
-                cargo: spoils.reduce<KingdomBuilderResources>((load, stack) => addResources(load, stack.cargo ?? {}), resourcesOf(army.cargo)),
-            }];
+            return spoils ? [{ ...army, ...combineCaravans([army, ...spoils]) }] : [army];
         }),
         seized,
     };

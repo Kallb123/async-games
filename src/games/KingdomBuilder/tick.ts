@@ -3,7 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { addUnits, advanceMarch, isCamped, isEscorted, seizeCaravans, type KingdomBuilderMarch, type KingdomBuilderSeizure } from "./armies";
+import { addUnits, advanceMarch, combineCaravans, isCamped, isEscorted, seizeCaravans, type KingdomBuilderMarch, type KingdomBuilderSeizure } from "./armies";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { besiegedProduction, siegeOf, siegeStage } from "./siege";
@@ -92,12 +92,13 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T & Pick
             }));
 
             const arriving = joining.get(settlement) ?? [];
+            const brought = combineCaravans(arriving);
             return {
                 ...settlement,
                 tiles,
                 // What its caravans bring home is unloaded into the stores the tick they arrive (PR 25).
-                resources: arriving.reduce((stores, army) => addResources(stores, army.cargo ?? {}), addResources(settlement.resources, production)),
-                caravans: arriving.reduce((total, army) => total + (army.caravans ?? 0), settlement.caravans ?? 0),
+                resources: addResources(addResources(settlement.resources, production), brought.cargo),
+                caravans: (settlement.caravans ?? 0) + brought.caravans,
                 ...withJoining(
                     halted ? { trainingQueue: (settlement.trainingQueue ?? []).map(order => ({ ...order })), garrison: garrisonOf(settlement.garrison) } : advanceTraining(settlement.trainingQueue, settlement.garrison),
                     arriving,

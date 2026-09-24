@@ -72,11 +72,14 @@ describe("Kingdom Builder armies", () => {
             expect(result.seized).toEqual([{ tick: 7, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 2 }]);
         });
 
-        it("meets them on the road too, wherever the two stacks stand", () => {
+        it("meets them on the road too, wherever the two stacks stand, and names no place for it", () => {
             // Two tiles into a route that has the rival camped on tile 1.
             const onTheRoad = caravans({ travelled: 2, arrivedAtTick: undefined });
             const rival = escort("rival", { path: [5, 1], pathCosts: [0, 2], travelled: 2 });
-            expect(seizeCaravans([onTheRoad, rival], 3).armies).toEqual([{ ...rival, caravans: 2, cargo: { wood: 0, stone: 0, iron: 30, wheat: 0 } }]);
+            const result = seizeCaravans([onTheRoad, rival], 3);
+            expect(result.armies).toEqual([{ ...rival, caravans: 2, cargo: { wood: 0, stone: 0, iron: 30, wheat: 0 } }]);
+            // Where they were bound is their owner's business, and the raid's report would tell the taker (§6.3).
+            expect(result.seized[0]).not.toHaveProperty("nodeId");
         });
 
         it("leaves caravans alone that their owner's own army guards, that stand elsewhere, or that only a rival's caravans meet", () => {

@@ -23,8 +23,11 @@ export interface IKingdomBuilderBattle {
     /** The tick it was fought on. */
     tick: number;
     kind: KingdomBuilderBattleKind;
-    /** The settlement's (or village's) node it was fought at. */
-    nodeId: string;
+    /**
+     * The settlement's (or village's) node it was fought at — absent only on
+     * a raid out on the road, which names nowhere (§4.7).
+     */
+    nodeId?: string;
     /** Who fought on each side: the pusher or the sallying garrison's owner attacks. Barbarians are nobody, so a village's side is empty. */
     attackerIds: string[];
     defenderIds: string[];
@@ -72,7 +75,7 @@ export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocume
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     tick: { type: Number, required: true, min: 0 },
     kind: { type: String, enum: KINGDOM_BUILDER_BATTLE_KINDS, required: true },
-    nodeId: { type: String, required: true },
+    nodeId: { type: String, required(this: IKingdomBuilderBattle) { return this.kind !== "raid"; } },
     attackerIds: { type: [String], required: true },
     defenderIds: { type: [String], required: true },
     attacker: { type: KingdomBuilderGarrisonSchema, required: true },

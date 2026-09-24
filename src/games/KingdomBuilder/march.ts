@@ -14,7 +14,7 @@ import mongoose, { Types, type ClientSession } from "mongoose";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_ARMY_LIMIT, addUnits, armyTile, isCamped, isEscorted, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
+import { KINGDOM_BUILDER_ARMY_LIMIT, addUnits, armyTile, combineCaravans, isCamped, isEscorted, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
 import { amountsFrom, caravanCapacityOf, depositTo, resourceTotal, resourcesIn, spendFrom } from "./market";
 import { addResources, resourcesOf } from "./resources";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
@@ -267,11 +267,11 @@ export async function joinArmies(worldId: string, userId: string, armyId: unknow
             throw invalid("Both have to be camped at the same place to join");
         }
         const since = [army.besiegingSince, into.besiegingSince].filter((tick): tick is number => typeof tick === "number");
-        const caravans = (army.caravans ?? 0) + (into.caravans ?? 0);
+        const caravans = combineCaravans([into, army]);
         await KingdomBuilderArmyModel.updateOne({ _id: into._id, worldId }, {
             $set: {
                 units: addUnits(into.units, army.units),
-                ...(caravans > 0 ? { caravans, cargo: addResources(into.cargo ?? {}, army.cargo ?? {}) } : {}),
+                ...(caravans.caravans > 0 ? caravans : {}),
                 ...(since.length ? { besiegingSince: Math.min(...since) } : {}),
             },
         }, { session });

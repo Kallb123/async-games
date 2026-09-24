@@ -15,8 +15,8 @@ export interface KingdomBuilderBattleReport {
     battleId: string;
     kind: KingdomBuilderBattleKind;
     tick: number;
-    /** The settlement's (or barbarian village's) node it was fought at. */
-    nodeId: string;
+    /** The settlement's (or barbarian village's) node it was fought at — none for a raid on the road. */
+    nodeId?: string;
     /** The reader's side started it: pushed the attack, or sallied out. */
     started: boolean;
     /**
@@ -64,7 +64,7 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         battleId: battle._id.toString(),
         kind: battle.kind,
         tick: battle.tick,
-        nodeId: battle.nodeId,
+        ...(battle.nodeId === undefined ? {} : { nodeId: battle.nodeId }),
         started,
         outcome,
         sent,

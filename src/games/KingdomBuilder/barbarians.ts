@@ -6,7 +6,7 @@
 // already holds two, is burnt, leaving open ground anyone can found on.
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
-import { addUnits, isCamped, isEscorted, unitCount, type KingdomBuilderMarch } from "./armies";
+import { addUnits, combineCaravans, isCamped, isEscorted, unitCount, type KingdomBuilderMarch } from "./armies";
 import { addResources, resourcesOf } from "./resources";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { combinedUnits } from "./siege";
@@ -136,11 +136,8 @@ export function assaultVillages<T extends KingdomBuilderMarch>(
             if (slot === undefined) continue;
             taken.add(slot);
             slots.set(ownerId, taken);
-            captures.push({
-                ownerId, nodeId, settlementNumber: slot, garrison: kept.reduce(addUnits, garrisonOf()),
-                caravans: camps.reduce((total, camp) => total + (camp.caravans ?? 0), 0),
-                resources: camps.reduce<KingdomBuilderResources>((stores, camp) => addResources(stores, camp.cargo ?? {}), resourcesOf()),
-            });
+            const { caravans, cargo } = combineCaravans(camps);
+            captures.push({ ownerId, nodeId, settlementNumber: slot, garrison: kept.reduce(addUnits, garrisonOf()), caravans, resources: cargo });
             camps.forEach(camp => left.set(camp, garrisonOf()));
         }
     }

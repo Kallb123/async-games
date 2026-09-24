@@ -3,7 +3,7 @@
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
 
-import { subtractUnits, unitCount } from "../armies";
+import { formatCaravans, subtractUnits, unitCount } from "../armies";
 import type { KingdomBuilderBattleReport } from "../battleReports";
 import { formatUnits, type KingdomBuilderGarrison } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
@@ -18,11 +18,14 @@ const OUTCOMES: Record<KingdomBuilderBattleReport["outcome"], string> = { won: "
 
 const unitsOrNone = (units: Partial<KingdomBuilderGarrison>) => unitCount(units) > 0 ? formatUnits(units) : "nothing";
 
-const caravansOf = (count: number) => `${count} caravan${count === 1 ? "" : "s"} and ${count === 1 ? "its" : "their"} load`;
+const caravansOf = (count: number) => `${formatCaravans(count)} and ${count === 1 ? "its" : "their"} load`;
 
-function titleOf(report: KingdomBuilderBattleReport, place: string): string {
+function titleOf(report: KingdomBuilderBattleReport, place: string | undefined): string {
     if (report.kind === "barbarian") return "Your attack on a barbarian village";
-    if (report.kind === "raid") return report.started ? `Caravans taken on the road to ${place}` : `Your caravans bound for ${place}`;
+    if (report.kind === "raid") {
+        const where = place ? ` at ${place}` : " on the road";
+        return report.started ? `Caravans taken${where}` : `Your caravans, taken${where}`;
+    }
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
     return report.started ? "Your sally out" : `A sally against your siege of ${place}`;
 }
@@ -52,7 +55,7 @@ export default function BattlesSection({ view, placeName }: BattlesSectionProps)
             hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia. An army at a barbarian village fights it every tick until one side is gone. Caravans with no escort are taken by any rival army that meets them, and an escort that falls leaves its caravans to whoever beat it.">
             {view.battles.map(report => (
                 <ListRow key={report.battleId} icon={report.started ? "⚔️" : "🛡️"}
-                    title={titleOf(report, placeName(report.nodeId))}
+                    title={titleOf(report, report.nodeId === undefined ? undefined : placeName(report.nodeId))}
                     action={<span className="ag-tag ag-tag--quiet">{OUTCOMES[report.outcome]}</span>}
                     sub={<>
                         {detailOf(report)}
