@@ -1612,7 +1612,7 @@ exercise:
 | **Cavalry** | Fast raiding/reinforcement | Fast | Expensive; sets a stack's speed if mixed in (see below) |
 | **Siege engine** | Needed to meaningfully damage walls | Slow | An attack without one against a walled settlement mostly just fails to break in |
 | **Scout** | Reveals a target's garrison/defences before committing | Fast | Cheap, disposable, answers "is this worth attacking" |
-| **Commander** | Leads an army out of a settlement | Fast | Planned for PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers that leaves a town |
+| **Commander** | Leads an army out of a settlement | Fast | Planned for PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers other than scouts that leaves a town |
 
 ### 6.2 Dispatch and travel time
 
@@ -1723,12 +1723,23 @@ Nothing makes a player choose *which* march matters. A **commander** is that
 choice. It's a scarce unit that an army needs before it can leave a
 settlement, and the **tavern** is where commanders are recruited.
 
-**The rule.** A stack with any soldier in it — any unit `militaryCount`
-counts, scouts included — can't be sent out of a settlement unless it takes
-at least one commander with it. Caravans and settlers travelling on their own
-aren't an army, so they still leave without one, unguarded as they are today
-(§4.7, §4.4). A commander travelling alone to another of its owner's towns is
-allowed too, and is just as unguarded.
+**The rule.** A stack with any soldier in it other than a scout can't be sent
+out of a settlement unless it takes at least one commander with it. The
+soldiers that count are militia, infantry, cavalry and siege engines.
+`needsCommander(units)` holds the rule: it's true when anything
+`militaryCount` counts, scouts aside, is in the stack. These stacks still
+leave without a commander:
+- **Scouts.** A stack of only scouts is a look, not an attack. Keeping it
+  cheap keeps scouting (§6.3) something a player does freely, before they
+  have committed an army.
+- **Caravans and settlers** travelling on their own aren't an army, and go
+  unguarded as they do today (§4.7, §4.4).
+- **A commander** travelling alone to another of its owner's towns, just as
+  unguarded.
+
+Scouts may take caravans or settlers along with them. That makes them the one
+escort without a commander, but a weak one (§7.6 gives a scout 1 attack and 3
+health).
 
 **The tavern.** A new building, one per settlement, raised a level at a time
 like the barracks and the market. Two rules cap it:
@@ -1771,12 +1782,15 @@ not taken. A captured commander would let the captor go over their own cap.
 | Combat | attack 3, health 12; no counters for or against it |
 
 **Leaderless armies.** A commander can die in a battle that its soldiers
-survive. An army left with soldiers but no commander is **leaderless**. That
-isn't stored anywhere: it's read off the stack. A leaderless army can only
+survive. An army left with no commander, when the march rule says it needs
+one, is **leaderless**. That isn't stored anywhere: it's read off the stack.
+So a party of scouts is never leaderless. A leaderless army can only
 march to one of its owner's own settlements, and can't push the attack on a
 siege. It can still be joined by a led army where both have camped, and the
 joined stack is led again. A push goes ahead if any one of the caller's
-besieging armies has a commander; that commander leads all of them.
+besieging armies has a commander; that commander leads all of them. The rule
+is the same for scouts: a party of scouts at a rival's gate can watch, but
+can't push without a commander.
 
 **What stays as it is.** A sally has the garrison fight at its own gate and
 come straight back, so it needs no commander. Any commanders in the garrison
@@ -3011,7 +3025,10 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
      - `commanderCapacityOf(settlements)` adds up the tavern levels;
      - `commandersHeld({ settlements, armies })` counts commanders in
        garrisons, in training queues and in the field;
-     - `isLeaderless(stack)` is true for a stack with soldiers but no commander.
+     - `needsCommander(units)` is the march rule: any soldier other than a
+       scout;
+     - `isLeaderless(stack)` is true for a stack that needs a commander and
+       has none.
 
      `queueUnitTraining`, for a commander only, first runs the count inside a
      transaction. That transaction starts by bumping a new world counter,
@@ -3030,22 +3047,26 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
        recruits none;
      - two concurrent recruits at cap − 1: exactly one goes through.
   4. **The march rule.** In `march.ts`:
-     - A dispatch out of a garrison with `militaryCount > 0` and no commander
-       is refused with "An army needs a commander to lead it out — recruit one
+     - A dispatch out of a garrison where `needsCommander` is true and no
+       commander goes with it is refused with "An army needs a commander to lead it out — recruit one
        at a tavern".
-     - Caravans alone, settlers alone and a commander alone are all still
-       allowed.
+     - Scouts alone, scouts escorting caravans or settlers, caravans alone,
+       settlers alone and a commander alone are all still allowed.
      - New orders for an army in the field that `isLeaderless` must target a
        node holding one of the caller's own settlements ("Without a commander
        this army can only march home").
      - `join` and `settle` are unchanged, and a leaderless stack joined by a
        led one is led again.
+     - A party of scouts joined by militia with no commander between them is
+       leaderless from then on. This is what `isLeaderless` gives, rather
+       than a case the code handles separately.
 
      Armies already in the field when this ships have no commander, so they are
      leaderless: they can come home and nothing else. There is no migration,
      since the game is pre-release (§11.1). The PR description says so, for
      anyone with a test world mid-siege. Tests in `march.test.ts`:
-     - each refusal, and each case still allowed;
+     - each refusal, and each case still allowed, a lone scout and scouts
+       with caravans among them;
      - a leaderless army turned round toward home;
      - a leaderless army refused a rival town;
      - a dispatch racing a recruit reads a consistent garrison.
@@ -3058,8 +3079,9 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
      battle share gain `commandersLost`, read by its owner only.
      `battleReports.ts` needs nothing new: a commander is a unit type in what
      each side brought and lost. Tests:
-     - in `assault.test.ts`, a push refused with no commander, and a push by
-       two armies with one commander between them;
+     - in `assault.test.ts`, a push refused with no commander, one refused
+       from a party of scouts at the gate, and a push by two armies with one
+       commander between them;
      - in `armies.test.ts`, a lone commander on the road killed by a rival
        escort, and one beside its owner's escort left alone;
      - in `battleReports.test.ts`, a `commandersLost` that the captor's
@@ -3079,7 +3101,8 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
      }` on the owner's own response only.
   7. **The world map.** In `ArmiesSection`:
      - the muster's Send is disabled with the march rule's own wording while
-       a stack of soldiers has no commander picked, and the commander stepper
+       `needsCommander` is true and no commander is picked, so a muster of
+       only scouts sends as it does today, and the commander stepper
        defaults to 1 when the garrison holds one;
      - a leaderless army carries a "No commander" `ag-tag`;
      - a leaderless army's orders offer only its owner's towns as
@@ -3087,7 +3110,8 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
        for a barbarian village a caravan can't enter.
 
      In `SiegesSection`, Push the attack is disabled with its reason when
-     every besieging army is leaderless. No new component: these are states
+     none of the caller's besieging armies has a commander, scouts included.
+     No new component: these are states
      of rows that already exist.
   8. Reviewers:
      - `locksmith`: the march and push refusals are server-side and not just
@@ -3366,8 +3390,9 @@ guessed at here:
   as snowfall over a winter world.
 - Commanders (§6.5): first-pass prices and stats, and one commander per
   tavern level, pooled across the realm. Open questions for playtesting:
-  - Should a lone scout be exempt from the march rule? Today it needs a
-    commander like any army, which makes cheap scouting a real cost.
+  - Scouts go out without a commander, as an escort for caravans or settlers
+    too. Watch in playtests whether a pile of cheap scouts turns into a
+    commander-free escort worth closing off.
   - Should a commander give its army a bonus: a combat edge, sight, or pace?
   - Should the cap be per tavern rather than pooled, if players find the
     pool hard to read?
