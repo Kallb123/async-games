@@ -11,7 +11,7 @@ const buildTime = new Date().toISOString();
 // site's general card instead of a 404 (`shareImageForGame` in
 // `src/utils/ui/games.ts`). Read here rather than at request time because
 // `public/` is served by the CDN and isn't in the server function's bundle.
-// The filename pattern mirrors `gameShareCard` in the same file.
+// The filename pattern mirrors `gameShareCard` in that same games.ts.
 const shareCardGames = readdirSync(new URL('./public/icons', import.meta.url))
   .map((file) => /^og-game-(.+)\.png$/.exec(file)?.[1])
   .filter(Boolean)
