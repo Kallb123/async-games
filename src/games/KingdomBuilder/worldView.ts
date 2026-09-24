@@ -3,12 +3,15 @@ import { Types } from "mongoose";
 import { buildUserDirectory } from "@/utils/users/clerk";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
-import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderSettlementModel, prepareMultipleSettlementsIndex, type KingdomBuilderResources, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
 import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
 import { siegesOn } from "./besiegers";
+import { marketLevelOf } from "./market";
+import { tradeOffersIn, type KingdomBuilderTradeOfferView } from "./tradeBoard";
+import { resourcesOf } from "./resources";
 import type { KingdomBuilderSiege } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
 import { barracksLevelOf, garrisonOf, type KingdomBuilderGarrison } from "./units";
@@ -64,6 +67,12 @@ export interface KingdomBuilderWorldView {
          * it only by seeing the army at its gate.
          */
         siege?: KingdomBuilderSiege;
+        /** Yours only: what is in its stores — what a caravan can be loaded with, and a trade offer paid from (PR 25). */
+        resources?: KingdomBuilderResources;
+        /** Yours only: the caravans standing empty at its market. */
+        caravans?: number;
+        /** Yours only: its market's level, 0 without one. */
+        marketLevel?: number;
     }>;
     /**
      * The barbarian villages still standing (§3.4) — public, like every
@@ -90,6 +99,8 @@ export interface KingdomBuilderWorldView {
      * own side. Nobody else's battle appears here.
      */
     battles: KingdomBuilderBattleReport[];
+    /** The world's trade board (PR 25): every open offer, oldest first, whoever posted it. */
+    offers: KingdomBuilderTradeOfferView[];
     /** The world's live join code — on the map, for its host only (a named invitee who hasn't joined yet sees it on the lobby screen, as with any lobby). */
     invite?: { joinCode: string; expiresAt: string; openSeats: number };
 }
@@ -109,6 +120,9 @@ export interface KingdomBuilderArmyView {
     arrivedAtTick?: number;
     /** The tick it began besieging the settlement it is camped at (§8), if it is. */
     besiegingSince?: number;
+    /** The caravans travelling with it (PR 25), and what they carry — 0 and nothing for a stack with none. */
+    caravans: number;
+    cargo: KingdomBuilderResources;
 }
 
 export interface KingdomBuilderArmySighting {
@@ -117,6 +131,8 @@ export interface KingdomBuilderArmySighting {
     /** The tile it stands on now. */
     tile: number;
     units: KingdomBuilderGarrison;
+    /** How many caravans travel with it (PR 25) — a covered cart shows it is one, never what it carries. */
+    caravans?: number;
 }
 
 function validateWorldId(worldId: string) {
@@ -125,11 +141,14 @@ function validateWorldId(worldId: string) {
     }
 }
 
-type SettlementRow = { _id: Types.ObjectId; ownerId: string; nodeId: string; tiles?: KingdomBuilderTile[]; garrison?: Partial<KingdomBuilderGarrison> };
+type SettlementRow = {
+    _id: Types.ObjectId; ownerId: string; nodeId: string; tiles?: KingdomBuilderTile[]; garrison?: Partial<KingdomBuilderGarrison>;
+    resources?: Partial<KingdomBuilderResources>; caravans?: number;
+};
 
 function readSettlements(worldId: string): Promise<SettlementRow[]> {
     return KingdomBuilderSettlementModel.find({ worldId })
-        .select({ ownerId: 1, nodeId: 1, tiles: 1, garrison: 1 })
+        .select({ ownerId: 1, nodeId: 1, tiles: 1, garrison: 1, resources: 1, caravans: 1 })
         .lean<SettlementRow[]>();
 }
 
@@ -140,6 +159,7 @@ async function readArmies(worldId: string, userId: string): Promise<KingdomBuild
         const units = garrisonOf(army.units);
         const arrivedAtTick = army.arrivedAtTick ?? undefined;
         const besiegingSince = army.besiegingSince ?? undefined;
+        const caravans = army.caravans ?? 0;
         return {
             armyId: army._id.toString(),
             units,
@@ -147,30 +167,35 @@ async function readArmies(worldId: string, userId: string): Promise<KingdomBuild
             route: army.path.slice(pathIndexOf(army)),
             fromNodeId: army.fromNodeId,
             targetNodeId: army.targetNodeId,
-            ticksToArrive: arrivedAtTick === undefined ? Math.max(1, ticksToArrive(army, paceOf(units) ?? 1)) : 0,
+            ticksToArrive: arrivedAtTick === undefined ? Math.max(1, ticksToArrive(army, paceOf(units, caravans) ?? 1)) : 0,
             ...(arrivedAtTick === undefined ? {} : { arrivedAtTick }),
             ...(besiegingSince === undefined ? {} : { besiegingSince }),
+            caravans,
+            cargo: resourcesOf(army.cargo),
         };
     });
 }
 
-type RivalArmyRow = Pick<KingdomBuilderMarch, "ownerId" | "units" | "path" | "pathCosts" | "travelled">;
+type RivalArmyRow = Pick<KingdomBuilderMarch, "ownerId" | "units" | "path" | "pathCosts" | "travelled" | "caravans">;
 
 /**
  * Other players' armies, as far as the viewer's sight reaches (§6.3). The read
- * takes only what finding the army's tile needs — never its orders — and the
- * reply carries only the tile, the owner's seat and the units, of the armies
- * in sight. Ordered by seat and tile rather than by when each set out.
+ * takes only what finding the army's tile needs — never its orders, nor what
+ * its caravans carry — and the reply carries only the tile, the owner's seat,
+ * the units and how many caravans, of the armies in sight. Ordered by seat and
+ * tile rather than by when each set out.
  */
 async function readSightings(worldId: string, userId: string, field: Pick<TerrainField, "columns"> | undefined, sights: readonly KingdomBuilderSight[], seatOf: ReadonlyMap<string, number>): Promise<KingdomBuilderArmySighting[]> {
     if (!field || sights.length === 0) return [];
     const armies = await KingdomBuilderArmyModel.find({ worldId, ownerId: { $ne: userId } })
-        .select({ ownerId: 1, units: 1, path: 1, pathCosts: 1, travelled: 1 })
+        .select({ ownerId: 1, units: 1, path: 1, pathCosts: 1, travelled: 1, caravans: 1 })
         .lean<RivalArmyRow[]>();
     return armies.flatMap(army => {
         const seat = seatOf.get(army.ownerId);
         const tile = armyTile(army);
-        return seat === undefined || tile === undefined || !isInSight(field, sights, tile) ? [] : [{ seat, tile, units: garrisonOf(army.units) }];
+        return seat === undefined || tile === undefined || !isInSight(field, sights, tile) ? [] : [{
+            seat, tile, units: garrisonOf(army.units), ...(army.caravans ? { caravans: army.caravans } : {}),
+        }];
     }).sort((a, b) => a.seat - b.seat || a.tile - b.tile);
 }
 
@@ -215,7 +240,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             .catch(error => console.error(`Kingdom Builder: could not save world ${worldId} onto its tiles`, error));
     }
     const hostId = world.hostId ?? memberIds[0];
-    const [directory, invite, armies, sieges, battles] = await Promise.all([
+    const [directory, invite, armies, sieges, battles, offers] = await Promise.all([
         buildUserDirectory(memberIds),
         hostId === userId ? liveWorldInvitation(worldId) : Promise.resolve(undefined),
         readArmies(worldId, userId),
@@ -223,6 +248,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         // A history, not the board: a failed read shows no battles rather than no world.
         recentBattles(worldId, userId).catch(error => {
             console.error(`Kingdom Builder: could not read the battles in world ${worldId}`, error);
+            return [];
+        }),
+        // The market, not the board: a failed read shows an empty board rather than no world.
+        tradeOffersIn(worldId, userId, seatOf).catch(error => {
+            console.error(`Kingdom Builder: could not read the trade offers in world ${worldId}`, error);
             return [];
         }),
         // The repair for a leave that died before handing the invitation on (§9.1).
@@ -275,6 +305,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                 seat: ownerSeat,
                 ...(settlement.ownerId === userId || isScouted(settlement.nodeId) ? { garrison: garrisonOf(settlement.garrison) } : {}),
                 ...(settlement.ownerId === userId && sieges.has(settlement.nodeId) ? { siege: sieges.get(settlement.nodeId)! } : {}),
+                ...(settlement.ownerId === userId ? {
+                    resources: resourcesOf(settlement.resources),
+                    caravans: settlement.caravans ?? 0,
+                    marketLevel: marketLevelOf(settlement.tiles ?? []),
+                } : {}),
             }];
         }),
         barbarians: villages.map(village => ({
@@ -285,6 +320,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
         sight,
         sightings,
         battles,
+        offers,
         ...(invite ? { invite } : {}),
     };
 }

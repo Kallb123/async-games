@@ -11,6 +11,7 @@ import type { KingdomBuilderBuildingType, KingdomBuilderResources, KingdomBuilde
 import {
     KINGDOM_BUILDER_BUILDING_PRODUCES,
     KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
+    KINGDOM_BUILDER_UPGRADABLE_BUILDINGS,
     buildTicksFor,
     buildingCostFor,
     buildingOutputFor,
@@ -18,8 +19,8 @@ import {
 } from "@/games/KingdomBuilder/buildings";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, formatResources, shortfallFor, type KingdomBuilderResourceType } from "@/games/KingdomBuilder/resources";
 import type { KingdomBuilderCatchment } from "@/games/KingdomBuilder/worldgen/catchment";
+import MarketSection from "@/games/KingdomBuilder/components/MarketSection";
 import {
-    KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
     KINGDOM_BUILDER_UNIT_TYPES,
     KINGDOM_BUILDER_UNITS,
@@ -43,6 +44,7 @@ const BUILDING_DETAILS: Record<string, { name: string; icon: string; role?: stri
     farm: { name: "Farm", icon: "🌾" },
     mine: { name: "Mine", icon: "⛏️" },
     barracks: { name: "Barracks", icon: "🏯", role: "trains army units" },
+    market: { name: "Market", icon: "⚖️", role: "exchanges resources and sells caravans" },
 };
 
 /** What the land is called when it yields each resource — "Rich woodland" (§4.6). */
@@ -110,14 +112,18 @@ export default function KingdomBuilderSettlementPage({
     const unavailable = status === 403 || status === 404;
     const construction = data?.tiles.find(tile => tile.construction)?.construction;
     const emptyTiles = data?.tiles.filter(tile => !tile.building && !tile.construction) ?? [];
-    const barracks = data?.tiles.find(tile => tile.building?.type === "barracks");
+    const tileOf = (type: KingdomBuilderPrototypeBuilding) => data?.tiles.find(tile => tile.building?.type === type);
+    const barracks = tileOf("barracks");
     const barracksLevel = barracks?.building?.level ?? 0;
-    const buildableTypes = KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => type !== "barracks" || (!barracks && !construction));
+    const market = tileOf("market");
+    // A barracks or a market is built once and levelled after (§4.2).
+    const buildableTypes = KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type] === undefined || (!tileOf(type) && !construction));
     const trainingQueue = data?.trainingQueue ?? [];
     const queueFull = trainingQueue.length >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT;
-    const upgradePrice = data && barracks && barracksLevel < KINGDOM_BUILDER_BARRACKS_MAX_LEVEL
-        ? priceFor(buildingCostFor("barracks", barracksLevel + 1), data.resources)
-        : null;
+    const upgradeRow = (type: KingdomBuilderPrototypeBuilding, tile: typeof barracks, effect: string) => data && tile?.building && (
+        <UpgradeRow type={type} tilePosition={tile.position} level={tile.building.level} effect={effect} resources={data.resources}
+            busy={!!construction} pending={pending === `upgrade-${type}`} disabled={isPending} onUpgrade={send} />
+    );
 
     return (
         <main>
@@ -230,18 +236,7 @@ export default function KingdomBuilderSettlementPage({
                                         + (trainingQueue.length > 1 ? `, then ${trainingQueue.length - 1} more (${trainingQueue.length}/${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT}).` : ".")}
                             </p>
                             <div className="ag-build-list">
-                                {upgradePrice && (
-                                    <BuildRow
-                                        icon={BUILDING_DETAILS.barracks.icon}
-                                        name={`Upgrade to level ${barracksLevel + 1}`}
-                                        cost={`${upgradePrice.label} · ${formatTicks(buildTicksFor(barracksLevel + 1))} · unlocks stronger units, trains faster and watches farther`}
-                                        tag={construction ? "Busy" : pending === "upgrade" ? "Queuing…" : upgradePrice.affordable ? "Upgrade" : "Can't afford"}
-                                        tagMuted={!!construction || !upgradePrice.affordable}
-                                        disabled={!!construction || !upgradePrice.affordable || isPending}
-                                        pending={pending === "upgrade"}
-                                        onClick={() => send("upgrade", { tilePosition: barracks.position, buildingType: "barracks" })}
-                                    />
-                                )}
+                                {upgradeRow("barracks", barracks, "unlocks stronger units, trains faster and watches farther")}
                                 {KINGDOM_BUILDER_UNIT_TYPES.map(unitType => (
                                     <UnitRow
                                         key={unitType}
@@ -256,6 +251,11 @@ export default function KingdomBuilderSettlementPage({
                                 ))}
                             </div>
                         </Section>
+                    )}
+
+                    {data && market?.building && (
+                        <MarketSection view={data} marketLevel={market.building.level} pending={pending} isPending={isPending} onSend={send}
+                            upgrade={upgradeRow("market", market, "a better rate")} />
                     )}
 
                     {data && (
@@ -301,6 +301,36 @@ function UnitRow({ unitType, barracksLevel, resources, queueFull, pending, disab
             disabled={!!blocker || disabled}
             pending={pending}
             onClick={onTrain}
+        />
+    );
+}
+
+/** Raises a barracks or a market a level (§4.2) — gone once it is at its highest. */
+function UpgradeRow({ type, tilePosition, level, effect, resources, busy, pending, disabled, onUpgrade }: {
+    type: KingdomBuilderPrototypeBuilding;
+    tilePosition: number;
+    level: number;
+    /** What the next level brings. */
+    effect: string;
+    resources: KingdomBuilderSettlementView["resources"];
+    /** Something else is being built. */
+    busy: boolean;
+    pending: boolean;
+    disabled: boolean;
+    onUpgrade: (key: string, request: object) => void;
+}) {
+    if (level >= (KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type] ?? 1)) return null;
+    const price = priceFor(buildingCostFor(type, level + 1), resources);
+    return (
+        <BuildRow
+            icon={BUILDING_DETAILS[type].icon}
+            name={`Upgrade to level ${level + 1}`}
+            cost={`${price.label} · ${formatTicks(buildTicksFor(level + 1))} · ${effect}`}
+            tag={busy ? "Busy" : pending ? "Queuing…" : price.affordable ? "Upgrade" : "Can't afford"}
+            tagMuted={busy || !price.affordable}
+            disabled={busy || !price.affordable || disabled}
+            pending={pending}
+            onClick={() => onUpgrade(`upgrade-${type}`, { tilePosition, buildingType: type })}
         />
     );
 }

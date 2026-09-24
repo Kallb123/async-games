@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceMarch, armyTile, paceOf, routeBetween, ticksToArrive, type KingdomBuilderMarch } from "./armies";
+import { advanceMarch, armyTile, paceOf, routeBetween, seizeCaravans, ticksToArrive, type KingdomBuilderMarch } from "./armies";
 import { garrisonOf, KINGDOM_BUILDER_PACES } from "./units";
 import { travelGridFor } from "./worldgen/tilePath";
 
@@ -54,5 +54,41 @@ describe("Kingdom Builder armies", () => {
     it("rejoins the garrison when the road ends at one of its owner's own settlements", () => {
         expect(advanceMarch(march({ travelled: 5 }), 9, new Set(["camp"])).joins).toBe("camp");
         expect(advanceMarch(march({ travelled: 1 }), 9, new Set(["camp"])).joins).toBeUndefined();
+    });
+
+    describe("seizeCaravans (§4.7)", () => {
+        // Camped at the end of the road, tile 3 — or, with less travelled, still on the way.
+        const caravans = (overrides: Partial<KingdomBuilderMarch> = {}) => march({ units: garrisonOf(), caravans: 2, cargo: { iron: 30 }, travelled: 6, arrivedAtTick: 1, ...overrides });
+        const escort = (ownerId: string, overrides: Partial<KingdomBuilderMarch> = {}) => march({ ownerId, travelled: 6, arrivedAtTick: 1, ...overrides });
+
+        it("hands caravans with no escort, and their load, to the first rival army on their tile", () => {
+            const first = escort("rival", { caravans: 1, cargo: { wood: 10 } });
+            const second = escort("other");
+            const taken = caravans();
+
+            const result = seizeCaravans([taken, first, second], 7);
+
+            expect(result.armies).toEqual([{ ...first, caravans: 3, cargo: { wood: 10, stone: 0, iron: 30, wheat: 0 } }, second]);
+            expect(result.seized).toEqual([{ tick: 7, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 2 }]);
+        });
+
+        it("meets them on the road too, wherever the two stacks stand, and names no place for it", () => {
+            // Two tiles into a route that has the rival camped on tile 1.
+            const onTheRoad = caravans({ travelled: 2, arrivedAtTick: undefined });
+            const rival = escort("rival", { path: [5, 1], pathCosts: [0, 2], travelled: 2 });
+            const result = seizeCaravans([onTheRoad, rival], 3);
+            expect(result.armies).toEqual([{ ...rival, caravans: 2, cargo: { wood: 0, stone: 0, iron: 30, wheat: 0 } }]);
+            // Where they were bound is their owner's business, and the raid's report would tell the taker (§6.3).
+            expect(result.seized[0]).not.toHaveProperty("nodeId");
+        });
+
+        it("leaves caravans alone that their owner's own army guards, that stand elsewhere, or that only a rival's caravans meet", () => {
+            const guarded = [caravans(), escort("owner"), escort("rival")];
+            expect(seizeCaravans(guarded, 7)).toEqual({ armies: guarded, seized: [] });
+            const apart = [caravans(), escort("rival", { travelled: 4, arrivedAtTick: undefined })];
+            expect(seizeCaravans(apart, 7).seized).toEqual([]);
+            const traders = [caravans(), caravans({ ownerId: "rival" })];
+            expect(seizeCaravans(traders, 7).seized).toEqual([]);
+        });
     });
 });

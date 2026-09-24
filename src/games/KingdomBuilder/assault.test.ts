@@ -94,6 +94,20 @@ describe("pushAttack", () => {
         expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([{ deleteOne: { filter: { _id: armyId, worldId } } }], { session });
     });
 
+    it("leaves the caravans of an army that falls, and their load, to the town that beat it (§4.7)", async () => {
+        besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 }, caravans: 2, cargo: { iron: 40, wheat: 10 } }]);
+
+        await pushAttack(worldId, "attacker", armyId.toString());
+
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith({ _id: settlementId, worldId }, {
+            $set: { garrison: expect.anything() }, $inc: { caravans: 2, "resources.iron": 40, "resources.wheat": 10 },
+        }, { session });
+        expect(kept()[0].shares).toEqual([
+            expect.objectContaining({ ownerId: "attacker", caravansLost: 2 }),
+            expect.objectContaining({ ownerId: "defender", caravansTaken: 2 }),
+        ]);
+    });
+
     it("tells a stranger only that the army isn't found, before anything else is read", async () => {
         vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue(chain(null));
         const settlement = vi.spyOn(KingdomBuilderSettlementModel, "findOne");
@@ -148,6 +162,25 @@ describe("sallyOut", () => {
                 { ownerId: "two", sent: garrisonOf({ militia: 2 }), left: garrisonOf() },
             ],
         });
+    });
+
+    it("brings in the caravans of the besiegers it destroys, and keeps a survivor's with it", async () => {
+        besieged({ infantry: 6 }, [
+            { _id: armyId, ownerId: "one", units: { militia: 1 }, caravans: 1, cargo: { wood: 30 } },
+            { _id: otherArmyId, ownerId: "two", units: { militia: 1 }, caravans: 3, cargo: { stone: 50 } },
+        ]);
+
+        await sallyOut(worldId, "defender", settlementId.toString());
+
+        expect(KingdomBuilderSettlementModel.updateOne).toHaveBeenCalledWith({ _id: settlementId.toString(), worldId, ownerId: "defender" }, {
+            $set: { garrison: expect.anything() }, $inc: { caravans: 4, "resources.wood": 30, "resources.stone": 50 },
+        }, { session });
+        // Each besieger is told only what they lost themselves.
+        expect(kept()[0].shares).toEqual([
+            expect.objectContaining({ ownerId: "defender", caravansTaken: 4 }),
+            expect.objectContaining({ ownerId: "one", caravansLost: 1 }),
+            expect.objectContaining({ ownerId: "two", caravansLost: 3 }),
+        ]);
     });
 
     it("loses the garrison when it is outfought", async () => {

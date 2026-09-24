@@ -1,4 +1,5 @@
 import type { KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
+import { KINGDOM_BUILDER_UPGRADABLE_BUILDINGS, buildingLevelOf } from "./buildings";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { tunedResources } from "./resources";
 
@@ -55,7 +56,7 @@ export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilde
     },
 };
 
-export const KINGDOM_BUILDER_BARRACKS_MAX_LEVEL = 3;
+export const KINGDOM_BUILDER_BARRACKS_MAX_LEVEL = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.barracks!;
 /** Units waiting at one barracks, the one in training included. */
 export const KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT = 20;
 
@@ -71,7 +72,7 @@ export function isUnitType(value: unknown): value is KingdomBuilderUnitType {
 
 /** The settlement's barracks level, or 0 without one. A settlement holds at most one. */
 export function barracksLevelOf(tiles: readonly KingdomBuilderTile[]): number {
-    return tiles.find(tile => tile.building?.type === "barracks")?.building?.level ?? 0;
+    return buildingLevelOf(tiles, "barracks");
 }
 
 /** Ticks one unit takes at this barracks level, or null while the level has not unlocked it. */

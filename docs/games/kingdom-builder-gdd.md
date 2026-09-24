@@ -8,8 +8,9 @@ vocabulary (PR 12), barracks and units (PR 13), ending a world (PR 14), the
 map-shape overhaul (PR 15, §3.7), travel over the tiles (PR 16, §3.8),
 building costs (PR 17, §4.5), wheat with land-driven production (PR 18,
 §4.6), army dispatch and movement (PR 19, §6.2), fog of war (PR 20, §6.3),
-automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6) and
-barbarian villages (PR 23, §3.4) are shipped. PR 24 (settlers) comes next;
+automatic siege on arrival (PR 21, §8), combat resolution (PR 22, §7.6),
+barbarian villages (PR 23, §3.4) and the market, trade and caravans (PR 25,
+§4.7) are shipped. PR 24 (settlers) comes next;
 §11.3 is the plan
 for the rest, including two presentation PRs for the ground — transparent-backed tiles
 (PR 29, §3.5.7) and animated tiles (PR 30, §3.5.8) — which can land whenever
@@ -50,6 +51,7 @@ movement — build on those two decisions rather than re-opening them.
    - 4.4 [Founding new settlements](#44-founding-new-settlements)
    - 4.5 [Building costs and the starting stockpile](#45-building-costs-and-the-starting-stockpile)
    - 4.6 [Wheat, and the land around a settlement](#46-wheat-and-the-land-around-a-settlement)
+   - 4.7 [The market, trade and caravans](#47-the-market-trade-and-caravans)
 5. [Time model: turns vs. ticks](#5-time-model-turns-vs-ticks)
    - 5.1 [Option A — strict sequential turns](#51-option-a--strict-sequential-turns)
    - 5.2 [Option B — simultaneous ("WEGO") turns](#52-option-b--simultaneous-wego-turns)
@@ -1162,7 +1164,7 @@ the settlement falls.
 | **Mine** | Produces iron per turn/tick | Only buildable where the settlement's surrounding land has hills or mountains in it (§4.6) — ties the settlement economy back to the world map rather than making all 8 tiles interchangeable |
 | **Farm** | Produces wheat per turn/tick | Added with wheat (§4.6); best on grass, fields and river land |
 | **Barracks** | Trains army units | Queue-based; higher levels unlock stronger unit types and shorten training time |
-| **Market** | Converts one resource to another at a rate, and/or lists trade offers to other players | Gives a player short on iron but flush with wood a way out that isn't "wait" |
+| **Market** | Converts one resource to another at a rate, lists trade offers to other players, and sells caravans | Gives a player short on iron but flush with wood a way out that isn't "wait" (§4.7) |
 | **Walls** | Passive defence bonus; the thing a siege wears down (§8) | Occupies a tile like anything else — a maxed-out economy settlement really is choosing not to have walls |
 | **Town centre** (fixed) | Caps the settlement's overall level, unlocks more building slots (if the design allows more than 8) or higher tiers of the tiles above | Its own upgrade track, gated behind resource cost + time like everything else |
 
@@ -1357,6 +1359,89 @@ with no wheat or no iron can never train a single unit. Composition, not total, 
 woodland start and a Rich mountain start are both fair — which is exactly the
 "parity on total value, not on flavour" rule §3.3 already states. §3.7's
 composition bands are what keep that rule satisfiable on most seeds.
+
+---
+
+### 4.7 The market, trade and caravans
+
+> PR 25 shipped this section. The prices, the rates, a caravan's load and the
+> offer limit live in `economy.ts` beside everything else; `market.ts` is the
+> pure half the settlement screen prices with.
+
+§4.3's third sink, in three parts: a market that converts, a board where
+players trade with each other, and caravans that carry stores by road.
+
+**The market** is a building like the barracks: one a settlement, built once
+(25 wood, 15 stone) and raised a level at a time to level three, each level
+priced and timed linearly like every other. It exchanges any resource for any
+other at a rate set by its level — **4 for 1, then 3, then 2** — which is
+always worse than producing the resource, so it stays a release valve. An
+exchange is instant and conditional on the market's level and the stores, so
+an upgrade finishing or a second tab in between fails it rather than pricing
+it at the wrong rate.
+
+**Trade offers.** A player posts an offer from a market — "40 wood for 10
+iron" — and any other player in the world takes it at a market of theirs.
+What an offer gives is taken from the stores when it is posted and held on the
+offer, so what is on the board is always paid for; withdrawing it returns the
+goods to the settlement it came from. Taking one is one transaction: the offer
+comes off the board, the taker pays what it wants and receives what it gives,
+and the poster's settlement receives what it wanted. Goods change hands market
+to market, instantly — the trade needs no road. Each side names at least one
+resource and no resource is on both; a player may have five offers open in a
+world. The board is public to every member: who posted each offer and what it
+is, but which of a player's settlements posted it is theirs alone. A player
+who leaves takes their offers — and the goods held on them — with them.
+
+**Caravans.** Moving stores between settlements by road — to feed a second
+town from a first, or to deliver the other half of a private deal — is what a
+caravan is for. One costs 20 wood and 10 wheat at a market, carries 50
+resources of any mix, and stands empty in the market yard until it is sent:
+
+- **Loaded at muster.** Sending a stack from a garrison (§6.2) can take
+  caravans from the yard, loaded from the stores in the same conditional write
+  that spends the garrison. With units in the stack the caravans are
+  **escorted**; with none they travel **alone**. Either way the stack moves at
+  a slow unit's pace — ox-carts set the speed, as the slowest unit does.
+- **Unloaded on arrival.** A stack that marches into one of its owner's own
+  settlements rejoins it as it always did (§6.2), and its caravans unload into
+  the stores the tick they arrive and stand in that yard.
+- **Detached and joined where they camp.** An escorted stack camped anywhere
+  but a barbarian village can split its caravans off into a stack of their own,
+  and any two of a player's stacks camped at the same place can be joined into
+  one — which is how caravans are attached to an army in the field.
+- **Unloaded into someone else's town.** A stack camped at another player's
+  settlement can unload its load into that settlement's stores: a gift, or
+  the delivery side of a deal made off the board. Not while it is besieging —
+  a besieger's caravans are detached first, and a caravan stack on its own
+  never besieges.
+
+Caravans follow the rules of the stack they are in: an **unescorted** stack
+lays no siege (§8), never fights, and is refused at a barbarian village, where
+it would simply be plundered. An **escorted** one shares its escort's fate: if
+the escort takes a barbarian village, the caravans and their load stock the
+new settlement.
+
+Caravans are never simply lost to another player — they change hands:
+
+- **Taken on the road.** At the end of every tick, an unescorted stack on the
+  same tile as a rival's stack with units — marching or camped, anywhere on
+  the map — is taken by it, unless a stack of its own owner's with units
+  stands on that tile too. The caravans and their load join the taker's stack
+  (the oldest, if several could), which carries them on wherever it was
+  going. A rival's caravans alone take nothing, and a town's garrison takes
+  nothing that camps at its gate: that is how a delivery is made.
+- **Left on the field.** If a push or a sally wipes an escort out, its caravans
+  and load go to the town that beat it — into its yard and its stores. Only a
+  barbarian village, which is nobody, still plunders them outright.
+
+Both sides are told, in their Battles list (§7.6): the taker how many
+caravans it took, the loser how many it lost — and, after a raid, nothing of
+the army that took them. A raid is named for the place it happened when the
+caravans were camped there; one on the open road names nowhere, since where
+they were bound is their owner's business (§6.3). A rival who can see a stack (§6.3) sees how
+many caravans it has — a covered cart shows it is one — but never what it
+carries.
 
 ---
 
@@ -2078,7 +2163,8 @@ admin-tools doc, and **PR 27** the push-notification plumbing. Everything else s
 `src/games/KingdomBuilder/` and Kingdom Builder's own routes, bar PR 28's
 one-line entries in the guide and tutorial registries, PRs 29 and 30's lines
 in the tile mapper's existing admin-tools entry, and PR 30's
-reduced-motion rule in `ag-theme.css`.
+reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
+`Stepper` and one-column-per-option `.ag-trade-grid`, both for the market's pickers.
 
 - **PR 6 — World map view and multiple settlements.** Shipped. Render the
   generated graph and let a second settlement be founded elsewhere on it. No armies
@@ -2707,8 +2793,54 @@ reduced-motion rule in `ag-theme.css`.
 - **PR 24 — Settlers and a second settlement.** The settler unit and a
   "found here" command on open expansion sites (§4.4) — mostly a new unit
   type once PRs 6–19's map/movement/dispatch already exist.
-- **PR 25 — Market and trade.** Resource conversion and player-to-player
-  trade offers (§4.3) — a pure economy addition with no combat interaction.
+- **PR 25 — Market and trade.** Shipped, ahead of PR 24 (§11.4 leaves it free
+  to move). Resource conversion and player-to-player trade offers (§4.3), and
+  caravans to carry stores by road (§4.7).
+
+  How it landed: `market.ts` is the pure half — the rate a market level asks
+  (`exchangeRateFor`), a caravan's price and load, the offer limit, and
+  `amountsFrom`, which reads a set of resources from a request; `spendFrom`
+  there is now the one conditional-spend helper the settlement's commands and
+  the new ones share. The market joins the buildable list and, with the
+  barracks, `KINGDOM_BUILDER_UPGRADABLE_BUILDINGS`, which is how
+  `queuePrototypeBuilding` now levels either. The settlement route gains
+  `action: "exchange"` and `action: "caravan"`; a settlement stores
+  `caravans`. Trade offers are a collection of their own
+  (`KingdomBuilderTradeOfferModel`), posted, taken and withdrawn through
+  `trade.ts` on the world route (`offer`, `accept`, `withdraw`), each in one
+  transaction that first bumps the world's `tradesMade`, so two posts at once
+  conflict rather than both slipping under the limit. `worldView` carries the
+  board as `offers` (`tradeBoard.ts`) — a failed read is an empty board — and,
+  on the viewer's own settlements only, their stores, caravans and market
+  level. An army document gains `caravans` and `cargo`: `paceOf` counts a
+  caravan as slow, the tick's `withSiege` dates no siege for a stack with no
+  units, `assaultVillages` leaves such a stack out and stocks a captured
+  village from its conquerors' loads, and a stack rejoining a garrison unloads
+  into its stores. The march route takes `caravans` and `cargo` at dispatch, and
+  `detach`, `join` and `unload` where a stack has camped, each claiming the
+  world like a dispatch so it can't interleave with the tick. A sighting carries
+  a rival stack's caravan count and never its load. The settlement screen gains
+  a Market section (exchange, caravans, upgrade), and the world map a Trade
+  section and caravans in the muster and an army's orders. Leaving a world
+  takes a player's offers with it, and removing one removes its board. Outside
+  Kingdom Builder, `Stepper` gains a `step` (a load is picked five at a time)
+  and `.ag-trade-grid` lays its options out a column apiece, so the market's
+  four resources reuse the Settlements & Cities bank-trade picker.
+
+  Caravans change hands rather than being lost (§4.7): `seizeCaravans`
+  (`armies.ts`) runs in `applyTick` once the armies have moved, folding an
+  unguarded stack into the first rival escort on its tile and listing the
+  raid in the tick's `seized`, which the cron keeps as a `raid` battle with no
+  rounds and no attacker units, so the loser learns nothing of the taker, and
+  with no `nodeId` when it happened on the road, so the taker learns nothing
+  of where the caravans were bound. `combineCaravans` is the one place stacks'
+  caravans and loads are added up — joined, taken, brought home, or stocking
+  a captured village. A
+  push or sally's `returnSurvivors` hands back the caravans of the armies it
+  disbands, and the winning town `$inc`s them into its yard and stores. A
+  battle share gains `caravansTaken` and `caravansLost`, each read by its own
+  owner only. No
+  `whatsNew.ts` line.
 - **PR 26 — Victory, seasons, catch-up.** Season length, scoring, new-player
   protection, diminishing returns, leaderboard (§9) — the systemic layer
   that turns the sandbox into a game with an end.
@@ -2930,6 +3062,11 @@ guessed at here:
   of question, and cheap to change late by design. Whether a lake is ever
   crossable by anything but a bridge or ford (a boat, a winter freeze) is a
   rules question left with them.
+- Market and caravan numbers (§4.7): whether 4/3/2 for 1 is too generous next
+  to a Poor site's own output, and whether a caravan's 50 is the right load against
+  the stores a mid-game town holds. Whether an escorted caravan on the road
+  can be raided by a rival army that meets it waits on field combat; one with
+  no escort already can (§4.7).
 - Exact resource/time cost curves for buildings and units. §4.5 and §4.6 now
   give first-pass numbers (linear in level, a 40/20/0/20 starting stockpile,
   tiered output of 1/2/3 per level); they exist so PRs 17–18 have something

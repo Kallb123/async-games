@@ -5,7 +5,9 @@
 // Won, the village becomes the attacker's settlement — or, for a player who
 // already holds two, is burnt, leaving open ground anyone can found on.
 
-import { addUnits, isCamped, unitCount, type KingdomBuilderMarch } from "./armies";
+import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
+import { addUnits, combineCaravans, isCamped, isEscorted, unitCount, type KingdomBuilderMarch } from "./armies";
+import { addResources, resourcesOf } from "./resources";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
@@ -61,12 +63,18 @@ export interface KingdomBuilderVillageBattle {
     left: KingdomBuilderGarrison;
 }
 
-/** A village taken: the settlement it becomes, in the owner's free slot, garrisoned by the survivors. */
+/**
+ * A village taken: the settlement it becomes, in the owner's free slot,
+ * garrisoned by the survivors — and stocked with whatever the caravans that
+ * came with them carried (PR 25), which stand in its market yard after.
+ */
 export interface KingdomBuilderVillageCapture {
     ownerId: string;
     nodeId: string;
     settlementNumber: number;
     garrison: KingdomBuilderGarrison;
+    caravans: number;
+    resources: KingdomBuilderResources;
 }
 
 export interface KingdomBuilderVillageAssault<T extends KingdomBuilderMarch> {
@@ -103,7 +111,8 @@ export function assaultVillages<T extends KingdomBuilderMarch>(
 
     const attacks = new Map<string, Map<string, T[]>>();
     for (const army of armies) {
-        if (!isCamped(army) || !standing.has(army.targetNodeId)) continue;
+        // Caravans with nobody to guard them never go in (march.ts won't send them there either).
+        if (!isCamped(army) || !isEscorted(army) || !standing.has(army.targetNodeId)) continue;
         const byOwner = attacks.get(army.targetNodeId) ?? new Map<string, T[]>();
         byOwner.set(army.ownerId, [...(byOwner.get(army.ownerId) ?? []), army]);
         attacks.set(army.targetNodeId, byOwner);
@@ -127,7 +136,8 @@ export function assaultVillages<T extends KingdomBuilderMarch>(
             if (slot === undefined) continue;
             taken.add(slot);
             slots.set(ownerId, taken);
-            captures.push({ ownerId, nodeId, settlementNumber: slot, garrison: kept.reduce(addUnits, garrisonOf()) });
+            const { caravans, cargo } = combineCaravans(camps);
+            captures.push({ ownerId, nodeId, settlementNumber: slot, garrison: kept.reduce(addUnits, garrisonOf()), caravans, resources: cargo });
             camps.forEach(camp => left.set(camp, garrisonOf()));
         }
     }

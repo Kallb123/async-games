@@ -52,10 +52,26 @@ describe("assaultVillages", () => {
         const result = assaultVillages([village()], home, [army]);
         expect(result.villages).toEqual([]);
         expect(result.armies).toEqual([]);
-        expect(result.captures).toEqual([{ ownerId: "alice", nodeId: "village", settlementNumber: 1, garrison: expected.attacker }]);
+        expect(result.captures).toEqual([{
+            ownerId: "alice", nodeId: "village", settlementNumber: 1, garrison: expected.attacker, caravans: 0, resources: { wood: 0, stone: 0, iron: 0, wheat: 0 },
+        }]);
         expect(result.battles).toEqual([{
             nodeId: "village", ownerId: "alice", attacker: army.units, defender: garrisonOf({ militia: 4 }), rounds: expected.rounds, left: expected.attacker,
         }]);
+    });
+
+    it("stocks a taken village with what its conquerors' caravans carried", () => {
+        const result = assaultVillages([village()], home, [camp({ caravans: 2, cargo: { wood: 30, iron: 10 } })]);
+        expect(result.captures).toEqual([expect.objectContaining({ caravans: 2, resources: { wood: 30, stone: 0, iron: 10, wheat: 0 } })]);
+        expect(result.armies).toEqual([]);
+    });
+
+    it("leaves caravans with nobody to guard them out of the fight", () => {
+        const caravans = camp({ units: garrisonOf(), caravans: 1, cargo: { wood: 20 } });
+        const result = assaultVillages([village()], home, [caravans]);
+        expect(result.battles).toEqual([]);
+        expect(result.villages).toEqual([village()]);
+        expect(result.armies).toEqual([caravans]);
     });
 
     it("burns a village won by a player who already holds two settlements, and leaves the army camped on the open site", () => {

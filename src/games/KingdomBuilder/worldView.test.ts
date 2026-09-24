@@ -7,6 +7,7 @@ vi.mock("@/utils/users/clerk", () => ({
 vi.mock("./worldInvitation", () => ({ liveWorldInvitation: vi.fn(), reconcileWorldInvitation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./roster", () => ({ ensureFirstSettlement: vi.fn() }));
 vi.mock("./battleReports", () => ({ recentBattles: vi.fn(async () => []) }));
+vi.mock("./tradeBoard", () => ({ tradeOffersIn: vi.fn(async () => []) }));
 
 import { buildUserDirectory } from "@/utils/users/clerk";
 
@@ -237,11 +238,17 @@ describe("Kingdom Builder world view", () => {
         expect(view.armies[0]).toEqual({
             armyId: armyId.toString(), units: { militia: 3, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 },
             tile: 6, route: [6, 7, 8], fromNodeId: "start", targetNodeId: "camp", ticksToArrive: 2,
+            caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 },
         });
         expect(view.armies[1]).toMatchObject({ tile: 2, route: [2], ticksToArrive: 0, arrivedAtTick: 7 });
         // A garrison is its owner's to see: the rival's settlement carries none.
         expect(view.settlements.find(settlement => settlement.isMine)?.garrison?.militia).toBe(2);
         expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("garrison");
+        // So are its stores, its caravans and its market (PR 25).
+        for (const field of ["resources", "caravans", "marketLevel"]) {
+            expect(view.settlements.find(settlement => settlement.isMine)).toHaveProperty(field);
+            expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty(field);
+        }
     });
 
     describe("fog of war", () => {
@@ -293,6 +300,16 @@ describe("Kingdom Builder world view", () => {
 
             expect(view.sight).toEqual([{ tile: at(2, 2), radius: 3 }]);
             expect(view.sightings).toEqual([{ seat: 1, tile: at(4, 3), units: { militia: 0, scout: 0, infantry: 0, cavalry: 2, "siege-engine": 0 } }]);
+        });
+
+        it("says a rival stack in sight has caravans, and never what they carry", async () => {
+            setUp();
+            mockArmies([], [{ ...rivalArmy(at(4, 3)), caravans: 2, cargo: { iron: 40 }, _id: new Types.ObjectId() }]);
+
+            const view = await worldView(worldId, "owner");
+
+            expect(view.sightings).toEqual([expect.objectContaining({ seat: 1, tile: at(4, 3), caravans: 2 })]);
+            expect(JSON.stringify(view.sightings)).not.toContain("cargo");
         });
 
         it("scouts a rival army with an army of the viewer's own nearby, where the town can't see it", async () => {

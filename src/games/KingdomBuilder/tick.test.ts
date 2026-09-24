@@ -117,6 +117,37 @@ describe("Kingdom Builder tick engine", () => {
         expect(input.armies[0].travelled).toBe(0);
     });
 
+    it("unloads caravans that reach home into the stores, and stands them in the market yard (PR 25)", () => {
+        const caravans = { ownerId: "owner", units: garrisonOf(), caravans: 2, cargo: { iron: 30, wheat: 10 }, path: [0, 1], pathCosts: [0, 2], travelled: 0, targetNodeId: "site" };
+        const result = applyTick({ currentTick: 4, settlements: [settlement({ caravans: 1 })], armies: [caravans] });
+
+        expect(result.armies).toEqual([]);
+        expect(result.settlements[0].caravans).toBe(3);
+        // What it carried, on top of what the buildings made this tick.
+        expect(result.settlements[0].resources).toEqual({ wood: 6, stone: 6, iron: 39, wheat: 17 });
+    });
+
+    it("moves caravans at a slow stack's pace, and lays no siege with caravans alone", () => {
+        const caravans = { ownerId: "rival", units: garrisonOf(), caravans: 1, path: [0, 1, 2], pathCosts: [0, 2, 4], travelled: 0, targetNodeId: "site" };
+        const cavalry = { ...caravans, units: garrisonOf({ cavalry: 1 }) };
+
+        expect(applyTick({ currentTick: 0, settlements: [], armies: [cavalry] }).armies[0].travelled).toBe(2);
+        const arrived = applyTick(applyTick({ currentTick: 0, settlements: [settlement()], armies: [caravans] }));
+        expect(arrived.armies[0]).toMatchObject({ arrivedAtTick: 2 });
+        expect(arrived.armies[0]).not.toHaveProperty("besiegingSince");
+    });
+
+    it("hands caravans with no escort to a rival army on the same tile, and says so (§4.7)", () => {
+        const caravans = { ownerId: "owner", units: garrisonOf(), caravans: 1, cargo: { wood: 20 }, path: [0, 1], pathCosts: [0, 2], travelled: 0, targetNodeId: "camp" };
+        const rival = { ...caravans, ownerId: "rival", units: garrisonOf({ militia: 3 }), caravans: undefined, cargo: undefined, travelled: 2, arrivedAtTick: 1 };
+
+        const result = applyTick({ currentTick: 4, settlements: [], armies: [caravans, rival] });
+
+        expect(result.armies).toEqual([{ ...rival, caravans: 1, cargo: { wood: 20, stone: 0, iron: 0, wheat: 0 } }]);
+        expect(result.seized).toEqual([{ tick: 5, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 3 }), caravans: 1 }]);
+        expect(applyTick(result).seized).toEqual([]);
+    });
+
     it("leaves a world with no armies field without one", () => {
         expect(applyTick({ currentTick: 0, settlements: [] })).not.toHaveProperty("armies");
     });

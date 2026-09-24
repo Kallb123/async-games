@@ -7,7 +7,7 @@ import ListRow from "@/components/ui/ListRow";
 import Section from "@/components/ui/Section";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 
-import { unitCount } from "../armies";
+import { formatStack, unitCount } from "../armies";
 import { describeSiege } from "../siege";
 import { formatUnits } from "../units";
 import type { KingdomBuilderWorldView } from "../worldView";
@@ -66,7 +66,7 @@ export default function SiegesSection({ endpoint, view, placeName, onFought }: S
                 })}
                 {besieging.map(army => (
                     <ListRow key={army.armyId} icon="🏹" title={`Besieging ${placeName(army.targetNodeId)}`}
-                        sub={`${formatUnits(army.units)} · since tick ${army.besiegingSince}`}
+                        sub={`${formatStack(army)} · since tick ${army.besiegingSince}`}
                         action={button({ action: "push", armyId: army.armyId }, "Push the attack")} />
                 ))}
             </div>

@@ -15,8 +15,8 @@ export interface KingdomBuilderBattleReport {
     battleId: string;
     kind: KingdomBuilderBattleKind;
     tick: number;
-    /** The settlement's (or barbarian village's) node it was fought at. */
-    nodeId: string;
+    /** The settlement's (or barbarian village's) node it was fought at — none for a raid on the road. */
+    nodeId?: string;
     /** The reader's side started it: pushed the attack, or sallied out. */
     started: boolean;
     /**
@@ -40,6 +40,9 @@ export interface KingdomBuilderBattleReport {
      * they would say what the reader's fellow besiegers had.
      */
     rounds: { lost?: KingdomBuilderGarrison; killed: KingdomBuilderGarrison }[];
+    /** The reader's own caravans that changed hands in it (§4.7) — absent when none did. */
+    caravansTaken?: number;
+    caravansLost?: number;
 }
 
 type BattleRecord = { _id: Types.ObjectId } & Pick<IKingdomBuilderBattle, "kind" | "tick" | "nodeId" | "attackerIds" | "defenderIds" | "attacker" | "defender" | "rounds" | "shares">;
@@ -61,7 +64,7 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         battleId: battle._id.toString(),
         kind: battle.kind,
         tick: battle.tick,
-        nodeId: battle.nodeId,
+        ...(battle.nodeId === undefined ? {} : { nodeId: battle.nodeId }),
         started,
         outcome,
         sent,
@@ -69,6 +72,8 @@ export function reportFor(battle: BattleRecord, userId: string): KingdomBuilderB
         faced: garrisonOf(battle[theirs]),
         faceLeft,
         rounds: battle.rounds.map(round => ({ ...(alone ? { lost: garrisonOf(round[mine]) } : {}), killed: garrisonOf(round[theirs]) })),
+        ...(share?.caravansTaken ? { caravansTaken: share.caravansTaken } : {}),
+        ...(share?.caravansLost ? { caravansLost: share.caravansLost } : {}),
     };
 }
 

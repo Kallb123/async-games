@@ -3,7 +3,7 @@ import type {
     KingdomBuilderResources,
     KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
-import { addUnits, advanceMarch, isCamped, type KingdomBuilderMarch } from "./armies";
+import { addUnits, advanceMarch, combineCaravans, isCamped, isEscorted, seizeCaravans, type KingdomBuilderMarch, type KingdomBuilderSeizure } from "./armies";
 import { KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE, buildingOutputFor } from "./buildings";
 import { addResources, resourcesOf } from "./resources";
 import { besiegedProduction, siegeOf, siegeStage } from "./siege";
@@ -20,6 +20,11 @@ export interface KingdomBuilderTickWorld {
      * hold the camped armies as well as the marching ones.
      */
     armies?: readonly KingdomBuilderMarch[];
+    /**
+     * The caravans taken this tick (PR 25) — set by `applyTick` alongside the
+     * armies, for the caller to tell both sides of; each tick replaces it.
+     */
+    seized?: readonly KingdomBuilderSeizure[];
 }
 
 /** "1 tick", "5 ticks" — how every screen counts time in a world (§5.5). */
@@ -62,13 +67,15 @@ function catchmentOf(settlement: IKingdomBuilderSettlement): KingdomBuilderCatch
  * as the tick begins — produces half, and once the siege's grace period is
  * over, its building and training stop where they are too.
  */
-export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
+export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T & Pick<KingdomBuilderTickWorld, "seized"> {
     const currentTick = world.currentTick + 1;
-    const { armies, joining } = marchArmies(world, currentTick);
+    const { armies: marched, joining } = marchArmies(world, currentTick);
+    // Where the armies stand once they have moved is where unguarded caravans are taken (§4.7).
+    const { armies, seized } = seizeCaravans(marched, currentTick);
     return {
         ...world,
         currentTick,
-        ...(world.armies ? { armies } : {}),
+        ...(world.armies ? { armies, seized } : {}),
         settlements: world.settlements.map(settlement => {
             const siege = siegeOf(settlement, world.armies ?? []);
             const halted = siege !== undefined && siegeStage(siege, currentTick) === "full";
@@ -84,13 +91,17 @@ export function applyTick<T extends KingdomBuilderTickWorld>(world: T): T {
                     : {}),
             }));
 
+            const arriving = joining.get(settlement) ?? [];
+            const brought = combineCaravans(arriving);
             return {
                 ...settlement,
                 tiles,
-                resources: addResources(settlement.resources, production),
+                // What its caravans bring home is unloaded into the stores the tick they arrive (PR 25).
+                resources: addResources(addResources(settlement.resources, production), brought.cargo),
+                caravans: (settlement.caravans ?? 0) + brought.caravans,
                 ...withJoining(
                     halted ? { trainingQueue: (settlement.trainingQueue ?? []).map(order => ({ ...order })), garrison: garrisonOf(settlement.garrison) } : advanceTraining(settlement.trainingQueue, settlement.garrison),
-                    joining.get(settlement),
+                    arriving,
                 ),
                 ...(construction && ticksRemaining !== 0
                     ? { construction: { ...construction, ticksRemaining: ticksRemaining! } }
@@ -115,7 +126,7 @@ function marchArmies(world: KingdomBuilderTickWorld, tick: number) {
         homes.get(settlement.ownerId)!.set(settlement.nodeId, settlement);
         ownerAt.set(settlement.nodeId, settlement.ownerId);
     }
-    const joining = new Map<IKingdomBuilderSettlement, KingdomBuilderMarch["units"][]>();
+    const joining = new Map<IKingdomBuilderSettlement, KingdomBuilderMarch[]>();
     const armies: KingdomBuilderMarch[] = [];
     for (const army of world.armies ?? []) {
         const home = homes.get(army.ownerId) ?? new Map<string, IKingdomBuilderSettlement>();
@@ -125,23 +136,24 @@ function marchArmies(world: KingdomBuilderTickWorld, tick: number) {
             armies.push(withSiege(march, ownerAt.get(march.targetNodeId), tick));
             continue;
         }
-        joining.set(settlement, [...(joining.get(settlement) ?? []), march.units]);
+        joining.set(settlement, [...(joining.get(settlement) ?? []), march]);
     }
     return { armies, joining };
 }
 
-function withJoining<T extends { garrison: KingdomBuilderMarch["units"] }>(trained: T, arriving: readonly KingdomBuilderMarch["units"][] = []): T {
-    return { ...trained, garrison: arriving.reduce(addUnits, trained.garrison) };
+function withJoining<T extends { garrison: KingdomBuilderMarch["units"] }>(trained: T, arriving: readonly KingdomBuilderMarch[]): T {
+    return { ...trained, garrison: arriving.reduce((garrison, army) => addUnits(garrison, army.units), trained.garrison) };
 }
 
 /**
  * Starts or ends a camped army's siege (§8): camped at a settlement that isn't
  * its owner's and not yet dated, it begins now; dated, but with no such
- * settlement there any more — its owner left the world — it ends.
+ * settlement there any more — its owner left the world — it ends. Caravans
+ * with no units to guard them lay no siege: they are there to trade.
  */
 function withSiege<T extends KingdomBuilderMarch>(march: T, ownerThere: string | undefined, tick: number): T {
     const camped = isCamped(march);
-    const hostile = camped && ownerThere !== undefined && ownerThere !== march.ownerId;
+    const hostile = camped && isEscorted(march) && ownerThere !== undefined && ownerThere !== march.ownerId;
     const dated = march.besiegingSince !== undefined && march.besiegingSince !== null;
     if (hostile && !dated) return { ...march, besiegingSince: tick };
     if (!hostile && dated) {

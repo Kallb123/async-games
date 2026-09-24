@@ -4,8 +4,12 @@ import type { KingdomBuilderBattleRound } from "./combat";
 import { KingdomBuilderGarrisonSchema } from "./KingdomBuilderSettlementModel";
 import type { KingdomBuilderGarrison } from "./units";
 
-/** How a battle came about: a push or a sally at a siege (§8), or an army against a barbarian village (§3.4). */
-export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian"] as const;
+/**
+ * How a battle came about: a push or a sally at a siege (§8), an army against
+ * a barbarian village (§3.4), or a rival's army taking caravans left with no
+ * escort (§4.7) — a raid, which has no rounds, since nobody fights it.
+ */
+export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid"] as const;
 export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
 
 /**
@@ -19,8 +23,11 @@ export interface IKingdomBuilderBattle {
     /** The tick it was fought on. */
     tick: number;
     kind: KingdomBuilderBattleKind;
-    /** The settlement's (or village's) node it was fought at. */
-    nodeId: string;
+    /**
+     * The settlement's (or village's) node it was fought at — absent only on
+     * a raid out on the road, which names nowhere (§4.7).
+     */
+    nodeId?: string;
     /** Who fought on each side: the pusher or the sallying garrison's owner attacks. Barbarians are nobody, so a village's side is empty. */
     attackerIds: string[];
     defenderIds: string[];
@@ -43,6 +50,9 @@ export interface KingdomBuilderBattleShare {
     ownerId: string;
     sent: KingdomBuilderGarrison;
     left: KingdomBuilderGarrison;
+    /** Caravans this player took from the other side, or lost to it (§4.7) — absent when none changed hands. */
+    caravansTaken?: number;
+    caravansLost?: number;
 }
 
 export interface IKingdomBuilderBattleDocument extends IKingdomBuilderBattle, Document {}
@@ -57,13 +67,15 @@ const ShareSchema = new Schema<KingdomBuilderBattleShare>({
     ownerId: { type: String, required: true },
     sent: { type: KingdomBuilderGarrisonSchema, required: true },
     left: { type: KingdomBuilderGarrisonSchema, required: true },
+    caravansTaken: { type: Number, min: 0 },
+    caravansLost: { type: Number, min: 0 },
 }, { _id: false });
 
 export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocument>({
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     tick: { type: Number, required: true, min: 0 },
     kind: { type: String, enum: KINGDOM_BUILDER_BATTLE_KINDS, required: true },
-    nodeId: { type: String, required: true },
+    nodeId: { type: String, required(this: IKingdomBuilderBattle) { return this.kind !== "raid"; } },
     attackerIds: { type: [String], required: true },
     defenderIds: { type: [String], required: true },
     attacker: { type: KingdomBuilderGarrisonSchema, required: true },

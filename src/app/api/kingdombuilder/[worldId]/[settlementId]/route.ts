@@ -2,6 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+    buyCaravan,
+    exchangeAtMarket,
     KingdomBuilderPrototypeError,
     queuePrototypeBuilding,
     queueUnitTraining,
@@ -46,9 +48,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.log(`POST ${request.nextUrl.pathname}`);
     const context = await requestContext(params);
     if (!context) return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
-    const { tilePosition, buildingType, unitType } = await readJsonBody<{ tilePosition: number; buildingType: string; unitType: string }>(request);
+    const { tilePosition, buildingType, unitType, action, give, get, amount } = await readJsonBody<{
+        tilePosition: number; buildingType: string; unitType: string; action: string; give: unknown; get: unknown; amount: unknown;
+    }>(request);
 
     try {
+        // GDD §4.3, PR 25: the market converts one resource into another, and sells caravans.
+        if (action === "exchange") {
+            return NextResponse.json(await exchangeAtMarket(context.worldId, context.settlementId, context.userId, { give, get, amount }));
+        }
+        if (action === "caravan") return NextResponse.json(await buyCaravan(context.worldId, context.settlementId, context.userId));
+        if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
         // A body naming a unit trains it at the barracks; anything else queues a building.
         if (unitType !== undefined) {
             return NextResponse.json(await queueUnitTraining(context.worldId, context.settlementId, context.userId, unitType));

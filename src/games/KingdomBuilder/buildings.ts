@@ -1,13 +1,29 @@
 // Pure, so the settlement screen can read the same list, timings and prices
 // the server checks against without pulling Mongoose into the client bundle.
 
-import type { KingdomBuilderBuildingType, KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
+import type { KingdomBuilderBuildingType, KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources, type KingdomBuilderResourceType } from "./resources";
 import { outputPerLevelFor, type KingdomBuilderCatchment } from "./worldgen/catchment";
 
-export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks"] as const;
+export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks", "market"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
+
+/**
+ * The buildings a settlement holds at most one of and raises a level at a time
+ * (§4.2), and the highest level of each: the barracks, whose levels unlock
+ * units, and the market (PR 25), whose levels better its rate. Everything
+ * else is built once, at level one.
+ */
+export const KINGDOM_BUILDER_UPGRADABLE_BUILDINGS: Partial<Record<KingdomBuilderPrototypeBuilding, number>> = {
+    barracks: 3,
+    market: economy.marketRates.length,
+};
+
+/** The level of a settlement's one building of this type, or 0 without one. */
+export function buildingLevelOf(tiles: readonly KingdomBuilderTile[], type: KingdomBuilderBuildingType): number {
+    return tiles.find(tile => tile.building?.type === type)?.building?.level ?? 0;
+}
 
 /**
  * What each production building makes. Its output per level is set by how

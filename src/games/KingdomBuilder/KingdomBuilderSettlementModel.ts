@@ -50,6 +50,8 @@ export interface IKingdomBuilderSettlement {
     trainingQueue?: KingdomBuilderTrainingOrder[];
     /** Units stationed here. Absent on older documents, which read as empty. */
     garrison?: KingdomBuilderGarrison;
+    /** Caravans standing empty at its market (PR 25), ready to be loaded and sent. Absent on older documents, which read as none. */
+    caravans?: number;
     /**
      * How well its land yields each resource (§4.6), worked out once at
      * founding — the ground never changes under a world. Absent on a
@@ -73,7 +75,8 @@ const TileSchema = new Schema<KingdomBuilderTile>({
     building: BuildingSchema,
 }, { _id: false });
 
-const ResourcesSchema = new Schema<KingdomBuilderResources>({
+/** A set of resources — a settlement's stores, a caravan's load, a side of a trade offer. */
+export const KingdomBuilderResourcesSchema = new Schema<KingdomBuilderResources>({
     wood: { type: Number, required: true, min: 0, default: 0 },
     stone: { type: Number, required: true, min: 0, default: 0 },
     iron: { type: Number, required: true, min: 0, default: 0 },
@@ -120,10 +123,11 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
         required: true,
         validate: { validator: isValidTileGrid, message: "Settlement tiles must be a complete 3x3 grid with a central town centre" },
     },
-    resources: { type: ResourcesSchema, required: true },
+    resources: { type: KingdomBuilderResourcesSchema, required: true },
     construction: ConstructionSchema,
     trainingQueue: { type: [TrainingOrderSchema], default: undefined },
     garrison: KingdomBuilderGarrisonSchema,
+    caravans: { type: Number, min: 0 },
     catchment: CatchmentSchema,
 }, { timestamps: true });
 

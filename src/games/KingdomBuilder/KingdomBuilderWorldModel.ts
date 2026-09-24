@@ -65,7 +65,9 @@ export interface IKingdomBuilderWorld {
     /**
      * How many armies have ever set out (PR 19). Nothing reads it: bumping it is
      * the write that makes two dispatches at once conflict, so the army limit
-     * is counted in a transaction that can't miss the other's army.
+     * is counted in a transaction that can't miss the other's army. A caravan
+     * split off, two stacks joined or a load unloaded (PR 25) bumps it too, so
+     * each conflicts with the tick rather than rewriting a stack it has moved.
      */
     armiesDispatched?: number;
     /**
@@ -74,6 +76,13 @@ export interface IKingdomBuilderWorld {
      * battle over the same world, rather than fight a garrison that has moved.
      */
     battlesFought?: number;
+    /**
+     * How many trade offers have been posted, taken or withdrawn (PR 25), for
+     * the same reason again: each bumps it, so two posts at once can't both
+     * slip under the offer limit, and a trade conflicts with the tick rather
+     * than paying into stores the tick is rewriting.
+     */
+    tradesMade?: number;
     /**
      * The barbarian villages still standing (§3.4, PR 23), each with what is
      * left of its garrison; a village taken or burnt drops out. Absent on a
@@ -166,6 +175,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     endReason: { type: String, enum: KINGDOM_BUILDER_END_REASONS },
     armiesDispatched: { type: Number, min: 0 },
     battlesFought: { type: Number, min: 0 },
+    tradesMade: { type: Number, min: 0 },
     barbarians: { type: [BarbarianVillageSchema], required: false, default: undefined },
 }, { timestamps: true });
 

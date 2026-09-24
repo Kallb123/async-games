@@ -6,6 +6,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderTradeOfferModel } from "./KingdomBuilderTradeOfferModel";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_MAX_SEATS } from "./roster";
@@ -131,6 +132,7 @@ export async function removeWorld(worldId: string): Promise<void> {
     await KingdomBuilderSettlementModel.deleteMany({ worldId });
     await KingdomBuilderArmyModel.deleteMany({ worldId });
     await KingdomBuilderBattleModel.deleteMany({ worldId });
+    await KingdomBuilderTradeOfferModel.deleteMany({ worldId });
     await KingdomBuilderInvitationModel.deleteMany({ worldId });
     await KingdomBuilderWorldModel.deleteOne({ _id: worldId, endedAt: { $ne: null } });
 }
@@ -165,12 +167,15 @@ export async function removeEndedWorlds(now: Date, limit: number, deadline: numb
 }
 
 /**
- * Everything a leaver holds in the world: their settlements, and their armies
- * in the field, which disband where they stand (§9.1, PR 19).
+ * Everything a leaver holds in the world: their settlements, their armies
+ * in the field, which disband where they stand (§9.1, PR 19), caravans and
+ * their loads with them, and their trade offers, whose goods go with the
+ * stores they were held from (PR 25).
  */
 async function removeHoldings(worldId: string, userId: string) {
     await KingdomBuilderSettlementModel.deleteMany({ worldId, ownerId: userId });
     await KingdomBuilderArmyModel.deleteMany({ worldId, ownerId: userId });
+    await KingdomBuilderTradeOfferModel.deleteMany({ worldId, ownerId: userId });
 }
 
 /**

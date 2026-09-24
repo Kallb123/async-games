@@ -1,6 +1,7 @@
 export * from "./KingdomBuilderArmyModel";
 export * from "./KingdomBuilderBattleModel";
 export * from "./KingdomBuilderSettlementModel";
+export * from "./KingdomBuilderTradeOfferModel";
 export * from "./KingdomBuilderWorldModel";
 export * from "./lifecycle";
 export * from "./persistence";
@@ -21,3 +22,6 @@ export * from "./assault";
 export * from "./combat";
 export * from "./battleReports";
 export * from "./barbarians";
+export * from "./market";
+export * from "./trade";
+export * from "./tradeBoard";

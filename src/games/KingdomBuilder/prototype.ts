@@ -9,13 +9,21 @@ import {
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KINGDOM_BUILDER_BUILDING_PRODUCES, KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, buildTicksFor, buildingCostFor, type KingdomBuilderPrototypeBuilding } from "./buildings";
+import {
+    KINGDOM_BUILDER_BUILDING_PRODUCES,
+    KINGDOM_BUILDER_PROTOTYPE_BUILDINGS,
+    KINGDOM_BUILDER_UPGRADABLE_BUILDINGS,
+    buildTicksFor,
+    buildingCostFor,
+    buildingLevelOf,
+    type KingdomBuilderPrototypeBuilding,
+} from "./buildings";
 import { siegesOn } from "./besiegers";
 import { catchmentOfSettlement } from "./land";
 import type { KingdomBuilderSiege } from "./siege";
-import { KINGDOM_BUILDER_RESOURCE_TYPES, canAfford, resourcesOf } from "./resources";
+import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
+import { canAfford, resourcesOf } from "./resources";
 import {
-    KINGDOM_BUILDER_BARRACKS_MAX_LEVEL,
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
     KINGDOM_BUILDER_UNITS,
     barracksLevelOf,
@@ -46,13 +54,15 @@ export interface KingdomBuilderSettlementView {
     /** The barracks' queue, head first — the head is the unit in training. */
     trainingQueue: KingdomBuilderTrainingOrder[];
     garrison: KingdomBuilderGarrison;
+    /** Caravans standing empty at its market (PR 25). */
+    caravans: number;
     /** The siege on it (§8), if another player's army is camped there. */
     siege?: KingdomBuilderSiege;
 }
 
 export class KingdomBuilderPrototypeError extends Error {
     constructor(
-        public readonly code: "INVALID_INPUT" | "NOT_FOUND" | "FORBIDDEN" | "QUEUE_BUSY" | "TILE_OCCUPIED" | "NO_BARRACKS" | "LOCKED" | "CANNOT_AFFORD" | "NO_YIELD",
+        public readonly code: "INVALID_INPUT" | "NOT_FOUND" | "FORBIDDEN" | "QUEUE_BUSY" | "TILE_OCCUPIED" | "NO_BARRACKS" | "NO_MARKET" | "LOCKED" | "CANNOT_AFFORD" | "NO_YIELD",
         message: string,
     ) {
         super(message);
@@ -71,22 +81,6 @@ async function assertWorldLive(worldId: string) {
     if (!await KingdomBuilderWorldModel.exists({ _id: worldId, endedAt: null })) {
         throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
     }
-}
-
-/**
- * The filter clauses and `$inc` that take a whole cost out of the stores in
- * the same conditional write that queues what it pays for (§4.5), so a tick or
- * a second tab landing after the pre-check fails the write rather than
- * overdrawing.
- */
-function spend(cost: KingdomBuilderResources) {
-    // Only what the cost asks for: a settlement stored before wheat existed
-    // has no wheat field, which `$gte: 0` would refuse — though it holds none.
-    const priced = KINGDOM_BUILDER_RESOURCE_TYPES.filter(resource => cost[resource] > 0);
-    return {
-        filter: Object.fromEntries(priced.map(resource => [`resources.${resource}`, { $gte: cost[resource] }])),
-        $inc: Object.fromEntries(priced.map(resource => [`resources.${resource}`, -cost[resource]])),
-    };
 }
 
 export async function settlementView(worldId: string, settlementId: string, userId: string): Promise<KingdomBuilderSettlementView> {
@@ -129,6 +123,7 @@ export async function settlementView(worldId: string, settlementId: string, user
         })),
         trainingQueue: (settlement.trainingQueue ?? []).map(({ unitType, ticksRemaining }: KingdomBuilderTrainingOrder) => ({ unitType, ticksRemaining })),
         garrison: garrisonOf(settlement.garrison),
+        caravans: settlement.caravans ?? 0,
         ...(siege ? { siege } : {}),
     };
 }
@@ -154,16 +149,18 @@ export async function queuePrototypeBuilding(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     if (existing.construction) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "Finish the current building first");
 
-    // The barracks is the one building a player can raise a level (§4.2), and
-    // a settlement holds only one, so its training queue has one home.
+    // The barracks and the market are the buildings a player can raise a
+    // level (§4.2), and a settlement holds only one of each, so the barracks'
+    // training queue has one home and the market one rate.
+    const maxLevel = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[buildingType as KingdomBuilderPrototypeBuilding];
     const current = existing.tiles.find((tile: KingdomBuilderTile) => tile.position === tilePosition)?.building;
-    const upgrading = current?.type === "barracks" && buildingType === "barracks";
+    const upgrading = maxLevel !== undefined && current?.type === buildingType;
     if (current && !upgrading) throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", "That tile already has a building");
-    if (upgrading && current.level >= KINGDOM_BUILDER_BARRACKS_MAX_LEVEL) {
-        throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", "The barracks is already at its highest level");
+    if (upgrading && current.level >= maxLevel) {
+        throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", `The ${buildingType} is already at its highest level`);
     }
-    if (!current && buildingType === "barracks" && barracksLevelOf(existing.tiles) > 0) {
-        throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", "This settlement already has a barracks");
+    if (!current && maxLevel !== undefined && buildingLevelOf(existing.tiles, buildingType as KingdomBuilderPrototypeBuilding) > 0) {
+        throw new KingdomBuilderPrototypeError("TILE_OCCUPIED", `This settlement already has a ${buildingType}`);
     }
 
     // Land that yields none of a building's resource can't hold it (§4.6).
@@ -178,7 +175,7 @@ export async function queuePrototypeBuilding(
     if (!canAfford(resourcesOf(existing.resources), cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
     }
-    const { filter: canPay, $inc } = spend(cost);
+    const { filter: canPay, $inc } = spendFrom(cost);
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
@@ -186,10 +183,10 @@ export async function queuePrototypeBuilding(
             ownerId: userId,
             construction: { $exists: false },
             ...(upgrading
-                ? { tiles: { $elemMatch: { position: tilePosition, "building.type": "barracks", "building.level": current.level } } }
+                ? { tiles: { $elemMatch: { position: tilePosition, "building.type": buildingType, "building.level": current.level } } }
                 : {
                     tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
-                    ...(buildingType === "barracks" ? { "tiles.building.type": { $ne: "barracks" } } : {}),
+                    ...(maxLevel !== undefined ? { "tiles.building.type": { $ne: buildingType } } : {}),
                 }),
             ...canPay,
         },
@@ -234,7 +231,7 @@ export async function queueUnitTraining(
     // Every check above is repeated in the filter, so a tick or a second tab
     // landing in between fails this write rather than overdrawing the stores,
     // overfilling the queue, or pricing the unit at a barracks level it lost.
-    const { filter: canPay, $inc } = spend(unit.cost);
+    const { filter: canPay, $inc } = spendFrom(unit.cost);
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
@@ -252,5 +249,73 @@ export async function queueUnitTraining(
     ).lean();
     if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
 
+    return settlementView(worldId, settlementId, userId);
+}
+
+/** Reads the caller's own settlement for a market command, refusing anyone else's and a settlement with no market. */
+async function ownMarket(worldId: string, settlementId: string, userId: string) {
+    await assertWorldLive(worldId);
+    const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
+        .select({ ownerId: 1, tiles: 1, resources: 1 })
+        .lean();
+    if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
+    if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
+    const marketLevel = marketLevelOf(existing.tiles);
+    if (marketLevel === 0) throw new KingdomBuilderPrototypeError("NO_MARKET", "Build a market first");
+    return { resources: resourcesOf(existing.resources), marketLevel };
+}
+
+/**
+ * Converts one resource into another at the settlement's market (§4.3): `amount`
+ * of `get` for the market's rate × `amount` of `give`. The rate is read at the
+ * market's level, and the write repeats that level and the stores, so an
+ * upgrade finishing or a second tab in between fails it rather than pricing it
+ * at the wrong rate or overdrawing.
+ */
+export async function exchangeAtMarket(
+    worldId: string,
+    settlementId: string,
+    userId: string,
+    request: { give: unknown; get: unknown; amount: unknown },
+): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    const { give, get, amount } = request;
+    if (!isResourceType(give) || !isResourceType(get) || give === get) {
+        throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose two different resources to exchange");
+    }
+    if (!Number.isSafeInteger(amount) || (amount as number) < 1 || (amount as number) > KINGDOM_BUILDER_MAX_AMOUNT) {
+        throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose how much to exchange for");
+    }
+    const { resources, marketLevel } = await ownMarket(worldId, settlementId, userId);
+    const cost = exchangeRateFor(marketLevel)! * (amount as number);
+    if (resources[give] < cost) throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough ${give} to exchange`);
+
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        {
+            _id: settlementId, worldId, ownerId: userId,
+            tiles: { $elemMatch: { "building.type": "market", "building.level": marketLevel } },
+            [`resources.${give}`]: { $gte: cost },
+        },
+        { $inc: { [`resources.${give}`]: -cost, [`resources.${get}`]: amount as number } },
+        { new: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before the exchange went through");
+    return settlementView(worldId, settlementId, userId);
+}
+
+/** Buys a caravan at the settlement's market (PR 25), paid in full at once; it stands empty there until it is loaded and sent. */
+export async function buyCaravan(worldId: string, settlementId: string, userId: string): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    const { resources } = await ownMarket(worldId, settlementId, userId);
+    if (!canAfford(resources, KINGDOM_BUILDER_CARAVAN_COST)) {
+        throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources for a caravan");
+    }
+    const { filter: canPay, $inc } = spendFrom(KINGDOM_BUILDER_CARAVAN_COST);
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        { _id: settlementId, worldId, ownerId: userId, "tiles.building.type": "market", ...canPay },
+        { $inc: { ...$inc, caravans: 1 } },
+        { new: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before the caravan could be bought");
     return settlementView(worldId, settlementId, userId);
 }

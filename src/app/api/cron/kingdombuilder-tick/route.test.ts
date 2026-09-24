@@ -128,6 +128,42 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
         ]);
     });
 
+    it("hands caravans with no escort to a rival army on their tile, and tells both sides of the raid", async () => {
+        process.env.CRON_SECRET = "cron-secret";
+        const worldId = "64b000000000000000000004";
+        const lean = vi.fn().mockResolvedValueOnce([{ _id: worldId }]).mockResolvedValue([]);
+        const chain = { sort: () => chain, limit: () => chain, select: () => chain, lean };
+        vi.spyOn(KingdomBuilderWorldModel, "find").mockReturnValue(chain as never);
+        vi.spyOn(KingdomBuilderWorldModel, "findById")
+            .mockReturnValue({ select: () => ({ session: () => ({ lean: async () => ({ currentTick: 5, nextTickAt: new Date(Date.now() - 1000) }) }) }) } as never);
+        vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+        vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ session: () => ({ lean: async () => [] }) } as never);
+        const units = (militia: number) => ({ militia, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0 });
+        vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => [
+            // The caravans reach the crossroads the rival is camped at.
+            { _id: "c1", worldId, ownerId: "trader", units: units(0), caravans: 2, cargo: { iron: 60 }, path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "home", targetNodeId: "crossroads" },
+            { _id: "r1", worldId, ownerId: "raider", units: units(3), path: [4, 1], pathCosts: [0, 2], travelled: 2, arrivedAtTick: 2, fromNodeId: "camp", targetNodeId: "crossroads" },
+        ] }) }) } as never);
+        const armyWrites = vi.spyOn(KingdomBuilderArmyModel, "bulkWrite").mockResolvedValue({} as never);
+        const battles = vi.spyOn(KingdomBuilderBattleModel, "create").mockResolvedValue([] as never);
+
+        const response = await POST(request("Bearer cron-secret"));
+
+        expect(response.status).toBe(200);
+        expect(armyWrites.mock.calls[0][0]).toEqual([
+            { deleteOne: { filter: { _id: "c1", worldId } } },
+            { updateOne: { filter: { _id: "r1", worldId }, update: { $set: { travelled: 2, arrivedAtTick: 2, caravans: 2, cargo: { wood: 0, stone: 0, iron: 60, wheat: 0 } } } } },
+        ]);
+        expect(battles).toHaveBeenCalledWith([{
+            worldId, tick: 6, kind: "raid", nodeId: "crossroads", attackerIds: ["raider"], defenderIds: ["trader"],
+            attacker: units(0), defender: units(0), rounds: [],
+            shares: [
+                { ownerId: "raider", sent: units(3), left: units(3), caravansTaken: 2 },
+                { ownerId: "trader", sent: units(0), left: units(0), caravansLost: 2 },
+            ],
+        }], { session: {}, ordered: true });
+    });
+
     it("fights a barbarian village the tick an army reaches it, and turns it into the winner's settlement", async () => {
         process.env.CRON_SECRET = "cron-secret";
         const worldId = "64b000000000000000000003";
