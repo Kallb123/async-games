@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange } from './games';
+import { GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
+import { OG_IMAGE } from '@/utils/app';
 
 describe('partySizeErrorMessage', () => {
     const meta = { name: 'Dice Cities', players: '2–6 players', minPlayers: 2, maxPlayers: 6 };
@@ -61,5 +62,21 @@ describe('isGameScreen', () => {
         expect(isGameScreen('/newgame/dicecities')).toBe(false);
         expect(isGameScreen('/lobby/abc123')).toBe(false);
         expect(isGameScreen('/settings')).toBe(false);
+    });
+});
+
+describe('shareImageForGame', () => {
+    const drawn = new Set(['dicecities']);
+
+    it("uses the game's own card when one has been drawn", () => {
+        expect(shareImageForGame('dicecities', drawn)).toBe('/icons/og-game-dicecities.png');
+    });
+
+    it('falls back to the general Async Games card for a game with no card yet', () => {
+        expect(shareImageForGame('kingdombuilder', drawn)).toBe(OG_IMAGE);
+    });
+
+    it('falls back to the general card when the game is unknown', () => {
+        expect(shareImageForGame(undefined, drawn)).toBe(OG_IMAGE);
     });
 });

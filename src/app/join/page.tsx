@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import JoinForm from "./JoinForm";
-import { APP_NAME, OG_IMAGE, shareImage } from "@/utils/app";
-import { gameShareCard } from "@/utils/ui/games";
+import { APP_NAME, shareImage } from "@/utils/app";
+import { shareImageForGame } from "@/utils/ui/games";
 import { readJoinCodeParam } from "@/utils/games/joinCode";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { randomGuestName } from "@/utils/games/guestName";
@@ -79,7 +79,7 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     // title and description above, so there is nothing here to render per
     // request. A game with no card yet falls back to the site's.
     const image = shareImage(
-        lobby.meta ? gameShareCard(lobby.meta.url) : OG_IMAGE,
+        shareImageForGame(lobby.meta?.url),
         `${title} — join code ${joinCode}.`,
     );
 

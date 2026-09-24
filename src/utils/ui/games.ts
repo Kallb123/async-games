@@ -46,6 +46,7 @@ export interface GameMeta {
 }
 
 import { pluralize } from "@/utils/ui/text";
+import { OG_IMAGE } from "@/utils/app";
 import { meta as diceCitiesMeta } from "@/games/DiceCities/meta";
 import { meta as smartthinkMeta } from "@/games/Smartthink/meta";
 import { meta as settlementsAndCitiesMeta } from "@/games/SettlementsAndCities/meta";
@@ -158,6 +159,22 @@ export const HEX_VERTICES: readonly (readonly [number, number])[] = [
 // (which writes it) agree on the filename without either hard-coding it.
 export function gameShareCard(gameUrl: string): string {
     return `/icons/og-game-${gameUrl}.png`;
+}
+
+// The games whose card is actually in `public/icons` — read off the folder by
+// `next.config.mjs` as the build starts and inlined as `SHARE_CARD_GAMES`, the
+// same trick `buildInfo.ts` uses. A game can ship before anyone has run
+// `npm run icons` for it, and pointing a crawler at a card that 404s leaves
+// the link with no picture at all. Empty off a Next build (tests, scripts).
+const GAMES_WITH_SHARE_CARDS = new Set((process.env.SHARE_CARD_GAMES ?? "").split(",").filter(Boolean));
+
+/**
+ * The image a link to this game should unfurl to: its own card when one has
+ * been drawn, otherwise the site's general Async Games card — never a URL
+ * that isn't there.
+ */
+export function shareImageForGame(gameUrl: string | undefined, drawn: ReadonlySet<string> = GAMES_WITH_SHARE_CARDS): string {
+    return gameUrl && drawn.has(gameUrl) ? gameShareCard(gameUrl) : OG_IMAGE;
 }
 
 // The in-app path of a game's board — `/games/<url slug>/<gameId>`. Every

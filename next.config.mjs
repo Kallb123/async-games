@@ -1,13 +1,27 @@
+import { readdirSync } from 'node:fs';
+
 // Stamped into the bundle when the build runs, so the Settings footer can say
 // which build a player is looking at alongside the version number. Read through
 // `src/utils/buildInfo.ts`; `next dev` re-reads it every time the dev server
 // restarts.
 const buildTime = new Date().toISOString();
 
+// The games that have a share card in `public/icons`, read off the folder as
+// the build starts. A join link to a game with no card yet unfurls to the
+// site's general card instead of a 404 (`shareImageForGame` in
+// `src/utils/ui/games.ts`). Read here rather than at request time because
+// `public/` is served by the CDN and isn't in the server function's bundle.
+// The filename pattern mirrors `gameShareCard` in the same file.
+const shareCardGames = readdirSync(new URL('./public/icons', import.meta.url))
+  .map((file) => /^og-game-(.+)\.png$/.exec(file)?.[1])
+  .filter(Boolean)
+  .join(',');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_TIME: buildTime,
+    SHARE_CARD_GAMES: shareCardGames,
   },
   // Source maps are off in every flavour, because we were paying for them by
   // the deployment rather than by the bug. They are build output, so Vercel
