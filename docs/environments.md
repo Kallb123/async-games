@@ -27,8 +27,9 @@ Point two Clerk instances at one database and:
   the invite picker can't show.
 - `/api/cron/turntimer` sweeps **every** unfinished game in the database whose
   turn timer has anything to say about it, whichever instance created it. The
-  nightly production run will expire, force-forfeit (`endReason: "abandoned"`)
-  and record results for games created against the dev instance.
+  nightly production run will expire turns in games created against the dev
+  instance, drop their players or force-forfeit them (`endReason: "abandoned"`),
+  and record results.
 - `npm run dev` locally takes turns in live games.
 
 ## The split
