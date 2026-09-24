@@ -22,7 +22,7 @@ import {
 import { siegesOn } from "./besiegers";
 import { catchmentOfSettlement } from "./land";
 import type { KingdomBuilderSiege } from "./siege";
-import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
+import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, depositTo, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
 import { canAfford, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT,
@@ -257,6 +257,59 @@ export async function queueUnitTraining(
         { new: true },
     ).lean();
     if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
+
+    return settlementView(worldId, settlementId, userId);
+}
+
+/**
+ * Takes one unit back out of the training queue — the one in training
+ * included — and refunds its whole cost, since it was paid for in full when
+ * it was queued. The caller names the order by its place in the queue and
+ * what it saw there, and the write only lands while that place still holds
+ * it: a tick finishing the head in between shifts every order up, and fails
+ * this rather than cancelling (and refunding) the wrong one.
+ */
+export async function cancelUnitTraining(
+    worldId: string,
+    settlementId: string,
+    userId: string,
+    request: { index: unknown; unitType: unknown; ticksRemaining: unknown },
+): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    const { index, unitType, ticksRemaining } = request;
+    if (!Number.isSafeInteger(index) || (index as number) < 0 || (index as number) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT
+        || !isUnitType(unitType) || !Number.isSafeInteger(ticksRemaining) || (ticksRemaining as number) < 1) {
+        throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose a unit in the queue to cancel");
+    }
+    await assertWorldLive(worldId);
+
+    const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId }).select({ ownerId: 1 }).lean();
+    if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
+    if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
+
+    const at = index as number;
+    const refund = depositTo(KINGDOM_BUILDER_UNITS[unitType].cost);
+    // A pipeline, because a plain update can't remove an array element by its place.
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        {
+            _id: settlementId,
+            worldId,
+            ownerId: userId,
+            [`trainingQueue.${at}.unitType`]: unitType,
+            [`trainingQueue.${at}.ticksRemaining`]: ticksRemaining,
+        },
+        [{
+            $set: {
+                trainingQueue: { $concatArrays: [
+                    { $slice: ["$trainingQueue", at] },
+                    { $slice: ["$trainingQueue", at + 1, KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT] },
+                ] },
+                ...Object.fromEntries(Object.entries(refund).map(([field, amount]) => [field, { $add: [{ $ifNull: [`$${field}`, 0] }, amount] }])),
+            },
+        }],
+        { new: true, updatePipeline: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The queue changed before this unit could be cancelled");
 
     return settlementView(worldId, settlementId, userId);
 }

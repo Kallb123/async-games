@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KingdomBuilderPrototypeError, buyCaravan, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
+import { KingdomBuilderPrototypeError, buyCaravan, cancelUnitTraining, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
 const settlementId = new Types.ObjectId().toString();
@@ -290,6 +290,49 @@ describe("Kingdom Builder training", () => {
     it("reports a lost race instead of overdrawing", async () => {
         stubSettlement({ ownerId: "owner", tiles: withBarracks(1), resources: rich }, null);
         await expect(queueUnitTraining(worldId, settlementId, "owner", "militia")).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
+
+describe("Kingdom Builder cancelling training", () => {
+    const order = { index: 1, unitType: "militia", ticksRemaining: 2 };
+
+    it("refuses forged orders and somebody else's queue, before writing anything", async () => {
+        const update = stubSettlement({ ownerId: "actual-owner" });
+        for (const forged of [
+            { ...order, index: -1 }, { ...order, index: 20 }, { ...order, index: 1.5 }, { ...order, index: "1" },
+            { ...order, unitType: "dragon" }, { ...order, ticksRemaining: 0 },
+        ]) {
+            await expect(cancelUnitTraining(worldId, settlementId, "owner", forged)).rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+        }
+        await expect(cancelUnitTraining(worldId, settlementId, "intruder", order)).rejects.toEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("removes only the order still at that place, refunding its whole cost in the same write", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withBarracks(1) });
+
+        await cancelUnitTraining(worldId, settlementId, "owner", order);
+
+        expect(update).toHaveBeenCalledWith(
+            {
+                _id: settlementId, worldId, ownerId: "owner",
+                "trainingQueue.1.unitType": "militia", "trainingQueue.1.ticksRemaining": 2,
+            },
+            [{
+                $set: {
+                    trainingQueue: { $concatArrays: [{ $slice: ["$trainingQueue", 1] }, { $slice: ["$trainingQueue", 2, 20] }] },
+                    "resources.wood": { $add: [{ $ifNull: ["$resources.wood", 0] }, 10] },
+                    "resources.iron": { $add: [{ $ifNull: ["$resources.iron", 0] }, 5] },
+                    "resources.wheat": { $add: [{ $ifNull: ["$resources.wheat", 0] }, 5] },
+                },
+            }],
+            { new: true, updatePipeline: true },
+        );
+    });
+
+    it("reports a queue that moved on instead of cancelling the wrong unit", async () => {
+        stubSettlement({ ownerId: "owner", tiles: withBarracks(1) }, null);
+        await expect(cancelUnitTraining(worldId, settlementId, "owner", order)).rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
     });
 });
 
