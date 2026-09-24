@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(await listAdminWorlds());
 }
 
-const ACTIONS: readonly unknown[] = ['end', 'delete', 'boost'] satisfies AdminKingdomBuilderWorldRequest['action'][];
-
 /**
  * Ends any world, ends and removes it there and then, or boosts a live one —
  * every settlement in it gets 100 of each resource. Each changes the world for
@@ -37,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { worldId, action } = await readJsonBody<AdminKingdomBuilderWorldRequest>(request);
-    if (typeof worldId !== 'string' || !ACTIONS.includes(action)) {
+    if (typeof worldId !== 'string' || (action !== 'end' && action !== 'delete' && action !== 'boost')) {
         return NextResponse.json({}, { status: 400, statusText: "A world and an action are required" });
     }
 
