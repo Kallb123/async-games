@@ -181,10 +181,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                                 onClick={march ? () => isTarget && marchTo(node.id)
                                                     : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isVillage ? "Barbarian village" : isOpen ? "Open settlement site" : "Free starting site"}>
-                                                {/* Every settlement wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. */}
-                                                <circle className={`${styles.site} ${isVillage ? styles.barbarian : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
-                                                    style={settlement && !isSelected ? { fill: playerColour(settlement.seat) } : undefined} />
-                                                {(settlement || isVillage) && <text className={styles.keep} x={node.x} y={node.y}>{isVillage ? "⚑" : "♜"}</text>}
+                                                {/* Every settlement's castle wears its owner's seat colour — the same one their row in "Players" is ringed in — so who holds what reads straight off the map. The glyph is wider than the dot under it, so it's the glyph that carries the colour, over a dark dot. */}
+                                                <circle className={`${styles.site} ${isVillage ? styles.barbarian : settlement ? styles.owned : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
+                                                {settlement && <text className={`${styles.keep} ${styles.castle}`} x={node.x} y={node.y} style={{ fill: playerColour(settlement.seat) }}>♜</text>}
+                                                {isVillage && <text className={styles.keep} x={node.x} y={node.y}>⚑</text>}
                                             </ClickableMapNode>;
                                         })}
                                         {data.terrainField && (

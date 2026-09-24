@@ -9,9 +9,13 @@
 .site { fill: var(--ag-surface); stroke: var(--ag-dark); stroke-width: 0.5; }
 /* A barbarian village (§3.4): nobody's seat colour, so it reads as a threat rather than a player. */
 .barbarian { fill: var(--ag-danger); }
+/* An occupied site: a dark dot, so the owner-coloured castle drawn over it reads against any ground. */
+.owned { fill: var(--ag-dark); }
 /* The one settlement state a label can't say by itself — "you've picked this one, tap Found here to confirm" — so it still gets its own look now that the oversized ring is gone. */
 .selected { fill: var(--ag-gold); stroke: var(--ag-terracotta-deep); stroke-width: 0.6; }
 .keep { fill: var(--ag-on-dark); font: 800 2.6px/1 var(--ag-font); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+/* The castle carries its owner's colour itself (set inline); a thin dark outline keeps a pale seat colour readable on pale ground. */
+.castle { stroke: var(--ag-dark); stroke-width: 0.2; paint-order: stroke; stroke-linejoin: round; }
 .hint { margin: 0 0 10px; font: 600 12px/1.4 var(--ag-font); color: var(--ag-ink-soft); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font: 700 10px/1 var(--ag-font); color: var(--ag-ink-soft); }
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--legend-colour); }
