@@ -965,16 +965,6 @@ export class RaceCarsUndo implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'RaceCarsUndo';
-    // See `ignoresTurnGate` (gameCommand.ts). The hold (docs/undo.md §5,
-    // `raceCarsFinishTurn`) means `currentTurn` no longer moves for the
-    // ordinary case this was written for — a move or tow that ends its
-    // driver's own turn now holds instead — but the one case it never
-    // covered is still real: a leg that rolled for oil or crossed the line
-    // ends the turn outright, with no hold, and `CheckEndTurn` has already
-    // advanced `currentTurn` by the time an undo of it could arrive. Left in
-    // place rather than removed, since `Execute`'s own anchor check refuses
-    // that case anyway (§6) — the gate would only ever save it the trip.
-    readonly ignoresTurnGate = true;
 
     myString() { return 'took back their last move'; }
 

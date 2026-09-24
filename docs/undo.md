@@ -1023,8 +1023,8 @@ Settlements & Cities placement never does:
   successful restore — safe because the anchor already guarantees at most one
   hand-off happened since the snapshot, and it was this command's own target
   that caused it.
-- **`RaceCarsUndo` is exempt from `/api/game/command`'s own "is it your turn"
-  gate; `SACUndo` is not.** That gate runs *before* any command's `Execute`,
+- **`RaceCarsUndo` was exempt from `/api/game/command`'s own "is it your turn"
+  gate; `SACUndo` never was.** (Since removed — see the end of this bullet.) That gate runs *before* any command's `Execute`,
   against whatever the previous request already saved — so the instant a move
   ends its own turn, `currentTurn` is the next driver by the time the sender's
   own follow-up request could physically arrive, and the gate refuses it
@@ -1033,17 +1033,28 @@ Settlements & Cities placement never does:
   pilot leaves it in place for its one rare placement, planning to close it
   with §5's hold instead. Race Cars can't wait for that hold — the gap would
   swallow the ordinary case for *both* undoable commands, not one rare one —
-  so `RaceCarsUndo` declares `readonly ignoresTurnGate = true`
+  so `RaceCarsUndo` declared `readonly ignoresTurnGate = true`
   (`gameCommand.ts`'s `ignoresTurnGate`, checked nowhere else) and the route
-  lets it through, trusting `Execute`'s own anchor-and-ownership check —
+  let it through, trusting `Execute`'s own anchor-and-ownership check —
   itself strictly narrower than "is it your turn" — to police who may
   actually run it. `SACUndo` does not opt in, on purpose: its one gap stays
   exactly as open as it always was, closed by the hold when that lands rather
   than by a gate every game's Undo would otherwise inherit for free.
 
+  **Since removed.** Once §5's hold landed on Race Cars (below), an undoable
+  leg no longer handed the turn off, so its driver's undo arrives while they
+  are still `currentTurn` and passes the ordinary gate. The only legs that
+  still hand off outright — oil or the line — are never undoable, and the
+  anchor check refuses them anyway. The exemption let no legitimate request
+  through, and because the route read the flag off the rehydrated request
+  body, any command could claim it and be played on another player's turn.
+  The gate has no exemptions now; see
+  [`out-of-turn-actions.md`](./out-of-turn-actions.md) §3 for the whole story
+  and for how a future exemption should be declared.
+
 Three commands' worth of real behavioural difference from `SACUndo` — the
-conditional push, the `currentTurn` restore, and the turn-gate exemption the
-first live-route test proved the second one actually needs — not the shape
+conditional push, the `currentTurn` restore, and (until the hold made it
+unnecessary) a turn-gate exemption — not the shape
 §16 expected a second game to be identical in. That's the signal to keep
 writing the third one by hand too, rather than promoting a `GameUndo` that
 can't express "sometimes I don't push" or "this one polices its own turn"
@@ -1076,8 +1087,8 @@ does in SAC, and that difference is the whole story below.
   ended itself the instant nothing was left to decide. The hold changes that
   for the first time, so it needed a command to close one — valid only while
   `gs.autoEndTurnAt` is set, checked against `driverOnTurn` like every other
-  command (no `ignoresTurnGate`: the held driver is still `currentTurn`,
-  since holding is precisely *not* advancing it). It is the board's own
+  command, and passing the ordinary turn gate: the held driver is still
+  `currentTurn`, since holding is precisely *not* advancing it. It is the board's own
   "Pass now" and the client's expired countdown alike, and the stalled-turn
   sweep's own way of closing a hold nobody came back to finish (§9, below).
 - **A guard SAC's placements didn't need.** `RaceCarsMove` and

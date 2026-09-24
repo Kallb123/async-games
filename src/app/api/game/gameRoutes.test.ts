@@ -294,6 +294,24 @@ describe('POST /api/game/command', () => {
         expect(history.find(entry => entry.commandId === 'earlier-command')?.reactions).toEqual([{ reaction: '😱', actorId: 'user_reactor', actorUsername: 'Reactor' }]);
     });
 
+    it("refuses a move off the player's turn, whatever turn-gate exemption the request claims", async () => {
+        // The route used to skip its turn gate for a command carrying
+        // `ignoresTurnGate`, read off the rehydrated request body — which the
+        // reviver copies every posted property onto — so a body claiming it got
+        // any command past the gate: here, rolling on BOB's turn. The gate has
+        // no exemptions now; this keeps a claimed one from coming back.
+        signIn(ANN);
+        seedSnakesAndLadders({ currentTurn: BOB.id });
+
+        const response = await command(jsonPost('/api/game/command', diceRoll({ ignoresTurnGate: true })));
+
+        expect(response.status).toBe(400);
+        expect(response.statusText).toBe('Not your turn in this game');
+        const saved = storedGame('game_1')!;
+        expect(commandHistory(saved)).toHaveLength(0);
+        expect(saved.currentTurn).toBe(BOB.id);
+    });
+
     it('rolls its own dice, whatever roll the request brought with it', async () => {
         signIn(ANN);
         seedSnakesAndLadders();
@@ -534,11 +552,9 @@ describe('POST /api/game/command', () => {
         // Held open, not handed off — still ANN's turn (docs/undo.md §5).
         expect(storedGame('game_1')!.currentTurn).toBe(ANN.id);
 
-        // BOB is not on turn at all, but `RaceCarsUndo`'s `ignoresTurnGate`
-        // lets his request past this route's own "is it your turn" gate
-        // regardless — it is the anchor's own ownership check inside
-        // `Execute`, not the gate, that refuses him taking back a move that
-        // isn't his.
+        // BOB isn't on turn, so the route's own gate refuses him before
+        // `Execute`'s ownership check is ever asked — an undo is played on the
+        // turn it takes back, like every other command.
         signIn(BOB);
         const undoResponse = await command(jsonPost('/api/game/command', {
             id: '44444444-4444-4444-4444-444444444444',
@@ -549,7 +565,8 @@ describe('POST /api/game/command', () => {
             className: 'RaceCarsUndo',
         }));
 
-        expect(undoResponse.status).toBe(401);
+        expect(undoResponse.status).toBe(400);
+        expect(undoResponse.statusText).toBe('Not your turn in this game');
         const saved = storedGame('game_1')!;
         expect(saved.currentTurn).toBe(ANN.id);
         expect(commandHistory(saved)).toHaveLength(1);
