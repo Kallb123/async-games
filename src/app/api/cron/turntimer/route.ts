@@ -4,7 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IGameDataDocument, ISweepCandidate, SWEEP_CANDIDATE_LIMIT, findSweepCandidates, trySave } from '@/utils/mongodb/GameData';
 import { finishGame } from '@/utils/games/finishGame';
 import { resolveStalledTurn, TurnTimeoutOutcome } from '@/utils/games/turnTimeout';
-import { activeTurnOrder, canDropPlayer, getPlayerDropoutAdapter, nextActivePlayer, PlayerDropped } from '@/utils/games/playerDropout';
+import { canDropPlayer, nextActivePlayer, PlayerDropped } from '@/utils/games/playerDropout';
 import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameType } from '@/utils/apiModels/gameCommand';
@@ -173,20 +173,6 @@ async function tellNextPlayer(gameData: IGameDataDocument, userList: User[], tim
 }
 
 /**
- * Whether a player who has just run out their last missed turn can be dropped
- * while the game carries on, judged before their turn is played out: the game
- * registers a dropout adapter, is happy to lose them in its current phase, and
- * still has enough players without them. `PlayerDropped` asks all of this
- * again once the turn has passed; this is only whether to try.
- */
-function mayDropInsteadOfAbandon(gameData: IGameDataDocument, userId: string): boolean {
-    const adapter = getPlayerDropoutAdapter(gameData.gameType.className);
-    if (!adapter) return false;
-    if (activeTurnOrder(gameData).length - 1 < adapter.minPlayers) return false;
-    return adapter.canDrop?.(gameData, userId) ?? true;
-}
-
-/**
  * Takes a player who has stopped turning up out of a game that can carry on
  * without them, rather than ending it for everybody.
  *
@@ -211,14 +197,16 @@ async function dropPlayer(gameData: IGameDataDocument, missingPlayerId: string):
     }
 
     const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
+    // A turn the game couldn't pass on ('declined') is still the missing
+    // player's, and a seat can't leave while it holds the turn: nobody would
+    // be left to take it.
+    if (gameData.currentTurn === missingPlayerId) return abandonGame(gameData, missingPlayerId);
+
     const drop = new PlayerDropped();
     drop.gameId = gameData.gameId;
     drop.senderId = missingPlayerId;
     drop.senderUsername = missingName;
-    // Asked here, not only inside Execute: a refused command is recorded
-    // nowhere, and a turn the game couldn't pass on ('declined') is still the
-    // missing player's, which PlayerDropped won't take from them.
-    if (!canDropPlayer(gameData, missingPlayerId)) return abandonGame(gameData, missingPlayerId);
+    drop.resumesWith = gameData.currentTurn;
 
     const { outcome, gameOver } = await runCommand(gameData, gameType, drop);
     if (!outcome.validMove) return abandonGame(gameData, missingPlayerId);
@@ -287,7 +275,10 @@ async function sweepGame(gameId: string): Promise<SweepOutcome> {
         gameData.missedTurnCounts.set(currentTurn, missedCount);
 
         if (!hasAbandonedGame(missedCount)) return passTurnOn(gameData, currentTurn);
-        return mayDropInsteadOfAbandon(gameData, currentTurn)
+        // Asked before their last turn is played out as well as by
+        // PlayerDropped afterwards: a game that can't lose them is abandoned
+        // exactly as it always was, without the cron playing a turn first.
+        return canDropPlayer(gameData, currentTurn)
             ? dropPlayer(gameData, currentTurn)
             : abandonGame(gameData, currentTurn);
     }

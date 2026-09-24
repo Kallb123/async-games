@@ -6,6 +6,7 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 import {
     activeTurnOrder, canDropPlayer, getPlayerDropoutAdapter, nextActivePlayer, PlayerDropped,
 } from "./playerDropout";
+import { buildTimeline } from "./replay";
 import { BOARD_TOPOLOGY } from "@/games/SettlementsAndCities/board";
 import { makeState, player } from "@/games/SettlementsAndCities/testFixtures";
 
@@ -46,9 +47,8 @@ describe("the rotation helpers", () => {
 });
 
 describe("canDropPlayer", () => {
-    it("refuses a game with no adapter, the player holding the turn, and a table left too small", () => {
+    it("refuses a game with no adapter and a table left too small", () => {
         expect(canDropPlayer(game("SmartthinkGameType"), A)).toBe(false);
-        expect(canDropPlayer(game("SnakesAndLaddersGameType"), B)).toBe(false);
         expect(canDropPlayer(game("SnakesAndLaddersGameType"), A)).toBe(true);
 
         const two = game("SnakesAndLaddersGameType", {}, { gameState: { turnOrder: [A, B], history: [], commandHistory: [] } });
@@ -81,11 +81,39 @@ describe("PlayerDropped", () => {
         expect(g.gameState.history[0]).toMatchObject({ actorId: A });
     });
 
+    it("puts the turn back where it was when a replay hands it the dropped player's", async () => {
+        const g = game("SnakesAndLaddersGameType", {}, { currentTurn: A });
+        const command = new PlayerDropped();
+        command.senderId = A;
+        command.resumesWith = B;
+
+        expect((await command.Execute(g)).validMove).toBe(true);
+        expect(g.currentTurn).toBe(B);
+    });
+
     it("refuses a second drop of the same player", async () => {
         const g = game("SnakesAndLaddersGameType", {}, { gameState: { turnOrder: [A, B, C, D], history: [], commandHistory: [], droppedPlayers: [A] } });
         const command = new PlayerDropped();
         command.senderId = A;
         expect((await command.Execute(g)).validMove).toBe(false);
+    });
+});
+
+describe("a recorded drop, replayed", () => {
+    it("drops the seat at the same step, with the turn where it really was", async () => {
+        const drop = new PlayerDropped();
+        drop.senderId = A;
+        drop.senderUsername = "Ann";
+        drop.resumesWith = B;
+        const g = game("SnakesAndLaddersGameType", { reRollOnSix: false }, {
+            gameState: { turnOrder: [A, B, C], history: [], commandHistory: [JSON.parse(JSON.stringify(drop))], droppedPlayers: [A] },
+        });
+
+        const { snapshots } = await buildTimeline(g, { [A]: "Ann", [B]: "Bob", [C]: "Cat" });
+
+        expect(snapshots).toHaveLength(2);
+        expect(snapshots[1].currentTurn).toBe(B);
+        expect(snapshots[1].history[0].text).toContain("Ann missed 3 turns in a row");
     });
 });
 

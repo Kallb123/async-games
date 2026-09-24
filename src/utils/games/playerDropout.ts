@@ -94,15 +94,19 @@ export function nextActivePlayer(gameData: Pick<IGameData, 'gameState'>, userId:
 }
 
 /**
- * Whether the cron may drop `userId` from this game rather than abandon it:
- * the game registers an adapter, the player is still seated and not holding
- * the turn, the adapter is happy with the phase, and enough players are left.
+ * Whether `userId` can be dropped from this game rather than it being
+ * abandoned: the game registers an adapter, the player is still seated, the
+ * adapter is happy with the phase, and enough players are left without them.
+ *
+ * Deliberately silent on whose turn it is. The cron asks this before playing
+ * out the missing player's last turn, when it is still theirs; and a replay
+ * (buildTimeline) hands every command the turn of its own sender before
+ * running it, so `PlayerDropped` arrives there holding the dropped player's.
  */
 export function canDropPlayer(gameData: IGameData, userId: string): boolean {
     const adapter = getPlayerDropoutAdapter(gameData.gameType.className);
     if (!adapter) return false;
     if (!gameData.gameState.turnOrder.includes(userId) || isDropped(gameData, userId)) return false;
-    if (gameData.currentTurn === userId) return false;
     if (activeTurnOrder(gameData).length - 1 < adapter.minPlayers) return false;
     return adapter.canDrop?.(gameData, userId) ?? true;
 }
@@ -120,6 +124,13 @@ export class PlayerDropped implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "PlayerDropped";
+    /**
+     * Who held the turn when the player was dropped — somebody else by then,
+     * since the cron plays out their last turn first. Only a replay needs it:
+     * buildTimeline gives every command its sender's turn before running it,
+     * and this puts the turn back where it really was for the snapshot.
+     */
+    resumesWith: string = "";
 
     myString() {
         return `was removed after missing ${MAX_CONSECUTIVE_MISSED_TURNS} turns in a row`;
@@ -142,9 +153,13 @@ export class PlayerDropped implements IGameCommand {
         gameData.gameState.history.unshift(playerHistory(this.senderId,
             `missed ${MAX_CONSECUTIVE_MISSED_TURNS} turns in a row and has left the game — play carries on without them`));
 
-        // Nobody's turn changes hands: canDropPlayer insisted the turn was
-        // already somebody else's, and the cron restarts that player's timer
-        // itself.
+        // Nobody's turn changes hands: the cron only drops a player once their
+        // last turn has passed to somebody else, and restarts that player's
+        // timer itself. A replay arrives holding the dropped player's turn
+        // (see resumesWith), and is handed back the real one.
+        if (gameData.currentTurn === this.senderId && this.resumesWith) {
+            gameData.currentTurn = this.resumesWith;
+        }
         return { validMove: true, turnOver: false };
     }
 }
