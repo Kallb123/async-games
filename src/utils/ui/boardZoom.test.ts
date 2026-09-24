@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIT_WIDTH, focusZoom, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { FIT_WIDTH, focusZoom, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -63,5 +63,25 @@ describe('wheelZoomFactor', () => {
 
     it('treats an unknown deltaMode as pixels rather than throwing', () => {
         expect(wheelZoomFactor(100, 9)).toBe(wheelZoomFactor(100, 0));
+    });
+});
+
+describe('pinchOffset', () => {
+    it('keeps the point under the fingers put when they spread without moving', () => {
+        // Scrolled 100 in, fingers at 50: content point 150 doubles to 300 and stays at 50.
+        expect(pinchOffset(100, 50, 50, 2, 1000, 320)).toBe(-250);
+    });
+
+    it('carries the board with the fingers as they travel', () => {
+        expect(pinchOffset(100, 50, 80, 1, 1000, 320)).toBe(-70);
+    });
+
+    it('never opens a gap before the board starts', () => {
+        expect(pinchOffset(0, 50, 200, 1, 1000, 320)).toBe(0);
+    });
+
+    it('never opens a gap past the board end', () => {
+        // Zooming out to half of 1000 leaves 500 of board; it can sit no further left than -180.
+        expect(pinchOffset(680, 300, 300, 0.5, 1000, 320)).toBe(-180);
     });
 });

@@ -1707,17 +1707,17 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
 /* Boards wider than the app column scroll inside the frame, at whatever width
-   BoardZoom's control has set. `touch-action` keeps one finger panning the
-   board while handing the two-finger gesture to BoardZoom, so a pinch zooms the
-   circuit rather than the whole page.
+   BoardZoom's control has set. Zoomed, the pane holds the height the board
+   fits the column at (BoardZoom sets it), so the board grows inside the frame
+   rather than the frame growing down the page, and it scrolls both ways.
+   `touch-action` keeps one finger panning the board while handing the
+   two-finger gesture to BoardZoom, so a pinch zooms the board rather than the
+   whole page.
    The containment is on the horizontal axis alone, and deliberately: a pan that
-   runs off the end of the board mustn't carry on into the page behind it, but a
-   board never scrolls vertically at all — its height follows its width, so the
-   pane is always exactly as tall as the board in it — and up and down is
-   therefore the page's to scroll. Containing that axis too left a finger or a
-   wheel that started on the board scrolling nothing, which on a board as tall
-   as a zoomed circuit meant reaching for the margin beside it to get down the
-   page. */
+   runs off the side of the board mustn't carry on into the page behind it, but
+   one that runs off its top or bottom should — up and down is how the player
+   gets past the board to the rest of the page, and a board that swallowed it
+   would leave them reaching for the margin beside it. */
 .ag-board-scroll {
     overflow: auto;
     border-radius: 12px;
@@ -1725,6 +1725,8 @@ a.ag-list-row, a.ag-list-row-main {
     touch-action: pan-x pan-y;
     overscroll-behavior-x: contain;
 }
+/* What a pinch transforms, frame by frame, before the new zoom is committed. */
+.ag-board-zoom-content { transform-origin: 0 0; }
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
     position: absolute;
