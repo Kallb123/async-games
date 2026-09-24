@@ -3,22 +3,38 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { ignoresTurnGate } from "../gameCommand";
+import { ignoresTurnGate } from "../GameLogic";
 import type { IGameCommand } from "../gameCommand";
+import { deserializeJSON, registeredClassNames } from "../Serialisable";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.resolve(here, "../../..");
 const gamesRoot = path.join(srcRoot, "games");
 
+/** A command exactly as /api/game/command receives it: a request body, rehydrated. */
+function posted(body: Record<string, unknown>): IGameCommand {
+    return deserializeJSON(JSON.stringify({ gameId: "game", senderId: "player", ...body })) as IGameCommand;
+}
+
 describe("ignoresTurnGate", () => {
-    it("is true only for a command declaring the flag", () => {
-        expect(ignoresTurnGate({ ignoresTurnGate: true } as unknown as IGameCommand)).toBe(true);
-        expect(ignoresTurnGate({} as unknown as IGameCommand)).toBe(false);
-        expect(ignoresTurnGate({ ignoresTurnGate: false } as unknown as IGameCommand)).toBe(false);
-        // A truthy-but-not-`true` value doesn't count, the same way a real
-        // command's own field initialiser (`readonly ignoresTurnGate = true`)
-        // never carries anything else.
-        expect(ignoresTurnGate({ ignoresTurnGate: "true" } as unknown as IGameCommand)).toBe(false);
+    it("is true for a command whose class declares the flag", () => {
+        expect(ignoresTurnGate(posted({ className: "RaceCarsUndo" }))).toBe(true);
+    });
+
+    it("is false for a command whose class doesn't", () => {
+        expect(ignoresTurnGate(posted({ className: "SACRollDice" }))).toBe(false);
+    });
+
+    // The reviver copies every posted property onto the instance it builds, so
+    // a flag read off the instance was the request's to set: this body rolled
+    // the dice on somebody else's turn.
+    it("can't be claimed by a request body", () => {
+        expect(ignoresTurnGate(posted({ className: "SACRollDice", ignoresTurnGate: true }))).toBe(false);
+        expect(ignoresTurnGate(posted({ className: "OutbreakPlayEvent", ignoresTurnGate: true }))).toBe(false);
+    });
+
+    it("can't be switched off by a request body either", () => {
+        expect(ignoresTurnGate(posted({ className: "RaceCarsUndo", ignoresTurnGate: false }))).toBe(true);
     });
 });
 
@@ -60,5 +76,14 @@ function classesDeclaringIgnoresTurnGate(): string[] {
 describe("commands that opt out of /api/game/command's turn gate", () => {
     it("are declared on exactly these classes, and no others", () => {
         expect(classesDeclaringIgnoresTurnGate().sort()).toEqual([...IGNORES_TURN_GATE_COMMANDS].sort());
+    });
+
+    // The scan above reads one spelling in one set of files. This asks every
+    // registered class the way the route does, so a flag that arrives some
+    // other way — inherited, a getter, a class outside a Logic file — is
+    // caught too.
+    it("are exactly these classes when the route asks", () => {
+        const exempt = registeredClassNames().filter(className => ignoresTurnGate(posted({ className })));
+        expect(exempt.sort()).toEqual([...IGNORES_TURN_GATE_COMMANDS].sort());
     });
 });

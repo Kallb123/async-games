@@ -294,6 +294,23 @@ describe('POST /api/game/command', () => {
         expect(history.find(entry => entry.commandId === 'earlier-command')?.reactions).toEqual([{ reaction: '😱', actorId: 'user_reactor', actorUsername: 'Reactor' }]);
     });
 
+    it("refuses a move off the player's turn, whatever turn-gate exemption the request claims", async () => {
+        // `ignoresTurnGate` is a class's to declare. The reviver copies every
+        // posted property onto the command it builds, so while the route read
+        // the flag off that instance, a body carrying it got any command past
+        // the gate — here, rolling on BOB's turn.
+        signIn(ANN);
+        seedSnakesAndLadders({ currentTurn: BOB.id });
+
+        const response = await command(jsonPost('/api/game/command', diceRoll({ ignoresTurnGate: true })));
+
+        expect(response.status).toBe(400);
+        expect(response.statusText).toBe('Not your turn in this game');
+        const saved = storedGame('game_1')!;
+        expect(commandHistory(saved)).toHaveLength(0);
+        expect(saved.currentTurn).toBe(BOB.id);
+    });
+
     it('rolls its own dice, whatever roll the request brought with it', async () => {
         signIn(ANN);
         seedSnakesAndLadders();

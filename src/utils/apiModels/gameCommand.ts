@@ -139,8 +139,20 @@ export function consumedRandomness(command: IGameCommand): boolean {
 // command's class starts declaring the flag, forcing whoever added it to
 // show their check to a reviewer rather than inheriting this one's trust
 // silently.
+//
+// Read off a fresh instance of the command's class, never off the command
+// itself. The command is a request body rehydrated by `deserializeJSON`, whose
+// reviver `Object.assign`s every posted property onto the new instance — and
+// `readonly` is compile-time only — so a body posting
+// `{"className": "SACRollDice", "ignoresTurnGate": true, …}` carried the flag
+// on an instance of a class that never declared it, and rolled the dice on
+// somebody else's turn. `constructor` is one of the keys the reviver refuses
+// to copy (Serialisable.ts), so it is always the class that was really
+// constructed, and a fresh instance of it carries only what that class
+// declares.
 export function ignoresTurnGate(command: IGameCommand): boolean {
-    return (command as unknown as Record<string, unknown>).ignoresTurnGate === true;
+    const declaringClass = (command as object).constructor as new () => unknown;
+    return (new declaringClass() as Record<string, unknown>).ignoresTurnGate === true;
 }
 
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,
