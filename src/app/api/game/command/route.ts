@@ -5,7 +5,7 @@ import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { ICommandOutcome, IGameCommand, IGameType, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
+import { ICommandOutcome, IGameCommand, IGameType, playableOutOfTurn, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
 import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
@@ -129,19 +129,30 @@ export async function POST(request: NextRequest) {
   }
   const gameData = found.game;
 
-  // No exceptions: every command is played by the player whose turn it is.
-  // This is the only membership-adjacent check most commands get, and their
-  // Execute relies on it rather than re-checking whose turn it is — so an
-  // exemption belongs here only once a design has worked through what it
-  // costs (docs/out-of-turn-actions.md).
-  if (userId !== gameData.currentTurn) {
-    return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
+  // Every command is played by the player whose turn it is, save one kind: a
+  // command whose *class* declares `playableOutOfTurn`, which any seated
+  // player may send on somebody else's turn (docs/out-of-turn-actions.md).
+  // The flag is read off the class, never the body — a body can claim
+  // anything (§3). This gate is the only membership-adjacent check most
+  // commands get, and their Execute relies on it rather than re-checking
+  // whose turn it is, which is why a declaring class's own Execute has to
+  // police what it allows off turn, and why the route checks membership
+  // itself on this path: being `currentTurn` implies being seated, and
+  // nothing else here does.
+  const onTurn = userId === gameData.currentTurn;
+  if (!onTurn) {
+    if (!playableOutOfTurn(commandRequest)) {
+      return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
+    }
+    if (!gameData.userIdList.includes(userId)) {
+      return NextResponse.json({}, {status: 403, statusText: "Not a player in this game"});
+    }
   }
 
   // A player the turn-timer cron dropped for going quiet has left the game
   // (utils/games/playerDropout.ts). Their seat never gets the turn again, so
-  // the gate above already refuses them; this stays so that an out-of-turn
-  // path, once there is one, can't forget them (docs/out-of-turn-actions.md).
+  // the gate above already refuses them an ordinary command; this is what
+  // stops the out-of-turn path from letting them back in.
   if (isDropped(gameData, userId)) {
     return NextResponse.json({}, {status: 400, statusText: "You have left this game"});
   }
@@ -189,16 +200,21 @@ export async function POST(request: NextRequest) {
   // reactions join on.
   commandRequest.id = uuidv4() as uuidString;
 
-  // Checks whether the turn should be progressed and actions it if so
+  // Checks whether the turn should be progressed and actions it if so. Off
+  // turn, the pipeline stamps the command with whose turn it was, and never
+  // lets it hand the turn off or run a follow-up (RunCommandOptions.outOfTurn).
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
-  const { outcome: commandOutcome, gameOver } = await runCommand(gameData, gameType, commandRequest);
+  const { outcome: commandOutcome, gameOver } = await runCommand(gameData, gameType, commandRequest, { outOfTurn: !onTurn });
   if (!commandOutcome.validMove) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
 
   // They acted within their turn window, so they haven't missed this one —
   // clear any run of expiries the turntimer cron had counted against them.
-  if (gameData.missedTurnCounts?.get(commandRequest.senderId)) {
+  // Not for a card played on somebody else's turn: that isn't taking your
+  // own, and a player who only ever interrupts should still climb the
+  // abandon ladder.
+  if (onTurn && gameData.missedTurnCounts?.get(commandRequest.senderId)) {
     gameData.missedTurnCounts.set(commandRequest.senderId, 0);
   }
 
@@ -234,8 +250,9 @@ export async function POST(request: NextRequest) {
   // own turn (`timerRestarts` — Fires Out's solitaire crew, where each
   // figure's turn is its own deadline and `turnOver` never comes). Both
   // restart the clock; only the first has anybody new to tell, which is why
-  // the push below stays on `turnOver` alone.
-  if (commandOutcome.turnOver || commandOutcome.timerRestarts) {
+  // the push below stays on `turnOver` alone. Neither for an out-of-turn
+  // play: the clock is the active player's, and they're still on it.
+  if (onTurn && (commandOutcome.turnOver || commandOutcome.timerRestarts)) {
     gameData.lastTurnTimestamp = new Date().toISOString();
     gameData.timerWarningNotificationSent = false;
   }
@@ -249,7 +266,9 @@ export async function POST(request: NextRequest) {
     gameData: await dataResponseWithReactions(gameData, userId)
   }
 
-  if (!commandOutcome.turnOver) {
+  // The pipeline already refuses an out-of-turn `turnOver` that didn't end
+  // the game; `onTurn` keeps this push from ever resting on that alone.
+  if (!onTurn || !commandOutcome.turnOver) {
     return NextResponse.json(response, {status: 200});
   }
 
