@@ -923,7 +923,10 @@ time it executes (e.g. `recordedRoll`), so replays reproduce the original result
 Replay runs each command on its sender's turn, except one stamped
 `recordedOnTurnOf` (played out of turn, §6), which runs on the turn it names,
 and a turn boundary is a change in whose turn a step was played on — so an
-interrupt never splits one turn into three.
+interrupt never splits one turn into three. Each command is also stamped
+`recordedTurnStartedAt`, the turn clock it ran against, which replay restores
+before running it: the turn-timer cron's plain advance restarts that clock
+without leaving a command in the log.
 Per-game `IReplayAdapter`s supply the deterministic initial state and the
 response-shape converter.
 

@@ -1348,9 +1348,12 @@ earlier one rather than repeat it.
   `undoEntryFor` / `holdOpenFor` pair both games' commands ask it through, and
   `UNDO_WINDOW_MS` moved to `src/utils/games/undo.ts` rather than being
   copied; Train Time, Race Cars and Settlements & Cities re-export the
-  constant from there. One gap is shared with Train Time: a replay has no
-  turn clock of its own, so a log where the timer passed a held turn on and
-  round again, back to the buyer, replays their next roll as refused.
+  constant from there. A replay follows that clock through the
+  `recordedTurnStartedAt` every command is stamped with, so a log where the
+  timer passed a held turn on and round again, back to the buyer, replays
+  their next roll as the live table played it — Train Time's claims likewise.
+  (A replay used to hold one clock for the whole game and refuse that roll; a
+  log recorded before the stamp still does.)
 - **The cloner.** `cloneDiceCitiesState` lives in `DiceCitiesLogic.ts`, the
   only file that needs it — replay doesn't (§16, above).
 - **Hidden information.** Nothing in Dice Cities is hidden. The snapshot still

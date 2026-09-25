@@ -15,7 +15,9 @@ export const UNDO_WINDOW_MS = 10_000;
  * stepping `currentTurn` and restarting the clock, with no command of the
  * game's own. So besides who pushed it, an entry records `turnStartedAt` — the
  * game's `lastTurnTimestamp` when it was pushed — and a turn the timer moved
- * on leaves it stale even though no command ran to move the anchor.
+ * on leaves it stale even though no command ran to move the anchor. A replay
+ * sees the same clock through each command's `recordedTurnStartedAt`
+ * (RECORDED_TURN_STARTED_AT), so it goes stale there at the same point.
  */
 export interface IClockedUndoEntry<State> {
     by: string;

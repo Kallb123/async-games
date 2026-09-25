@@ -313,6 +313,31 @@ describe("Dice Cities — replay", () => {
         expect(replayed.at(-1)!.specificGameState).toEqual(gameStateToModel(game.specificGameState, NAMES));
     });
 
+    it("replays the buyer's next roll after the turn timer passed a held turn round the table and back", async () => {
+        // Live: u1 buys and walks away from the hold, the cron's plain advance
+        // passes it to u2 and, when u2 times out too, back to u1 — each time
+        // restarting the clock without a command, so the purchase is still the
+        // last thing in the log when u1 rolls. The live hold went stale with the
+        // clock; the replay has to see the same clock to agree.
+        const game = replayableGame([]) as IDiceCitiesGameData;
+        const play = async (command: IGameCommand) => {
+            expect((await run(game, command)).outcome.validMove).toBe(true);
+        };
+        await play(rollCommand(1));
+        await play(buyCommand(CAFE));
+        game.currentTurn = nextActivePlayer(game, "u1");
+        game.lastTurnTimestamp = "2026-07-22T09:00:00.000Z";
+        game.currentTurn = nextActivePlayer(game, "u2");
+        game.lastTurnTimestamp = "2026-07-23T09:00:00.000Z";
+        await play(rollCommand(1));
+
+        const recorded = game.gameState.commandHistory;
+        const replayed = (await buildTimeline(replayableGame(recorded), NAMES)).snapshots;
+        // One snapshot per command applied, plus the opening: none refused.
+        expect(replayed).toHaveLength(recorded.length + 1);
+        expect(replayed.at(-1)!.specificGameState).toEqual(gameStateToModel(game.specificGameState, NAMES));
+    });
+
     it("leaves no recap row for the purchase taken back", async () => {
         // Bob's turn first, so the recap he's shown is Alice's whole turn.
         const feed = await buildEventFeed(replayableGame(

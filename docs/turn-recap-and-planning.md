@@ -251,6 +251,18 @@ by that same whose-turn answer (`playedOnTurnOf`), so an interrupt is part of
 the turn it landed in, and the recap feed windows on the viewer's last event on
 their *own* turn. A planned command's stamp is ignored.
 
+Every recorded command also carries `recordedTurnStartedAt`: the game's
+`lastTurnTimestamp` when it ran, stamped by `runCommand`. `applyCommands` puts
+the replay's turn clock back to it before running the command, because the live
+clock moves where the log can't follow — the turn-timer cron's plain advance,
+for a game with no timeout adapter, passes the turn on and restarts the clock
+without running a command. A game whose undo holds are clocked (Train Time,
+Dice Cities — [`undo.md`](./undo.md)) reads that restart as the hold closing, so
+a replay with one clock for the whole game kept a hold open that the cron had
+passed round the table and back to its owner, and refused the owner's next
+move. A command recorded before the stamp, and a planned one, keep the clock the
+replay already had.
+
 It must stay opt-in per game. In a co-op game with open hands, planning a
 teammate's turn discloses nothing and is the entire point. In a competitive game
 it would both leak and mislead. Games opting in declare it alongside their replay
