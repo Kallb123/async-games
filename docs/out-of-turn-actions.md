@@ -477,6 +477,18 @@ specials themselves:
   armed from the viewer's own hand, off turn, and the board's
   `onPositionClick` is live only for that pick.
 
+**Disarm when the board moves.** `expectedCommandCount` guards the gap between
+the board a move was *rendered* from and the one it runs against — not a
+choice spread over two taps. A board that arms a move first (pick Drive or a
+special, then tap the map) and polls on its own turn can take a teammate's
+interrupt between the two taps: the poll repaints the board, the count the
+hook sends catches up with it, and the second tap lands a choice half-made on
+the old board without a 409. So in a game with `hasOutOfTurnPlays`, any armed
+pick — the active player's on-turn targeting as much as an off-turn one —
+clears whenever `gameState.commandCount` changes, and the player chooses again
+on the board in front of them. That belongs in the shared pick hook below, so
+neither page has to remember it.
+
 If the two pages grow the same "armed out-of-turn pick" state machine, that is
 the signal to extract it into `src/utils/hooks/` rather than copy it — the
 component-reuse rule. They likely will: both are "a card from my hand, a
@@ -569,7 +581,8 @@ What's new: none — nothing uses it yet.
    gives the same board.
 3. **Add to the tripwire list.**
 4. **Board screen.** `OutbreakEventTray` off turn, and off-turn targeting on
-   the map. `hasOutOfTurnPlays: true` in `meta.ts`.
+   the map. Every armed targeting disarms when `commandCount` changes (§5.8).
+   `hasOutOfTurnPlays: true` in `meta.ts`.
 5. **Recap adapter** copy for an interrupt, if it needs any beyond the history
    line.
 6. **Docs and player copy.** `outbreak-gdd.md` §21.3: replace the
