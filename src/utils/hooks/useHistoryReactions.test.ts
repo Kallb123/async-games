@@ -22,7 +22,7 @@ function gameData(history: { commandId?: string; reactions?: { reaction: string;
         userIdList: [],
         turnTimer: "",
         currentTurn: "",
-        gameState: { turnOrder: [], history: history.map((entry) => ({ text: "", ...entry })) },
+        gameState: { turnOrder: [], history: history.map((entry) => ({ text: "", ...entry })), commandCount: 0 },
         complete: false,
         winner: "",
     };
