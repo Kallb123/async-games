@@ -44,6 +44,8 @@ import {
     shareKnowledgeCardMatchRequired,
     stationCityIds,
     treatDiseaseRemovalCount,
+    UNDO_STACK_DEPTH,
+    cloneOutbreakState,
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
@@ -342,6 +344,42 @@ function applyCure(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, col
     return historyLine;
 }
 
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The fourth game to take a move back, and shaped like Banned Islet's: nothing
+// a player does in the action phase is random, and nothing in it ends a turn —
+// only OutbreakEndTurn does, and it is the draw. So there is no ten-second
+// hold (§5): the turn is already waiting on the player, and Undo is simply
+// there until they do something that isn't undoable.
+//
+// Undoable: every OutbreakAction (a move of any kind, a station, a treatment,
+// a shared card, a cure, a role ability, even a forfeit), and an event card
+// played or retrieved in the action phase. Never: OutbreakEndTurn and
+// OutbreakDiscard, which draw and infect; Forecast, which turns up the top of
+// the infection deck and cannot be un-seen, and its ordering step; an event
+// played mid-discard, which can close the draw phase and run the infection;
+// and the cure that wins, which ends the game outside `specificGameState`
+// where no snapshot can reach.
+
+/** The pre-move state, taken before a command's first mutation and pushed only once it has succeeded. */
+function undoSnapshot(data: IOutbreakGameData): IOutbreakSpecificGameState {
+    return cloneOutbreakState(data.specificGameState, data.gameState.turnOrder);
+}
+
+/**
+ * Pushes a snapshot `undoSnapshot` took and moves the anchor onto `command`.
+ * Capped at UNDO_STACK_DEPTH — dropping the oldest only ever costs reach, never
+ * correctness, because the anchor is what decides whether a snapshot can still
+ * be restored.
+ */
+function commitUndo(data: IOutbreakGameData, command: IGameCommand, preState: IOutbreakSpecificGameState): void {
+    const gs = data.specificGameState;
+    gs.undoStack ??= [];
+    gs.undoStack.push({ by: command.senderId, state: preState });
+    if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
+    gs.undoAnchorId = command.id;
+}
+
 // ─── Game type ──────────────────────────────────────────────────────────────
 
 @serializable
@@ -358,6 +396,12 @@ export class OutbreakGameType implements IGameType {
         const outbreakData = gameData as IOutbreakGameData;
         const next = nextActivePlayer(outbreakData, outbreakData.currentTurn);
         outbreakData.currentTurn = next;
+
+        // Nothing on the stack can be restored past a draw anyway (the anchor
+        // sees to that), so it goes with the turn rather than riding along on
+        // every save until the next action happens to push it out.
+        outbreakData.specificGameState.undoStack = [];
+        outbreakData.specificGameState.undoAnchorId = null;
 
         // actionsLeft refills at the *start* of the new current player's turn,
         // not the end of the previous one — see IOutbreakPlayerState. Her
@@ -443,6 +487,9 @@ export class OutbreakAction implements IGameCommand {
     /** cure: exactly cureCardsRequired() city-card ids of `color`, discarded to pay for it. */
     cardIds: number[] = [];
     readonly className = 'OutbreakAction';
+    // No kind of action draws, infects or ends the turn — only the cure that
+    // wins isn't pushed, enforced in Execute (docs/undo.md, above).
+    readonly undoable = true;
 
     // Player-facing summary for the turn-review scrubber (TurnNavControls) —
     // shown next to the sender's name, so it reads as "<name> · <this>".
@@ -475,6 +522,9 @@ export class OutbreakAction implements IGameCommand {
         if (!ps) return INVALID;
         if (gs.phase !== 'actions') return INVALID;
         if (ps.actionsLeft <= 0) return INVALID;
+
+        // Before the first mutation, pushed only once the action is legal.
+        const preUndoState = undoSnapshot(outbreakData);
 
         let historyLine: string | null;
         switch (this.kind) {
@@ -520,6 +570,11 @@ export class OutbreakAction implements IGameCommand {
 
         ps.actionsLeft -= 1;
         outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+        // The fourth cure wins the game in CheckGameOver, straight after this
+        // — outside specificGameState, where no snapshot could take it back.
+        if (!DISEASE_COLORS.every(color => gs.cures[color] !== 'none')) {
+            commitUndo(outbreakData, this, preUndoState);
+        }
 
         // Never ends the turn itself, even on the fourth action (§21.4): only
         // OutbreakEndTurn (and, past the hand limit, OutbreakDiscard) may —
@@ -1114,6 +1169,9 @@ export class OutbreakPlayEvent implements IGameCommand {
     /** forecastOrder: the reordered infection city ids drawn by Forecast, top card first. */
     cardIds: number[] = [];
     readonly className = 'OutbreakPlayEvent';
+    // Only a retrieval, or a card other than Forecast played in the action
+    // phase — enforced in Execute, not here (docs/undo.md, above).
+    readonly undoable = true;
 
     myString() {
         const name = this.cardId !== null ? eventCardName(this.cardId) : 'an event card';
@@ -1140,23 +1198,71 @@ export class OutbreakPlayEvent implements IGameCommand {
             return infectionPhaseOutcome(turnOver, infectionLog);
         }
 
+        // Before the first mutation of either kind below.
+        const preUndoState = undoSnapshot(outbreakData);
+
         if (this.kind === 'retrieve') {
             if (gs.phase !== 'actions' || ps.actionsLeft <= 0) return INVALID;
             const historyLine = applyRetrieve(gs, ps, this.cardId);
             if (historyLine === null) return INVALID;
             ps.actionsLeft -= 1;
             outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+            commitUndo(outbreakData, this, preUndoState);
             return { validMove: true, turnOver: false };
         }
 
         // 'play': free of action cost either way (§12) — only ever ends the
         // turn by finishing a hand-limit duck, never by spending an action.
         if (!eventPlayableInPhase(gs.phase)) return INVALID;
+        // Read now, because the phase is what decides whether this card can be
+        // taken back at all: mid-discard it can close the draw phase and run
+        // the infection. Forecast never can, wherever it is played — the
+        // player has already seen the top of the infection deck.
+        const undoable = gs.phase === 'actions' && this.cardId !== EVENT_CARD_FORECAST;
         const historyLine = applyPlayEvent(outbreakData, ps, this);
         if (historyLine === null) return INVALID;
         outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+        if (undoable) commitUndo(outbreakData, this, preUndoState);
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
         return infectionPhaseOutcome(turnOver, infectionLog);
+    }
+}
+
+// ─── OutbreakUndo (docs/undo.md) ────────────────────────────────────────────
+
+@serializable
+export class OutbreakUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'OutbreakUndo';
+
+    myString() { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const outbreakData = gameData as IOutbreakGameData;
+        const gs = outbreakData.specificGameState;
+
+        // A snapshot is only good for the command directly behind it: refused
+        // once anything else has run since it was pushed — an End turn above
+        // all, whose draw and infection no snapshot may rewind (docs/undo.md §4).
+        const lastCommand = outbreakData.gameState.commandHistory.at(-1);
+        if (!lastCommand || gs.undoAnchorId !== lastCommand.id) return INVALID;
+
+        const entry = (gs.undoStack ?? []).at(-1);
+        if (!entry || entry.by !== this.senderId) return INVALID;
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        // No `currentTurn` to put back, unlike Race Cars: nothing undoable here
+        // ever ends a turn, so the turn is still the sender's.
+        outbreakData.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -1178,5 +1284,9 @@ registerPlayerDropoutAdapter({
         const ps = gs.players.get(userId);
         if (ps) gs.playerDiscard.push(...ps.hand);
         deleteFromMongoMap(gs.players, userId);
+        // Every snapshot is a whole state taken before the drop, so restoring
+        // one would put the pawn that left back on the board.
+        gs.undoStack = [];
+        gs.undoAnchorId = null;
     },
 });

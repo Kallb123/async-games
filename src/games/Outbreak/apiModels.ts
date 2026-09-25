@@ -52,6 +52,12 @@ export interface IOutbreakSpecificGameStateResponse {
     // Forecast (§12), step 1: the revealed top infection cards awaiting a
     // new order — empty outside `phase === 'forecast'`.
     forecastCards: number[];
+    /**
+     * True when the viewer has a move of their own they can still take back
+     * (docs/undo.md). The only per-viewer field here; the stack it reads is
+     * never sent.
+     */
+    canUndo: boolean;
 }
 
 export interface IOutbreakGameDataResponse extends IGameDataResponse {

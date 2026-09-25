@@ -213,8 +213,10 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "OutbreakGameType",
     buildInitialSpecificGameState: (gameData) => buildInitialOutbreakStateFromGameData(gameData as IOutbreakGameData),
-    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
-        outbreakStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // canUndo needs the anchor to still match the tail of commandHistory, not
+    // just the stack's own owner — see gameStateToModel's lastCommandId.
+    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory) =>
+        outbreakStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null),
     // The crew planner is §21.6 step 13, not this one — deck freeze is
     // feasible (only OutbreakEndTurn touches a deck) but no planning UI
     // exists yet, so this stays empty until that step turns it on.

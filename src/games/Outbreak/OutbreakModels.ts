@@ -18,7 +18,7 @@ import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
 import type { IOutbreakInfectionPhaseOutcome } from "./OutbreakLogic";
 import type { IReplayStep } from "@/utils/games/replay";
 import { shuffle } from "@/utils/games/shuffle";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
 import {
     IOutbreakGameDataResponse,
@@ -46,6 +46,7 @@ import {
     buildEpidemicDeck,
     dealRoles,
     emptyCubeCounts,
+    cloneOutbreakState,
     placeCubeOrOutbreak,
     startingHandSize,
 } from "./rules";
@@ -195,53 +196,28 @@ export interface IOutbreakSpecificGameState {
     // limit, and Forecast's own card leaving the hand may already have
     // settled that before the reorder even happens.
     forecastResumePhase: OutbreakPhase | null;
+    /**
+     * Snapshots of the whole state, newest last, pushed by the undoable
+     * commands (docs/undo.md) — every OutbreakAction, and an event card played
+     * or retrieved in the action phase (bar Forecast) — before they change
+     * anything. `by` is whose move it was. Never sent: it carries both deck
+     * orders. Capped at UNDO_STACK_DEPTH and emptied on every hand-off.
+     */
+    undoStack: { by: string, state: IOutbreakSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot.
+     * OutbreakUndo refuses unless it is the tail of commandHistory, which is
+     * how the stack goes stale the moment anything else is played — a draw
+     * above all — without every other command having to clear it.
+     */
+    undoAnchorId: string | null;
 }
 
-function cloneCityState(c: IOutbreakCityState): IOutbreakCityState {
-    return { cubes: { ...c.cubes }, station: c.station };
-}
-
-function clonePlayerState(ps: IOutbreakPlayerState): IOutbreakPlayerState {
-    return {
-        hand: [...ps.hand],
-        city: ps.city,
-        role: ps.role,
-        contingencyCard: ps.contingencyCard,
-        actionsLeft: ps.actionsLeft,
-        opsExpertFlightUsed: ps.opsExpertFlightUsed,
-        cubesTreated: ps.cubesTreated,
-        timesTravelled: ps.timesTravelled,
-    };
-}
-
-// Deep-clones an Outbreak game state into independent plain objects,
-// rebuilding the player map in `userIdList` order (see clonePlayerStates) —
-// mirrors WorldDomination's cloneWorldDominationState: the board (here, the
-// shuffled infection deal) is randomised at creation and can't be
-// reconstructed later, so turn recap replays from a persisted snapshot
-// instead.
-export function cloneOutbreakState(
-    gs: IOutbreakSpecificGameState,
-    userIdList: string[],
-): IOutbreakSpecificGameState {
-    return {
-        difficulty: gs.difficulty,
-        cities: gs.cities.map(cloneCityState),
-        cubesLeft: { ...gs.cubesLeft },
-        cures: { ...gs.cures },
-        outbreaks: gs.outbreaks,
-        infectionRateIndex: gs.infectionRateIndex,
-        playerDeck: [...gs.playerDeck],
-        playerDiscard: [...gs.playerDiscard],
-        infectionDeck: [...gs.infectionDeck],
-        infectionDiscard: [...gs.infectionDiscard],
-        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
-        phase: gs.phase,
-        oneQuietNightActive: gs.oneQuietNightActive,
-        forecastCards: [...gs.forecastCards],
-        forecastResumePhase: gs.forecastResumePhase,
-    };
-}
+// `cloneOutbreakState` moved to rules.ts (docs/undo.md): the undo command in
+// OutbreakLogic.ts needs it too, and rules.ts is the one file both it and this
+// one already import without the two of them importing each other.
+// Re-exported so nothing that already imports it from here has to change.
+export { cloneOutbreakState };
 
 // Builds the deterministic starting specificGameState for an Outbreak game:
 // the opening board of §6 steps 4, 5 and 8 — a research station in Atlanta,
@@ -327,6 +303,8 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
         oneQuietNightActive: false,
         forecastCards: [],
         forecastResumePhase: null,
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 
@@ -334,7 +312,7 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
 // (§21.5, §21.6 step 12): the deal, the initial infection and the role deal
 // are all randomised at creation, so — like World Domination and Train
 // Time — replay clones the persisted initialSpecificGameState snapshot
-// rather than re-deriving it, via cloneOutbreakState above. Rebuilds the
+// rather than re-deriving it, via cloneOutbreakState (rules.ts). Rebuilds the
 // player map in `gameState.turnOrder` order, the same order it was dealt in.
 export function buildInitialOutbreakStateFromGameData(gameData: IOutbreakGameData): IOutbreakSpecificGameState {
     return cloneOutbreakState(gameData.initialSpecificGameState, gameData.gameState.turnOrder);
@@ -345,7 +323,7 @@ export function buildInitialOutbreakStateFromGameData(gameData: IOutbreakGameDat
 export interface IOutbreakGameData extends IGameData {
     specificGameState: IOutbreakSpecificGameState;
     // Immutable copy of the starting (post-deal) state, persisted at creation
-    // so turn recap can replay from it — see cloneOutbreakState above.
+    // so turn recap can replay from it — see cloneOutbreakState in rules.ts.
     initialSpecificGameState: IOutbreakSpecificGameState;
 }
 
@@ -391,6 +369,9 @@ function makeOutbreakStateSchemaDef() {
             },
         },
         phase: String,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
     };
 }
 
@@ -422,19 +403,31 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         // endInTeamLoss, and IGameData.endDetail).
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToModel(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            doc.gameState.commandHistory.at(-1)?.id ?? null,
+        ),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
-// `_viewerId` is unused: §2 makes every hand public, so — unlike World
-// Domination's cards or Train Time's tickets — nothing here is redacted per
-// viewer. Kept in the signature to match the shared CreateDataResponse
-// contract (see GameData.ts).
+// §2 makes every hand public, so — unlike World Domination's cards or Train
+// Time's tickets — nothing here is redacted per viewer. What *is* redacted is
+// redacted from everybody: both deck orders go over the wire as counts, and
+// the undo stack, which holds a copy of both, does not go at all.
+//
+// `viewerId` is read for one thing only: `canUndo`, which answers "have *you*
+// got a move you can still take back". `lastCommandId` (commandHistory's real
+// tail) is what makes it the same test OutbreakUndo runs on itself — the
+// stack's owner alone would still say yes after an End turn that left the
+// stack untouched (docs/undo.md §7).
 export function gameStateToModel(
     gs: IOutbreakSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    _viewerId: string | null,
+    viewerId: string | null,
+    lastCommandId: string | null = null,
 ): IOutbreakSpecificGameStateResponse {
     const playerStatesSource = mongoMap(gs.players);
     const playerStates: IOutbreakSpecificGameStateResponse['playerStates'] = {};
@@ -471,6 +464,9 @@ export function gameStateToModel(
         phase: gs.phase,
         oneQuietNightActive: gs.oneQuietNightActive,
         forecastCards: [...gs.forecastCards],
+        // Absent (`?? []`) on a game that predates the stack; false for every
+        // viewer but the mover, and for a viewerless replay.
+        canUndo: (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
 }
 

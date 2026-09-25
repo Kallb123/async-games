@@ -5,57 +5,13 @@ import { IOutbreakGameData, IOutbreakPlayerState, IOutbreakSpecificGameState } f
 import { ATLANTA_CITY_ID, CITIES, CITY_COUNT } from "./board";
 import { ACTIONS_PER_TURN, CUBES_PER_COLOR, HAND_LIMIT, emptyCubeCounts } from "./rules";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
+import { baseState, idFor } from "./testFixtures";
 
 // docs/games/outbreak-gdd.md §21.6 step 7: a stalled turn resolves through
 // Outbreak's own commands (forfeit remaining actions, then draw/infect, then
 // discard if the draw needs it), never by mutating specificGameState from the
 // cron directly — so this exercises resolveStalledTurn exactly as the
 // turn-timer cron calls it, against a real OutbreakGameType and real commands.
-
-function idFor(name: string): number {
-    const city = CITIES.find(c => c.name === name);
-    if (!city) throw new Error(`unknown city: ${name}`);
-    return city.id;
-}
-
-// Mirrors OutbreakLogic.test.ts's baseState: an empty board, a station only
-// in Atlanta — the initial infection is real RNG and isn't needed here.
-function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
-    const cities = Array.from({ length: CITY_COUNT }, () => ({ cubes: emptyCubeCounts(), station: false }));
-    cities[ATLANTA_CITY_ID].station = true;
-
-    const players = new Map<string, IOutbreakPlayerState>();
-    for (const userId of turnOrder) {
-        players.set(userId, {
-            hand: [],
-            city: ATLANTA_CITY_ID,
-            role: null,
-            contingencyCard: null,
-            actionsLeft: ACTIONS_PER_TURN,
-            opsExpertFlightUsed: false,
-            cubesTreated: 0,
-            timesTravelled: 0,
-        });
-    }
-
-    return {
-        difficulty: 'standard',
-        cities,
-        cubesLeft: { blue: CUBES_PER_COLOR, yellow: CUBES_PER_COLOR, black: CUBES_PER_COLOR, red: CUBES_PER_COLOR },
-        cures: { blue: 'none', yellow: 'none', black: 'none', red: 'none' },
-        outbreaks: 0,
-        infectionRateIndex: 0,
-        playerDeck: [],
-        playerDiscard: [],
-        infectionDeck: [],
-        infectionDiscard: [],
-        players,
-        phase: 'actions',
-        oneQuietNightActive: false,
-        forecastCards: [],
-        forecastResumePhase: null,
-    };
-}
 
 // Real gameType and a no-op markModified — the only two things resolveStalledTurn
 // needs beyond what OutbreakLogic.test.ts's own makeGame provides — so this can

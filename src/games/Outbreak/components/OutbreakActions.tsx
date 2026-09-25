@@ -2,11 +2,12 @@
 import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
+import UndoButton from '@/components/ui/UndoButton';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor, OutbreakRoleId, cardColor, cardName, isCityCardId, roleDef } from '@/games/Outbreak/board';
 import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
-import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent, OutbreakUndo } from '@/utils/apiModels/GameLogic';
 import { useResettingState } from '@/utils/hooks/useResettingState';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import { seatOrderFrom } from '@/utils/ui/players';
@@ -202,6 +203,17 @@ export default function OutbreakActions({ gs, myUserId, userIdList, turnOrder, m
         submitCommand(cmd, () => setRelocating(false), target);
     }
 
+    // Taking back the last action or event card (docs/undo.md). `canUndo` is
+    // only ever true for the player who made the move, and never once End turn
+    // has drawn — so the two sheets that can show it are the two a turn spends
+    // its actions in, and the discard and Forecast sheets never do.
+    const undoButton = gs.canUndo ? (
+        <UndoButton
+            pending={pendingTarget === 'undo'}
+            onClick={() => submitCommand(new OutbreakUndo(), () => setRelocating(false), 'undo')}
+        />
+    ) : null;
+
     // ── Over the hand limit (§9, §21.6 step 6): discard before anything else,
     //     including before the turn can end — OutbreakEndTurn already put the
     //     game in this phase and is waiting on OutbreakDiscard to close it. ──
@@ -312,14 +324,17 @@ export default function OutbreakActions({ gs, myUserId, userIdList, turnOrder, m
                 <p className="ag-action-hint" style={{ marginTop: 0 }}>
                     ⏭ Out of actions — end your turn to draw 2 cards and infect.
                 </p>
-                <ActionButton
-                    className="ag-btn ag-btn--primary ag-btn--block"
-                    pending={pendingTarget === 'endTurn'}
-                    pendingLabel="Ending turn…"
-                    onClick={() => submitCommand(new OutbreakEndTurn(), undefined, 'endTurn')}
-                >
-                    End turn
-                </ActionButton>
+                <div className="ag-action-grid">
+                    {undoButton}
+                    <ActionButton
+                        className="ag-btn ag-btn--primary"
+                        pending={pendingTarget === 'endTurn'}
+                        pendingLabel="Ending turn…"
+                        onClick={() => submitCommand(new OutbreakEndTurn(), undefined, 'endTurn')}
+                    >
+                        End turn
+                    </ActionButton>
+                </div>
             </div>
         );
     }
@@ -746,6 +761,8 @@ export default function OutbreakActions({ gs, myUserId, userIdList, turnOrder, m
                     );
                 })}
             </div>
+
+            {undoButton && <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div>}
 
             <ActionButton
                 className="ag-btn ag-btn--light ag-btn--block"
