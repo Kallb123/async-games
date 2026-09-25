@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "End-of-turn draws stay on the table",
+                detail: "Banned Islet and Outbreak now show the cards you just drew and your updated hand beside the flood or infection recap, so you can take in the whole end of your turn at once.",
+            },
+            {
                 title: "One quiet player no longer ends the game for everyone",
                 detail: "Miss three turns in a row and, in most games, you now leave the game rather than ending it: everyone else plays on without you. In a race your counter or car drops out, in Dice Cities and Settlements & Cities your city stops collecting, Train Time keeps your track on the map but not in the scores, World Domination leaves your armies standing to be conquered, and the co-op teams share out or discard what you held and carry on — even down to one player. Two-player games, Smartthink and Solitaire still end as before.",
             },
@@ -117,10 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Banned Islet shows which treasure is running out of island",
                 detail: "The \"Tiles left\" box on the board is now the four treasures, two by two — each showing how many of its two tiles are still above water, and turning red the moment one is down to its last. That is the count that actually ends the game: let both tiles of a treasure you haven't captured go under and the team loses, however much dry land is left over. A treasure already aboard ticks off instead. Your match review still charts the island shrinking, tile by tile, turn by turn.",
                 game: "bannedislet",
-            },
-            {
-                title: "Every game shows when it's waiting",
-                detail: "The \"Sending\" badge in a game's top bar is now a pulsing bar along the bottom edge of it — and it lights up for everything the game is waiting on, not just the move you have made: your move going out, an opponent's move coming back, and the match review being built. It sits inside the bar, so nothing on screen shifts when it comes and goes.",
             },
         ],
     },

@@ -597,14 +597,16 @@ export class OutbreakAction implements IGameCommand {
 // commandHistory since replaying the same command recomputes it identically.
 export interface IOutbreakInfectionPhaseOutcome extends ICommandOutcome {
     infectionLog: IOutbreakInfectionLogEntry[];
+    /** Non-epidemic player cards added to the acting player's hand. */
+    drawnCards?: number[];
 }
 
 // Every valid-move return from OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent
 // builds one of these — a tiny helper instead of repeating the object shape
 // (and re-declaring the type at each call site to dodge the excess-property
 // check a bare `return { ..., infectionLog } as ICommandOutcome` would trip).
-function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfectionLogEntry[]): IOutbreakInfectionPhaseOutcome {
-    return { validMove: true, turnOver, infectionLog };
+function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfectionLogEntry[], drawnCards?: number[]): IOutbreakInfectionPhaseOutcome {
+    return { validMove: true, turnOver, infectionLog, ...(drawnCards ? { drawnCards } : {}) };
 }
 
 // Ends the game in a shared defeat (§4.2), the moment one of the three loss
@@ -864,7 +866,7 @@ export class OutbreakEndTurn implements IGameCommand {
         // instead of joining the hand (§9.1) — if both cards drawn this turn
         // are epidemics, the first is resolved completely before the second
         // is even drawn (§16).
-        let cardsDrawn = 0;
+        const drawnCards: number[] = [];
         let intensifyIndex = 0;
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
@@ -873,7 +875,7 @@ export class OutbreakEndTurn implements IGameCommand {
                     `${userToken(this.senderId)} had to draw with the player deck empty`,
                     'the player deck ran out of cards',
                 );
-                return infectionPhaseOutcome(true, infectionLog);
+                return infectionPhaseOutcome(true, infectionLog, drawnCards);
             }
 
             const cardId = gs.playerDeck.shift()!;
@@ -886,15 +888,15 @@ export class OutbreakEndTurn implements IGameCommand {
                     intensifyIndex++;
                 }
                 if (outbreakData.complete) {
-                    return infectionPhaseOutcome(true, infectionLog);
+                    return infectionPhaseOutcome(true, infectionLog, drawnCards);
                 }
             } else {
                 ps.hand.push(cardId);
-                cardsDrawn++;
+                drawnCards.push(cardId);
             }
         }
-        if (cardsDrawn > 0) {
-            outbreakData.gameState.history.unshift(playerHistory(this.senderId, `drew ${cardsDrawn} card${cardsDrawn === 1 ? '' : 's'}`));
+        if (drawnCards.length > 0) {
+            outbreakData.gameState.history.unshift(playerHistory(this.senderId, `drew ${drawnCards.length} card${drawnCards.length === 1 ? '' : 's'}`));
         }
 
         // Hand limit (§9, §16): over it, the turn pauses for OutbreakDiscard
@@ -902,11 +904,11 @@ export class OutbreakEndTurn implements IGameCommand {
         if (ps.hand.length > HAND_LIMIT) {
             gs.phase = 'discard';
             outbreakData.gameState.history.unshift(playerHistory(this.senderId, `must discard down to ${HAND_LIMIT} cards`));
-            return infectionPhaseOutcome(false, infectionLog);
+            return infectionPhaseOutcome(false, infectionLog, drawnCards);
         }
 
         infectionLog.push(...resolveInfectPhase(outbreakData));
-        return infectionPhaseOutcome(true, infectionLog);
+        return infectionPhaseOutcome(true, infectionLog, drawnCards);
     }
 }
 

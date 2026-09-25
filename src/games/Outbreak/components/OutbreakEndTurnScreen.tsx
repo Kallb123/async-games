@@ -5,9 +5,13 @@ import { CITIES, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
 import { describeOutbreakChain } from '@/games/Outbreak/narration';
 import { meta } from '@/games/Outbreak/meta';
 import { pluralize } from '@/utils/ui/text';
+import EndTurnHand from '@/components/ui/EndTurnHand';
+import OutbreakCardChip from './OutbreakCardChip';
 
 interface OutbreakEndTurnScreenProps {
     infectionLog: IOutbreakInfectionLogEntry[];
+    drawnCards: number[];
+    hand: number[];
     onDismiss: () => void;
 }
 
@@ -94,13 +98,21 @@ function summaryFor(log: IOutbreakInfectionLogEntry[]): { headline: string; subl
 // (TurnRecap) rather than a bespoke screen, since the two are the same
 // picture — a dark header, a headline, a timeline — just for a different
 // stretch of time.
-export default function OutbreakEndTurnScreen({ infectionLog, onDismiss }: OutbreakEndTurnScreenProps) {
+export default function OutbreakEndTurnScreen({ infectionLog, drawnCards, hand, onDismiss }: OutbreakEndTurnScreenProps) {
     return (
         <TurnRecap
             header={{ name: meta.name, accent: meta.accent, glyph: meta.glyph }}
             since="This turn"
             summary={summaryFor(infectionLog)}
             events={infectionLog.map(eventFor)}
+            footer={(
+                <EndTurnHand
+                    drawn={drawnCards.map(cardId => <OutbreakCardChip key={cardId} cardId={cardId} />)}
+                    drawnCount={drawnCards.length}
+                    hand={hand.map(cardId => <OutbreakCardChip key={cardId} cardId={cardId} />)}
+                    handCount={hand.length}
+                />
+            )}
             cta={{ label: 'Back to the board', onClick: onDismiss }}
         />
     );

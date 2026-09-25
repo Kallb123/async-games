@@ -478,7 +478,7 @@ describe("OutbreakEndTurn", () => {
 
         // infectionDeck is empty (baseState's default, untouched here), so
         // Phase 3 breaks on its first draw without producing any log entry.
-        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [] });
+        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [], drawnCards: [first, second] });
         expect(state.players.get("u1")!.hand).toEqual([first, second]);
         expect(state.playerDeck).toEqual([third]);
         expect(state.phase).toBe('actions');
@@ -499,7 +499,7 @@ describe("OutbreakEndTurn", () => {
         const outcome = await endTurnCmd().Execute(game);
 
         // Paused before Phase 3 ever runs, so there's nothing in the log yet.
-        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [], drawnCards: [idFor("Chicago"), idFor("Miami")] });
         expect(state.phase).toBe('discard');
         expect(ps.hand.length).toBe(8);
     });
@@ -622,6 +622,7 @@ describe("OutbreakEndTurn", () => {
             validMove: true,
             turnOver: true,
             infectionLog: [{ kind: 'infect', cityId: chicago, color: 'blue', outcome: 'eradicated' }],
+            drawnCards: [idFor("San Francisco"), idFor("Osaka")],
         });
     });
 });
@@ -790,7 +791,7 @@ describe("OutbreakEndTurn epidemics", () => {
 
         // Increase still ran (rate index 0 -> 1, so rateAfter is 2), but with
         // nothing in the deck the Infect step never drew a card.
-        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [{ kind: 'epidemic', rateAfter: 2 }] });
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [{ kind: 'epidemic', rateAfter: 2 }], drawnCards: [idFor("Osaka")] });
         expect(state.infectionRateIndex).toBe(1);
         expect(game.complete).toBe(false);
     });
@@ -1406,7 +1407,7 @@ describe("OutbreakPlayEvent — One Quiet Night (§12)", () => {
 
         // Phase 3 is skipped outright, logged as its own entry rather than
         // silently producing nothing.
-        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [{ kind: 'quietNight' }] });
+        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [{ kind: 'quietNight' }], drawnCards: [idFor("Chicago"), idFor("Miami")] });
         expect(state.oneQuietNightActive).toBe(false);
         expect(state.infectionDeck).toEqual([idFor("Tokyo"), idFor("Cairo")]); // untouched
         expect(state.cities[idFor("Tokyo")].cubes).toEqual(emptyCubeCounts());
