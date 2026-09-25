@@ -43,3 +43,32 @@ export function liveUndoEntry<State>(
     if (entry.turnStartedAt !== turnStartedAt) return null;
     return entry;
 }
+
+/** The parts of a game's data the two helpers below read. */
+interface IClockedUndoGame<State> {
+    specificGameState: {
+        undoStack?: IClockedUndoEntry<State>[];
+        undoAnchorId?: string | null;
+        autoEndTurnAt?: string | null;
+    };
+    gameState: { commandHistory: { id: string }[] };
+    lastTurnTimestamp: string;
+}
+
+/**
+ * The move `userId` can still take back in this game, if any — `liveUndoEntry`
+ * read against the game's own command log and turn clock.
+ */
+export function undoEntryFor<State>(gameData: IClockedUndoGame<State>, userId: string | null): IClockedUndoEntry<State> | null {
+    return liveUndoEntry(
+        gameData.specificGameState,
+        userId,
+        gameData.gameState.commandHistory.at(-1)?.id ?? null,
+        gameData.lastTurnTimestamp,
+    );
+}
+
+/** True while `userId`'s own move is holding their turn open (docs/undo.md §5). */
+export function holdOpenFor<State>(gameData: IClockedUndoGame<State>, userId: string): boolean {
+    return !!gameData.specificGameState.autoEndTurnAt && undoEntryFor(gameData, userId) !== null;
+}

@@ -12,7 +12,7 @@ import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { buildableLandmarks, LANDMARKS } from "./ui";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
-import { liveUndoEntry, type IClockedUndoEntry } from "@/utils/games/undo";
+import { undoEntryFor, type IClockedUndoEntry } from "@/utils/games/undo";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -339,12 +339,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         specificGameState: gameStateToModel(
             gameDataDocument.specificGameState,
             userIdNameMap,
-            liveUndoEntry(
-                gameDataDocument.specificGameState,
-                viewerId,
-                gameDataDocument.gameState.commandHistory.at(-1)?.id ?? null,
-                gameDataDocument.lastTurnTimestamp,
-            ) !== null,
+            undoEntryFor(gameDataDocument, viewerId) !== null,
         )
     };
 };

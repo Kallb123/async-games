@@ -1339,7 +1339,8 @@ earlier one rather than repeat it.
   would refuse.
 - **Staleness is Train Time's.** Dice Cities registers no turn-timeout
   adapter, so each stack entry records the turn clock it was pushed in and
-  `liveUndoEntry` refuses one the clock has since moved past. That test and
+  `liveUndoEntry` refuses one the clock has since moved past. That test, the
+  `undoEntryFor` / `holdOpenFor` pair both games' commands ask it through, and
   `UNDO_WINDOW_MS` moved to `src/utils/games/undo.ts` rather than being
   copied; Train Time, Race Cars and Settlements & Cities re-export the
   constant from there. One gap is shared with Train Time: a replay has no

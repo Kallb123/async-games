@@ -1,4 +1,4 @@
-import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState, IDiceCitiesUndoEntry } from "@/games/DiceCities/DiceCitiesModels";
+import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -7,7 +7,7 @@ import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { clonePlayerStates, deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
-import { UNDO_WINDOW_MS, liveUndoEntry } from "@/utils/games/undo";
+import { UNDO_WINDOW_MS, holdOpenFor, undoEntryFor } from "@/utils/games/undo";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
@@ -850,24 +850,6 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
 //   CheckEndTurn would have done for it and stays undoable until they roll.
 //   This is also what keeps a game recorded before undo replaying the way it
 //   was played, since its log goes straight from that purchase to the roll.
-
-/**
- * The purchase `userId` can still take back, if any — the anchor and the turn
- * clock both say nothing has happened since it (see `liveUndoEntry`).
- */
-function undoEntryFor(dcGameData: IDiceCitiesGameData, userId: string): IDiceCitiesUndoEntry | null {
-    return liveUndoEntry(
-        dcGameData.specificGameState,
-        userId,
-        dcGameData.gameState.commandHistory.at(-1)?.id ?? null,
-        dcGameData.lastTurnTimestamp,
-    );
-}
-
-/** True while `userId`'s own purchase is holding their turn open (docs/undo.md §5). */
-function holdOpenFor(dcGameData: IDiceCitiesGameData, userId: string): boolean {
-    return !!dcGameData.specificGameState.autoEndTurnAt && undoEntryFor(dcGameData, userId) !== null;
-}
 
 function clearUndo(gs: IDiceCitiesGameState): void {
     gs.undoStack = [];

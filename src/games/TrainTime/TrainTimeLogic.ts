@@ -1,6 +1,6 @@
 import type { ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import type { ITrainTimeSpecificGameState, ITrainTimePlayerState } from "@/games/TrainTime/board";
-import type { ClaimContext, ITrainTimeUndoEntry } from "@/games/TrainTime/board";
+import type { ClaimContext } from "@/games/TrainTime/board";
 import {
     ROUTES,
     drawFromDeck,
@@ -25,8 +25,8 @@ import {
     totalScore,
     UNDO_WINDOW_MS,
     cloneTrainTimeState,
-    liveUndoEntry,
 } from "@/games/TrainTime/board";
+import { holdOpenFor, undoEntryFor } from "@/utils/games/undo";
 import { pluralize } from "@/utils/ui/text";
 import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -74,24 +74,6 @@ function playerState(gs: ITrainTimeSpecificGameState, userId: string): ITrainTim
 // game can't be taken back — CheckGameOver scores it straight away, outside
 // `specificGameState`, where no snapshot reaches — so it pushes nothing and
 // hands off at once, as every claim used to.
-
-/**
- * The claim `userId` can still take back, if any — the anchor and the turn
- * clock both say nothing has happened since it (see `liveUndoEntry`).
- */
-function undoEntryFor(trainData: ITrainTimeGameData, userId: string): ITrainTimeUndoEntry | null {
-    return liveUndoEntry(
-        trainData.specificGameState,
-        userId,
-        trainData.gameState.commandHistory.at(-1)?.id ?? null,
-        trainData.lastTurnTimestamp,
-    );
-}
-
-/** True while `userId`'s own claim is holding their turn open (docs/undo.md §5). */
-function holdOpenFor(trainData: ITrainTimeGameData, userId: string): boolean {
-    return !!trainData.specificGameState.autoEndTurnAt && undoEntryFor(trainData, userId) !== null;
-}
 
 /**
  * The sender's state, if they may act at all. A claim holding their turn open

@@ -14,7 +14,7 @@
 
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates } from "@/utils/games/mongoMaps";
-import { UNDO_WINDOW_MS, liveUndoEntry, type IClockedUndoEntry } from "@/utils/games/undo";
+import { UNDO_WINDOW_MS, type IClockedUndoEntry } from "@/utils/games/undo";
 import { pluralize, signed } from "@/utils/ui/text";
 
 // ─── Colours ────────────────────────────────────────────────────────────────
@@ -732,10 +732,6 @@ export interface ITrainTimeSpecificGameState {
 }
 
 export type ITrainTimeUndoEntry = IClockedUndoEntry<ITrainTimeSpecificGameState>;
-
-// The snapshot a player can still take back — shared with Dice Cities, the
-// other game whose turn timer passes a turn on without a command.
-export { liveUndoEntry };
 
 /**
  * How far into their two-card draw this player is. The count is dropped the

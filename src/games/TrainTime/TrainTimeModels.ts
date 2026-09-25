@@ -13,6 +13,7 @@ import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
 import { mongoMap } from "@/utils/games/mongoMaps";
+import { undoEntryFor } from "@/utils/games/undo";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
 import { userToken } from "@/utils/games/history";
 import {
@@ -27,7 +28,6 @@ import {
     buildInitialTrainTimeState,
     cloneTrainTimeState,
     drawsTakenBy,
-    liveUndoEntry,
     longestRun,
     playerNetwork,
     scoreBreakdown,
@@ -203,12 +203,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
             doc.specificGameState,
             userIdNameMap,
             viewerId,
-            liveUndoEntry(
-                doc.specificGameState,
-                viewerId,
-                doc.gameState.commandHistory.at(-1)?.id ?? null,
-                doc.lastTurnTimestamp,
-            ) !== null,
+            undoEntryFor(doc, viewerId) !== null,
         ),
         recapAvailable: !!doc.initialSpecificGameState,
     };

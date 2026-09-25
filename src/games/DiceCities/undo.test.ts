@@ -17,7 +17,7 @@ import { runCommand } from "@/utils/games/commandPipeline";
 import { getPlayerDropoutAdapter, nextActivePlayer } from "@/utils/games/playerDropout";
 import { buildTimeline, computePerTurnEvents } from "@/utils/games/replay";
 import { buildEventFeed } from "@/utils/games/recap";
-import { liveUndoEntry } from "@/utils/games/undo";
+import { undoEntryFor } from "@/utils/games/undo";
 
 // docs/undo.md's sixth game. What a Dice Cities player can take back is a
 // purchase — an establishment or a landmark — and never a roll or anything a
@@ -64,14 +64,9 @@ function owned(game: IDiceCitiesGameData, cardId: string, userId = "u1"): number
     return seat(game, userId).cards.find(cc => cc.card === cardId)?.amount ?? 0;
 }
 
-/** What CreateDataResponse sends `viewerId` — the same `liveUndoEntry` test it runs. */
+/** What CreateDataResponse sends `viewerId` — the same `undoEntryFor` test it runs. */
 function wireFor(game: IDiceCitiesGameData, viewerId: string | null) {
-    const canUndo = liveUndoEntry(
-        game.specificGameState,
-        viewerId,
-        game.gameState.commandHistory.at(-1)?.id ?? null,
-        game.lastTurnTimestamp,
-    ) !== null;
+    const canUndo = undoEntryFor(game, viewerId) !== null;
     return gameStateToModel(game.specificGameState, NAMES, canUndo);
 }
 
