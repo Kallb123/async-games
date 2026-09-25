@@ -1,11 +1,12 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
 import { IHistoryEntry, resolveHistory, resolveTokens, toTheMinute } from "./history";
-import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
+import { IGameCommand, IGameType, ICommandOutcome, recordedOnTurnOf } from "../apiModels/GameLogic";
 import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { isRecordedFollowUpOf, runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
+import { playedOnTurnOf } from "./turnCount";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
 import { LEGACY_BANK_TOTAL_COINS } from "@/games/DiceCities/cards";
@@ -393,13 +394,24 @@ export async function buildTimeline(
             // server doing it — isn't read back verbatim forever. historyNames
             // above already encodes that preference, recorded name and all.
             command.senderUsername = historyNames[command.senderId] ?? command.senderUsername;
-            // Every command was executed on its sender's turn.
-            state.currentTurn = command.senderId;
+            // Every command was executed on its sender's turn — except one
+            // played out of turn, which ran on the turn of the player it names
+            // (docs/out-of-turn-actions.md §5.4). Putting `currentTurn` back
+            // to that, rather than to the sender, is what lets its Execute
+            // tell it was out of turn the same way it did live, and keeps the
+            // snapshot after it naming the player who really held the turn.
+            // Replay then runs it under the same invariants the live route
+            // did. Only a recorded command's stamp counts: a planned one is
+            // whatever the planner's client sent, and plans the planner's own
+            // turn.
+            const onTurnOf = planned ? undefined : recordedOnTurnOf(command);
+            state.currentTurn = onTurnOf ?? command.senderId;
             // One snapshot per command *applied*, which is not the same as per
             // command fed in: a command can bring a follow-up with it, and that
             // gets its own step rather than being folded into the trigger's —
             // see ICommandOutcome.followUpCommand.
             const { outcome, gameOver } = await runCommand(state, gameType, command, {
+                outOfTurn: onTurnOf !== undefined,
                 onStep: (applied, appliedOutcome) => {
                     // Every command actually applied, the follow-ups among them:
                     // this is the plan handed back to the client to resend.
@@ -463,8 +475,11 @@ export async function buildTimeline(
 // Replays a game via buildTimeline, calling `onStep` for every applied
 // command together with the 0-based index of the turn it belongs to and
 // whether it's the first step of that turn — the shared bookkeeping
-// computePerTurnStat and computePerTurnEvents both need: a turn ends when the
-// sender changes, not whenever a command reports `turnOver` (a bonus like
+// computePerTurnStat and computePerTurnEvents both need: a turn ends when
+// whose turn it is changes (`playedOnTurnOf` — the sender, or for a command
+// played out of turn the player whose turn it was, so an interrupt is part of
+// the turn it landed in rather than a turn of its own), not whenever a
+// command reports `turnOver` (a bonus like
 // Dice Cities' roll-doubles-go-again keeps the same player acting across
 // several `turnOver: true` commands, since their CheckEndTurn holds the seat
 // instead of advancing it), the same maximal-run-of-one-sender boundary
@@ -490,15 +505,16 @@ async function replayTurnByTurn(
 ): Promise<boolean> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     let turnIndex = 0;
-    let previousSenderId: string | undefined;
+    let previousTurnOf: string | undefined;
     try {
         await buildTimeline(gameData, identityMap, [], (step) => {
-            const isFirstStepOfTurn = previousSenderId !== undefined && step.command.senderId !== previousSenderId;
+            const turnOf = playedOnTurnOf(step.command);
+            const isFirstStepOfTurn = previousTurnOf !== undefined && turnOf !== previousTurnOf;
             if (isFirstStepOfTurn) {
                 turnIndex++;
             }
             onStep(step, turnIndex, isFirstStepOfTurn);
-            previousSenderId = step.command.senderId;
+            previousTurnOf = turnOf;
         });
         return true;
     } catch (error) {
@@ -546,7 +562,7 @@ export async function computePerTurnStat<TState>(
 
 // Replays a game via buildTimeline, calling `detect` once per applied command
 // and recording any events it returns against the turn they happened in — the
-// same sender-changes turn boundary computePerTurnStat groups by, so an event
+// same whose-turn-changes boundary computePerTurnStat groups by, so an event
 // computed from the same replay lands on the same round as a per-turn stat
 // next to it (see GameResultEvent, GameDataApi.ts). A single turn can produce
 // more than one event (Outbreak's double epidemic).

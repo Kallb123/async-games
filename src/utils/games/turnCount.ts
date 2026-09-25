@@ -1,4 +1,14 @@
-import { IGameCommand } from "../apiModels/gameCommand";
+import { IGameCommand, recordedOnTurnOf } from "../apiModels/gameCommand";
+
+/**
+ * Whose turn a recorded command was played on: its sender's, unless it was
+ * played out of turn (docs/out-of-turn-actions.md), in which case the player
+ * it names. The one answer every "where does a turn start?" question here and
+ * in the replay engine uses, so an interrupt never splits a turn in three.
+ */
+export function playedOnTurnOf(command: Pick<IGameCommand, "senderId"> | null | undefined): string | undefined {
+    return recordedOnTurnOf(command) ?? command?.senderId;
+}
 
 /**
  * How many turns a game's command history represents.
@@ -13,20 +23,22 @@ import { IGameCommand } from "../apiModels/gameCommand";
  * command whose `senderId` isn't the current player — and the turn only passes
  * to someone else once a command reports `turnOver`. So a turn is a maximal run
  * of consecutive commands by the same player, and counting those runs collapses
- * each multi-command turn back to the one turn it was.
+ * each multi-command turn back to the one turn it was. The one exception is a
+ * command played out of turn, which never passes the turn and is counted
+ * under the turn it was played on (`playedOnTurnOf`), not as one of its own.
  *
  * A solo game whose turn never passes (Solitaire) is a single unbroken run —
  * one turn — which is exactly what its never-changing `currentTurn` makes it.
  */
 export function countTurns(commandHistory: readonly IGameCommand[]): number {
     let turns = 0;
-    let previousSenderId: string | undefined;
+    let previousTurnOf: string | undefined;
     for (const command of commandHistory) {
-        const senderId = command?.senderId;
-        if (senderId !== previousSenderId) {
+        const turnOf = playedOnTurnOf(command);
+        if (turnOf !== previousTurnOf) {
             turns++;
         }
-        previousSenderId = senderId;
+        previousTurnOf = turnOf;
     }
     return turns;
 }

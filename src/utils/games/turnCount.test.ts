@@ -4,6 +4,8 @@ import type { IGameCommand } from '../apiModels/gameCommand';
 
 // Only senderId matters to countTurns; the rest of a command is irrelevant here.
 const by = (senderId: string) => ({ senderId } as IGameCommand);
+// ...and the stamp a command played out of turn carries (docs/out-of-turn-actions.md).
+const interrupting = (senderId: string, onTurnOf: string) => ({ senderId, recordedOnTurnOf: onTurnOf } as unknown as IGameCommand);
 
 describe('countTurns', () => {
     it('is zero for a game nobody has moved in', () => {
@@ -30,6 +32,14 @@ describe('countTurns', () => {
 
     it('treats a solo game whose turn never passes as one turn', () => {
         expect(countTurns([by('solo'), by('solo'), by('solo')])).toBe(1);
+    });
+
+    it('counts a command played out of turn under the turn it was played on', () => {
+        // u2 plays a card mid-way through u1's turn: still one turn for u1,
+        // then u2's own.
+        expect(countTurns([by('u1'), interrupting('u2', 'u1'), by('u1'), by('u2')])).toBe(2);
+        // And one played before the turn's owner has moved belongs to them too.
+        expect(countTurns([by('u1'), interrupting('u1', 'u2'), by('u2')])).toBe(2);
     });
 });
 
