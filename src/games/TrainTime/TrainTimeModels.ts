@@ -12,7 +12,7 @@ import {
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
-import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
 import { userToken } from "@/utils/games/history";
 import {
@@ -21,12 +21,13 @@ import {
     ITrainTimeTicketView,
 } from "./apiModels";
 import {
-    ITrainTimePlayerState,
     ITrainTimeSpecificGameState,
     TICKETS,
     TRAINS_PER_PLAYER,
     buildInitialTrainTimeState,
+    cloneTrainTimeState,
     drawsTakenBy,
+    liveUndoEntry,
     longestRun,
     playerNetwork,
     scoreBreakdown,
@@ -114,49 +115,11 @@ export interface ITrainTimeGameDataModel extends Model<ITrainTimeGameDataDocumen
 
 // ─── Replay support ─────────────────────────────────────────────────────────
 
-/**
- * One player's state as plain data. Every field is named rather than spread:
- * the snapshot recap replays from comes back from Mongo as a subdocument, whose
- * fields live behind getters and so are missed entirely by `{ ...ps }` — which
- * left every score, train count and route tally `undefined`, and every total on
- * a reviewed turn NaN.
- */
-function clonePlayerState(ps: ITrainTimePlayerState): ITrainTimePlayerState {
-    return {
-        hand: [...ps.hand],
-        tickets: [...ps.tickets],
-        pendingTickets: [...ps.pendingTickets],
-        trains: ps.trains,
-        score: ps.score,
-        ticketScore: ps.ticketScore,
-        ticketsCompleted: ps.ticketsCompleted,
-        longHaulBonus: ps.longHaulBonus,
-        routesClaimed: ps.routesClaimed,
-    };
-}
-
-/**
- * Deep copy of a game state, rebuilding the player map in `order` so iteration
- * matches the original deal — final scoring ranks players by that order, so a
- * replay that iterated differently could break a tie the other way.
- */
-export function cloneTrainTimeState(
-    gs: ITrainTimeSpecificGameState,
-    order: string[],
-): ITrainTimeSpecificGameState {
-    return {
-        deck: [...gs.deck],
-        discard: [...gs.discard],
-        market: [...gs.market],
-        ticketDeck: [...gs.ticketDeck],
-        playerStates: clonePlayerStates(gs.playerStates, order, clonePlayerState),
-        routeOwners: [...gs.routeOwners],
-        drawsThisTurn: gs.drawsThisTurn,
-        drawTurnOwner: gs.drawTurnOwner,
-        finalRoundPending: gs.finalRoundPending ? [...gs.finalRoundPending] : null,
-        gameOver: gs.gameOver,
-    };
-}
+// `cloneTrainTimeState` moved to board.ts (docs/undo.md): the undo command in
+// TrainTimeLogic.ts needs it too, and board.ts is the one file both it and
+// this one already import without the two of them importing each other.
+// Re-exported so nothing that already imports it from here has to change.
+export { cloneTrainTimeState };
 
 /**
  * The starting state the replay engine rewinds to. Train Time deals shuffled
@@ -203,6 +166,10 @@ function makeTrainTimeStateSchemaDef() {
         drawTurnOwner: String,
         finalRoundPending: Schema.Types.Mixed,
         gameOver: Boolean,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, turnStartedAt: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
+        autoEndTurnAt: { type: String, default: null },
     };
 }
 
@@ -232,15 +199,32 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToModel(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            liveUndoEntry(
+                doc.specificGameState,
+                viewerId,
+                doc.gameState.commandHistory.at(-1)?.id ?? null,
+                doc.lastTurnTimestamp,
+            ) !== null,
+        ),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
+/**
+ * `canUndo` answers "have *you* got a claim you can still take back" — the same
+ * `liveUndoEntry` test TrainTimeUndo runs on itself, worked out by the caller
+ * because it needs the command log and the turn clock, which live outside the
+ * state. A replayed step never offers it: the review is read-only.
+ */
 export function gameStateToModel(
     gs: ITrainTimeSpecificGameState,
     userIdNameMap: { [key: string]: string },
     viewerId: string | null,
+    canUndo: boolean = false,
 ): ITrainTimeSpecificGameStateResponse {
     const playerStatesSource = mongoMap(gs.playerStates);
 
@@ -287,6 +271,10 @@ export function gameStateToModel(
             : null,
         scored: gs.gameOver,
         myHand: viewer ? [...viewer.hand] : [],
+        canUndo,
+        // Only ever the claimer's to act on, so it goes out on exactly the
+        // test canUndo does and to nobody else.
+        autoEndTurnAt: canUndo ? (gs.autoEndTurnAt ?? null) : null,
     };
 }
 

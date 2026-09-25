@@ -108,7 +108,9 @@ out. A second copy is the signal to extract the first one.
   don't hand-write that markup again.
   A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`
   — one child of an `.ag-action-grid` row beside whatever it shares the row
-  with — rather than another hand-built "↩ Undo".
+  with — rather than another hand-built "↩ Undo". A game whose undoable move
+  ends the turn holds it open for ten seconds first, and shows that hold with
+  `UndoHold`: Pass now, Undo, the countdown and the hand-off it sends by itself.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `gameThemes.ts` (the themes each game can be
   played in — see [`docs/game-themes.md`](./docs/game-themes.md)),

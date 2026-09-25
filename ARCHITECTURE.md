@@ -600,9 +600,11 @@ exactly like a build or a roll — validated, stamped, recorded on
 The ten-second hold before a turn ends reuses `followUpCommand` from the
 paragraph above: the game simply declines to return one it would otherwise
 have returned.
-Race Cars, Banned Islet and Outbreak have since opted in the same way, by hand
-(`RaceCarsUndo`, `BannedIsletUndo`, `OutbreakUndo`); the last two need no hold,
-because their turns only ever end on the player's own End turn.
+Race Cars, Banned Islet, Outbreak and Train Time have since opted in the same
+way, by hand (`RaceCarsUndo`, `BannedIsletUndo`, `OutbreakUndo`,
+`TrainTimeUndo`); Banned Islet and Outbreak need no hold, because their turns
+only ever end on the player's own End turn, while a Train Time claim holds its
+turn open as Race Cars' legs do.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the

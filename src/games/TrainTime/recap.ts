@@ -21,6 +21,7 @@ const DRAW_PAIR = "tt_draw_pair";
 const TICKETS = "tt_tickets";
 const PASS = "tt_pass";
 const LAST_LAP = "tt_lastlap";
+const UNDO = "tt_undo";
 
 function state(snapshot: ITurnSnapshot): ITrainTimeSpecificGameStateResponse {
     return snapshot.specificGameState as ITrainTimeSpecificGameStateResponse;
@@ -115,6 +116,12 @@ function toEvents(
             break;
         }
 
+        // ── A claim taken back (docs/undo.md §10). The only move that can be,
+        //    so postProcess folds it into the claim it cancels. ──────────────
+        case "TrainTimeUndo":
+            events.push({ ...base, type: UNDO, glyph: "↩️", title: `${name} took back their last move` });
+            break;
+
         case "TrainTimePassTurn":
             events.push({
                 ...base,
@@ -146,9 +153,18 @@ function toEvents(
 // folded back into the single turn they were. Only ever a pair: the merged row
 // changes type, so a third draw — which means a second turn, after a skip —
 // starts a new row instead of joining this one.
+//
+// A claim taken back never happened as far as the board is concerned, so it
+// and its undo leave no row at all — and nor does the last lap it tripped,
+// which rides on the claim's own command id.
 function postProcess(events: IGameEvent[]): IGameEvent[] {
     const merged: IGameEvent[] = [];
     for (const event of events) {
+        if (event.type === UNDO) {
+            const claim = merged.findLast(e => e.type === CLAIM && e.actorId === event.actorId);
+            if (claim) merged.splice(0, merged.length, ...merged.filter(e => e.commandId !== claim.commandId));
+            continue;
+        }
         const last = merged[merged.length - 1];
         if (last && last.type === DRAW && event.type === DRAW && last.actorId === event.actorId) {
             merged[merged.length - 1] = {

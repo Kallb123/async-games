@@ -13,6 +13,7 @@
 // definition of "is this claim legal" rather than each growing their own.
 
 import { shuffle } from "@/utils/games/shuffle";
+import { clonePlayerStates } from "@/utils/games/mongoMaps";
 import { pluralize, signed } from "@/utils/ui/text";
 
 // ─── Colours ────────────────────────────────────────────────────────────────
@@ -53,6 +54,12 @@ export const FINAL_ROUND_TRAIN_THRESHOLD = 2;
 // Below 4 players every double route is closed once either half is claimed (§6).
 export const DOUBLE_ROUTES_OPEN_FROM_PLAYERS = 4;
 export const MIN_PLAYERS = 2;
+/**
+ * How long a claim holds the turn open for its own undo (docs/undo.md §5)
+ * before the board ends it with `TrainTimeEndTurn` — the same ten seconds
+ * Settlements & Cities and Race Cars hold for.
+ */
+export const UNDO_WINDOW_MS = 10_000;
 export const MAX_PLAYERS = 5;
 
 // ─── Cities ─────────────────────────────────────────────────────────────────
@@ -699,6 +706,55 @@ export interface ITrainTimeSpecificGameState {
     finalRoundPending: string[] | null;
     /** Set the moment the last lap finishes, so CheckGameOver can score up. */
     gameOver: boolean;
+    /**
+     * The snapshot a claim pushed before it changed anything (docs/undo.md) —
+     * at most one, since a claim is the whole of a turn and the only move that
+     * can be taken back. `by` is whose claim it was; `turnStartedAt` is the
+     * `lastTurnTimestamp` of the turn it was made in, so a hand-off that ran
+     * no command of this game's (the turn timer's plain advance) still leaves
+     * it stale. Never sent: it holds both decks and every hand.
+     */
+    undoStack: ITrainTimeUndoEntry[];
+    /**
+     * The id of the last command that pushed or popped a snapshot. Nothing can
+     * be taken back unless it is the tail of commandHistory, which is how the
+     * stack goes stale the moment anything else is played.
+     */
+    undoAnchorId: string | null;
+    /**
+     * Set while a claim holds its turn open for UNDO_WINDOW_MS (docs/undo.md
+     * §5): the moment the board sends `TrainTimeEndTurn` on its own. Null
+     * otherwise, and in every snapshot, since nothing can be pushed while a
+     * hold is open.
+     */
+    autoEndTurnAt: string | null;
+}
+
+export interface ITrainTimeUndoEntry {
+    by: string;
+    turnStartedAt: string;
+    state: ITrainTimeSpecificGameState;
+}
+
+/**
+ * The snapshot `userId` can still take back, or null (docs/undo.md §4): theirs,
+ * pushed by the very last command played, in the turn that is still running.
+ * `lastCommandId` is the tail of commandHistory and `turnStartedAt` the game's
+ * `lastTurnTimestamp`, which every hand-off moves on — the command route's and
+ * the turn timer's alike.
+ */
+export function liveUndoEntry(
+    gs: ITrainTimeSpecificGameState,
+    userId: string | null,
+    lastCommandId: string | null,
+    turnStartedAt: string,
+): ITrainTimeUndoEntry | null {
+    // Absent (`?? []`) on a game that predates the stack.
+    const entry = (gs.undoStack ?? []).at(-1);
+    if (!entry || entry.by !== userId) return null;
+    if (lastCommandId === null || gs.undoAnchorId !== lastCommandId) return null;
+    if (entry.turnStartedAt !== turnStartedAt) return null;
+    return entry;
 }
 
 /**
@@ -747,6 +803,9 @@ export function buildInitialTrainTimeState(turnOrder: string[]): ITrainTimeSpeci
         drawTurnOwner: null,
         finalRoundPending: null,
         gameOver: false,
+        undoStack: [],
+        undoAnchorId: null,
+        autoEndTurnAt: null,
     };
     // The three-Engine rule applies to the opening market too (§4).
     refillMarket(state);
@@ -809,4 +868,59 @@ export function drawFromDeck(
         state.discard = [];
     }
     return state.deck.pop() ?? null;
+}
+
+// ─── Cloning the state (turn recap, docs/undo.md) ───────────────────────────
+
+/**
+ * One player's state as plain data. Every field is named rather than spread:
+ * the snapshot recap replays from comes back from Mongo as a subdocument, whose
+ * fields live behind getters and so are missed entirely by `{ ...ps }` — which
+ * left every score, train count and route tally `undefined`, and every total on
+ * a reviewed turn NaN.
+ */
+function clonePlayerState(ps: ITrainTimePlayerState): ITrainTimePlayerState {
+    return {
+        hand: [...ps.hand],
+        tickets: [...ps.tickets],
+        pendingTickets: [...ps.pendingTickets],
+        trains: ps.trains,
+        score: ps.score,
+        ticketScore: ps.ticketScore,
+        ticketsCompleted: ps.ticketsCompleted,
+        longHaulBonus: ps.longHaulBonus,
+        routesClaimed: ps.routesClaimed,
+    };
+}
+
+/**
+ * Deep copy of a game state, rebuilding the player map in `order` so iteration
+ * matches the original deal — final scoring ranks players by that order, so a
+ * replay that iterated differently could break a tie the other way. Also the
+ * snapshot a claim pushes for `TrainTimeUndo` to restore, which is why it lives
+ * here: the logic and the models both import this file, and not each other.
+ */
+export function cloneTrainTimeState(
+    gs: ITrainTimeSpecificGameState,
+    order: string[],
+): ITrainTimeSpecificGameState {
+    return {
+        deck: [...gs.deck],
+        discard: [...gs.discard],
+        market: [...gs.market],
+        ticketDeck: [...gs.ticketDeck],
+        playerStates: clonePlayerStates(gs.playerStates, order, clonePlayerState),
+        routeOwners: [...gs.routeOwners],
+        drawsThisTurn: gs.drawsThisTurn,
+        drawTurnOwner: gs.drawTurnOwner,
+        finalRoundPending: gs.finalRoundPending ? [...gs.finalRoundPending] : null,
+        gameOver: gs.gameOver,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing,
+        // and TrainTimeUndo leaves the live stack where it is anyway.
+        undoStack: [],
+        undoAnchorId: null,
+        // Copied through for recap, which clones mid-hold states too; always
+        // null on a pushed snapshot, since no claim runs while a hold is open.
+        autoEndTurnAt: gs.autoEndTurnAt ?? null,
+    };
 }

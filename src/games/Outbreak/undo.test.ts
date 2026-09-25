@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
 import {
     OutbreakAction,
     OutbreakActionKind,
@@ -380,11 +378,6 @@ describe("Outbreak — the undoable commands never consume randomness", () => {
     });
 
     it("declares undoable on exactly these two commands, and no others", () => {
-        const source = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "OutbreakLogic.ts"), "utf8");
-        const found: string[] = [];
-        for (const match of source.matchAll(/export class (\w+) implements IGameCommand \{([\s\S]*?)myString\(/g)) {
-            if (/readonly undoable = true/.test(match[2])) found.push(match[1]);
-        }
-        expect(found).toEqual(["OutbreakAction", "OutbreakPlayEvent"]);
+        expect(undoableCommandsIn(import.meta.url, "OutbreakLogic.ts")).toEqual(["OutbreakAction", "OutbreakPlayEvent"]);
     });
 });

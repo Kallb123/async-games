@@ -68,6 +68,16 @@ export interface ITrainTimeSpecificGameStateResponse {
     myPendingTickets: ITrainTimeTicketView[];
     /** How many of those they must keep; 0 when nothing is pending. */
     myTicketsToKeep: number;
+    /**
+     * True when the viewer has a claim of their own they can still take back
+     * (docs/undo.md). Per-viewer; the stack it reads is never sent.
+     */
+    canUndo: boolean;
+    /**
+     * When the viewer's held turn ends on its own (docs/undo.md §5) — set only
+     * while `canUndo` is, and null for everybody else.
+     */
+    autoEndTurnAt: string | null;
 }
 
 export interface ITrainTimeGameDataResponse extends IGameDataResponse {

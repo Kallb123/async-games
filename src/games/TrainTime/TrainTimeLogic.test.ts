@@ -4,6 +4,7 @@ import {
     TrainTimeClaimRoute,
     TrainTimeDrawCarriageCard,
     TrainTimeDrawTickets,
+    TrainTimeEndTurn,
     TrainTimeGameType,
     TrainTimeKeepTickets,
     TrainTimePassTurn,
@@ -40,6 +41,7 @@ import {
     totalScore,
 } from "./board";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
+import { runCommand } from "@/utils/games/commandPipeline";
 
 // ─── Minimal in-memory game harness ─────────────────────────────────────────
 // The commands only ever touch the plain IGameData-shaped object handed to
@@ -88,11 +90,16 @@ function clearTickets(state: ITrainTimeSpecificGameState): void {
 async function play(game: ITrainTimeGameData, command: IGameCommand): Promise<ICommandOutcome> {
     command.senderId = game.currentTurn;
     command.senderUsername = game.currentTurn;
-    const outcome = await command.Execute(game);
-    if (!outcome.validMove) return outcome;
-    const gameType = new TrainTimeGameType();
-    if (gameType.CheckGameOver(game)) return outcome;
-    gameType.CheckEndTurn(game, outcome);
+    return (await runCommand(game, new TrainTimeGameType(), command)).outcome;
+}
+
+/**
+ * Claims, then closes the ten-second hold the claim opens (docs/undo.md §5) —
+ * what the board sends when its countdown runs out.
+ */
+async function claimAndPass(game: ITrainTimeGameData, command: IGameCommand): Promise<ICommandOutcome> {
+    const outcome = await play(game, command);
+    if (game.specificGameState.autoEndTurnAt) return play(game, new TrainTimeEndTurn());
     return outcome;
 }
 
@@ -330,8 +337,14 @@ describe("Action B — claiming a route", () => {
         const before = totalCards(game.specificGameState);
         const discardBefore = game.specificGameState.discard.length;
 
+        // Held open for its undo window rather than handed off (docs/undo.md §5)…
         const outcome = await play(game, claim(route.id, Array(4).fill('blue')));
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(game.currentTurn).toBe("u1");
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
+        // …until the board closes it.
+        expect(await play(game, new TrainTimeEndTurn())).toEqual({ validMove: true, turnOver: true });
+        expect(game.specificGameState.autoEndTurnAt).toBeNull();
 
         const me = game.specificGameState.playerStates.get("u1")!;
         expect(me.hand.length).toBe(0);
@@ -374,7 +387,7 @@ describe("game end", () => {
         gs.playerStates.get("u1")!.trains = 6;
         gs.playerStates.get("u1")!.score = 20;
 
-        await play(game, claim(route.id, Array(4).fill('blue')));
+        await claimAndPass(game, claim(route.id, Array(4).fill('blue')));
         expect(gs.playerStates.get("u1")!.trains).toBe(2);
         expect(gs.finalRoundPending).toEqual(["u1", "u2", "u3"]);
         expect(game.complete).toBe(false);
@@ -820,7 +833,7 @@ describe("a full simulated game", () => {
             const claimable = midDraw ? undefined : ROUTES.find(route => canClaimRoute(route, ctx));
             if (claimable) {
                 const colour = payableColours(claimable, me.hand)[0];
-                await play(game, claim(claimable.id, buildPayment(claimable, colour, me.hand)));
+                await claimAndPass(game, claim(claimable.id, buildPayment(claimable, colour, me.hand)));
             } else if (!midDraw && gs.ticketDeck.length > 0 && turns % 6 === 0) {
                 await play(game, new TrainTimeDrawTickets());
             } else if (gs.deck.length + gs.discard.length > 0) {
@@ -858,7 +871,7 @@ describe("Train Time — action summaries", () => {
     );
 
     it("summarises every command in words, not as a debug string", () => {
-        expect(commandClasses.length).toBe(5);
+        expect(commandClasses.length).toBe(7);
         for (const Command of commandClasses) {
             const summary = new Command().myString();
             expect(summary, `${new Command().className} reads as debug output`)
