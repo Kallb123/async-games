@@ -22,6 +22,7 @@ import {
     TILE_COUNT,
     TILE_IDS,
     TREASURE_IDS,
+    tileName,
     BannedIsletCardId,
     BannedIsletTileId,
 } from "./board";
@@ -1127,5 +1128,102 @@ describe("§4.1's fourth condition — the escape", () => {
 
         expect(game.complete).toBe(false);
         expect(new BannedIsletGameType().CheckGameOver(game)).toBe(false);
+    });
+});
+
+describe("BannedIsletPlayCard — on a teammate's turn (docs/out-of-turn-actions.md §5.5)", () => {
+    // u1 holds the turn throughout; u2 is the teammate playing out of it.
+
+    it("is declared playable out of turn, on its class", () => {
+        expect(new BannedIsletPlayCard().playableOutOfTurn).toBe(true);
+    });
+
+    it("sandbags a tile from the sender's own hand, and says whose turn it was", async () => {
+        const state = baseState({ u1: { position: MIDDLE }, u2: { position: TOP_TIP, hand: ['sandbags'] } }, { flooded: [FAR_EAST] });
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'sandbags', target: FAR_EAST }, "u2").Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, floodLog: [] });
+        expect(state.positions[FAR_EAST].state).toBe('dry');
+        expect(state.players.get("u2")!.hand).toEqual([]);
+        expect(state.treasureDiscard).toEqual(['sandbags']);
+        // The active player's turn is untouched: their actions, and the turn.
+        expect(state.players.get("u1")!.actionsLeft).toBe(ACTIONS_PER_TURN);
+        expect(game.currentTurn).toBe("u1");
+        expect(game.gameState.history[0].text)
+            .toBe("{{u2}} played Sandbags on " + tileName(state.positions[FAR_EAST].tile) + ", drying it back out, on {{u1}}'s turn");
+    });
+
+    it("flies the active player somewhere with a Helicopter Lift", async () => {
+        const state = baseState({ u1: { position: MIDDLE }, u2: { position: TOP_TIP, hand: ['helicopterLift'] } });
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'helicopterLift', userIds: ["u1"], target: FAR_EAST }, "u2").Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(state.players.get("u1")!.position).toBe(FAR_EAST);
+        expect(game.gameState.history[0].text).toMatch(/, on \{\{u1\}\}'s turn$/);
+    });
+
+    it("can't spend the active player's card", async () => {
+        const state = baseState({ u1: { hand: ['sandbags'] }, u2: {} }, { flooded: [FAR_EAST] });
+        const game = makeGame(state);
+
+        expect((await playCard({ cardId: 'sandbags', target: FAR_EAST }, "u2").Execute(game)).validMove).toBe(false);
+        expect(state.players.get("u1")!.hand).toEqual(['sandbags']);
+    });
+
+    it("leaves the active player's discard open, and floods nothing (§2 row 8)", async () => {
+        // u1 is over the limit and owes a discard. u2's hand is *at* the limit
+        // once the card is played — which is the hand the old helper would
+        // have looked at before closing u1's turn for them.
+        const hand: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'tideChalice'];
+        const state = endOfTurnState(
+            { u1: { hand }, u2: { hand: ['stormIdol', 'stormIdol', 'rootStone', 'rootStone', 'tideChalice', 'sandbags'] } },
+            { flooded: [TOP_TIP] },
+        );
+        state.phase = 'discard';
+        state.floodDeck = ['kelpStair', 'saltMarket'];
+        state.floodDiscard = ['crabFlats'];
+        const game = makeGame(state);
+        const command = playCard({ cardId: 'sandbags', target: TOP_TIP }, "u2");
+
+        const outcome = await command.Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, floodLog: [] });
+        expect(state.phase).toBe('discard');
+        expect(state.players.get("u1")!.hand).toEqual(hand);
+        expect(state.floodDeck).toEqual(['kelpStair', 'saltMarket']);
+        // Nothing ran the flood, so nothing was shuffled or recorded.
+        expect(command.recordedFloodShuffles).toBeUndefined();
+    });
+
+    it("calls the escape on a teammate's turn, and the game ends through the pipeline", async () => {
+        const state = escapedState();
+        state.players.get("u2")!.hand = ['helicopterLift'];
+        const game = makeGame(state);
+
+        const { outcome, gameOver } = await runCommand(game, new BannedIsletGameType(), playCard({ cardId: 'helicopterLift' }, "u2"), { outOfTurn: true });
+
+        expect(outcome.validMove).toBe(true);
+        expect(gameOver).toBe(true);
+        expect(game.endReason).toBe('teamwin');
+        const [played] = game.gameState.commandHistory;
+        expect((played as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf).toBe("u1");
+        expect((played as BannedIsletPlayCard).myString()).toBe("played Helicopter Lift, on {{u1}}'s turn");
+        expect(game.gameState.history[1].text).toMatch(/, on \{\{u1\}\}'s turn$/);
+    });
+
+    it("says nothing about whose turn it was on the holder's own turn", async () => {
+        const state = baseState({ u1: { hand: ['sandbags'] } }, { flooded: [FAR_EAST] });
+        const game = makeGame(state);
+        const command = playCard({ cardId: 'sandbags', target: FAR_EAST });
+
+        await command.Execute(game);
+
+        expect(command.myString()).toBe("played Sandbags");
+        expect(game.gameState.history[0].text).not.toMatch(/turn/);
     });
 });

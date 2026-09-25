@@ -23,10 +23,12 @@ import {
     TREASURES,
     WATER_LEVEL_TRACK,
     diagonalNeighbours,
+    isPlayableCard,
     isTreasureCard,
     orthogonalNeighbours,
     tileOrder,
     BannedIsletCardId,
+    BannedIsletPhase,
     BannedIsletRoleId,
     BannedIsletTileId,
     BannedIsletTileState,
@@ -519,6 +521,28 @@ export function liftOrigin(pawns: readonly IBannedIsletPawn[], userIds: readonly
         else if (pawn.position !== origin) return null;
     }
     return origin;
+}
+
+/**
+ * The active player's phases a teammate may play one of §10's specials in
+ * (docs/out-of-turn-actions.md §5.5): all of them today, but listed rather
+ * than assumed, so a phase added later is closed to interrupts until somebody
+ * decides otherwise.
+ */
+const OUT_OF_TURN_PHASES: readonly BannedIsletPhase[] = ['actions', 'discard'];
+
+/**
+ * Whether `card` may be played on a teammate's turn, while the active player
+ * is in `phase` (docs/out-of-turn-actions.md §5.5). Both specials can be:
+ * Sandbags and a Helicopter Lift that moves pawns, in either of the active
+ * player's phases, and the lift's escape call as well — its §4.1 conditions
+ * are checked the moment it is played, whoever's turn that is.
+ *
+ * The same answer `BannedIsletPlayCard.Execute` gets, so the board screen
+ * offers a waiting player exactly the plays the server will take.
+ */
+export function outOfTurnPlayable(phase: BannedIsletPhase, card: BannedIsletCardId): boolean {
+    return isPlayableCard(card) && OUT_OF_TURN_PHASES.includes(phase);
 }
 
 // ─── The four losses (§4.2) ─────────────────────────────────────────────────

@@ -19,6 +19,7 @@ import {
     liftOrigin,
     lostTreasures,
     moveTargets,
+    outOfTurnPlayable,
     pierPosition,
     positionOfTile,
     resolveSwim,
@@ -283,5 +284,20 @@ describe("the special cards (§10)", () => {
         expect(liftOrigin(pawns, [])).toBeNull();
         expect(liftOrigin(pawns, ["u1", "u1"])).toBeNull();
         expect(liftOrigin(pawns, ["u9"])).toBeNull();
+    });
+});
+
+describe("outOfTurnPlayable (docs/out-of-turn-actions.md §5.5)", () => {
+    it("lets a teammate play either special in either of the active player's phases", () => {
+        for (const phase of ["actions", "discard"] as const) {
+            expect(outOfTurnPlayable(phase, "sandbags")).toBe(true);
+            expect(outOfTurnPlayable(phase, "helicopterLift")).toBe(true);
+        }
+    });
+
+    it("never offers a card that isn't played at all", () => {
+        // Treasure cards are handed in, and Waters Rise! is never held (§10).
+        expect(outOfTurnPlayable("actions", "emberCrown")).toBe(false);
+        expect(outOfTurnPlayable("actions", "watersRise")).toBe(false);
     });
 });

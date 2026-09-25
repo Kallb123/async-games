@@ -383,6 +383,51 @@ describe("Banned Islet replay", () => {
             .toEqual(gameStateToModel(game.specificGameState, userIdNameMap, null));
     });
 
+    it("replays specials played on a teammate's turn to the same board (docs/out-of-turn-actions.md §5.5)", async () => {
+        const game = makeGame(undefined, 'novice');
+        const gs = game.specificGameState;
+        const gameType = new BannedIsletGameType();
+        // Both specials moved into the second seat's hand rather than
+        // conjured, and something for the Sandbags to dry.
+        const bob = gs.players.get("u2")!;
+        for (const special of ['sandbags', 'helicopterLift'] as const) {
+            const index = gs.treasureDeck.indexOf(special);
+            if (index >= 0) bob.hand.push(...gs.treasureDeck.splice(index, 1));
+        }
+        const wet = gs.positions.findIndex(p => p.state === 'dry');
+        gs.positions[wet].state = 'flooded';
+        game.initialSpecificGameState = cloneBannedIsletState(gs, [...PLAYERS]);
+
+        const pass = new BannedIsletAction();
+        pass.kind = 'pass';
+        await runCommand(game, gameType, send(pass, "u1"));
+
+        const sandbags = new BannedIsletPlayCard();
+        sandbags.cardId = 'sandbags';
+        sandbags.target = sandbagsTargets(gs.positions)[0];
+        expect((await runCommand(game, gameType, send(sandbags, "u2"), { outOfTurn: true })).outcome.validMove).toBe(true);
+
+        const lift = new BannedIsletPlayCard();
+        lift.cardId = 'helicopterLift';
+        lift.userIds = ["u1"];
+        lift.target = flightTargets(gs.positions, gs.players.get("u1")!.position)[0];
+        expect((await runCommand(game, gameType, send(lift, "u2"), { outOfTurn: true })).outcome.validMove).toBe(true);
+
+        await runCommand(game, gameType, send(new BannedIsletEndTurn(), "u1"));
+        expect(game.currentTurn).not.toBe("u1");
+
+        const userIdNameMap = { ...NAMES };
+        const timeline = await noRandomness(() => buildTimeline(game, userIdNameMap));
+
+        expect(timeline.snapshots.length).toBe(game.gameState.commandHistory.length + 1);
+        const live = timeline.snapshots[timeline.currentIndex];
+        expect(live.specificGameState).toEqual(gameStateToModel(game.specificGameState, userIdNameMap, null));
+        expect(live.currentTurn).toBe(game.currentTurn);
+        // Each interrupt's own step still names the active player's turn.
+        expect(timeline.snapshots[2].currentTurn).toBe("u1");
+        expect(timeline.snapshots[3].currentTurn).toBe("u1");
+    });
+
     it("has no timeline for a game created before the starting snapshot existed", async () => {
         const game = makeGame();
         delete (game as { initialSpecificGameState?: unknown }).initialSpecificGameState;
