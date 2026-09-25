@@ -159,8 +159,8 @@ export function consumedRandomness(command: IGameCommand): boolean {
 // its sender's own turn it takes the ordinary path. Played off it, the pipeline
 // enforces the out-of-turn invariants (`RunCommandOptions.outOfTurn`), and the
 // command's own `Execute` tells the two apart the way the route did —
-// `gameData.currentTurn !== this.senderId`. `outOfTurn.test.ts` lists every
-// class that answers true; adding one means a reviewer reads its `Execute`.
+// `gameData.currentTurn !== this.senderId`. `playableOutOfTurnCommands.test.ts` lists
+// every class that answers true; adding one means a reviewer reads its `Execute`.
 export function playableOutOfTurn(command: IGameCommand): boolean {
     const declaringClass = (command as object).constructor as new () => unknown;
     if (typeof declaringClass !== "function" || declaringClass === Object) {
