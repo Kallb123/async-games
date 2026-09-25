@@ -1,5 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
-import { ICommandOutcome, IGameCommand, IGameType, RECORDED_FOLLOW_UP_TO_ID } from "../apiModels/gameCommand";
+import { ICommandOutcome, IGameCommand, IGameType, RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF } from "../apiModels/gameCommand";
 
 export interface RunCommandOptions {
     /**
@@ -20,11 +20,40 @@ export interface RunCommandOptions {
      * line. Regenerating it would apply the same command twice.
      */
     resolveFollowUp?: (generated: IGameCommand, trigger: IGameCommand) => IGameCommand | null;
+    /**
+     * The command is being played off its sender's turn — by a seated player
+     * who isn't `currentTurn`, through a class that declares
+     * `playableOutOfTurn` (docs/out-of-turn-actions.md §5.2). The command
+     * route sets it for such a request; a replay sets it for a command that
+     * was recorded that way, having first put `currentTurn` back where it was.
+     *
+     * The invariants are enforced here, where the route and replay share them,
+     * rather than left to each command to remember:
+     *
+     * - The command is stamped `recordedOnTurnOf` the player whose turn it is.
+     * - `CheckEndTurn` never runs: an interrupt can't hand the turn off. An
+     *   `Execute` that reports `turnOver` without ending the game is a bug in
+     *   the command, so the move is refused (and taken back off
+     *   `commandHistory`); the caller mustn't persist it, as for any invalid
+     *   move.
+     * - A `followUpCommand` is ignored, the same rule a follow-up's own
+     *   follow-up gets.
+     * - `timerRestarts` is dropped from the outcome: the clock is the active
+     *   player's, not the interrupter's.
+     * - `CheckGameOver` still runs, so an interrupt that wins or loses the
+     *   game ends it through the ordinary game-over branch.
+     */
+    outOfTurn?: boolean;
 }
 
 /** Marks `followUp` as the command the pipeline ran for `trigger`. */
 function stampFollowUpOf(followUp: IGameCommand, trigger: IGameCommand): void {
     (followUp as unknown as Record<string, unknown>)[RECORDED_FOLLOW_UP_TO_ID] = trigger.id;
+}
+
+/** Marks `command` as played out of turn, on the turn of whoever holds it now. */
+function stampOutOfTurn(command: IGameCommand, onTurnOf: string): void {
+    (command as unknown as Record<string, unknown>)[RECORDED_ON_TURN_OF] = onTurnOf;
 }
 
 /** True for a command that carries that mark, recorded or freshly stamped. */
@@ -83,7 +112,7 @@ export async function runCommand(
     command: IGameCommand,
     options: RunCommandOptions = {},
 ): Promise<RunCommandResult> {
-    const { onStep, resolveFollowUp } = options;
+    const { onStep, resolveFollowUp, outOfTurn = false } = options;
     const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
@@ -113,9 +142,15 @@ export async function runCommand(
         }
     }
 
+    if (outOfTurn) {
+        stampOutOfTurn(command, gameData.currentTurn);
+    }
     gameData.gameState.commandHistory.push(command);
 
     const gameOver = gameType.CheckGameOver(gameData);
+    if (outOfTurn) {
+        return finishOutOfTurn(gameData, command, outcome, gameOver, onStep);
+    }
     if (!gameOver) {
         gameType.CheckEndTurn(gameData, outcome);
     }
@@ -153,4 +188,31 @@ export async function runCommand(
         },
         gameOver: follow.gameOver,
     };
+}
+
+/**
+ * The rest of `runCommand` for a command played out of turn (see
+ * `RunCommandOptions.outOfTurn`): no `CheckEndTurn`, no follow-up, no clock,
+ * and a hand-off that didn't end the game refused outright.
+ */
+function finishOutOfTurn(
+    gameData: IGameData,
+    command: IGameCommand,
+    outcome: ICommandOutcome,
+    gameOver: boolean,
+    onStep: RunCommandOptions["onStep"],
+): RunCommandResult {
+    // A game that ended passes nothing on, so `turnOver` alongside it is only
+    // the game saying so. Anywhere else it is a command trying to end
+    // somebody else's turn for them — the bug §2 row 8 of the design is
+    // about — and the move doesn't happen.
+    if (outcome.turnOver && !gameOver) {
+        console.error(`${command.className} reported turnOver out of turn in game ${gameData.gameId}; refusing it`);
+        gameData.gameState.commandHistory.pop();
+        return { outcome: { ...outcome, validMove: false, followUpCommand: undefined }, gameOver: false };
+    }
+    // `followUpCommand` is dropped unrun, for the reason a follow-up's own is.
+    const { followUpCommand, timerRestarts, ...spent } = outcome;
+    onStep?.(command, spent);
+    return { outcome: spent, gameOver };
 }
