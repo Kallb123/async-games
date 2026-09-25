@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
 import {
     TrainTimeClaimRoute,
     TrainTimeDrawCarriageCard,
@@ -311,11 +309,6 @@ describe("Train Time — the undoable command never consumes randomness", () => 
     });
 
     it("declares undoable on the claim, and on nothing else", () => {
-        const source = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "TrainTimeLogic.ts"), "utf8");
-        const found: string[] = [];
-        for (const match of source.matchAll(/export class (\w+) implements IGameCommand \{([\s\S]*?)myString\(/g)) {
-            if (/readonly undoable = true/.test(match[2])) found.push(match[1]);
-        }
-        expect(found).toEqual(["TrainTimeClaimRoute"]);
+        expect(undoableCommandsIn(import.meta.url, "TrainTimeLogic.ts")).toEqual(["TrainTimeClaimRoute"]);
     });
 });
