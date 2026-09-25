@@ -195,13 +195,18 @@ function toEvents(
 
         case "SACUndo": {
             // What came back tells the story: the anchor means an undo can only
-            // reach the placement directly behind it, so exactly one of the two
+            // reach the move directly behind it, so at most one of the two
             // diffs below fires — a vertex the sender owned that they no longer
             // do (a settlement taken back), or an edge the same way (a road).
             // Without this the settlement/road's own event would stand with
-            // nothing on the board to show for it (docs/undo.md §10).
+            // nothing on the board to show for it (docs/undo.md §10). Neither
+            // firing means a bank trade came back, and a trade is silent here
+            // (below), so taking one back is too.
             const tookBackSettlement = prevState.vertices.some((v, i) =>
                 v.owner === command.senderId && v.building !== null && nextState.vertices[i]?.owner !== command.senderId);
+            const tookBackRoad = prevState.edges.some((e, i) =>
+                e.owner === command.senderId && e.hasRoad && nextState.edges[i]?.owner !== command.senderId);
+            if (!tookBackSettlement && !tookBackRoad) break;
             events.push({
                 ...base,
                 type: "sac_undo",
