@@ -37,7 +37,6 @@ const RC_FINISH = "rc_finish";
 const RC_LEAD = "rc_lead";
 const RC_STALL = "rc_stall";
 const RC_FLIER = "rc_flier";
-const RC_UNDO = "rc_undo";
 
 /**
  * One arrival event as a recap row, or null for one that reads as "a plain
@@ -99,8 +98,7 @@ function toEvents(
 ): IGameEvent[] {
     if (command.className !== "RaceCarsLaunch"
         && command.className !== "RaceCarsMove"
-        && command.className !== "RaceCarsSlipstream"
-        && command.className !== "RaceCarsUndo") return [];
+        && command.className !== "RaceCarsSlipstream") return [];
 
     const name = command.senderUsername;
     const base = {
@@ -110,14 +108,6 @@ function toEvents(
         actorId: command.senderId,
         actorUsername: name,
     };
-
-    // docs/undo.md §10: without this, an undone move's own event would stand
-    // with nothing on the board to show for it — the anchor means an undo can
-    // only ever reach the leg directly behind it, so there is exactly one
-    // thing being taken back.
-    if (command.className === "RaceCarsUndo") {
-        return [{ ...base, id: `${command.id}:undo`, type: RC_UNDO, glyph: '↩️', title: `${name} took back their last move` }];
-    }
 
     const prevState = state(prev);
     const nextState = state(next);

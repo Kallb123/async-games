@@ -440,7 +440,9 @@ The pilot for all three features, and still the only game with planning.
   command's own `attackerDiceCount` and the defending territory). Card draws
   need no recording: they `pop()` the snapshot-preserved `cardDeck`.
 - **Recap** — deployments, battles and conquests (an elimination is folded into
-  the conquest line that caused it), card cash-ins and fortifies. It's the only
+  the conquest line that caused it), card cash-ins and fortifies. A plain end
+  turn stays silent; when ending the turn pays out a conquest card, the public
+  draw and new hand count get a row instead. It's the only
   adapter using **`postProcess`**: an attack and
   the `WorldDominationOccupyTerritory` that follows it are two commands but one
   logical conquest, and `toEvents` only ever sees one command at a time, so the
@@ -489,10 +491,11 @@ is also the game that closed the viewer gap below.
   Ticket draws need nothing: that deck is never reshuffled.
 - **Recap** — one row per turn: a route claimed (with the Long Haul lead
   call-out), the two halves of a draw folded back together by `postProcess`,
-  a ticket draw as the count that stuck, a pass, and the last lap — which is
+  a ticket draw as the count that stuck, and the last lap — which is
   everybody's clock, so it's the one row with `affectedIds`. **Events are
   public information only**: a face-up card taken is named, a blind draw and a
-  kept ticket are only ever counts (design doc §10). The tip is the exception —
+  kept ticket are only ever counts (design doc §10); a plain pass stays out of
+  both the recap and the turn notification. The tip is the exception —
   it reads the viewer's own hand, which is why the feed replays per viewer.
 - **Planning** — `canPlan={false}`. The design objection stands and is exact: a
   hypothetical *draw* would deal off the real deck and show the player the card

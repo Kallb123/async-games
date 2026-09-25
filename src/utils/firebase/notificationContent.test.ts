@@ -5,7 +5,8 @@ import type { IEventFeed, IGameEvent } from '@/utils/games/recap';
 // The recap engine is exercised by each game's own recap tests; here it's stubbed
 // so these tests are about the copy, not about replaying a real game.
 const buildEventFeed = vi.hoisted(() => vi.fn());
-vi.mock('@/utils/games/recap', () => ({ buildEventFeed }));
+const hasRecapAdapter = vi.hoisted(() => vi.fn(() => false));
+vi.mock('@/utils/games/recap', () => ({ buildEventFeed, hasRecapAdapter }));
 
 import {
     buildChatNotification,
@@ -65,6 +66,8 @@ describe('your turn notification', () => {
     beforeEach(() => {
         buildEventFeed.mockReset();
         buildEventFeed.mockResolvedValue(NO_RECAP);
+        hasRecapAdapter.mockReset();
+        hasRecapAdapter.mockReturnValue(false);
     });
 
     it('names the game in the title so a player with several games knows which one', async () => {
@@ -97,6 +100,20 @@ describe('your turn notification', () => {
             names
         );
         expect(push.body).toBe('Priya guessed 4 pegs.');
+    });
+
+    it('does not put an excluded recap action back into the push from history', async () => {
+        hasRecapAdapter.mockReturnValue(true);
+        const push = await buildYourTurnNotification(
+            game({
+                gameType: { className: 'TestRecapGameType', friendlyName: 'Test', url: 'test' },
+                gameState: { turnOrder: [], history: [{ text: '{{u2}} undid their move', actorId: 'u2' }], commandHistory: [] },
+            } as unknown as Partial<IGameData>),
+            'u1',
+            names,
+        );
+
+        expect(push.body).toBe('The board is waiting on your move.');
     });
 
     it('degrades to the history line when the recap engine throws', async () => {

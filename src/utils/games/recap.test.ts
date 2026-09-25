@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEventFeed, registerRecapAdapter } from "./recap";
+import { buildAllEvents, buildEventFeed, registerRecapAdapter } from "./recap";
 import { registerReplayAdapter } from "./replay";
 import { serializable } from "../apiModels/Serialisable";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
@@ -61,6 +61,17 @@ class TestRecapInterrupt extends TestRecapMove {
     passes = false;
 }
 
+@serializable
+class TestRecapUndo extends TestRecapMove {
+    readonly className: string = "TestRecapUndo";
+    passes = false;
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        (gameData as unknown as { specificGameState: ITestState }).specificGameState.moves--;
+        return { validMove: true, turnOver: false };
+    }
+}
+
 registerReplayAdapter({
     className: "TestRecapGameType",
     buildInitialSpecificGameState: () => ({ moves: 0 }),
@@ -97,6 +108,14 @@ function interrupt(id: string, senderId: string, onTurnOf: string): TestRecapInt
     command.senderId = senderId;
     command.senderUsername = senderId;
     (command as unknown as Record<string, unknown>).recordedOnTurnOf = onTurnOf;
+    return command;
+}
+
+function undo(id: string, senderId: string): TestRecapUndo {
+    const command = new TestRecapUndo();
+    command.id = id as uuidString;
+    command.senderId = senderId;
+    command.senderUsername = senderId;
     return command;
 }
 
@@ -145,5 +164,14 @@ describe("buildEventFeed", () => {
         const feed = await buildEventFeed(game(history, "u1"), names, "u1");
 
         expect(feed.events.map(event => event.commandId)).toEqual(["e"]);
+    });
+
+    it("excludes both an undo and the command it reversed", async () => {
+        const events = await buildAllEvents(
+            game([move("a", "u1"), move("b", "u2"), undo("c", "u2")], "u2"),
+            names,
+        );
+
+        expect(events.map(event => event.commandId)).toEqual(["a"]);
     });
 });

@@ -1,6 +1,6 @@
 import type { IGameData } from '@/utils/mongodb/GameData';
 import type { IGameEvent } from '@/utils/games/recap';
-import { buildEventFeed } from '@/utils/games/recap';
+import { buildEventFeed, hasRecapAdapter } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
 import { formatElapsedTime } from '@/utils/games/TurnTimer';
 import { nameList } from '@/utils/ui/players';
@@ -72,6 +72,11 @@ async function describeWhatHappened(
         // never their move.
         console.error(`Failed to build recap copy for game ${gameData.gameId}`, error);
     }
+
+    // An adapter-backed game returning no events means that nothing worth
+    // reporting happened (for example a plain pass, or a move immediately
+    // undone). Do not resurrect that excluded action from the raw history.
+    if (hasRecapAdapter(gameData.gameType.className)) return null;
 
     // Straight off the stored log, so the {{userId}} tokens in it still have to
     // be resolved — this copy is read by a player, not by the engine.
