@@ -114,6 +114,35 @@ export function consumedRandomness(command: IGameCommand): boolean {
     return Object.keys(fields).some(key => key.startsWith("recorded") && key !== RECORDED_FOLLOW_UP_TO_ID);
 }
 
+// Whether a command's *class* declares that it may be played out of turn
+// (`readonly playableOutOfTurn = true`) — by a seated player who isn't
+// `currentTurn`. See docs/out-of-turn-actions.md §5.1.
+//
+// Read off a fresh instance of the command's constructor, never off the
+// command itself. The command the route holds is the request body, rehydrated
+// by deserializeJSON's reviver, which copies every posted property onto the
+// instance (`readonly` is compile-time only) — so a flag read off it is the
+// client's to set, and the old `ignoresTurnGate` exemption was exactly that
+// hole (§3). `constructor` is one of the keys the reviver refuses to copy, so
+// it is always the class that was really constructed, and a fresh instance
+// carries only what that class declares. Every registered class constructs
+// with no arguments and no side effects: `@serializable` does exactly this at
+// module load.
+//
+// Declaring it widens *who* may send the command, not what it does: played on
+// its sender's own turn it takes the ordinary path. Played off it, the pipeline
+// enforces the out-of-turn invariants (`RunCommandOptions.outOfTurn`), and the
+// command's own `Execute` tells the two apart the way the route did —
+// `gameData.currentTurn !== this.senderId`. `outOfTurn.test.ts` lists every
+// class that answers true; adding one means a reviewer reads its `Execute`.
+export function playableOutOfTurn(command: IGameCommand): boolean {
+    const declaringClass = (command as object).constructor as new () => unknown;
+    if (typeof declaringClass !== "function" || declaringClass === Object) {
+        return false;
+    }
+    return (new declaringClass() as Record<string, unknown>).playableOutOfTurn === true;
+}
+
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,
 // keyed by userId) can't survive `NextResponse.json`: a Map has no own
 // enumerable properties, so plain JSON.stringify sends it over as `{}`. Every
