@@ -54,32 +54,6 @@ function bonusChangeEvent(
     };
 }
 
-// What an undo took back, read off what came back between the two snapshots.
-// The anchor means an undo only ever reaches the one move directly behind it,
-// so at most one of these matches: a vertex the sender owned that they no
-// longer do (a settlement), a city back to a settlement, an edge the sender
-// owned that they no longer do (a road), or a played card back in hand — told
-// apart by what it had armed. `null` for a bank trade, the one undoable move
-// that leaves no public trace to name.
-function sacUndoneMove(prev: SACState, next: SACState, senderId: string): string | null {
-    if (prev.vertices.some((v, i) => v.owner === senderId && v.building !== null && next.vertices[i]?.owner !== senderId)) {
-        return "a settlement";
-    }
-    if (prev.vertices.some((v, i) => v.owner === senderId && v.building === "city" && next.vertices[i]?.building === "settlement")) {
-        return "a city";
-    }
-    if (prev.edges.some((e, i) => e.owner === senderId && e.hasRoad && next.edges[i]?.owner !== senderId)) {
-        return "a road";
-    }
-    if ((playerByUserId(next, senderId)?.knightsPlayed ?? 0) < (playerByUserId(prev, senderId)?.knightsPlayed ?? 0)) {
-        return "a Knight";
-    }
-    if (prev.playedDevCard && !next.playedDevCard) {
-        return prev.pendingRoadBuilding > 0 ? "Road Building" : "Year of Plenty";
-    }
-    return null;
-}
-
 // Turns one replayed Settlements & Cities command into zero or more recap events.
 // Since the viewer's window spans every opponent's full turn, we surface only the
 // meaningful beats — rolls, the robber, builds, dev cards, and bonus handovers —
@@ -216,17 +190,6 @@ function toEvents(
 
         case "SACPlayYearOfPlenty": {
             events.push({ ...base, type: "sac_progress", glyph: "🌾", title: `${name} played Year of Plenty` });
-            break;
-        }
-
-        case "SACUndo": {
-            // Without this the undone move's own event would stand with nothing
-            // on the board to show for it (docs/undo.md §10). A bank trade
-            // coming back names nothing, since a trade is silent here too.
-            const undone = sacUndoneMove(prevState, nextState, command.senderId);
-            if (undone) {
-                events.push({ ...base, type: "sac_undo", glyph: "↩️", title: `${name} took back ${undone}` });
-            }
             break;
         }
 

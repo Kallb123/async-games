@@ -595,11 +595,11 @@ The gremlin's questions.
   command; replaying it re-pops a snapshot that the same replay re-pushed. The
   hold changes nothing either: `autoEndTurnAt` is set and cleared by commands
   that replay in order.
-- **One recap event.** `recap.ts`'s `toEvents` gets a `SACUndo` case emitting
-  "took back a settlement"/"took back a road" (from what the restore put back),
-  because without it a recap would show an opponent building something that is
-  not on the board — the build's own event with nothing following it. Glyph
-  `↩️`.
+- **No recap event.** Replay retains `SACUndo`, but the shared recap engine
+  treats undo as an edit: it suppresses the Undo and every event produced by
+  the command immediately before it. The recap therefore shows neither a
+  building that is no longer on the board nor a bookkeeping row about taking
+  it back. The same rule serves every game that supports undo.
 - **Planning is unaffected.** `plannableCommands` does not list any of the four,
   and does not gain `SACUndo`. A planned move is never saved, so there is
   nothing to take back.
@@ -756,8 +756,8 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
   `submitCommand`; `SACEndTurn` fired on expiry after re-reading the deadline;
   a manual *End turn* routed through the same window when there is a snapshot
   to keep.
-- **`Recap reads an undo`** — the `SACUndo` case in `recap.ts`'s `toEvents`
-  and its test in `recap.test.ts`.
+- **`Recap omits an undo`** — the shared recap replay drops the Undo and the
+  immediately preceding command's events, covered once by the engine test.
 
 ---
 
@@ -1183,9 +1183,10 @@ action phase is random and none of it ends a turn.
   this game hides — and is never sent: `gameStateToModel` builds its return
   field by field, and its allowlist test now names `canUndo` and nothing else
   new. `canUndo` is the same expression Race Cars and Settlements & Cities use.
-- **Recap.** Plain moves and shore-ups earn no recap row, so undoing one earns
-  none either. A capture does, so taking one back adds a `bi_uncapture` row and
-  nets it out of the summary.
+- **Recap.** The shared recap engine removes an Undo together with every row
+  from the immediately preceding command. Plain moves and shore-ups were
+  already silent; an undone capture now disappears rather than leaving either
+  the capture or a compensating row behind.
 - **The button.** Three games showing the same Undo button was the signal to
   extract it: `src/components/ui/UndoButton.tsx`, which Settlements & Cities and
   Race Cars now use too. It sits beside End turn once the actions are spent, and
@@ -1233,10 +1234,10 @@ hand for the same reason the third was.
   snapshot are the two deck orders, and the snapshot is never sent:
   `gameStateToModel` builds its return field by field and gains `canUndo`
   alone — the same expression the other three games use.
-- **Recap.** Cures, stations and event cards earn rows going forward, so taking
-  one back earns an `↩️` row coming back (read off the snapshot diff, since the
-  undo names nothing itself), and an uncured disease nets out of the summary's
-  cure count. A plain move taken back stays silent, as the move did.
+- **Recap.** The shared recap engine removes an Undo together with every row
+  from the immediately preceding command. An undone cure, station or event
+  card therefore disappears completely; a plain move remains silent as it was
+  going forward.
 - **The button.** `UndoButton`, beside End turn once the actions are spent and
   above Forfeit while they aren't — Banned Islet's placement.
 
@@ -1298,9 +1299,9 @@ The narrowest opt-in so far, and the first since Race Cars to need §5's hold.
   claimer. `canUndo` is worked out by `CreateDataResponse`, not inside
   `gameStateToModel`, because it needs the command log and the turn clock; a
   replayed step never offers it.
-- **Recap.** A claim taken back leaves no row at all: `postProcess` drops the
-  claim, the last lap it tripped (which rides on the claim's command id) and the
-  undo itself, since the board says none of it happened.
+- **Recap.** A claim taken back leaves no row at all: shared recap replay drops
+  every row carrying the claim's command id (including the last lap it tripped)
+  and the undo itself, since the board says none of it happened.
 - **The countdown.** Race Cars' `RaceCarsUndoHold` became
   `src/components/ui/UndoHold.tsx` — the Pass now / Undo pair, the countdown
   and the auto-fire — which `RaceCarsUndoHold` now wraps and Train Time's turn
@@ -1361,8 +1362,8 @@ earlier one rather than repeat it.
   and gains `canUndo` and `autoEndTurnAt` alone, worked out by
   `CreateDataResponse` from the command log and the turn clock, both false or
   null for everyone but the buyer. A replayed step never offers it.
-- **Recap and charts.** A purchase taken back leaves no recap row:
-  `postProcess` drops it and the undo together. A landmark taken back comes off
+- **Recap and charts.** A purchase taken back leaves no recap row: shared recap
+  replay drops it and the undo together. A landmark taken back comes off
   the result page's buildings chart too — `computePerTurnEvents` now hands a
   detector the markers recorded so far, and `detectLandmarkEvent` takes the
   buyer's last one back when an undo knocks a landmark down.

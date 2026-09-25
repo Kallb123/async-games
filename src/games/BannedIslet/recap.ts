@@ -32,7 +32,6 @@ const BI_FLOOD = "bi_flood";
 const BI_SWIM = "bi_swim";
 const BI_WATERS_RISE = "bi_watersrise";
 const BI_CAPTURE = "bi_capture";
-const BI_UNCAPTURE = "bi_uncapture";
 const BI_WIN = "bi_win";
 const BI_LOSS = "bi_loss";
 
@@ -98,20 +97,6 @@ function toEvents(
             glyph: '💎',
             title: `${name} captured the ${treasureName(treasure)}!`,
             detail: `${captured} of ${TREASURE_IDS.length} relics aboard`,
-        });
-    }
-
-    // ── A capture taken back (docs/undo.md §10) ───────────────────────────
-    // Plain moves and shore-ups earn no row of their own, so taking one back
-    // earns none either. A capture does, and without this the recap would
-    // show a relic aboard that the island says is still on it.
-    for (const treasure of newlyCaptured(nextState, prevState)) {
-        events.push({
-            ...base,
-            id: `${command.id}:uncapture:${treasure}`,
-            type: BI_UNCAPTURE,
-            glyph: '↩️',
-            title: `${name} took back capturing the ${treasureName(treasure)}`,
         });
     }
 
@@ -209,8 +194,7 @@ function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
     const drowned = events.some(e => e.type === BI_SWIM && e.glyph === '💀');
     const swims = events.filter(e => e.type === BI_SWIM).length;
     const rises = events.filter(e => e.type === BI_WATERS_RISE).length;
-    // Net of any taken back, so a capture and its undo read as nothing gained.
-    const captures = events.filter(e => e.type === BI_CAPTURE).length - events.filter(e => e.type === BI_UNCAPTURE).length;
+    const captures = events.filter(e => e.type === BI_CAPTURE).length;
     const lost = events.some(e => e.type === BI_LOSS);
     const won = events.some(e => e.type === BI_WIN);
     const beats = events.filter(e => e.type !== BI_WIN && e.type !== BI_LOSS).length;

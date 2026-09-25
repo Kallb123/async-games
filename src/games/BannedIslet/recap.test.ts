@@ -165,27 +165,6 @@ describe("Banned Islet recap adapter — Waters Rise! and captures", () => {
         expect(events[0].detail).toBe("1 of 4 relics aboard");
     });
 
-    it("says so when a capture is taken back, and nets it out of the summary (docs/undo.md §10)", () => {
-        const captured = { ...state().treasures, emberCrown: true };
-        const capture = bannedIsletRecapAdapter.toEvents(
-            snap(state()),
-            snap(state({ treasures: captured })),
-            cmd({ className: "BannedIsletAction" }),
-            { validMove: true, turnOver: false },
-        );
-        const undone = bannedIsletRecapAdapter.toEvents(
-            snap(state({ treasures: captured })),
-            snap(state()),
-            cmd({ id: "c2" as IGameCommand["id"], className: "BannedIsletUndo" }),
-            { validMove: true, turnOver: false },
-        );
-
-        expect(undone).toHaveLength(1);
-        expect(undone[0].type).toBe("bi_uncapture");
-        expect(undone[0].title).toBe(`Alice took back capturing the ${treasureName('emberCrown')}`);
-        expect(bannedIsletRecapAdapter.summarize([...capture, ...undone], BOB).subline).not.toContain("relic");
-    });
-
     it("says nothing for an undone move, which never earned a row to take back", () => {
         expect(bannedIsletRecapAdapter.toEvents(snap(state()), snap(state()), cmd({ className: "BannedIsletUndo" }), { validMove: true, turnOver: false }))
             .toEqual([]);

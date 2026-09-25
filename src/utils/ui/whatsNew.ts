@@ -129,6 +129,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Turn recaps leave out moves that were taken back",
+                detail: "Undoing a move now removes both the move and the Undo from the recap and your next-turn notification. Plain passes stay quiet too, while a turn that pays out a card still tells you about the card.",
+            },
+            {
                 title: "Banned Islet's water meter climbs at the right pace",
                 detail: "The flood rate on the water meter ran too steep, so the island went under faster than it should: from level 4 up it flooded one tile too many every turn, and the last two levels flooded six. The meter now reads 2, 2, 3, 3, 3, 4, 4, 5, 5 and then the skull, so Legendary opens on three tiles a turn rather than four. Games already under way switch to the new rates on their next flood.",
                 game: "bannedislet",
@@ -167,10 +171,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Race Cars: cars no longer start the Anglet track boxed in",
                 detail: "Four of the six cars on Anglet Chambre D'Amour were parked on a piece of road the track doesn't actually have, so those drivers were told \"boxed in — nothing is reachable\" on the first turn and every turn after it, whatever gear they picked. The grid now sits on the six spaces the art paints a car on.",
                 game: "racecars",
-            },
-            {
-                title: "A connection blip no longer throws you out of your game",
-                detail: "If the app lost the network for a moment while you had a board open — a phone changing between wifi and cell, or a tab left sitting long enough that your sign-in needed renewing — you were dumped back on your home screen, which then came up empty and needed a reload of its own. A game now waits out a blip and quietly asks again, keeping the board in front of you while it does; a sign-in that has gone stale is renewed behind the scenes; and every list on the home screen waits it out the same way rather than showing you nothing. A move you have just made can no longer be undone on screen either, by a background refresh that was already on its way when you tapped.",
             },
         ],
     },

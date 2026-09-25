@@ -209,13 +209,8 @@ function toEvents(
 		}
 
 		case "WorldDominationSkipFortify": {
-			// Skip fortify phase
-			events.push({
-				...base,
-				type: "wd_skip_fortify",
-				glyph: "⏭️",
-				title: `${name} skipped fortifying`,
-			});
+			// A plain end turn is plumbing, not a recap event. The visible card
+			// draw it can trigger is added from the state delta below.
 			break;
 		}
 
@@ -227,6 +222,25 @@ function toEvents(
 
 		default:
 			break;
+	}
+
+	// Ending a turn is normally just plumbing and earns no recap row. A player
+	// who conquered this turn does receive a card, though, which is a result the
+	// table can see in their public hand count and is worth carrying into the
+	// recap (and therefore the turn notification). This applies equally to a
+	// fortify and to the otherwise-silent Skip Fortify command.
+	const cardsBefore = playerByUserId(prevState, command.senderId)?.cardCount ?? 0;
+	const cardsAfter = playerByUserId(nextState, command.senderId)?.cardCount ?? 0;
+	const endsTurn = command.className === "WorldDominationFortify" || command.className === "WorldDominationSkipFortify";
+	if (endsTurn && cardsAfter > cardsBefore) {
+		events.push({
+			...base,
+			id: `${command.id}:draw`,
+			type: "wd_draw",
+			glyph: "🃏",
+			title: `${name} drew a World Domination card`,
+			detail: `${cardsAfter} card${cardsAfter === 1 ? "" : "s"} in hand`,
+		});
 	}
 
 	return events;
@@ -276,6 +290,7 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
 	const conquered = events.filter((e) => e.type === "wd_conquest").length;
 	const fortifies = events.filter((e) => e.type === "wd_fortify").length;
 	const cardsCashed = events.filter((e) => e.type === "wd_cards").length;
+	const cardsDrawn = events.filter((e) => e.type === "wd_draw").length;
 
 	let tail = ".";
 	if (conquered > 0) {
@@ -286,11 +301,13 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
 		tail = " — the battle lines were drawn.";
 	} else if (cardsCashed > 0) {
 		tail = " — someone cashed in cards for reinforcements.";
+	} else if (cardsDrawn > 0) {
+		tail = " — a conquest paid out a card.";
 	} else if (deployments > 0) {
 		tail = " — armies were positioned.";
 	}
 
-	const totalTurns = deployments + battles + conquered + fortifies + cardsCashed;
+	const totalTurns = deployments + battles + conquered + fortifies + cardsCashed + cardsDrawn;
 
 	return {
 		headline: "Your move 👋",

@@ -109,15 +109,31 @@ async function replayEvents(
         }
     }, viewerId);
 
-    const events: IGameEvent[] = [];
+    let events: IGameEvent[] = [];
     // The commands played out of turn, by id — which an event carries, and
     // which survives a postProcess merge that a parallel array wouldn't.
     const outOfTurnCommandIds = new Set<string>();
+    let previousCommandId: string | null = null;
     for (const step of steps) {
-        events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+        // Undo is an editing operation, not something that happened in the
+        // game. Its row and every row produced by the command it reverses must
+        // therefore disappear from both the recap and the turn notification.
+        // Every undo implementation is deliberately constrained to the last
+        // recorded command (docs/undo.md), so the command id immediately before
+        // it is the exact, game-agnostic target. Filtering here also covers an
+        // action that produced several rows without asking every recap adapter
+        // to independently reconstruct the same pairing.
+        if (step.command.className.endsWith("Undo")) {
+            if (previousCommandId !== null) {
+                events = events.filter(event => event.commandId !== previousCommandId);
+            }
+        } else {
+            events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+        }
         if (isRecordedOutOfTurn(step.command)) {
             outOfTurnCommandIds.add(step.command.id);
         }
+        previousCommandId = step.command.id;
     }
     return { events: adapter.postProcess ? adapter.postProcess(events) : events, timeline, outOfTurnCommandIds };
 }
