@@ -14,6 +14,7 @@ import {
     EVENT_CARD_RESILIENT_POPULATION,
     eventCardName,
     isCityCardId,
+    isEventCardId,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
 import type { IOutbreakInfectionLogEntry } from "@/games/Outbreak/rules";
@@ -29,6 +30,8 @@ import { pluralize } from "@/utils/ui/text";
 // passing are the game's equivalent of Settlements & Cities' roads — too
 // granular to earn a row of their own.
 const OB_CURE = "ob_cure";
+const OB_UNCURE = "ob_uncure";
+const OB_UNDO = "ob_undo";
 const OB_STATION = "ob_station";
 const OB_EPIDEMIC = "ob_epidemic";
 const OB_OUTBREAK = "ob_outbreak";
@@ -80,6 +83,64 @@ function describePlacements(entries: IOutbreakInfectionLogEntry[]): string {
     return [...counts.entries()]
         .map(([cityId, n]) => (n > 1 ? `${CITIES[cityId].name} (×${n})` : CITIES[cityId].name))
         .join(', ');
+}
+
+// The event cards `userId` holds, in hand or in the Contingency Planner's slot.
+function heldEventCards(gs: IOutbreakSpecificGameStateResponse, userId: string): number[] {
+    const ps = playerByUserId(gs, userId);
+    if (!ps) return [];
+    return [...ps.hand, ...(ps.contingencyCard !== null ? [ps.contingencyCard] : [])].filter(isEventCardId);
+}
+
+function undoEvents(
+    prevState: IOutbreakSpecificGameStateResponse,
+    nextState: IOutbreakSpecificGameStateResponse,
+    senderId: string,
+    name: string,
+    base: Omit<IGameEvent, 'type' | 'glyph' | 'title'>,
+): IGameEvent[] {
+    const events: IGameEvent[] = [];
+    for (const color of DISEASE_COLORS) {
+        if (prevState.cures[color] === 'none' || nextState.cures[color] !== 'none') continue;
+        events.push({
+            ...base,
+            id: `${base.id}:uncure:${color}`,
+            type: OB_UNCURE,
+            glyph: '↩️',
+            title: `${name} took back the cure for ${DISEASE_COLOR_DEFS[color].name}`,
+        });
+    }
+    prevState.cities.forEach((city, cityId) => {
+        if (!city.station || nextState.cities[cityId]?.station) return;
+        events.push({
+            ...base,
+            id: `${base.id}:unstation:${cityId}`,
+            type: OB_UNDO,
+            glyph: '↩️',
+            title: `${name} took back the research station in ${CITIES[cityId].name}`,
+        });
+    });
+    const heldBefore = heldEventCards(prevState, senderId);
+    const heldAfter = heldEventCards(nextState, senderId);
+    for (const cardId of heldAfter.filter(id => !heldBefore.includes(id))) {
+        events.push({
+            ...base,
+            id: `${base.id}:unplay:${cardId}`,
+            type: OB_UNDO,
+            glyph: '↩️',
+            title: `${name} took back playing ${eventCardName(cardId)}`,
+        });
+    }
+    for (const cardId of heldBefore.filter(id => !heldAfter.includes(id))) {
+        events.push({
+            ...base,
+            id: `${base.id}:unretrieve:${cardId}`,
+            type: OB_UNDO,
+            glyph: '↩️',
+            title: `${name} put ${eventCardName(cardId)} back on the discard pile`,
+        });
+    }
+    return events;
 }
 
 /**
@@ -205,6 +266,15 @@ function toEvents(
             break;
         }
 
+        // ── A move taken back (docs/undo.md §10) ─────────────────────────
+        // Read off the diff, since the undo names nothing itself. Only what
+        // earned a row going forward earns one coming back — a cure, a
+        // station, an event card — or the recap would show something the
+        // board says never happened. A plain move taken back stays silent.
+        case "OutbreakUndo":
+            events.push(...undoEvents(prevState, nextState, command.senderId, name, base));
+            break;
+
         // Movement, Share Knowledge, Treat Disease, passing and discarding
         // down to the hand limit are this game's equivalent of a road build —
         // routine enough that they'd drown out the beats that matter.
@@ -299,7 +369,8 @@ function toEvents(
 }
 
 function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
-    const cures = events.filter(e => e.type === OB_CURE).length;
+    // Net of any taken back, so a cure and its undo read as nothing gained.
+    const cures = events.filter(e => e.type === OB_CURE).length - events.filter(e => e.type === OB_UNCURE).length;
     const outbreaks = events.filter(e => e.type === OB_OUTBREAK).length;
     const epidemics = events.filter(e => e.type === OB_EPIDEMIC).length;
     const contained = events.some(e => e.type === OB_CONTAINED);

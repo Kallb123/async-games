@@ -27,54 +27,9 @@ import {
     emptyCubeCounts,
 } from "./rules";
 import type { IOutbreakSpecificGameState } from "./OutbreakModels";
+import { baseState, idFor } from "./testFixtures";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ──────────
-
-function idFor(name: string): number {
-    const city = CITIES.find(c => c.name === name);
-    if (!city) throw new Error(`unknown city: ${name}`);
-    return city.id;
-}
-
-// A deterministic state with an empty board and a station only in Atlanta —
-// buildInitialOutbreakState's initial infection is real RNG and isn't needed
-// to exercise the action phase in isolation.
-function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
-    const cities = Array.from({ length: CITY_COUNT }, () => ({ cubes: emptyCubeCounts(), station: false }));
-    cities[ATLANTA_CITY_ID].station = true;
-
-    const players = new Map<string, IOutbreakPlayerState>();
-    for (const userId of turnOrder) {
-        players.set(userId, {
-            hand: [],
-            city: ATLANTA_CITY_ID,
-            role: null,
-            contingencyCard: null,
-            actionsLeft: ACTIONS_PER_TURN,
-            opsExpertFlightUsed: false,
-            cubesTreated: 0,
-            timesTravelled: 0,
-        });
-    }
-
-    return {
-        difficulty: 'standard',
-        cities,
-        cubesLeft: { blue: CUBES_PER_COLOR, yellow: CUBES_PER_COLOR, black: CUBES_PER_COLOR, red: CUBES_PER_COLOR },
-        cures: { blue: 'none', yellow: 'none', black: 'none', red: 'none' },
-        outbreaks: 0,
-        infectionRateIndex: 0,
-        playerDeck: [],
-        playerDiscard: [],
-        infectionDeck: [],
-        infectionDiscard: [],
-        players,
-        phase: 'actions',
-        oneQuietNightActive: false,
-        forecastCards: [],
-        forecastResumePhase: null,
-    };
-}
 
 function makeGame(state: IOutbreakSpecificGameState, turnOrder: string[] = ["u1", "u2"]): IOutbreakGameData {
     return {

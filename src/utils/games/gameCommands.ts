@@ -91,11 +91,14 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     ],
     // docs/games/outbreak-gdd.md §21.6 step 4 added OutbreakAction; step 6
     // added OutbreakEndTurn and OutbreakDiscard; step 10 added OutbreakPlayEvent.
+    // docs/undo.md adds OutbreakUndo: taking back an action, or an event card
+    // played or retrieved in the action phase.
     OutbreakGameType: [
         "OutbreakAction",
         "OutbreakEndTurn",
         "OutbreakDiscard",
         "OutbreakPlayEvent",
+        "OutbreakUndo",
     ],
     // docs/games/fires-out-gdd.md §17.6: step 3 added FiresOutGameType and a
     // skeleton FiresOutAction; step 4 filled Execute in (move, door,

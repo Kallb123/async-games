@@ -17,11 +17,21 @@ import {
     ROLES,
 } from "./board";
 import { shuffle } from "@/utils/games/shuffle";
+import { clonePlayerStates } from "@/utils/games/mongoMaps";
+import type { IOutbreakCityState, IOutbreakPlayerState, IOutbreakSpecificGameState } from "./OutbreakModels";
 
 // ─── The action economy (§7-8) ──────────────────────────────────────────────
 
 /** Actions per player per turn (§7 Phase 1, §21.4 — refills at turn start). */
 export const ACTIONS_PER_TURN = 4;
+
+/**
+ * How many snapshots the undo stack keeps (docs/undo.md): one per action, so a
+ * player can take back all four of a turn's actions one at a time. An event
+ * card played in between takes a slot too, which only ever costs reach — the
+ * anchor is what keeps an older entry from being restored, not the cap.
+ */
+export const UNDO_STACK_DEPTH = ACTIONS_PER_TURN;
 
 // ─── The draw and infect phases (§7 Phase 2-3, §9-10, §21.6 step 6) ────────
 
@@ -429,4 +439,56 @@ export function isCubeExhaustionLoss(cubesRemainingInSupply: number, cubesNeeded
 /** Time-out loss: a card must be drawn from an empty player deck. */
 export function isPlayerDeckEmptyLoss(deckSize: number): boolean {
     return deckSize <= 0;
+}
+
+// ─── Cloning the state (§21.5, docs/undo.md) ────────────────────────────────
+
+function cloneCityState(c: IOutbreakCityState): IOutbreakCityState {
+    return { cubes: { ...c.cubes }, station: c.station };
+}
+
+function clonePlayerState(ps: IOutbreakPlayerState): IOutbreakPlayerState {
+    return {
+        hand: [...ps.hand],
+        city: ps.city,
+        role: ps.role,
+        contingencyCard: ps.contingencyCard,
+        actionsLeft: ps.actionsLeft,
+        opsExpertFlightUsed: ps.opsExpertFlightUsed,
+        cubesTreated: ps.cubesTreated,
+        timesTravelled: ps.timesTravelled,
+    };
+}
+
+// Deep-clones an Outbreak game state into independent plain objects,
+// rebuilding the player map in `userIdList` order (see clonePlayerStates) —
+// mirrors WorldDomination's cloneWorldDominationState: the board (here, the
+// shuffled infection deal) is randomised at creation and can't be
+// reconstructed later, so turn recap replays from a persisted snapshot
+// instead. Also the snapshot OutbreakUndo restores.
+export function cloneOutbreakState(
+    gs: IOutbreakSpecificGameState,
+    userIdList: string[],
+): IOutbreakSpecificGameState {
+    return {
+        difficulty: gs.difficulty,
+        cities: gs.cities.map(cloneCityState),
+        cubesLeft: { ...gs.cubesLeft },
+        cures: { ...gs.cures },
+        outbreaks: gs.outbreaks,
+        infectionRateIndex: gs.infectionRateIndex,
+        playerDeck: [...gs.playerDeck],
+        playerDiscard: [...gs.playerDiscard],
+        infectionDeck: [...gs.infectionDeck],
+        infectionDiscard: [...gs.infectionDiscard],
+        players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
+        phase: gs.phase,
+        oneQuietNightActive: gs.oneQuietNightActive,
+        forecastCards: [...gs.forecastCards],
+        forecastResumePhase: gs.forecastResumePhase,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing,
+        // and OutbreakUndo leaves the live stack where it is anyway.
+        undoStack: [],
+        undoAnchorId: null,
+    };
 }

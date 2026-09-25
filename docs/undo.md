@@ -10,8 +10,8 @@ pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
 someone opts it in a line at a time (§14, §16). Two more games have since
-opted in by hand: Race Cars (§16, "The second game") and Banned Islet (§16,
-"The third game").
+opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
+"The third game") and Outbreak (§16, "The fourth game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -1182,3 +1182,46 @@ anchor check, the owner check, the pop and the restore are line for line the
 same, and it differs from Race Cars' only by *not* restoring `currentTurn`. The
 per-game differences live in the pushing commands — whether they push, and
 whether a hold follows — which is where §16 predicted they would stay.
+
+### The fourth game: Outbreak
+
+Banned Islet's shape again, almost line for line — the two games share a turn
+structure (actions, then a draw that nobody can take back) — and written by
+hand for the same reason the third was.
+
+- **What is undoable.** Every `OutbreakAction` — any of the four moves, a
+  station, a treatment, a shared card, a cure, the Dispatcher's and the
+  Operations Expert's abilities, and a forfeit — and an `OutbreakPlayEvent`
+  that retrieves a card (the Contingency Planner) or plays one in the action
+  phase: Airlift, Government Grant, One Quiet Night and Resilient Population.
+  Both declare `readonly undoable = true`; the source scan in
+  `src/games/Outbreak/undo.test.ts` holds that list to exactly those two, and
+  the guard beside it holds them to no `recorded…` field.
+- **What is not.** `OutbreakEndTurn` draws, may resolve an epidemic (the one
+  recorded shuffle in the game) and infects; `OutbreakDiscard` always closes
+  the draw phase and infects. **Forecast is never undoable**, in any phase: it
+  turns up the top six infection cards, and a snapshot can put them back but
+  can't make the player forget them. Its ordering step pushes nothing either,
+  so after a Forecast the anchor no longer matches and nothing before it can be
+  reached. An event played mid-discard can close the draw phase and run the
+  infection, so — as with Banned Islet's specials — `OutbreakPlayEvent` only
+  pushes when it was played in the action phase. The fourth cure wins the game
+  in `CheckGameOver`, outside `specificGameState`, so `OutbreakAction` doesn't
+  push for it, like the winning Helicopter Lift.
+- **No hold (§5)**, no `currentTurn` to restore, depth `ACTIONS_PER_TURN` (four),
+  the stack emptied by `CheckEndTurn` and the dropout adapter — all for Banned
+  Islet's reasons.
+- **The cloner moved.** `cloneOutbreakState` moved from `OutbreakModels.ts` to
+  `rules.ts`, as Banned Islet's and Race Cars' did; `OutbreakModels.ts`
+  re-exports it. The three copies of the tests' `baseState` became
+  `src/games/Outbreak/testFixtures.ts` on the way.
+- **Hidden information.** Every hand is public here, so the only secrets in a
+  snapshot are the two deck orders, and the snapshot is never sent:
+  `gameStateToModel` builds its return field by field and gains `canUndo`
+  alone — the same expression the other three games use.
+- **Recap.** Cures, stations and event cards earn rows going forward, so taking
+  one back earns an `↩️` row coming back (read off the snapshot diff, since the
+  undo names nothing itself), and an uncured disease nets out of the summary's
+  cure count. A plain move taken back stays silent, as the move did.
+- **The button.** `UndoButton`, beside End turn once the actions are spent and
+  above Forfeit while they aren't — Banned Islet's placement.

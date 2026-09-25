@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { outbreakRecapAdapter } from "./recap";
-import { CITIES, CITY_COUNT } from "./board";
+import { CITIES, CITY_COUNT, EVENT_CARD_AIRLIFT } from "./board";
 import type { IOutbreakInfectionPhaseOutcome } from "./OutbreakLogic";
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { IOutbreakSpecificGameStateResponse } from "./apiModels";
-
-function idFor(name: string): number {
-    const city = CITIES.find(c => c.name === name);
-    if (!city) throw new Error(`unknown city: ${name}`);
-    return city.id;
-}
+import { idFor } from "./testFixtures";
 
 function state(): IOutbreakSpecificGameStateResponse {
     return {
@@ -28,6 +23,7 @@ function state(): IOutbreakSpecificGameStateResponse {
         phase: 'actions',
         oneQuietNightActive: false,
         forecastCards: [],
+        canUndo: false,
     };
 }
 
@@ -226,5 +222,43 @@ describe("Outbreak recap adapter — Quarantine Specialist containment", () => {
 
         const summary = outbreakRecapAdapter.summarize(containedEvent, "u2");
         expect(summary.subline).toContain("Quarantine Specialist held the line");
+    });
+});
+
+describe("Outbreak recap adapter — a move taken back (docs/undo.md §10)", () => {
+    it("names a cure taken back, and nets it out of the summary", () => {
+        const cured = state();
+        cured.cures.blue = 'cured';
+        const undoEvents = outbreakRecapAdapter.toEvents(snap(cured), snap(state()), cmd({ className: "OutbreakUndo", id: "c2" as IGameCommand["id"] }), { validMove: true, turnOver: false });
+
+        expect(undoEvents).toHaveLength(1);
+        expect(undoEvents[0].type).toBe("ob_uncure");
+        expect(undoEvents[0].title).toBe("Alice took back the cure for Blue");
+
+        const cureEvents = outbreakRecapAdapter.toEvents(
+            snap(state()), snap(cured),
+            cmd({ className: "OutbreakAction", kind: 'cure', color: 'blue' } as never),
+            { validMove: true, turnOver: false },
+        );
+        expect(outbreakRecapAdapter.summarize([...cureEvents, ...undoEvents], "u2").subline).not.toContain("cure");
+    });
+
+    it("names an event card that went back into the hand", () => {
+        const played = state();
+        played.playerStates.u1 = {
+            userId: "u1", username: "Alice", hand: [], city: 0, role: null, contingencyCard: null,
+            actionsLeft: 4, opsExpertFlightUsed: false, cubesTreated: 0, timesTravelled: 0,
+        };
+        const takenBack = state();
+        takenBack.playerStates.u1 = { ...played.playerStates.u1, hand: [EVENT_CARD_AIRLIFT] };
+
+        const events = outbreakRecapAdapter.toEvents(snap(played), snap(takenBack), cmd({ className: "OutbreakUndo" }), { validMove: true, turnOver: false });
+
+        expect(events.map(e => e.title)).toEqual(["Alice took back playing Airlift"]);
+    });
+
+    it("stays silent for a plain move taken back, as the move itself was", () => {
+        const events = outbreakRecapAdapter.toEvents(snap(state()), snap(state()), cmd({ className: "OutbreakUndo" }), { validMove: true, turnOver: false });
+        expect(events).toEqual([]);
     });
 });
