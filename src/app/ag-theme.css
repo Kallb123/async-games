@@ -4616,6 +4616,11 @@ button.ag-tt-ticket { cursor: pointer; }
     gap: 2px;
     cursor: default;
     overflow: hidden;
+    /* A tile out of reach is a disabled button, and the browser's disabled
+       text colour is translucent — which colour emoji inherit, fading every
+       figure on the island. The gold ring on a reachable tile is the only
+       signal wanted, so the figures stay at full strength everywhere. */
+    color: var(--ag-ink);
 }
 
 /* §17 is the rule these three faces exist to keep: a tile's state is read from
