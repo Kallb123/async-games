@@ -172,7 +172,7 @@ describe("the numbers (§7, §8, §10, §11, §13)", () => {
     });
 
     it("tracks §11's flood rate for levels 1-9, with the skull at 10", () => {
-        expect([...WATER_LEVEL_TRACK]).toEqual([2, 2, 3, 4, 4, 5, 5, 6, 6]);
+        expect([...WATER_LEVEL_TRACK]).toEqual([2, 2, 3, 3, 3, 4, 4, 5, 5]);
         expect(WATER_LEVEL_TRACK).toHaveLength(LOSING_WATER_LEVEL - 1);
     });
 

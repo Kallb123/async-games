@@ -47,7 +47,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             },
             {
                 title: "Banned Islet",
-                detail: "Team up on a sinking island and lift four relics off it before the sea takes the floor out from under you. Three actions a turn against an island that floods two to six tiles between turns — a flooded tile is a tile with one life left, and a sunk one leaves a hole your route home used to run through. Four difficulties, and an end-of-turn screen that shows you exactly what went under. Six roles, one broken rule each, and an escape you have to hold the card for: with every relic aboard and the whole team on the pier, it still takes a Helicopter Lift to actually leave.",
+                detail: "Team up on a sinking island and lift four relics off it before the sea takes the floor out from under you. Three actions a turn against an island that floods two to five tiles between turns — a flooded tile is a tile with one life left, and a sunk one leaves a hole your route home used to run through. Four difficulties, and an end-of-turn screen that shows you exactly what went under. Six roles, one broken rule each, and an escape you have to hold the card for: with every relic aboard and the whole team on the pier, it still takes a Helicopter Lift to actually leave.",
                 game: "bannedislet",
             },
             {
@@ -129,6 +129,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Banned Islet's water meter climbs at the right pace",
+                detail: "The flood rate on the water meter ran too steep, so the island went under faster than it should: from level 4 up it flooded one tile too many every turn, and the last two levels flooded six. The meter now reads 2, 2, 3, 3, 3, 4, 4, 5, 5 and then the skull, so Legendary opens on three tiles a turn rather than four. Games already under way switch to the new rates on their next flood.",
+                game: "bannedislet",
+            },
+            {
                 title: "Every join link shows a picture when you share it",
                 detail: "Sharing a join link for a game that didn't have its own preview image yet — Kingdom Builder, for one — unfurled in the chat with a broken picture or none at all. A game without its own card now shows the general Async Games one instead.",
             },
@@ -166,10 +171,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A connection blip no longer throws you out of your game",
                 detail: "If the app lost the network for a moment while you had a board open — a phone changing between wifi and cell, or a tab left sitting long enough that your sign-in needed renewing — you were dumped back on your home screen, which then came up empty and needed a reload of its own. A game now waits out a blip and quietly asks again, keeping the board in front of you while it does; a sign-in that has gone stale is renewed behind the scenes; and every list on the home screen waits it out the same way rather than showing you nothing. A move you have just made can no longer be undone on screen either, by a background refresh that was already on its way when you tapped.",
-            },
-            {
-                title: "A lobby that closed stops saying a game is starting",
-                detail: "If the host cancelled your lobby while you were sitting on it, or it ran out of time, you were told \"Game is starting! Look for it on your home screen.\" — and then found nothing there, because nothing had started. It now says the lobby isn't open any more. Opening an old lobby link after the game has already begun takes you to the board instead of turning you away.",
             },
         ],
     },
