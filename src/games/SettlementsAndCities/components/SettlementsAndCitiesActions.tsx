@@ -638,6 +638,8 @@ export default function SettlementsAndCitiesActions({
                 <p className="ag-action-hint">
                     {active ? 'Tap a hex to move the robber there.' : 'You rolled 7 — move the robber to a new hex.'}
                 </p>
+                {/* Only ever present after a Knight — a rolled 7 pushes no snapshot. */}
+                {undoRow}
             </div>
         );
     }
@@ -673,6 +675,8 @@ export default function SettlementsAndCitiesActions({
                 >
                     🎲 Roll the dice
                 </ActionButton>
+                {/* A dev card played before the roll (Year of Plenty) lands back here. */}
+                {undoRow}
                 {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
                 {yopModal}
                 {monopolyModal}

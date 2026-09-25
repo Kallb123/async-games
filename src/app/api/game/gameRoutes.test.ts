@@ -318,10 +318,11 @@ describe('POST /api/game/command', () => {
 
     it("won't let a reused id undo past a move made after the undoable one", async () => {
         // The attack the server-minted id closes: build a road (undoable, so it
-        // anchors the undo), then trade under the road's id so the anchor still
-        // matches the tail of commandHistory, then undo — taking back the trade
-        // along with the road. With a development card in place of the trade,
-        // that was seeing the card and putting it back.
+        // anchors the undo), then play Monopoly (not undoable) under the road's
+        // id so the anchor still matches the tail of commandHistory, then undo —
+        // taking back the Monopoly along with the road, having seen what every
+        // other hand held. With a card bought in its place, that was seeing the
+        // card and putting it back.
         signIn(ANN);
         const gs = makeState({
             hexes: HEX_POSITIONS.map(() => ({ terrain: 'desert', numberToken: null })),
@@ -331,9 +332,9 @@ describe('POST /api/game/command', () => {
         const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
         const edgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][0];
         gs.vertices[vertexId] = { building: 'settlement', owner: ANN.id };
-        // Enough ore to trade twice, so neither the road nor the trade leaves
-        // her with nothing to do and holds the turn (docs/undo.md §5).
-        gs.playerStates.set(ANN.id, player({ resources: { brick: 1, lumber: 1, ore: 8 } }));
+        // Ore to spare for a bank trade, so neither the road nor the Monopoly
+        // leaves her with nothing to do and holds the turn (docs/undo.md §5).
+        gs.playerStates.set(ANN.id, player({ resources: { brick: 1, lumber: 1, ore: 8 }, devCards: { monopoly: 1 } }));
         gs.playerStates.set(BOB.id, player());
         seedGame({
             gameId: 'game_1',
@@ -359,13 +360,13 @@ describe('POST /api/game/command', () => {
         });
 
         expect((await command(as('SACBuildRoad', { edgeId }))).status).toBe(200);
-        expect((await command(as('SACMaritimeTrade', { offerResource: 'ore', wantResource: 'wool' }))).status).toBe(200);
+        expect((await command(as('SACPlayMonopoly', { resource: 'wool' }))).status).toBe(200);
         const undo = await command(as('SACUndo'));
 
         expect(undo.status).toBe(401);
-        const saved = storedGame('game_1')!.specificGameState as { playerStates: Record<string, { resources: Record<string, number> }>, edges: { hasRoad: boolean }[] };
+        const saved = storedGame('game_1')!.specificGameState as { playerStates: Record<string, { devCards: Record<string, number> }>, edges: { hasRoad: boolean }[] };
         expect(saved.edges[edgeId].hasRoad).toBe(true);
-        expect(saved.playerStates[ANN.id].resources).toMatchObject({ ore: 4, wool: 1 });
+        expect(saved.playerStates[ANN.id].devCards).toMatchObject({ monopoly: 0 });
     });
 
     it("refuses a move off the player's turn, whatever turn-gate exemption the request claims", async () => {

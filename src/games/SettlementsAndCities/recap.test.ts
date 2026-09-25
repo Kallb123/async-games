@@ -198,6 +198,24 @@ describe("Settlements & Cities recap adapter", () => {
         expect(events[0].title).toBe("Alice took back a road");
     });
 
+    it.each([
+        ["a city", { vertices: [{ building: "city", owner: "u1" }] }, { vertices: [{ building: "settlement", owner: "u1" }] }, {}, {}],
+        ["a Knight", {}, {}, { knightsPlayed: 1 }, { knightsPlayed: 0 }],
+        ["Road Building", { playedDevCard: true, pendingRoadBuilding: 2 }, { playedDevCard: false, pendingRoadBuilding: 0 }, {}, {}],
+        ["Year of Plenty", { playedDevCard: true }, { playedDevCard: false }, {}, {}],
+    ] as const)("names %s an undo took back", (what, prevState, nextState, prevPlayer, nextPlayer) => {
+        const prev = state([player({ userId: "u1", username: "Alice", ...prevPlayer })], prevState as Partial<ISACSpecificGameStateResponse>);
+        const next = state([player({ userId: "u1", username: "Alice", ...nextPlayer })], nextState as Partial<ISACSpecificGameStateResponse>);
+        const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACUndo" }), OK);
+        expect(events[0].title).toBe(`Alice took back ${what}`);
+    });
+
+    it("stays silent for an undo that took back a trade — the trade itself is silent", () => {
+        const prev = state([player({ userId: "u1", username: "Alice", resources: { lumber: 0, wool: 1, grain: 0, brick: 0, ore: 0 } })]);
+        const next = state([player({ userId: "u1", username: "Alice", resources: { lumber: 4, wool: 0, grain: 0, brick: 0, ore: 0 } })]);
+        expect(settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACUndo" }), OK)).toEqual([]);
+    });
+
     it("emits a bonus-handover event when longest road changes hands", () => {
         const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u2" });
         const next = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u1" });

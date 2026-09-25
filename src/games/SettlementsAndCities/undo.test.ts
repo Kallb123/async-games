@@ -9,7 +9,12 @@ import {
     SACPlaceRoadSetup,
     SACBuildRoad,
     SACBuildSettlement,
+    SACMaritimeTrade,
+    SACBuildCity,
     SACPlayKnight,
+    SACPlayMonopoly,
+    SACPlayRoadBuilding,
+    SACPlayYearOfPlenty,
     SACRollDice,
     SACEndTurn,
     SACUndo,
@@ -166,7 +171,7 @@ describe("Settlements & Cities — the undo anchor", () => {
     });
 
     it("refuses once anything else has been played since the snapshot", async () => {
-        const { gs, edgeId } = mainBoardWithRoad();
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 2, lumber: 2 }, devCards: { monopoly: 1 } });
         const game = makeGame(gs);
 
         const road = cmd(new SACBuildRoad());
@@ -174,10 +179,14 @@ describe("Settlements & Cities — the undo anchor", () => {
         await run(game, road);
         expect(gs.edges[edgeId].hasRoad).toBe(true);
 
-        await run(game, cmd(new SACPlayKnight()));
+        // Monopoly: not undoable (it shows what every other hand held), so it
+        // moves the tail of commandHistory on without pushing a snapshot.
+        const monopoly = cmd(new SACPlayMonopoly());
+        monopoly.resource = "wool";
+        await run(game, monopoly);
 
         // The stack's own top entry still names u1 — only the anchor (matched
-        // against the real tail of commandHistory) tells canUndo the Knight
+        // against the real tail of commandHistory) tells canUndo the Monopoly
         // happened in between, so it must go stale here too, not just the
         // command's own refusal below.
         const lastId = game.gameState.commandHistory.at(-1)!.id;
@@ -185,10 +194,9 @@ describe("Settlements & Cities — the undo anchor", () => {
 
         const undone = await run(game, cmd(new SACUndo()));
         expect(undone.outcome.validMove).toBe(false);
-        // Nothing rolled back: the road is still built and the Knight still spent.
+        // Nothing rolled back: the road is still built and the Monopoly still spent.
         expect(gs.edges[edgeId].hasRoad).toBe(true);
-        expect(gs.playerStates.get("u1")!.devCards.knight).toBe(0);
-        expect(gs.playerStates.get("u1")!.knightsPlayed).toBe(1);
+        expect(gs.playerStates.get("u1")!.devCards.monopoly).toBe(0);
     });
 
     it("refuses once the turn has passed, even with nothing else played on it", async () => {
@@ -222,6 +230,70 @@ describe("Settlements & Cities — the undo anchor", () => {
         const undone = await run(game, cmd(new SACUndo()));
         expect(undone.outcome.validMove).toBe(false);
         expect(gs.hasRolled).toBe(true);
+    });
+});
+
+describe("Settlements & Cities — taking back a development card", () => {
+    it("takes a Knight back before the robber moves, clearing the robber move it armed", async () => {
+        const { gs } = mainBoardWithRoad({ devCards: { knight: 1 } });
+        const game = makeGame(gs);
+
+        await run(game, cmd(new SACPlayKnight()));
+        expect(gs.pendingRobber).toBe(true);
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.pendingRobber).toBe(false);
+        expect(gs.playedDevCard).toBe(false);
+        const ps = gs.playerStates.get("u1")!;
+        expect(ps.devCards.knight).toBe(1);
+        expect(ps.knightsPlayed).toBe(0);
+    });
+
+    it("unwinds Road Building one step at a time — both free roads, then the card", async () => {
+        const { gs } = mainBoardWithRoad({ devCards: { roadBuilding: 1, knight: 1 } });
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        const [firstEdge, secondEdge] = BOARD_TOPOLOGY.vertexEdges[vertexId];
+        const game = makeGame(gs);
+
+        await run(game, cmd(new SACPlayRoadBuilding()));
+        expect(gs.pendingRoadBuilding).toBe(2);
+        for (const edgeId of [firstEdge, secondEdge]) {
+            const road = cmd(new SACBuildRoad());
+            road.edgeId = edgeId;
+            expect((await run(game, road)).outcome.validMove).toBe(true);
+        }
+        expect(gs.pendingRoadBuilding).toBe(0);
+
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(true);
+        expect(gs.edges[secondEdge].hasRoad).toBe(false);
+        expect(gs.pendingRoadBuilding).toBe(1);
+
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(true);
+        expect(gs.edges[firstEdge].hasRoad).toBe(false);
+        expect(gs.pendingRoadBuilding).toBe(2);
+
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(true);
+        expect(gs.pendingRoadBuilding).toBe(0);
+        expect(gs.playedDevCard).toBe(false);
+        expect(gs.playerStates.get("u1")!.devCards.roadBuilding).toBe(1);
+    });
+
+    it("takes Year of Plenty back, returning the card and the two resources it paid", async () => {
+        const { gs } = mainBoardWithRoad({ devCards: { yearOfPlenty: 1, knight: 1 } });
+        const game = makeGame(gs);
+        const yop = cmd(new SACPlayYearOfPlenty());
+        yop.resource1 = "ore";
+        yop.resource2 = "grain";
+
+        await run(game, yop);
+        expect(gs.playerStates.get("u1")!.resources).toMatchObject({ ore: 1, grain: 1 });
+
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(true);
+        const ps = gs.playerStates.get("u1")!;
+        expect(ps.resources).toMatchObject({ ore: 0, grain: 0 });
+        expect(ps.devCards.yearOfPlenty).toBe(1);
+        expect(gs.playedDevCard).toBe(false);
     });
 });
 
@@ -269,6 +341,52 @@ describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5
         expect(undone.outcome.validMove).toBe(true);
         expect(gs.autoEndTurnAt).toBeNull();
         expect(gs.edges[edgeId].hasRoad).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("holds a bank trade that leaves nothing else to do, and undoing it hands the resources back", async () => {
+        const gs = makeState(emptyBoard());
+        gs.playerStates.set("u1", player({ resources: { lumber: 4 } }));
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
+
+        const { outcome } = await run(game, trade);
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
+            .toEqual(["SACMaritimeTrade"]);
+        expect(game.currentTurn).toBe("u1");
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.playerStates.get("u1")!.resources.lumber).toBe(4);
+        expect(gs.playerStates.get("u1")!.resources.wool).toBe(0);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("holds a city that leaves nothing else to do, and undoing it puts the settlement back", async () => {
+        const { gs } = mainBoardWithRoad({ resources: { grain: 2, ore: 3 } });
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        const game = makeGame(gs);
+        const city = cmd(new SACBuildCity());
+        city.vertexId = vertexId;
+
+        const { outcome } = await run(game, city);
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(gs.vertices[vertexId].building).toBe("city");
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.vertices[vertexId]).toEqual({ building: "settlement", owner: "u1" });
+        expect(gs.playerStates.get("u1")!.resources).toMatchObject({ grain: 2, ore: 3 });
         expect(game.currentTurn).toBe("u1");
     });
 
@@ -430,9 +548,12 @@ describe("Settlements & Cities — the undoable commands never consume randomnes
     // asserted to carry no `recorded…` field once executed — the machine-
     // checked half of "only on non-random actions". A command discovered below
     // that isn't covered by name here fails the second test, which is the
-    // point: a fifth command can't opt in to undo without a reviewer adding it
+    // point: another command can't opt in to undo without a reviewer adding it
     // to this file.
-    const UNDOABLE_COMMAND_NAMES = ["SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACBuildRoad", "SACBuildSettlement"];
+    const UNDOABLE_COMMAND_NAMES = [
+        "SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACBuildRoad", "SACBuildSettlement", "SACBuildCity",
+        "SACMaritimeTrade", "SACPlayKnight", "SACPlayRoadBuilding", "SACPlayYearOfPlenty",
+    ];
 
     it("SACPlaceSettlementSetup", async () => {
         const gs = setupBoard(0);
@@ -482,7 +603,43 @@ describe("Settlements & Cities — the undoable commands never consume randomnes
         expect(consumedRandomness(command)).toBe(false);
     });
 
-    it("declares undoable on exactly these four commands, and no others", () => {
+    it("SACMaritimeTrade", async () => {
+        const gs = makeState(emptyBoard());
+        gs.playerStates.set("u1", player({ resources: { lumber: 4 } }));
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+        const command = cmd(new SACMaritimeTrade());
+        command.offerResource = "lumber";
+        command.wantResource = "wool";
+        const outcome = await command.Execute(game as unknown as IGameData);
+        expect(outcome.validMove).toBe(true);
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it("SACBuildCity", async () => {
+        const { gs } = mainBoardWithRoad({ resources: { grain: 2, ore: 3 } });
+        const game = makeGame(gs);
+        const command = cmd(new SACBuildCity());
+        command.vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        const outcome = await command.Execute(game as unknown as IGameData);
+        expect(outcome.validMove).toBe(true);
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it.each([
+        ["SACPlayKnight", { knight: 1 }, () => cmd(new SACPlayKnight())],
+        ["SACPlayRoadBuilding", { roadBuilding: 1 }, () => cmd(new SACPlayRoadBuilding())],
+        ["SACPlayYearOfPlenty", { yearOfPlenty: 1 }, () => cmd(new SACPlayYearOfPlenty())],
+    ] as const)("%s", async (_name, devCards, make) => {
+        const { gs } = mainBoardWithRoad({ devCards });
+        const game = makeGame(gs);
+        const command = make();
+        const outcome = await command.Execute(game as unknown as IGameData);
+        expect(outcome.validMove).toBe(true);
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it("declares undoable on exactly these commands, and no others", () => {
         expect(classesDeclaringUndoable().sort()).toEqual([...UNDOABLE_COMMAND_NAMES].sort());
     });
 });
