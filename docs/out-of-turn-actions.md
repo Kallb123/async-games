@@ -1,7 +1,11 @@
 # Out-of-turn actions
 
-**Status: proposal.** Nothing here is built yet. The PR that adds this document
-also removes the one turn-gate exemption the app had, which is why §3 exists.
+**Status: engine built (PR 2); no game uses it yet.** PR 1 added this document
+and removed the one turn-gate exemption the app had, which is why §3 exists.
+PR 2 built the engine half of §5 — the route, the pipeline, replay and recap —
+with one change from the design as first written: the stamp is
+`recordedOnTurnOf`, naming the player whose turn it was, rather than a
+`recordedOutOfTurn` boolean (§5.4 says why). PRs 3–5 are still to come.
 
 Every command in the app today is played by the player whose turn it is. That
 rule is enforced in one place (the command route's turn gate) and *assumed* in
@@ -35,7 +39,7 @@ from any seated, non-dropped player, and sends it down the **same pipeline with
 four invariants the route enforces** rather than trusting each command to
 remember them: it can't end or hand off the turn, can't run a follow-up, can't
 touch the turn timer, and can't clear the sender's missed-turn count. The
-server stamps it `recordedOutOfTurn`, which is how replay, recap and the
+server stamps it `recordedOnTurnOf` the active player, which is how replay, recap and the
 per-turn charts know not to treat it as the start of the sender's turn.
 Everything about *which* card and *which* phase stays in the command's own
 `Execute`, which can tell it is being played out of turn by the same test the
@@ -293,8 +297,8 @@ if (!onTurn):
     if userId ∉ userIdList               → 403 "Not a player in this game"   ← new
     → out-of-turn path
 isDropped / senderId / isCommandForGameType checks                          ← unchanged
-cmd.recordedOutOfTurn = !onTurn && playableOutOfTurn(cmd)                   ← server-stamped
-runCommand(gameData, gameType, cmd, { outOfTurn: cmd.recordedOutOfTurn })
+runCommand(gameData, gameType, cmd, { outOfTurn: !onTurn })
+    └─ outOfTurn: cmd.recordedOnTurnOf = gameData.currentTurn                ← server-stamped
 ```
 
 A class that declares `playableOutOfTurn` is still played *on* turn through the
@@ -336,18 +340,32 @@ land in the same PR.
 
 ### 5.4 Recording and replay
 
-- **`recordedOutOfTurn`**, stamped by the route *after* `stripRecordedRandomness`
-  (so a client can't forge it — the `recorded…` prefix gets that for free). It
-  joins `RECORDED_FOLLOW_UP_TO_ID` as an exception in `consumedRandomness`,
-  because it marks how a command was played, not a random outcome. It must be
-  excluded there, or every interrupt reads as having consumed randomness, and
-  the undo guards (`docs/undo.md` §6) refuse it for the wrong reason.
-- **`applyCommands`** sets `state.currentTurn = command.senderId` only for an
-  unstamped command. A stamped one runs with `currentTurn` left where the
-  previous command's `CheckEndTurn` put it, which is where it really was.
-- **`replayTurnByTurn`** doesn't treat a stamped step as a turn boundary, and
-  doesn't let it move `previousSenderId`. The interrupt's effects are sampled
-  at the end of the turn it happened in.
+- **`recordedOnTurnOf`**, stamped by `runCommand`'s `outOfTurn` option with
+  the `currentTurn` it ran against — after the route's
+  `stripRecordedRandomness`, so a client can't forge it (the `recorded…` prefix
+  gets that for free). It joins `RECORDED_FOLLOW_UP_TO_ID` as an exception in
+  `consumedRandomness`, because it marks how a command was played, not a random
+  outcome. It must be excluded there, or every interrupt reads as having
+  consumed randomness, and the undo guards (`docs/undo.md` §6) refuse it for the
+  wrong reason.
+
+  *Why a name, not a boolean* (as first designed): leaving `currentTurn` "where
+  the previous command's `CheckEndTurn` put it" is only right when every
+  hand-off went through a command. Two don't — `POST /api/game/taketurn` and the
+  turn-timer cron's plain step for a game with no turn-timeout adapter — and
+  after either, a replay would run the interrupt on the wrong player's turn,
+  where its `Execute` could even read it as *on* turn. Recording whose turn it
+  was makes replay exact whatever moved the turn, and hands PR 4's
+  "…, on {{ann}}'s turn" copy the name it needs.
+- **`applyCommands`** sets `state.currentTurn = command.senderId` for an
+  unstamped command, and to the player it names for a stamped one, then runs
+  it with `outOfTurn` so replay shares the route's invariants. A planned
+  command's stamp is ignored: it is whatever the planner's client sent.
+- **`replayTurnByTurn`** and **`countTurns`** find a turn boundary where *whose
+  turn a step was played on* changes (`playedOnTurnOf`: the stamp, else the
+  sender), rather than where the sender does. An interrupt is part of the turn
+  it happened in — including one played before that turn's owner has moved —
+  and its effects are sampled at the end of it.
 - **Planning** (`timeline` route) is untouched: it clamps every planned command
   to the caller and only plans the caller's own turn.
 
@@ -471,20 +489,24 @@ in order. Every code PR runs `npm run build`, `npx tsc --noEmit`,
 Crew: `locksmith`.
 What's new: none — a fix to a hole no player should have been using.
 
-### PR 2 — Engine: the out-of-turn path
+### PR 2 — Engine: the out-of-turn path *(built)*
 
-No game uses it yet, so nothing a player can see changes.
+No game uses it yet, so nothing a player can see changes. Built as listed,
+with the stamp renamed `recordedOnTurnOf` (§5.4), and `countTurns` given the
+same turn boundary as `replayTurnByTurn` so the result page's turn count
+agrees with its charts. The route tests use a test-only command, as item 4
+hoped.
 
 1. **Add `playableOutOfTurn`** (§5.1): the helper, read off the class; unit
    tests including a forged body.
-2. **Add `recordedOutOfTurn`.** The constant, its exclusion in
+2. **Add `recordedOnTurnOf`.** The constant, its exclusion in
    `consumedRandomness`, tests.
 3. **`runCommand`'s `outOfTurn` option.** Skip `CheckEndTurn` and follow-ups;
    refuse `turnOver` without game over. Unit tests with a test-double command.
 4. **The route's out-of-turn branch.** Membership check; stamp; call
    `runCommand` with the option; no clock, missed-turn or `YourTurn` side
    effects. Route tests for each invariant, each refusal (stranger, dropped,
-   undeclared class), the game-over branch, and a forged `recordedOutOfTurn`.
+   undeclared class), the game-over branch, and a forged `recordedOnTurnOf`.
    The tests need a declared command; a test-only class registered in the test
    file, and added to `COMMANDS_BY_GAME_TYPE` by the test's own stub, keeps real
    games out of it. If that proves awkward, move this commit into PR 4 and

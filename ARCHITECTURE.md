@@ -169,7 +169,11 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
 3. **Play.** On each turn the active player submits a **command**
    (`POST /api/game/command`). The server validates it's their turn, executes the
    command against the persisted game, checks for game-over / end-of-turn,
-   persists, and notifies the next player (see §6).
+   persists, and notifies the next player (see §6). A command whose class
+   declares `playableOutOfTurn` may also be sent by any other seated player on
+   the active player's turn — a card the rules let you play "at any time" —
+   and never ends or hands off that turn
+   ([`docs/out-of-turn-actions.md`](./docs/out-of-turn-actions.md)).
 4. **Timeout.** If a player doesn't move within their game's turn timer, the cron
    job advances the turn for them (see §7).
 
@@ -560,6 +564,9 @@ regardless of game:
 2. auth() — must be signed in
 3. load game by gameId
 4. guard: userId === gameData.currentTurn  (it's your turn)
+     …or the command's class declares playableOutOfTurn, and userId is seated
+     (403 if not) — the out-of-turn path, below
+   guard: not dropped from the game
    guard: userId === command.senderId      (not acting for someone else)
 5. outcome = await command.Execute(gameData)
    └─ if !outcome.validMove → 401
@@ -577,6 +584,23 @@ regardless of game:
 
 Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
 the replay engine and the turn-timer cron so all three run a move the same way.
+
+**Out of turn.** A command class may declare `readonly playableOutOfTurn = true`
+([`docs/out-of-turn-actions.md`](./docs/out-of-turn-actions.md)). The route
+reads it off a fresh instance of the command's *class* (`playableOutOfTurn()`
+in `gameCommand.ts`), never off the request body, and on that path checks
+membership itself — being `currentTurn` was the only membership check most
+commands got. It then runs `runCommand` with `{ outOfTurn: true }`, which
+enforces the invariants in one place for the route and replay alike: the
+command is stamped `recordedOnTurnOf` the active player (a `recorded…` field,
+so a client can't forge it), step 9 is skipped, step 10 is ignored, a
+`turnOver` that didn't end the game is refused as an invalid move, and step 8
+still runs — an interrupt can win or lose the game. The route skips steps 11
+and 13 and leaves the sender's `missedTurnCounts` alone. Everything about
+*which* kinds of a command are allowed off turn stays in its own `Execute`,
+which tells by `gameData.currentTurn !== this.senderId`; a declared command
+played on its sender's own turn takes the ordinary path.
+`playableOutOfTurnCommands.test.ts` lists every class that declares it.
 Step 10 is how a game acts on the player's behalf: an outcome can name a
 `followUpCommand`, which runs immediately as if the player had sent it — its own
 id, its own history line, its own entry on `commandHistory`, its own step in a
@@ -875,6 +899,10 @@ commands on top of the real history using the same engine.
 
 Determinism is preserved by **recording RNG outcomes** into the command the first
 time it executes (e.g. `recordedRoll`), so replays reproduce the original result.
+Replay runs each command on its sender's turn, except one stamped
+`recordedOnTurnOf` (played out of turn, §6), which runs on the turn it names,
+and a turn boundary is a change in whose turn a step was played on — so an
+interrupt never splits one turn into three.
 Per-game `IReplayAdapter`s supply the deterministic initial state and the
 response-shape converter.
 
