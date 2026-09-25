@@ -119,6 +119,11 @@ export async function runCommand(
     // The route strips every `recorded…` field from a live request, so a
     // command arriving already stamped is one replay is reading back.
     const replayingOutOfTurn = outOfTurn && isRecordedOutOfTurn(command);
+    // Whose turn it is, read before Execute: a command that ends the game
+    // clears `currentTurn` on the way (Banned Islet's escape, called on a
+    // teammate's turn, does), and the stamp has to name the player whose turn
+    // it was played on rather than nobody.
+    const onTurnOf = gameData.currentTurn;
     const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
@@ -149,7 +154,7 @@ export async function runCommand(
     }
 
     if (outOfTurn) {
-        stampOutOfTurn(command, gameData.currentTurn);
+        stampOutOfTurn(command, onTurnOf);
     }
     gameData.gameState.commandHistory.push(command);
 

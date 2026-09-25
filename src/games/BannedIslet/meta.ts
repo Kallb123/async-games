@@ -25,5 +25,9 @@ export const meta: GameMeta = {
     // for everybody) and PR 9's replay adapter (without which the board's turn
     // scrubber errors on every tap). §21.6's "What PR 5 actually shipped" says
     // why in full.
+    // A teammate may play Sandbags or a Helicopter Lift on your turn
+    // (docs/out-of-turn-actions.md §5.5), so the board polls while it is yours
+    // and every move says which board it was built against.
+    hasOutOfTurnPlays: true,
     available: true,
 };

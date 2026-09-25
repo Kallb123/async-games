@@ -234,6 +234,27 @@ describe("Banned Islet — what can't be taken back", () => {
         expect(seat(game, "u1").position).toBe(NORTH_OF_MIDDLE);
     });
 
+    it("forgets the stack when a teammate plays a special on this turn, so no undo can hand it back", async () => {
+        // Without that, the active player's next action pushes a snapshot
+        // taken after the teammate's card, and undoing *two* would reach one
+        // taken before it: the tile wet again and the card back in the
+        // teammate's hand, on a move the teammate never took back.
+        const game = makeGame(baseState({ u1: {}, u2: { hand: ["sandbags"] } }, { flooded: [EAST_OF_MIDDLE] }));
+        await run(game, action("move", { target: NORTH_OF_MIDDLE }));
+
+        const outOfTurn = await runCommand(game, new BannedIsletGameType(), playCard({ cardId: "sandbags", target: EAST_OF_MIDDLE }, "u2"), { outOfTurn: true });
+        expect(outOfTurn.outcome.validMove).toBe(true);
+        expect(game.specificGameState.undoStack).toHaveLength(0);
+        expect(game.specificGameState.undoAnchorId).toBeNull();
+
+        await run(game, action("move", { target: MIDDLE }));
+        expect((await run(game, undo())).outcome.validMove).toBe(true);
+        expect(seat(game, "u1").position).toBe(NORTH_OF_MIDDLE);
+        expect((await run(game, undo())).outcome.validMove).toBe(false);
+        expect(game.specificGameState.positions[EAST_OF_MIDDLE].state).toBe("dry");
+        expect(seat(game, "u2").hand).toEqual([]);
+    });
+
     it("forgets the stack when a player drops out, so no snapshot can bring their pawn back", async () => {
         const game = makeGame(baseState({ u1: {}, u2: {}, u3: {} }), ["u1", "u2", "u3"]);
         await run(game, action("move", { target: NORTH_OF_MIDDLE }));

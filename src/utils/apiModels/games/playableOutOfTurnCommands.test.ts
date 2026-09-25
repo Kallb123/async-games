@@ -26,7 +26,12 @@ import "../GameLogic";
 // Built from the live registry rather than a list of files, which is why it
 // lives apart from outOfTurn.test.ts: that file registers test-only classes
 // that declare the flag, and they'd land here.
-const PLAYABLE_OUT_OF_TURN: string[] = [];
+const PLAYABLE_OUT_OF_TURN: string[] = [
+    // Both specials, in either of the active player's phases (rules.ts
+    // outOfTurnPlayable); spends only the sender's card; never runs the
+    // flood or closes the discard off turn, and clears the undo stack.
+    "BannedIsletPlayCard",
+];
 
 describe("commands playable out of turn", () => {
     it("are exactly the reviewed list", () => {

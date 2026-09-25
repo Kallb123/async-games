@@ -1159,7 +1159,12 @@ action phase is random and none of it ends a turn.
   push, sometimes I don't" shape as Race Cars' oil check, decided by the phase
   it starts in rather than by what the command rolled. The Helicopter Lift that
   wins sets `complete` outside `specificGameState` and pushes nothing, like a
-  Race Cars leg that crosses the line.
+  Race Cars leg that crosses the line. And a special a teammate plays on
+  somebody else's turn ([`out-of-turn-actions.md`](./out-of-turn-actions.md)
+  §5.5) pushes nothing and **empties the stack**: its sender has no Undo off
+  turn, and every snapshot the active player holds was taken before it, so the
+  second of two undos would otherwise restore a board from before the card and
+  hand it back.
 - **No hold (§5).** A Banned Islet turn has never ended itself: only
   `BannedIsletEndTurn` hands off, and the player sends it. So there is no
   `autoEndTurnAt`, no countdown and no "Pass now" — Undo simply stays available

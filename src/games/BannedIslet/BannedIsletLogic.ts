@@ -1,5 +1,6 @@
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import { recordedOnTurnOf } from "@/utils/apiModels/gameCommand";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
@@ -32,6 +33,7 @@ import {
     moveTargets,
     navigatorCanMoveOthers,
     navigatorMoveTargets,
+    outOfTurnPlayable,
     pilotFlightAvailable,
     flightTargets,
     liftOrigin,
@@ -215,9 +217,10 @@ function applyCapture(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerS
 // Undoable: every BannedIsletAction (a move, a shore up, a give, a capture, a
 // role ability, even a pass), and a special card played in the action phase.
 // Never: BannedIsletEndTurn and BannedIsletDiscard, which draw and flood; a
-// special played mid-discard, which can close the turn and run the flood; and
-// the Helicopter Lift that wins, which ends the game outside
-// `specificGameState` where no snapshot can reach.
+// special played mid-discard, which can close the turn and run the flood; the
+// Helicopter Lift that wins, which ends the game outside `specificGameState`
+// where no snapshot can reach; and a special played on a teammate's turn,
+// which clears the stack instead (see BannedIsletPlayCard).
 
 /** The pre-move state, taken before a command's first mutation and pushed only once it has succeeded. */
 function undoSnapshot(data: IBannedIsletGameData): IBannedIsletSpecificGameState {
@@ -857,11 +860,16 @@ export class BannedIsletDiscard implements IGameCommand {
 // §10's two playable specials in one parameterised command — the fourth and
 // last of §21.4's "four command classes, not fifteen". Neither costs an action
 // (§8: special cards "are not actions and do not cost one"), so neither
-// touches `actionsLeft`, and §21.3 puts both on the holder's own turn: at any
+// touches `actionsLeft`. On the holder's own turn both can be played at any
 // point in their action phase, and during their own discard phase to duck the
 // hand limit, which §10 calls the only way Sandbags reliably reaches the
-// board. The command route already rejects anything from a user who isn't
-// `currentTurn`, so nothing here re-checks whose turn it is.
+// board.
+//
+// And on a teammate's turn too (§21.3, docs/out-of-turn-actions.md §5.5): the
+// class declares `playableOutOfTurn`, so the command route lets any seated
+// player send it, and this Execute is what decides what they may do with it —
+// `outOfTurnPlayable` for which card in which phase, and the rest of the
+// out-of-turn branch below for what a teammate's card must never touch.
 //
 // This is also where the game is won. §4.1's fourth condition is a Helicopter
 // Lift actually played, which is what makes the win an action taken rather
@@ -917,6 +925,16 @@ function applyHelicopterLift(
     return `played Helicopter Lift, flying ${flown} from ${tileName(gs.positions[from].tile)} to ${tileName(gs.positions[target].tile)}`;
 }
 
+/**
+ * The tail a special played on a teammate's turn carries — ", on {{ann}}'s
+ * turn" — in its history line and its `myString()` alike, so the log, the
+ * review and the recap call it the same thing (docs/out-of-turn-actions.md
+ * §5.5). Empty for a card played on its holder's own turn.
+ */
+function onTurnOfClause(onTurnOf: string | undefined): string {
+    return onTurnOf ? `, on ${userToken(onTurnOf)}'s turn` : '';
+}
+
 @serializable
 export class BannedIsletPlayCard implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
@@ -939,12 +957,16 @@ export class BannedIsletPlayCard implements IGameCommand {
      */
     recordedFloodShuffles?: BannedIsletTileId[][];
     readonly className = 'BannedIsletPlayCard';
-    // Only when played in the action phase and it didn't win — enforced in
-    // Execute, not here (docs/undo.md, above).
+    // Only when played on the sender's own turn, in the action phase, and it
+    // didn't win — enforced in Execute, not here (docs/undo.md, above).
     readonly undoable = true;
+    // Read off the class by the command route, never off a request
+    // (docs/out-of-turn-actions.md §5.1). Execute polices the rest.
+    readonly playableOutOfTurn = true;
 
     myString() {
-        return this.cardId ? `played ${cardName(this.cardId)}` : 'played a special card';
+        const played = this.cardId ? `played ${cardName(this.cardId)}` : 'played a special card';
+        return played + onTurnOfClause(recordedOnTurnOf(this));
     }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
@@ -954,12 +976,21 @@ export class BannedIsletPlayCard implements IGameCommand {
         const ps = playerState(gs, this.senderId);
         if (!ps) return INVALID;
         // Both of the game's phases accept a special (§21.3), so — unlike
-        // every other command here — there is no phase to refuse.
+        // every other command here — there is no phase to refuse on the
+        // holder's own turn.
         const card = this.cardId;
         // Held, and one of the two that can be played at all: a treasure card
         // is collected rather than played (§8), and Waters Rise! is never in a
-        // hand to begin with (§10).
+        // hand to begin with (§10). Always the sender's own hand, on or off
+        // turn: a teammate spends their card, never the active player's.
         if (!card || !isPlayableCard(card) || !ps.hand.includes(card)) return INVALID;
+
+        // The test the command route used to let this through
+        // (docs/out-of-turn-actions.md §5.3), which replay reproduces from the
+        // recorded stamp. Off turn, rules.ts decides what is allowed — the
+        // same answer the board screen offers a waiting player from.
+        const outOfTurn = data.currentTurn !== this.senderId;
+        if (outOfTurn && !outOfTurnPlayable(gs.phase, card)) return INVALID;
 
         // Before the first mutation. Read now because the phase is what decides
         // whether this card is undoable at all: mid-discard it can close the
@@ -977,7 +1008,9 @@ export class BannedIsletPlayCard implements IGameCommand {
 
         ps.hand.splice(ps.hand.indexOf(card), 1);
         gs.treasureDiscard.push(card);
-        data.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+        // Read before endInEscape clears `currentTurn`.
+        const onTurnOf = outOfTurn ? data.currentTurn : undefined;
+        data.gameState.history.unshift(playerHistory(this.senderId, historyLine + onTurnOfClause(onTurnOf)));
 
         // §4.1 and §16: all four conditions are checked at the moment the card
         // is played, and the card is spent either way. Checked *after* the lift
@@ -986,6 +1019,23 @@ export class BannedIsletPlayCard implements IGameCommand {
         if (card === 'helicopterLift' && isEscapeReady(gs.positions, gs.treasures, pawnList(gs).map(p => p.position))) {
             endInEscape(data);
             return floodPhaseOutcome(true, []);
+        }
+
+        // On a teammate's turn: the discard, the flood and the turn itself all
+        // belong to the active player, so this finishes none of them — a hand
+        // at the limit here is the *sender's*, and closing the active
+        // player's discard on the strength of it would end their turn without
+        // it (docs/out-of-turn-actions.md §2 row 8). Nothing runs the flood,
+        // so nothing is shuffled and `recordedFloodShuffles` stays empty.
+        //
+        // Nor can it be taken back. Its sender has no Undo off turn, and the
+        // active player's own snapshots were all taken before it — so the
+        // stack goes, rather than letting a later undo of theirs restore a
+        // board from before a teammate's card and hand that card back.
+        if (outOfTurn) {
+            gs.undoStack = [];
+            gs.undoAnchorId = null;
+            return floodPhaseOutcome(false, []);
         }
 
         // Played in the action phase this ends nothing and touches no deck, so

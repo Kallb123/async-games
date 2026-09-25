@@ -15,7 +15,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Take up to three actions, in any mix you like: move to a neighbouring tile, shore a flooded tile back to dry, hand a treasure card to somebody standing on your tile, or capture a treasure by discarding four matching cards while standing on either of that treasure's tiles. Then you draw two treasure cards — nobody may hold more than five, so a full hand has to spend or ditch something — and the sea floods the island. Helicopter Lift and Sandbags cost no action — playing one is free, any time it's your turn.",
+            body: "Take up to three actions, in any mix you like: move to a neighbouring tile, shore a flooded tile back to dry, hand a treasure card to somebody standing on your tile, or capture a treasure by discarding four matching cards while standing on either of that treasure's tiles. Then you draw two treasure cards — nobody may hold more than five, so a full hand has to spend or ditch something — and the sea floods the island. Helicopter Lift and Sandbags cost no action, and you can play them on a teammate's turn too — fly the team somewhere, dry a tile before their flood, or call the escape the moment everyone's on the pier.",
         },
         {
             heading: "Flooded, then gone",

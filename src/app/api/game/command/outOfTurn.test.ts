@@ -8,11 +8,13 @@
 // carrying the `expectedCommandCount` of the board it was built against is
 // refused once an interrupt has moved that board.
 //
-// No real game declares the flag yet, so these run against a test-only command
-// registered here and admitted to Snakes and Ladders by this file's own stub of
-// the command registry — keeping every real game's command list out of it.
-// Everything else is the real route, pipeline and game type, as in
-// gameRoutes.test.ts.
+// The invariants run against a test-only command registered here and admitted
+// to Snakes and Ladders by this file's own stub of the command registry — so
+// each one can be tried with a command built to break it, and no real game's
+// command list is bent to allow that. Everything else is the real route,
+// pipeline and game type, as in gameRoutes.test.ts. The first real game to
+// declare the flag, Banned Islet, has its own block at the bottom: its
+// escape is the one interrupt that ends a game.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,13 +38,16 @@ vi.mock('@/utils/games/gameCommands', async (importOriginal) => {
 });
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
-import { ANN, BOB, jsonPost, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, jsonPost, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { serializable } from '@/utils/apiModels/Serialisable';
 import { playerHistory } from '@/utils/games/history';
 import type { ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { uuidString } from '@/utils/apiModels/GameDataApi';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import type { ISnakesAndLaddersGameData } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
+import type { IBannedIsletSpecificGameState } from '@/games/BannedIslet/BannedIsletModels';
+import { HAND_LIMIT, PIER_TILE, TREASURE_IDS } from '@/games/BannedIslet/board';
+import { FAR_EAST, MIDDLE, baseState as bannedIsletState } from '@/games/BannedIslet/testFixtures';
 import { POST as command } from './route';
 
 const CAROL = { id: 'user_carol', username: 'carol' };
@@ -360,5 +365,83 @@ describe('POST /api/game/command, a move that says which board it was built agai
         expect(stale.status).toBe(409);
         expect(fresh.status).toBe(200);
         expect(commandHistory()).toHaveLength(2);
+    });
+});
+
+/** A Banned Islet game with Ann to play, holding the island `gs` describes. */
+function seedBannedIslet(gs: IBannedIsletSpecificGameState) {
+    seedGame({
+        gameId: 'game_1',
+        gameType: {
+            gameId: 'gametype_1', gameType: 'BannedIslet', friendlyName: 'Banned Islet',
+            icon: '', url: 'bannedislet', className: 'BannedIsletGameType'
+        },
+        kind: 'BannedIsletGameData',
+        userIdList: [ANN.id, BOB.id],
+        turnTimer: '1 day',
+        currentTurn: ANN.id,
+        lastTurnTimestamp: STALE,
+        timerWarningNotificationSent: true,
+        gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
+        complete: false,
+        winner: '',
+        specificGameState: { ...gs, players: Object.fromEntries(gs.players) },
+    });
+}
+
+/** Bob's special, as his client posts it on Ann's turn. */
+function bobPlays(fields: Record<string, unknown>) {
+    return jsonPost('/api/game/command', {
+        gameId: 'game_1', senderId: BOB.id, senderUsername: 'bob', className: 'BannedIsletPlayCard', ...fields,
+    });
+}
+
+describe('POST /api/game/command, Banned Islet\'s specials on a teammate\'s turn', () => {
+    it('calls the escape on Ann\'s turn, and the game ends through the ordinary game-over branch', async () => {
+        const gs = bannedIsletState(
+            { [ANN.id]: { position: MIDDLE }, [BOB.id]: { position: MIDDLE, hand: ['helicopterLift'] } },
+            { tiles: { [MIDDLE]: PIER_TILE } },
+        );
+        for (const id of TREASURE_IDS) gs.treasures[id] = true;
+        seedBannedIslet(gs);
+        signIn(BOB);
+
+        const response = await command(bobPlays({ cardId: 'helicopterLift', target: -1, userIds: [] }));
+
+        expect(response.status).toBe(200);
+        const saved = storedGame('game_1')!;
+        expect(saved.complete).toBe(true);
+        expect(saved.endReason).toBe('teamwin');
+        expect(commandHistory()[0].recordedOnTurnOf).toBe(ANN.id);
+        await runAfterCallbacks();
+        expect(recordGameResult).toHaveBeenCalled();
+    });
+
+    it('sandbags a tile mid-discard without closing Ann\'s turn, her clock or her discard', async () => {
+        const gs = bannedIsletState(
+            {
+                [ANN.id]: { actionsLeft: 0, hand: ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'stormIdol'] },
+                [BOB.id]: { hand: ['sandbags'] },
+            },
+            { flooded: [FAR_EAST] },
+        );
+        gs.phase = 'discard';
+        gs.floodDeck = ['kelpStair', 'saltMarket'];
+        seedBannedIslet(gs);
+        signIn(BOB);
+
+        const response = await command(bobPlays({ cardId: 'sandbags', target: FAR_EAST }));
+
+        expect(response.status).toBe(200);
+        const saved = storedGame('game_1')!;
+        const stored = saved.specificGameState as unknown as IBannedIsletSpecificGameState & { players: Record<string, { hand: string[] }> };
+        expect(saved.currentTurn).toBe(ANN.id);
+        expect(saved.lastTurnTimestamp).toBe(STALE);
+        expect(stored.phase).toBe('discard');
+        expect(stored.players[ANN.id].hand).toHaveLength(HAND_LIMIT + 1);
+        expect(stored.floodDeck).toEqual(['kelpStair', 'saltMarket']);
+        expect(stored.positions[FAR_EAST].state).toBe('dry');
+        await runAfterCallbacks();
+        expect(sentPushes).toEqual([]);
     });
 });
