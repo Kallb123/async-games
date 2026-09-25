@@ -287,6 +287,22 @@ describe("a command played out of turn", () => {
         expect(endTurns).toEqual([]);
     });
 
+    it("stamps whose turn it was even when ending the game cleared currentTurn", async () => {
+        const { gameData, type } = twoSeatGame();
+        const endsIt: IGameType = { ...type, CheckGameOver: () => true };
+        const escape: IGameCommand = {
+            ...interrupt(),
+            Execute: async (data: IGameData) => {
+                data.currentTurn = "";
+                return { validMove: true, turnOver: true };
+            },
+        };
+
+        await runCommand(gameData, endsIt, escape, { outOfTurn: true });
+
+        expect(recordedOnTurnOf(gameData.gameState.commandHistory[0])).toBe("user_a");
+    });
+
     it("ignores a follow-up it asks for", async () => {
         const { gameData, type } = twoSeatGame();
         const followUp: IGameCommand = { ...makeCommand(1), id: "follow" as IGameCommand["id"], className: "FollowUp" };
