@@ -5,6 +5,7 @@ import BuildRow, { BuildRowProps } from '@/components/ui/BuildRow';
 import PendingTag from '@/components/ui/PendingTag';
 import UndoButton from '@/components/ui/UndoButton';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
+import { useArmedPick } from '@/utils/hooks/useArmedPick';
 import { useResettingState } from '@/utils/hooks/useResettingState';
 import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn, BannedIsletPlayCard, BannedIsletUndo } from '@/utils/apiModels/GameLogic';
 import type { IBannedIsletSpecificGameStateResponse } from '@/games/BannedIslet/apiModels';
@@ -21,7 +22,7 @@ import {
     treasureName,
     BannedIsletCardId,
 } from '@/games/BannedIslet/board';
-import { countCards, isEscapeReady, liftOrigin, treasureAt } from '@/games/BannedIslet/rules';
+import { countCards, isEscapeReady, liftOrigin, outOfTurnPlayable, treasureAt } from '@/games/BannedIslet/rules';
 import { pluralize } from '@/utils/ui/text';
 
 /**
@@ -54,6 +55,12 @@ export interface BannedIsletPick {
     userId?: string;
     /** helicopterLift: whose pawns are flying, all from one tile (§10). */
     userIds?: string[];
+    /**
+     * helicopterLift: the passengers are still being chosen, in the sheet
+     * rather than on the board — so the board has nothing to offer yet. Held
+     * here rather than in the sheet so it disarms with every other pick.
+     */
+    boarding?: boolean;
     /** shoreUp, Engineer only: the tile already banked, waiting on a second (§12). */
     first?: number;
 }
@@ -89,7 +96,7 @@ function CancelButton({ onClick, gap = 8 }: { onClick: () => void; gap?: number 
 
 interface DiscardPickerProps {
     hand: BannedIsletCardId[];
-    /** §10's specials, offered as the alternative to letting a card go — see SpecialCards. */
+    /** §10's specials, offered as the alternative to letting a card go — see BannedIsletSpecials. */
     specials: React.ReactNode;
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
@@ -212,9 +219,24 @@ function LiftPassengers({ gs, chosen, onChange, onReady, onCancel, submitting }:
     );
 }
 
-interface SpecialCardsProps {
-    rows: ActionRow[];
+interface BannedIsletSpecialsProps {
+    gs: IBannedIsletSpecificGameStateResponse;
+    myUserId: string;
+    pick: BannedIsletPick | null;
+    onPickChange: (pick: BannedIsletPick | null) => void;
+    /** How many tiles a Sandbags could dry right now — 0 disables its row. */
+    sandbagsReach: number;
+    /** The line the rows are introduced with. */
     hint: string;
+    /**
+     * Played on a teammate's turn (docs/out-of-turn-actions.md §5.8): only the
+     * cards `outOfTurnPlayable` allows, in a sheet of their own, since the turn
+     * sheet they would otherwise sit in is the active player's and read-only.
+     */
+    outOfTurn?: boolean;
+    submitCommand: SubmitCommand;
+    pendingTarget: string | null;
+    submitting: boolean;
 }
 
 /**
@@ -223,15 +245,112 @@ interface SpecialCardsProps {
  * button once those are spent, *and* beside the hand-limit picker — §10 calls
  * playing one instead of discarding it "the only way Sandbags reliably reaches
  * the board", and a player who can only discard would never get it there.
+ *
+ * And off the holder's turn altogether: the page renders this on its own,
+ * outside the read-only turn sheet, for a teammate holding a card they may
+ * play on the active player's turn (§21.3). One row per *kind* held — the
+ * copies are interchangeable.
+ *
+ * While a lift is boarding, this is the passenger picker instead, and takes
+ * whichever sheet it sits in.
  */
-function SpecialCards({ rows, hint }: SpecialCardsProps) {
+export function BannedIsletSpecials({
+    gs,
+    myUserId,
+    pick,
+    onPickChange,
+    sandbagsReach,
+    hint,
+    outOfTurn = false,
+    submitCommand,
+    pendingTarget,
+    submitting,
+}: BannedIsletSpecialsProps) {
+    const me = gs.playerStates[myUserId];
+    if (!me) return null;
+
+    // ── Choosing a lift's passengers (§10), which is a decision about pawns
+    //     rather than about a tile and so has nowhere on the board to be made. ──
+    if (pick?.mode === 'helicopterLift' && pick.boarding) {
+        const chosen = pick.userIds ?? [];
+        return (
+            <LiftPassengers
+                gs={gs}
+                chosen={chosen}
+                onChange={userIds => onPickChange({ mode: 'helicopterLift', userIds, boarding: true })}
+                onReady={() => onPickChange({ mode: 'helicopterLift', userIds: chosen })}
+                onCancel={() => onPickChange(null)}
+                submitting={submitting}
+            />
+        );
+    }
+
+    function playCard(apply: (cmd: BannedIsletPlayCard) => void, target: string) {
+        const cmd = new BannedIsletPlayCard();
+        apply(cmd);
+        submitCommand(cmd, undefined, target);
+    }
+
+    // Off turn, a card rules.ts says a teammate can't play is one this sheet
+    // doesn't have.
+    const held = (card: BannedIsletCardId) =>
+        outOfTurn && !outOfTurnPlayable(gs.phase, card) ? 0 : countCards(me.hand, card);
+    const lifts = held('helicopterLift');
+    const sandbags = held('sandbags');
+    // §4.1's first three conditions, asked of the same rules.ts the win itself
+    // is decided by: everything aboard, and the whole team on an unsunk pier.
+    // The fourth is the card, and playing it is what wins — on anyone's turn.
+    const escapeReady = isEscapeReady(gs.positions, gs.treasures, Object.values(gs.playerStates).map(ps => ps.position));
+
+    const rows: ActionRow[] = [];
+    if (lifts > 0 && escapeReady) {
+        rows.push({
+            key: 'escape',
+            icon: cardGlyph('helicopterLift'),
+            name: 'Lift off and win',
+            cost: `Every treasure is aboard and the whole team is on ${tileName(PIER_TILE)} — this is the escape`,
+            disabled: submitting,
+            pending: pendingTarget === 'escape',
+            tag: pendingTarget === 'escape' ? <PendingTag label="Lifting off" /> : '🎉 Escape',
+            onClick: () => playCard(cmd => { cmd.cardId = 'helicopterLift'; }, 'escape'),
+        });
+    } else if (lifts > 0) {
+        const armed = pick?.mode === 'helicopterLift';
+        rows.push({
+            key: 'helicopterLift',
+            icon: cardGlyph('helicopterLift'),
+            name: cardName('helicopterLift'),
+            cost: 'Fly any number of pawns off one tile to any other. Costs no action',
+            disabled: submitting,
+            active: armed,
+            tag: lifts > 1 ? `${lifts} in hand` : 'Play',
+            // Tapping the armed row puts the helicopter back down; tapping it
+            // otherwise asks who is flying.
+            onClick: () => onPickChange(armed ? null : { mode: 'helicopterLift', userIds: [], boarding: true }),
+        });
+    }
+    if (sandbags > 0) {
+        rows.push({
+            key: 'sandbags',
+            icon: cardGlyph('sandbags'),
+            name: cardName('sandbags'),
+            cost: 'Dry any one flooded tile, anywhere on the island. Costs no action',
+            disabled: submitting || sandbagsReach === 0,
+            active: pick?.mode === 'sandbags',
+            tag: sandbagsReach === 0 ? 'Nothing flooded' : `${sandbagsReach} ${sandbagsReach === 1 ? 'tile' : 'tiles'}`,
+            tagMuted: sandbagsReach === 0,
+            onClick: () => onPickChange(pick?.mode === 'sandbags' ? null : { mode: 'sandbags' }),
+        });
+    }
     if (rows.length === 0) return null;
-    return (
+
+    const cards = (
         <>
-            <p className="ag-action-hint">{hint}</p>
+            <p className="ag-action-hint" style={outOfTurn ? { marginTop: 0 } : undefined}>{hint}</p>
             <ActionRows rows={rows} />
         </>
     );
+    return outOfTurn ? <div className="ag-actionsheet">{cards}</div> : cards;
 }
 
 interface BannedIsletActionsProps {
@@ -242,7 +361,8 @@ interface BannedIsletActionsProps {
      * off-turn too, made inert by `ReadOnlyPanel`, so that a waiting player
      * reads what they *will* be able to do (AGENTS.md) — but `phase` and the
      * action counter belong to whoever is playing, not to the reader, so the
-     * two turn-closing sheets below are the viewer's own or nobody's.
+     * two turn-closing sheets below are the viewer's own or nobody's. So are
+     * the specials: off turn the page offers them live, outside this sheet.
      */
     isMyTurn: boolean;
     /** Which tile-picking action is armed, and what it is acting on. */
@@ -250,6 +370,8 @@ interface BannedIsletActionsProps {
     onPickChange: (pick: BannedIsletPick | null) => void;
     /** How many tiles each of the single-list choices can currently reach — 0 disables its row. */
     targetCounts: Record<BannedIsletCountedMode, number>;
+    /** The board's version (`gameState.commandCount`): a half-chosen give disarms when it moves, like the board's own pick. */
+    commandCount: number | undefined;
     /** §8 / §12: the teammates I may hand a treasure card to — my own tile, or anywhere if I am the Messenger. */
     giveMates: string[];
     /** §12 Navigator: where each teammate's pawn could be sent, keyed by seat. Empty for every other role. */
@@ -275,10 +397,13 @@ interface BannedIsletActionsProps {
  *
  * Off-turn the whole sheet is made inert by `ReadOnlyPanel` on the page: a
  * waiting player reads what they *will* be able to do rather than being shown
- * nothing (AGENTS.md). That is the only thing `isMyTurn` is for — it keeps the
+ * nothing (AGENTS.md). That is most of what `isMyTurn` is for — it keeps the
  * two sheets that *close* a turn (the End Turn button and the hand-limit
  * picker) off a reader's screen, since `phase` and `actionsLeft` describe
- * whoever is playing rather than whoever is looking.
+ * whoever is playing rather than whoever is looking. It also keeps §10's
+ * specials out of the inert copy: a teammate *can* play those on this turn,
+ * so the page renders them live as `BannedIsletSpecials`, and a second, dead
+ * copy here would only say they can't.
  *
  * Once the three actions are spent the sheet becomes the End Turn button, and
  * if the two cards drawn push the hand past the limit it becomes the discard
@@ -292,6 +417,7 @@ export default function BannedIsletActions({
     pick,
     onPickChange,
     targetCounts,
+    commandCount,
     giveMates,
     navigatorReach,
     onShoreUpFirstOnly,
@@ -303,21 +429,11 @@ export default function BannedIsletActions({
 
     // Which teammate a card is being handed to, mid-pick. Keyed on the actions
     // left so it clears itself the moment one is spent — which is both the
-    // successful give and the start of anybody's next turn.
-    const [giveTo, setGiveTo] = useResettingState<string | null>(null, `${myUserId}:${me?.actionsLeft ?? 0}`);
-
-    // Who is boarding the helicopter, mid-pick — null while the picker is
-    // shut. Keyed on the hand rather than the action counter, because §10's
-    // specials cost no action: what clears this is the lift leaving the hand.
-    const [liftPassengers, setLiftPassengers] = useResettingState<string[] | null>(null, `${myUserId}:${me?.hand.join(',') ?? ''}`);
+    // successful give and the start of anybody's next turn — and on the board,
+    // so a teammate's lift carrying either pawn away mid-choice disarms it.
+    const [giveTo, setGiveTo] = useArmedPick<string>(`${myUserId}:${me?.actionsLeft ?? 0}`, commandCount);
 
     if (!me) return null;
-
-    function playCard(apply: (cmd: BannedIsletPlayCard) => void, target: string) {
-        const cmd = new BannedIsletPlayCard();
-        apply(cmd);
-        submitCommand(cmd, undefined, target);
-    }
 
     // Taking back the last action or special (docs/undo.md). `canUndo` is only
     // ever true for the player who made the move, and never once End turn has
@@ -331,77 +447,28 @@ export default function BannedIsletActions({
         />
     ) : null;
 
-    // ── §10's two playable specials, built before any of the sheets below
-    //     because all three of them offer these: they cost no action (§8), so
-    //     neither an empty action counter nor the hand-limit discard takes
-    //     them off the table. One row per *kind* held — the copies are
-    //     interchangeable. ──
-    const specialRows: ActionRow[] = [];
-    const lifts = countCards(me.hand, 'helicopterLift');
-    const sandbags = countCards(me.hand, 'sandbags');
-    // §4.1's first three conditions, asked of the same rules.ts the win itself
-    // is decided by: everything aboard, and the whole team on an unsunk pier.
-    // The fourth is the card, and playing it is what wins.
-    const escapeReady = isEscapeReady(gs.positions, gs.treasures, Object.values(gs.playerStates).map(ps => ps.position));
+    // ── §10's two playable specials, offered by all three of the sheets
+    //     below: they cost no action (§8), so neither an empty action counter
+    //     nor the hand-limit discard takes them off the table. Only on the
+    //     viewer's own turn — off it, the page offers them live, outside this
+    //     read-only sheet. ──
+    const specials = (hint: string) => isMyTurn ? (
+        <BannedIsletSpecials
+            gs={gs}
+            myUserId={myUserId}
+            pick={pick}
+            onPickChange={onPickChange}
+            sandbagsReach={targetCounts.sandbags}
+            hint={hint}
+            submitCommand={submitCommand}
+            pendingTarget={pendingTarget}
+            submitting={submitting}
+        />
+    ) : null;
 
-    if (lifts > 0 && escapeReady) {
-        specialRows.push({
-            key: 'escape',
-            icon: cardGlyph('helicopterLift'),
-            name: 'Lift off and win',
-            cost: `Every treasure is aboard and the whole team is on ${tileName(PIER_TILE)} — this is the escape`,
-            disabled: submitting,
-            pending: pendingTarget === 'escape',
-            tag: pendingTarget === 'escape' ? <PendingTag label="Lifting off" /> : '🎉 Escape',
-            onClick: () => playCard(cmd => { cmd.cardId = 'helicopterLift'; }, 'escape'),
-        });
-    } else if (lifts > 0) {
-        const armed = pick?.mode === 'helicopterLift';
-        specialRows.push({
-            key: 'helicopterLift',
-            icon: cardGlyph('helicopterLift'),
-            name: cardName('helicopterLift'),
-            cost: 'Fly any number of pawns off one tile to any other. Costs no action',
-            disabled: submitting,
-            active: armed,
-            tag: lifts > 1 ? `${lifts} in hand` : 'Play',
-            // Tapping the armed row puts the helicopter back down; tapping it
-            // otherwise asks who is flying.
-            onClick: () => (armed ? onPickChange(null) : setLiftPassengers([])),
-        });
-    }
-    if (sandbags > 0) {
-        specialRows.push({
-            key: 'sandbags',
-            icon: cardGlyph('sandbags'),
-            name: cardName('sandbags'),
-            cost: 'Dry any one flooded tile, anywhere on the island. Costs no action',
-            disabled: submitting || targetCounts.sandbags === 0,
-            active: pick?.mode === 'sandbags',
-            tag: targetCounts.sandbags === 0 ? 'Nothing flooded' : `${targetCounts.sandbags} ${targetCounts.sandbags === 1 ? 'tile' : 'tiles'}`,
-            tagMuted: targetCounts.sandbags === 0,
-            onClick: () => onPickChange(pick?.mode === 'sandbags' ? null : { mode: 'sandbags' }),
-        });
-    }
-
-    // ── Choosing a lift's passengers (§10), which is a decision about pawns
-    //     rather than about a tile and so has nowhere on the board to be made.
-    //     Takes the screen wherever the turn is, including mid-discard. ──
-    if (liftPassengers !== null) {
-        return (
-            <LiftPassengers
-                gs={gs}
-                chosen={liftPassengers}
-                onChange={setLiftPassengers}
-                onReady={() => {
-                    onPickChange({ mode: 'helicopterLift', userIds: liftPassengers });
-                    setLiftPassengers(null);
-                }}
-                onCancel={() => setLiftPassengers(null)}
-                submitting={submitting}
-            />
-        );
-    }
+    // A lift that is boarding takes the screen wherever the turn is,
+    // including mid-discard: the specials render as its passenger picker.
+    if (isMyTurn && pick?.mode === 'helicopterLift' && pick.boarding) return specials('');
 
     // ── Over the hand limit (§10, §16): the island is waiting on this, and
     //     nothing else on the turn can happen until the hand is back down —
@@ -413,7 +480,7 @@ export default function BannedIsletActions({
         return (
             <DiscardPicker
                 hand={me.hand}
-                specials={<SpecialCards rows={specialRows} hint="🃏 Or play one of these instead of letting it go — they cost no action." />}
+                specials={specials("🃏 Or play one of these instead of letting it go — they cost no action.")}
                 submitCommand={submitCommand}
                 pendingTarget={pendingTarget}
                 submitting={submitting}
@@ -445,7 +512,7 @@ export default function BannedIsletActions({
                         End turn
                     </ActionButton>
                 </div>
-                <SpecialCards rows={specialRows} hint="🃏 These cost no action — you can still play one." />
+                {specials("🃏 These cost no action — you can still play one.")}
             </div>
         );
     }
@@ -655,7 +722,7 @@ export default function BannedIsletActions({
 
             <ActionRows rows={rows} />
 
-            <SpecialCards rows={specialRows} hint="🃏 Special cards cost no action — play one whenever it is your turn." />
+            {specials("🃏 Special cards cost no action — play one on your turn or a teammate's.")}
 
             {undoButton && <div className="ag-action-grid" style={{ marginTop: 10 }}>{undoButton}</div>}
 

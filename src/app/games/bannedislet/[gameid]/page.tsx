@@ -6,7 +6,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { BannedIsletAction, BannedIsletPlayCard, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IBannedIsletGameDataResponse, IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
-import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/components/BannedIsletActions";
+import BannedIsletActions, { BannedIsletPick, BannedIsletSpecials } from "@/games/BannedIslet/components/BannedIsletActions";
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
 import BannedIsletWaterLevelScale from "@/games/BannedIslet/components/BannedIsletWaterLevelScale";
@@ -22,6 +22,7 @@ import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import Stat from "@/components/ui/Stat";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
+import { useArmedPick } from "@/utils/hooks/useArmedPick";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
@@ -38,6 +39,7 @@ import {
     liftOrigin,
     moveTargets,
     navigatorMoveTargets,
+    outOfTurnPlayable,
     pilotFlightAvailable,
     flightTargets,
     positionOfTile,
@@ -133,8 +135,10 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     // Which tile-picking action is armed, if any — and, for the two that act on
     // something other than the viewer's own pawn, what they are acting on (§12).
     // Reset whenever the turn changes, so a stale pick never lingers into
-    // somebody else's turn.
-    const [pick, setPick] = useResettingState<BannedIsletPick | null>(null, `${displayedCurrentTurn}`);
+    // somebody else's turn, and whenever the board moves under it: a
+    // teammate's special can land between the two taps (useArmedPick).
+    const commandCount = gameData?.gameState?.commandCount;
+    const [pick, setPick] = useArmedPick<BannedIsletPick>(`${displayedCurrentTurn}`, commandCount);
 
     // Which tile a tapped flood-discard card is ringing on the island right
     // now — purely a lookup aid on a board of 24 shuffled names, reset
@@ -186,7 +190,9 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             // all standing on — `liftOrigin` is the same answer the server's
             // Execute gets, so a tile the board lights up is never refused.
             case 'helicopterLift': {
-                if (!gs) return [];
+                // Still boarding: the passengers are being chosen in the
+                // sheet, and there is nowhere to land until they are.
+                if (!gs || current.boarding) return [];
                 const pawns = Object.values(gs.playerStates).map(p => ({ userId: p.userId, position: p.position }));
                 const origin = liftOrigin(pawns, current.userIds ?? []);
                 return origin === null ? [] : flightTargets(gs.positions, origin);
@@ -194,7 +200,18 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
         }
     }
 
-    const validPositions = new Set<number>(!isMyTurn || !pick ? [] : positionsFor(pick));
+    // A teammate's specials, on somebody else's turn (§21.3,
+    // docs/out-of-turn-actions.md §5.8): offered live, outside the read-only
+    // turn sheet, whenever the viewer holds a card rules.ts says they can
+    // play now — the same answer BannedIsletPlayCard.Execute gets.
+    const canPlayOutOfTurn = !!gs && !!me && nav.isLive && !complete && !isMyTurn
+        && me.hand.some(card => outOfTurnPlayable(gs.phase, card));
+    // Whether the armed pick is one the board should answer. Off turn only a
+    // special can be armed, and only while it can still be played.
+    const pickLive = !!pick && (isMyTurn
+        || (canPlayOutOfTurn && (pick.mode === 'sandbags' || pick.mode === 'helicopterLift')));
+
+    const validPositions = new Set<number>(pickLive && pick ? positionsFor(pick) : []);
 
     function sendAction(apply: (cmd: BannedIsletAction) => void, target: string) {
         const cmd = new BannedIsletAction();
@@ -203,7 +220,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     }
 
     function handlePositionClick(position: number) {
-        if (!pick || !me) return;
+        if (!pick || !me || !pickLive) return;
         // §10's two specials are cards rather than actions, so the tap sends
         // BannedIsletPlayCard rather than one of §8's verbs — and costs none
         // of the three.
@@ -224,6 +241,8 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             setPick({ mode: 'shoreUp', first: position });
             return;
         }
+        // Everything below is one of the active player's actions.
+        if (!isMyTurn) return;
         // Narrowed to §8's verbs here — the two card modes returned above —
         // and read out before the closure, which is where that narrowing would
         // otherwise be lost.
@@ -237,7 +256,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     }
 
     let boardTag: string | null = null;
-    if (isMyTurn && pick && gs) {
+    if (pickLive && pick && gs && !pick.boarding) {
         switch (pick.mode) {
             case 'move': boardTag = 'Choose a tile to move to'; break;
             case 'pilotFlight': boardTag = 'Choose any tile on the island to fly to'; break;
@@ -407,12 +426,27 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                             userIdList={userIdList}
                             treasures={gs.treasures}
                             validPositions={validPositions}
-                            onPositionClick={isMyTurn && !submitting ? handlePositionClick : undefined}
+                            onPositionClick={(isMyTurn || pickLive) && !submitting ? handlePositionClick : undefined}
                             boardTag={boardTag}
                             activeUserId={complete ? null : displayedCurrentTurn}
                             highlightedPosition={highlightedTile ? positionOfTile(gs.positions, highlightedTile) : null}
                         />
                     </div>
+
+                    {canPlayOutOfTurn && gs && (
+                        <BannedIsletSpecials
+                            gs={gs}
+                            myUserId={myUserId}
+                            pick={pick}
+                            onPickChange={setPick}
+                            sandbagsReach={sandbagsReach.length}
+                            hint={`🃏 Special cards cost no action — play one now, on ${currentTurnUsername}'s turn.`}
+                            outOfTurn
+                            submitCommand={submitCommand}
+                            pendingTarget={pendingTarget}
+                            submitting={submitting}
+                        />
+                    )}
 
                     {!complete && (
                         <ReadOnlyPanel readOnly={!isMyTurn}>
@@ -431,6 +465,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                     pilotFlight: flightReach.length,
                                     sandbags: sandbagsReach.length,
                                 }}
+                                commandCount={commandCount}
                                 giveMates={giveMates}
                                 navigatorReach={navigatorReach}
                                 onShoreUpFirstOnly={first => sendAction(cmd => {
