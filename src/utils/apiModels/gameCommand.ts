@@ -93,6 +93,28 @@ export interface IGameType {
 // supplied one could make a replay drop a follow-up that really happened.
 export const RECORDED_FOLLOW_UP_TO_ID = "recordedFollowUpToId";
 
+// And again: `recordedOnTurnOf` marks a command as played *out of turn*, and
+// names the player whose turn it was — `currentTurn` at the moment it ran, who
+// is never its sender. The pipeline stamps it (`RunCommandOptions.outOfTurn`),
+// only ever for a request the command route has already let past its turn gate
+// as `playableOutOfTurn`, and the prefix means a client can't supply one: a
+// forged stamp would make a replay leave the turn with somebody the live game
+// never gave it to. Replay puts `currentTurn` back to it before running the
+// command, and the per-turn charts, the turn count and the recap feed read it
+// as "not the start of the sender's turn" (docs/out-of-turn-actions.md §5.4).
+export const RECORDED_ON_TURN_OF = "recordedOnTurnOf";
+
+/** Whose turn an out-of-turn command was played on, or undefined for an ordinary one. */
+export function recordedOnTurnOf(command: unknown): string | undefined {
+    const onTurnOf = (command as Record<string, unknown> | null)?.[RECORDED_ON_TURN_OF];
+    return typeof onTurnOf === "string" ? onTurnOf : undefined;
+}
+
+/** True for a command the pipeline recorded as played off its sender's turn. */
+export function isRecordedOutOfTurn(command: unknown): boolean {
+    return recordedOnTurnOf(command) !== undefined;
+}
+
 export function stripRecordedRandomness(command: IGameCommand): void {
     const fields = command as unknown as Record<string, unknown>;
     for (const key of Object.keys(fields)) {
@@ -102,16 +124,49 @@ export function stripRecordedRandomness(command: IGameCommand): void {
     }
 }
 
+const PLAY_MARKERS = new Set([RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF]);
+
 // Whether an executed command consumed randomness: any own property whose
-// name starts with `recorded`, other than `recordedFollowUpToId` — that one
-// marks a follow-up command, not a random outcome, and its own callers (see
-// above) are the ones who care about it. This is the machine-checked half of
+// name starts with `recorded`, other than the two markers above —
+// `recordedFollowUpToId` and `recordedOnTurnOf` say how a command was played,
+// not what it rolled, and their own callers (see above) are the ones who care
+// about them. Counting either would have the undo guards refuse a move for a
+// reason it doesn't have. This is the machine-checked half of
 // "only on non-random actions" (docs/undo.md §1, §6): a command that answers
 // true here must never declare itself undoable, because restoring an older
 // snapshot would silently replay the randomness it consumed a second time.
 export function consumedRandomness(command: IGameCommand): boolean {
     const fields = command as unknown as Record<string, unknown>;
-    return Object.keys(fields).some(key => key.startsWith("recorded") && key !== RECORDED_FOLLOW_UP_TO_ID);
+    return Object.keys(fields).some(key => key.startsWith("recorded") && !PLAY_MARKERS.has(key));
+}
+
+// Whether a command's *class* declares that it may be played out of turn
+// (`readonly playableOutOfTurn = true`) — by a seated player who isn't
+// `currentTurn`. See docs/out-of-turn-actions.md §5.1.
+//
+// Read off a fresh instance of the command's constructor, never off the
+// command itself. The command the route holds is the request body, rehydrated
+// by deserializeJSON's reviver, which copies every posted property onto the
+// instance (`readonly` is compile-time only) — so a flag read off it is the
+// client's to set, and the old `ignoresTurnGate` exemption was exactly that
+// hole (§3). `constructor` is one of the keys the reviver refuses to copy, so
+// it is always the class that was really constructed, and a fresh instance
+// carries only what that class declares. Every registered class constructs
+// with no arguments and no side effects: `@serializable` does exactly this at
+// module load.
+//
+// Declaring it widens *who* may send the command, not what it does: played on
+// its sender's own turn it takes the ordinary path. Played off it, the pipeline
+// enforces the out-of-turn invariants (`RunCommandOptions.outOfTurn`), and the
+// command's own `Execute` tells the two apart the way the route did —
+// `gameData.currentTurn !== this.senderId`. `playableOutOfTurnCommands.test.ts` lists
+// every class that answers true; adding one means a reviewer reads its `Execute`.
+export function playableOutOfTurn(command: IGameCommand): boolean {
+    const declaringClass = (command as object).constructor as new () => unknown;
+    if (typeof declaringClass !== "function" || declaringClass === Object) {
+        return false;
+    }
+    return (new declaringClass() as Record<string, unknown>).playableOutOfTurn === true;
 }
 
 // A command outcome that carries a native Map (Dice Cities' roll payouts do,

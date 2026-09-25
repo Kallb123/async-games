@@ -237,9 +237,19 @@ hypothetical. Fires Out is the clean case.
 `POST /api/game/[gameid]/timeline` overwrites every planned command's `senderId`
 with the caller — "for v1 planning we only let a user plan their own moves". The
 replay engine itself has no such limit: `applyCommands` sets `state.currentTurn =
-command.senderId` before every `Execute`, so a planned command from another
-player already makes it that player's turn. Planning a whole table's turns is
-therefore a route change, not an engine change.
+command.senderId` before every planned `Execute`, so a planned command from
+another player already makes it that player's turn. Planning a whole table's
+turns is therefore a route change, not an engine change.
+
+A *recorded* command is the one exception to "every command was executed on its
+sender's turn": one played out of turn
+([`out-of-turn-actions.md`](./out-of-turn-actions.md)) carries
+`recordedOnTurnOf`, the player whose turn it was, and `applyCommands` puts
+`currentTurn` back to that instead, then replays it under the same out-of-turn
+invariants the live route used. `replayTurnByTurn` and `countTurns` group steps
+by that same whose-turn answer (`playedOnTurnOf`), so an interrupt is part of
+the turn it landed in, and the recap feed windows on the viewer's last event on
+their *own* turn. A planned command's stamp is ignored.
 
 It must stay opt-in per game. In a co-op game with open hands, planning a
 teammate's turn discloses nothing and is the entire point. In a competitive game

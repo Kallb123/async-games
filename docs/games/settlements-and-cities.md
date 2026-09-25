@@ -484,6 +484,15 @@ maritime modal (§10.12).
 
 ### 10.3 The engine change: an off-turn escape hatch
 
+> **Since built, generally.** The platform now has this escape hatch for every
+> game: a command class declares `readonly playableOutOfTurn = true`, read off
+> the class rather than the body, and the route and pipeline enforce the
+> invariants this section and §10.4 work out — see
+> [`docs/out-of-turn-actions.md`](../out-of-turn-actions.md). Trade acceptance
+> should declare that flag rather than grow the route-side allowlist below; the
+> class-wide tripwire (`playableOutOfTurnCommands.test.ts`) is that allowlist.
+> The reasoning below is kept for the trade-specific parts.
+
 **Recommendation: let a command declare that it may be played off-turn — but
 decide that server-side, never from the request body.** This is the whole
 architectural change, and the "server-side" part is not a detail.
@@ -589,6 +598,12 @@ off-turn flag itself — not a notifications detail.
 | Give the responder a real turn (the Special Build model) | See §10.1 — it serialises the table behind a question most players will decline. |
 
 ### 10.4 The landmine: `replay.ts` will silently corrupt recap
+
+> **Defused.** A command played out of turn is recorded with
+> `recordedOnTurnOf` — the player whose turn it was — and `applyCommands` runs
+> it on that turn rather than its sender's; the per-turn charts and the turn
+> count group by the same answer
+> ([`docs/out-of-turn-actions.md`](../out-of-turn-actions.md) §5.4).
 
 This must land in the same change as the first off-turn command.
 `src/utils/games/replay.ts` does:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePerTurnEvents, computePerTurnStat, registerReplayAdapter } from "./replay";
+import { buildTimeline, computePerTurnEvents, computePerTurnStat, registerReplayAdapter } from "./replay";
 import { countTurns } from "./turnCount";
 import { serializable } from "../apiModels/Serialisable";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
@@ -71,6 +71,32 @@ class TestBonusAction implements IGameCommand {
     }
 }
 
+// A card played on somebody else's turn (docs/out-of-turn-actions.md): it
+// scores for its sender and never ends a turn — the pipeline refuses one that
+// tries. `executedOutOfTurn` is what Execute saw, by the test §5.3 gives it.
+@serializable
+class TestInterruptAction implements IGameCommand {
+    id = "interrupt" as uuidString;
+    timestamp = "2026-07-21T09:00:00.000Z";
+    gameId = "g1" as uuidString;
+    senderId = "Unknown";
+    senderUsername = "Unknown";
+    readonly className = "TestInterruptAction";
+    readonly playableOutOfTurn = true;
+    executedOutOfTurn?: boolean;
+
+    myString() {
+        return "TestInterruptAction";
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        this.executedOutOfTurn = gameData.currentTurn !== this.senderId;
+        const state = (gameData as unknown as { specificGameState: ITestGameState }).specificGameState;
+        state.scores[this.senderId] = (state.scores[this.senderId] ?? 0) + 10;
+        return { validMove: true, turnOver: false };
+    }
+}
+
 registerReplayAdapter({
     className: "TestBonusTurnGameType",
     buildInitialSpecificGameState: (gameData) => ({
@@ -93,6 +119,15 @@ function action(senderId: string, triggerBonus = false): TestBonusAction {
     command.senderId = senderId;
     command.senderUsername = senderId;
     command.triggerBonus = triggerBonus;
+    return command;
+}
+
+/** `senderId`'s card, recorded as the live route stamps one played on `onTurnOf`'s turn. */
+function interrupt(senderId: string, onTurnOf: string): TestInterruptAction {
+    const command = new TestInterruptAction();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    (command as unknown as Record<string, unknown>).recordedOnTurnOf = onTurnOf;
     return command;
 }
 
@@ -198,5 +233,77 @@ describe("computePerTurnEvents", () => {
     it("records nothing when detect finds nothing", async () => {
         const events = await computePerTurnEvents(game([action("u1", false)]), () => undefined);
         expect(events).toEqual([]);
+    });
+});
+
+// docs/out-of-turn-actions.md §5.4: a command played out of turn is recorded
+// with whose turn it was, and replay must neither hand that player's turn to
+// the interrupter nor count the interrupt as a turn of its own.
+describe("a command played out of turn", () => {
+    it("replays on the turn it was played on, and leaves the live snapshot naming that player", async () => {
+        // u1 ends their turn; u1 then plays a card on u2's. It is the last
+        // command, so it is the live state the review opens on.
+        const history = [action("u1"), interrupt("u1", "u2")];
+        const seen: boolean[] = [];
+
+        const timeline = await buildTimeline(game(history), { u1: "u1", u2: "u2" }, [], (step) => {
+            if (step.command instanceof TestInterruptAction) seen.push(step.command.executedOutOfTurn!);
+        });
+
+        const live = timeline.snapshots[timeline.currentIndex];
+        expect(live.currentTurn).toBe("u2");
+        expect((live.specificGameState as ITestGameState).scores).toEqual({ u1: 11, u2: 0 });
+        // Execute could tell on replay, as it could live.
+        expect(seen).toEqual([true]);
+    });
+
+    it("ignores the stamp on a planned command", async () => {
+        // A planned command is whatever the planner's client sent, so a stamp
+        // on one is theirs to forge; planning is always the planner's own turn.
+        const history = [action("u1"), action("u2")];
+        const planned = interrupt("u1", "u2");
+        const seen: boolean[] = [];
+
+        const timeline = await buildTimeline(game(history), { u1: "u1", u2: "u2" }, [planned], (step) => {
+            if (step.planned) seen.push((step.command as TestInterruptAction).executedOutOfTurn!);
+        });
+
+        expect(seen).toEqual([false]);
+        expect(timeline.snapshots[timeline.snapshots.length - 1].currentTurn).toBe("u1");
+    });
+
+    it("charts one turn, not three, when an interrupt lands mid-turn", async () => {
+        // u1 acts, u2 interrupts, u1 acts again and ends the turn, then u2
+        // takes theirs: two turns, not u1 / u2 / u1 / u2.
+        const history = [
+            action("u1", true),
+            interrupt("u2", "u1"),
+            action("u1"),
+            action("u2"),
+        ];
+
+        const perTurn = await computePerTurnStat<ITestGameState>(game(history), (state, userId) => state.scores[userId]);
+
+        expect(countTurns(history)).toBe(2);
+        expect(perTurn).toHaveLength(2);
+        // The interrupt's effect is sampled at the end of the turn it happened in.
+        expect([...perTurn[0].entries()]).toEqual([["u1", 2], ["u2", 10]]);
+        expect([...perTurn[1].entries()]).toEqual([["u1", 2], ["u2", 11]]);
+    });
+
+    it("counts an interrupt at the very start of a turn as part of that turn", async () => {
+        // u1 ends their turn, then plays a card on u2's before u2 has moved.
+        // Grouping by sender would leave it in u1's turn; it happened in u2's.
+        const history = [action("u1"), interrupt("u1", "u2"), action("u2")];
+
+        const events = await computePerTurnEvents(game(history), (step) =>
+            step.command instanceof TestInterruptAction ? [{ icon: "landmark" }] : undefined,
+        );
+        const perTurn = await computePerTurnStat<ITestGameState>(game(history), (state, userId) => state.scores[userId]);
+
+        expect(events).toEqual([{ turnIndex: 1, icon: "landmark" }]);
+        expect(countTurns(history)).toBe(2);
+        expect([...perTurn[0].entries()]).toEqual([["u1", 1], ["u2", 0]]);
+        expect([...perTurn[1].entries()]).toEqual([["u1", 11], ["u2", 1]]);
     });
 });

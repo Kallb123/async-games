@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runCommand } from "./commandPipeline";
 import { playerHistory } from "./history";
 import type { IGameData } from "../mongodb/GameData";
-import type { IGameCommand, IGameType } from "../apiModels/gameCommand";
+import { recordedOnTurnOf } from "../apiModels/gameCommand";
+import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
 
 const GAME_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -176,5 +177,157 @@ describe("a command that asks for a follow-up", () => {
 
         expect(gameOver).toBe(true);
         expect(gameData.gameState.commandHistory.map(c => (c as IGameCommand).className)).toEqual(["Trigger"]);
+    });
+});
+
+// docs/out-of-turn-actions.md §5.2: a command played off its sender's turn runs
+// through the same pipeline, with the invariants enforced here rather than left
+// to each command to remember. user_a holds the turn; user_b interrupts.
+describe("a command played out of turn", () => {
+    /** A two-seat game where user_a holds the turn, and CheckEndTurn is watched. */
+    function twoSeatGame(): { gameData: IGameData, endTurns: ICommandOutcome[], type: IGameType } {
+        const gameData = makeGameData();
+        gameData.userIdList = ["user_a", "user_b"];
+        gameData.gameState.turnOrder = ["user_a", "user_b"];
+        const endTurns: ICommandOutcome[] = [];
+        const type: IGameType = {
+            ...gameType,
+            CheckEndTurn: (data, outcome) => {
+                endTurns.push(outcome);
+                if (outcome.turnOver) data.currentTurn = data.currentTurn === "user_a" ? "user_b" : "user_a";
+            },
+        };
+        return { gameData, endTurns, type };
+    }
+
+    /** user_b's command, answering with `outcome`. */
+    function interrupt(outcome: Partial<ICommandOutcome> = {}): IGameCommand {
+        return {
+            ...makeCommand(1),
+            id: "interrupt" as IGameCommand["id"],
+            senderId: "user_b",
+            className: "Interrupt",
+            Execute: async (gameData: IGameData) => {
+                gameData.gameState.history.unshift(playerHistory("user_b", "interrupted"));
+                return { validMove: true, turnOver: false, ...outcome };
+            },
+        };
+    }
+
+    it("records it, stamped with whose turn it was", async () => {
+        const { gameData, type } = twoSeatGame();
+
+        const { outcome, gameOver } = await runCommand(gameData, type, interrupt(), { outOfTurn: true });
+
+        expect(outcome.validMove).toBe(true);
+        expect(gameOver).toBe(false);
+        expect(gameData.gameState.commandHistory).toHaveLength(1);
+        expect(recordedOnTurnOf(gameData.gameState.commandHistory[0])).toBe("user_a");
+        // The history line is stamped as usual, so a reaction can find it.
+        expect(gameData.gameState.history[0].commandId).toBe("interrupt");
+    });
+
+    it("never runs CheckEndTurn, so the turn stays where it was", async () => {
+        const { gameData, endTurns, type } = twoSeatGame();
+
+        await runCommand(gameData, type, interrupt(), { outOfTurn: true });
+
+        expect(endTurns).toEqual([]);
+        expect(gameData.currentTurn).toBe("user_a");
+    });
+
+    it("refuses one that reports turnOver without ending the game, and takes it back off the log", async () => {
+        // A command that thinks it may end the turn from off it is the bug §2
+        // row 8 describes: a teammate's card closing the active player's
+        // discard phase for them.
+        const { gameData, endTurns, type } = twoSeatGame();
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const { outcome, gameOver } = await runCommand(gameData, type, interrupt({ turnOver: true }), { outOfTurn: true });
+        error.mockRestore();
+
+        expect(outcome.validMove).toBe(false);
+        expect(gameOver).toBe(false);
+        expect(gameData.gameState.commandHistory).toEqual([]);
+        // The line it wrote goes too, so the game reads as if it never ran.
+        expect(gameData.gameState.history).toEqual([]);
+        expect(endTurns).toEqual([]);
+        expect(gameData.currentTurn).toBe("user_a");
+    });
+
+    it("keeps a recorded one that now reports turnOver on replay, without the hand-off", async () => {
+        // The live game accepted it, so only a later change to its Execute
+        // gets here. Refusing it would drop a move that really happened and
+        // leave its effects behind for every later snapshot to build on.
+        const { gameData, endTurns, type } = twoSeatGame();
+        const recorded = interrupt({ turnOver: true });
+        (recorded as unknown as Record<string, unknown>).recordedOnTurnOf = "user_a";
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        const { outcome, gameOver } = await runCommand(gameData, type, recorded, { outOfTurn: true });
+        warn.mockRestore();
+
+        expect(outcome).toMatchObject({ validMove: true, turnOver: false });
+        expect(gameOver).toBe(false);
+        expect(gameData.gameState.commandHistory).toHaveLength(1);
+        expect(gameData.gameState.history).toHaveLength(1);
+        expect(endTurns).toEqual([]);
+        expect(gameData.currentTurn).toBe("user_a");
+    });
+
+    it("still runs CheckGameOver, and lets a game-ending interrupt end the game", async () => {
+        const { gameData, endTurns, type } = twoSeatGame();
+        const endsIt: IGameType = { ...type, CheckGameOver: () => true };
+
+        const { outcome, gameOver } = await runCommand(gameData, endsIt, interrupt({ turnOver: true }), { outOfTurn: true });
+
+        expect(outcome.validMove).toBe(true);
+        expect(gameOver).toBe(true);
+        expect(gameData.gameState.commandHistory).toHaveLength(1);
+        expect(endTurns).toEqual([]);
+    });
+
+    it("ignores a follow-up it asks for", async () => {
+        const { gameData, type } = twoSeatGame();
+        const followUp: IGameCommand = { ...makeCommand(1), id: "follow" as IGameCommand["id"], className: "FollowUp" };
+        const steps: string[] = [];
+
+        const { outcome } = await runCommand(gameData, type, interrupt({ followUpCommand: followUp }), {
+            outOfTurn: true,
+            onStep: applied => steps.push(applied.className),
+        });
+
+        expect(gameData.gameState.commandHistory.map(c => (c as IGameCommand).className)).toEqual(["Interrupt"]);
+        expect(steps).toEqual(["Interrupt"]);
+        expect(outcome.followUpCommand).toBeUndefined();
+    });
+
+    it("drops timerRestarts, since the clock belongs to the active player", async () => {
+        const { gameData, type } = twoSeatGame();
+
+        const { outcome } = await runCommand(gameData, type, interrupt({ timerRestarts: true }), { outOfTurn: true });
+
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.timerRestarts).toBeUndefined();
+    });
+
+    it("stamps nothing and changes nothing when the move is refused", async () => {
+        const { gameData, type } = twoSeatGame();
+        const command = interrupt({ validMove: false });
+
+        const { outcome } = await runCommand(gameData, type, command, { outOfTurn: true });
+
+        expect(outcome.validMove).toBe(false);
+        expect(recordedOnTurnOf(command)).toBeUndefined();
+        expect(gameData.gameState.commandHistory).toEqual([]);
+    });
+
+    it("stamps nothing on an ordinary command", async () => {
+        const { gameData, type } = twoSeatGame();
+        const command = { ...interrupt(), senderId: "user_a" };
+
+        await runCommand(gameData, type, command);
+
+        expect(recordedOnTurnOf(command)).toBeUndefined();
     });
 });

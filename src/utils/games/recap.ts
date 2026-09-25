@@ -1,5 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
-import { IGameCommand, ICommandOutcome } from "../apiModels/GameLogic";
+import { IGameCommand, ICommandOutcome, isRecordedOutOfTurn } from "../apiModels/GameLogic";
 import { buildTimeline, ITimeline, ITurnSnapshot, IReplayStep } from "./replay";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
@@ -101,7 +101,7 @@ async function replayEvents(
     // their own cards into the snapshots the adapter reads (the tip needs
     // them). Null when the feed isn't being built for anybody in particular.
     viewerId: string | null
-): Promise<{ events: IGameEvent[]; timeline: ITimeline }> {
+): Promise<{ events: IGameEvent[]; timeline: ITimeline; outOfTurnCommandIds: Set<string> }> {
     const steps: IReplayStep[] = [];
     const timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
         if (!step.planned) {
@@ -110,14 +110,21 @@ async function replayEvents(
     }, viewerId);
 
     const events: IGameEvent[] = [];
+    // The commands played out of turn, by id — which an event carries, and
+    // which survives a postProcess merge that a parallel array wouldn't.
+    const outOfTurnCommandIds = new Set<string>();
     for (const step of steps) {
         events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+        if (isRecordedOutOfTurn(step.command)) {
+            outOfTurnCommandIds.add(step.command.id);
+        }
     }
-    return { events: adapter.postProcess ? adapter.postProcess(events) : events, timeline };
+    return { events: adapter.postProcess ? adapter.postProcess(events) : events, timeline, outOfTurnCommandIds };
 }
 
 // Builds a viewer's "since you were last here" feed by replaying the game and
-// keeping only the events that happened after the viewer's own last turn. Returns
+// keeping only the events that happened after the viewer's own last turn —
+// their last move on it, not a card they played on somebody else's. Returns
 // hasRecap === false (and empty payload) when the game has no recap adapter, when
 // it isn't the viewer's turn, or when nothing happened while they were away.
 export async function buildEventFeed(
@@ -140,8 +147,9 @@ export async function buildEventFeed(
 
     let allEvents: IGameEvent[];
     let timeline: ITimeline;
+    let outOfTurnCommandIds: Set<string>;
     try {
-        ({ events: allEvents, timeline } = await replayEvents(gameData, userIdNameMap, adapter, forUserId));
+        ({ events: allEvents, timeline, outOfTurnCommandIds } = await replayEvents(gameData, userIdNameMap, adapter, forUserId));
     } catch {
         // Some games can't be replayed for every historical game (e.g. Settlements
         // & Cities games created before recap support lack the stored initial-state
@@ -151,11 +159,16 @@ export async function buildEventFeed(
         return empty;
     }
 
-    // The window is everything after the viewer's own last event. If they've
-    // never moved (first turn), that's the whole game so far.
+    // The window is everything after the viewer's own last event on their own
+    // turn. If they've never moved (first turn), that's the whole game so far.
+    // A card they played on a teammate's turn doesn't count as having been
+    // here: the recap is about their turn, and playing an Airlift two hours
+    // into somebody else's doesn't mean they saw everything after it
+    // (docs/out-of-turn-actions.md §5.6). It still shows in the feed, as the
+    // ordinary event by them that it is.
     let lastOwn = -1;
     allEvents.forEach((event, i) => {
-        if (event.actorId === forUserId) {
+        if (event.actorId === forUserId && !outOfTurnCommandIds.has(event.commandId)) {
             lastOwn = i;
         }
     });

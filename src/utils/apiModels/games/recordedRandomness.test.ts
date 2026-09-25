@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { consumedRandomness, stripRecordedRandomness } from "../gameCommand";
+import { consumedRandomness, isRecordedOutOfTurn, recordedOnTurnOf, stripRecordedRandomness } from "../gameCommand";
 import { SnakesAndLaddersRequestDiceRoll } from "../GameLogic";
 import { buildInitialSnakesAndLaddersState } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -92,10 +92,59 @@ describe("consumedRandomness", () => {
         expect(consumedRandomness(command)).toBe(false);
     });
 
+    // recordedOnTurnOf marks a command played off its sender's turn — how it
+    // was played, not what it rolled (docs/out-of-turn-actions.md §5.4). An
+    // interrupt that rolled nothing must stay undoable by that guard's lights.
+    it("is false for a command carrying only recordedOnTurnOf", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = "user-2";
+
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it("is still true for an out-of-turn command that did roll", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = "user-2";
+        command.recordedRoll = 6;
+
+        expect(consumedRandomness(command)).toBe(true);
+    });
+
     it("is false for a plain command with no recorded fields", () => {
         const command = new SnakesAndLaddersRequestDiceRoll();
 
         expect(consumedRandomness(command)).toBe(false);
+    });
+});
+
+describe("recordedOnTurnOf", () => {
+    it("names the player whose turn a stamped command was played on", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = "user-2";
+
+        expect(recordedOnTurnOf(command)).toBe("user-2");
+        expect(isRecordedOutOfTurn(command)).toBe(true);
+    });
+
+    it("is undefined for an ordinary command, or one carrying anything but a string", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        expect(recordedOnTurnOf(command)).toBeUndefined();
+        expect(isRecordedOutOfTurn(command)).toBe(false);
+
+        (command as unknown as { recordedOnTurnOf: unknown }).recordedOnTurnOf = true;
+        expect(isRecordedOutOfTurn(command)).toBe(false);
+        expect(isRecordedOutOfTurn(null)).toBe(false);
+    });
+
+    it("is one of the fields a live request can't supply", () => {
+        // The route strips every `recorded…` field before anything reads the
+        // command, so a client can't claim a play was out of turn.
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = "user-2";
+
+        stripRecordedRandomness(command);
+
+        expect(isRecordedOutOfTurn(command)).toBe(false);
     });
 });
 
