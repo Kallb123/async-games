@@ -102,6 +102,16 @@ describe("consumedRandomness", () => {
         expect(consumedRandomness(command)).toBe(false);
     });
 
+    // recordedTurnStartedAt is the turn clock a command ran against, stamped
+    // on every command so a replay can put the clock back — how it was
+    // played, again, never what it rolled.
+    it("is false for a command carrying only recordedTurnStartedAt", () => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        (command as unknown as { recordedTurnStartedAt: string }).recordedTurnStartedAt = "2026-09-25T08:00:00.000Z";
+
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
     it("is still true for an out-of-turn command that did roll", () => {
         const command = new SnakesAndLaddersRequestDiceRoll();
         (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = "user-2";

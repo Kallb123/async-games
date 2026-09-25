@@ -1,5 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
-import { ICommandOutcome, IGameCommand, IGameType, isRecordedOutOfTurn, RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF } from "../apiModels/gameCommand";
+import { ICommandOutcome, IGameCommand, IGameType, isRecordedOutOfTurn, RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF, RECORDED_TURN_STARTED_AT } from "../apiModels/gameCommand";
 
 export interface RunCommandOptions {
     /**
@@ -124,6 +124,9 @@ export async function runCommand(
     // teammate's turn, does), and the stamp has to name the player whose turn
     // it was played on rather than nobody.
     const onTurnOf = gameData.currentTurn;
+    // The turn clock this command runs against, for the same reason: read
+    // before Execute, stamped only once the move is known to be valid.
+    const turnStartedAt = gameData.lastTurnTimestamp;
     const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
@@ -156,6 +159,9 @@ export async function runCommand(
     if (outOfTurn) {
         stampOutOfTurn(command, onTurnOf);
     }
+    // So a replay can put the clock back where it was (RECORDED_TURN_STARTED_AT):
+    // the turn-timer cron moves it on without leaving anything in this log.
+    (command as unknown as Record<string, unknown>)[RECORDED_TURN_STARTED_AT] = turnStartedAt;
     gameData.gameState.commandHistory.push(command);
 
     const gameOver = gameType.CheckGameOver(gameData);

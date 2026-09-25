@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { runCommand } from "./commandPipeline";
 import { playerHistory } from "./history";
 import type { IGameData } from "../mongodb/GameData";
-import { recordedOnTurnOf } from "../apiModels/gameCommand";
+import { recordedOnTurnOf, recordedTurnStartedAt } from "../apiModels/gameCommand";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
 
 const GAME_ID = "11111111-1111-1111-1111-111111111111";
@@ -90,6 +90,27 @@ describe("runCommand", () => {
         await runCommand(gameData, gameType, makeCommand(1));
 
         expect(gameData.gameState.history[0].createdAt).toBe("2026-01-01T00:00:00.000Z");
+    });
+
+    it("stamps the turn clock the command ran against, so a replay can put it back", async () => {
+        // The turn-timer cron restarts the clock without a command of its own,
+        // and a replay can only follow it through this stamp — see
+        // RECORDED_TURN_STARTED_AT.
+        const gameData = makeGameData();
+        gameData.lastTurnTimestamp = "2026-01-03T00:00:00.000Z";
+        const command = makeCommand(0);
+
+        await runCommand(gameData, gameType, command);
+
+        expect(recordedTurnStartedAt(command)).toBe("2026-01-03T00:00:00.000Z");
+    });
+
+    it("stamps no clock on a refused move", async () => {
+        const command = makeCommand(0, false);
+
+        await runCommand(makeGameData(), gameType, command);
+
+        expect(recordedTurnStartedAt(command)).toBeUndefined();
     });
 });
 

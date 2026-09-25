@@ -1,7 +1,7 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
 import { IHistoryEntry, resolveHistory, resolveTokens, toTheMinute } from "./history";
-import { IGameCommand, IGameType, ICommandOutcome, recordedOnTurnOf } from "../apiModels/GameLogic";
+import { IGameCommand, IGameType, ICommandOutcome, recordedOnTurnOf, recordedTurnStartedAt } from "../apiModels/GameLogic";
 import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { isRecordedFollowUpOf, runCommand } from "./commandPipeline";
@@ -406,6 +406,17 @@ export async function buildTimeline(
             // turn.
             const onTurnOf = planned ? undefined : recordedOnTurnOf(command);
             state.currentTurn = onTurnOf ?? command.senderId;
+            // The turn clock goes back to the one the command ran against, too.
+            // The live clock also moves where this log can't follow it — the
+            // turn-timer cron's plain advance steps the turn on and restarts
+            // the clock without running a command — and a game whose undo
+            // entries are clocked (utils/games/undo.ts) reads that as a hold
+            // closing. Without this, a hold the cron passed on round the table
+            // and back to its owner replayed as still open, and refused the
+            // owner's next move. A command recorded before the stamp, or a
+            // planned one, keeps whatever clock the replay already had.
+            const turnStartedAt = planned ? undefined : recordedTurnStartedAt(command);
+            if (turnStartedAt !== undefined) state.lastTurnTimestamp = turnStartedAt;
             // One snapshot per command *applied*, which is not the same as per
             // command fed in: a command can bring a follow-up with it, and that
             // gets its own step rather than being folded into the trigger's —
