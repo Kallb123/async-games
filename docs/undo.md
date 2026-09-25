@@ -434,8 +434,9 @@ them is a hand-maintained list that silently stops covering a field somebody
 adds next year.
 
 **Size and depth.** A cloned state is six to eight kilobytes of JSON.
-`UNDO_STACK_DEPTH = 3` — a Road Building card and the two free roads it grants
-is the deepest run the game needs to unwind (§6), and it covers a setup
+`UNDO_STACK_DEPTH = 3` — a Road Building card and the two free roads it grants,
+placed back to back, is the deepest ordinary run to unwind (§6; a build slipped
+in between pushes the card out of reach), and it covers a setup
 settlement and its road as well. It was 2 until Road Building became undoable;
 each level is bytes on every save, so it stays at what a real sequence needs. The stack is emptied on every turn hand-off, in the two places that
 already know the turn passed.

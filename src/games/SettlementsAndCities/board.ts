@@ -222,8 +222,10 @@ export interface ISACSpecificGameState {
 export const UNDO_WINDOW_MS = 10_000;
 
 // How many snapshots the undo stack keeps. A Road Building card and the two
-// free roads it grants is the deepest run the game needs to unwind — it also
-// covers a setup settlement and its road, and a three-build main-phase run.
+// free roads it grants, placed back to back, is the deepest ordinary run to
+// unwind — it also covers a setup settlement and its road, and a three-build
+// main-phase run. A build slipped in between the card and its second road
+// pushes the card out of reach; that only costs reach, never correctness.
 // Each level is a whole-state copy on every save, so it stays at what a real
 // sequence needs.
 export const UNDO_STACK_DEPTH = 3;
