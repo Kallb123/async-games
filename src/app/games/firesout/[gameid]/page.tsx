@@ -60,7 +60,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IFiresOutGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IFiresOutGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IFiresOutGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const { endGame } = useEndGame(gameId);
 
     // Turn review steps back through the match's real actions (one per played

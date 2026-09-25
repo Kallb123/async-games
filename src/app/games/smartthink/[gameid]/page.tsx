@@ -37,7 +37,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISmartthinkGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
-    const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const isCodeSetter = user?.id === gameData?.specificGameState?.codeSetterId;
     const isCodeBreaker = user?.id === gameData?.specificGameState?.codeBreakerId;

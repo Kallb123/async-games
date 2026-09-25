@@ -170,6 +170,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
   }
 
+  // The board the move was built against. In a game where a teammate may play
+  // out of turn, the active player's board can have moved since they rendered
+  // it, and a move that is still legal on the new board can mean something
+  // they never chose — so a client that says which board it saw is refused
+  // when that isn't the board any more, and its resync shows them the new one
+  // (docs/out-of-turn-actions.md §5.7). `commandHistory` only ever grows, so
+  // its length is the board's version. A request field, not part of the move:
+  // deleted before anything records the command. It can only fail the
+  // sender's own request, so nothing about it needs trusting beyond that.
+  const expectedCommandCount = commandRequest.expectedCommandCount;
+  delete commandRequest.expectedCommandCount;
+  if (expectedCommandCount !== undefined && expectedCommandCount !== gameData.gameState.commandHistory.length) {
+    return NextResponse.json({}, {status: 409, statusText: "The board changed, take another look"});
+  }
+
   // The client supplies the move, never the name on it. `senderUsername` is
   // recorded on the command and read back by every replayed view — the recap
   // timeline's title for this move, and the name a swept guest's moves keep —

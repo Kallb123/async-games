@@ -46,7 +46,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IWorldDominationGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,

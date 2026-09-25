@@ -65,7 +65,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IRaceCarsGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const { endGame } = useEndGame(gameId);
 
     // The reveals this game shows over the board, caught by one hook rather than

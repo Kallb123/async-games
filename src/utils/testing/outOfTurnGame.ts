@@ -1,0 +1,40 @@
+// A game that plays out of turn, for the client tests that need one
+// (docs/out-of-turn-actions.md §5.7). No real game sets
+// `GameMeta.hasOutOfTurnPlays` yet — and a test pinned to whichever one does
+// would change meaning the day another is flagged — so this registers a game
+// of its own in `GAME_META` around each test, keeping the real lookup in play.
+
+import { afterEach, beforeEach } from "vitest";
+import { GAME_META } from "@/utils/ui/games";
+import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
+import type { IGameType } from "@/utils/apiModels/GameLogic";
+
+/** The `gameType.url` of the test-only game with out-of-turn plays. */
+export const OUT_OF_TURN_TEST_GAME = "testinterrupts";
+
+/** Registers `OUT_OF_TURN_TEST_GAME` for every test in the calling suite. */
+export function registerOutOfTurnTestGame(): void {
+    beforeEach(() => {
+        GAME_META[OUT_OF_TURN_TEST_GAME] = { ...GAME_META.outbreak, url: OUT_OF_TURN_TEST_GAME, hasOutOfTurnPlays: true };
+    });
+    afterEach(() => {
+        delete GAME_META[OUT_OF_TURN_TEST_GAME];
+    });
+}
+
+/** A two-seat board, "me" and "them", as `/api/game/[gameid]` sends it: only what the hooks read. */
+export function testBoard(
+    url: string,
+    { currentTurn = "me", complete = false, commandCount = 0 }: { currentTurn?: string; complete?: boolean; commandCount?: number } = {},
+): IGameDataResponse {
+    return {
+        gameType: { url } as IGameType,
+        usernameList: [],
+        userIdList: ["me", "them"],
+        turnTimer: "",
+        currentTurn,
+        gameState: { turnOrder: ["me", "them"], history: [], commandCount },
+        complete,
+        winner: "",
+    };
+}

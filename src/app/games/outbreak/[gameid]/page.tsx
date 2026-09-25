@@ -62,7 +62,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IOutbreakGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const { endGame } = useEndGame(gameId);
 
     // End-of-turn screen: whichever command just finished the draw/infect
