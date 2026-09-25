@@ -456,6 +456,16 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                         highlightedTile={highlightedTile}
                     />
 
+                    {/* The treasure deck, as counts only: its order is hidden
+                        (§21.4), but how close the next reshuffle — and the
+                        Waters Rise! cards it brings back — is, is not. */}
+                    <div className="ag-hand ag-hand--strip">
+                        <div className="ag-hand-head">
+                            <span className="ag-hand-title">Treasure deck · {gs.treasureDeckCount}</span>
+                            <span className="ag-hand-note">{gs.treasureDiscard.length} discarded</span>
+                        </div>
+                    </div>
+
                     {/* Every hand is public (§2), so these are outside the
                         ReadOnlyPanel above: there is nothing here to take out
                         of play on anybody's turn. */}
