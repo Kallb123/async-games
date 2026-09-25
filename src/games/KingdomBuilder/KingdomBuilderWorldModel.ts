@@ -24,7 +24,7 @@ export interface KingdomBuilderSeat {
 
 /**
  * Why a world ended (GDD §9.1): its host ended it, its last player left, or an
- * admin cleared it out. A season ending on schedule (PR 26) adds its own.
+ * admin cleared it out. A season ending on schedule (PR 27) adds its own.
  */
 export const KINGDOM_BUILDER_END_REASONS = ["host", "abandoned", "admin"] as const;
 export type KingdomBuilderEndReason = typeof KINGDOM_BUILDER_END_REASONS[number];
@@ -83,6 +83,12 @@ export interface IKingdomBuilderWorld {
      * than paying into stores the tick is rewriting.
      */
     tradesMade?: number;
+    /**
+     * How many commanders have been queued at a tavern (PR 26), for the same
+     * reason again: each recruit bumps it, so two at once — two tabs, or two
+     * towns — can't both slip under the player's commander cap (§6.5).
+     */
+    commandersRecruited?: number;
     /**
      * The barbarian villages still standing (§3.4, PR 23), each with what is
      * left of its garrison; a village taken or burnt drops out. Absent on a
@@ -176,6 +182,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     armiesDispatched: { type: Number, min: 0 },
     battlesFought: { type: Number, min: 0 },
     tradesMade: { type: Number, min: 0 },
+    commandersRecruited: { type: Number, min: 0 },
     barbarians: { type: [BarbarianVillageSchema], required: false, default: undefined },
 }, { timestamps: true });
 

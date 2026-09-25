@@ -87,6 +87,28 @@ describe("Kingdom Builder armies", () => {
             expect(seizeCaravans([caravans(), escort("rival", { units: garrisonOf({ settler: 1 }) })], 4).seized).toEqual([]);
         });
 
+        it("kills a commander with no soldiers to guard it, never folding it into the captor's units (PR 26)", () => {
+            const rival = escort("rival");
+            const lone = caravans({ units: garrisonOf({ commander: 1 }), caravans: undefined, cargo: undefined, travelled: 2, arrivedAtTick: undefined });
+            const onTheRoad = escort("rival", { path: [5, 1], pathCosts: [0, 2], travelled: 2 });
+            const killed = seizeCaravans([lone, onTheRoad], 5);
+            expect(killed.armies).toEqual([{ ...onTheRoad, caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }]);
+            expect(killed.seized).toEqual([{ tick: 5, ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 0, commandersLost: 1 }]);
+
+            // Beside caravans and a settler, the commander dies and the rest are taken.
+            const party = seizeCaravans([caravans({ units: garrisonOf({ commander: 2, settler: 1 }) }), rival], 6);
+            expect(party.armies).toEqual([{ ...rival, units: garrisonOf({ militia: 2, settler: 1 }), caravans: 2, cargo: { wood: 0, stone: 0, iron: 30, wheat: 0 } }]);
+            expect(party.seized[0]).toMatchObject({ caravans: 2, settlers: 1, commandersLost: 2 });
+        });
+
+        it("leaves a lone commander alone beside its owner's escort, and a commander alone takes nothing", () => {
+            const lone = caravans({ units: garrisonOf({ commander: 1 }), caravans: undefined, cargo: undefined });
+            const guarded = [lone, escort("owner"), escort("rival")];
+            expect(seizeCaravans(guarded, 7)).toEqual({ armies: guarded, seized: [] });
+            // A rival's commander is no escort either.
+            expect(seizeCaravans([caravans(), escort("rival", { units: garrisonOf({ commander: 1 }) })], 7).seized).toEqual([]);
+        });
+
         it("meets them on the road too, wherever the two stacks stand, and names no place for it", () => {
             // Two tiles into a route that has the rival camped on tile 1.
             const onTheRoad = caravans({ travelled: 2, arrivedAtTick: undefined });

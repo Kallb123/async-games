@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 
 import {
     KINGDOM_BUILDER_BUILDING_TYPES,
@@ -8,6 +8,7 @@ import {
     type KingdomBuilderResources,
     type KingdomBuilderTile,
 } from "./KingdomBuilderSettlementModel";
+import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import {
     KINGDOM_BUILDER_BUILDING_PRODUCES,
@@ -16,10 +17,12 @@ import {
     buildTicksFor,
     buildingCostFor,
     buildingLevelOf,
+    tavernLevelCapFor,
     type KingdomBuilderPrototypeBuilding,
     type KingdomBuilderUpgradableBuilding,
 } from "./buildings";
 import { siegesOn } from "./besiegers";
+import { commanderCapacityOf, commandersHeld } from "./commanders";
 import { catchmentOfSettlement } from "./land";
 import type { KingdomBuilderSiege } from "./siege";
 import { KINGDOM_BUILDER_CARAVAN_COST, KINGDOM_BUILDER_MAX_AMOUNT, depositTo, exchangeRateFor, isResourceType, marketLevelOf, spendFrom } from "./market";
@@ -59,6 +62,12 @@ export interface KingdomBuilderSettlementView {
     caravans: number;
     /** The siege on it (§8), if another player's army is camped there. */
     siege?: KingdomBuilderSiege;
+    /**
+     * The owner's commanders across their whole realm (§6.5): how many they
+     * hold — stationed, in training and in the field — and how many their
+     * taverns allow. Only ever on the owner's own settlement.
+     */
+    commanders: { held: number; capacity: number };
 }
 
 export class KingdomBuilderPrototypeError extends Error {
@@ -92,8 +101,9 @@ export async function settlementView(worldId: string, settlementId: string, user
 
     const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
     if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
-    const [ownerSettlements, catchment, sieges] = await Promise.all([
-        KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1 }).lean(),
+    const [ownerSettlements, ownerArmies, catchment, sieges] = await Promise.all([
+        KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1, garrison: 1, trainingQueue: 1 }).lean(),
+        KingdomBuilderArmyModel.find({ worldId, ownerId: userId }).select({ units: 1 }).lean(),
         catchmentOfSettlement(worldId, settlement),
         siegesOn(worldId, [settlement]),
     ]);
@@ -128,6 +138,10 @@ export async function settlementView(worldId: string, settlementId: string, user
         garrison: garrisonOf(settlement.garrison),
         caravans: settlement.caravans ?? 0,
         ...(siege ? { siege } : {}),
+        commanders: {
+            held: commandersHeld({ settlements: ownerSettlements, armies: ownerArmies }),
+            capacity: commanderCapacityOf(ownerSettlements),
+        },
     };
 }
 
@@ -155,7 +169,7 @@ export async function queuePrototypeBuilding(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     if (existing.construction) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "Finish the current building first");
 
-    // The barracks, the market and the town centre are the buildings a player
+    // The barracks, the market, the tavern and the town centre are the buildings a player
     // can raise a level (§4.2), and a settlement holds only one of each, so
     // each level has one home and the market one rate.
     const maxLevel = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS[type];
@@ -177,23 +191,31 @@ export async function queuePrototypeBuilding(
     }
 
     const targetLevel = upgrading ? current.level + 1 : 1;
+    // A tavern never stands above its town centre's built level (§6.5).
+    if (type === "tavern" && targetLevel > tavernLevelCapFor(existing.tiles)) {
+        throw new KingdomBuilderPrototypeError("LOCKED", `Raise the town centre to level ${targetLevel} first`);
+    }
     const cost = buildingCostFor(type, targetLevel);
     if (!canAfford(resourcesOf(existing.resources), cost)) {
         throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", "Not enough resources to build that");
     }
     const { filter: canPay, $inc } = spendFrom(cost);
+    const onTile = upgrading
+        ? { tiles: { $elemMatch: { position: tilePosition, "building.type": buildingType, "building.level": current.level } } }
+        : {
+            tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
+            ...(maxLevel !== undefined ? { "tiles.building.type": { $ne: buildingType } } : {}),
+        };
     const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
         {
             _id: settlementId,
             worldId,
             ownerId: userId,
             construction: { $exists: false },
-            ...(upgrading
-                ? { tiles: { $elemMatch: { position: tilePosition, "building.type": buildingType, "building.level": current.level } } }
-                : {
-                    tiles: { $elemMatch: { position: tilePosition, building: { $exists: false } } },
-                    ...(maxLevel !== undefined ? { "tiles.building.type": { $ne: buildingType } } : {}),
-                }),
+            // The tavern's cap is repeated here, so a town centre that changed since the read can't be built past.
+            ...(type === "tavern"
+                ? { $and: [onTile, { tiles: { $elemMatch: { "building.type": "town-centre", "building.level": { $gte: targetLevel } } } }] }
+                : onTile),
             ...canPay,
         },
         { $set: { construction: { tilePosition, buildingType, targetLevel, ticksRemaining: buildTicksFor(targetLevel) } }, $inc },
@@ -206,8 +228,8 @@ export async function queuePrototypeBuilding(
 
 /**
  * Queues one unit where it trains — a soldier at the barracks, a settler at the
- * town centre (PR 24) — paying its whole cost up front (§4.3). Both join the
- * settlement's one training queue.
+ * town centre (PR 24), a commander at the tavern (PR 26) — paying its whole
+ * cost up front (§4.3). All of them join the settlement's one training queue.
  */
 export async function queueUnitTraining(
     worldId: string,
@@ -226,11 +248,12 @@ export async function queueUnitTraining(
     if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const { building } = unit.trainedAt;
+    const buildingName = building.replace("-", " ");
     const level = trainingLevelFor(unitType, existing.tiles);
-    if (level === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", "Build a barracks first");
+    if (level === 0) throw new KingdomBuilderPrototypeError("NO_BARRACKS", `Build a ${buildingName} first`);
     const ticksRemaining = trainingTicksFor(unitType, level);
     if (ticksRemaining === null) {
-        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.trainedAt.level} ${building === "barracks" ? "barracks" : "town centre"}`);
+        throw new KingdomBuilderPrototypeError("LOCKED", `${unit.name} needs a level ${unit.trainedAt.level} ${buildingName}`);
     }
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
         throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The training queue is full");
@@ -243,24 +266,50 @@ export async function queueUnitTraining(
     // landing in between fails this write rather than overdrawing the stores,
     // overfilling the queue, or pricing the unit at a level it lost.
     const { filter: canPay, $inc } = spendFrom(unit.cost);
-    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
-        {
-            _id: settlementId,
-            worldId,
-            ownerId: userId,
-            tiles: { $elemMatch: { "building.type": building, "building.level": level } },
-            [`trainingQueue.${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT - 1}`]: { $exists: false },
-            ...canPay,
-        },
-        {
-            $inc,
-            $push: { trainingQueue: { unitType, ticksRemaining, orderId: new Types.ObjectId().toString() } },
-        },
-        { new: true },
-    ).lean();
-    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
+    const queue = async (session?: ClientSession) => {
+        const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+            {
+                _id: settlementId,
+                worldId,
+                ownerId: userId,
+                tiles: { $elemMatch: { "building.type": building, "building.level": level } },
+                [`trainingQueue.${KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT - 1}`]: { $exists: false },
+                ...canPay,
+            },
+            {
+                $inc,
+                $push: { trainingQueue: { unitType, ticksRemaining, orderId: new Types.ObjectId().toString() } },
+            },
+            session ? { new: true, session } : { new: true },
+        ).lean();
+        if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
+    };
+    if (unitType === "commander") await mongoose.connection.transaction(async session => recruitCommander(worldId, userId, session, queue));
+    else await queue();
 
     return settlementView(worldId, settlementId, userId);
+}
+
+/**
+ * Queues a commander only while the player holds fewer than their taverns
+ * allow (§6.5) — counted across the whole realm, since a commander marches
+ * between towns. The transaction writes the world first, as a dispatch does,
+ * so two recruits at once (two tabs, or two towns) conflict and the one
+ * retried counts the other's commander; so do a tick and a dispatch, which
+ * move commanders between the places counted.
+ */
+async function recruitCommander(worldId: string, userId: string, session: ClientSession, queue: (session: ClientSession) => Promise<void>) {
+    const live = await KingdomBuilderWorldModel.updateOne({ _id: worldId, endedAt: null }, { $inc: { commandersRecruited: 1 } }, { session });
+    if (live.modifiedCount !== 1) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
+    // One after the other: a transaction's operations don't run side by side.
+    const settlements = await KingdomBuilderSettlementModel.find({ worldId, ownerId: userId })
+        .select({ tiles: 1, garrison: 1, trainingQueue: 1 }).session(session).lean();
+    const armies = await KingdomBuilderArmyModel.find({ worldId, ownerId: userId }).select({ units: 1 }).session(session).lean();
+    const capacity = commanderCapacityOf(settlements);
+    if (commandersHeld({ settlements, armies }) >= capacity) {
+        throw new KingdomBuilderPrototypeError("LOCKED", `All ${capacity} commanders recruited — raise a tavern to recruit another`);
+    }
+    await queue(session);
 }
 
 /**

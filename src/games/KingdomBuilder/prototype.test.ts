@@ -284,7 +284,7 @@ describe("Kingdom Builder training", () => {
             },
             { new: true },
         );
-        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0 });
+        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
     });
 
     it("reports a lost race instead of overdrawing", async () => {
@@ -375,6 +375,78 @@ describe("Kingdom Builder town centre and settlers (PR 24)", () => {
             expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4, orderId: expect.any(String) } } }),
             { new: true },
         );
+    });
+});
+
+function withTavern(level: number, townCentre = 1) {
+    return withTownCentre(townCentre).map(tile => tile.position === 2 ? { position: 2, building: { type: "tavern" as const, level } } : tile);
+}
+
+describe("Kingdom Builder tavern (PR 26)", () => {
+    it("builds a first tavern at town-centre level 1, guarded on the town centre in the same write", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 2, "tavern");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                $and: [
+                    { tiles: { $elemMatch: { position: 2, building: { $exists: false } } }, "tiles.building.type": { $ne: "tavern" } },
+                    { tiles: { $elemMatch: { "building.type": "town-centre", "building.level": { $gte: 1 } } } },
+                ],
+            }),
+            {
+                $set: { construction: { tilePosition: 2, buildingType: "tavern", targetLevel: 1, ticksRemaining: 2 } },
+                $inc: { "resources.wood": -25, "resources.stone": -15, "resources.wheat": -10 },
+            },
+            { new: true },
+        );
+    });
+
+    it("refuses level 2 while the town centre stands at level 1, before writing anything", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withTavern(1) });
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 2, "tavern"))
+            .rejects.toEqual(expect.objectContaining({ code: "LOCKED", message: "Raise the town centre to level 2 first" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("refuses level 2 while the town centre's own level 2 is still being built", async () => {
+        // Only the built level counts — and the one building project a settlement runs at a time is busy with it anyway.
+        const update = stubSettlement({
+            ownerId: "owner", tiles: withTavern(1),
+            construction: { tilePosition: 4, buildingType: "town-centre", targetLevel: 2, ticksRemaining: 3 },
+        });
+
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 2, "tavern")).rejects.toBeDefined();
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("accepts level 2 once the town centre has reached level 2, and goes no higher", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withTavern(1, 2) });
+
+        await queuePrototypeBuilding(worldId, settlementId, "owner", 2, "tavern");
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                $and: [
+                    { tiles: { $elemMatch: { position: 2, "building.type": "tavern", "building.level": 1 } } },
+                    { tiles: { $elemMatch: { "building.type": "town-centre", "building.level": { $gte: 2 } } } },
+                ],
+            }),
+            expect.objectContaining({ $set: { construction: { tilePosition: 2, buildingType: "tavern", targetLevel: 2, ticksRemaining: 4 } } }),
+            { new: true },
+        );
+
+        vi.restoreAllMocks();
+        stubSettlement({ ownerId: "owner", tiles: withTavern(2, 2) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 2, "tavern"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
+    });
+
+    it("allows one tavern per settlement", async () => {
+        stubSettlement({ ownerId: "owner", tiles: withTavern(1) });
+        await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 3, "tavern"))
+            .rejects.toEqual(expect.objectContaining({ code: "TILE_OCCUPIED" }));
     });
 });
 

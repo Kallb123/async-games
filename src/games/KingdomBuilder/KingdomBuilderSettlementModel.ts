@@ -11,7 +11,7 @@ import {
 export const KINGDOM_BUILDER_GRID_SIZE = 9;
 export const KINGDOM_BUILDER_TOWN_CENTRE_INDEX = 4;
 
-export const KINGDOM_BUILDER_BUILDING_TYPES = ["town-centre", "lumber-camp", "quarry", "mine", "farm", "barracks", "market", "walls"] as const;
+export const KINGDOM_BUILDER_BUILDING_TYPES = ["town-centre", "lumber-camp", "quarry", "mine", "farm", "barracks", "market", "tavern", "walls"] as const;
 export type KingdomBuilderBuildingType = typeof KINGDOM_BUILDER_BUILDING_TYPES[number];
 
 export interface KingdomBuilderTile {

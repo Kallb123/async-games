@@ -47,8 +47,8 @@ describe("pushAttack", () => {
     }
 
     it("sends every army of the attacker's at the settlement in together against the fortified garrison, and keeps the battle for both sides", async () => {
-        const { find } = besieging({ militia: 3 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 2 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2 } }]);
-        const sent = garrisonOf({ militia: 2, cavalry: 2 });
+        const { find } = besieging({ militia: 3 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 2, commander: 1 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2 } }]);
+        const sent = garrisonOf({ militia: 2, cavalry: 2, commander: 1 });
         const battle = resolveBattle(sent, { militia: 3 }, { fortified: true });
         expect(battle.attackerWon).toBe(true);
 
@@ -70,22 +70,22 @@ describe("pushAttack", () => {
     });
 
     it("hands each attacking army back its share of the survivors, and disbands one left with none", async () => {
-        besieging({ militia: 4 }, [{ _id: armyId, ownerId: "attacker", units: { infantry: 3 } }, { _id: otherArmyId, ownerId: "attacker", units: { scout: 1 } }]);
-        const battle = resolveBattle({ infantry: 3, scout: 1 }, { militia: 4 }, { fortified: true });
-        // The infantry win without a loss, but the scout soaks its share of the blows and falls.
-        expect(battle.attacker).toEqual(garrisonOf({ infantry: 3 }));
+        besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { infantry: 3, commander: 1 } }, { _id: otherArmyId, ownerId: "attacker", units: { scout: 1 } }]);
+        const battle = resolveBattle({ infantry: 3, scout: 1, commander: 1 }, { militia: 5 }, { fortified: true });
+        // The infantry and their commander win without a loss, but the scout soaks its share of the blows and falls.
+        expect(battle.attacker).toEqual(garrisonOf({ infantry: 3, commander: 1 }));
 
         await pushAttack(worldId, "attacker", armyId.toString());
 
         expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([
-            { updateOne: { filter: { _id: armyId, worldId }, update: { $set: { units: garrisonOf({ infantry: 3 }) } } } },
+            { updateOne: { filter: { _id: armyId, worldId }, update: { $set: { units: garrisonOf({ infantry: 3, commander: 1 }) } } } },
             { deleteOne: { filter: { _id: otherArmyId, worldId } } },
         ], { session });
     });
 
     it("loses the attacking armies against a garrison they can't break, and leaves what is left of it at home", async () => {
-        besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 } }]);
-        const battle = resolveBattle({ militia: 5 }, { militia: 5 }, { fortified: true });
+        besieging({ militia: 7 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5, commander: 1 } }]);
+        const battle = resolveBattle({ militia: 5, commander: 1 }, { militia: 7 }, { fortified: true });
         expect(battle.attackerWon).toBe(false);
 
         await pushAttack(worldId, "attacker", armyId.toString());
@@ -95,7 +95,7 @@ describe("pushAttack", () => {
     });
 
     it("leaves the caravans of an army that falls, and their load, to the town that beat it (§4.7)", async () => {
-        besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 }, caravans: 2, cargo: { iron: 40, wheat: 10 } }]);
+        besieging({ militia: 7 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5, commander: 1 }, caravans: 2, cargo: { iron: 40, wheat: 10 } }]);
 
         await pushAttack(worldId, "attacker", armyId.toString());
 
@@ -115,6 +115,29 @@ describe("pushAttack", () => {
         await expect(pushAttack(worldId, "stranger", armyId.toString())).rejects.toMatchObject({ code: "ARMY_NOT_FOUND" });
         expect(settlement).not.toHaveBeenCalled();
         expect(mongoose.connection.transaction).not.toHaveBeenCalled();
+    });
+
+    it("refuses a push with no commander among the caller's besiegers, before a blow is struck", async () => {
+        besieging({ militia: 1 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2 } }]);
+
+        await expect(pushAttack(worldId, "attacker", armyId.toString())).rejects.toMatchObject({ code: "ARMY_BUSY", message: "No commander to lead the attack" });
+        expect(KingdomBuilderBattleModel.create).not.toHaveBeenCalled();
+        expect(KingdomBuilderSettlementModel.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("refuses a push from a party of scouts at the gate — they can watch, not push", async () => {
+        besieging({ militia: 1 }, [{ _id: armyId, ownerId: "attacker", units: { scout: 4 } }]);
+
+        await expect(pushAttack(worldId, "attacker", armyId.toString())).rejects.toMatchObject({ message: "No commander to lead the attack" });
+        expect(KingdomBuilderBattleModel.create).not.toHaveBeenCalled();
+    });
+
+    it("lets one commander lead two armies in together", async () => {
+        besieging({ militia: 2 }, [{ _id: armyId, ownerId: "attacker", units: { infantry: 4 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2, commander: 1 } }]);
+
+        await pushAttack(worldId, "attacker", armyId.toString());
+
+        expect(kept()[0].attacker).toEqual(garrisonOf({ infantry: 4, cavalry: 2, commander: 1 }));
     });
 
     it("refuses an army that is only camped", async () => {

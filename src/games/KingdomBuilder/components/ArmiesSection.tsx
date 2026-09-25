@@ -9,6 +9,7 @@ import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import type { KingdomBuilderResources } from "../KingdomBuilderSettlementModel";
 import { formatStack, isCamped, isEscorted, unitCount } from "../armies";
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "../buildings";
+import { KINGDOM_BUILDER_HOME_ONLY, KINGDOM_BUILDER_NEEDS_COMMANDER, isLeaderless } from "../commanders";
 import { KINGDOM_BUILDER_CARAVAN_CAPACITY, caravanCapacityOf, resourceTotal } from "../market";
 import { formatResources, resourcesOf } from "../resources";
 import { KINGDOM_BUILDER_SETTLEMENT_LIMIT, openSites } from "../sites";
@@ -45,9 +46,12 @@ interface ArmiesSectionProps {
 /** What a stack does where it has camped (PR 25, PR 24), each its own command on the world route. */
 type CampAction = { action: "detach" } | { action: "unload" } | { action: "join"; intoArmyId: string } | { action: "settle" };
 
-/** How a stack reads in a list: soldiers march, settlers and caravans travel. */
+/** How a stack reads in a list: soldiers march, settlers, caravans and a lone commander travel. */
 function stackIcon(army: KingdomBuilderArmyView): string {
-    if (!isEscorted(army)) return army.units.settler > 0 ? KINGDOM_BUILDER_UNITS.settler.icon : "🐪";
+    if (!isEscorted(army)) {
+        if (army.units.settler > 0) return KINGDOM_BUILDER_UNITS.settler.icon;
+        return army.caravans > 0 ? "🐪" : KINGDOM_BUILDER_UNITS.commander.icon;
+    }
     return army.arrivedAtTick === undefined ? "⚔️" : army.besiegingSince === undefined ? "⛺" : "🏹";
 }
 
@@ -76,13 +80,17 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
         const origin = "settlementId" in march ? view.settlements.find(settlement => settlement.settlementId === march.settlementId) : undefined;
         const army = "armyId" in march ? view.armies.find(entry => entry.armyId === march.armyId) : undefined;
         const stack = "units" in march ? march : army;
-        const status = !march.targetNodeId
-            ? "Tap somewhere on the map to march there."
-            : preview === "no-route"
-                ? `There is no way across the land to ${placeName(march.targetNodeId)}.`
-                : `To ${placeName(march.targetNodeId)}${preview ? ` — ${formatTicks(preview.ticks)}` : ""}.`;
+        // Soldiers leave a garrison only behind a commander (§6.5); an army out that has lost its own can only come home.
+        const unled = !!origin && "units" in march && isLeaderless(march);
+        const status = unled
+            ? KINGDOM_BUILDER_NEEDS_COMMANDER
+            : !march.targetNodeId
+                ? army && isLeaderless(army) ? `${KINGDOM_BUILDER_HOME_ONLY} — tap one of your towns.` : "Tap somewhere on the map to march there."
+                : preview === "no-route"
+                    ? `There is no way across the land to ${placeName(march.targetNodeId)}.`
+                    : `To ${placeName(march.targetNodeId)}${preview ? ` — ${formatTicks(preview.ticks)}` : ""}.`;
         const overloaded = "cargo" in march && resourceTotal(march.cargo) > caravanCapacityOf(march.caravans);
-        const canSend = !!march.targetNodeId && preview !== "no-route" && !!stack && unitCount(stack.units) + (stack.caravans ?? 0) > 0 && !overloaded && !isPending;
+        const canSend = !unled && !!march.targetNodeId && preview !== "no-route" && !!stack && unitCount(stack.units) + (stack.caravans ?? 0) > 0 && !overloaded && !isPending;
         return (
             <Section label={army ? "New orders" : "Send an army"}>
                 {origin && "units" in march && (
@@ -115,7 +123,8 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
             {view.armies.length > 0 && (
                 <div className="ag-list">
                     {view.armies.map(army => (
-                        <ListRow key={army.armyId} icon={stackIcon(army)} title={formatStack(army)}
+                        <ListRow key={army.armyId} icon={stackIcon(army)}
+                            title={isLeaderless(army) ? <>{formatStack(army)} <span className="ag-tag ag-tag--quiet">No commander</span></> : formatStack(army)}
                             sub={army.arrivedAtTick === undefined
                                 ? `Marching to ${placeName(army.targetNodeId)} — ${formatTicks(army.ticksToArrive)}`
                                 : villages.has(army.targetNodeId)
@@ -136,11 +145,12 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                         <BuildRow key={settlement.settlementId} icon="🏯" name={`From settlement ${index + 1}`}
                             cost={empty ? "No units in the garrison — train some at the barracks" : formatStack({ units: garrison, caravans })}
                             tag={empty ? "Empty" : "Muster"} tagMuted={empty} disabled={empty}
-                            onClick={() => onMarchChange({ settlementId: settlement.settlementId!, units: garrison, caravans: 0, cargo: resourcesOf() })} />
+                            // One commander leads the muster by default; the rest stay to lead the next.
+                            onClick={() => onMarchChange({ settlementId: settlement.settlementId!, units: { ...garrison, commander: Math.min(1, garrison.commander) }, caravans: 0, cargo: resourcesOf() })} />
                     );
                 })}
             </div>
-            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns. A settler from a town centre founds a new town on the open site it camps at. Caravans and settlers left with no escort are taken by any rival army that meets them.</p>}
+            {view.armies.length === 0 && <p className="ag-hint">Muster a garrison to send an army across the map. An army that marches home rejoins its garrison, one that reaches another player&apos;s town lays siege to it, and one that reaches a barbarian village fights for it at once — take it and it becomes your town. Caravans from a market go with an army, or alone, to carry the stores; they unload when they reach one of your towns. A settler from a town centre founds a new town on the open site it camps at. Caravans and settlers left with no escort are taken by any rival army that meets them. Soldiers march out only behind a commander from a tavern; scouts, caravans and settlers go without.</p>}
         </Section>
     );
 }

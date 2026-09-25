@@ -15,6 +15,7 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { KINGDOM_BUILDER_ARMY_LIMIT, addUnits, armyTile, combineCaravans, isCamped, isEscorted, routeBetween, unitCount, type KingdomBuilderRoute } from "./armies";
+import { KINGDOM_BUILDER_HOME_ONLY, KINGDOM_BUILDER_NEEDS_COMMANDER, isLeaderless } from "./commanders";
 import { amountsFrom, caravanCapacityOf, depositTo, resourceTotal, resourcesIn, spendFrom } from "./market";
 import { addResources, resourcesOf } from "./resources";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
@@ -105,6 +106,8 @@ async function dispatchFromSettlement(worldId: string, userId: string, order: Ki
     const units = unitsFrom(order.units);
     const { caravans, cargo } = caravansFrom(order.caravans, order.cargo);
     if (unitCount(units) === 0 && caravans === 0) throw invalid("Send at least one unit or caravan");
+    // The march rule (§6.5): soldiers leave only behind a commander. Scouts, caravans, settlers and a commander alone go as they are.
+    if (isLeaderless({ units })) throw invalid(KINGDOM_BUILDER_NEEDS_COMMANDER);
     // Whose it is comes first, so a stranger learns nothing about the world from what is refused.
     const settlement = await KingdomBuilderSettlementModel.findOne({ _id: order.settlementId, worldId, ownerId: userId })
         .select({ nodeId: 1, garrison: 1, caravans: 1, resources: 1 })
@@ -177,6 +180,10 @@ async function orderArmy(worldId: string, userId: string, order: KingdomBuilderM
     const camped = isCamped(army);
     if (camped && order.targetNodeId === army.targetNodeId) throw invalid("The army is already there");
     ground.assertCanGo(isEscorted(army), order.targetNodeId);
+    // An army that has lost its commander can only come home (§6.5).
+    if (isLeaderless(army) && !await KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId, nodeId: order.targetNodeId })) {
+        throw invalid(KINGDOM_BUILDER_HOME_ONLY);
+    }
     const route = ground.route(armyTile(army), ground.tileOf(order.targetNodeId));
 
     const moved = await KingdomBuilderArmyModel.updateOne(

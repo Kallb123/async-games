@@ -10,6 +10,7 @@ import { KingdomBuilderBattleModel, type KingdomBuilderBattleShare } from "./Kin
 import { KingdomBuilderSettlementModel, type KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { addUnits, combineCaravans, subtractUnits, unitCount } from "./armies";
+import { KINGDOM_BUILDER_NO_PUSH_COMMANDER, hasCommander } from "./commanders";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
@@ -115,6 +116,7 @@ function plundered(spoils: Spoils): Record<string, number> {
  * goes on — taking a settlement is a later rule. Otherwise whatever is left
  * of the armies keeps up the siege, and whatever is left of the garrison
  * stays home — with the caravans of any army that fell, and their load.
+ * It needs a commander among those armies to lead them in (§6.5).
  */
 export async function pushAttack(worldId: string, userId: string, armyId: unknown): Promise<KingdomBuilderWorldView> {
     if (!Types.ObjectId.isValid(worldId)) throw invalid("A valid world is required");
@@ -133,6 +135,8 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         if (!target || !attackers.some(attacker => attacker._id.toString() === armyId)) {
             throw new KingdomBuilderPersistenceError("NO_SIEGE", "The siege ended before the attack could go in");
         }
+        // One commander among the caller's besiegers leads them all in (§6.5); scouts alone can watch, not push.
+        if (!hasCommander(attackers)) throw new KingdomBuilderPersistenceError("ARMY_BUSY", KINGDOM_BUILDER_NO_PUSH_COMMANDER);
         const sent = combinedUnits(attackers.map(attacker => attacker.units));
         const faced = garrisonOf(target.garrison);
         const battle = resolveBattle(sent, faced, { fortified: true });
@@ -147,7 +151,7 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
 }
 
 /**
- * The defender sallies out (§8): the settlement's whole garrison — its settlers aside — goes out
+ * The defender sallies out (§8): the settlement's whole garrison — its settlers aside, its commanders with it — goes out
  * against every army besieging it, in the open, without its town's defences.
  * Won, the besiegers are destroyed and the siege is lifted, and their
  * caravans and load are brought in. Otherwise

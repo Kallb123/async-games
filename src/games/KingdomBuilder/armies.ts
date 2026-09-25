@@ -50,12 +50,12 @@ export interface KingdomBuilderMarch {
     cargo?: Partial<KingdomBuilderResources>;
 }
 
-/** How many of the stack's units fight — all of them but its settlers (PR 24). */
+/** How many of the stack's units guard it — all of them but its settlers (PR 24) and its commanders (PR 26). */
 export function militaryCount(units: Partial<KingdomBuilderGarrison>): number {
     return KINGDOM_BUILDER_MILITARY_UNIT_TYPES.reduce((total, unitType) => total + (units[unitType] ?? 0), 0);
 }
 
-/** Whether the stack has any units to guard it — one that is only caravans and settlers has none. */
+/** Whether the stack has any units to guard it — one that is only caravans, settlers and commanders has none. */
 export function isEscorted(march: { units: Partial<KingdomBuilderGarrison> }): boolean {
     return militaryCount(march.units) > 0;
 }
@@ -181,13 +181,20 @@ export interface KingdomBuilderSeizure {
     caravans: number;
     /** Settlers taken with them, or alone — absent when there were none. */
     settlers?: number;
+    /**
+     * Commanders with them, or alone (PR 26), killed rather than taken — a
+     * captured one would put the captor over their cap. Absent when there
+     * were none; only their owner is told.
+     */
+    commandersLost?: number;
 }
 
 /**
  * Caravans and settlers with nobody to guard them are taken by a rival's
  * escorted stack on the same tile (§4.7): they and their load join the first
  * such stack — the oldest, in the order given — which drives them on wherever
- * it is going, and whose settlers they now are. A stack of their owner's with
+ * it is going, and whose settlers they now are. Commanders with them, or on
+ * their own, are killed (§6.5), never taken. A stack of their owner's with
  * fighting units on the tile guards them instead.
  */
 export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[], tick: number): { armies: T[]; seized: KingdomBuilderSeizure[] } {
@@ -201,7 +208,8 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
     const seized: KingdomBuilderSeizure[] = [];
     for (const army of armies) {
         const settlers = army.units.settler ?? 0;
-        if (isEscorted(army) || (!army.caravans && !settlers)) continue;
+        const commanders = army.units.commander ?? 0;
+        if (isEscorted(army) || (!army.caravans && !settlers && !commanders)) continue;
         const here = guards.get(armyTile(army)) ?? [];
         const captor = here.some(guard => guard.ownerId === army.ownerId) ? undefined : here[0];
         if (!captor) continue;
@@ -209,6 +217,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         seized.push({
             tick, ...(isCamped(army) ? { nodeId: army.targetNodeId } : {}), ownerId: army.ownerId, captorId: captor.ownerId,
             captor: garrisonOf(captor.units), caravans: army.caravans ?? 0, ...(settlers ? { settlers } : {}),
+            ...(commanders ? { commandersLost: commanders } : {}),
         });
     }
     if (seized.length === 0) return { armies: [...armies], seized };
@@ -217,7 +226,8 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         armies: armies.flatMap(army => {
             if (gone.has(army)) return [];
             const spoils = taken.get(army);
-            return spoils ? [{ ...army, units: spoils.reduce((units, spoil) => addUnits(units, spoil.units), army.units), ...combineCaravans([army, ...spoils]) }] : [army];
+            // The commanders among the spoils are dead: they join nobody.
+            return spoils ? [{ ...army, units: spoils.reduce((units, spoil) => addUnits(units, { ...spoil.units, commander: 0 }), army.units), ...combineCaravans([army, ...spoils]) }] : [army];
         }),
         seized,
     };

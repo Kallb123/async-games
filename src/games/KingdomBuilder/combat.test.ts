@@ -38,6 +38,8 @@ describe("the matchup table (§7.3)", () => {
         ["one more unit is enough to break it", { militia: 6 }, { militia: 5 }, town, true],
         ["an even infantry push stalls on the town", { infantry: 10 }, { infantry: 10 }, town, false],
         ["siege engines breach the defences it stalls on", { infantry: 10, "siege-engine": 5 }, { infantry: 10 }, town, true],
+        ["a commander adds its weight to a stack that would otherwise stall", { militia: 5, commander: 1 }, { militia: 5 }, town, true],
+        ["a commander alone is no army", { commander: 1 }, { militia: 3 }, open, false],
     ])("%s", (_, attacker, defender, ground, attackerWins) => {
         expect(resolveBattle(attacker, defender, ground).attackerWon).toBe(attackerWins);
     });
@@ -95,6 +97,12 @@ describe("resolveBattle", () => {
         expect(unitCount(battle.attacker)).toBeGreaterThan(0);
         expect(unitCount(battle.defender)).toBeGreaterThan(0);
         expect(battle.attackerWon).toBe(false);
+    });
+
+    it("kills a commander in a stack that is wiped out, like any soldier", () => {
+        const battle = resolveBattle({ militia: 2, commander: 1 }, { infantry: 10 }, open);
+        expect(battle.attacker).toEqual(garrisonOf());
+        expect(battle.rounds.reduce((total, round) => total + round.attacker.commander, 0)).toBe(1);
     });
 
     it("wins at once against nobody, without a round", () => {

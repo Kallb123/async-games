@@ -3,8 +3,12 @@ import { KINGDOM_BUILDER_UPGRADABLE_BUILDINGS, buildingLevelOf } from "./buildin
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { tunedResources } from "./resources";
 
-/** GDD §6.1's roster, in the order the barracks unlocks them — and the settler (§4.4, PR 24), which the town centre trains. */
-export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "infantry", "cavalry", "siege-engine", "settler"] as const;
+/**
+ * GDD §6.1's roster, in the order the barracks unlocks them — then the settler
+ * (§4.4, PR 24), which the town centre trains, and the commander (§6.5, PR 26),
+ * which the tavern recruits.
+ */
+export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "infantry", "cavalry", "siege-engine", "settler", "commander"] as const;
 export type KingdomBuilderUnitType = typeof KINGDOM_BUILDER_UNIT_TYPES[number];
 
 export type KingdomBuilderGarrison = Record<KingdomBuilderUnitType, number>;
@@ -31,16 +35,24 @@ export interface KingdomBuilderUnitDefinition {
     trainTicks: number;
     /**
      * Where it trains, and the level of that building that unlocks it: the
-     * barracks for the army (§4.2), the town centre for the settler (§4.4).
-     * Either way it joins the settlement's one training queue.
+     * barracks for the army (§4.2), the town centre for the settler (§4.4),
+     * the tavern for the commander (§6.5). Whichever, it joins the
+     * settlement's one training queue.
      */
-    trainedAt: { building: "barracks" | "town-centre"; level: number };
+    trainedAt: { building: "barracks" | "town-centre" | "tavern"; level: number };
     /**
      * A settler fights no better than a caravan (§4.4): it guards nothing, lays
      * no siege and goes into no barbarian village alone — though it dies like
      * any unit in a battle it is caught in.
      */
     civilian?: true;
+    /**
+     * A commander leads an army rather than guarding one (§6.5): it fights and
+     * dies like a soldier in a battle, but alone it escorts nothing, lays no
+     * siege and goes into no barbarian village — and a rival escort on the
+     * road kills it.
+     */
+    leader?: true;
 }
 
 export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilderUnitDefinition> = {
@@ -68,10 +80,14 @@ export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilde
         name: "Settler", icon: "🧺", role: "Founds a new town on an open site", speed: "slow",
         cost: tunedResources("unitCosts.settler", economy.unitCosts.settler), trainTicks: 4, trainedAt: { building: "town-centre", level: 2 }, civilian: true,
     },
+    commander: {
+        name: "Commander", icon: "🎖️", role: "Leads an army out of a settlement", speed: "fast",
+        cost: tunedResources("unitCosts.commander", economy.unitCosts.commander), trainTicks: 4, trainedAt: { building: "tavern", level: 1 }, leader: true,
+    },
 };
 
-/** The units that fight for a stack — every one but the settler. */
-export const KINGDOM_BUILDER_MILITARY_UNIT_TYPES = KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => !KINGDOM_BUILDER_UNITS[unitType].civilian);
+/** The units that guard a stack — every one but the settler and the commander. */
+export const KINGDOM_BUILDER_MILITARY_UNIT_TYPES = KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => !KINGDOM_BUILDER_UNITS[unitType].civilian && !KINGDOM_BUILDER_UNITS[unitType].leader);
 
 export const KINGDOM_BUILDER_BARRACKS_MAX_LEVEL = KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.barracks!;
 /** Units waiting in one settlement's training queue, the one in training included. */
@@ -98,7 +114,7 @@ export function barracksLevelOf(tiles: readonly KingdomBuilderTile[]): number {
     return buildingLevelOf(tiles, "barracks");
 }
 
-/** The level of the building a unit trains at in this settlement — its barracks, or its town centre — or 0 without one. */
+/** The level of the building a unit trains at in this settlement — its barracks, its town centre or its tavern — or 0 without one. */
 export function trainingLevelFor(unitType: KingdomBuilderUnitType, tiles: readonly KingdomBuilderTile[]): number {
     return buildingLevelOf(tiles, KINGDOM_BUILDER_UNITS[unitType].trainedAt.building);
 }

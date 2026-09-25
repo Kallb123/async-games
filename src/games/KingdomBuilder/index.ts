@@ -26,3 +26,4 @@ export * from "./barbarians";
 export * from "./market";
 export * from "./trade";
 export * from "./tradeBoard";
+export * from "./commanders";
