@@ -65,6 +65,11 @@ export interface BannedIsletPick {
     first?: number;
 }
 
+/** A Helicopter Lift whose passengers are still being chosen — the sheet's question, not yet the board's. */
+export function isBoarding(pick: BannedIsletPick | null): boolean {
+    return pick?.mode === 'helicopterLift' && pick.boarding === true;
+}
+
 // Every choice in this sheet is one shared `BuildRow`, described as data so a
 // sixth kind of action is a line in an array rather than another copy of the
 // markup — and so the two lists below (the actions, and the cards a give
@@ -271,7 +276,7 @@ export function BannedIsletSpecials({
 
     // ── Choosing a lift's passengers (§10), which is a decision about pawns
     //     rather than about a tile and so has nowhere on the board to be made. ──
-    if (pick?.mode === 'helicopterLift' && pick.boarding) {
+    if (pick && isBoarding(pick)) {
         const chosen = pick.userIds ?? [];
         return (
             <LiftPassengers
@@ -468,7 +473,7 @@ export default function BannedIsletActions({
 
     // A lift that is boarding takes the screen wherever the turn is,
     // including mid-discard: the specials render as its passenger picker.
-    if (isMyTurn && pick?.mode === 'helicopterLift' && pick.boarding) return specials('');
+    if (isMyTurn && isBoarding(pick)) return specials('');
 
     // ── Over the hand limit (§10, §16): the island is waiting on this, and
     //     nothing else on the turn can happen until the hand is back down —

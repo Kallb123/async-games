@@ -6,7 +6,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { BannedIsletAction, BannedIsletPlayCard, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IBannedIsletGameDataResponse, IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
-import BannedIsletActions, { BannedIsletPick, BannedIsletSpecials } from "@/games/BannedIslet/components/BannedIsletActions";
+import BannedIsletActions, { BannedIsletPick, BannedIsletSpecials, isBoarding } from "@/games/BannedIslet/components/BannedIsletActions";
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
 import BannedIsletWaterLevelScale from "@/games/BannedIslet/components/BannedIsletWaterLevelScale";
@@ -192,7 +192,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             case 'helicopterLift': {
                 // Still boarding: the passengers are being chosen in the
                 // sheet, and there is nowhere to land until they are.
-                if (!gs || current.boarding) return [];
+                if (!gs || isBoarding(current)) return [];
                 const pawns = Object.values(gs.playerStates).map(p => ({ userId: p.userId, position: p.position }));
                 const origin = liftOrigin(pawns, current.userIds ?? []);
                 return origin === null ? [] : flightTargets(gs.positions, origin);
@@ -256,7 +256,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     }
 
     let boardTag: string | null = null;
-    if (pickLive && pick && gs && !pick.boarding) {
+    if (pickLive && pick && gs && !isBoarding(pick)) {
         switch (pick.mode) {
             case 'move': boardTag = 'Choose a tile to move to'; break;
             case 'pilotFlight': boardTag = 'Choose any tile on the island to fly to'; break;
