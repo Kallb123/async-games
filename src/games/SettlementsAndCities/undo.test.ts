@@ -9,6 +9,7 @@ import {
     SACPlaceRoadSetup,
     SACBuildRoad,
     SACBuildSettlement,
+    SACMaritimeTrade,
     SACPlayKnight,
     SACRollDice,
     SACEndTurn,
@@ -272,6 +273,31 @@ describe("Settlements & Cities — the hold before a turn ends (docs/undo.md §5
         expect(game.currentTurn).toBe("u1");
     });
 
+    it("holds a bank trade that leaves nothing else to do, and undoing it hands the resources back", async () => {
+        const gs = makeState(emptyBoard());
+        gs.playerStates.set("u1", player({ resources: { lumber: 4 } }));
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
+
+        const { outcome } = await run(game, trade);
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        expect(game.gameState.commandHistory.map(c => (c as { className: string }).className))
+            .toEqual(["SACMaritimeTrade"]);
+        expect(game.currentTurn).toBe("u1");
+
+        const undone = await run(game, cmd(new SACUndo()));
+        expect(undone.outcome.validMove).toBe(true);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.playerStates.get("u1")!.resources.lumber).toBe(4);
+        expect(gs.playerStates.get("u1")!.resources.wool).toBe(0);
+        expect(game.currentTurn).toBe("u1");
+    });
+
     it("still ends a roll-triggered auto-end immediately, with no hold", async () => {
         // Same shape as autoEndTurn.test.ts: SACRollDice pushes no snapshot, so
         // there's nothing on the anchor for sacFinishTurn to hold for — a roll
@@ -430,9 +456,9 @@ describe("Settlements & Cities — the undoable commands never consume randomnes
     // asserted to carry no `recorded…` field once executed — the machine-
     // checked half of "only on non-random actions". A command discovered below
     // that isn't covered by name here fails the second test, which is the
-    // point: a fifth command can't opt in to undo without a reviewer adding it
+    // point: a sixth command can't opt in to undo without a reviewer adding it
     // to this file.
-    const UNDOABLE_COMMAND_NAMES = ["SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACBuildRoad", "SACBuildSettlement"];
+    const UNDOABLE_COMMAND_NAMES = ["SACPlaceSettlementSetup", "SACPlaceRoadSetup", "SACBuildRoad", "SACBuildSettlement", "SACMaritimeTrade"];
 
     it("SACPlaceSettlementSetup", async () => {
         const gs = setupBoard(0);
@@ -482,7 +508,20 @@ describe("Settlements & Cities — the undoable commands never consume randomnes
         expect(consumedRandomness(command)).toBe(false);
     });
 
-    it("declares undoable on exactly these four commands, and no others", () => {
+    it("SACMaritimeTrade", async () => {
+        const gs = makeState(emptyBoard());
+        gs.playerStates.set("u1", player({ resources: { lumber: 4 } }));
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+        const command = cmd(new SACMaritimeTrade());
+        command.offerResource = "lumber";
+        command.wantResource = "wool";
+        const outcome = await command.Execute(game as unknown as IGameData);
+        expect(outcome.validMove).toBe(true);
+        expect(consumedRandomness(command)).toBe(false);
+    });
+
+    it("declares undoable on exactly these five commands, and no others", () => {
         expect(classesDeclaringUndoable().sort()).toEqual([...UNDOABLE_COMMAND_NAMES].sort());
     });
 });

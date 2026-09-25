@@ -328,7 +328,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
 });
 
 describe("Settlements & Cities — auto-ending a turn with nothing left to do", () => {
-    it("ends the turn once a trade leaves the player unable to build, buy or trade further", async () => {
+    it("holds the turn once a trade leaves the player unable to build, buy or trade further, then ends it", async () => {
         const gs = makeState({
             playerStates: new Map([["u1", player({ resources: { lumber: 4 } })]]),
         });
@@ -342,10 +342,17 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         expect(outcome.validMove).toBe(true);
         expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, wool: 1 });
         // No dev cards in the deck, no resources left for another build or
-        // trade — there's nothing left to decide, so the turn ends for them.
-        expect(outcome.turnOver).toBe(true);
-        // Word for word what tapping "End turn" writes: the log must not tell the
-        // table that this player ran out of things they could afford.
+        // trade — there's nothing left to decide, but the trade can still be
+        // taken back, so the hand-off waits (docs/undo.md §5) rather than
+        // ending the turn outright.
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+
+        // The countdown running out sends an ordinary SACEndTurn, which writes
+        // word for word what tapping "End turn" writes: the log must not tell
+        // the table that this player ran out of things they could afford.
+        const ended = await run(game, cmd(new SACEndTurn()));
+        expect(ended.outcome.turnOver).toBe(true);
         expect(game.gameState.history[0].text).toBe("{{u1}} ended their turn");
     });
 

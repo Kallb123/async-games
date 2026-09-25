@@ -60,10 +60,12 @@ In Settlements & Cities that reads:
   settlement is still yours to undo after it); Pass now skips the wait.
 - **Main phase.** Build a road or a settlement and the same Undo appears. If
   that build left you with nothing else to buy, build or trade, the turn would
-  today end itself the instant the build landed. Now it holds for ten seconds
+  today end itself the instant the build landed. A bank trade works the same way
+  (§6): trade away your last four lumber for the wrong resource and you get it
+  back. Now it holds for ten seconds
   first, with the same countdown, because "I've just spent my last brick on the
   wrong edge" is exactly the moment you want it back.
-- **Nothing else changes.** Rolling, the robber, dev cards and trades are not
+- **Nothing else changes.** Rolling, the robber and dev cards are not
   undoable (§6), and a turn that ends on one of those ends exactly as it does
   today, with no countdown and no delay.
 
@@ -326,6 +328,7 @@ Two alternatives were considered and dropped:
 | `SACPlaceRoadSetup` | ✅ | Pure placement; ends the setup turn, so it is the one that needs the hold. |
 | `SACBuildSettlement` | ✅ | Spends four known resources on a known vertex. |
 | `SACBuildRoad` | ✅ | Spends two known resources on a known edge. Also covers a free road from Road Building — `pendingRoadBuilding` is restored with the rest of the state. |
+| `SACMaritimeTrade` | ✅ | Added after the pilot: swaps known resources with the bank at a rate read off the board. A trade that spends a player's last tradeable hand ended the turn with no chance to take it back; it now holds like a build. |
 
 ### And what is not, with the reason in each case
 
@@ -335,7 +338,7 @@ Two alternatives were considered and dropped:
 | `SACMoveRobber` | The steal is random, and the victim has already been told they were robbed. |
 | `SACBuyDevCard` | The buyer has seen the top of the deck. Undo would be a free peek. |
 | `SACPlayKnight` / `RoadBuilding` / `YearOfPlenty` / `Monopoly` | A played card is announced, Monopoly has already emptied other hands, and a Knight has a robber move behind it. Taking one back is a statement about a hidden hand. |
-| `SACMaritimeTrade`, `SACBuildCity` | Neither is random and both could be added — deliberately held back so the pilot is the two placements that were asked for, and the shape gets one game's worth of play before it spreads. §14. |
+| `SACBuildCity` | Not random and could be added — deliberately held back so the pilot is the two placements that were asked for, and the shape gets one game's worth of play before it spreads. §14. |
 | `SACEndTurn`, `SACUndo` | The hand-off itself, and undo itself. Neither is a move to reverse. |
 
 ### The enforcement
@@ -831,10 +834,10 @@ asserting on.
 
 ## 14. What this does not reach
 
-- **Other Settlements & Cities commands.** `SACBuildCity` and
-  `SACMaritimeTrade` are both non-random and both one line each once the shape
-  has had a game's worth of play: `readonly undoable = true` and a
-  `sacPushUndo` call. Deliberately not in the pilot.
+- **Other Settlements & Cities commands.** `SACBuildCity` is non-random and one
+  line once the shape has had a game's worth of play: `readonly undoable = true`
+  and a `sacPushUndo` call. Deliberately not in the pilot. (`SACMaritimeTrade`
+  has since opted in exactly that way — §6.)
 - **Other games.** Nothing here is wired into any other game. Dice Cities' card
   purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
   and World Domination's troop movements (not its combat) are all plausible
@@ -852,7 +855,7 @@ asserting on.
 
 - The four placements can be taken back, and the two that end a turn hold it
   for ten seconds first, with a countdown and a *Pass now* on screen.
-- A roll, a robber move, a dev card and a trade cannot be taken back, and a
+- A roll, a robber move and a dev card cannot be taken back, and a
   turn ending on one of them behaves exactly as it does today —
   `autoEndTurn.test.ts` passing unchanged is the proof.
 - The undo stack and the anchor never leave the server, and a held deadline

@@ -259,8 +259,8 @@ function sacFinishTurn(
     // Something to take back right now — hold the hand-off instead of ending
     // the turn (docs/undo.md §5). Checked against the trigger's own id, not
     // merely whether the stack has anything in it: a build followed by a
-    // non-undoable action that leaves nothing else to do (a trade, say) must
-    // still end at once, because the trade didn't push and the anchor has
+    // non-undoable action that leaves nothing else to do (a Monopoly, say) must
+    // still end at once, because the card didn't push and the anchor has
     // moved on since — the same staleness test SACUndo and canUndo already
     // run on themselves (§4). For a setup road this is always true, since it
     // just pushed its own snapshot above.
@@ -1084,6 +1084,11 @@ export class SACMaritimeTrade implements IGameCommand {
     offerResource: SAC_Resource = 'lumber';
     wantResource: SAC_Resource = 'wool';
     readonly className = 'SACMaritimeTrade';
+    // Swaps known resources at a rate read off the board — nothing drawn,
+    // nothing another player learns from it — so it can be taken back, and a
+    // trade that leaves nothing else to do holds the turn open rather than
+    // ending it outright (docs/undo.md §5, §6).
+    readonly undoable = true;
 
     // The trade ratio comes off the board's harbours, which the command can't
     // read, so the summary names what was swapped and the history line (written
@@ -1103,6 +1108,8 @@ export class SACMaritimeTrade implements IGameCommand {
         const ratio = sacTradeRatio(gs, this.senderId, this.offerResource);
 
         if (ps.resources[this.offerResource] < ratio) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         ps.resources[this.offerResource] -= ratio;
         ps.resources[this.wantResource]++;
