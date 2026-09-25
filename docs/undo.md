@@ -60,13 +60,14 @@ In Settlements & Cities that reads:
   settlement is still yours to undo after it); Pass now skips the wait.
 - **Main phase.** Build a road or a settlement and the same Undo appears. If
   that build left you with nothing else to buy, build or trade, the turn would
-  today end itself the instant the build landed. A bank trade works the same way
-  (§6): trade away your last four lumber for the wrong resource and you get it
-  back. Now it holds for ten seconds
+  today end itself the instant the build landed. A city, a bank trade and the
+  development cards that draw nothing — Knight, Road Building, Year of Plenty —
+  work the same way (§6): trade away your last four lumber for the wrong
+  resource and you get it back. Now it holds for ten seconds
   first, with the same countdown, because "I've just spent my last brick on the
   wrong edge" is exactly the moment you want it back.
-- **Nothing else changes.** Rolling, the robber and dev cards are not
-  undoable (§6), and a turn that ends on one of those ends exactly as it does
+- **Nothing else changes.** Rolling, the robber, buying a dev card and
+  Monopoly are not undoable (§6), and a turn that ends on one of those ends exactly as it does
   today, with no countdown and no delay.
 
 Two clauses of the ask are worth pinning down because they decide the design:
@@ -320,7 +321,7 @@ Two alternatives were considered and dropped:
 
 ## 6. What is undoable, and what enforces it
 
-### The pilot's four
+### The pilot's four, and what has joined them
 
 | Command | Undoable | Why |
 |---|---|---|
@@ -329,6 +330,10 @@ Two alternatives were considered and dropped:
 | `SACBuildSettlement` | ✅ | Spends four known resources on a known vertex. |
 | `SACBuildRoad` | ✅ | Spends two known resources on a known edge. Also covers a free road from Road Building — `pendingRoadBuilding` is restored with the rest of the state. |
 | `SACMaritimeTrade` | ✅ | Added after the pilot: swaps known resources with the bank at a rate read off the board. A trade that spends a player's last tradeable hand ended the turn with no chance to take it back; it now holds like a build. |
+| `SACBuildCity` | ✅ | Added after the pilot: spends five known resources on a settlement already on the board. |
+| `SACPlayKnight` | ✅ | Added after the pilot. Playing the card draws nothing; it arms a robber move, and that move (a random steal) is its own, non-undoable command — so the Knight can only be taken back before the robber moves. Largest Army is restored with the rest of the state. |
+| `SACPlayRoadBuilding` | ✅ | Added after the pilot. Arms two free roads, each undoable on its own, so the card and both roads unwind one at a time — the reason `UNDO_STACK_DEPTH` is 3. |
+| `SACPlayYearOfPlenty` | ✅ | Added after the pilot: two resources of the player's own choosing from the bank. Nothing drawn, no other hand touched. |
 
 ### And what is not, with the reason in each case
 
@@ -337,8 +342,7 @@ Two alternatives were considered and dropped:
 | `SACRollDice` | Randomness. Taking a roll back is re-rolling it. |
 | `SACMoveRobber` | The steal is random, and the victim has already been told they were robbed. |
 | `SACBuyDevCard` | The buyer has seen the top of the deck. Undo would be a free peek. |
-| `SACPlayKnight` / `RoadBuilding` / `YearOfPlenty` / `Monopoly` | A played card is announced, Monopoly has already emptied other hands, and a Knight has a robber move behind it. Taking one back is a statement about a hidden hand. |
-| `SACBuildCity` | Not random and could be added — deliberately held back so the pilot is the two placements that were asked for, and the shape gets one game's worth of play before it spreads. §14. |
+| `SACPlayMonopoly` | Draws nothing, but it tells the player exactly how much of that resource every opponent was holding, and has already emptied those hands. Undo would make that a free look at everyone's cards, played again later. |
 | `SACEndTurn`, `SACUndo` | The hand-off itself, and undo itself. Neither is a move to reverse. |
 
 ### The enforcement
@@ -430,10 +434,10 @@ them is a hand-maintained list that silently stops covering a field somebody
 adds next year.
 
 **Size and depth.** A cloned state is six to eight kilobytes of JSON.
-`UNDO_STACK_DEPTH = 2` — a setup settlement and its road is the depth the game
-actually needs, and it covers a two-build main-phase run as well. It costs one
-character to raise when somebody hits the wall, and bytes on every save until
-then. The stack is emptied on every turn hand-off, in the two places that
+`UNDO_STACK_DEPTH = 3` — a Road Building card and the two free roads it grants
+is the deepest run the game needs to unwind (§6), and it covers a setup
+settlement and its road as well. It was 2 until Road Building became undoable;
+each level is bytes on every save, so it stays at what a real sequence needs. The stack is emptied on every turn hand-off, in the two places that
 already know the turn passed.
 
 ### `apiModels.ts` — two new response fields
@@ -834,10 +838,10 @@ asserting on.
 
 ## 14. What this does not reach
 
-- **Other Settlements & Cities commands.** `SACBuildCity` is non-random and one
-  line once the shape has had a game's worth of play: `readonly undoable = true`
-  and a `sacPushUndo` call. Deliberately not in the pilot. (`SACMaritimeTrade`
-  has since opted in exactly that way — §6.)
+- **The rest of Settlements & Cities.** Every command that neither draws
+  nor reveals a hidden hand has since opted in (§6). What is left — the roll,
+  the robber, buying a card and Monopoly — stays out for the reasons in §6's
+  second table.
 - **Other games.** Nothing here is wired into any other game. Dice Cities' card
   purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
   and World Domination's troop movements (not its combat) are all plausible
@@ -855,7 +859,7 @@ asserting on.
 
 - The four placements can be taken back, and the two that end a turn hold it
   for ten seconds first, with a countdown and a *Pass now* on screen.
-- A roll, a robber move and a dev card cannot be taken back, and a
+- A roll, a robber move, a card bought and a Monopoly cannot be taken back, and a
   turn ending on one of them behaves exactly as it does today —
   `autoEndTurn.test.ts` passing unchanged is the proof.
 - The undo stack and the anchor never leave the server, and a held deadline

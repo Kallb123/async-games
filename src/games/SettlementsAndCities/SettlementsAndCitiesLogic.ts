@@ -538,6 +538,11 @@ export class SACPlayKnight implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'SACPlayKnight';
+    // Playing the card draws nothing and moves no one's cards — the robber move
+    // it arms is a command of its own, and that one (a random steal) isn't
+    // undoable, so the Knight can only be taken back before the robber moves
+    // (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'played a Knight card'; }
 
@@ -550,6 +555,8 @@ export class SACPlayKnight implements IGameCommand {
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.knight < 1) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         ps.devCards.knight--;
         ps.knightsPlayed++;
@@ -896,6 +903,9 @@ export class SACBuildCity implements IGameCommand {
     senderUsername: string = 'Unknown';
     vertexId: number = 0;
     readonly className = 'SACBuildCity';
+    // Spends five known resources on a settlement already on the board
+    // (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'built a city'; }
 
@@ -914,6 +924,8 @@ export class SACBuildCity implements IGameCommand {
         if (!ps) return { validMove: false, turnOver: false };
         if (ps.remainingCities <= 0) return { validMove: false, turnOver: false };
         if (ps.resources.grain < 2 || ps.resources.ore < 3) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         ps.resources.grain -= 2;
         ps.resources.ore -= 3;
@@ -976,6 +988,10 @@ export class SACPlayRoadBuilding implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'SACPlayRoadBuilding';
+    // Arms two free roads and nothing else; the roads it grants are undoable
+    // on their own, so the card and both roads unwind one at a time
+    // (UNDO_STACK_DEPTH, docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return 'played Road Building'; }
 
@@ -987,6 +1003,8 @@ export class SACPlayRoadBuilding implements IGameCommand {
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.roadBuilding < 1) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         ps.devCards.roadBuilding--;
         gs.playedDevCard = true;
@@ -1009,6 +1027,9 @@ export class SACPlayYearOfPlenty implements IGameCommand {
     resource1: SAC_Resource = 'lumber';
     resource2: SAC_Resource = 'lumber';
     readonly className = 'SACPlayYearOfPlenty';
+    // Two resources of the player's own choosing from the bank — nothing
+    // drawn, nobody else's hand touched (docs/undo.md §6).
+    readonly undoable = true;
 
     myString() { return `played Year of Plenty (+${this.resource1}, +${this.resource2})`; }
 
@@ -1020,6 +1041,8 @@ export class SACPlayYearOfPlenty implements IGameCommand {
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.yearOfPlenty < 1) return { validMove: false, turnOver: false };
+
+        sacPushUndo(sacData, this);
 
         ps.devCards.yearOfPlenty--;
         gs.playedDevCard = true;

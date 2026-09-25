@@ -188,9 +188,9 @@ export interface ISACSpecificGameState {
     victoryTarget: number;
     // ─── Undo (docs/undo.md) ───────────────────────────────────────────────
     /**
-     * Snapshots of the whole state, newest last, pushed by the undoable
-     * commands (SACPlaceSettlementSetup, SACPlaceRoadSetup, SACBuildSettlement,
-     * SACBuildRoad) before they mutate anything. `by` is whose move it was —
+     * Snapshots of the whole state, newest last, pushed by the commands that
+     * declare `readonly undoable = true` (docs/undo.md §6) before they mutate
+     * anything. `by` is whose move it was —
      * the response builder reads it to decide who may be told about an undo
      * (see `canUndo` in `gameStateToResponse`). Capped at UNDO_STACK_DEPTH; the
      * oldest is dropped, which only ever costs reach, never correctness.
@@ -221,11 +221,12 @@ export interface ISACSpecificGameState {
 // for a literal `10_000`.
 export const UNDO_WINDOW_MS = 10_000;
 
-// How many snapshots the undo stack keeps. A setup settlement and its road is
-// the depth the game actually needs, and it covers a two-build main-phase run
-// as well — raising it costs one character and bytes on every save, so it
-// waits for somebody to actually hit the wall.
-export const UNDO_STACK_DEPTH = 2;
+// How many snapshots the undo stack keeps. A Road Building card and the two
+// free roads it grants is the deepest run the game needs to unwind — it also
+// covers a setup settlement and its road, and a three-build main-phase run.
+// Each level is a whole-state copy on every save, so it stays at what a real
+// sequence needs.
+export const UNDO_STACK_DEPTH = 3;
 
 // ─── Cloning (turn recap, undo) ───────────────────────────────────────────────
 // SAC's board and dev-card deck are randomised at creation and can't be
