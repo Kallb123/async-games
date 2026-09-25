@@ -6,11 +6,12 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
+import { clonePlayerStates, deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
+import { UNDO_WINDOW_MS, holdOpenFor, undoEntryFor } from "@/utils/games/undo";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
-import { coinChangeParts, type DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
+import { coinChangeParts, LANDMARKS, type DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
@@ -75,6 +76,12 @@ export class DiceCitiesGameType implements IGameType {
 
     CheckEndTurn (gameData: IGameData, commandOutcome: ICommandOutcome) {
         const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
+        if (commandOutcome.turnOver) {
+            // Whatever hold was open closes with the turn, and the snapshot
+            // behind it goes too: the anchor has already made it unreachable,
+            // so it would only ride along on every save until the next purchase.
+            clearUndo(dcGameData.specificGameState);
+        }
         if (dcGameData.specificGameState.awaitingDoubleReroll && commandOutcome.turnOver) {
             dcGameData.specificGameState.hasRolled = false;
             dcGameData.specificGameState.awaitingDoubleReroll = false;
@@ -92,7 +99,7 @@ export class DiceCitiesGameType implements IGameType {
         const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
         let isFinished = false;
         dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
-            if (playerState.bonusDiningAndStore && playerState.doubleUnlocked && playerState.oneReroll && playerState.rerollDoubles) {
+            if (hasBuiltEveryLandmark(playerState)) {
                 isFinished = true;
                 dcGameData.complete = true;
                 dcGameData.winner = userId;
@@ -132,7 +139,12 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
 
-        if (dcGameData.specificGameState.hasRolled) {
+        // A purchase holding the turn open has already cleared `hasRolled` for
+        // whoever rolls next, so this is the one command that would otherwise
+        // get through the hold: the buyer rolling a second time on the same
+        // turn. Every other command refuses on `hasRolled` or the flag of a
+        // selection that isn't pending.
+        if (dcGameData.specificGameState.hasRolled || holdOpenFor(dcGameData, this.senderId)) {
             return {
                 turnOver: false,
                 validMove: false
@@ -188,12 +200,14 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
     senderUsername: string = "Unknown";
     cardId: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestCardPurchase";
+    // Unless it ends the game — see finishPurchase (docs/undo.md).
+    readonly undoable = true;
 
     myString() {
         return `bought a ${cardTitle(this.cardId)}`;
     }
 
-    async Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -236,6 +250,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
             };
         }
 
+        const before = cloneDiceCitiesState(dcGameData.specificGameState);
         payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         bankCard.amount--;
@@ -250,10 +265,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
 
         dcGameData.specificGameState.hasRolled = false;
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${logNames(dcGameData).cards[this.cardId].title}`));
-        return {
-            turnOver: true,
-            validMove: true
-        };
+        return finishPurchase(dcGameData, this, before);
     }
 }
 
@@ -295,13 +307,14 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockTrainStation";
+    readonly undoable = true;
 
     myString() {
         return `bought a ${DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].title}`;
     }
 
-    async Execute(gameData: IGameData) {
-        return buildLandmark(gameData, DiceCitiesCardIds.TRAIN_STATION, "doubleUnlocked", this.senderId);
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        return buildLandmark(gameData, DiceCitiesCardIds.TRAIN_STATION, "doubleUnlocked", this);
     }
 }
 
@@ -313,13 +326,14 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockShoppingMall";
+    readonly undoable = true;
 
     myString() {
         return `bought a ${DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].title}`;
     }
 
-    async Execute(gameData: IGameData) {
-        return buildLandmark(gameData, DiceCitiesCardIds.SHOPPING_MALL, "bonusDiningAndStore", this.senderId);
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        return buildLandmark(gameData, DiceCitiesCardIds.SHOPPING_MALL, "bonusDiningAndStore", this);
     }
 }
 
@@ -331,13 +345,14 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockAmusementPark";
+    readonly undoable = true;
 
     myString() {
         return `bought a ${DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].title}`;
     }
 
-    async Execute(gameData: IGameData) {
-        return buildLandmark(gameData, DiceCitiesCardIds.AMUSEMENT_PARK, "rerollDoubles", this.senderId);
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        return buildLandmark(gameData, DiceCitiesCardIds.AMUSEMENT_PARK, "rerollDoubles", this);
     }
 }
 
@@ -349,13 +364,14 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockRadioTower";
+    readonly undoable = true;
 
     myString() {
         return `bought a ${DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].title}`;
     }
 
-    async Execute(gameData: IGameData) {
-        return buildLandmark(gameData, DiceCitiesCardIds.RADIO_TOWER, "oneReroll", this.senderId);
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        return buildLandmark(gameData, DiceCitiesCardIds.RADIO_TOWER, "oneReroll", this);
     }
 }
 
@@ -369,19 +385,20 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockHarbour";
+    readonly undoable = true;
 
     myString() {
         return `bought a ${DiceCitiesCards[DiceCitiesCardIds.HARBOUR].title}`;
     }
 
-    async Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         if ((gameData as IDiceCitiesGameData).specificGameState.enabledDocks !== true) {
             return {
                 turnOver: false,
                 validMove: false
             };
         }
-        return buildLandmark(gameData, DiceCitiesCardIds.HARBOUR, "harbourUnlocked", this.senderId);
+        return buildLandmark(gameData, DiceCitiesCardIds.HARBOUR, "harbourUnlocked", this);
     }
 }
 
@@ -810,6 +827,178 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     }
 }
 
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The sixth game to take a move back. What a Dice Cities player can take back
+// is a purchase — an establishment or a landmark — and nothing else: the roll,
+// the re-roll, the Harbour's +2 and everything a roll sets off (the TV
+// Station, the Business Centre) are dice, or answers to dice. A purchase
+// spends known coins on a card anyone can see in the market, so nothing about
+// it is random.
+//
+// A purchase is the last thing a turn does, so it always ends one — which is
+// the §5 hold, as in Train Time: rather than hand off, it sets
+// `autoEndTurnAt` and leaves the turn with its buyer for UNDO_WINDOW_MS, and
+// the board sends DiceCitiesEndTurn when that runs out (or on "Pass now").
+// Two purchases don't hold:
+//
+// - The landmark that wins the game. CheckGameOver scores it straight away,
+//   outside `specificGameState`, where no snapshot reaches — so it pushes
+//   nothing and hands off at once, as every purchase used to.
+// - One made on an Amusement Park doubles turn. There is no hand-off to hold:
+//   the turn comes straight back to the buyer, so the purchase does what
+//   CheckEndTurn would have done for it and stays undoable until they roll.
+//   This is also what keeps a game recorded before undo replaying the way it
+//   was played, since its log goes straight from that purchase to the roll.
+
+function clearUndo(gs: IDiceCitiesGameState): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
+    gs.autoEndTurnAt = null;
+}
+
+/**
+ * How a purchase ends, once it has spent its coins: `before` is the state it
+ * cloned first, pushed for DiceCitiesUndo to restore. See the block above for
+ * the two purchases that don't hold.
+ */
+function finishPurchase(dcGameData: IDiceCitiesGameData, command: IGameCommand, before: IDiceCitiesGameState): ICommandOutcome {
+    const gs = dcGameData.specificGameState;
+    const buyer = gs.playerStates.get(command.senderId);
+    if (buyer && hasBuiltEveryLandmark(buyer)) {
+        return { validMove: true, turnOver: true };
+    }
+
+    gs.undoStack = [{ by: command.senderId, turnStartedAt: dcGameData.lastTurnTimestamp, state: before }];
+    gs.undoAnchorId = command.id;
+    if (gs.awaitingDoubleReroll) {
+        // `hasRolled` is already cleared, as CheckEndTurn's own doubles branch
+        // would have left it.
+        gs.awaitingDoubleReroll = false;
+        return { validMove: true, turnOver: false };
+    }
+    gs.autoEndTurnAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
+    return { validMove: true, turnOver: false };
+}
+
+/**
+ * Closes the hold a purchase opened: the board's "Pass now", and what it sends
+ * by itself when the countdown runs out. Valid only while that hold is open —
+ * `autoEndTurnAt` and the snapshot behind it are server state the purchase
+ * wrote, so this can't be used to skip a turn that hasn't been played.
+ */
+@serializable
+export class DiceCitiesEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
+    readonly className = "DiceCitiesEndTurn";
+
+    myString() {
+        return "ended their turn";
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        if (!holdOpenFor(gameData as IDiceCitiesGameData, this.senderId)) {
+            return { validMove: false, turnOver: false };
+        }
+        // No line of its own: the purchase already said what the turn was.
+        return { validMove: true, turnOver: true };
+    }
+}
+
+@serializable
+export class DiceCitiesUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
+    readonly className = "DiceCitiesUndo";
+
+    myString() {
+        return "took back their last move";
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        const gs = dcGameData.specificGameState;
+
+        // A snapshot is only good for the command directly behind it, in the
+        // turn it was taken in (docs/undo.md §4).
+        const entry = undoEntryFor(dcGameData, this.senderId);
+        if (!entry) {
+            return { validMove: false, turnOver: false };
+        }
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        // `autoEndTurnAt` comes back null with the rest, closing the hold, and
+        // `hasRolled` comes back true, so the market is open again. No
+        // `currentTurn` to put back: the hold never let the turn go.
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, "took back their last move"));
+        return { validMove: true, turnOver: false };
+    }
+}
+
+// One player's state as plain data. Every field is named rather than spread:
+// a stored state is a Mongoose subdocument, whose fields live behind getters
+// that `{ ...ps }` never sees (see mongoMaps.ts).
+function clonePlayerState(ps: IDiceCitiesPlayerState): IDiceCitiesPlayerState {
+    return {
+        cards: ps.cards.map(cc => ({ card: cc.card, amount: cc.amount })),
+        money: ps.money,
+        totalCoinsEarned: ps.totalCoinsEarned,
+        doubleUnlocked: ps.doubleUnlocked,
+        bonusDiningAndStore: ps.bonusDiningAndStore,
+        rerollDoubles: ps.rerollDoubles,
+        oneReroll: ps.oneReroll,
+        harbourUnlocked: ps.harbourUnlocked,
+        lastDiceSelection: ps.lastDiceSelection,
+    };
+}
+
+/**
+ * Deep copy of a game state — the snapshot a purchase pushes for
+ * DiceCitiesUndo to restore. The player map is rebuilt in its own order, since
+ * a roll's payout falls back to that order for anyone the turn order misses.
+ * Unlike the other games' cloners, replay doesn't need this one: it rebuilds
+ * the opening from the creation parameters instead (docs/undo.md §16).
+ */
+export function cloneDiceCitiesState(gs: IDiceCitiesGameState): IDiceCitiesGameState {
+    return {
+        bankCards: gs.bankCards.map(cc => ({ card: cc.card, amount: cc.amount })),
+        bankMoney: gs.bankMoney,
+        bankTotal: gs.bankTotal,
+        playerStates: clonePlayerStates(gs.playerStates, [...mongoMap(gs.playerStates).keys()], clonePlayerState),
+        hasRolled: gs.hasRolled,
+        awaitingTSSelection: gs.awaitingTSSelection,
+        awaitingBCSelectionOwn: gs.awaitingBCSelectionOwn,
+        awaitingBCSelectionOpponent: gs.awaitingBCSelectionOpponent,
+        bcSelectedOwnCard: gs.bcSelectedOwnCard,
+        bcSelectedOpponent: gs.bcSelectedOpponent,
+        bcSelectedOpponentCard: gs.bcSelectedOpponentCard,
+        awaitingDoubleReroll: gs.awaitingDoubleReroll,
+        hasReRolled: gs.hasReRolled,
+        awaitingHarbourChoice: gs.awaitingHarbourChoice,
+        harbourRoll1: gs.harbourRoll1,
+        harbourRoll2: gs.harbourRoll2,
+        enabledDocks: gs.enabledDocks,
+        theme: gs.theme,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing.
+        undoStack: [],
+        undoAnchorId: null,
+        // Always null on a pushed snapshot — nothing is bought while a hold is
+        // open — so restoring one closes the hold.
+        autoEndTurnAt: gs.autoEndTurnAt ?? null,
+    };
+}
+
 /**
  * Closes out a Business Center swap once both cards have been chosen: the log
  * line naming the trade, the cleared selection state, and whether the roll is
@@ -979,7 +1168,7 @@ function undoRollPayout(dcGameData: IDiceCitiesGameData, command: RollPayoutComm
 
 // Every landmark is bought the same way: by the active player, after their
 // roll, at full price, once. All that differs is the flag it lights up.
-function buildLandmark(gameData: IGameData, cardId: DiceCitiesCardIds, flag: DiceCitiesBuildFlag, senderId: string): ICommandOutcome {
+function buildLandmark(gameData: IGameData, cardId: DiceCitiesCardIds, flag: DiceCitiesBuildFlag, command: IGameCommand): ICommandOutcome {
     const dcGameData = gameData as IDiceCitiesGameData;
     const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
     if (!currentPlayerState) {
@@ -1013,16 +1202,19 @@ function buildLandmark(gameData: IGameData, cardId: DiceCitiesCardIds, flag: Dic
         };
     }
 
+    const before = cloneDiceCitiesState(dcGameData.specificGameState);
     payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
     currentPlayerState[flag] = true;
 
     dcGameData.specificGameState.hasRolled = false;
-    dcGameData.gameState.history.unshift(playerHistory(senderId, `bought a ${logNames(dcGameData).cards[cardId].title}`));
-    return {
-        turnOver: true,
-        validMove: true
-    };
+    dcGameData.gameState.history.unshift(playerHistory(command.senderId, `bought a ${logNames(dcGameData).cards[cardId].title}`));
+    return finishPurchase(dcGameData, command, before);
+}
+
+// The four landmarks that win the game. The Docks' Harbour isn't one of them.
+function hasBuiltEveryLandmark(playerState: IDiceCitiesPlayerState): boolean {
+    return LANDMARKS.every(l => playerState[l.flag]);
 }
 
 // Docks: a Harbour owner gets to say whether a 10-or-better total takes the
@@ -1334,5 +1526,8 @@ registerPlayerDropoutAdapter({
         const ps = mongoMap(gs.playerStates).get(userId);
         if (ps) gs.bankMoney += ps.money;
         deleteFromMongoMap(gs.playerStates, userId);
+        // Every snapshot is a whole state taken before the drop, so restoring
+        // one would put the city that left back on the table.
+        clearUndo(gs);
     },
 });

@@ -419,12 +419,10 @@ export const UNDO_STACK_DEPTH = 2;
 
 /**
  * How long a turn that is ready to end is held open for its own undo window
- * (docs/undo.md §5) before `RaceCarsEndTurn` closes it on its own — the same
- * ten seconds Settlements & Cities holds a placement for, and the same
- * constant so moving it later is one import change per file rather than a
- * hunt for a literal `10_000` (docs/undo.md §16).
+ * (docs/undo.md §5) before `RaceCarsEndTurn` closes it on its own — the shared
+ * window every game holds for, re-exported so this game keeps one import.
  */
-export const UNDO_WINDOW_MS = 10_000;
+export { UNDO_WINDOW_MS } from "@/utils/games/undo";
 
 // ─── Board geometry (§5.1, §10) ─────────────────────────────────────────────
 

@@ -9,9 +9,10 @@ import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
-import { LANDMARKS } from "./ui";
+import { buildableLandmarks, LANDMARKS } from "./ui";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
+import { undoEntryFor, type IClockedUndoEntry } from "@/utils/games/undo";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -105,6 +106,9 @@ export function buildInitialDiceCitiesState(
         // theme is always one this game has" is true by construction instead of
         // by every caller remembering to normalise first.
         theme: diceCitiesTheme(theme).id,
+        undoStack: [],
+        undoAnchorId: null,
+        autoEndTurnAt: null,
     };
 }
 
@@ -226,8 +230,30 @@ export interface IDiceCitiesGameState {
      * the game exists, and because a replay has to rebuild the game in the
      * theme its recorded history was written in.
      */
-    theme: string
+    theme: string,
+    /**
+     * The snapshot a purchase pushed before it spent anything (docs/undo.md) —
+     * at most one, since a purchase is the last thing a turn does. `by` is the
+     * buyer; `turnStartedAt` pins it to the turn it was made in, because this
+     * game's turn timer passes a turn on without running a command (see
+     * `liveUndoEntry`). Absent on a game that predates undo.
+     */
+    undoStack: IDiceCitiesUndoEntry[],
+    /**
+     * The id of the last command that pushed or popped a snapshot. Nothing can
+     * be taken back unless it is the tail of commandHistory, which is how the
+     * stack goes stale the moment anything else is played.
+     */
+    undoAnchorId: string | null,
+    /**
+     * Set while a purchase holds its turn open for UNDO_WINDOW_MS (docs/undo.md
+     * §5): the moment the board sends `DiceCitiesEndTurn` on its own. Null
+     * otherwise.
+     */
+    autoEndTurnAt: string | null
 }
+
+export type IDiceCitiesUndoEntry = IClockedUndoEntry<IDiceCitiesGameState>;
 
 export interface IDiceCitiesGameData extends IGameData {
     enabledBillionaireRow: boolean,
@@ -283,10 +309,14 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         harbourRoll1: Number,
         harbourRoll2: Number,
         enabledDocks: Boolean,
-        theme: String
+        theme: String,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, turnStartedAt: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
+        autoEndTurnAt: { type: String, default: null }
     }
 }, {discriminatorKey: 'kind'});
-DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IDiceCitiesGameDataResponse> {
+DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<IDiceCitiesGameDataResponse> {
     console.log("CreateDataResponse: Dice Cities game");
 
     const gameDataDocument: IDiceCitiesGameData = this as IDiceCitiesGameData;
@@ -306,11 +336,21 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
-        specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
+        specificGameState: gameStateToModel(
+            gameDataDocument.specificGameState,
+            userIdNameMap,
+            undoEntryFor(gameDataDocument, viewerId) !== null,
+        )
     };
 };
 
-export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
+/**
+ * `canUndo` answers "have *you* got a purchase you can still take back" — the
+ * same `liveUndoEntry` test DiceCitiesUndo runs on itself, worked out by the
+ * caller because it needs the command log and the turn clock, which live
+ * outside the state. A replayed step never offers it: the review is read-only.
+ */
+export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}, canUndo: boolean = false) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
         playerStates[userId] = {
@@ -358,7 +398,11 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
         enabledDocks: gameState.enabledDocks === true,
         // Likewise for themes: a game that predates them is the game as it
         // shipped, which is exactly what the default theme names.
-        theme: diceCitiesTheme(gameState.theme).id
+        theme: diceCitiesTheme(gameState.theme).id,
+        canUndo,
+        // Only ever the buyer's to act on, so it goes out on exactly the test
+        // canUndo does and to nobody else.
+        autoEndTurnAt: canUndo ? (gameState.autoEndTurnAt ?? null) : null
     }
 }
 
@@ -430,7 +474,23 @@ export const LANDMARK_UNLOCK_COMMANDS = new Set([
 // be unit-tested and wired straight into GAME_RESULT_STATS.DiceCities.compute
 // (GameResultData.ts) without GameResultData.ts having to know the command
 // names itself.
-export function detectLandmarkEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+//
+// A landmark taken back (docs/undo.md) comes off the chart with it: an undo can
+// only ever reach the buyer's very last move, so the marker it retracts is the
+// buyer's latest — and only when the undo actually knocked a landmark down,
+// since the move it took back may have been an establishment.
+export function detectLandmarkEvent(step: IReplayStep, events: GameResultEvent[] = []): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    if (step.command.className === "DiceCitiesUndo") {
+        const builtBy = (snapshot: IReplayStep["prev"]) => {
+            const ps = playerByUserId(snapshot.specificGameState as IDiceCitiesGameStateResponse, step.command.senderId);
+            return ps ? buildableLandmarks(true).filter(l => ps[l.flag]).length : 0;
+        };
+        if (builtBy(step.next) < builtBy(step.prev)) {
+            const index = events.findLastIndex(e => e.seriesKey === step.command.senderId);
+            if (index >= 0) events.splice(index, 1);
+        }
+        return undefined;
+    }
     return LANDMARK_UNLOCK_COMMANDS.has(step.command.className)
         ? [{ icon: 'landmark', title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
         : undefined;

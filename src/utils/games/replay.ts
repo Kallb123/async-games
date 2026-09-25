@@ -552,11 +552,14 @@ export async function computePerTurnStat<TState>(
 // more than one event (Outbreak's double epidemic).
 export async function computePerTurnEvents(
     gameData: IGameData,
-    detect: (step: IReplayStep) => Omit<GameResultEvent, 'turnIndex'>[] | undefined,
+    // `events` is every marker recorded so far, oldest first. A detector only
+    // ever reads it — or takes its own last marker back off it, for a step
+    // that undoes the move the marker was for (docs/undo.md).
+    detect: (step: IReplayStep, events: GameResultEvent[]) => Omit<GameResultEvent, 'turnIndex'>[] | undefined,
 ): Promise<GameResultEvent[]> {
     const events: GameResultEvent[] = [];
     const ok = await replayTurnByTurn(gameData, (step, turnIndex) => {
-        for (const event of detect(step) ?? []) {
+        for (const event of detect(step, events) ?? []) {
             events.push({ ...event, turnIndex });
         }
     }, "per-turn events");

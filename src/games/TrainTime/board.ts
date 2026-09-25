@@ -14,6 +14,7 @@
 
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates } from "@/utils/games/mongoMaps";
+import { UNDO_WINDOW_MS, type IClockedUndoEntry } from "@/utils/games/undo";
 import { pluralize, signed } from "@/utils/ui/text";
 
 // ─── Colours ────────────────────────────────────────────────────────────────
@@ -56,10 +57,10 @@ export const DOUBLE_ROUTES_OPEN_FROM_PLAYERS = 4;
 export const MIN_PLAYERS = 2;
 /**
  * How long a claim holds the turn open for its own undo (docs/undo.md §5)
- * before the board ends it with `TrainTimeEndTurn` — the same ten seconds
- * Settlements & Cities and Race Cars hold for.
+ * before the board ends it with `TrainTimeEndTurn` — the shared window every
+ * game holds for.
  */
-export const UNDO_WINDOW_MS = 10_000;
+export { UNDO_WINDOW_MS };
 export const MAX_PLAYERS = 5;
 
 // ─── Cities ─────────────────────────────────────────────────────────────────
@@ -730,32 +731,7 @@ export interface ITrainTimeSpecificGameState {
     autoEndTurnAt: string | null;
 }
 
-export interface ITrainTimeUndoEntry {
-    by: string;
-    turnStartedAt: string;
-    state: ITrainTimeSpecificGameState;
-}
-
-/**
- * The snapshot `userId` can still take back, or null (docs/undo.md §4): theirs,
- * pushed by the very last command played, in the turn that is still running.
- * `lastCommandId` is the tail of commandHistory and `turnStartedAt` the game's
- * `lastTurnTimestamp`, which every hand-off moves on — the command route's and
- * the turn timer's alike.
- */
-export function liveUndoEntry(
-    gs: ITrainTimeSpecificGameState,
-    userId: string | null,
-    lastCommandId: string | null,
-    turnStartedAt: string,
-): ITrainTimeUndoEntry | null {
-    // Absent (`?? []`) on a game that predates the stack.
-    const entry = (gs.undoStack ?? []).at(-1);
-    if (!entry || entry.by !== userId) return null;
-    if (lastCommandId === null || gs.undoAnchorId !== lastCommandId) return null;
-    if (entry.turnStartedAt !== turnStartedAt) return null;
-    return entry;
-}
+export type ITrainTimeUndoEntry = IClockedUndoEntry<ITrainTimeSpecificGameState>;
 
 /**
  * How far into their two-card draw this player is. The count is dropped the

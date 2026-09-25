@@ -17,6 +17,7 @@ import {
     DiceCitiesRequestDiceRoll,
     DiceCitiesRequestHarbourBonus,
     DiceCitiesRequestPassTurn,
+    DiceCitiesEndTurn,
 } from "./DiceCitiesLogic";
 import { DiceCitiesCardIds, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
@@ -57,6 +58,12 @@ export function passCommand(sender = "u1"): DiceCitiesRequestPassTurn {
     command.senderId = sender;
     command.senderUsername = sender;
     return command;
+}
+
+/** Closes the ten-second hold a purchase opens (docs/undo.md §5) — what the
+ *  board sends when its countdown runs out. */
+export function endTurnCommand(sender = "u1"): DiceCitiesEndTurn {
+    return sentBy(new DiceCitiesEndTurn(), sender);
 }
 
 export function buyCommand(cardId: DiceCitiesCardIds, sender = "u1"): DiceCitiesRequestCardPurchase {

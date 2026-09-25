@@ -15,8 +15,8 @@ import {
     SETUP_TICKETS_KEPT_MIN,
     TRAINS_PER_PLAYER,
     buildInitialTrainTimeState,
-    liveUndoEntry,
 } from "./board";
+import { undoEntryFor } from "@/utils/games/undo";
 import { consumedRandomness } from "@/utils/apiModels/gameCommand";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
@@ -82,14 +82,9 @@ function seat(game: ITrainTimeGameData, userId = "u1") {
     return game.specificGameState.playerStates.get(userId)!;
 }
 
-/** What CreateDataResponse sends `viewerId` — the same `liveUndoEntry` test it runs. */
+/** What CreateDataResponse sends `viewerId` — the same `undoEntryFor` test it runs. */
 function wireFor(game: ITrainTimeGameData, viewerId: string | null) {
-    const canUndo = liveUndoEntry(
-        game.specificGameState,
-        viewerId,
-        game.gameState.commandHistory.at(-1)?.id ?? null,
-        game.lastTurnTimestamp,
-    ) !== null;
+    const canUndo = undoEntryFor(game, viewerId) !== null;
     return gameStateToModel(game.specificGameState, NAMES, viewerId, canUndo);
 }
 

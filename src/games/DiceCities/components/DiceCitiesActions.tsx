@@ -1,8 +1,10 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesCard, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCardIds, HARBOUR_BONUS } from "@/games/DiceCities/cards";
+import { UNDO_WINDOW_MS } from "@/utils/games/undo";
 import { playerByUserId, uuidString } from "@/utils/apiModels/GameDataApi";
 import {
+    DiceCitiesEndTurn,
     DiceCitiesRequestBusinessCenterOpponentSelection,
     DiceCitiesRequestBusinessCenterOwnSelection,
     DiceCitiesRequestCardPurchase,
@@ -16,6 +18,7 @@ import {
     DiceCitiesRequestUnlockRadioTower,
     DiceCitiesRequestUnlockShoppingMall,
     DiceCitiesRequestUnlockTrainStation,
+    DiceCitiesUndo,
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
@@ -26,6 +29,7 @@ import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import RollReadout from "@/components/ui/RollReadout";
 import ActionButton from "@/components/ui/ActionButton";
+import UndoHold from "@/components/ui/UndoHold";
 import PendingTag from "@/components/ui/PendingTag";
 import { capitalise } from "@/utils/ui/text";
 import { mongoMap } from "@/utils/games/mongoMaps";
@@ -281,6 +285,32 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         );
     }
 
+    // ── Taking a purchase back (docs/undo.md) ────────────────────────────────
+    // `canUndo` and `autoEndTurnAt` only ever reach the buyer. While a hold is
+    // open the purchase was the turn, so Pass now / Undo is the whole sheet; a
+    // purchase on a doubles turn holds nothing, since the dice come straight
+    // back, and its Undo sits under the roll button until they're thrown.
+    const undoBar = (nested: boolean) => (
+        <UndoHold
+            holdDeadline={gameState.autoEndTurnAt}
+            windowMs={UNDO_WINDOW_MS}
+            canUndo={gameState.canUndo}
+            onEndTurn={() => send(new DiceCitiesEndTurn(), "endTurn")}
+            onUndo={() => send(new DiceCitiesUndo(), "undo")}
+            endTurnPending={pendingTarget === "endTurn"}
+            undoPending={pendingTarget === "undo"}
+            nested={nested}
+        />
+    );
+    if (gameState.autoEndTurnAt !== null) {
+        return (
+            <div className="ag-dc-post">
+                {rollReadout("built — undo it, or pass the turn")}
+                {undoBar(false)}
+            </div>
+        );
+    }
+
     // ── Pending selections take over the sheet until resolved ────────────────
     if (gameState.awaitingHarbourChoice) {
         // Read the parked dice off the game state rather than the local roll, so
@@ -448,6 +478,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                 >
                     🎲 Roll {effectiveDice === 2 ? "2 dice" : "1 die"}
                 </ActionButton>
+                {undoBar(true)}
             </div>
         );
     }

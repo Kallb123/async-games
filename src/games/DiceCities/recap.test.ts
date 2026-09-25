@@ -49,6 +49,8 @@ function state(players: IDiceCitiesPlayerStateResponse[], theme = DEFAULT_DICE_C
         harbourRoll2: null,
         enabledDocks: false,
         theme,
+        canUndo: false,
+        autoEndTurnAt: null,
     };
 }
 

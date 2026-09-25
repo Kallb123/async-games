@@ -80,7 +80,17 @@ export interface IDiceCitiesGameStateResponse {
      * card and every noun on the board. Fixed at creation, and always one of
      * the game's own themes by the time it reaches here.
      */
-    theme: string
+    theme: string,
+    /**
+     * True when the viewer has a purchase of their own they can still take
+     * back (docs/undo.md). Per-viewer; the stack it reads is never sent.
+     */
+    canUndo: boolean,
+    /**
+     * When the viewer's held turn ends on its own (docs/undo.md §5) — set only
+     * while `canUndo` is, and null for everybody else.
+     */
+    autoEndTurnAt: string | null
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {
