@@ -9,10 +9,10 @@ the hold, the board's Undo button and countdown, and this documentation. The
 pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
-someone opts it in a line at a time (§14, §16). Four more games have since
+someone opts it in a line at a time (§14, §16). Five more games have since
 opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
-"The third game"), Outbreak (§16, "The fourth game") and Train Time (§16,
-"The fifth game").
+"The third game"), Outbreak (§16, "The fourth game"), Train Time (§16,
+"The fifth game") and Dice Cities (§16, "The sixth game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -846,7 +846,7 @@ asserting on.
 - **Other games.** Nothing here is wired into any other game. Dice Cities' card
   purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
   and World Domination's troop movements (not its combat) are all plausible
-  candidates. None of them needs the engine to change again to *work* — but at
+  candidates — and all but the last have since opted in (§16). None of them needs the engine to change again to *work* — but at
   that many, the six copies stop being a pattern and start being duplication.
   §16 says what to promote, when, and what the pilot does now so that promotion
   is mechanical.
@@ -950,12 +950,12 @@ through the PR.
    game type that registers an undo adapter — is a change to a security
    boundary, and **it is the locksmith's call, not the caveman's.** Raise it
    with them when game #2 lands, not in a PR description.
-2. **Dice Cities has no `cloneDiceCitiesState`.** It is the one of the six that
+2. **Dice Cities had no `cloneDiceCitiesState`.** It was the one of the six that
    never needed one: its replay adapter rebuilds the opening state from the
    creation parameters (`buildInitialDiceCitiesState(userIdList, enabledDocks,
-   bankTotal, theme)`) rather than cloning a stored snapshot. Undo there starts
-   with writing that cloner — about thirty lines in the shape of the other
-   seven — which is a real cost to budget, not a surprise to hit.
+   bankTotal, theme)`) rather than cloning a stored snapshot. Its undo started
+   with writing that cloner, in the shape of the other seven (§16, "The sixth
+   game").
 
 ### What stays per-game even at six
 
@@ -1300,3 +1300,63 @@ The narrowest opt-in so far, and the first since Race Cars to need §5's hold.
   `src/components/ui/UndoHold.tsx` — the Pass now / Undo pair, the countdown
   and the auto-fire — which `RaceCarsUndoHold` now wraps and Train Time's turn
   sheet uses in place of its action picker while a hold is open.
+
+### The sixth game: Dice Cities
+
+Train Time's shape — a move that always ends the turn, a hold, and a turn
+timer with no adapter behind it — and the first opt-in to share code with an
+earlier one rather than repeat it.
+
+- **What is undoable.** A purchase: `DiceCitiesRequestCardPurchase` and the five
+  landmark unlocks. A purchase spends known coins on a card anyone can see in
+  the market, and nothing about it is random. The roll, the Radio Tower's
+  re-roll and the Harbour's +2 are dice, and the TV Station and the Business
+  Centre are answers to dice, so none of them pushes anything. The source scan
+  in `src/games/DiceCities/undo.test.ts` holds the list to those six, and the
+  guard beside it holds them to no `recorded…` field.
+- **What is not, even of a purchase.** The landmark that wins the game is
+  scored by `CheckGameOver` straight away, outside `specificGameState`, so it
+  pushes nothing and hands off at once — the winning Helicopter Lift again.
+- **The hold (§5).** A purchase is the last thing a turn does, so it sets
+  `autoEndTurnAt` and returns `turnOver: false`; `DiceCitiesEndTurn`, valid
+  only while that hold is open, is the board's *Pass now* and what it sends by
+  itself when the countdown runs out. A purchase has already cleared
+  `hasRolled` for whoever rolls next, so the roll is the one command that
+  would otherwise get through a hold, and it refuses while one is open; every
+  other command already refuses on `hasRolled` or on a selection that isn't
+  pending. `CheckEndTurn` empties the stack and closes the hold on every
+  hand-off, and the dropout adapter does too. Depth one.
+- **No hold on a doubles turn.** With the Amusement Park, doubles bring the
+  turn straight back to the roller, so a purchase then has no hand-off to
+  hold. It does what `CheckEndTurn`'s doubles branch would have done for it
+  (clears `awaitingDoubleReroll`; `hasRolled` is already clear) and returns
+  `turnOver: false`, and stays undoable — Banned Islet's shape — until the
+  bonus roll makes the anchor stale. Two costs, both deliberate: the bonus
+  turn no longer restarts the turn timer (a `turnOver` would, and would also
+  make the snapshot's turn clock stale the instant it was pushed); and it is
+  what keeps a game recorded before undo replaying correctly, since that log
+  goes straight from such a purchase to the same player's roll, which a hold
+  would refuse.
+- **Staleness is Train Time's.** Dice Cities registers no turn-timeout
+  adapter, so each stack entry records the turn clock it was pushed in and
+  `liveUndoEntry` refuses one the clock has since moved past. That test and
+  `UNDO_WINDOW_MS` moved to `src/utils/games/undo.ts` rather than being
+  copied; Train Time, Race Cars and Settlements & Cities re-export the
+  constant from there. One gap is shared with Train Time: a replay has no
+  turn clock of its own, so a log where the timer passed a held turn on and
+  round again, back to the buyer, replays their next roll as refused.
+- **The cloner.** `cloneDiceCitiesState` lives in `DiceCitiesLogic.ts`, the
+  only file that needs it — replay doesn't (§16, above).
+- **Hidden information.** Nothing in Dice Cities is hidden. The snapshot still
+  never leaves the server — `gameStateToModel` builds its return field by field
+  and gains `canUndo` and `autoEndTurnAt` alone, worked out by
+  `CreateDataResponse` from the command log and the turn clock, both false or
+  null for everyone but the buyer. A replayed step never offers it.
+- **Recap and charts.** A purchase taken back leaves no recap row:
+  `postProcess` drops it and the undo together. A landmark taken back comes off
+  the result page's buildings chart too — `computePerTurnEvents` now hands a
+  detector the markers recorded so far, and `detectLandmarkEvent` takes the
+  buyer's last one back when an undo knocks a landmark down.
+- **The board.** While a hold is open, `UndoHold` is the whole turn sheet under
+  the roll readout; on a doubles turn, Undo sits under the roll button until
+  the dice are thrown.

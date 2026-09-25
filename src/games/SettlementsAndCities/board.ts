@@ -215,11 +215,9 @@ export interface ISACSpecificGameState {
 }
 
 // How long a player has to take an undoable move back, once the turn it would
-// otherwise pass on its own is being held open for them (docs/undo.md §5).
-// Declared here, alongside the state it will apply to, even though nothing
-// reads it until that hold lands — so moving it later is a rename, not a hunt
-// for a literal `10_000`.
-export const UNDO_WINDOW_MS = 10_000;
+// otherwise pass on its own is being held open for them (docs/undo.md §5) —
+// the shared window, re-exported so this game's screens keep one import.
+export { UNDO_WINDOW_MS } from "@/utils/games/undo";
 
 // How many snapshots the undo stack keeps. A Road Building card and the two
 // free roads it grants, placed back to back, is the deepest ordinary run to

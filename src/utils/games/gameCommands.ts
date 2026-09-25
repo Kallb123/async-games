@@ -28,6 +28,8 @@
  * fails if a `@serializable` class is missing from this map or listed twice.
  */
 const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
+    // docs/undo.md adds DiceCitiesUndo, taking back a purchase, and
+    // DiceCitiesEndTurn, the one way to close the hold a purchase opens.
     DiceCitiesGameType: [
         "DiceCitiesRequestDiceRoll",
         "DiceCitiesRequestCardPurchase",
@@ -42,6 +44,8 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "DiceCitiesRequestBusinessCenterOwnSelection",
         "DiceCitiesRequestBusinessCenterOpponentSelection",
         "DiceCitiesRequestRadioTowerReroll",
+        "DiceCitiesEndTurn",
+        "DiceCitiesUndo",
     ],
     SmartthinkGameType: [
         "SmartthinkSetSecretCode",

@@ -18,7 +18,7 @@ import { LANDMARKS } from "./ui";
 import type { IDiceCitiesBusinessCenterOutcome, IDiceCitiesDiceRollOutcome, IDiceCitiesTvStationOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
-import { harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
+import { endTurnCommand, harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
 import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
@@ -64,6 +64,9 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
         harbourRoll2: null,
         enabledDocks: false,
         theme: DEFAULT_DICE_CITIES_THEME.id,
+        undoStack: [],
+        undoAnchorId: null,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }
@@ -1086,10 +1089,12 @@ describe("Dice Cities: replaying a Docks game", () => {
         const gameData = replayableGame([
             rollCommand(1),
             sentBy(new DiceCitiesRequestUnlockTrainStation()),
+            endTurnCommand(),
             rollCommand(1),
             passCommand(),
             rollCommand(1),
             sentBy(new DiceCitiesRequestUnlockHarbour()),
+            endTurnCommand(),
             rollCommand(5, "u1", 6),
             harbourCommand(true),
         ], buildInitialDiceCitiesState(["u1", "u2"], true));

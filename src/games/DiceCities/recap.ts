@@ -193,8 +193,34 @@ function toEvents(
         ];
     }
 
-    // Passes don't earn their own recap row.
+    // ── A purchase taken back (docs/undo.md). The only move that can be, so
+    //    postProcess folds it into the purchase it cancels. ──────────────────
+    if (command.className === "DiceCitiesUndo") {
+        return [{ ...base, type: UNDO, glyph: "↩️", title: `${name} took back their last move` }];
+    }
+
+    // Passes, and closing a purchase's hold, don't earn their own recap row.
     return [];
+}
+
+const UNDO = "dc_undo";
+// The rows a purchase earns: an establishment, a landmark, or the Harbour.
+const PURCHASE_TYPES = new Set(["dc_buy", "dc_landmark", "dc_harbour"]);
+
+// A purchase taken back never happened as far as the board is concerned, so it
+// and its undo leave no row at all — which also keeps a landmark the recap
+// headline would count, or call a win, out of the summary.
+function postProcess(events: IGameEvent[]): IGameEvent[] {
+    const kept: IGameEvent[] = [];
+    for (const event of events) {
+        if (event.type === UNDO) {
+            const index = kept.findLastIndex(e => PURCHASE_TYPES.has(e.type) && e.actorId === event.actorId);
+            if (index >= 0) kept.splice(index, 1);
+            continue;
+        }
+        kept.push(event);
+    }
+    return kept;
 }
 
 // Deliberately app-voiced rather than themed: `summarize` is handed the events
@@ -261,6 +287,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 export const diceCitiesRecapAdapter: IRecapAdapter = {
     className: "DiceCitiesGameType",
     toEvents,
+    postProcess,
     summarize,
     tip,
 };

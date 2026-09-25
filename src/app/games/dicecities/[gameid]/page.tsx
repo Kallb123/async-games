@@ -125,6 +125,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
+        } else if (isMyTurn && displayed.autoEndTurnAt) {
+            // A purchase holding the turn open for its undo window (docs/undo.md
+            // §5) — only ever sent to the buyer.
+            subtitle = <><span className="ag-hi">Built</span> · undo, or pass the turn</>;
         } else if (isMyTurn) {
             subtitle = hasRolled
                 ? <><span className="ag-hi">Your turn</span> · build or end turn</>

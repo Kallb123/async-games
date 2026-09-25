@@ -4,7 +4,7 @@ import { countTurns } from "@/utils/games/turnCount";
 import { DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockTrainStation } from "./DiceCitiesLogic";
 import { detectLandmarkEvent, playerByUserId } from "./DiceCitiesModels";
 import { DiceCitiesCardIds, DiceCitiesCards } from "./cards";
-import { passCommand, replayableGame, rollCommand, saveUpTo, sentBy } from "./testHarness";
+import { endTurnCommand, passCommand, replayableGame, rollCommand, saveUpTo, sentBy } from "./testHarness";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { IReplayStep } from "@/utils/games/replay";
@@ -26,9 +26,9 @@ describe("Dice Cities result charts, replayed from a real command log", () => {
             // and u2 starting with u1, so an odd target leaves an even number
             // of rounds - ending on u2's round, so it's u1's real turn next.
             ...saveUpTo(trainStationCost + amusementParkCost + 9, "u1", "u2"),
-            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockTrainStation(), "u1"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockTrainStation(), "u1"), endTurnCommand("u1"),
             rollCommand(1, "u2"), passCommand("u2"),
-            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockAmusementPark(), "u1"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockAmusementPark(), "u1"), endTurnCommand("u1"),
             rollCommand(1, "u2"), passCommand("u2"),
             // u1 now owns both landmarks. Rolling doubles grants another go:
             // the pass that follows reports turnOver, but the real turn does
@@ -74,9 +74,9 @@ describe("Dice Cities result charts, replayed from a real command log", () => {
 
         const commandHistory: IGameCommand[] = [
             ...saveUpTo(trainStationCost + amusementParkCost + 9, "u1", "u2"),
-            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockTrainStation(), "u1"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockTrainStation(), "u1"), endTurnCommand("u1"),
             rollCommand(1, "u2"), passCommand("u2"),
-            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockAmusementPark(), "u1"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockAmusementPark(), "u1"), endTurnCommand("u1"),
             rollCommand(1, "u2"), passCommand("u2"),
         ];
 
