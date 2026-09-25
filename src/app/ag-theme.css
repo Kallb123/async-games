@@ -1790,6 +1790,9 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand--me { background: color-mix(in oklch, var(--ag-terracotta) 7%, transparent); }
 .ag-hand--active { box-shadow: inset 3px 0 0 var(--ag-terracotta); }
 .ag-hand-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+/* A head with no cards under it — a one-line count, such as a deck's size. */
+.ag-hand--strip { padding-bottom: 12px; }
+.ag-hand--strip .ag-hand-head { margin-bottom: 0; }
 .ag-hand-title {
     font: 800 11px var(--ag-font);
     letter-spacing: 0.06em;
