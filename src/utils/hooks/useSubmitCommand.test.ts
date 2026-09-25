@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { expectedCommandCountFor } from "./useSubmitCommand";
-import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame, testBoard } from "@/utils/testing/outOfTurnGame";
+import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame } from "@/utils/testing/outOfTurnGame";
+import { testBoard } from "@/utils/testing/testBoard";
 
 describe("expectedCommandCountFor", () => {
     registerOutOfTurnTestGame();

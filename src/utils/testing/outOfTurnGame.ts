@@ -6,8 +6,6 @@
 
 import { afterEach, beforeEach } from "vitest";
 import { GAME_META } from "@/utils/ui/games";
-import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { IGameType } from "@/utils/apiModels/GameLogic";
 
 /** The `gameType.url` of the test-only game with out-of-turn plays. */
 export const OUT_OF_TURN_TEST_GAME = "testinterrupts";
@@ -22,19 +20,3 @@ export function registerOutOfTurnTestGame(): void {
     });
 }
 
-/** A two-seat board, "me" and "them", as `/api/game/[gameid]` sends it: only what the hooks read. */
-export function testBoard(
-    url: string,
-    { currentTurn = "me", complete = false, commandCount = 0 }: { currentTurn?: string; complete?: boolean; commandCount?: number } = {},
-): IGameDataResponse {
-    return {
-        gameType: { url } as IGameType,
-        usernameList: [],
-        userIdList: ["me", "them"],
-        turnTimer: "",
-        currentTurn,
-        gameState: { turnOrder: ["me", "them"], history: [], commandCount },
-        complete,
-        winner: "",
-    };
-}

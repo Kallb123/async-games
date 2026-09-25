@@ -8,7 +8,8 @@ vi.mock("@clerk/nextjs", () => ({ useUser: () => ({ user: null, isLoaded: false 
 
 // Below the mock on purpose: vitest hoists `vi.mock` above the imports.
 import { boardCanMove } from "./useGameData";
-import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame, testBoard } from "@/utils/testing/outOfTurnGame";
+import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame } from "@/utils/testing/outOfTurnGame";
+import { testBoard } from "@/utils/testing/testBoard";
 
 describe("boardCanMove", () => {
     registerOutOfTurnTestGame();

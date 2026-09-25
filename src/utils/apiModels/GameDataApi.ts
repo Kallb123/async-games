@@ -324,7 +324,10 @@ export interface IGameDataResponse {
         // is how the route refuses a move built against a board a teammate's
         // out-of-turn play has since changed (docs/out-of-turn-actions.md
         // §5.7). Only the count is sent: the commands themselves stay private
-        // (see publicGameState).
+        // (see publicGameState). The count discloses nothing new even where a
+        // command writes no history line (Train Time's EndTurn): the timeline
+        // route already sends every seat one review snapshot per command, so
+        // a command that must stay secret needs hiding there first.
         commandCount: number,
     },
     complete: boolean,
