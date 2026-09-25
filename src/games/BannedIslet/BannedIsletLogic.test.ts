@@ -584,9 +584,10 @@ describe("BannedIsletEndTurn — Phase 2, the draw (§7, §10)", () => {
         state.treasureDeck = ['emberCrown', 'stormIdol', 'sandbags'];
         const game = makeGame(state);
 
-        await endTurn().Execute(game);
+        const outcome = await endTurn().Execute(game) as IBannedIsletFloodPhaseOutcome;
 
         expect(state.players.get("u1")!.hand).toEqual(['emberCrown', 'stormIdol']);
+        expect(outcome.drawnCards).toEqual(['emberCrown', 'stormIdol']);
         expect(state.treasureDeck).toEqual(['sandbags']);
     });
 

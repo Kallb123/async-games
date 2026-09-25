@@ -421,10 +421,12 @@ export class BannedIsletAction implements IGameCommand {
  */
 export interface IBannedIsletFloodPhaseOutcome extends ICommandOutcome {
     floodLog: IBannedIsletFloodLogEntry[];
+    /** Ordinary cards added to the acting player's hand in this draw phase. */
+    drawnCards?: BannedIsletCardId[];
 }
 
-function floodPhaseOutcome(turnOver: boolean, floodLog: IBannedIsletFloodLogEntry[]): IBannedIsletFloodPhaseOutcome {
-    return { validMove: true, turnOver, floodLog };
+function floodPhaseOutcome(turnOver: boolean, floodLog: IBannedIsletFloodLogEntry[], drawnCards?: BannedIsletCardId[]): IBannedIsletFloodPhaseOutcome {
+    return { validMove: true, turnOver, floodLog, ...(drawnCards ? { drawnCards } : {}) };
 }
 
 /**
@@ -746,7 +748,7 @@ export class BannedIsletEndTurn implements IGameCommand {
         //    resolved fully and immediately instead of joining the hand, and
         //    §16 is explicit that a second one drawn in the same phase picks
         //    up the discard pile the first one just created.
-        let drawn = 0;
+        const drawnCards: BannedIsletCardId[] = [];
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (gs.treasureDeck.length === 0) {
                 // §10: routine rather than a crisis — treasure cards are never
@@ -765,14 +767,14 @@ export class BannedIsletEndTurn implements IGameCommand {
             if (card === 'watersRise') {
                 gs.treasureDiscard.push(card);
                 floodLog.push(resolveWatersRise(data, shuffleFlood));
-                if (data.complete) return floodPhaseOutcome(true, floodLog);
+                if (data.complete) return floodPhaseOutcome(true, floodLog, drawnCards);
                 continue;
             }
             ps.hand.push(card);
-            drawn++;
+            drawnCards.push(card);
         }
-        if (drawn > 0) {
-            data.gameState.history.unshift(playerHistory(this.senderId, `drew ${pluralize(drawn, 'treasure card')}`));
+        if (drawnCards.length > 0) {
+            data.gameState.history.unshift(playerHistory(this.senderId, `drew ${pluralize(drawnCards.length, 'treasure card')}`));
         }
 
         // ── The hand limit (§10, §16): checked at the end of Phase 2, so the
@@ -781,11 +783,11 @@ export class BannedIsletEndTurn implements IGameCommand {
         if (ps.hand.length > HAND_LIMIT) {
             gs.phase = 'discard';
             data.gameState.history.unshift(playerHistory(this.senderId, `must discard down to ${HAND_LIMIT} cards`));
-            return floodPhaseOutcome(false, floodLog);
+            return floodPhaseOutcome(false, floodLog, drawnCards);
         }
 
         floodLog.push(...resolveFloodPhase(data, shuffleFlood));
-        return floodPhaseOutcome(true, floodLog);
+        return floodPhaseOutcome(true, floodLog, drawnCards);
     }
 }
 

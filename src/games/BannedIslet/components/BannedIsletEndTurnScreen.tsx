@@ -7,6 +7,10 @@ import { swimLines, tileList, watersRiseLines } from '@/games/BannedIslet/narrat
 import { meta } from '@/games/BannedIslet/meta';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import { pluralize } from '@/utils/ui/text';
+import EndTurnHand from '@/components/ui/EndTurnHand';
+import type { BannedIsletCardId } from '@/games/BannedIslet/board';
+import { sortHand } from '@/games/BannedIslet/board';
+import BannedIsletCardChip from './BannedIsletCardChip';
 
 interface BannedIsletEndTurnScreenProps {
     floodLog: IBannedIsletFloodLogEntry[];
@@ -16,6 +20,8 @@ interface BannedIsletEndTurnScreenProps {
     userIdList: string[];
     /** The island as it stands now, so a swim row can say which tile the pawn surfaced on. */
     tileAt: (position: number) => string;
+    drawnCards: BannedIsletCardId[];
+    hand: BannedIsletCardId[];
     onDismiss: () => void;
 }
 
@@ -138,14 +144,25 @@ export default function BannedIsletEndTurnScreen({
     playerStates,
     userIdList,
     tileAt,
+    drawnCards,
+    hand,
     onDismiss,
 }: BannedIsletEndTurnScreenProps) {
+    const cardChip = (card: BannedIsletCardId, index: number) => <BannedIsletCardChip key={`${card}-${index}`} card={card} />;
     return (
         <TurnRecap
             header={{ name: meta.name, accent: meta.accent, glyph: meta.glyph }}
             since="This turn"
             summary={summaryFor(floodLog)}
             events={floodLog.flatMap((entry, index) => eventsFor(entry, index, playerStates, userIdList, tileAt))}
+            footer={(
+                <EndTurnHand
+                    drawn={drawnCards.map(cardChip)}
+                    drawnCount={drawnCards.length}
+                    hand={sortHand(hand).map(cardChip)}
+                    handCount={hand.length}
+                />
+            )}
             cta={{ label: 'Back to the island', onClick: onDismiss }}
         />
     );

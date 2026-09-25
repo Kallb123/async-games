@@ -2,9 +2,9 @@
 import React from 'react';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
 import RoleNote from '@/components/ui/RoleNote';
-import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
-import { cardGlyph, cardName, roleDef, sortHand } from '@/games/BannedIslet/board';
+import { roleDef, sortHand } from '@/games/BannedIslet/board';
+import BannedIsletCardChip from './BannedIsletCardChip';
 
 interface BannedIsletHandsProps {
     playerStates: { [userId: string]: IBannedIsletPlayerStateResponse };
@@ -45,11 +45,7 @@ export default function BannedIsletHands({ playerStates, userIdList, turnOrder, 
         // the same card), so there is no id to key on and the index is what
         // tells two of them apart.
         cards: sortHand(ps.hand).map((card, index) => (
-            <NamedChip
-                key={`${card}-${index}`}
-                indicator={<span className="ag-hand-card-emoji" aria-hidden="true">{cardGlyph(card)}</span>}
-                label={cardName(card)}
-            />
+            <BannedIsletCardChip key={`${card}-${index}`} card={card} />
         )),
         note: <RoleNote role={roleDef(ps.role)} />,
     }));

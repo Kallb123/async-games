@@ -3739,6 +3739,17 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-recap-tip-glyph { font-size: 22px; line-height: 1.2; flex: 0 0 auto; }
 .ag-recap-tip-text { font: 500 14px/1.45 var(--ag-font); color: var(--ag-ink); }
 
+/* The cards gained and held alongside an end-of-turn recap. */
+.ag-end-turn-hand {
+    margin-top: 20px;
+    overflow: hidden;
+    background: var(--ag-surface);
+    border: 1px solid var(--ag-line);
+    border-radius: 14px;
+    box-shadow: var(--ag-shadow);
+}
+.ag-end-turn-hand .ag-hand:first-child { border-top: 0; }
+
 .ag-recap-cta { margin-top: 20px; padding: 16px; font-size: 16px; border-radius: 16px; }
 
 /* ==========================================================================

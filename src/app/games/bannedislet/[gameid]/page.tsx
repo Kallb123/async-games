@@ -29,10 +29,11 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
+import { useStagedOutcomeReveal } from "@/utils/hooks/useStagedOutcomeReveal";
+import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, roleDef, tileName, BannedIsletTileId, BannedIsletCardId } from "@/games/BannedIslet/board";
 import {
     IBannedIsletFloodLogEntry,
     giveCardTargets,
@@ -89,14 +90,16 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     // BannedIsletEndTurn, or the BannedIsletDiscard that closed the same turn.
     // Every submit goes through this one wrapper so it is caught whichever
     // control fired it.
-    const [turnResult, setTurnResult] = useState<IBannedIsletFloodLogEntry[] | null>(null);
+    type TurnResult = { floodLog: IBannedIsletFloodLogEntry[]; drawnCards: BannedIsletCardId[] };
     const [showWaterScale, setShowWaterScale] = useState(false);
-    const submitCommand: SubmitCommand = (command, callback, target) =>
-        rawSubmitCommand(command, (r) => {
-            const floodLog = (r.outcome as IBannedIsletFloodPhaseOutcome).floodLog;
-            if (floodLog?.length) setTurnResult(floodLog);
-            callback?.(r);
-        }, target);
+    const { submitCommand, reveal: turnResult, dismiss: dismissTurnResult } = useStagedOutcomeReveal<BannedIsletCardId[], TurnResult>(
+        rawSubmitCommand,
+        outcome => (outcome as IBannedIsletFloodPhaseOutcome).drawnCards,
+        (outcome, drawnCards) => {
+            const floodLog = (outcome as IBannedIsletFloodPhaseOutcome).floodLog;
+            return floodLog?.length ? { floodLog, drawnCards: drawnCards ?? [] } : null;
+        },
+    );
 
     // Turn review steps back through the match's real actions (one per played
     // command, not one per turn); the board, the hands and the log all render
@@ -345,11 +348,13 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     if (turnResult && gs) {
         return (
             <BannedIsletEndTurnScreen
-                floodLog={turnResult}
+                floodLog={turnResult.floodLog}
+                drawnCards={turnResult.drawnCards}
+                hand={gs.playerStates[myUserId]?.hand ?? []}
                 playerStates={gs.playerStates}
                 userIdList={userIdList}
                 tileAt={position => tileName(gs.positions[position].tile)}
-                onDismiss={() => setTurnResult(null)}
+                onDismiss={dismissTurnResult}
             />
         );
     }

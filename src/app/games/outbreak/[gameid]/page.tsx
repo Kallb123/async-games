@@ -25,8 +25,8 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
-import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useStagedOutcomeReveal } from "@/utils/hooks/useStagedOutcomeReveal";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
@@ -70,11 +70,13 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // limit) hands back what it drew and what it did on its own outcome —
     // see IOutbreakInfectionPhaseOutcome. Every submit goes through this one
     // wrapper so it's caught regardless of which control fired it.
-    const { submitCommand, reveal: turnResult, dismiss: dismissTurnResult } = useOutcomeReveal(
+    type TurnResult = { infectionLog: IOutbreakInfectionLogEntry[]; drawnCards: number[] };
+    const { submitCommand, reveal: turnResult, dismiss: dismissTurnResult } = useStagedOutcomeReveal<number[], TurnResult>(
         rawSubmitCommand,
-        (outcome) => {
+        outcome => (outcome as IOutbreakInfectionPhaseOutcome).drawnCards,
+        (outcome, drawnCards) => {
             const infectionLog = (outcome as IOutbreakInfectionPhaseOutcome).infectionLog;
-            return infectionLog?.length ? infectionLog : null;
+            return infectionLog?.length ? { infectionLog, drawnCards: drawnCards ?? [] } : null;
         },
     );
 
@@ -308,7 +310,9 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     if (turnResult) {
         return (
             <OutbreakEndTurnScreen
-                infectionLog={turnResult}
+                infectionLog={turnResult.infectionLog}
+                drawnCards={turnResult.drawnCards}
+                hand={gameData?.specificGameState.playerStates[myUserId]?.hand ?? []}
                 onDismiss={dismissTurnResult}
             />
         );
