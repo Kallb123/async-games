@@ -249,6 +249,28 @@ describe("a command played out of turn", () => {
         expect(outcome.validMove).toBe(false);
         expect(gameOver).toBe(false);
         expect(gameData.gameState.commandHistory).toEqual([]);
+        // The line it wrote goes too, so the game reads as if it never ran.
+        expect(gameData.gameState.history).toEqual([]);
+        expect(endTurns).toEqual([]);
+        expect(gameData.currentTurn).toBe("user_a");
+    });
+
+    it("keeps a recorded one that now reports turnOver on replay, without the hand-off", async () => {
+        // The live game accepted it, so only a later change to its Execute
+        // gets here. Refusing it would drop a move that really happened and
+        // leave its effects behind for every later snapshot to build on.
+        const { gameData, endTurns, type } = twoSeatGame();
+        const recorded = interrupt({ turnOver: true });
+        (recorded as unknown as Record<string, unknown>).recordedOnTurnOf = "user_a";
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        const { outcome, gameOver } = await runCommand(gameData, type, recorded, { outOfTurn: true });
+        warn.mockRestore();
+
+        expect(outcome).toMatchObject({ validMove: true, turnOver: false });
+        expect(gameOver).toBe(false);
+        expect(gameData.gameState.commandHistory).toHaveLength(1);
+        expect(gameData.gameState.history).toHaveLength(1);
         expect(endTurns).toEqual([]);
         expect(gameData.currentTurn).toBe("user_a");
     });

@@ -312,7 +312,10 @@ route share them) and in the route, never left to each command:
 1. **No hand-off.** `CheckEndTurn` is skipped. If `Execute` returns
    `turnOver: true` without the game being over, that's a bug in the command
    (row 8 in §2 is exactly such a bug waiting to happen): the outcome is
-   treated as an invalid move, and the document isn't saved.
+   treated as an invalid move, and the document isn't saved. *(As built: on
+   replay, a play that is already stamped was accepted live, so it stands
+   and only the hand-off is dropped — refusing it there would lose a real
+   move and leave its effects behind for every later snapshot.)*
 2. **No follow-up.** An outcome's `followUpCommand` is ignored — the same rule
    the pipeline already applies to a follow-up of a follow-up.
 3. **`CheckGameOver` still runs.** A Helicopter Lift that calls the escape out

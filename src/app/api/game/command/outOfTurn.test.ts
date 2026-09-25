@@ -167,6 +167,23 @@ describe('POST /api/game/command, off the sender\'s turn', () => {
         expect(sentPushes).toEqual([]);
     });
 
+    it('lets one of an interrupt and the active player\'s own move through when they race, not both', async () => {
+        // Both load the same version of the game; optimistic concurrency
+        // (trySave) turns the loser's save into a 409, so neither overwrites
+        // the other. Each request reads who is signed in on its first line
+        // (the stub's auth()), before the other signs in over it.
+        const interrupting = (async () => { signIn(BOB); return command(interrupt(BOB, { jumpTo: 30 })); })();
+        const moving = (async () => { signIn(ANN); return command(jsonPost('/api/game/command', {
+            gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'SnakesAndLaddersRequestDiceRoll',
+        })); })();
+
+        const statuses = (await Promise.all([interrupting, moving])).map(response => response.status);
+
+        expect(statuses.sort()).toEqual([200, 409]);
+        expect(storedGame('game_1')!.__v).toBe(1);
+        expect(commandHistory()).toHaveLength(1);
+    });
+
     it('runs no follow-up', async () => {
         signIn(BOB);
 

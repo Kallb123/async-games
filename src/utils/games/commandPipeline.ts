@@ -1,5 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
-import { ICommandOutcome, IGameCommand, IGameType, RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF } from "../apiModels/gameCommand";
+import { ICommandOutcome, IGameCommand, IGameType, isRecordedOutOfTurn, RECORDED_FOLLOW_UP_TO_ID, RECORDED_ON_TURN_OF } from "../apiModels/gameCommand";
 
 export interface RunCommandOptions {
     /**
@@ -33,9 +33,12 @@ export interface RunCommandOptions {
      * - The command is stamped `recordedOnTurnOf` the player whose turn it is.
      * - `CheckEndTurn` never runs: an interrupt can't hand the turn off. An
      *   `Execute` that reports `turnOver` without ending the game is a bug in
-     *   the command, so the move is refused (and taken back off
-     *   `commandHistory`); the caller mustn't persist it, as for any invalid
-     *   move.
+     *   the command, so a live play is refused (and taken back off
+     *   `commandHistory` and `history`); the caller mustn't persist it, as
+     *   for any invalid move. A play that is already stamped is a replay of
+     *   one the live game accepted, so it stands and only the hand-off is
+     *   dropped — refusing it would lose a move that really happened and
+     *   carry its half-applied effects into every later snapshot.
      * - A `followUpCommand` is ignored, the same rule a follow-up's own
      *   follow-up gets.
      * - `timerRestarts` is dropped from the outcome: the clock is the active
@@ -113,6 +116,9 @@ export async function runCommand(
     options: RunCommandOptions = {},
 ): Promise<RunCommandResult> {
     const { onStep, resolveFollowUp, outOfTurn = false } = options;
+    // The route strips every `recorded…` field from a live request, so a
+    // command arriving already stamped is one replay is reading back.
+    const replayingOutOfTurn = outOfTurn && isRecordedOutOfTurn(command);
     const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
@@ -149,7 +155,7 @@ export async function runCommand(
 
     const gameOver = gameType.CheckGameOver(gameData);
     if (outOfTurn) {
-        return finishOutOfTurn(gameData, command, outcome, gameOver, onStep);
+        return finishOutOfTurn(gameData, command, outcome, { gameOver, linesWritten, replaying: replayingOutOfTurn }, onStep);
     }
     if (!gameOver) {
         gameType.CheckEndTurn(gameData, outcome);
@@ -199,20 +205,27 @@ function finishOutOfTurn(
     gameData: IGameData,
     command: IGameCommand,
     outcome: ICommandOutcome,
-    gameOver: boolean,
+    { gameOver, linesWritten, replaying }: { gameOver: boolean, linesWritten: number, replaying: boolean },
     onStep: RunCommandOptions["onStep"],
 ): RunCommandResult {
     // A game that ended passes nothing on, so `turnOver` alongside it is only
     // the game saying so. Anywhere else it is a command trying to end
     // somebody else's turn for them — the bug §2 row 8 of the design is
-    // about — and the move doesn't happen.
+    // about. Played live, the move doesn't happen. Replayed, it already did:
+    // the live game accepted it, so only a later change to its Execute can
+    // have got here, and the play stands without the hand-off.
     if (outcome.turnOver && !gameOver) {
-        console.error(`${command.className} reported turnOver out of turn in game ${gameData.gameId}; refusing it`);
-        gameData.gameState.commandHistory.pop();
-        return { outcome: { ...outcome, validMove: false, followUpCommand: undefined }, gameOver: false };
+        if (!replaying) {
+            console.error(`${command.className} reported turnOver out of turn in game ${gameData.gameId}; refusing it`);
+            gameData.gameState.commandHistory.pop();
+            gameData.gameState.history.splice(0, linesWritten);
+            return { outcome: { ...outcome, validMove: false, followUpCommand: undefined }, gameOver: false };
+        }
+        console.warn(`${command.className} recorded out of turn in game ${gameData.gameId} now reports turnOver on replay; keeping the turn where it was`);
     }
     // `followUpCommand` is dropped unrun, for the reason a follow-up's own is.
-    const { followUpCommand, timerRestarts, ...spent } = outcome;
+    const { followUpCommand, timerRestarts, turnOver, ...rest } = outcome;
+    const spent: ICommandOutcome = { ...rest, turnOver: turnOver && gameOver };
     onStep?.(command, spent);
     return { outcome: spent, gameOver };
 }
