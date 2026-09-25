@@ -533,7 +533,7 @@ describe("BannedIsletEndTurn — Phase 3, the flood (§7, §9.1)", () => {
 
     it("keeps all 24 flood cards accounted for across a run of floods and sinkings (§21.7)", async () => {
         const state = endOfTurnState({ u1: { position: MIDDLE } }, { flooded: [1, 2, 3, 4] });
-        state.waterLevel = 8;                       // §11: rate 6
+        state.waterLevel = 8;                       // §11: rate 5
         state.floodDeck = [...TILE_IDS];
         const game = makeGame(state);
 

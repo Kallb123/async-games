@@ -136,7 +136,7 @@ async function playOut(game: IBannedIsletGameData): Promise<IBannedIsletGameData
 }
 
 /**
- * Nothing here is good play — the point is that Legendary's rate of four
+ * Nothing here is good play — the point is that Legendary's rate of three
  * drowns the table in a handful of turns while drawing the whole treasure
  * deck, which is what puts a Waters Rise! shuffle, a flood-deck reshuffle and
  * a treasure-deck reshuffle into one command log.
@@ -189,7 +189,7 @@ function playSpecialGame(): Promise<IBannedIsletGameData> {
  * the live game didn't.
  */
 async function playRoleGame(roles: BannedIsletRoleId[]): Promise<IBannedIsletGameData> {
-    // Novice rather than the passive game's Legendary: at a rate of four the
+    // Novice rather than the passive game's Legendary: at a rate of three the
     // island can drown the table inside two turns, before the third seat has
     // ever played — and a run where a role never got a turn proves nothing
     // about replaying it. The reshuffles Legendary is there to force are the

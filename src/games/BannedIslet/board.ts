@@ -400,7 +400,7 @@ export const UNDO_STACK_DEPTH = ACTIONS_PER_TURN;
  * Level 10 has no rate because it isn't one: it's the skull, and the loss
  * (§4.2). `floodRateFor` in rules.ts is the only thing that should index this.
  */
-export const WATER_LEVEL_TRACK: readonly number[] = [2, 2, 3, 4, 4, 5, 5, 6, 6];
+export const WATER_LEVEL_TRACK: readonly number[] = [2, 2, 3, 3, 3, 4, 4, 5, 5];
 
 /** §4.2, §11: the tenth level of the meter is the skull — reaching it loses the game. */
 export const LOSING_WATER_LEVEL = 10;
@@ -416,10 +416,10 @@ export interface IBannedIsletDifficultyDef {
 }
 
 export const DIFFICULTIES: readonly IBannedIsletDifficultyDef[] = [
-    { id: 'novice', label: 'Novice', startWaterLevel: 1, description: 'Two tiles a turn to start, and the meter can never reach the skull.' },
+    { id: 'novice', label: 'Novice', startWaterLevel: 1, description: 'Two tiles a turn to start, and the most room before the skull.' },
     { id: 'normal', label: 'Normal', startWaterLevel: 2, description: 'The intended baseline: two tiles a turn, with room to climb.' },
     { id: 'elite', label: 'Elite', startWaterLevel: 3, description: 'Three tiles a turn from the first, and the meter is now a real clock.' },
-    { id: 'legendary', label: 'Legendary', startWaterLevel: 4, description: 'Four tiles a turn from the first, and six Waters Rise! cards end it.' },
+    { id: 'legendary', label: 'Legendary', startWaterLevel: 4, description: 'Three tiles a turn from the first, and six Waters Rise! cards end it.' },
 ];
 
 /**

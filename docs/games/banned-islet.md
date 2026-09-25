@@ -340,7 +340,7 @@ water meter:
 
 | Water level | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **Flood rate** | 2 | 2 | 3 | 4 | 4 | 5 | 5 | 6 | 6 | 💀 |
+| **Flood rate** | 2 | 2 | 3 | 3 | 3 | 4 | 4 | 5 | 5 | 💀 |
 
 Level 10 is not a rate — it is the loss (§4.2).
 
@@ -360,7 +360,7 @@ game, each Waters Rise! shuffles back a *smaller* pile of increasingly dangerous
 cards. The deck concentrates.
 
 **If the flood deck empties mid-draw**, shuffle the discard to form a new deck
-and continue the draw. With only 24 cards and a rate reaching 6, this happens in
+and continue the draw. With only 24 cards and a rate reaching 5, this happens in
 most Elite and Legendary games and is not an exception case — it is the endgame.
 
 ---
@@ -403,10 +403,10 @@ One dial, set at creation: the **starting water level**.
 
 | Difficulty | Start level | Opening flood rate | Waters Rise! cards needed to lose |
 |---|---|---|---|
-| **Novice** | 1 | 2 | 9 (more than exist — the meter cannot reach 10) |
-| **Normal** | 2 | 2 | 8 (likewise unreachable) |
+| **Novice** | 1 | 2 | 9 (more than one pass of the deck holds) |
+| **Normal** | 2 | 2 | 8 (likewise) |
 | **Elite** | 3 | 3 | 7 |
-| **Legendary** | 4 | 4 | 6 |
+| **Legendary** | 4 | 3 | 6 |
 
 With only three Waters Rise! cards in a 28-card deck, **the water meter is not
 actually a loss condition in a single pass of the deck** — it becomes one only
