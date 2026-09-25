@@ -1,13 +1,15 @@
 # Out-of-turn actions
 
-**Status: engine and the active player's screen built (PRs 2 and 3); no game
-uses them yet.** PR 1 added this document and removed the one turn-gate
+**Status: engine, the active player's screen and Banned Islet built (PRs 2, 3
+and 5); Outbreak (PR 4) still to come.** PR 1 added this document and removed the one turn-gate
 exemption the app had, which is why §3 exists. PR 2 built the engine half of
 §5 — the route, the pipeline, replay and recap — with one change from the
 design as first written: the stamp is `recordedOnTurnOf`, naming the player
 whose turn it was, rather than a `recordedOutOfTurn` boolean (§5.4 says why).
 PR 3 built §5.7, with the board's version sent as a `commandCount` on every
-game response (§5.7 says why). PRs 4–5 are still to come.
+game response (§5.7 says why). PR 5 shipped before PR 4, so it built the
+shared pick hook §5.8 asks for rather than reusing one; its section in §6
+says what else it found.
 
 Every command in the app today is played by the player whose turn it is. That
 rule is enforced in one place (the command route's turn gate) and *assumed* in
@@ -594,7 +596,30 @@ What's new: none — nothing uses it yet.
 
 Crew: `rulebook`, `croupier`, `caveman`, `gremlin`.
 
-### PR 5 — Banned Islet: specials on a teammate's turn
+### PR 5 — Banned Islet: specials on a teammate's turn *(built)*
+
+Built before PR 4, as listed below, with four things the list didn't
+foresee:
+
+- **The stamp was read after `Execute`.** `runCommand` stamped
+  `recordedOnTurnOf` with `currentTurn` as `Execute` left it — and Banned
+  Islet's escape, like every game-ending command, clears it. An out-of-turn
+  escape was stamped with nobody. The pipeline now reads whose turn it is
+  before `Execute` runs.
+- **An out-of-turn play empties the undo stack.** Its sender has no Undo off
+  turn, and the active player's snapshots were all taken before it, so without
+  this their second undo would restore a board from before the teammate's card
+  and put the card back in its holder's hand (`docs/undo.md`, Banned Islet).
+- **The shared hook is `useArmedPick`** (`src/utils/hooks/`): state that clears
+  when the turn changes or `commandCount` does. Banned Islet's board pick and
+  its half-chosen give both use it, and the lift's passenger stage moved into
+  the pick (`boarding`) so it disarms with it. PR 4 swaps Outbreak's
+  `boardTarget` onto it.
+- **No recap copy.** A lift or a Sandbags earns no recap row on any turn, and
+  the escape's row is the same whoever called it, so the history line's
+  ", on {{ann}}'s turn" is the only copy an interrupt needs.
+
+What's new: not added with the build. Crew as listed.
 
 The same shape as PR 4, for `BannedIsletPlayCard`: `outOfTurnPlayable` in
 `rules.ts`; declare the flag; skip `maybeFinishFloodPhase` out of turn; an

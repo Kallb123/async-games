@@ -688,13 +688,22 @@ subsection of this document as it lands.
   a silent pawn teleport) and it must be **cheap to undo** — one Move action on
   the swimmer's own next turn, which the tie-break toward the pier is chosen to
   make rare.
-* **Special cards are playable only on your own turn**, at any point in your
-  action phase, and during your own draw phase to duck the hand limit. §10 has
-  them playable at any moment by anyone, which the command route cannot express
-  and which means nothing when turns are hours apart. **Sandbags loses the
-  most** — its whole point is reacting to a flood card — and drops to "shore
-  anywhere, free" as a result; Helicopter Lift loses almost nothing, since the
-  escape play (§4.1) is taken on a turn anyway.
+* **Special cards are playable on anyone's turn, but only between commands.**
+  On your own turn: at any point in your action phase, and during your own
+  draw phase to duck the hand limit. On a teammate's turn: while they are in
+  their action phase or their discard, from your own hand
+  ([`out-of-turn-actions.md`](../out-of-turn-actions.md) §5.5). §10 has them
+  playable at any moment by anyone; what async play can't give is the moment
+  *inside* a command — the draw and the flood resolve atomically inside one
+  `BannedIsletEndTurn`, so nobody's card can land between a flood card and the
+  sink it causes. A teammate's card never closes the active player's discard or
+  runs the flood (their discard and the island's turn are theirs), and can't be
+  taken back. **Helicopter Lift loses almost nothing**: the holder can move the
+  team, or call the escape the moment everyone is on the pier, without waiting
+  for their own turn to come round. **Sandbags recovers most of its point** —
+  dry a tile on a teammate's turn, before *their* draw floods it again — but
+  still can't answer a flood card as it's drawn. That would need a reaction
+  window or a standing order (`out-of-turn-actions.md` §4, Options E and F).
 * **The Navigator moves a teammate without consent** (§12), the same call
   Outbreak makes for Airlift: co-op means no adversarial use, and the moved
   player can see where they were put.

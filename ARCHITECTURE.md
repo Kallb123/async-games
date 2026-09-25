@@ -615,7 +615,11 @@ changed is refused with a 409 rather than run against a board its sender never
 saw, and the hook's resync shows them the new one. It is a request field that
 can only fail its own sender's request, and the route deletes it before
 anything records the command. Every other game sends none, and nothing is
-checked.
+checked. A choice armed across two taps (a card, then a tile) is held in
+`useArmedPick`, which clears it whenever `commandCount` changes, so a
+teammate's interrupt between the taps makes the player choose again on the
+board in front of them rather than sending half a choice made on the old one.
+Banned Islet is the first game to set the flag.
 Step 10 is how a game acts on the player's behalf: an outcome can name a
 `followUpCommand`, which runs immediately as if the player had sent it — its own
 id, its own history line, its own entry on `commandHistory`, its own step in a
