@@ -1253,6 +1253,13 @@ The narrowest opt-in so far, and the first since Race Cars to need §5's hold.
   and then draw two cards. `CheckEndTurn` empties the stack and closes the hold
   on every hand-off, and the dropout adapter does too. Depth one: a turn only
   ever has one claim in it.
+- **The last lap is announced when the hold closes.** A claim that leaves its
+  player on two trains or fewer starts the last lap in the state straight away,
+  where the snapshot can take it back, but its log line waits for
+  `TrainTimeEndTurn`: the history is outside `specificGameState`, and a table
+  told the game is ending by a claim that was then taken back would have no way
+  to un-read it. A hold the turn timer passes on (below) never gets the line;
+  the board's own "last lap" marker still shows.
 - **No turn-timer adapter, and what that costs.** Train Time registers no
   turn-timeout adapter — an expired turn is the cron stepping `currentTurn` on
   and restarting the clock — so, unlike Race Cars and Settlements & Cities, a

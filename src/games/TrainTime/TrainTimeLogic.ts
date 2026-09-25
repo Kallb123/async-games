@@ -50,8 +50,11 @@ function markDirty(gameData: IGameData) {
     (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
 }
 
+// Through mongoMap, like the dropout adapter below: TrainTimeUndo assigns the
+// map back from a snapshot that was stored as Mixed, and nothing here should
+// depend on Mongoose having cast it back into a Map on the way.
 function playerState(gs: ITrainTimeSpecificGameState, userId: string): ITrainTimePlayerState | undefined {
-    return gs.playerStates.get(userId);
+    return mongoMap(gs.playerStates).get(userId);
 }
 
 // ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
@@ -152,7 +155,7 @@ function boardIsDeadlocked(trainData: ITrainTimeGameData): boolean {
  * because the command route asks CheckGameOver first — by the time
  * CheckEndTurn runs, the game-over decision has already been made.
  */
-function finishTurn(trainData: ITrainTimeGameData, senderId: string): void {
+function finishTurn(trainData: ITrainTimeGameData, senderId: string, { announceLastLap = true } = {}): void {
     const gs = trainData.specificGameState;
     gs.drawsThisTurn = 0;
     gs.drawTurnOwner = null;
@@ -167,10 +170,7 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string): void {
     if (sender && sender.trains <= FINAL_ROUND_TRAIN_THRESHOLD) {
         // Everyone, the trigger included, gets exactly one more turn.
         gs.finalRoundPending = activeTurnOrder(trainData);
-        trainData.gameState.history.unshift(playerHistory(
-            senderId,
-            `is down to ${sender.trains} trains — last lap, everyone gets one more turn`,
-        ));
+        if (announceLastLap) announceLastLapBy(trainData, senderId);
         return;
     }
 
@@ -178,6 +178,14 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string): void {
         gs.gameOver = true;
         trainData.gameState.history.unshift({ text: 'No route left is short enough for anyone to build — the game ends here' });
     }
+}
+
+function announceLastLapBy(trainData: ITrainTimeGameData, senderId: string): void {
+    const trains = playerState(trainData.specificGameState, senderId)?.trains ?? 0;
+    trainData.gameState.history.unshift(playerHistory(
+        senderId,
+        `is down to ${trains} trains — last lap, everyone gets one more turn`,
+    ));
 }
 
 /**
@@ -430,7 +438,10 @@ export class TrainTimeClaimRoute implements IGameCommand {
             `claimed ${routeName(route)} (${route.length} track, +${points})${leadNote}`,
         ));
 
-        finishTurn(trainData, this.senderId);
+        // The last lap is announced when the hold closes (TrainTimeEndTurn),
+        // not here: a claim taken back never started it, and the log can't
+        // take a line back. A claim that ends the game never starts one.
+        finishTurn(trainData, this.senderId, { announceLastLap: false });
         markDirty(gameData);
         // The last claim of the game is scored the moment it lands, by
         // CheckGameOver, and no snapshot can take that back (above).
@@ -629,7 +640,12 @@ export class TrainTimeEndTurn implements IGameCommand {
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;
         if (!holdOpenFor(trainData, this.senderId)) return INVALID;
-        // No history line: the claim already said what the turn was.
+        // No line of its own — the claim already said what the turn was — but
+        // the last lap the claim started is announced now that it stands.
+        const before = undoEntryFor(trainData, this.senderId)!.state;
+        if (before.finalRoundPending === null && trainData.specificGameState.finalRoundPending !== null) {
+            announceLastLapBy(trainData, this.senderId);
+        }
         return { validMove: true, turnOver: true };
     }
 }

@@ -128,6 +128,19 @@ describe("Train Time — taking a claim back", () => {
         await run(game, undo());
         expect(game.specificGameState.finalRoundPending).toBeNull();
         expect(seat(game).trains).toBe(6);
+        // The log never said it started, so it has nothing to take back.
+        expect(game.gameState.history.some(line => line.text.includes("last lap"))).toBe(false);
+    });
+
+    it("announces the last lap a claim started once its hold closes", async () => {
+        const game = makeGame();
+        seat(game).trains = 6;
+
+        await run(game, claim());
+        expect(game.gameState.history.some(line => line.text.includes("last lap"))).toBe(false);
+
+        await run(game, endTurn());
+        expect(game.gameState.history[0].text).toBe("{{u1}} is down to 2 trains — last lap, everyone gets one more turn");
     });
 
     it("restores from a copy, not a view — a later change to the live state can't reach the snapshot", async () => {
