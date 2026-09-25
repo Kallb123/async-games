@@ -47,7 +47,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IDiceCitiesGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,

@@ -64,7 +64,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISACGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
-    const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const submitCommand: SubmitCommand = (command, callback, target) =>
         sendCommand(command, (data) => {
             setBoardMode('idle');

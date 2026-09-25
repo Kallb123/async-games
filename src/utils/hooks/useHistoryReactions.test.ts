@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { patchHistoryReaction } from "./useHistoryReactions";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { IGameType } from "@/utils/apiModels/gameCommand";
+import { testBoard } from "@/utils/testing/testBoard";
 
 /** A `setGameData`-shaped stand-in that just applies the updater to a held value, like React's own setState does for the functional-update form. */
 function fakeSetGameData<T extends IGameDataResponse>(initial: T | null) {
@@ -12,20 +12,9 @@ function fakeSetGameData<T extends IGameDataResponse>(initial: T | null) {
     return { setGameData, get: () => value };
 }
 
-/** Only `gameState.history` matters to patchHistoryReaction — the rest of a real IGameType is irrelevant here. */
-const STUB_GAME_TYPE = {} as IGameType;
-
+/** Only `gameState.history` matters to patchHistoryReaction. */
 function gameData(history: { commandId?: string; reactions?: { reaction: string; actorId: string; actorUsername: string }[] }[]): IGameDataResponse {
-    return {
-        gameType: STUB_GAME_TYPE,
-        usernameList: [],
-        userIdList: [],
-        turnTimer: "",
-        currentTurn: "",
-        gameState: { turnOrder: [], history: history.map((entry) => ({ text: "", ...entry })) },
-        complete: false,
-        winner: "",
-    };
+    return testBoard("", { history: history.map((entry) => ({ text: "", ...entry })) });
 }
 
 describe("patchHistoryReaction", () => {

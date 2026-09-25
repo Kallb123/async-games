@@ -57,6 +57,16 @@ export interface IGameCommand {
     senderId: string;
     senderUsername: string;
     readonly className: string;
+    /**
+     * A request field, never recorded: the `commandCount` of the board the
+     * client built this command against (IGameDataResponse). The command route
+     * refuses the request with a 409 when the game has recorded a different
+     * number of commands since, and deletes the field before the command runs.
+     * It can only make its sender's own request fail, so it needs no trust.
+     * Sent by `useSubmitCommand` from games with out-of-turn plays
+     * (docs/out-of-turn-actions.md §5.7); absent, nothing is checked.
+     */
+    expectedCommandCount?: number;
 
     myString: () => string;
     Execute: (gameData: IGameData) => Promise<ICommandOutcome>;

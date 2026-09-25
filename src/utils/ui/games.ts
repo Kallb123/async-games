@@ -42,6 +42,13 @@ export interface GameMeta {
     // Prototypes that persist outside the shared GameData/invitation engine.
     // They still use the library metadata, but have no discriminator models.
     engine?: "standalone";
+    // The game has a command a seated player may send on somebody else's turn
+    // (docs/out-of-turn-actions.md) — so the board can move under the active
+    // player while they sit and look at it. The active player's board polls
+    // (useGameData) and every command they send says which board it was built
+    // against (useSubmitCommand's `expectedCommandCount`). Absent means false:
+    // on your own turn nothing moves until you do.
+    hasOutOfTurnPlays?: boolean;
     available: boolean;
 }
 
@@ -74,6 +81,15 @@ export const GAME_META: Record<string, GameMeta> = {
     racecars: raceCarsMeta,
     kingdombuilder: kingdomBuilderMeta,
 };
+
+/**
+ * Whether a game's board can move on the active player's own turn, because a
+ * teammate may play out of turn — `GameMeta.hasOutOfTurnPlays`, looked up by
+ * the `url` every game response's `gameType` carries.
+ */
+export function gameHasOutOfTurnPlays(gameType: { url: string } | null | undefined): boolean {
+    return !!gameType && GAME_META[gameType.url]?.hasOutOfTurnPlays === true;
+}
 
 // Games that don't have an implementation yet but are teased in the library.
 /** The bounds the party-size rule below needs — a `GameMeta` satisfies it. */

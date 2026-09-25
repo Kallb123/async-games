@@ -7,10 +7,34 @@ import { useIsAuthorised } from "./useAuthGuard";
 import { TURN_ADVANCED_EVENTS } from "./usePushEvents";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
+import { gameHasOutOfTurnPlays } from "@/utils/ui/games";
 
 /** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
 interface IGameDataBody<T> {
     gameData: T;
+}
+
+/**
+ * Whether the board the viewer is looking at could change without them doing
+ * anything — which is when `useGameData` polls for it.
+ *
+ * Only while the game is live, and then either the turn belongs to somebody
+ * else, or it is the viewer's own turn in a game where a teammate may play on
+ * it (`GameMeta.hasOutOfTurnPlays`, docs/out-of-turn-actions.md §5.7). In any
+ * other game nothing can move on the viewer's own turn until they act, so
+ * polling then would be pure noise — and `YourTurn` already pushes the moment
+ * the turn comes back to them. An out-of-turn play pushes nothing (a
+ * data-only push is banned, see `sendPushToUsers`), so for the active player
+ * the poll is the only way to see one before their next move is refused for
+ * being built against the old board.
+ *
+ * `currentTurn` is empty until the first fetch lands, and on a finished game.
+ */
+export function boardCanMove(game: IGameDataResponse | null | undefined, viewerId: string | null | undefined): boolean {
+    if (!game?.currentTurn || game.complete) {
+        return false;
+    }
+    return game.currentTurn !== viewerId || gameHasOutOfTurnPlays(game.gameType);
 }
 
 /**
@@ -19,8 +43,8 @@ interface IGameDataBody<T> {
  * flags, the drop-overlapping-fetches bookkeeping, the keep-the-last-good-body
  * failure handling and the backoff retries are all that hook's, and what is
  * left here is the three things that are actually about a game — which body
- * field the board wants, when an opponent could be moving, and where a viewer
- * goes when the game isn't theirs to look at.
+ * field the board wants, when the board could be moving (`boardCanMove`), and
+ * where a viewer goes when the game isn't theirs to look at.
  *
  * `loading` is true whenever a fetch is in flight — the first one and every
  * later refresh — which is what the shell's top-bar loading bar renders from.
@@ -56,20 +80,10 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     const router = useRouter();
     const { showToast } = useToast();
 
-    // Poll only while there is something that could change under us: the game is
-    // live and the turn belongs to somebody else. On the viewer's own turn
-    // nothing can move until they act, so polling then would be pure noise — and
-    // `YourTurn` already pushes the moment the turn comes back to them.
-    // `currentTurn` is empty until the first fetch lands, and on a finished game.
-    const waitingOnOpponent = (body: IGameDataBody<T> | null) => {
-        const game = body?.gameData;
-        return !!game?.currentTurn && !game.complete && game.currentTurn !== user?.id;
-    };
-
     const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
         `/api/game/${gameId}`,
         TURN_ADVANCED_EVENTS,
-        { pollWhileWatching: waitingOnOpponent },
+        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id) },
     );
 
     // Null until the first response lands, rather than `{} as T`. The cast was

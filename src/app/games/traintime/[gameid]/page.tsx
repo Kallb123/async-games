@@ -60,7 +60,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ITrainTimeGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const { endGame } = useEndGame(gameId);
 
     // Turn review steps back through the match's real actions (one per played

@@ -35,7 +35,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     const state = gameData?.specificGameState;
     const complete = gameData?.complete ?? false;
 
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const handleDraw = () => submitCommand(new SolitaireDraw(), undefined, 'draw');
     const handleUndo = () => submitCommand(new SolitaireUndo(), undefined, 'undo');

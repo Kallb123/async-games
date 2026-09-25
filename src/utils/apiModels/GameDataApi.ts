@@ -316,7 +316,19 @@ export interface IGameDataResponse {
         // — ready to render. `actorId` says whose line it is.
         history: IHistoryEntryResponse[],
         // Seats dropped for going quiet — still in turnOrder, out of the game.
-        droppedPlayers?: string[]
+        droppedPlayers?: string[],
+        // How many commands the game has recorded: the board's version.
+        // `commandHistory` only ever grows (an undo is a command of its own),
+        // so a board built from a response is out of date exactly when this
+        // has moved. A client sends it back as `expectedCommandCount`, which
+        // is how the route refuses a move built against a board a teammate's
+        // out-of-turn play has since changed (docs/out-of-turn-actions.md
+        // §5.7). Only the count is sent: the commands themselves stay private
+        // (see publicGameState). The count discloses nothing new even where a
+        // command writes no history line (Train Time's EndTurn): the timeline
+        // route already sends every seat one review snapshot per command, so
+        // a command that must stay secret needs hiding there first.
+        commandCount: number,
     },
     complete: boolean,
     winner: string,

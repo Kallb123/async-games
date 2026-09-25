@@ -48,7 +48,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISnakesAndLaddersGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
-    const { submitCommand, submitting } = useSubmitCommand<ISnakesAndLaddersGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting } = useSubmitCommand<ISnakesAndLaddersGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,

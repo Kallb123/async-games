@@ -568,6 +568,8 @@ regardless of game:
      (403 if not) — the out-of-turn path, below
    guard: not dropped from the game
    guard: userId === command.senderId      (not acting for someone else)
+   guard: command.expectedCommandCount, if sent, === commandHistory.length
+     (409 if not — the board moved under the sender, below), then deleted
 5. outcome = await command.Execute(gameData)
    └─ if !outcome.validMove → 401
 6. push command onto gameState.commandHistory (markModified)
@@ -601,6 +603,19 @@ and 13 and leaves the sender's `missedTurnCounts` alone. Everything about
 which tells by `gameData.currentTurn !== this.senderId`; a declared command
 played on its sender's own turn takes the ordinary path.
 `playableOutOfTurnCommands.test.ts` lists every class that declares it.
+
+**The active player's side of it** (§5.7 of the same document). A game with
+out-of-turn plays sets `hasOutOfTurnPlays` in its `meta.ts`, and its board can
+then move while its active player looks at it. So that board polls on its own
+turn too (`boardCanMove` in `useGameData`), and every command it sends carries
+the response's `gameState.commandCount` — `commandHistory.length`, the board's
+version, since the history only ever grows — as `expectedCommandCount`
+(`useSubmitCommand`). A move built against a board a teammate has since
+changed is refused with a 409 rather than run against a board its sender never
+saw, and the hook's resync shows them the new one. It is a request field that
+can only fail its own sender's request, and the route deletes it before
+anything records the command. Every other game sends none, and nothing is
+checked.
 Step 10 is how a game acts on the player's behalf: an outcome can name a
 `followUpCommand`, which runs immediately as if the player had sent it — its own
 id, its own history line, its own entry on `commandHistory`, its own step in a
@@ -884,7 +899,9 @@ were removed: a tab coming back to the foreground refetches via
 `usePushEvents`' `refreshOnVisible`, and a board being watched live polls via
 its `pollWhileWatching` (see `useGameData`) — every 10s, only while the tab is in
 the foreground and only within 10 minutes of the viewer last interacting, so a
-forgotten tab stops on its own. Prefer either over adding a new silent push.
+forgotten tab stops on its own. A board polls while somebody else holds the
+turn, and on the viewer's own turn only in a game with out-of-turn plays
+(`GameMeta.hasOutOfTurnPlays`), where a teammate's card can move it. Prefer either over adding a new silent push.
 
 ## 9. Turn recap & planning (replay engine)
 

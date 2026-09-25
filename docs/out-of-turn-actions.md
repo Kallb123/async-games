@@ -1,11 +1,13 @@
 # Out-of-turn actions
 
-**Status: engine built (PR 2); no game uses it yet.** PR 1 added this document
-and removed the one turn-gate exemption the app had, which is why §3 exists.
-PR 2 built the engine half of §5 — the route, the pipeline, replay and recap —
-with one change from the design as first written: the stamp is
-`recordedOnTurnOf`, naming the player whose turn it was, rather than a
-`recordedOutOfTurn` boolean (§5.4 says why). PRs 3–5 are still to come.
+**Status: engine and the active player's screen built (PRs 2 and 3); no game
+uses them yet.** PR 1 added this document and removed the one turn-gate
+exemption the app had, which is why §3 exists. PR 2 built the engine half of
+§5 — the route, the pipeline, replay and recap — with one change from the
+design as first written: the stamp is `recordedOnTurnOf`, naming the player
+whose turn it was, rather than a `recordedOutOfTurn` boolean (§5.4 says why).
+PR 3 built §5.7, with the board's version sent as a `commandCount` on every
+game response (§5.7 says why). PRs 4–5 are still to come.
 
 Every command in the app today is played by the player whose turn it is. That
 rule is enforced in one place (the command route's turn gate) and *assumed* in
@@ -440,11 +442,20 @@ see an interrupt.
    runs against the board as it is now. If a teammate airlifted them between
    the two, "Drive to Lagos" may still be legal from the new city and mean
    something they never chose. Fix: an optional `expectedCommandCount` on a
-   command, set by the client from the history length it rendered; the route
-   answers 409 "The board changed — take another look" when it doesn't match.
+   command, set by the client from the command count it rendered; the route
+   answers 409 "The board changed, take another look" when it doesn't match.
    It is a request field that can only make the sender's *own* request fail, so
    it needs no server trust. `useSubmitCommand` already resyncs on any refusal.
    Send it only from boards of games with `hasOutOfTurnPlays`, at first.
+
+   *As built:* the count is `commandHistory.length`, sent on every game
+   response as `gameState.commandCount` — the history *lines* the client
+   already had aren't one per command (a command can write several, or none,
+   and the opening roll-off writes some with no command at all), while
+   `commandHistory` only ever grows, an undo being a command of its own. Only
+   the count is sent, never the commands. The route deletes the field before
+   the command runs, so it is never recorded. The status text is ASCII because
+   an HTTP reason phrase can't carry an em dash.
 
 A *visible* push to a player an interrupt affected ("Bea airlifted you to
 Lagos") is a nice-to-have. It needs a notification channel with a sender behind
@@ -465,6 +476,18 @@ specials themselves:
   `BannedIsletPlayCard` builder around `page.tsx:208`) gets the same treatment:
   armed from the viewer's own hand, off turn, and the board's
   `onPositionClick` is live only for that pick.
+
+**Disarm when the board moves.** `expectedCommandCount` guards the gap between
+the board a move was *rendered* from and the one it runs against — not a
+choice spread over two taps. A board that arms a move first (pick Drive or a
+special, then tap the map) and polls on its own turn can take a teammate's
+interrupt between the two taps: the poll repaints the board, the count the
+hook sends catches up with it, and the second tap lands a choice half-made on
+the old board without a 409. So in a game with `hasOutOfTurnPlays`, any armed
+pick — the active player's on-turn targeting as much as an off-turn one —
+clears whenever `gameState.commandCount` changes, and the player chooses again
+on the board in front of them. That belongs in the shared pick hook below, so
+neither page has to remember it.
 
 If the two pages grow the same "armed out-of-turn pick" state machine, that is
 the signal to extract it into `src/utils/hooks/` rather than copy it — the
@@ -526,7 +549,16 @@ hoped.
 Crew: `locksmith`, `gremlin`, `croupier` (replay and recap adapters).
 What's new: none.
 
-### PR 3 — The active player sees the board move
+### PR 3 — The active player sees the board move *(built)*
+
+Built as listed, with the count the client sends back arriving as
+`gameState.commandCount` on the game response (§5.7). `hasOutOfTurnPlays` is
+optional rather than written out as `false` in every `meta.ts`: absent means
+false. Every board passes `useSubmitCommand` the `gameData` it renders, so a
+game only has to set the flag. The poll condition is `boardCanMove`, tested
+against a test-only flagged game (`src/utils/testing/outOfTurnGame.ts`), as are
+the hook's choice of count and — in `outOfTurn.test.ts`, beside the test-only
+interrupt — the route's 409.
 
 1. **`hasOutOfTurnPlays` in `GameMeta`**, false everywhere.
 2. **`useGameData` polls on your own turn in such a game.** Test the poll
@@ -549,7 +581,8 @@ What's new: none — nothing uses it yet.
    gives the same board.
 3. **Add to the tripwire list.**
 4. **Board screen.** `OutbreakEventTray` off turn, and off-turn targeting on
-   the map. `hasOutOfTurnPlays: true` in `meta.ts`.
+   the map. Every armed targeting disarms when `commandCount` changes (§5.8).
+   `hasOutOfTurnPlays: true` in `meta.ts`.
 5. **Recap adapter** copy for an interrupt, if it needs any beyond the history
    line.
 6. **Docs and player copy.** `outbreak-gdd.md` §21.3: replace the

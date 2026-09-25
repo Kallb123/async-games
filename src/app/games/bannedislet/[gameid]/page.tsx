@@ -79,7 +79,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IBannedIsletGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IBannedIsletGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IBannedIsletGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
     const { endGame } = useEndGame(gameId);
 
     // The end-of-turn reveal: whichever command ran the flood phase hands back

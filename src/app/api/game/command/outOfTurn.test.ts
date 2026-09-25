@@ -4,6 +4,10 @@
 // out-of-turn invariants enforced by the route and runCommand rather than by
 // the command.
 //
+// It also covers the other half of the active player's side (§5.7): a move
+// carrying the `expectedCommandCount` of the board it was built against is
+// refused once an interrupt has moved that board.
+//
 // No real game declares the flag yet, so these run against a test-only command
 // registered here and admitted to Snakes and Ladders by this file's own stub of
 // the command registry — keeping every real game's command list out of it.
@@ -280,5 +284,81 @@ describe('POST /api/game/command, a declared command on the sender\'s own turn',
 
         await runAfterCallbacks();
         expect(sentPushes.map(push => push.userIds)).toEqual([[BOB.id]]);
+    });
+});
+
+/** The active player's ordinary move, built against a board of `expectedCommandCount` commands (absent: unsaid). */
+function roll(extra: Record<string, unknown> = {}) {
+    return jsonPost('/api/game/command', {
+        gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'SnakesAndLaddersRequestDiceRoll',
+        ...extra,
+    });
+}
+
+describe('POST /api/game/command, a move that says which board it was built against', () => {
+    it('refuses the active player\'s move once a teammate\'s interrupt has moved the board, and saves nothing', async () => {
+        signIn(BOB);
+        const interrupted = await command(interrupt(BOB, { jumpTo: 30 }));
+        const { gameData } = await interrupted.json();
+        // What every player's board now reads its version from.
+        expect(gameData.gameState.commandCount).toBe(1);
+
+        // Ann rendered the board before Bob's card landed.
+        signIn(ANN);
+        const response = await command(roll({ expectedCommandCount: 0 }));
+
+        expect(response.status).toBe(409);
+        expect(response.statusText).toBe('The board changed, take another look');
+        const saved = storedGame('game_1')!;
+        expect(saved.__v).toBe(1);
+        expect(commandHistory()).toHaveLength(1);
+        expect(saved.currentTurn).toBe(ANN.id);
+    });
+
+    it('plays it against the board it names, and never records the count on the move', async () => {
+        signIn(BOB);
+        await command(interrupt(BOB));
+        signIn(ANN);
+
+        const response = await command(roll({ expectedCommandCount: 1 }));
+
+        expect(response.status).toBe(200);
+        expect(commandHistory()).toHaveLength(2);
+        expect(commandHistory()[1]).not.toHaveProperty('expectedCommandCount');
+        expect((await response.json()).gameData.gameState.commandCount).toBe(2);
+    });
+
+    it('checks nothing when the move doesn\'t say, as every game without out-of-turn plays sends it', async () => {
+        signIn(BOB);
+        await command(interrupt(BOB));
+        signIn(ANN);
+
+        const response = await command(roll());
+
+        expect(response.status).toBe(200);
+        expect(commandHistory()).toHaveLength(2);
+    });
+
+    it('refuses a count from a board the server has never shown, or one that isn\'t a count', async () => {
+        signIn(ANN);
+
+        for (const expectedCommandCount of [1, -1, '0', null]) {
+            const response = await command(roll({ expectedCommandCount }));
+            expect(response.status, JSON.stringify(expectedCommandCount)).toBe(409);
+        }
+        expect(commandHistory()).toEqual([]);
+    });
+
+    it('holds an interrupt to the same check', async () => {
+        signIn(ANN);
+        await command(roll());
+        signIn(BOB);
+
+        const stale = await command(interrupt(BOB, { expectedCommandCount: 0 }));
+        const fresh = await command(interrupt(BOB, { expectedCommandCount: 1 }));
+
+        expect(stale.status).toBe(409);
+        expect(fresh.status).toBe(200);
+        expect(commandHistory()).toHaveLength(2);
     });
 });

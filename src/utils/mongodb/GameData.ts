@@ -18,7 +18,7 @@ export interface IGameState {
 }
 
 // The response-safe view of a game's shared state: turn order and the plain-text
-// history log, and deliberately not commandHistory.
+// history log, and deliberately not commandHistory — only how long it is.
 //
 // commandHistory is the engine's private replay log, and every game hangs its
 // own fields off its commands — Smartthink's secret code, Train Time's kept
@@ -41,6 +41,7 @@ export function publicGameState(
         turnOrder: gameState.turnOrder,
         history: resolveHistory(gameState.history, userIdNameMap),
         droppedPlayers: gameState.droppedPlayers ?? [],
+        commandCount: gameState.commandHistory?.length ?? 0,
     };
 }
 
