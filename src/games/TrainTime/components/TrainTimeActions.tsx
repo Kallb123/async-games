@@ -6,13 +6,15 @@ import {
     TICKETS_DRAWN_PER_TURN,
     TRAIN_TIME_CARD_COLOURS,
     TrainTimeCardColour,
+    UNDO_WINDOW_MS,
     routeName,
 } from '@/games/TrainTime/board';
 import { CARD_LABEL, cardFaceStyle } from '@/games/TrainTime/ui';
 import ActionButton from '@/components/ui/ActionButton';
+import UndoHold from '@/components/ui/UndoHold';
 import { pluralize } from '@/utils/ui/text';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
-import { TrainTimeDrawCarriageCard, TrainTimePassTurn } from '@/utils/apiModels/GameLogic';
+import { TrainTimeDrawCarriageCard, TrainTimeEndTurn, TrainTimePassTurn, TrainTimeUndo } from '@/utils/apiModels/GameLogic';
 
 const HAND_ORDER: TrainTimeCardColour[] = [...TRAIN_TIME_CARD_COLOURS, 'engine'];
 
@@ -66,6 +68,10 @@ export default function TrainTimeActions({
     // picker last had selected.
     const chosen: TrainTimeAction = midDraw ? 'draw' : action;
     const ticketsLeft = Math.min(TICKETS_DRAWN_PER_TURN, gs.ticketDeckCount);
+    // A claim holding the turn open for its undo window (docs/undo.md §5): the
+    // turn's one action is spent, so the picker gives way to Pass now / Undo
+    // and the face-up row can't be drawn from. Only ever sent to the claimer.
+    const held = gs.autoEndTurnAt !== null;
 
     function draw(source: 'deck' | 'market', marketIndex = 0) {
         const command = new TrainTimeDrawCarriageCard();
@@ -78,7 +84,7 @@ export default function TrainTimeActions({
     // worked out on the turn that could claim it, so off-turn this says what
     // the hand is worth instead of a count that would read as zero.
     let handNote = <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>;
-    if (readOnly) handNote = <span className="ag-hand-note">{me.trains} trains left</span>;
+    if (readOnly || held) handNote = <span className="ag-hand-note">{me.trains} trains left</span>;
     else if (midDraw) handNote = <span className="ag-hand-note">one more card ends your turn</span>;
     else if (selectedRoute) handNote = <span className="ag-tt-payable">✓ {routeName(selectedRoute)} payable</span>;
 
@@ -105,7 +111,7 @@ export default function TrainTimeActions({
                                 type="button"
                                 className={`ag-tt-card${colour === 'engine' ? ' ag-tt-card--engine' : ''}`}
                                 style={cardFaceStyle(colour)}
-                                disabled={engineBlocked || pendingTarget !== null}
+                                disabled={engineBlocked || held || pendingTarget !== null}
                                 onClick={() => draw('market', index)}
                             >
                                 {CARD_LABEL[colour]}
@@ -115,14 +121,14 @@ export default function TrainTimeActions({
                     <button
                         type="button"
                         className="ag-tt-card ag-tt-card--deck"
-                        disabled={deckEmpty || pendingTarget !== null}
+                        disabled={deckEmpty || held || pendingTarget !== null}
                         onClick={() => draw('deck')}
                         aria-label="Draw a card blind from the deck"
                     >
                         ?
                     </button>
                 </div>
-                {!readOnly && (
+                {!readOnly && !held && (
                     <p className="ag-action-hint">
                         {midDraw
                             ? 'A Loco can’t be the second pick — it costs a whole turn.'
@@ -158,7 +164,19 @@ export default function TrainTimeActions({
                 </div>
             </div>
 
-            {!readOnly && (
+            {!readOnly && held && (
+                <UndoHold
+                    holdDeadline={gs.autoEndTurnAt}
+                    windowMs={UNDO_WINDOW_MS}
+                    canUndo={gs.canUndo}
+                    onEndTurn={() => submitCommand(new TrainTimeEndTurn(), undefined, 'endTurn')}
+                    onUndo={() => submitCommand(new TrainTimeUndo(), undefined, 'undo')}
+                    endTurnPending={pendingTarget === 'endTurn'}
+                    undoPending={pendingTarget === 'undo'}
+                />
+            )}
+
+            {!readOnly && !held && (
                 <div className="ag-actionsheet">
                     <div className="ag-tt-actions">
                         <button

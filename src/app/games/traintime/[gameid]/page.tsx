@@ -92,6 +92,12 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // Reviewing a past turn is read-only, so every interactive path hangs off
     // this rather than off whose turn it is.
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
+    // docs/undo.md §5: a claim holds the turn open for its own undo window,
+    // with the turn's one action already spent — the map offers nothing to
+    // claim, and TrainTimeActions swaps its picker for Pass now / Undo.
+    // `autoEndTurnAt` only ever reaches the claimer, so this is never true
+    // off-turn.
+    const holdOpen = !!gs?.autoEndTurnAt;
     const myUserId = user?.id ?? '';
     const usernameList = useMemo(() => gameData?.usernameList ?? [], [gameData?.usernameList]);
     const userIdList = useMemo(() => gameData?.userIdList ?? [], [gameData?.userIdList]);
@@ -120,8 +126,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // A draw already started this turn is one action, so nothing is claimable
     // until it finishes.
     const claimableRoutes = useMemo(
-        () => (claimContext && isMyTurn && gs?.myDrawsThisTurn === 0 ? claimableRouteIds(claimContext) : new Set<number>()),
-        [claimContext, isMyTurn, gs?.myDrawsThisTurn],
+        () => (claimContext && isMyTurn && !holdOpen && gs?.myDrawsThisTurn === 0 ? claimableRouteIds(claimContext) : new Set<number>()),
+        [claimContext, isMyTurn, holdOpen, gs?.myDrawsThisTurn],
     );
 
     const playerName = (userId?: string): string => nameForUserId(gameData, userId);
@@ -178,7 +184,9 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             subtitle = `Claim route · ${routeName(claimSheetRoute)}`;
         } else {
             const lastLap = gs.finalRoundPending ? ' · last lap' : '';
-            subtitle = isMyTurn
+            subtitle = holdOpen
+                ? <>Route claimed{lastLap}</>
+                : isMyTurn
                 ? <>Your move · <span className="ag-hi">one action</span>{lastLap}</>
                 : <>{currentTurnUsername}&apos;s move{lastLap}</>;
         }
@@ -321,7 +329,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     let boardTag: string | null = null;
     if (gs && isMyTurn && !complete) {
-        if (ticketChoice) boardTag = `🎫 keep at least ${gs.myTicketsToKeep}`;
+        if (holdOpen) boardTag = '🚂 claimed — undo, or pass the turn';
+        else if (ticketChoice) boardTag = `🎫 keep at least ${gs.myTicketsToKeep}`;
         else if (gs.myDrawsThisTurn > 0) boardTag = '🃏 one more card to take';
         else if (claimableRoutes.size > 0) boardTag = `◆ ${pluralize(claimableRoutes.size, 'route')} claimable`;
         else boardTag = '◆ nothing claimable — draw cards';
@@ -437,7 +446,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             highlightClaimable={action === 'claim'}
                             selectedRouteId={selectedRouteId}
                             highlightedCities={highlightedCities}
-                            onRouteClick={isMyTurn && !submitting ? selectRoute : undefined}
+                            onRouteClick={isMyTurn && !holdOpen && !submitting ? selectRoute : undefined}
                             boardTag={boardTag}
                         />
                         <div className="ag-tt-legend">

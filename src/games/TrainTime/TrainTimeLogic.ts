@@ -1,6 +1,6 @@
 import type { ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import type { ITrainTimeSpecificGameState, ITrainTimePlayerState } from "@/games/TrainTime/board";
-import type { ClaimContext } from "@/games/TrainTime/board";
+import type { ClaimContext, ITrainTimeUndoEntry } from "@/games/TrainTime/board";
 import {
     ROUTES,
     drawFromDeck,
@@ -23,6 +23,9 @@ import {
     ticketPoints,
     ticketsToKeep,
     totalScore,
+    UNDO_WINDOW_MS,
+    cloneTrainTimeState,
+    liveUndoEntry,
 } from "@/games/TrainTime/board";
 import { pluralize } from "@/utils/ui/text";
 import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
@@ -49,6 +52,53 @@ function markDirty(gameData: IGameData) {
 
 function playerState(gs: ITrainTimeSpecificGameState, userId: string): ITrainTimePlayerState | undefined {
     return gs.playerStates.get(userId);
+}
+
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The fifth game to take a move back, and the narrowest: the one thing a
+// Train Time player can take back is a claim. Nothing about a claim is random
+// — the cards it spends go on the discard pile, and only a draw ever shuffles
+// that — but every other action is a draw of some kind: carriage cards off the
+// blind deck or a market that refills from it, destination tickets whose faces
+// the player has now seen, and the keep that answers them. None of those can
+// be un-seen, so none of them pushes anything.
+//
+// A claim is the whole of a turn, so it always ends one — which is the §5
+// hold, as in Race Cars: rather than hand off, the claim sets `autoEndTurnAt`
+// and leaves the turn with its player for UNDO_WINDOW_MS, and the board sends
+// TrainTimeEndTurn when it runs out (or on "Pass now"). A claim that ends the
+// game can't be taken back — CheckGameOver scores it straight away, outside
+// `specificGameState`, where no snapshot reaches — so it pushes nothing and
+// hands off at once, as every claim used to.
+
+/**
+ * The claim `userId` can still take back, if any — the anchor and the turn
+ * clock both say nothing has happened since it (see `liveUndoEntry`).
+ */
+function undoEntryFor(trainData: ITrainTimeGameData, userId: string): ITrainTimeUndoEntry | null {
+    return liveUndoEntry(
+        trainData.specificGameState,
+        userId,
+        trainData.gameState.commandHistory.at(-1)?.id ?? null,
+        trainData.lastTurnTimestamp,
+    );
+}
+
+/** True while `userId`'s own claim is holding their turn open (docs/undo.md §5). */
+function holdOpenFor(trainData: ITrainTimeGameData, userId: string): boolean {
+    return !!trainData.specificGameState.autoEndTurnAt && undoEntryFor(trainData, userId) !== null;
+}
+
+/**
+ * The sender's state, if they may act at all. A claim holding their turn open
+ * is their action for the turn, finished — the draw counter has already been
+ * reset behind it — so until the hold closes nothing but TrainTimeUndo and
+ * TrainTimeEndTurn is theirs to send.
+ */
+function actingPlayer(trainData: ITrainTimeGameData, senderId: string): ITrainTimePlayerState | undefined {
+    if (holdOpenFor(trainData, senderId)) return undefined;
+    return playerState(trainData.specificGameState, senderId);
 }
 
 /** What the shared claim-legality helpers need to judge this player's move. */
@@ -172,6 +222,13 @@ export class TrainTimeGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         gameData.currentTurn = nextActivePlayer(gameData, gameData.currentTurn);
+        // Whatever hold was open closes with the turn, and the snapshot behind
+        // it goes too: the anchor has already made it unreachable, so it only
+        // rides along on every save until the next claim pushes it out.
+        const gs = (gameData as ITrainTimeGameData).specificGameState;
+        gs.undoStack = [];
+        gs.undoAnchorId = null;
+        gs.autoEndTurnAt = null;
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -252,7 +309,7 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        const ps = playerState(gs, this.senderId);
+        const ps = actingPlayer(trainData, this.senderId);
         if (!ps) return INVALID;
         if (awaitingTicketChoice(ps)) return INVALID;
         const drawnSoFar = drawsTakenBy(gs, this.senderId);
@@ -317,6 +374,8 @@ export class TrainTimeClaimRoute implements IGameCommand {
     /** The exact cards being spent, e.g. ['red','red','engine']. */
     cards: TrainTimeCardColour[] = [];
     readonly className = 'TrainTimeClaimRoute';
+    // Unless it ends the game — enforced in Execute (docs/undo.md, above).
+    readonly undoable = true;
 
     // Reads the route's own name/length/score straight off ROUTES — a static,
     // public list — so no state has to ride on the command for this one. The
@@ -332,7 +391,7 @@ export class TrainTimeClaimRoute implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        const ps = playerState(gs, this.senderId);
+        const ps = actingPlayer(trainData, this.senderId);
         if (!ps) return INVALID;
         if (awaitingTicketChoice(ps)) return INVALID;
         // A draw already started this turn is one action; you can't switch to
@@ -344,6 +403,9 @@ export class TrainTimeClaimRoute implements IGameCommand {
 
         if (!canClaimRoute(route, claimContextFor(trainData, this.senderId, ps))) return INVALID;
         if (!paymentIsValid(route, this.cards, ps.hand)) return INVALID;
+
+        // Before the first mutation, pushed below unless the claim ends the game.
+        const preUndoState = cloneTrainTimeState(gs, trainData.gameState.turnOrder);
 
         for (const card of this.cards) {
             ps.hand.splice(ps.hand.indexOf(card), 1);
@@ -370,7 +432,14 @@ export class TrainTimeClaimRoute implements IGameCommand {
 
         finishTurn(trainData, this.senderId);
         markDirty(gameData);
-        return { validMove: true, turnOver: true };
+        // The last claim of the game is scored the moment it lands, by
+        // CheckGameOver, and no snapshot can take that back (above).
+        if (gs.gameOver) return { validMove: true, turnOver: true };
+
+        gs.undoStack = [{ by: this.senderId, turnStartedAt: trainData.lastTurnTimestamp, state: preUndoState }];
+        gs.undoAnchorId = this.id;
+        gs.autoEndTurnAt = new Date(Date.now() + UNDO_WINDOW_MS).toISOString();
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -401,7 +470,7 @@ export class TrainTimeDrawTickets implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        const ps = playerState(gs, this.senderId);
+        const ps = actingPlayer(trainData, this.senderId);
         if (!ps) return INVALID;
         // One offer at a time, and not halfway through a draw action.
         if (awaitingTicketChoice(ps)) return INVALID;
@@ -458,7 +527,7 @@ export class TrainTimeKeepTickets implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        const ps = playerState(gs, this.senderId);
+        const ps = actingPlayer(trainData, this.senderId);
         if (!ps) return INVALID;
 
         const offered = ps.pendingTickets;
@@ -522,7 +591,7 @@ export class TrainTimePassTurn implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        const ps = playerState(gs, this.senderId);
+        const ps = actingPlayer(trainData, this.senderId);
         if (!ps) return INVALID;
         if (awaitingTicketChoice(ps)) return INVALID;
         if (drawsTakenBy(gs, this.senderId) > 0) return INVALID;
@@ -535,6 +604,67 @@ export class TrainTimePassTurn implements IGameCommand {
         finishTurn(trainData, this.senderId);
         markDirty(gameData);
         return { validMove: true, turnOver: true };
+    }
+}
+
+// ─── The hold and the undo (docs/undo.md) ────────────────────────────────────
+
+/**
+ * Closes a hold a claim opened: the board's "Pass now", and what it sends by
+ * itself when the countdown runs out. Valid only while that hold is open —
+ * `autoEndTurnAt` and the snapshot behind it are server state the claim
+ * wrote, so this can't be used to skip a turn that hasn't been played.
+ */
+@serializable
+export class TrainTimeEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'TrainTimeEndTurn';
+
+    myString() { return 'ended their turn'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const trainData = gameData as ITrainTimeGameData;
+        if (!holdOpenFor(trainData, this.senderId)) return INVALID;
+        // No history line: the claim already said what the turn was.
+        return { validMove: true, turnOver: true };
+    }
+}
+
+@serializable
+export class TrainTimeUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'TrainTimeUndo';
+
+    myString() { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const trainData = gameData as ITrainTimeGameData;
+        const gs = trainData.specificGameState;
+
+        // A snapshot is only good for the command directly behind it, in the
+        // turn it was taken in (docs/undo.md §4).
+        const entry = undoEntryFor(trainData, this.senderId);
+        if (!entry) return INVALID;
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        // `autoEndTurnAt` comes back null with the rest, closing the hold. No
+        // `currentTurn` to put back, unlike Race Cars': the hold never let the
+        // turn go.
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        trainData.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        markDirty(gameData);
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -564,6 +694,11 @@ registerPlayerDropoutAdapter({
             gs.finalRoundPending = gs.finalRoundPending.filter(id => id !== userId);
             if (gs.finalRoundPending.length === 0) gs.gameOver = true;
         }
+        // Every snapshot is a whole state taken before the drop, so restoring
+        // one would put the seat that left back at the table.
+        gs.undoStack = [];
+        gs.undoAnchorId = null;
+        gs.autoEndTurnAt = null;
         markDirty(gameData);
     },
 });

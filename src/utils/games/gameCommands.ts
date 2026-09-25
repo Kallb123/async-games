@@ -82,12 +82,16 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "SolitaireUndo",
         "SolitaireAutoSolve",
     ],
+    // docs/undo.md adds TrainTimeUndo, taking back a claim, and
+    // TrainTimeEndTurn, the one way to close the hold a claim opens.
     TrainTimeGameType: [
         "TrainTimeDrawCarriageCard",
         "TrainTimeClaimRoute",
         "TrainTimeDrawTickets",
         "TrainTimeKeepTickets",
         "TrainTimePassTurn",
+        "TrainTimeEndTurn",
+        "TrainTimeUndo",
     ],
     // docs/games/outbreak-gdd.md §21.6 step 4 added OutbreakAction; step 6
     // added OutbreakEndTurn and OutbreakDiscard; step 10 added OutbreakPlayEvent.

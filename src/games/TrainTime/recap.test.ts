@@ -49,6 +49,8 @@ function state(
         finalRoundPending: null,
         scored: false,
         myHand: [],
+        canUndo: false,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }
@@ -103,6 +105,23 @@ describe("Train Time recap adapter", () => {
             cmd({ className: "TrainTimeClaimRoute", ...{ routeId: ROUTE.id } } as never),
         );
         expect(event.detail).not.toContain("longest run");
+    });
+
+    it("leaves no row for a claim taken back, nor for the last lap it tripped (docs/undo.md §10)", () => {
+        const claimed = events(
+            state([ALICE, BOB]),
+            state([player({ ...ALICE, routesClaimed: 1, trains: 2 }), BOB], { finalRoundPending: ["u1", "u2"] }),
+            cmd({ className: "TrainTimeClaimRoute", ...{ routeId: ROUTE.id } } as never),
+        );
+        expect(claimed.map(e => e.type)).toEqual(["tt_claim", "tt_lastlap"]);
+        const undone = events(state([ALICE, BOB]), state([ALICE, BOB]), cmd({ className: "TrainTimeUndo", ...{ id: "c2" } } as never));
+        const [bobClaim] = events(
+            state([ALICE, BOB]),
+            state([ALICE, player({ ...BOB, routesClaimed: 1 })]),
+            cmd({ id: "c3", senderId: "u2", senderUsername: "Bob", className: "TrainTimeClaimRoute", ...{ routeId: ROUTE.id } } as never),
+        );
+
+        expect(trainTimeRecapAdapter.postProcess!([...claimed, ...undone, bobClaim])).toEqual([bobClaim]);
     });
 
     it("names a face-up card taken but never a card drawn blind", () => {

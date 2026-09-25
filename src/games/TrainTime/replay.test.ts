@@ -7,9 +7,11 @@ import {
     TrainTimeClaimRoute,
     TrainTimeDrawCarriageCard,
     TrainTimeDrawTickets,
+    TrainTimeEndTurn,
     TrainTimeGameType,
     TrainTimeKeepTickets,
     TrainTimePassTurn,
+    TrainTimeUndo,
 } from "./TrainTimeLogic";
 import { cloneTrainTimeState, gameStateToModel, ITrainTimeGameData } from "./TrainTimeModels";
 import {
@@ -115,12 +117,19 @@ async function playWholeGame(maxTurns = 5000): Promise<ITrainTimeGameData> {
     const gs = game.specificGameState;
 
     const midTurn = () => drawsTakenBy(gs, game.currentTurn) > 0
+        || gs.autoEndTurnAt !== null
         || (gs.playerStates.get(game.currentTurn)?.pendingTickets.length ?? 0) > 0;
 
     for (let turns = 0; !game.complete && turns < 5000; turns++) {
         if (turns >= maxTurns && !midTurn()) break;
         const sender = game.currentTurn;
         const me = gs.playerStates.get(sender)!;
+        // A claim holds the turn open (docs/undo.md §5): now and then take it
+        // back, so the log carries undos for replay to reproduce too.
+        if (gs.autoEndTurnAt) {
+            await play(game, turns % 5 === 0 ? new TrainTimeUndo() : new TrainTimeEndTurn(), sender);
+            continue;
+        }
         if (me.pendingTickets.length > 0) {
             const keep = new TrainTimeKeepTickets();
             keep.keep = me.pendingTickets.slice(0, ticketsToKeep(me));

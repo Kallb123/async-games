@@ -9,9 +9,10 @@ the hold, the board's Undo button and countdown, and this documentation. The
 pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
-someone opts it in a line at a time (§14, §16). Two more games have since
+someone opts it in a line at a time (§14, §16). Four more games have since
 opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
-"The third game") and Outbreak (§16, "The fourth game").
+"The third game"), Outbreak (§16, "The fourth game") and Train Time (§16,
+"The fifth game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -1225,3 +1226,62 @@ hand for the same reason the third was.
   cure count. A plain move taken back stays silent, as the move did.
 - **The button.** `UndoButton`, beside End turn once the actions are spent and
   above Forfeit while they aren't — Banned Islet's placement.
+
+### The fifth game: Train Time
+
+The narrowest opt-in so far, and the first since Race Cars to need §5's hold.
+
+- **What is undoable.** A `TrainTimeClaimRoute`, and nothing else. A claim
+  spends cards onto the discard pile, and only a draw ever shuffles that, so
+  nothing about it is random. Every other action is a draw of some kind — blind
+  carriage cards, a face-up card the market refills behind, destination tickets
+  whose faces the player has now seen, and the keep that answers them — and none
+  of those can be un-seen. The source scan in `src/games/TrainTime/undo.test.ts`
+  holds the list to that one command, and the guard beside it holds it to no
+  `recorded…` field.
+- **What is not, even of a claim.** The claim that ends the game — the last
+  turn of the last lap, or one that leaves no route short enough for anyone —
+  is scored by `CheckGameOver` straight away, outside `specificGameState`, so it
+  pushes nothing and hands off at once, as every claim used to. It is the
+  winning Helicopter Lift again.
+- **The hold (§5).** A claim is the whole of a turn, so it always ends one:
+  Race Cars' shape rather than Banned Islet's. It sets `autoEndTurnAt` and
+  returns `turnOver: false`; `TrainTimeEndTurn`, valid only while that hold is
+  open, is the board's *Pass now* and what it sends by itself when the countdown
+  runs out. Every other command refuses while the hold is open — the claim has
+  already reset the draw counter behind it, so without that a player could claim
+  and then draw two cards. `CheckEndTurn` empties the stack and closes the hold
+  on every hand-off, and the dropout adapter does too. Depth one: a turn only
+  ever has one claim in it.
+- **No turn-timer adapter, and what that costs.** Train Time registers no
+  turn-timeout adapter — an expired turn is the cron stepping `currentTurn` on
+  and restarting the clock — so, unlike Race Cars and Settlements & Cities, a
+  hold nobody comes back to is not closed by a command. The turn still moves on;
+  what is left behind is a hold and an anchor that still match, because no
+  command ran. In a two-seat game where both players time out, the turn comes
+  straight back round with the claim still the last command. So each stack
+  entry records the `lastTurnTimestamp` of the turn it was pushed in, and
+  `liveUndoEntry` (in `board.ts`) refuses one whose turn clock has since moved —
+  which every hand-off does, the command route's and the cron's alike. The
+  command guards, `TrainTimeUndo`, `TrainTimeEndTurn` and `canUndo` all go
+  through it, so a stale hold neither undoes a claim two turns old nor locks its
+  player out of the turn they are now owed. Registering an adapter instead would
+  have changed what every other expired Train Time turn does: with no command to
+  play for a turn that isn't held, an adapter can only decline it.
+- **The cloner moved.** `cloneTrainTimeState` moved from `TrainTimeModels.ts` to
+  `board.ts`, Train Time's equivalent of the other games' `rules.ts`: the one
+  file both the logic and the models import without importing each other.
+  `TrainTimeModels.ts` re-exports it.
+- **Hidden information.** The snapshot carries both decks and every hand and
+  is never sent: `gameStateToModel` builds its return field by field and gains
+  `canUndo` and `autoEndTurnAt` alone, both false or null for everyone but the
+  claimer. `canUndo` is worked out by `CreateDataResponse`, not inside
+  `gameStateToModel`, because it needs the command log and the turn clock; a
+  replayed step never offers it.
+- **Recap.** A claim taken back leaves no row at all: `postProcess` drops the
+  claim, the last lap it tripped (which rides on the claim's command id) and the
+  undo itself, since the board says none of it happened.
+- **The countdown.** Race Cars' `RaceCarsUndoHold` became
+  `src/components/ui/UndoHold.tsx` — the Pass now / Undo pair, the countdown
+  and the auto-fire — which `RaceCarsUndoHold` now wraps and Train Time's turn
+  sheet uses in place of its action picker while a hold is open.
