@@ -1,0 +1,108 @@
+{
+  "tileResolution": 128,
+  "tileImage": {
+    "width": 218,
+    "height": 234
+  },
+  "dims": {
+    "Wt": 160,
+    "Ht": 113,
+    "S": 96,
+    "Z": 113,
+    "PX": 29,
+    "HR": 107,
+    "BP": 14
+  },
+  "types": [
+    {
+      "index": 0,
+      "key": "sea",
+      "name": "Sea",
+      "swatch": "#3d7fc0"
+    },
+    {
+      "index": 1,
+      "key": "lake",
+      "name": "Lake",
+      "swatch": "#5ea5da"
+    },
+    {
+      "index": 2,
+      "key": "coast",
+      "name": "Coast",
+      "swatch": "#e3cf96"
+    },
+    {
+      "index": 3,
+      "key": "grass",
+      "name": "Grassland",
+      "swatch": "#9cc05c"
+    },
+    {
+      "index": 4,
+      "key": "wheat",
+      "name": "Wheat fields",
+      "swatch": "#dcb553"
+    },
+    {
+      "index": 5,
+      "key": "hills",
+      "name": "Hills",
+      "swatch": "#98ae58"
+    },
+    {
+      "index": 6,
+      "key": "forest",
+      "name": "Forest",
+      "swatch": "#4f8a3c"
+    },
+    {
+      "index": 7,
+      "key": "mountain",
+      "name": "Mountains",
+      "swatch": "#8e86a0"
+    }
+  ],
+  "pairs": [
+    "sea__lake",
+    "sea__coast",
+    "sea__grass",
+    "sea__wheat",
+    "sea__hills",
+    "sea__forest",
+    "sea__mountain",
+    "lake__coast",
+    "lake__grass",
+    "lake__wheat",
+    "lake__hills",
+    "lake__forest",
+    "lake__mountain",
+    "coast__grass",
+    "coast__wheat",
+    "coast__hills",
+    "coast__forest",
+    "coast__mountain",
+    "grass__wheat",
+    "grass__hills",
+    "grass__forest",
+    "grass__mountain",
+    "wheat__hills",
+    "wheat__forest",
+    "wheat__mountain",
+    "hills__forest",
+    "hills__mountain",
+    "forest__mountain"
+  ],
+  "icons": [
+    "barbarian",
+    "forest",
+    "quarry",
+    "iron",
+    "plot",
+    "village1",
+    "village2",
+    "village3",
+    "village4",
+    "village5"
+  ]
+}

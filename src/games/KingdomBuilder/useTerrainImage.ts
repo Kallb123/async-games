@@ -1,286 +1,321 @@
 'use client'
 
-// Rendering beneath the node graph (GDD §3.5.6): composites the generated
-// ground into one offscreen canvas, once per world, and hands back an object
-// URL the map draws as a single `<image>` — the same single-raster board
-// World Domination and Outbreak already draw. `MapEdges`, the node graph and
-// `MapLabelLayer` are untouched; the tiles just go underneath them.
+// The v2 world art is the kit's pre-rendered tiles, shrunk to 64px a tile and
+// packed into one sheet by `npm run kb-atlas` (scripts/kingdombuilder-atlas.mjs).
+// The world is composed from that sheet once, back row first so each tile's
+// trees and peaks overlap the row behind it, into a few horizontal bands (one
+// canvas would be over iOS Safari's size limit), and the SVG is handed those
+// rasters so panning, fog and the node/route layers stay in world coordinates.
 //
-// Three passes, in order (§3.5.6): every area's fill, then every area's
-// border-overlay tiles, then the sparse overlay list. PR 10 shipped with no
-// sheet at all, so only the fill pass ever drew anything — the fallback
-// colour every registry entry declares. PR 11 adds the first sheet and the
-// other two passes: an area on a mask layout recomputes, per tile, which of
-// its art tiles its own neighbour mask picks (§3.5.5's autotiling), and a
-// `variants`/`single` area or overlay draws straight from the sheet. An area
-// or overlay with no art yet, or whose sheet failed to load, is left on the
-// fallback fill from pass one — never a coloured square standing in for a
-// picture, and never a throw inside a board.
+// The kit pre-renders a tile for one terrain or a blend of two, and rivers only
+// on grass. A world's corner grid is nudged to fit that (see
+// `terrainCornerGrid`) rather than generating the rest in the browser, which
+// took seconds on a phone.
 
 import { useEffect, useMemo } from "react";
 
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { AREAS, areaForCode } from "./worldgen/areas";
-import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./worldgen/overlays";
+import ATLAS from "./terrainAtlas.json";
+import { overlayCodesByTile, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
-import { AREA_ART, blobIndexOf, isMaskArt, NEIGHBOUR_BITS, OVERLAY_ART, pickMaskSlotTile, seededVariantIndex, sheetColumns, sheetSourceRect, sheetTilePixels, tilePieceParts, tileRefsOf, TILESET, type MaskLayout, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
 
-// `seededVariantIndex` lives in tileset.ts now (both this file and the mapper
-// model need it), re-exported here so nothing importing it from this file —
-// this module used to be its only home — has to change. `overlayCodesByTile`
-// moved to worldgen/overlays.ts for the same reason: the overlay vocabulary's
-// road pass (worldgen/overlayVocabulary.ts) needs the same tile→code index
-// this rendering pass does, and it can't import from a 'use client' module.
-export { seededVariantIndex, overlayCodesByTile };
+const ATLAS_HREF = "/art/kingdombuilder/v2/tiles.png";
+
+export const TERRAIN_KEYS = ["sea", "lake", "coast", "grass", "wheat", "hills", "forest", "mountain"] as const;
+export type TerrainKey = typeof TERRAIN_KEYS[number];
+const GRASS = TERRAIN_KEYS.indexOf("grass");
+const MOUNTAIN = TERRAIN_KEYS.indexOf("mountain");
+
+/** Persisted game terrain translated to the closest member of the art kit. */
+export const ART_TERRAIN_BY_CODE: Readonly<Record<string, TerrainKey>> = {
+    o: "sea", l: "lake", b: "coast", g: "grass", f: "wheat",
+    h: "hills", w: "forest", s: "forest", m: "mountain",
+    // Rivers have dedicated overlay tiles on grass, rather than being one of
+    // the kit's corner terrain values.
+    r: "grass",
+};
 
 export interface TerrainImageWorld {
     terrainField?: TerrainField;
     overlays?: OverlayPlacement[];
 }
 
+/** One horizontal band of the drawn map. */
+export interface TerrainStrip {
+    href: string;
+    /** Placement in world units, including the transparent overhang around its rows. */
+    bounds: { x: number; y: number; width: number; height: number };
+}
+
 export interface TerrainImage {
-    /**
-     * An object URL for the composited ground, in the same world-unit space
-     * as the field's grid. Null for a world with no terrain field (drawn
-     * before this landed) or a canvas the browser refused — the map screen
-     * keeps drawing today's flat silhouette in either case (§3.5.6).
-     */
-    href: string | null;
+    /** Top to bottom, in drawing order; empty until the map is drawn. */
+    strips: TerrainStrip[];
+}
+
+/** A tile's ground footprint and the overhang padding around the ground grid, in sheet pixels. */
+export interface TerrainTileDims {
+    /** Ground footprint of one tile. */
+    Wt: number;
+    Ht: number;
+    /** Padding left and right, above (for peaks and trees) and below. */
+    PX: number;
+    HR: number;
+    BP: number;
 }
 
 let loggedFieldMismatch = false;
+let loggedAtlasFailure = false;
+let loggedMissingCell = false;
 
-/** A field whose length disagrees with its own declared grid — a corrupt or partial document — is drawn as no ground layer at all, never thrown over (a board draws the fallback, it never throws). Exported for testing without a DOM. */
 export function terrainFieldMatchesGrid(field: TerrainField): boolean {
     return field.codes.length === field.columns * field.rows;
 }
 
-/** Overlays are generated once and stored, never recomputed per render (§3.5.3), so a stable key of their content — not the array reference a poll hands back afresh — keeps an unchanged world from recompositing (and re-leaking an object URL) on every refetch. Exported for testing without a DOM. */
 export function overlaysKey(overlays: OverlayPlacement[] | undefined): string {
     return (overlays ?? []).map(overlay => `${overlay.tile}:${overlay.code}:${overlay.orientation ?? ""}`).join(",");
 }
 
-/**
- * A tile's own 4-bit neighbour mask (§3.5.5): bit 0 north, bit 1 east, bit 2
- * south, bit 3 west, set when that neighbour carries the *same* code as this
- * tile. Off the edge of the grid is never a match, so the map's own border
- * always autotiles as a border rather than assuming open ground beyond it.
- * Compares raw codes rather than resolved areas, so two tiles of an unknown
- * code still autotile consistently with each other. Exported for testing
- * without a DOM.
- */
-export function neighbourMask(field: TerrainField, col: number, row: number): number {
-    return sideMask(sameCodeAs(field, field.codes[row * field.columns + col]), col, row);
+function codeAt(field: TerrainField, col: number, row: number): string {
+    const x = Math.max(0, Math.min(field.columns - 1, col));
+    const y = Math.max(0, Math.min(field.rows - 1, row));
+    return field.codes[y * field.columns + x];
+}
+
+/** Whether an in-bounds cell holds a terrain code — the field's edge counts as neither. */
+function codeIs(field: TerrainField, col: number, row: number, code: string): boolean {
+    return col >= 0 && col < field.columns && row >= 0 && row < field.rows && field.codes[row * field.columns + col] === code;
+}
+
+/** Row-major indices into a corner grid of the tile's [TL, TR, BR, BL] corners. */
+function cornerIndices(field: TerrainField, col: number, row: number): [number, number, number, number] {
+    const width = field.columns + 1;
+    const top = row * width + col;
+    return [top, top + 1, top + width + 1, top + width];
 }
 
 /**
- * "Is the square at (c, r) the same thing as the one being drawn?" — the one
- * question every mask asks, and the only thing that differs between an area
- * masking against the terrain field and a self-connecting overlay masking
- * against the sparse placement list. Off the edge of the grid is never a
- * match, so the map's own border always autotiles as a border rather than
- * assuming open ground beyond it.
+ * Which terrain a crowded tile gives up last, by kit index. Water and
+ * mountains are the shapes a player reads the map by, so they hold; grass and
+ * beach give way first — the kit paints its own sand edge wherever land meets
+ * water, so a dropped beach corner costs little.
  */
-type NeighbourMatcher = (col: number, row: number) => boolean;
-
-/** Matches a square of the terrain field carrying the given raw code. Compares raw codes rather than resolved areas, so two tiles of an unknown code still autotile consistently with each other. */
-function sameCodeAs(field: TerrainField, code: string): NeighbourMatcher {
-    return (col, row) => col >= 0 && col < field.columns && row >= 0 && row < field.rows && field.codes[row * field.columns + col] === code;
-}
-
-/** Matches a square carrying the given overlay code, from the sparse placement list indexed by tile. A square with no overlay on it matches nothing, so a lone bridge still autotiles as a lone bridge. */
-function sameOverlayAs(field: TerrainField, overlayByTile: ReadonlyMap<number, string>, code: string): NeighbourMatcher {
-    return (col, row) => col >= 0 && col < field.columns && row >= 0 && row < field.rows && overlayByTile.get(row * field.columns + col) === code;
-}
-
-function sideMask(matches: NeighbourMatcher, col: number, row: number): number {
-    let mask = 0;
-    if (matches(col, row - 1)) mask |= 1;
-    if (matches(col + 1, row)) mask |= 2;
-    if (matches(col, row + 1)) mask |= 4;
-    if (matches(col - 1, row)) mask |= 8;
-    return mask;
-}
+const KEEP_PRIORITY = [7, 6, 1, 0, 2, 3, 4, 5];
+const isWater = (value: number) => value <= TERRAIN_KEYS.indexOf("lake");
 
 /**
- * A tile's own 8-bit neighbour mask, for `mask47` (§3.5.5): the four sides of
- * `neighbourMask` plus the four diagonals, so an area can tell an inner corner
- * — two arms closing around one square of something else — from the plain
- * interior tile a 4-bit mask collapses it onto. Same rules otherwise: a match
- * is the *same* raw code, and off the edge of the grid never matches.
- * Exported for testing without a DOM.
+ * Reduces one tile's corners to the two terrains the kit can blend: grass
+ * first if a river has locked a corner to it, then the most common, then the
+ * one that matters most on the map. A dropped corner takes a kept terrain of
+ * its own kind where it can — water stays water and land stays land, so a
+ * snap never fills a lake in or floods a field — and of those the nearest in
+ * the kit's order (grass, wheat, hills, forest, mountain runs low to high
+ * ground), so a mountain range doesn't creep over the grass beside it.
  */
-export function neighbourMask8(field: TerrainField, col: number, row: number): number {
-    return eightMask(sameCodeAs(field, field.codes[row * field.columns + col]), col, row);
+export function snapCorners(corners: readonly number[], locked: readonly boolean[] = []): number[] {
+    const counts = new Map<number, number>();
+    corners.forEach(value => counts.set(value, (counts.get(value) ?? 0) + 1));
+    if (counts.size <= 2) return [...corners];
+    const ranked = [...counts.keys()].sort((a, b) => (counts.get(b)! - counts.get(a)!) || KEEP_PRIORITY[b] - KEEP_PRIORITY[a]);
+    const kept = (locked.some(Boolean) ? [GRASS, ...ranked.filter(value => value !== GRASS)] : ranked).slice(0, 2);
+    const replacement = (value: number) => {
+        const sameKind = kept.filter(candidate => isWater(candidate) === isWater(value));
+        return (sameKind.length > 0 ? sameKind : kept)
+            .sort((a, b) => (Math.abs(a - value) - Math.abs(b - value)) || counts.get(b)! - counts.get(a)!)[0];
+    };
+    return corners.map((value, index) => kept.includes(value) || locked[index] ? value : replacement(value));
 }
 
-function eightMask(matches: NeighbourMatcher, col: number, row: number): number {
-    let mask = 0;
-    if (matches(col, row - 1)) mask |= NEIGHBOUR_BITS.north;
-    if (matches(col + 1, row - 1)) mask |= NEIGHBOUR_BITS.northEast;
-    if (matches(col + 1, row)) mask |= NEIGHBOUR_BITS.east;
-    if (matches(col + 1, row + 1)) mask |= NEIGHBOUR_BITS.southEast;
-    if (matches(col, row + 1)) mask |= NEIGHBOUR_BITS.south;
-    if (matches(col - 1, row + 1)) mask |= NEIGHBOUR_BITS.southWest;
-    if (matches(col - 1, row)) mask |= NEIGHBOUR_BITS.west;
-    if (matches(col - 1, row - 1)) mask |= NEIGHBOUR_BITS.northWest;
-    return mask;
-}
+const RELAX_PASSES = 8;
 
 /**
- * The tile a mask layout draws for one square of map: the 4-bit mask straight
- * into a `mask16`'s sixteen, or the 8-bit mask through `blobIndexOf` into a
- * `mask47`'s forty-seven. Falls back to the entry's last tile if a caller ever
- * hands it a short array — the guard test is what actually keeps the shipped
- * manifest's arrays the right length.
+ * Every tile corner's art terrain, as a (columns+1)x(rows+1) row-major grid.
+ * Each corner takes the cell down/right of it, so every shared corner has one
+ * value. It is then fitted to the tiles the kit pre-renders: every corner of a
+ * river tile becomes grass (the only ground the river tiles are drawn on), and
+ * any tile left with three or four terrains is snapped to two. Corners are
+ * shared, so a change here carries into the neighbours and the map stays
+ * seamless; a few passes settle what one snap unsettles next door.
  */
-function maskSlot(layout: MaskLayout, matches: NeighbourMatcher, col: number, row: number): number {
-    return layout === "mask16" ? sideMask(matches, col, row) : blobIndexOf(eightMask(matches, col, row));
-}
-
-function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number, col: number, row: number): TileRef | undefined {
-    const entry = art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
-    return entry === undefined ? undefined : pickMaskSlotTile(entry, col, row);
-}
-
-/**
- * Which slot of a self-connecting overlay's mask art one placement draws — a
- * road, a wall, a fence, masking against the other overlays around it rather
- * than against the ground under it, which is what makes a road read as its own
- * run and not as the grass it crosses. A square carrying no overlay matches
- * nothing, so a lone bridge autotiles as a lone bridge; off the edge of the
- * grid never matches, same as an area's. Exported for testing without a DOM.
- */
-export function overlayMaskSlot(layout: MaskLayout, field: TerrainField, overlayByTile: ReadonlyMap<number, string>, tile: number): number {
-    const code = overlayByTile.get(tile);
-    if (code === undefined) return 0;
-    return maskSlot(layout, sameOverlayAs(field, overlayByTile, code), tile % field.columns, Math.floor(tile / field.columns));
-}
-
-/** Every tile a `variants`/`single`/mask art entry could ever point at, for preloading every sheet a composite might need before drawing starts. */
-function sheetNamesUsed(artMaps: ReadonlyArray<Readonly<Record<string, TileArt>>>): Set<string> {
-    const names = new Set<string>();
-    for (const map of artMaps) for (const art of Object.values(map)) for (const ref of tileRefsOf(art)) names.add(ref.sheet);
-    return names;
-}
-
-const sheetImageCache = new Map<string, Promise<HTMLImageElement | null>>();
-let loggedSheetLoadFailure = false;
-
-/** Loads (and caches) a sheet's own image element. Never rejects — a sheet that 404s or fails to decode resolves to `null`, which every caller treats as "draw the fallback instead", not a thrown error inside a board (§3.5.6). */
-function loadSheetImage(sheetPath: string): Promise<HTMLImageElement | null> {
-    let cached = sheetImageCache.get(sheetPath);
-    if (!cached) {
-        cached = new Promise<HTMLImageElement | null>(resolve => {
-            const image = new Image();
-            image.onload = () => resolve(image);
-            image.onerror = () => {
-                if (!loggedSheetLoadFailure) {
-                    loggedSheetLoadFailure = true;
-                    console.warn(`Kingdom Builder: tile sheet "${sheetPath}" failed to load — drawing fallback colours for it.`);
-                }
-                resolve(null);
-            };
-            image.src = sheetPath;
-        });
-        sheetImageCache.set(sheetPath, cached);
+export function terrainCornerGrid(field: TerrainField): Uint8Array {
+    const width = field.columns + 1;
+    const grid = new Uint8Array(width * (field.rows + 1));
+    for (let y = 0; y <= field.rows; y++) {
+        for (let x = 0; x < width; x++) grid[y * width + x] = TERRAIN_KEYS.indexOf(ART_TERRAIN_BY_CODE[codeAt(field, x, y)] ?? "grass");
     }
-    return cached;
-}
-
-async function loadSheetImages(manifest: TilesetManifest, needed: Set<string>): Promise<Map<string, HTMLImageElement>> {
-    const entries = await Promise.all(
-        [...needed].map(async name => {
-            const sheet = manifest.sheets[name];
-            const image = sheet ? await loadSheetImage(sheet.path) : null;
-            return [name, image] as const;
-        }),
-    );
-    const images = new Map<string, HTMLImageElement>();
-    for (const [name, image] of entries) if (image) images.set(name, image);
-    return images;
-}
-
-/**
- * Draws one ref's art at the map square it was placed on, straight from the
- * loaded sheet image — a no-op if that sheet never loaded. A multi-square
- * piece is blitted a square at a time, each one offset from the placement by
- * `tilePieceParts` (which has already applied the piece's anchor), so a sheet
- * with a gutter between its squares doesn't drag that gutter into the picture.
- */
-function drawTile(context: CanvasRenderingContext2D, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>, ref: TileRef, col: number, row: number, tilePixels: number): void {
-    const sheet = manifest.sheets[ref.sheet];
-    const image = images.get(ref.sheet);
-    if (!sheet || !image) return;
-    const columns = Math.max(1, sheetColumns(sheet, image.naturalWidth));
-    for (const part of tilePieceParts(ref, columns)) {
-        const { sx, sy, sw, sh } = sheetSourceRect(sheet, image.naturalWidth, part.index);
-        context.drawImage(image, sx, sy, sw, sh, (col + part.offsetX) * tilePixels, (row + part.offsetY) * tilePixels, tilePixels, tilePixels);
-    }
-}
-
-/** Pass one (§3.5.6): every tile's registry fallback colour, then a `variants`/`single` area's own picked tile on top where its sheet loaded. Areas on a mask layout are deliberately left on the fallback here — their real look is pass two's, once every tile's neighbours are known. */
-function paintFill(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    for (let row = 0; row < field.rows; row++) {
-        for (let col = 0; col < field.columns; col++) {
-            const area = areaForCode(field.codes[row * field.columns + col]);
-            context.fillStyle = area.fallbackColour;
-            context.fillRect(col * tilePixels, row * tilePixels, tilePixels, tilePixels);
-
-            const art = AREA_ART[area.code];
-            // `orientation` describes an overlay's own direction (a bridge's
-            // crossing), not anything an area has — nothing declares one for
-            // an area, and this pass wouldn't know what to pick if it did.
-            if (!art || isMaskArt(art) || art.layout === "orientation") continue;
-            const ref = art.layout === "single" ? art.tile : art.tiles[seededVariantIndex(col, row, art.tiles.length)];
-            if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
+    const locked = new Uint8Array(grid.length);
+    for (let tile = 0; tile < field.codes.length; tile++) {
+        if (field.codes[tile] !== "r") continue;
+        for (const corner of cornerIndices(field, tile % field.columns, Math.floor(tile / field.columns))) {
+            grid[corner] = GRASS;
+            locked[corner] = 1;
         }
     }
-}
-
-/** Pass two (§3.5.6): every area on a mask layout redraws its own tiles, in the registry's priority order, picking each one's real neighbour-mask variant — the four sides for a `mask16`, all eight neighbours for a `mask47`. A no-op for a tile whose area has no mask entry or whose sheet never loaded — pass one's fallback (or its `variants`/`single` art) stands as its finished look. */
-function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    for (const area of AREAS) {
-        const art = AREA_ART[area.code];
-        if (!art || !isMaskArt(art)) continue;
+    for (let pass = 0; pass < RELAX_PASSES; pass++) {
+        let changed = false;
         for (let row = 0; row < field.rows; row++) {
             for (let col = 0; col < field.columns; col++) {
-                if (field.codes[row * field.columns + col] !== area.code) continue;
-                const ref = maskTile(art, maskSlot(art.layout, sameCodeAs(field, area.code), col, row), col, row);
-                if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
+                const corners = cornerIndices(field, col, row);
+                const snapped = snapCorners(corners.map(corner => grid[corner]), corners.map(corner => locked[corner] === 1));
+                corners.forEach((corner, index) => {
+                    if (grid[corner] !== snapped[index]) { grid[corner] = snapped[index]; changed = true; }
+                });
             }
         }
+        if (!changed) break;
     }
+    return grid;
 }
 
-/** Pass three (§3.5.6): the sparse overlay list. An overlay with no `OVERLAY_ART` entry, or whose code the registry no longer recognises, or whose sheet failed to load, draws nothing — a missing bridge reads as "not drawn yet", never a coloured square standing in for one. */
-function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, overlays: readonly OverlayPlacement[], tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    // Indexed once here rather than scanned per neighbour per square.
-    const overlayByTile = overlayCodesByTile(overlays);
-
-    for (const placement of overlays) {
-        if (placement.tile < 0 || placement.tile >= field.columns * field.rows) continue;
-        if (!overlayForCode(placement.code)) continue;
-        const art = OVERLAY_ART[placement.code];
-        if (!art) continue;
-
-        const col = placement.tile % field.columns, row = Math.floor(placement.tile / field.columns);
-        // An orientation key may itself hold several interchangeable tiles
-        // (the same MaskSlotArt escape hatch a mask slot uses) — picked the
-        // same stable, seeded way, so "several different ruins under one
-        // key" varies per placement rather than always drawing the first one.
-        const orientationSlot = art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] : undefined;
-        const ref =
-            art.layout === "single" ? art.tile :
-            art.layout === "orientation" ? (orientationSlot ? pickMaskSlotTile(orientationSlot, col, row) : undefined) :
-            art.layout === "variants" ? art.tiles[seededVariantIndex(col, row, art.tiles.length)] :
-            maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile), col, row); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
-        if (!ref) continue;
-        drawTile(context, manifest, images, ref, col, row, tilePixels);
-    }
+/** Kit bit order is N=8, E=4, S=2, W=1. */
+export function riverMask(field: TerrainField, col: number, row: number): number {
+    const river = (x: number, y: number) => codeIs(field, x, y, "r");
+    return (river(col, row - 1) ? 8 : 0) | (river(col + 1, row) ? 4 : 0) | (river(col, row + 1) ? 2 : 0) | (river(col - 1, row) ? 1 : 0);
 }
 
-async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<HTMLCanvasElement | null> {
+export interface TerrainTileSpec {
+    corners: readonly [number, number, number, number];
+    variant: number;
+    river: number;
+    bridge: boolean;
+    summit: boolean;
+}
+
+/** Everything that picks one square's tile, derived without touching the DOM so it stays testable. */
+export function terrainTileSpec(field: TerrainField, grid: Uint8Array, overlayByTile: ReadonlyMap<number, string>, col: number, row: number): TerrainTileSpec {
+    const tile = row * field.columns + col;
+    const river = field.codes[tile] === "r" ? riverMask(field, col, row) : 0;
+    const isMountain = (x: number, y: number) => codeIs(field, x, y, "m");
+    return {
+        corners: cornerIndices(field, col, row).map(corner => grid[corner]) as [number, number, number, number],
+        variant: Math.abs(Math.imul(col, 374761393) ^ Math.imul(row, 668265263)) % 3,
+        river,
+        bridge: overlayByTile.get(tile) === "B" && (river === 5 || river === 10),
+        summit: field.codes[tile] === "m" && isMountain(col, row - 1) && isMountain(col + 1, row)
+            && isMountain(col, row + 1) && isMountain(col - 1, row),
+    };
+}
+
+const twoDigits = (value: number) => String(value).padStart(2, "0");
+
+/** The sheet cell for a tile: its master's path under art-masters/kingdombuilder/v2/tiles. */
+export function atlasCellName(spec: TerrainTileSpec): string {
+    if (spec.river) return `river/grass_river_${twoDigits(spec.river)}${spec.bridge ? "_bridge" : ""}`;
+    // A tile the corner grid couldn't settle is snapped on its own: one seam beats a hole.
+    const corners = snapCorners(spec.corners);
+    const [low, high] = [...new Set(corners)].sort((a, b) => a - b);
+    if (high === undefined) return spec.summit && low === MOUNTAIN ? "base/mountain_summit" : `base/${TERRAIN_KEYS[low]}_v${spec.variant}`;
+    // Kit blend index: TL=8, TR=4, BR=2, BL=1, set where the corner is the higher-drawn terrain.
+    const mask = corners.reduce((bits, value, index) => bits | (value === high ? 8 >> index : 0), 0);
+    return `blend/${TERRAIN_KEYS[low]}__${TERRAIN_KEYS[high]}/${twoDigits(mask)}`;
+}
+
+const CELL_INDEX = new Map(ATLAS.cells.map((name, index) => [name, index]));
+
+let atlasPromise: Promise<HTMLImageElement | null> | null = null;
+
+function loadAtlas(): Promise<HTMLImageElement | null> {
+    if (!atlasPromise) {
+        const image = new Image();
+        image.src = ATLAS_HREF;
+        atlasPromise = image.decode().then(() => image, () => {
+            if (!loggedAtlasFailure) {
+                loggedAtlasFailure = true;
+                console.warn("Kingdom Builder: terrain tile sheet failed to load.");
+            }
+            atlasPromise = null;
+            return null;
+        });
+    }
+    return atlasPromise;
+}
+
+/**
+ * iOS Safari refuses any canvas over 16.7M pixels, and a 100x70 world at 64px a
+ * tile is twice that, so the map is drawn as bands of whole tile rows, each on
+ * a canvas of at most half the limit.
+ */
+export const MAX_STRIP_PIXELS = 8_000_000;
+
+/** A band's rows: `count` of them from `first`. */
+export interface StripRows {
+    first: number;
+    count: number;
+}
+
+/**
+ * How many rows a band draws: its own, plus the next one down. Two images'
+ * ground edges meeting would each come out part-transparent as the browser
+ * scales them, a hairline of board showing through; the extra row puts an
+ * opaque copy under the next band's top edge instead.
+ */
+const drawnRows = (field: TerrainField, strip: StripRows) => Math.min(strip.count + 1, field.rows - strip.first);
+
+/** A canvas's size in pixels for `rows` rows of ground plus the overhang padding around them. */
+function stripSize(field: TerrainField, rows: number, dims: TerrainTileDims): { width: number; height: number } {
+    return { width: field.columns * dims.Wt + 2 * dims.PX, height: rows * dims.Ht + dims.HR + dims.BP };
+}
+
+/** The canvas one band is drawn on, in pixels. */
+export function terrainStripSize(field: TerrainField, strip: StripRows, dims: TerrainTileDims = ATLAS.dims): { width: number; height: number } {
+    return stripSize(field, drawnRows(field, strip), dims);
+}
+
+/** Splits the map into bands of whole rows, as even as they come, each under the canvas budget. */
+export function terrainStripRows(field: TerrainField, dims: TerrainTileDims = ATLAS.dims, maxPixels = MAX_STRIP_PIXELS): StripRows[] {
+    const { width } = stripSize(field, 0, dims);
+    // One row of each band's budget goes to the copy it draws of the next band's first row.
+    const fits = Math.max(1, Math.floor((maxPixels / width - dims.HR - dims.BP) / dims.Ht) - 1);
+    const bands = Math.ceil(field.rows / fits);
+    const perBand = Math.ceil(field.rows / bands);
+    const strips: StripRows[] = [];
+    for (let first = 0; first < field.rows; first += perBand) strips.push({ first, count: Math.min(perBand, field.rows - first) });
+    return strips;
+}
+
+/** Where a band's raster sits in world units, so its ground lines up with the terrain field. */
+export function terrainStripBounds(field: TerrainField, strip: StripRows, dims: TerrainTileDims = ATLAS.dims): TerrainStrip["bounds"] {
+    const scaleX = field.tileSize / dims.Wt;
+    const scaleY = field.tileSize / dims.Ht;
+    const { width, height } = terrainStripSize(field, strip, dims);
+    return { x: -dims.PX * scaleX, y: (strip.first * dims.Ht - dims.HR) * scaleY, width: width * scaleX, height: height * scaleY };
+}
+
+/** Draws one band from the sheet, back row first so each tile's trees and peaks overlap the row behind it. */
+function drawStrip(atlas: HTMLImageElement, field: TerrainField, grid: Uint8Array, overlayByTile: ReadonlyMap<number, string>, strip: StripRows): HTMLCanvasElement | null {
+    const { dims, cell, columns } = ATLAS;
+    const canvas = document.createElement("canvas");
+    Object.assign(canvas, terrainStripSize(field, strip, dims));
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    const lastRow = strip.first + drawnRows(field, strip);
+    for (let row = strip.first; row < lastRow; row++) {
+        for (let col = 0; col < field.columns; col++) {
+            const name = atlasCellName(terrainTileSpec(field, grid, overlayByTile, col, row));
+            const index = CELL_INDEX.get(name);
+            if (index === undefined) {
+                if (!loggedMissingCell) {
+                    loggedMissingCell = true;
+                    console.warn(`Kingdom Builder: no terrain tile "${name}" in the sheet.`);
+                }
+                continue;
+            }
+            context.drawImage(atlas, (index % columns) * cell.width, Math.floor(index / columns) * cell.height, cell.width, cell.height,
+                col * dims.Wt, (row - strip.first) * dims.Ht, cell.width, cell.height);
+        }
+    }
+    return canvas;
+}
+
+/** A canvas's PNG, releasing the canvas's own pixels as soon as the copy is taken. */
+function takeBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+    return new Promise(resolve => canvas.toBlob(blob => {
+        canvas.width = canvas.height = 0;
+        resolve(blob);
+    }));
+}
+
+/** Every band of the map as an image, drawn one at a time so only one band's canvas is ever alive. */
+async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<{ blob: Blob; strip: StripRows }[] | null> {
     if (!terrainFieldMatchesGrid(field)) {
         if (!loggedFieldMismatch) {
             loggedFieldMismatch = true;
@@ -289,63 +324,45 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
         return null;
     }
 
-    const manifest = TILESET;
-    const images = await loadSheetImages(manifest, sheetNamesUsed([AREA_ART, OVERLAY_ART]));
-
-    const tilePixels = sheetTilePixels();
-    const canvas = document.createElement("canvas");
-    canvas.width = field.columns * tilePixels;
-    canvas.height = field.rows * tilePixels;
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    // The art is pixel art, and a sheet drawn at anything but its own pixel
-    // size goes through this — `sheetTilePixels()` is the *largest* declared
-    // tile size, so the day a 32px sheet lands beside a 16px one, the 16px art
-    // is upscaled. Left smoothed, that upscale is a bilinear blur, which is
-    // the one thing pixel art must never be put through.
-    context.imageSmoothingEnabled = false;
-
-    paintFill(context, field, tilePixels, manifest, images);
-    paintMaskBorders(context, field, tilePixels, manifest, images);
-    paintOverlays(context, field, overlays, tilePixels, manifest, images);
-    return canvas;
+    const atlas = await loadAtlas();
+    if (!atlas) return null;
+    const grid = terrainCornerGrid(field);
+    const overlayByTile = overlayCodesByTile(overlays);
+    const drawn: { blob: Blob; strip: StripRows }[] = [];
+    for (const strip of terrainStripRows(field)) {
+        const canvas = drawStrip(atlas, field, grid, overlayByTile, strip);
+        const blob = canvas && await takeBlob(canvas);
+        if (!blob) return null;
+        drawn.push({ blob, strip });
+    }
+    return drawn;
 }
 
 export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
     const field = world.terrainField;
     const fieldKey = field ? `${field.columns}x${field.rows}@${field.tileSize}:${field.codes}` : "";
     const overlayKey = useMemo(() => overlaysKey(world.overlays), [world.overlays]);
-    // A plain `useEffect(() => setHref(...), [key])` is a synchronous setState
-    // inside an effect (react-hooks/set-state-in-effect) and, worse, shows a
-    // stale image for one extra render whenever the key changes. Holding the
-    // href alongside the key it was composited for and falling back to `null`
-    // once that key moves on — `useResettingState` — gets the reset for free,
-    // and leaves the effect only ever calling `setHref` from inside the async
-    // compositing work below.
-    const [href, setHref] = useResettingState<string | null>(null, `${fieldKey}::${overlayKey}`);
+    const [strips, setStrips] = useResettingState<TerrainStrip[]>([], `${fieldKey}::${overlayKey}`);
 
     useEffect(() => {
         if (!field) return;
         let cancelled = false;
-        let objectUrl: string | null = null;
-
-        compositeTerrain(field, world.overlays ?? []).then(canvas => {
-            if (cancelled || !canvas) return;
-            canvas.toBlob(blob => {
-                if (cancelled || !blob) return;
-                objectUrl = URL.createObjectURL(blob);
-                setHref(objectUrl);
-            });
+        const objectUrls: string[] = [];
+        compositeTerrain(field, world.overlays ?? []).then(drawn => {
+            if (cancelled || !drawn) return;
+            setStrips(drawn.map(({ blob, strip }) => {
+                const href = URL.createObjectURL(blob);
+                objectUrls.push(href);
+                return { href, bounds: terrainStripBounds(field, strip) };
+            }));
         });
-
         return () => {
             cancelled = true;
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            objectUrls.forEach(url => URL.revokeObjectURL(url));
         };
-        // `field`/`world.overlays` are re-derived every render; `fieldKey` and
-        // `overlayKey` are what should actually retrigger the composite.
+        // Stable content keys prevent polling from recompositing equal data.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fieldKey, overlayKey]);
 
-    return { href };
+    return { strips };
 }

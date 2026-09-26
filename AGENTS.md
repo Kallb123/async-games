@@ -165,7 +165,11 @@ art tool essentially uncompressed, at megabytes a file. Save the export to
 [`/art-masters`](./art-masters/README.md) under the path it mirrors in
 `public/art`, then run `npm run optimise-art` and commit what it writes: it
 quantises the served copy to roughly a third of the file at the same
-resolution, and never touches the master.
+resolution, and never touches the master. Kingdom Builder's world map
+(`art-masters/kingdombuilder/v2`) is the one exception: it is served as a
+single tile sheet, so run `npm run kb-atlas` instead and commit the
+`public/art/kingdombuilder/v2/` files and
+`src/games/KingdomBuilder/terrainAtlas.json` it writes.
 
 ## Design system conventions
 

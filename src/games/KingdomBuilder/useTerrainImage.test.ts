@@ -1,197 +1,125 @@
 import { describe, expect, it } from "vitest";
 
-import { neighbourMask, neighbourMask8, overlayCodesByTile, overlayMaskSlot, overlaysKey, seededVariantIndex, terrainFieldMatchesGrid } from "./useTerrainImage";
-import { NINE_SLICE_MASKS } from "./tileMapperModel";
-import { blobIndexOf, NEIGHBOUR_BITS } from "./tileset";
+import ATLAS from "./terrainAtlas.json";
+import { atlasCellName, overlaysKey, riverMask, snapCorners, TERRAIN_KEYS, terrainCornerGrid, terrainFieldMatchesGrid, terrainStripBounds, terrainStripRows, terrainStripSize, terrainTileSpec, MAX_STRIP_PIXELS } from "./useTerrainImage";
+import { generateWorld } from "./worldgen/generateWorld";
+import { overlayCodesByTile } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 
-const FIELD: TerrainField = { columns: 2, rows: 2, tileSize: 2, codes: "gggg" };
+const field = (codes: string, columns = 2): TerrainField => ({ columns, rows: codes.length / columns, tileSize: 2, codes });
+const spec = (world: TerrainField, col: number, row: number, overlays: ReadonlyMap<number, string> = new Map()) =>
+    terrainTileSpec(world, terrainCornerGrid(world), overlays, col, row);
+const index = (key: typeof TERRAIN_KEYS[number]) => TERRAIN_KEYS.indexOf(key);
 
-describe("terrainFieldMatchesGrid", () => {
-    it("accepts a field whose codes fill its declared grid", () => {
-        expect(terrainFieldMatchesGrid(FIELD)).toBe(true);
+describe("the v2 terrain tile model", () => {
+    it("rejects a partial stored field rather than indexing outside it", () => {
+        expect(terrainFieldMatchesGrid({ columns: 2, rows: 2, tileSize: 2, codes: "ggg" })).toBe(false);
     });
 
-    it("rejects a field shorter or longer than columns × rows — a corrupt or partial document, never worth throwing over", () => {
-        expect(terrainFieldMatchesGrid({ ...FIELD, codes: "ggg" })).toBe(false);
-        expect(terrainFieldMatchesGrid({ ...FIELD, codes: "ggggg" })).toBe(false);
-    });
-});
-
-describe("overlaysKey", () => {
-    it("is stable for the same content even across distinct array instances", () => {
-        const a = [{ tile: 4, code: "B" }];
-        const b = [{ tile: 4, code: "B" }];
-        expect(overlaysKey(a)).toBe(overlaysKey(b));
+    it("takes each corner from the cell down/right of it, so neighbours share their corners", () => {
+        const world = field("gwgw");
+        expect(spec(world, 0, 0).corners).toEqual([index("grass"), index("forest"), index("forest"), index("grass")]);
+        expect(spec(world, 1, 0).corners[0]).toBe(spec(world, 0, 0).corners[1]);
     });
 
-    it("changes when a placement's tile, code or orientation differs", () => {
-        const base = overlaysKey([{ tile: 4, code: "B" }]);
-        expect(overlaysKey([{ tile: 5, code: "B" }])).not.toBe(base);
-        expect(overlaysKey([{ tile: 4, code: "F" }])).not.toBe(base);
-        expect(overlaysKey([{ tile: 4, code: "B", orientation: "ns" }])).not.toBe(base);
+    it("keeps the water when a three-terrain tile has to drop one, turning the beach corner to land", () => {
+        // Two grass, one sand, one sea: the sea holds and the sand joins the grass (the kit draws its own shore).
+        expect(snapCorners([index("grass"), index("grass"), index("coast"), index("sea")]))
+            .toEqual([index("grass"), index("grass"), index("grass"), index("sea")]);
     });
 
-    it("is the empty string for no overlays at all", () => {
-        expect(overlaysKey(undefined)).toBe("");
-        expect(overlaysKey([])).toBe("");
-    });
-});
-
-describe("neighbourMask", () => {
-    it("is 15 — every side matching — in the middle of a field of one code", () => {
-        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "ggggggggg" };
-        expect(neighbourMask(field, 1, 1)).toBe(15);
+    it("never fills a lake in with land", () => {
+        expect(snapCorners([index("forest"), index("grass"), index("lake"), index("wheat")])).toContain(index("lake"));
     });
 
-    it("is 0 for a tile whose every neighbour differs", () => {
-        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "gggghggg" };
-        expect(neighbourMask(field, 1, 1)).toBe(0);
-    });
-
-    it("never treats off-grid as a match — a corner tile can't autotile as fully interior", () => {
-        const field: TerrainField = { columns: 2, rows: 2, tileSize: 2, codes: "gggg" };
-        expect(neighbourMask(field, 0, 0)).toBe(6); // east (2) and south (4) match; north and west are off-grid
-    });
-
-    it("sets exactly the bit for each matching side — north 1, east 2, south 4, west 8", () => {
-        expect(neighbourMask({ columns: 1, rows: 2, tileSize: 2, codes: "gg" }, 0, 1)).toBe(1); // only a north neighbour, and it matches
-        expect(neighbourMask({ columns: 2, rows: 1, tileSize: 2, codes: "gg" }, 0, 0)).toBe(2); // only an east neighbour, and it matches
-        expect(neighbourMask({ columns: 1, rows: 2, tileSize: 2, codes: "gg" }, 0, 0)).toBe(4); // only a south neighbour, and it matches
-        expect(neighbourMask({ columns: 2, rows: 1, tileSize: 2, codes: "gg" }, 1, 0)).toBe(8); // only a west neighbour, and it matches
-    });
-});
-
-describe("the nine-slice masks the mapper imports under", () => {
-    it("are exactly what a real 3×3 patch of map asks for, square by square", () => {
-        // A 3×3 patch of woodland in a sea of grass. Each square of the patch
-        // is one square of a nine-slice block, so the mask the compositor
-        // computes for it has to be the mask `mask16FromNineSlice` filed that
-        // block's square under — otherwise every imported sheet is rotated or
-        // mirrored and nobody finds out until the art looks wrong.
-        const field: TerrainField = { columns: 5, rows: 5, tileSize: 2, codes: "ggggg" + "gwwwg" + "gwwwg" + "gwwwg" + "ggggg" };
-        for (let slot = 0; slot < 9; slot++) {
-            const col = 1 + (slot % 3);
-            const row = 1 + Math.floor(slot / 3);
-            expect(neighbourMask(field, col, row)).toBe(NINE_SLICE_MASKS[slot]);
-        }
-    });
-});
-
-describe("neighbourMask8", () => {
-    it("is every bit set in the middle of a field of one code", () => {
-        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "ggggggggg" };
-        expect(neighbourMask8(field, 1, 1)).toBe(255);
-    });
-
-    it("never treats off-grid as a match, diagonals included", () => {
-        const field: TerrainField = { columns: 2, rows: 2, tileSize: 2, codes: "gggg" };
-        // From the top-left square only east, south and south-east exist.
-        expect(neighbourMask8(field, 0, 0)).toBe(NEIGHBOUR_BITS.east | NEIGHBOUR_BITS.south | NEIGHBOUR_BITS.southEast);
-    });
-
-    it("sets exactly the bit for each neighbour, clockwise from north", () => {
-        // A 3×3 of one code with a single different square in each position.
-        const around: [number, number, number][] = [
-            [1, 0, NEIGHBOUR_BITS.north], [2, 0, NEIGHBOUR_BITS.northEast], [2, 1, NEIGHBOUR_BITS.east], [2, 2, NEIGHBOUR_BITS.southEast],
-            [1, 2, NEIGHBOUR_BITS.south], [0, 2, NEIGHBOUR_BITS.southWest], [0, 1, NEIGHBOUR_BITS.west], [0, 0, NEIGHBOUR_BITS.northWest],
-        ];
-        for (const [col, row, bit] of around) {
-            const codes = [..."ggggggggg"];
-            codes[row * 3 + col] = "h";
-            expect(neighbourMask8({ columns: 3, rows: 3, tileSize: 2, codes: codes.join("") }, 1, 1)).toBe(255 & ~bit);
+    it("finds a sheet cell even for a tile the corner grid couldn't settle to two terrains", () => {
+        const cells = new Set(ATLAS.cells);
+        const world = field("obgmwfhl", 4);
+        for (let row = 0; row < world.rows; row++) {
+            for (let col = 0; col < world.columns; col++) expect(cells.has(atlasCellName(spec(world, col, row)))).toBe(true);
         }
     });
 
-    it("tells an inner corner from the plain interior tile — the whole reason mask47 exists", () => {
-        // Woodland everywhere but the north-east diagonal, which is grass. All
-        // four sides still match, so mask16 calls this 15 — the fully-interior
-        // tile — and draws no corner at all.
-        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wwgwwwwww" };
-        expect(neighbourMask(field, 1, 1)).toBe(15);
-        expect(blobIndexOf(neighbourMask8(field, 1, 1))).not.toBe(blobIndexOf(255));
+    it("puts every river tile on grass, the only ground the river art is drawn on", () => {
+        const world = field("wwwwrwwww", 3);
+        expect(spec(world, 1, 1).corners).toEqual([index("grass"), index("grass"), index("grass"), index("grass")]);
     });
 
-    it("ignores a diagonal whose sides are already open, so the same tile isn't drawn two ways", () => {
-        // The north side is grass, so what sits beyond the north-east corner
-        // can't be seen from this square: woodland or grass up there, this
-        // tile is drawn the same. Only the north-east square differs.
-        const openCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wgwwwwwww" };
-        const closedCorner: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "wggwwwwww" };
-        expect(blobIndexOf(neighbourMask8(openCorner, 1, 1))).toBe(blobIndexOf(neighbourMask8(closedCorner, 1, 1)));
-    });
-});
-
-describe("a self-connecting overlay's own mask", () => {
-    // Five squares of grass across, with a road (R) laid along the middle three.
-    const FIELD: TerrainField = { columns: 5, rows: 1, tileSize: 2, codes: "ggggg" };
-    const ROAD = [{ tile: 1, code: "R" }, { tile: 2, code: "R" }, { tile: 3, code: "R" }];
-
-    it("masks against the other overlays around it, not against the ground under it", () => {
-        // Every square of ground here is grass, so a mask taken from the
-        // terrain would call all three of these fully interior. The road's own
-        // run is what it has to read.
-        const byTile = overlayCodesByTile(ROAD);
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 1)).toBe(2); // west end: only east continues
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 2)).toBe(2 | 8); // middle: east and west
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 3)).toBe(8); // east end: only west
+    it("uses a repeatable variant in the kit's range", () => {
+        const first = spec(field("gggg"), 0, 0).variant;
+        expect(first).toBeGreaterThanOrEqual(0);
+        expect(first).toBeLessThan(3);
+        expect(spec(field("gggg"), 0, 0).variant).toBe(first);
     });
 
-    it("treats a square with no overlay on it as no match, so a lone bridge reads as a lone bridge", () => {
-        const byTile = overlayCodesByTile([{ tile: 2, code: "B" }]);
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 2)).toBe(0);
+    it("uses the river kit's N/E/S/W bit order", () => {
+        expect(riverMask(field("grgrrr", 3), 1, 1)).toBe(8 | 4 | 1);
     });
 
-    it("treats a different overlay code as no match — a road doesn't join a fence", () => {
-        const byTile = overlayCodesByTile([{ tile: 1, code: "R" }, { tile: 2, code: "F" }]);
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 1)).toBe(0);
+    it("picks the bridge and summit tiles where they apply", () => {
+        expect(atlasCellName(spec(field("grggrggrg", 3), 1, 1, new Map([[4, "B"]])))).toBe("river/grass_river_10_bridge");
+        expect(atlasCellName(spec(field("mmmmmmmmm", 3), 1, 1))).toBe("base/mountain_summit");
     });
 
-    it("never treats off-grid as a match", () => {
-        const byTile = overlayCodesByTile([{ tile: 0, code: "R" }, { tile: 1, code: "R" }]);
-        expect(overlayMaskSlot("mask16", FIELD, byTile, 0)).toBe(2); // east only; nothing west of column 0
+    it("names a two-terrain tile by the kit's blend index, bit set where the higher-drawn terrain is", () => {
+        const blend = spec(field("gwgw"), 0, 0);
+        expect(atlasCellName(blend)).toBe("blend/grass__forest/06");
     });
 
-    it("reads all eight neighbours for a mask47 overlay", () => {
-        const field: TerrainField = { columns: 3, rows: 3, tileSize: 2, codes: "ggggggggg" };
-        const every = overlayCodesByTile(Array.from({ length: 9 }, (_, tile) => ({ tile, code: "R" })));
-        expect(overlayMaskSlot("mask47", field, every, 4)).toBe(blobIndexOf(255));
-    });
-
-    it("gives a tile carrying no overlay at all the empty slot rather than reading someone else's run", () => {
-        expect(overlayMaskSlot("mask16", FIELD, overlayCodesByTile(ROAD), 0)).toBe(0);
-    });
-});
-
-describe("overlayCodesByTile", () => {
-    it("lets the last placement win a tile two of them claim, rather than throwing over a generated-world bug", () => {
-        const byTile = overlayCodesByTile([{ tile: 4, code: "B" }, { tile: 4, code: "F" }]);
-        expect(byTile.get(4)).toBe("F");
-    });
-});
-
-describe("seededVariantIndex", () => {
-    it("is always inside [0, count)", () => {
-        for (let col = 0; col < 5; col++) {
-            for (let row = 0; row < 5; row++) {
-                const index = seededVariantIndex(col, row, 4);
-                expect(index).toBeGreaterThanOrEqual(0);
-                expect(index).toBeLessThan(4);
+    it("finds a sheet cell for every tile of a generated world", () => {
+        const cells = new Set(ATLAS.cells);
+        const world = generateWorld("atlas-coverage");
+        const grid = terrainCornerGrid(world.terrainField);
+        const overlays = overlayCodesByTile(world.overlays);
+        const missing = new Set<string>();
+        for (let row = 0; row < world.terrainField.rows; row++) {
+            for (let col = 0; col < world.terrainField.columns; col++) {
+                const name = atlasCellName(terrainTileSpec(world.terrainField, grid, overlays, col, row));
+                if (!cells.has(name)) missing.add(name);
             }
         }
+        expect([...missing]).toEqual([]);
     });
 
-    it("is deterministic — the same tile picks the same variant every time", () => {
-        expect(seededVariantIndex(7, 3, 5)).toBe(seededVariantIndex(7, 3, 5));
+    it("places a one-band map so its ground footprint remains in world coordinates", () => {
+        // An 80x57 footprint with 14px sides, 54px above and 7px below — the sheet's own 64px tiles.
+        const dims = { Wt: 80, Ht: 57, PX: 14, HR: 54, BP: 7 };
+        const world = field("gggg");
+        expect(terrainStripRows(world, dims)).toEqual([{ first: 0, count: 2 }]);
+        const bounds = terrainStripBounds(world, { first: 0, count: 2 }, dims);
+        expect(bounds.x).toBeCloseTo(-14 * 2 / 80);
+        expect(bounds.y).toBeCloseTo(-54 * 2 / 57);
+        // Two 2-unit tiles plus the padding either side, in world units.
+        expect(bounds.width).toBeCloseTo(4 + 28 * 2 / 80);
+        expect(bounds.height).toBeCloseTo(4 + 61 * 2 / 57);
     });
 
-    it("is 0 for a count of zero rather than dividing by it", () => {
-        expect(seededVariantIndex(1, 1, 0)).toBe(0);
+    it("splits a full-size world into bands of whole rows, each under iOS Safari's canvas limit", () => {
+        const world = generateWorld("atlas-bands").terrainField;
+        const strips = terrainStripRows(world);
+        expect(strips.length).toBeGreaterThan(1);
+        // Each band starts where the one above it ends, and the last ends on the last row.
+        let next = 0;
+        for (const strip of strips) {
+            expect(strip.first).toBe(next);
+            next += strip.count;
+        }
+        expect(next).toBe(world.rows);
+        expect(MAX_STRIP_PIXELS).toBeLessThan(16_777_216);
+        for (const strip of strips) {
+            const { width, height } = terrainStripSize(world, strip);
+            expect(width * height).toBeLessThanOrEqual(MAX_STRIP_PIXELS);
+        }
     });
 
-    it("varies across neighbouring tiles rather than picking the same variant everywhere", () => {
-        const picks = new Set<number>();
-        for (let col = 0; col < 8; col++) picks.add(seededVariantIndex(col, 0, 6));
-        expect(picks.size).toBeGreaterThan(1);
+    it("stacks the bands so each starts on its own first row's ground", () => {
+        const world = generateWorld("atlas-bands").terrainField;
+        const [, second] = terrainStripRows(world);
+        const { Ht, HR } = ATLAS.dims;
+        expect(terrainStripBounds(world, second).y + HR * world.tileSize / Ht).toBeCloseTo(second.first * world.tileSize);
+    });
+
+    it("keys overlays by content so polling does not redraw an unchanged map", () => {
+        expect(overlaysKey([{ tile: 2, code: "B", orientation: "ew" }])).toBe("2:B:ew");
     });
 });
