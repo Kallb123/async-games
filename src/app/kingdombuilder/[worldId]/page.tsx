@@ -58,7 +58,7 @@ const MAP_ICON_SIZE = 4;
 
 /** A v2 kit marker, bottom-centred on the same world point used by routes, fog and hit targets. */
 function MapArtIcon({ name, x, y }: { name: "barbarian" | "forest" | "quarry" | "iron" | "plot" | "village1"; x: number; y: number }) {
-    return <image className={styles.mapIcon} href={`/art/kingdombuilder/v2/icons/${name}.svg`}
+    return <image className={styles.mapIcon} href={`/art/kingdombuilder/v2/icons/${name}.png`}
         x={x - MAP_ICON_SIZE / 2} y={y - MAP_ICON_SIZE * 0.78} width={MAP_ICON_SIZE} height={MAP_ICON_SIZE} />;
 }
 

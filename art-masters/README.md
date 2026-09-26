@@ -25,3 +25,12 @@ Save the export here **and** under the matching path in `public/art`, then run
 `npm run optimise-art`. That quantises the served copy — about two thirds off
 the file at the same resolution, for nothing an eye can find — and never walks
 this folder, so the original stays as it arrived.
+
+## Kingdom Builder's world map
+
+`kingdombuilder/v2` is the one folder that doesn't mirror `public/art` file for
+file. Its ~500 tiles are served as a single sheet, shrunk to the size the map
+is drawn at, and its icons as small PNGs. After changing anything in it, run
+`npm run kb-atlas` (not `optimise-art`) and commit the
+`public/art/kingdombuilder/v2/` files and `src/games/KingdomBuilder/terrainAtlas.json`
+it writes.

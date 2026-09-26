@@ -15,6 +15,7 @@
     "icons": "tsx scripts/generate-icons.mjs",
     "kb-worlds": "tsx scripts/kb-worlds.mjs",
     "version:bump": "node scripts/bump-version.mjs",
+    "kb-atlas": "node scripts/kingdombuilder-atlas.mjs",
     "optimise-art": "node scripts/optimise-art.mjs"
   },
   "dependencies": {

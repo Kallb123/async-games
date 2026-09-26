@@ -1,27 +1,29 @@
 'use client'
 
-// The v2 world art is a text-only canvas generator rather than a conventional
-// sprite sheet. It composes the ground first and overhanging mountains and
-// trees second, once per world, then gives the SVG one raster so panning, fog
-// and the node/route layers stay in the world-coordinate system they use.
+// The v2 world art is the kit's pre-rendered tiles, shrunk to 32px a tile and
+// packed into one sheet by `npm run kb-atlas` (scripts/kingdombuilder-atlas.mjs).
+// The world is composed from that sheet once, back row first so each tile's
+// trees and peaks overlap the row behind it, and the SVG is handed one raster
+// so panning, fog and the node/route layers stay in world coordinates.
 //
-// It paints at 32px a tile, not the kit's native 128. A world is 100x70 tiles,
-// and at 128 the one raster came to 16058x8031 — eight times the canvas area
-// iOS Safari allows, and ~500MB of per-tile canvases on top — so phones drew
-// no map at all. At 32 it is ~4000x2000, the old sprite-sheet map's detail.
+// The kit pre-renders a tile for one terrain or a blend of two, and rivers only
+// on grass. A world's corner grid is nudged to fit that (see
+// `terrainCornerGrid`) rather than generating the rest in the browser, which
+// took seconds on a phone.
 
 import { useEffect, useMemo } from "react";
 
 import { useResettingState } from "@/utils/hooks/useResettingState";
+import ATLAS from "./terrainAtlas.json";
 import { overlayCodesByTile, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 
-const ART_ROOT = "/art/kingdombuilder/v2";
-/** The kit's tile resolution; every pixel size below follows from it via the kit's own `dims()`. */
-const TILE_RESOLUTION = 32;
+const ATLAS_HREF = "/art/kingdombuilder/v2/tiles.png";
 
 export const TERRAIN_KEYS = ["sea", "lake", "coast", "grass", "wheat", "hills", "forest", "mountain"] as const;
 export type TerrainKey = typeof TERRAIN_KEYS[number];
+const GRASS = TERRAIN_KEYS.indexOf("grass");
+const MOUNTAIN = TERRAIN_KEYS.indexOf("mountain");
 
 /** Persisted game terrain translated to the closest member of the art kit. */
 export const ART_TERRAIN_BY_CODE: Readonly<Record<string, TerrainKey>> = {
@@ -43,8 +45,20 @@ export interface TerrainImage {
     bounds?: { x: number; y: number; width: number; height: number };
 }
 
+/** A tile's ground footprint and the overhang padding around the ground grid, in sheet pixels. */
+export interface TerrainTileDims {
+    /** Ground footprint of one tile. */
+    Wt: number;
+    Ht: number;
+    /** Padding left and right, above (for peaks and trees) and below. */
+    PX: number;
+    HR: number;
+    BP: number;
+}
+
 let loggedFieldMismatch = false;
-let loggedTileLoadFailure = false;
+let loggedAtlasFailure = false;
+let loggedMissingCell = false;
 
 export function terrainFieldMatchesGrid(field: TerrainField): boolean {
     return field.codes.length === field.columns * field.rows;
@@ -60,14 +74,84 @@ function codeAt(field: TerrainField, col: number, row: number): string {
     return field.codes[y * field.columns + x];
 }
 
+/** Row-major indices into a corner grid of the tile's [TL, TR, BR, BL] corners. */
+function cornerIndices(field: TerrainField, col: number, row: number): [number, number, number, number] {
+    const width = field.columns + 1;
+    const top = row * width + col;
+    return [top, top + 1, top + width + 1, top + width];
+}
+
 /**
- * The art joins on corner values, not on a square's own terrain. Taking each
- * corner from the cell down/right of it gives every shared corner one stable
- * value while retaining every generated terrain cell in the picture.
+ * Which terrain a crowded tile gives up last, by kit index. Water and
+ * mountains are the shapes a player reads the map by, so they hold; grass and
+ * beach give way first — the kit paints its own sand edge wherever land meets
+ * water, so a dropped beach corner costs little.
  */
-export function terrainCorners(field: TerrainField, col: number, row: number): readonly [TerrainKey, TerrainKey, TerrainKey, TerrainKey] {
-    const terrainAt = (x: number, y: number) => ART_TERRAIN_BY_CODE[codeAt(field, x, y)] ?? "grass";
-    return [terrainAt(col, row), terrainAt(col + 1, row), terrainAt(col + 1, row + 1), terrainAt(col, row + 1)];
+const KEEP_PRIORITY = [7, 6, 1, 0, 2, 3, 4, 5];
+const isWater = (value: number) => value <= TERRAIN_KEYS.indexOf("lake");
+
+/**
+ * Reduces one tile's corners to the two terrains the kit can blend: grass
+ * first if a river has locked a corner to it, then the most common, then the
+ * one that matters most on the map. A dropped corner takes a kept terrain of
+ * its own kind where it can — water stays water and land stays land, so a
+ * snap never fills a lake in or floods a field — and of those the nearest in
+ * the kit's order (grass, wheat, hills, forest, mountain runs low to high
+ * ground), so a mountain range doesn't creep over the grass beside it.
+ */
+export function snapCorners(corners: readonly number[], locked: readonly boolean[] = []): number[] {
+    const counts = new Map<number, number>();
+    corners.forEach(value => counts.set(value, (counts.get(value) ?? 0) + 1));
+    if (counts.size <= 2) return [...corners];
+    const ranked = [...counts.keys()].sort((a, b) => (counts.get(b)! - counts.get(a)!) || KEEP_PRIORITY[b] - KEEP_PRIORITY[a]);
+    const kept = (locked.some(Boolean) ? [GRASS, ...ranked.filter(value => value !== GRASS)] : ranked).slice(0, 2);
+    const replacement = (value: number) => {
+        const sameKind = kept.filter(candidate => isWater(candidate) === isWater(value));
+        return (sameKind.length > 0 ? sameKind : kept)
+            .sort((a, b) => (Math.abs(a - value) - Math.abs(b - value)) || counts.get(b)! - counts.get(a)!)[0];
+    };
+    return corners.map((value, index) => kept.includes(value) || locked[index] ? value : replacement(value));
+}
+
+const RELAX_PASSES = 8;
+
+/**
+ * Every tile corner's art terrain, as a (columns+1)x(rows+1) row-major grid.
+ * Each corner takes the cell down/right of it, so every shared corner has one
+ * value. It is then fitted to the tiles the kit pre-renders: every corner of a
+ * river tile becomes grass (the only ground the river tiles are drawn on), and
+ * any tile left with three or four terrains is snapped to two. Corners are
+ * shared, so a change here carries into the neighbours and the map stays
+ * seamless; a few passes settle what one snap unsettles next door.
+ */
+export function terrainCornerGrid(field: TerrainField): Uint8Array {
+    const width = field.columns + 1;
+    const grid = new Uint8Array(width * (field.rows + 1));
+    for (let y = 0; y <= field.rows; y++) {
+        for (let x = 0; x < width; x++) grid[y * width + x] = TERRAIN_KEYS.indexOf(ART_TERRAIN_BY_CODE[codeAt(field, x, y)] ?? "grass");
+    }
+    const locked = new Uint8Array(grid.length);
+    for (let tile = 0; tile < field.codes.length; tile++) {
+        if (field.codes[tile] !== "r") continue;
+        for (const corner of cornerIndices(field, tile % field.columns, Math.floor(tile / field.columns))) {
+            grid[corner] = GRASS;
+            locked[corner] = 1;
+        }
+    }
+    for (let pass = 0; pass < RELAX_PASSES; pass++) {
+        let changed = false;
+        for (let row = 0; row < field.rows; row++) {
+            for (let col = 0; col < field.columns; col++) {
+                const corners = cornerIndices(field, col, row);
+                const snapped = snapCorners(corners.map(corner => grid[corner]), corners.map(corner => locked[corner] === 1));
+                corners.forEach((corner, index) => {
+                    if (grid[corner] !== snapped[index]) { grid[corner] = snapped[index]; changed = true; }
+                });
+            }
+        }
+        if (!changed) break;
+    }
+    return grid;
 }
 
 /** Kit bit order is N=8, E=4, S=2, W=1. */
@@ -84,13 +168,13 @@ export interface TerrainTileSpec {
     summit: boolean;
 }
 
-/** Everything the source kit needs to paint one square, derived without touching the DOM so it stays testable. */
-export function terrainTileSpec(field: TerrainField, overlayByTile: ReadonlyMap<number, string>, col: number, row: number): TerrainTileSpec {
+/** Everything that picks one square's tile, derived without touching the DOM so it stays testable. */
+export function terrainTileSpec(field: TerrainField, grid: Uint8Array, overlayByTile: ReadonlyMap<number, string>, col: number, row: number): TerrainTileSpec {
     const tile = row * field.columns + col;
     const river = field.codes[tile] === "r" ? riverMask(field, col, row) : 0;
     const isMountain = (x: number, y: number) => x >= 0 && x < field.columns && y >= 0 && y < field.rows && codeAt(field, x, y) === "m";
     return {
-        corners: terrainCorners(field, col, row).map(value => TERRAIN_KEYS.indexOf(value)) as [number, number, number, number],
+        corners: cornerIndices(field, col, row).map(corner => grid[corner]) as [number, number, number, number],
         variant: Math.abs(Math.imul(col, 374761393) ^ Math.imul(row, 668265263)) % 3,
         river,
         bridge: overlayByTile.get(tile) === "B" && (river === 5 || river === 10),
@@ -99,58 +183,41 @@ export function terrainTileSpec(field: TerrainField, overlayByTile: ReadonlyMap<
     };
 }
 
-/** A tile's ground footprint and the overhang padding around the ground grid, in canvas pixels. */
-export interface TerrainKitDims {
-    /** Ground footprint of one tile. */
-    Wt: number;
-    Ht: number;
-    /** Padding left and right, above (for peaks and trees) and below. */
-    PX: number;
-    HR: number;
-    BP: number;
+const twoDigits = (value: number) => String(value).padStart(2, "0");
+
+/** The sheet cell for a tile: its master's path under art-masters/kingdombuilder/v2/tiles. */
+export function atlasCellName(spec: TerrainTileSpec): string {
+    if (spec.river) return `river/grass_river_${twoDigits(spec.river)}${spec.bridge ? "_bridge" : ""}`;
+    // A tile the corner grid couldn't settle is snapped on its own: one seam beats a hole.
+    const corners = snapCorners(spec.corners);
+    const [low, high] = [...new Set(corners)].sort((a, b) => a - b);
+    if (high === undefined) return spec.summit && low === MOUNTAIN ? "base/mountain_summit" : `base/${TERRAIN_KEYS[low]}_v${spec.variant}`;
+    // Kit blend index: TL=8, TR=4, BR=2, BL=1, set where the corner is the higher-drawn terrain.
+    const mask = corners.reduce((bits, value, index) => bits | (value === high ? 8 >> index : 0), 0);
+    return `blend/${TERRAIN_KEYS[low]}__${TERRAIN_KEYS[high]}/${twoDigits(mask)}`;
 }
 
-/** The kit's finished world raster, with the dimensions it was drawn at. */
-type ComposedTerrain = { canvas: HTMLCanvasElement } & TerrainKitDims;
+const CELL_INDEX = new Map(ATLAS.cells.map((name, index) => [name, index]));
 
-interface TerrainTilesApi {
-    compose(
-        resolution: number,
-        columns: number,
-        rows: number,
-        tileAt: (col: number, row: number) => readonly [readonly number[], number, number, boolean, boolean],
-        options: { grid: boolean },
-    ): ComposedTerrain;
-    /** Frees every cached per-tile canvas. */
-    clearCache(): void;
-}
+let atlasPromise: Promise<HTMLImageElement | null> | null = null;
 
-declare global {
-    interface Window { TerrainTiles?: TerrainTilesApi }
-}
-
-let kitPromise: Promise<TerrainTilesApi | null> | null = null;
-
-/** Loads the text-only source generator once. This replaces hundreds of generated binary tiles in the deploy. */
-function loadTerrainKit(): Promise<TerrainTilesApi | null> {
-    if (window.TerrainTiles) return Promise.resolve(window.TerrainTiles);
-    if (!kitPromise) kitPromise = new Promise(resolve => {
-        const script = document.createElement("script");
-        script.src = `${ART_ROOT}/terrain-tiles.js`;
-        script.onload = () => resolve(window.TerrainTiles ?? null);
-        script.onerror = () => {
-            if (!loggedTileLoadFailure) {
-                loggedTileLoadFailure = true;
-                console.warn("Kingdom Builder: terrain generator failed to load.");
+function loadAtlas(): Promise<HTMLImageElement | null> {
+    if (!atlasPromise) {
+        const image = new Image();
+        image.src = ATLAS_HREF;
+        atlasPromise = image.decode().then(() => image, () => {
+            if (!loggedAtlasFailure) {
+                loggedAtlasFailure = true;
+                console.warn("Kingdom Builder: terrain tile sheet failed to load.");
             }
-            resolve(null);
-        };
-        document.head.appendChild(script);
-    });
-    return kitPromise;
+            atlasPromise = null;
+            return null;
+        });
+    }
+    return atlasPromise;
 }
 
-async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<ComposedTerrain | null> {
+async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<HTMLCanvasElement | null> {
     if (!terrainFieldMatchesGrid(field)) {
         if (!loggedFieldMismatch) {
             loggedFieldMismatch = true;
@@ -159,27 +226,37 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
         return null;
     }
 
-    const kit = await loadTerrainKit();
-    if (!kit) return null;
-    const overlayByTile = overlayCodesByTile(overlays);
+    const atlas = await loadAtlas();
+    if (!atlas) return null;
+    const { dims, cell, columns } = ATLAS;
+    const canvas = document.createElement("canvas");
+    canvas.width = field.columns * dims.Wt + 2 * dims.PX;
+    canvas.height = field.rows * dims.Ht + dims.HR + dims.BP;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
 
-    try {
-        return kit.compose(TILE_RESOLUTION, field.columns, field.rows, (col, row) => {
-            const spec = terrainTileSpec(field, overlayByTile, col, row);
-            return [spec.corners, spec.variant, spec.river, spec.summit, spec.bridge];
-        }, { grid: false });
-    } catch (error) {
-        console.warn("Kingdom Builder: terrain generator failed to draw the map.", error);
-        return null;
-    } finally {
-        // The finished raster is all the map needs; the per-tile canvases
-        // behind it would otherwise hold their memory until the page closes.
-        kit.clearCache();
+    const grid = terrainCornerGrid(field);
+    const overlayByTile = overlayCodesByTile(overlays);
+    for (let row = 0; row < field.rows; row++) {
+        for (let col = 0; col < field.columns; col++) {
+            const name = atlasCellName(terrainTileSpec(field, grid, overlayByTile, col, row));
+            const index = CELL_INDEX.get(name);
+            if (index === undefined) {
+                if (!loggedMissingCell) {
+                    loggedMissingCell = true;
+                    console.warn(`Kingdom Builder: no terrain tile "${name}" in the sheet.`);
+                }
+                continue;
+            }
+            context.drawImage(atlas, (index % columns) * cell.width, Math.floor(index / columns) * cell.height, cell.width, cell.height,
+                col * dims.Wt, row * dims.Ht, cell.width, cell.height);
+        }
     }
+    return canvas;
 }
 
 /** Where the padded raster sits in world units, so its ground grid lines up with the terrain field. */
-export function terrainImageBounds(field: TerrainField, dims: TerrainKitDims): NonNullable<TerrainImage["bounds"]> {
+export function terrainImageBounds(field: TerrainField, dims: TerrainTileDims = ATLAS.dims): NonNullable<TerrainImage["bounds"]> {
     const scaleX = field.tileSize / dims.Wt;
     const scaleY = field.tileSize / dims.Ht;
     return {
@@ -194,21 +271,20 @@ export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
     const field = world.terrainField;
     const fieldKey = field ? `${field.columns}x${field.rows}@${field.tileSize}:${field.codes}` : "";
     const overlayKey = useMemo(() => overlaysKey(world.overlays), [world.overlays]);
-    const [image, setImage] = useResettingState<Required<TerrainImage> | null>(null, `${fieldKey}::${overlayKey}`);
+    const [href, setHref] = useResettingState<string | null>(null, `${fieldKey}::${overlayKey}`);
 
     useEffect(() => {
         if (!field) return;
         let cancelled = false;
         let objectUrl: string | null = null;
-        compositeTerrain(field, world.overlays ?? []).then(composed => {
-            if (cancelled || !composed) return;
-            const { canvas } = composed;
+        compositeTerrain(field, world.overlays ?? []).then(canvas => {
+            if (cancelled || !canvas) return;
             canvas.toBlob(blob => {
                 // The blob is a copy; release the raster's pixels straight away.
                 canvas.width = canvas.height = 0;
                 if (cancelled || !blob) return;
                 objectUrl = URL.createObjectURL(blob);
-                setImage({ href: objectUrl, bounds: terrainImageBounds(field, composed) });
+                setHref(objectUrl);
             });
         });
         return () => {
@@ -219,5 +295,5 @@ export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fieldKey, overlayKey]);
 
-    return image ?? { href: null };
+    return { href, ...(field ? { bounds: terrainImageBounds(field) } : {}) };
 }
