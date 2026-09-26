@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import AdminGuestRecovery from '@/components/AdminGuestRecovery';
 import AdminUserAnalytics from '@/components/AdminUserAnalytics';
+import AdminPerformance from '@/components/AdminPerformance';
 import AdminPage from '@/components/ui/AdminPage';
 import Section from '@/components/ui/Section';
 
@@ -17,6 +18,7 @@ export default function Admin() {
         <AdminPage title="Admin" backHref="/settings" backLabel="Back to settings">
             <AdminGuestRecovery />
             <AdminUserAnalytics />
+            <AdminPerformance />
 
             <Section label="Game tools">
                 <div className="ag-stack">

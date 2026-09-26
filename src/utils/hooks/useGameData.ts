@@ -94,6 +94,17 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     // code, so a new screen that forgets is a compile error rather than a
     // blank board and a thrown render.
     const gameData = data?.gameData ?? null;
+    const reportedUsable = useRef(false);
+    useEffect(() => {
+        if (gameData && !reportedUsable.current) {
+            reportedUsable.current = true;
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                performance.mark('ag_board_painted');
+                window.__agPerformanceReport?.('game_board_painted', performance.now());
+                window.__agPerformanceReport?.('game_usable', performance.now());
+            }));
+        }
+    }, [gameData]);
 
     // The same `Dispatch` the screens have always been handed — the updater
     // form included, which is how a reaction gets patched into the history in

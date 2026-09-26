@@ -236,6 +236,14 @@ export function useRefreshableData<T>(
                     retryIn = retryDelayMs(responseStatus, attemptsRef.current);
                     continue;
                 }
+                for (const span of (response.headers.get('server-timing') ?? '').split(',')) {
+                    const match = /^\s*([a-z_]+);dur=([0-9.]+)/.exec(span);
+                    if (match) window.__agPerformanceReport?.(`server_${match[1]}` as import('@/utils/performance').PerformanceMetricName, Number(match[2]));
+                }
+                const responseBytes = Number(response.headers.get('content-length'));
+                if (Number.isFinite(responseBytes) && responseBytes > 0) {
+                    window.__agPerformanceReport?.('response_bytes', responseBytes);
+                }
                 let body: T;
                 try {
                     body = await response.json() as T;
@@ -254,6 +262,10 @@ export function useRefreshableData<T>(
                 clearStaleSessionReload();
                 if (generationRef.current === generation) {
                     setDataState(body);
+                    if (!loadedRef.current) {
+                        performance.mark('ag_first_data');
+                        window.__agPerformanceReport?.('first_data', performance.now());
+                    }
                 }
             } while (rerunRef.current && mountedRef.current);
         } finally {

@@ -520,3 +520,28 @@ add a section to `/admin` rather than a second screen — the page is a list of
 sections, and `Section` / `ListSection` / `ListRow` already draw them. A tool
 that only authors repo data and persists nothing (the track editor) needs no
 API route at all — a client screen behind the same `isAdmin` gate is enough.
+
+## Performance telemetry
+
+`/admin` → `AdminPerformance` is the observation point for the loading performance
+plan. It shows seven-day median, p75 and p95 values per metric and route. The
+browser records Core Web Vitals plus navigation intent, route commit, Clerk
+authorisation, first JSON, dashboard usability, board paint/interactivity,
+response bytes and image load duration. Dashboard and game responses also expose
+`Server-Timing` for authentication, Mongo connection/query, response building,
+reaction lookup and JSON serialisation; the client records those spans beside the
+journey.
+
+Samples deliberately contain no user or game identifier, player name, hand,
+chat, or command body. Dynamic path segments are replaced by route templates,
+inputs are allow-listed and bounded, the endpoint requires a signed-in player,
+and Mongo expires samples after 30 days. The report reads at most 20,000 samples
+from the latest seven days so opening the admin screen cannot grow without bound.
+
+Run `npm run build && npm run performance:budget` to check the deterministic CI
+budget for the largest route JavaScript payload and required image. Browser/API
+latency is observed rather than gated in per-commit CI because Internet timings
+are noisy. The Playwright journeys should be recorded with `--trace on` against
+a production build when taking a baseline; retain separate cold and warm traces
+for dashboard → game, game → home, home → profile, home → new game, and a deep
+link → game.
