@@ -1,37 +1,34 @@
 'use client'
 
-// Rendering beneath the node graph (GDD §3.5.6): composites the generated
-// ground into one offscreen canvas, once per world, and hands back an object
-// URL the map draws as a single `<image>` — the same single-raster board
-// World Domination and Outbreak already draw. `MapEdges`, the node graph and
-// `MapLabelLayer` are untouched; the tiles just go underneath them.
-//
-// Three passes, in order (§3.5.6): every area's fill, then every area's
-// border-overlay tiles, then the sparse overlay list. PR 10 shipped with no
-// sheet at all, so only the fill pass ever drew anything — the fallback
-// colour every registry entry declares. PR 11 adds the first sheet and the
-// other two passes: an area on a mask layout recomputes, per tile, which of
-// its art tiles its own neighbour mask picks (§3.5.5's autotiling), and a
-// `variants`/`single` area or overlay draws straight from the sheet. An area
-// or overlay with no art yet, or whose sheet failed to load, is left on the
-// fallback fill from pass one — never a coloured square standing in for a
-// picture, and never a throw inside a board.
+// The v2 world art is a text-only canvas generator rather than a conventional
+// sprite sheet. It composes the ground first and overhanging mountains and
+// trees second, once per world, then gives the SVG one raster so panning, fog
+// and the node/route layers stay in the world-coordinate system they use.
 
 import { useEffect, useMemo } from "react";
 
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { AREAS, areaForCode } from "./worldgen/areas";
-import { overlayCodesByTile, overlayForCode, type OverlayPlacement } from "./worldgen/overlays";
+import { overlayCodesByTile, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
-import { AREA_ART, blobIndexOf, isMaskArt, NEIGHBOUR_BITS, OVERLAY_ART, pickMaskSlotTile, seededVariantIndex, sheetColumns, sheetSourceRect, sheetTilePixels, tilePieceParts, tileRefsOf, TILESET, type MaskLayout, type TileArt, type TileRef, type TilesetManifest } from "./tileset";
 
-// `seededVariantIndex` lives in tileset.ts now (both this file and the mapper
-// model need it), re-exported here so nothing importing it from this file —
-// this module used to be its only home — has to change. `overlayCodesByTile`
-// moved to worldgen/overlays.ts for the same reason: the overlay vocabulary's
-// road pass (worldgen/overlayVocabulary.ts) needs the same tile→code index
-// this rendering pass does, and it can't import from a 'use client' module.
-export { seededVariantIndex, overlayCodesByTile };
+const ART_ROOT = "/art/kingdombuilder/v2";
+const TILE_WIDTH = 160;
+const TILE_HEIGHT = 113;
+const PAD_X = 29;
+const GROUND_Y = 107;
+const PAD_BOTTOM = 14;
+
+export const TERRAIN_KEYS = ["sea", "lake", "coast", "grass", "wheat", "hills", "forest", "mountain"] as const;
+export type TerrainKey = typeof TERRAIN_KEYS[number];
+
+/** Persisted game terrain translated to the closest member of the art kit. */
+export const ART_TERRAIN_BY_CODE: Readonly<Record<string, TerrainKey>> = {
+    o: "sea", l: "lake", b: "coast", g: "grass", f: "wheat",
+    h: "hills", w: "forest", s: "forest", m: "mountain",
+    // Rivers have dedicated overlay tiles on grass, rather than being one of
+    // the kit's corner terrain values.
+    r: "grass",
+};
 
 export interface TerrainImageWorld {
     terrainField?: TerrainField;
@@ -39,245 +36,100 @@ export interface TerrainImageWorld {
 }
 
 export interface TerrainImage {
-    /**
-     * An object URL for the composited ground, in the same world-unit space
-     * as the field's grid. Null for a world with no terrain field (drawn
-     * before this landed) or a canvas the browser refused — the map screen
-     * keeps drawing today's flat silhouette in either case (§3.5.6).
-     */
     href: string | null;
+    /** Placement includes the transparent overhang around the ground grid. */
+    bounds?: { x: number; y: number; width: number; height: number };
 }
 
 let loggedFieldMismatch = false;
+let loggedTileLoadFailure = false;
 
-/** A field whose length disagrees with its own declared grid — a corrupt or partial document — is drawn as no ground layer at all, never thrown over (a board draws the fallback, it never throws). Exported for testing without a DOM. */
 export function terrainFieldMatchesGrid(field: TerrainField): boolean {
     return field.codes.length === field.columns * field.rows;
 }
 
-/** Overlays are generated once and stored, never recomputed per render (§3.5.3), so a stable key of their content — not the array reference a poll hands back afresh — keeps an unchanged world from recompositing (and re-leaking an object URL) on every refetch. Exported for testing without a DOM. */
 export function overlaysKey(overlays: OverlayPlacement[] | undefined): string {
     return (overlays ?? []).map(overlay => `${overlay.tile}:${overlay.code}:${overlay.orientation ?? ""}`).join(",");
 }
 
-/**
- * A tile's own 4-bit neighbour mask (§3.5.5): bit 0 north, bit 1 east, bit 2
- * south, bit 3 west, set when that neighbour carries the *same* code as this
- * tile. Off the edge of the grid is never a match, so the map's own border
- * always autotiles as a border rather than assuming open ground beyond it.
- * Compares raw codes rather than resolved areas, so two tiles of an unknown
- * code still autotile consistently with each other. Exported for testing
- * without a DOM.
- */
-export function neighbourMask(field: TerrainField, col: number, row: number): number {
-    return sideMask(sameCodeAs(field, field.codes[row * field.columns + col]), col, row);
+function codeAt(field: TerrainField, col: number, row: number): string {
+    const x = Math.max(0, Math.min(field.columns - 1, col));
+    const y = Math.max(0, Math.min(field.rows - 1, row));
+    return field.codes[y * field.columns + x];
 }
 
 /**
- * "Is the square at (c, r) the same thing as the one being drawn?" — the one
- * question every mask asks, and the only thing that differs between an area
- * masking against the terrain field and a self-connecting overlay masking
- * against the sparse placement list. Off the edge of the grid is never a
- * match, so the map's own border always autotiles as a border rather than
- * assuming open ground beyond it.
+ * The art joins on corner values, not on a square's own terrain. Taking each
+ * corner from the cell down/right of it gives every shared corner one stable
+ * value while retaining every generated terrain cell in the picture.
  */
-type NeighbourMatcher = (col: number, row: number) => boolean;
-
-/** Matches a square of the terrain field carrying the given raw code. Compares raw codes rather than resolved areas, so two tiles of an unknown code still autotile consistently with each other. */
-function sameCodeAs(field: TerrainField, code: string): NeighbourMatcher {
-    return (col, row) => col >= 0 && col < field.columns && row >= 0 && row < field.rows && field.codes[row * field.columns + col] === code;
+export function terrainCorners(field: TerrainField, col: number, row: number): readonly [TerrainKey, TerrainKey, TerrainKey, TerrainKey] {
+    const terrainAt = (x: number, y: number) => ART_TERRAIN_BY_CODE[codeAt(field, x, y)] ?? "grass";
+    return [terrainAt(col, row), terrainAt(col + 1, row), terrainAt(col + 1, row + 1), terrainAt(col, row + 1)];
 }
 
-/** Matches a square carrying the given overlay code, from the sparse placement list indexed by tile. A square with no overlay on it matches nothing, so a lone bridge still autotiles as a lone bridge. */
-function sameOverlayAs(field: TerrainField, overlayByTile: ReadonlyMap<number, string>, code: string): NeighbourMatcher {
-    return (col, row) => col >= 0 && col < field.columns && row >= 0 && row < field.rows && overlayByTile.get(row * field.columns + col) === code;
+/** Kit bit order is N=8, E=4, S=2, W=1. */
+export function riverMask(field: TerrainField, col: number, row: number): number {
+    const river = (x: number, y: number) => x >= 0 && x < field.columns && y >= 0 && y < field.rows && codeAt(field, x, y) === "r";
+    return (river(col, row - 1) ? 8 : 0) | (river(col + 1, row) ? 4 : 0) | (river(col, row + 1) ? 2 : 0) | (river(col - 1, row) ? 1 : 0);
 }
 
-function sideMask(matches: NeighbourMatcher, col: number, row: number): number {
-    let mask = 0;
-    if (matches(col, row - 1)) mask |= 1;
-    if (matches(col + 1, row)) mask |= 2;
-    if (matches(col, row + 1)) mask |= 4;
-    if (matches(col - 1, row)) mask |= 8;
-    return mask;
+export interface TerrainTileSpec {
+    corners: readonly [number, number, number, number];
+    variant: number;
+    river: number;
+    bridge: boolean;
+    summit: boolean;
 }
 
-/**
- * A tile's own 8-bit neighbour mask, for `mask47` (§3.5.5): the four sides of
- * `neighbourMask` plus the four diagonals, so an area can tell an inner corner
- * — two arms closing around one square of something else — from the plain
- * interior tile a 4-bit mask collapses it onto. Same rules otherwise: a match
- * is the *same* raw code, and off the edge of the grid never matches.
- * Exported for testing without a DOM.
- */
-export function neighbourMask8(field: TerrainField, col: number, row: number): number {
-    return eightMask(sameCodeAs(field, field.codes[row * field.columns + col]), col, row);
+/** Everything the source kit needs to paint one square, derived without touching the DOM so it stays testable. */
+export function terrainTileSpec(field: TerrainField, overlayByTile: ReadonlyMap<number, string>, col: number, row: number): TerrainTileSpec {
+    const tile = row * field.columns + col;
+    const river = field.codes[tile] === "r" ? riverMask(field, col, row) : 0;
+    const isMountain = (x: number, y: number) => x >= 0 && x < field.columns && y >= 0 && y < field.rows && codeAt(field, x, y) === "m";
+    return {
+        corners: terrainCorners(field, col, row).map(value => TERRAIN_KEYS.indexOf(value)) as [number, number, number, number],
+        variant: Math.abs(Math.imul(col, 374761393) ^ Math.imul(row, 668265263)) % 3,
+        river,
+        bridge: overlayByTile.get(tile) === "B" && (river === 5 || river === 10),
+        summit: field.codes[tile] === "m" && isMountain(col, row - 1) && isMountain(col + 1, row)
+            && isMountain(col, row + 1) && isMountain(col - 1, row),
+    };
 }
 
-function eightMask(matches: NeighbourMatcher, col: number, row: number): number {
-    let mask = 0;
-    if (matches(col, row - 1)) mask |= NEIGHBOUR_BITS.north;
-    if (matches(col + 1, row - 1)) mask |= NEIGHBOUR_BITS.northEast;
-    if (matches(col + 1, row)) mask |= NEIGHBOUR_BITS.east;
-    if (matches(col + 1, row + 1)) mask |= NEIGHBOUR_BITS.southEast;
-    if (matches(col, row + 1)) mask |= NEIGHBOUR_BITS.south;
-    if (matches(col - 1, row + 1)) mask |= NEIGHBOUR_BITS.southWest;
-    if (matches(col - 1, row)) mask |= NEIGHBOUR_BITS.west;
-    if (matches(col - 1, row - 1)) mask |= NEIGHBOUR_BITS.northWest;
-    return mask;
+interface TerrainTilesApi {
+    compose(
+        resolution: number,
+        columns: number,
+        rows: number,
+        tileAt: (col: number, row: number) => readonly [readonly number[], number, number, boolean, boolean],
+        options: { grid: boolean },
+    ): { canvas: HTMLCanvasElement };
 }
 
-/**
- * The tile a mask layout draws for one square of map: the 4-bit mask straight
- * into a `mask16`'s sixteen, or the 8-bit mask through `blobIndexOf` into a
- * `mask47`'s forty-seven. Falls back to the entry's last tile if a caller ever
- * hands it a short array — the guard test is what actually keeps the shipped
- * manifest's arrays the right length.
- */
-function maskSlot(layout: MaskLayout, matches: NeighbourMatcher, col: number, row: number): number {
-    return layout === "mask16" ? sideMask(matches, col, row) : blobIndexOf(eightMask(matches, col, row));
+declare global {
+    interface Window { TerrainTiles?: TerrainTilesApi }
 }
 
-function maskTile(art: Extract<TileArt, { layout: MaskLayout }>, slot: number, col: number, row: number): TileRef | undefined {
-    const entry = art.tiles[slot] ?? art.tiles[art.tiles.length - 1];
-    return entry === undefined ? undefined : pickMaskSlotTile(entry, col, row);
-}
+let kitPromise: Promise<TerrainTilesApi | null> | null = null;
 
-/**
- * Which slot of a self-connecting overlay's mask art one placement draws — a
- * road, a wall, a fence, masking against the other overlays around it rather
- * than against the ground under it, which is what makes a road read as its own
- * run and not as the grass it crosses. A square carrying no overlay matches
- * nothing, so a lone bridge autotiles as a lone bridge; off the edge of the
- * grid never matches, same as an area's. Exported for testing without a DOM.
- */
-export function overlayMaskSlot(layout: MaskLayout, field: TerrainField, overlayByTile: ReadonlyMap<number, string>, tile: number): number {
-    const code = overlayByTile.get(tile);
-    if (code === undefined) return 0;
-    return maskSlot(layout, sameOverlayAs(field, overlayByTile, code), tile % field.columns, Math.floor(tile / field.columns));
-}
-
-/** Every tile a `variants`/`single`/mask art entry could ever point at, for preloading every sheet a composite might need before drawing starts. */
-function sheetNamesUsed(artMaps: ReadonlyArray<Readonly<Record<string, TileArt>>>): Set<string> {
-    const names = new Set<string>();
-    for (const map of artMaps) for (const art of Object.values(map)) for (const ref of tileRefsOf(art)) names.add(ref.sheet);
-    return names;
-}
-
-const sheetImageCache = new Map<string, Promise<HTMLImageElement | null>>();
-let loggedSheetLoadFailure = false;
-
-/** Loads (and caches) a sheet's own image element. Never rejects — a sheet that 404s or fails to decode resolves to `null`, which every caller treats as "draw the fallback instead", not a thrown error inside a board (§3.5.6). */
-function loadSheetImage(sheetPath: string): Promise<HTMLImageElement | null> {
-    let cached = sheetImageCache.get(sheetPath);
-    if (!cached) {
-        cached = new Promise<HTMLImageElement | null>(resolve => {
-            const image = new Image();
-            image.onload = () => resolve(image);
-            image.onerror = () => {
-                if (!loggedSheetLoadFailure) {
-                    loggedSheetLoadFailure = true;
-                    console.warn(`Kingdom Builder: tile sheet "${sheetPath}" failed to load — drawing fallback colours for it.`);
-                }
-                resolve(null);
-            };
-            image.src = sheetPath;
-        });
-        sheetImageCache.set(sheetPath, cached);
-    }
-    return cached;
-}
-
-async function loadSheetImages(manifest: TilesetManifest, needed: Set<string>): Promise<Map<string, HTMLImageElement>> {
-    const entries = await Promise.all(
-        [...needed].map(async name => {
-            const sheet = manifest.sheets[name];
-            const image = sheet ? await loadSheetImage(sheet.path) : null;
-            return [name, image] as const;
-        }),
-    );
-    const images = new Map<string, HTMLImageElement>();
-    for (const [name, image] of entries) if (image) images.set(name, image);
-    return images;
-}
-
-/**
- * Draws one ref's art at the map square it was placed on, straight from the
- * loaded sheet image — a no-op if that sheet never loaded. A multi-square
- * piece is blitted a square at a time, each one offset from the placement by
- * `tilePieceParts` (which has already applied the piece's anchor), so a sheet
- * with a gutter between its squares doesn't drag that gutter into the picture.
- */
-function drawTile(context: CanvasRenderingContext2D, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>, ref: TileRef, col: number, row: number, tilePixels: number): void {
-    const sheet = manifest.sheets[ref.sheet];
-    const image = images.get(ref.sheet);
-    if (!sheet || !image) return;
-    const columns = Math.max(1, sheetColumns(sheet, image.naturalWidth));
-    for (const part of tilePieceParts(ref, columns)) {
-        const { sx, sy, sw, sh } = sheetSourceRect(sheet, image.naturalWidth, part.index);
-        context.drawImage(image, sx, sy, sw, sh, (col + part.offsetX) * tilePixels, (row + part.offsetY) * tilePixels, tilePixels, tilePixels);
-    }
-}
-
-/** Pass one (§3.5.6): every tile's registry fallback colour, then a `variants`/`single` area's own picked tile on top where its sheet loaded. Areas on a mask layout are deliberately left on the fallback here — their real look is pass two's, once every tile's neighbours are known. */
-function paintFill(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    for (let row = 0; row < field.rows; row++) {
-        for (let col = 0; col < field.columns; col++) {
-            const area = areaForCode(field.codes[row * field.columns + col]);
-            context.fillStyle = area.fallbackColour;
-            context.fillRect(col * tilePixels, row * tilePixels, tilePixels, tilePixels);
-
-            const art = AREA_ART[area.code];
-            // `orientation` describes an overlay's own direction (a bridge's
-            // crossing), not anything an area has — nothing declares one for
-            // an area, and this pass wouldn't know what to pick if it did.
-            if (!art || isMaskArt(art) || art.layout === "orientation") continue;
-            const ref = art.layout === "single" ? art.tile : art.tiles[seededVariantIndex(col, row, art.tiles.length)];
-            if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
-        }
-    }
-}
-
-/** Pass two (§3.5.6): every area on a mask layout redraws its own tiles, in the registry's priority order, picking each one's real neighbour-mask variant — the four sides for a `mask16`, all eight neighbours for a `mask47`. A no-op for a tile whose area has no mask entry or whose sheet never loaded — pass one's fallback (or its `variants`/`single` art) stands as its finished look. */
-function paintMaskBorders(context: CanvasRenderingContext2D, field: TerrainField, tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    for (const area of AREAS) {
-        const art = AREA_ART[area.code];
-        if (!art || !isMaskArt(art)) continue;
-        for (let row = 0; row < field.rows; row++) {
-            for (let col = 0; col < field.columns; col++) {
-                if (field.codes[row * field.columns + col] !== area.code) continue;
-                const ref = maskTile(art, maskSlot(art.layout, sameCodeAs(field, area.code), col, row), col, row);
-                if (ref) drawTile(context, manifest, images, ref, col, row, tilePixels);
+/** Loads the text-only source generator once. This replaces hundreds of generated binary tiles in the deploy. */
+function loadTerrainKit(): Promise<TerrainTilesApi | null> {
+    if (window.TerrainTiles) return Promise.resolve(window.TerrainTiles);
+    if (!kitPromise) kitPromise = new Promise(resolve => {
+        const script = document.createElement("script");
+        script.src = `${ART_ROOT}/terrain-tiles.js`;
+        script.onload = () => resolve(window.TerrainTiles ?? null);
+        script.onerror = () => {
+            if (!loggedTileLoadFailure) {
+                loggedTileLoadFailure = true;
+                console.warn("Kingdom Builder: terrain generator failed to load.");
             }
-        }
-    }
-}
-
-/** Pass three (§3.5.6): the sparse overlay list. An overlay with no `OVERLAY_ART` entry, or whose code the registry no longer recognises, or whose sheet failed to load, draws nothing — a missing bridge reads as "not drawn yet", never a coloured square standing in for one. */
-function paintOverlays(context: CanvasRenderingContext2D, field: TerrainField, overlays: readonly OverlayPlacement[], tilePixels: number, manifest: TilesetManifest, images: ReadonlyMap<string, HTMLImageElement>): void {
-    // Indexed once here rather than scanned per neighbour per square.
-    const overlayByTile = overlayCodesByTile(overlays);
-
-    for (const placement of overlays) {
-        if (placement.tile < 0 || placement.tile >= field.columns * field.rows) continue;
-        if (!overlayForCode(placement.code)) continue;
-        const art = OVERLAY_ART[placement.code];
-        if (!art) continue;
-
-        const col = placement.tile % field.columns, row = Math.floor(placement.tile / field.columns);
-        // An orientation key may itself hold several interchangeable tiles
-        // (the same MaskSlotArt escape hatch a mask slot uses) — picked the
-        // same stable, seeded way, so "several different ruins under one
-        // key" varies per placement rather than always drawing the first one.
-        const orientationSlot = art.layout === "orientation" ? (placement.orientation ? art.tiles[placement.orientation] : undefined) ?? Object.values(art.tiles)[0] : undefined;
-        const ref =
-            art.layout === "single" ? art.tile :
-            art.layout === "orientation" ? (orientationSlot ? pickMaskSlotTile(orientationSlot, col, row) : undefined) :
-            art.layout === "variants" ? art.tiles[seededVariantIndex(col, row, art.tiles.length)] :
-            maskTile(art, overlayMaskSlot(art.layout, field, overlayByTile, placement.tile), col, row); // a self-connecting overlay autotiles against its own kind exactly as an area does against its own.
-        if (!ref) continue;
-        drawTile(context, manifest, images, ref, col, row, tilePixels);
-    }
+            resolve(null);
+        };
+        document.head.appendChild(script);
+    });
+    return kitPromise;
 }
 
 async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<HTMLCanvasElement | null> {
@@ -289,46 +141,37 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
         return null;
     }
 
-    const manifest = TILESET;
-    const images = await loadSheetImages(manifest, sheetNamesUsed([AREA_ART, OVERLAY_ART]));
+    const kit = await loadTerrainKit();
+    if (!kit) return null;
+    const overlayByTile = overlayCodesByTile(overlays);
 
-    const tilePixels = sheetTilePixels();
-    const canvas = document.createElement("canvas");
-    canvas.width = field.columns * tilePixels;
-    canvas.height = field.rows * tilePixels;
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    // The art is pixel art, and a sheet drawn at anything but its own pixel
-    // size goes through this — `sheetTilePixels()` is the *largest* declared
-    // tile size, so the day a 32px sheet lands beside a 16px one, the 16px art
-    // is upscaled. Left smoothed, that upscale is a bilinear blur, which is
-    // the one thing pixel art must never be put through.
-    context.imageSmoothingEnabled = false;
+    return kit.compose(128, field.columns, field.rows, (col, row) => {
+        const spec = terrainTileSpec(field, overlayByTile, col, row);
+        return [spec.corners, spec.variant, spec.river, spec.summit, spec.bridge];
+    }, { grid: false }).canvas;
+}
 
-    paintFill(context, field, tilePixels, manifest, images);
-    paintMaskBorders(context, field, tilePixels, manifest, images);
-    paintOverlays(context, field, overlays, tilePixels, manifest, images);
-    return canvas;
+export function terrainImageBounds(field: TerrainField): NonNullable<TerrainImage["bounds"]> {
+    const scaleX = field.tileSize / TILE_WIDTH;
+    const scaleY = field.tileSize / TILE_HEIGHT;
+    return {
+        x: -PAD_X * scaleX,
+        y: -GROUND_Y * scaleY,
+        width: (field.columns * TILE_WIDTH + 2 * PAD_X) * scaleX,
+        height: (field.rows * TILE_HEIGHT + GROUND_Y + PAD_BOTTOM) * scaleY,
+    };
 }
 
 export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
     const field = world.terrainField;
     const fieldKey = field ? `${field.columns}x${field.rows}@${field.tileSize}:${field.codes}` : "";
     const overlayKey = useMemo(() => overlaysKey(world.overlays), [world.overlays]);
-    // A plain `useEffect(() => setHref(...), [key])` is a synchronous setState
-    // inside an effect (react-hooks/set-state-in-effect) and, worse, shows a
-    // stale image for one extra render whenever the key changes. Holding the
-    // href alongside the key it was composited for and falling back to `null`
-    // once that key moves on — `useResettingState` — gets the reset for free,
-    // and leaves the effect only ever calling `setHref` from inside the async
-    // compositing work below.
     const [href, setHref] = useResettingState<string | null>(null, `${fieldKey}::${overlayKey}`);
 
     useEffect(() => {
         if (!field) return;
         let cancelled = false;
         let objectUrl: string | null = null;
-
         compositeTerrain(field, world.overlays ?? []).then(canvas => {
             if (cancelled || !canvas) return;
             canvas.toBlob(blob => {
@@ -337,15 +180,13 @@ export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
                 setHref(objectUrl);
             });
         });
-
         return () => {
             cancelled = true;
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
-        // `field`/`world.overlays` are re-derived every render; `fieldKey` and
-        // `overlayKey` are what should actually retrigger the composite.
+        // Stable content keys prevent polling from recompositing equal data.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fieldKey, overlayKey]);
 
-    return { href };
+    return { href, ...(field ? { bounds: terrainImageBounds(field) } : {}) };
 }
