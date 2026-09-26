@@ -31,6 +31,9 @@ const PLAYABLE_OUT_OF_TURN: string[] = [
     // outOfTurnPlayable); spends only the sender's card; never runs the
     // flood or closes the discard off turn, and clears the undo stack.
     "BannedIsletPlayCard",
+    // Four single-step event cards in actions/discard; Forecast, retrieval and
+    // forecast ordering are refused, and an interrupt never closes discard.
+    "OutbreakPlayEvent",
 ];
 
 describe("commands playable out of turn", () => {

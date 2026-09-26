@@ -24,6 +24,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
+import { useArmedPick } from "@/utils/hooks/useArmedPick";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useStagedOutcomeReveal } from "@/utils/hooks/useStagedOutcomeReveal";
@@ -31,7 +32,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
-import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
+import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, outOfTurnEventsHeld, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS, roleDef } from "@/games/Outbreak/board";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -124,8 +125,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // What the board is targeting right now, if anything — reset whenever the
     // turn changes so a stale pick from a previous player never lingers into
     // someone else's turn.
-    const [boardTarget, setBoardTarget] = useResettingState<BoardTarget | null>(null, `${displayedCurrentTurn}`);
+    const commandCount = gameData?.gameState?.commandCount;
+    const [boardTarget, setBoardTarget] = useArmedPick<BoardTarget>(`${displayedCurrentTurn}`, commandCount);
     const eventTargeting = boardTarget && (boardTarget.kind === 'airlift' || boardTarget.kind === 'governmentGrant') ? boardTarget : null;
+
+    const canPlayOutOfTurn = !!gs && !!me && nav.isLive && !complete && !isMyTurn
+        && outOfTurnEventsHeld(gs.phase, me.hand, me.contingencyCard).length > 0;
+    const boardTargetLive = !!boardTarget && (isMyTurn
+        || (canPlayOutOfTurn && (boardTarget.kind === 'airlift' || boardTarget.kind === 'governmentGrant')));
 
     // Which city a tapped hand/discard card is ringing on the board right
     // now — purely a lookup aid, reset alongside the move/event target above
@@ -136,7 +143,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     const validCities = new Set<number>();
-    if (gs && me && isMyTurn && boardTarget) {
+    if (gs && me && boardTargetLive && boardTarget) {
         if (boardTarget.kind === 'move') {
             const legal = getLegalMoves({ currentCity: me.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
             legal.filter(m => m.type === boardTarget.type).forEach(m => validCities.add(m.destination));
@@ -162,7 +169,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     function handleCityClick(cityId: number) {
-        if (!gs || !isMyTurn || !boardTarget) return;
+        if (!gs || !boardTargetLive || !boardTarget) return;
 
         if (boardTarget.kind === 'move') {
             const cmd = new OutbreakAction();
@@ -399,7 +406,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             playerStates={gs.playerStates}
                             userIdList={userIdList}
                             validCities={validCities}
-                            onCityClick={isMyTurn && !complete && !submitting ? handleCityClick : undefined}
+                            onCityClick={boardTargetLive && !complete && !submitting ? handleCityClick : undefined}
                             boardTag={boardTag}
                             highlightedCityId={highlightedCityId}
                         />
@@ -418,9 +425,11 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         ))}
                     </div>
 
-                    {isMyTurn && !complete && (gs.phase === 'actions' || gs.phase === 'discard') && (
+                    {(isMyTurn || canPlayOutOfTurn) && !complete && (gs.phase === 'actions' || gs.phase === 'discard') && (
                         <OutbreakEventTray
+                            key={`${displayedCurrentTurn}:${commandCount ?? ''}`}
                             gs={gs}
+                            isMyTurn={isMyTurn}
                             myUserId={myUserId}
                             userIdList={userIdList}
                             turnOrder={turnOrder}

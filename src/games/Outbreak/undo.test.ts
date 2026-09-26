@@ -340,6 +340,20 @@ describe("Outbreak — canUndo on the wire", () => {
 });
 
 describe("Outbreak — replay", () => {
+    it("replays an out-of-turn event against the same active player's board", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u2")!.hand = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state);
+        const command = playEvent({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u1", destination: MONTREAL }, "u2");
+
+        expect((await runCommand(game, new OutbreakGameType(), command, { outOfTurn: true })).outcome.validMove).toBe(true);
+        const live = gameStateToModel(game.specificGameState, NAMES, "u1", command.id);
+        const replayed = (await buildTimeline(game, NAMES, [], undefined, "u1")).snapshots.at(-1)!;
+
+        expect(replayed.currentTurn).toBe("u1");
+        expect(replayed.specificGameState).toEqual(live);
+    });
+
     it("replays a turn with an undo in the middle of it to the live table's state", async () => {
         const state = baseState(["u1", "u2"]);
         state.players.get("u1")!.hand = [EVENT_CARD_AIRLIFT];

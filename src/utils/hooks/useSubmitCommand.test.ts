@@ -12,11 +12,11 @@ describe("expectedCommandCountFor", () => {
     it("names the board it was rendered from in a game a teammate can play out of turn in", () => {
         expect(expectedCommandCountFor(testBoard(INTERRUPTS, { commandCount: 7 }))).toBe(7);
         expect(expectedCommandCountFor(testBoard(INTERRUPTS, { commandCount: 0 }))).toBe(0);
+        expect(expectedCommandCountFor(testBoard("outbreak", { commandCount: 7 }))).toBe(7);
     });
 
     it("says nothing in any other game, where only its sender moves the board on their turn", () => {
         expect(expectedCommandCountFor(testBoard("snakesandladders", { commandCount: 7 }))).toBeUndefined();
-        expect(expectedCommandCountFor(testBoard("outbreak", { commandCount: 7 }))).toBeUndefined();
     });
 
     it("says nothing before the board has loaded", () => {

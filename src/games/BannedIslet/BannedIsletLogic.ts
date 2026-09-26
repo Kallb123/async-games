@@ -46,7 +46,7 @@ import {
     IBannedIsletPawn,
     IBannedIsletSwim,
 } from "@/games/BannedIslet/rules";
-import { playerHistory, userToken } from "@/utils/games/history";
+import { onTurnOfClause, playerHistory, userToken } from "@/utils/games/history";
 import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { shuffle } from "@/utils/games/shuffle";
@@ -925,16 +925,6 @@ function applyHelicopterLift(
     const tokens = userIds.map(userToken);
     const flown = tokens.length === 1 ? tokens[0] : `${tokens.slice(0, -1).join(', ')} and ${tokens[tokens.length - 1]}`;
     return `played Helicopter Lift, flying ${flown} from ${tileName(gs.positions[from].tile)} to ${tileName(gs.positions[target].tile)}`;
-}
-
-/**
- * The tail a special played on a teammate's turn carries — ", on {{ann}}'s
- * turn" — in its history line and its `myString()` alike, so the log, the
- * review and the recap call it the same thing (docs/out-of-turn-actions.md
- * §5.5). Empty for a card played on its holder's own turn.
- */
-function onTurnOfClause(onTurnOf: string | undefined): string {
-    return onTurnOf ? `, on ${userToken(onTurnOf)}'s turn` : '';
 }
 
 @serializable

@@ -1,6 +1,6 @@
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { recordedOnTurnOf, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IOutbreakGameData, IOutbreakPlayerState, IOutbreakSpecificGameState } from "@/games/Outbreak/OutbreakModels";
@@ -39,6 +39,7 @@ import {
     isProtectedByQuarantine,
     medicAutoClearColors,
     opsExpertBuildsFree,
+    outOfTurnPlayable,
     placeCubeOrOutbreak,
     placeEpidemicCubesOrOutbreak,
     shareKnowledgeCardMatchRequired,
@@ -49,7 +50,7 @@ import {
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
-import { playerHistory, userToken } from "@/utils/games/history";
+import { onTurnOfClause, playerHistory, userToken } from "@/utils/games/history";
 import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 
@@ -964,11 +965,10 @@ export class OutbreakDiscard implements IGameCommand {
 // OutbreakPlayEvent covers the five one-shot cards of §12, the Contingency
 // Planner's retrieval (§11), and Forecast's second (ordering) step — one
 // parameterised command rather than five-plus, following §21.4's "four
-// command classes, not fifteen". §21.3: played only on your own turn — the
-// command route already rejects anything from a user who isn't currentTurn,
-// so nothing here re-checks that — at any point in the action phase, or
-// during the player's own draw phase to duck the hand limit; never
-// mid-resolution of another card, which is why phase 'forecast' rejects the
+// command classes, not fifteen". Four single-step events can also be played
+// on a teammate's turn; Forecast and the two action/continuation kinds cannot.
+// Events are accepted in the action phase or while the active player discards,
+// never mid-resolution of another card, which is why phase 'forecast' rejects the
 // ordinary 'play'/'retrieve' kinds and accepts only 'forecastOrder'.
 
 // After a hand shrinks below/at HAND_LIMIT while phase is 'discard' — an
@@ -1174,11 +1174,14 @@ export class OutbreakPlayEvent implements IGameCommand {
     // Only a retrieval, or a card other than Forecast played in the action
     // phase — enforced in Execute, not here (docs/undo.md, above).
     readonly undoable = true;
+    // The route reads this declaration from a fresh class instance. Execute
+    // still owns the narrower per-kind/card/phase decision below.
+    readonly playableOutOfTurn = true;
 
     myString() {
         const name = this.cardId !== null ? eventCardName(this.cardId) : 'an event card';
         switch (this.kind) {
-            case 'play': return `played ${name}`;
+            case 'play': return `played ${name}${onTurnOfClause(recordedOnTurnOf(this))}`;
             case 'retrieve': return `retrieved ${name} from the discard pile`;
             case 'forecastOrder': return 'reordered the top of the infection deck';
             default: return `played ${name}`;
@@ -1190,6 +1193,11 @@ export class OutbreakPlayEvent implements IGameCommand {
         const gs = outbreakData.specificGameState;
         const ps = playerState(gs, this.senderId);
         if (!ps) return INVALID;
+        const outOfTurn = outbreakData.currentTurn !== this.senderId;
+
+        // Retrieval spends an action and Forecast ordering continues a
+        // two-command flow owned by the active player: neither may interrupt.
+        if (outOfTurn && this.kind !== 'play') return INVALID;
 
         if (this.kind === 'forecastOrder') {
             if (gs.phase !== 'forecast') return INVALID;
@@ -1216,6 +1224,7 @@ export class OutbreakPlayEvent implements IGameCommand {
         // 'play': free of action cost either way (§12) — only ever ends the
         // turn by finishing a hand-limit duck, never by spending an action.
         if (!eventPlayableInPhase(gs.phase)) return INVALID;
+        if (outOfTurn && (this.cardId === null || !outOfTurnPlayable(gs.phase, this.cardId))) return INVALID;
         // Read now, because the phase is what decides whether this card can be
         // taken back at all: mid-discard it can close the draw phase and run
         // the infection. Forecast never can, wherever it is played — the
@@ -1223,7 +1232,15 @@ export class OutbreakPlayEvent implements IGameCommand {
         const undoable = gs.phase === 'actions' && this.cardId !== EVENT_CARD_FORECAST;
         const historyLine = applyPlayEvent(outbreakData, ps, this);
         if (historyLine === null) return INVALID;
-        outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+        const onTurnOf = outOfTurn ? outbreakData.currentTurn : undefined;
+        outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine + onTurnOfClause(onTurnOf)));
+        // An active player's older snapshots predate this teammate's event and
+        // must not be able to restore the board (and the spent card) past it.
+        if (outOfTurn) {
+            gs.undoStack = [];
+            gs.undoAnchorId = null;
+            return infectionPhaseOutcome(false, []);
+        }
         if (undoable) commitUndo(outbreakData, this, preUndoState);
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
         return infectionPhaseOutcome(turnOver, infectionLog);

@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Outbreak event cards work on a teammate's turn",
+                detail: "Play Airlift, Government Grant, One Quiet Night or Resilient Population while a teammate is taking their turn, so the whole crew can respond without waiting for the turn to come around. Forecast still stays on its holder's turn while they arrange the deck.",
+                game: "outbreak",
+            },
+            {
                 title: "Kingdom Builder has a new painted world map",
                 detail: "Forests, fields, coasts and mountain ranges now blend into a seamless tabletop landscape, with rivers and bridges drawn into the terrain.",
                 game: "kingdombuilder",
@@ -115,11 +120,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Race Cars now starts with a roll off the line",
                 detail: "Round one is the start, and it is one d20 a driver instead of a gear. Roll a 1 and the engine bogs down: no gear, no movement, and you are still in neutral when the race comes back round to you. Roll 2 to 16 and you get away cleanly in first, rolling its die for the move as usual. Roll 17 or more and it is a flying start — four spaces with no roll at all. Everybody who gets away is in first and can change gear from round two, and that is when normal racing begins. Out of neutral there is now one gear to take rather than two, so a car that bogged down — or spun — climbs the ladder from first like everybody else.",
-                game: "racecars",
-            },
-            {
-                title: "Race Cars: get right in on the track",
-                detail: "The circuit is a big board with small spaces, so the zoom pill has grown a second step — and you can now pinch to zoom anywhere in between. Both work on every board with a zoom pill, Outbreak and World Domination and the rest, and Race Cars goes deepest of the lot. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
                 game: "racecars",
             },
         ],

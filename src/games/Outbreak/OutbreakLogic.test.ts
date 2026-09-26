@@ -1617,3 +1617,64 @@ describe("OutbreakPlayEvent — phase gating and action cost (§21.3, §12)", ()
         expect(ps.actionsLeft).toBe(ACTIONS_PER_TURN);
     });
 });
+
+describe("OutbreakPlayEvent — on a teammate's turn (docs/out-of-turn-actions.md §5.5)", () => {
+    it("declares the reviewed out-of-turn command capability", () => {
+        expect(new OutbreakPlayEvent().playableOutOfTurn).toBe(true);
+    });
+
+    it.each([
+        ['Airlift', EVENT_CARD_AIRLIFT, { targetUserId: 'u1', destination: idFor('Tokyo') }],
+        ['Government Grant', EVENT_CARD_GOVERNMENT_GRANT, { destination: idFor('Tokyo') }],
+        ['One Quiet Night', EVENT_CARD_ONE_QUIET_NIGHT, {}],
+        ['Resilient Population', EVENT_CARD_RESILIENT_POPULATION, { infectionCardId: idFor('Cairo') }],
+    ] as const)("plays %s from the sender's own hand without taking an action", async (_name, cardId, fields) => {
+        const state = baseState(['u1', 'u2']);
+        state.players.get('u2')!.hand = [cardId];
+        state.infectionDiscard = [idFor('Cairo')];
+        const game = makeGame(state);
+
+        const outcome = await eventCmd({ cardId, ...fields }, 'u2').Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
+        expect(state.players.get('u2')!.hand).toEqual([]);
+        expect(state.players.get('u2')!.actionsLeft).toBe(ACTIONS_PER_TURN);
+        expect(game.currentTurn).toBe('u1');
+        expect(game.gameState.history[0].text).toMatch(/, on \{\{u1\}\}'s turn$/);
+    });
+
+    it("leaves the active player's discard and infection phase untouched", async () => {
+        const state = baseState(['u1', 'u2']);
+        state.phase = 'discard';
+        state.players.get('u1')!.hand = Array.from({ length: HAND_LIMIT + 1 }, (_, i) => i);
+        state.players.get('u2')!.hand = [EVENT_CARD_ONE_QUIET_NIGHT];
+        state.infectionDeck = [idFor('Tokyo')];
+        const game = makeGame(state);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }, 'u2').Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
+        expect(state.phase).toBe('discard');
+        expect(state.infectionDeck).toEqual([idFor('Tokyo')]);
+    });
+
+    it("refuses Forecast, retrieval and Forecast ordering out of turn", async () => {
+        const state = baseState(['u1', 'u2']);
+        const ps = state.players.get('u2')!;
+        ps.hand = [EVENT_CARD_FORECAST];
+        ps.role = 'contingencyPlanner';
+        state.playerDiscard = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state);
+
+        expect((await eventCmd({ cardId: EVENT_CARD_FORECAST }, 'u2').Execute(game)).validMove).toBe(false);
+        expect((await eventCmd({ kind: 'retrieve', cardId: EVENT_CARD_AIRLIFT }, 'u2').Execute(game)).validMove).toBe(false);
+        state.phase = 'forecast';
+        expect((await eventCmd({ kind: 'forecastOrder', cardIds: [] }, 'u2').Execute(game)).validMove).toBe(false);
+    });
+
+    it("includes the recorded turn in review copy", () => {
+        const command = eventCmd({ cardId: EVENT_CARD_AIRLIFT }, 'u2');
+        (command as unknown as { recordedOnTurnOf: string }).recordedOnTurnOf = 'u1';
+        expect(command.myString()).toBe("played Airlift, on {{u1}}'s turn");
+    });
+});
