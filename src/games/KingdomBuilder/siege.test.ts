@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { IKingdomBuilderSettlement } from "./KingdomBuilderSettlementModel";
 import type { KingdomBuilderMarch } from "./armies";
-import { KINGDOM_BUILDER_SIEGE_GRACE_TICKS, besiegedProduction, siegeOf, siegeStage } from "./siege";
+import { KINGDOM_BUILDER_SIEGE_GRACE_TICKS, KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL, assaultFromTick, besiegedProduction, siegeOf, siegeStage } from "./siege";
 import { applyTick } from "./tick";
 import { garrisonOf } from "./units";
 
@@ -47,6 +47,12 @@ describe("siegeOf", () => {
     ])("ignores %s", (_, army) => {
         expect(siegeOf(town, [army])).toBeUndefined();
     });
+});
+
+it("each completed wall level holds a full attack off for another fixed interval", () => {
+    expect(assaultFromTick(7, [])).toBe(7);
+    expect(assaultFromTick(7, [{ position: 0, building: { type: "walls", level: 3 } }]))
+        .toBe(7 + 3 * KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL);
 });
 
 it("halves production, rounding down", () => {

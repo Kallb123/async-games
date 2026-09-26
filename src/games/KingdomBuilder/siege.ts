@@ -4,8 +4,9 @@
 // lightly through a short grace period, then in full — until the besieger
 // leaves, is beaten, or pushes the attack.
 
-import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
+import type { KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { addUnits, type KingdomBuilderMarch } from "./armies";
+import { buildingLevelOf } from "./buildings";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf } from "./resources";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 
@@ -16,6 +17,14 @@ import { garrisonOf, type KingdomBuilderGarrison } from "./units";
  * First-pass number (§12).
  */
 export const KINGDOM_BUILDER_SIEGE_GRACE_TICKS = 4;
+
+/** Each wall level buys its town one more hour before a besieger can push an attack. */
+export const KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL = 4;
+
+/** The first tick on which a full attack may be pushed against these defences. */
+export function assaultFromTick(sinceTick: number, tiles: readonly KingdomBuilderTile[]): number {
+    return sinceTick + buildingLevelOf(tiles, "walls") * KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL;
+}
 
 /** How long a settlement has been besieged, and when the grace period gives out. */
 export interface KingdomBuilderSiege {

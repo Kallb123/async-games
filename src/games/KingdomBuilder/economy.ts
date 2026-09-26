@@ -18,7 +18,9 @@ interface Economy {
      * build time. The town centre is never bought at level one — every
      * settlement is founded with it — so its entry prices the levels after.
      */
-    buildingCosts: Record<KingdomBuilderUpgradableBuilding, Amounts>;
+    buildingCosts: Record<Exclude<KingdomBuilderUpgradableBuilding, "walls">, Amounts>;
+    /** The deliberately different price of each wall level: timber, masonry, then both. */
+    wallCosts: readonly [Amounts, Amounts, Amounts];
     /** Training price of one unit, paid in full when it is queued. */
     unitCosts: Record<KingdomBuilderUnitType, Amounts>;
     /**
@@ -65,6 +67,7 @@ export const KINGDOM_BUILDER_ECONOMY = {
         // Level two, the settler's threshold (§4.4), is twice this: 60 wood, 60 stone, 20 iron.
         "town-centre": { wood: 30, stone: 30, iron: 10 },
     },
+    wallCosts: [{ wood: 30 }, { stone: 30 }, { wood: 30, stone: 30 }],
     // Armies eat (§4.6): every unit's price carries wheat, cavalry most — horses eat.
     unitCosts: {
         militia: { wood: 10, iron: 5, wheat: 5 },

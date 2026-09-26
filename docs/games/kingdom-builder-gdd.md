@@ -1166,13 +1166,13 @@ the settlement falls.
 | **Barracks** | Trains army units | Queue-based; higher levels unlock stronger unit types and shorten training time |
 | **Tavern** | Recruits commanders, one per tavern level (§6.5) | Shipped in PR 26. A settlement holds one, and it can never stand a level above the town centre — the second reason to raise the town centre |
 | **Market** | Converts one resource to another at a rate, lists trade offers to other players, and sells caravans | Gives a player short on iron but flush with wood a way out that isn't "wait" (§4.7) |
-| **Walls** | Passive defence bonus; the thing a siege wears down (§8) | Occupies a tile like anything else — a maxed-out economy settlement really is choosing not to have walls |
+| **Walls** | Delays when a besieger may push a full attack (§8) | Three levels; each adds four ticks (one hour) to the minimum siege time. Level 1 costs 30 wood, level 2 costs 30 stone, and level 3 costs 30 wood + 30 stone |
 | **Town centre** (fixed) | Caps the settlement's overall level, unlocks more building slots (if the design allows more than 8) or higher tiers of the tiles above | Its own upgrade track, gated behind resource cost + time like everything else |
 
 Each building has levels; a higher level costs more of one or more resources
 and more build time, and yields a bigger per-turn/tick output (production
-buildings) or a stronger effect (barracks unlock speed/strength, walls raise
-the defence multiplier). Only one building project and, separately, one
+buildings) or a stronger effect (barracks unlock speed/strength, walls delay
+a full attack). Only one building project and, separately, one
 training queue run at a time per settlement at low town-centre levels, with
 higher town-centre levels unlocking parallel queues — this is the main
 lever for making the town centre feel like progress rather than a plaque.
@@ -1958,8 +1958,9 @@ around it.
 > As shipped in PR 21: an army camped at another player's settlement besieges
 > it from the tick it arrives. The town produces half from the next tick; after
 > a four-tick grace period (an hour) its building and training stop where they
-> are as well. There are no walls yet, so nothing stops regenerating. The
-> besieger can **push the attack** with every army of theirs at the town, and
+> are as well. Walls have three levels, each of which delays a **push the
+> attack** action by four ticks from the start of the siege. The besieger pushes
+> with every army of theirs at the town once that minimum has passed, and
 > the defender can **sally out** with the whole garrison against every army at
 > the gate. Since PR 22 both are fought out by §7's engine: a push against the
 > garrison behind its town's defences, a sally in the open without them. What
@@ -1990,10 +1991,12 @@ both ticking from the moment siege begins:
 - A short **grace period** after siege begins, before debuffs ramp to full
   strength, prevents a siege from being a near-instant knockout against a
   player who happens to be offline at exactly the wrong tick.
-- The attacker chooses, at any point after arrival, to **push the attack** —
+- The attacker chooses, once any wall-imposed minimum siege time has passed,
+  to **push the attack** —
   the action that finally triggers §7's combat resolution against the
-  garrison and any remaining wall bonus. There's no forced timer on this
-  beyond the strategic cost of waiting: every extra tick under siege is
+  garrison behind its town defences. Without walls this can happen on arrival;
+  each completed wall level requires four ticks of siege first. Beyond that
+  minimum there is no forced timer: every extra tick under siege is
   another tick of debuff extracted for free, but it's also another tick the
   defender has to reinforce, and another tick a relief force has to arrive.
   A common reason to hold off rather than push immediately is massing a

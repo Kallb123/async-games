@@ -68,10 +68,11 @@ export default function SiegesSection({ endpoint, view, placeName, onFought }: S
                 {besieging.map(army => {
                     // One commander among the armies at this gate leads them all in (§6.5).
                     const led = hasCommander(besieging.filter(other => other.targetNodeId === army.targetNodeId));
+                    const wallsHolding = (army.assaultFromTick ?? army.besiegingSince ?? 0) > view.currentTick;
                     return (
                         <ListRow key={army.armyId} icon="🏹" title={`Besieging ${placeName(army.targetNodeId)}`}
-                            sub={`${formatStack(army)} · since tick ${army.besiegingSince}${led ? "" : ` · ${KINGDOM_BUILDER_NO_PUSH_COMMANDER}`}`}
-                            action={button({ action: "push", armyId: army.armyId }, "Push the attack", !led)} />
+                            sub={`${formatStack(army)} · since tick ${army.besiegingSince}${wallsHolding ? ` · walls hold until tick ${army.assaultFromTick}` : led ? "" : ` · ${KINGDOM_BUILDER_NO_PUSH_COMMANDER}`}`}
+                            action={button({ action: "push", armyId: army.armyId }, "Push the attack", !led || wallsHolding)} />
                     );
                 })}
             </div>

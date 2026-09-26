@@ -16,6 +16,7 @@ describe("Kingdom Builder economy.ts", () => {
     // the rule they can't state, run over the real file.
     const entries = [
         ...Object.entries(economy.buildingCosts).map(([name, amounts]) => [`buildingCosts.${name}`, amounts] as const),
+        ...economy.wallCosts.map((amounts, index) => [`wallCosts.${index + 1}`, amounts] as const),
         ...Object.entries(economy.unitCosts).map(([name, amounts]) => [`unitCosts.${name}`, amounts] as const),
         ["startingStockpile", economy.startingStockpile] as const,
         ["townCentreTrickle", economy.townCentreTrickle] as const,
@@ -47,6 +48,13 @@ describe("Kingdom Builder building costs", () => {
     it("scales the level-one price linearly with the target level", () => {
         const levelOne = buildingCostFor("barracks", 1);
         expect(buildingCostFor("barracks", 3)).toEqual({ wood: levelOne.wood * 3, stone: levelOne.stone * 3, iron: levelOne.iron * 3, wheat: 0 });
+    });
+
+    it("builds walls from timber, then stone, then both", () => {
+        expect(buildingCostFor("walls", 1)).toEqual({ wood: 30, stone: 0, iron: 0, wheat: 0 });
+        expect(buildingCostFor("walls", 2)).toEqual({ wood: 0, stone: 30, iron: 0, wheat: 0 });
+        expect(buildingCostFor("walls", 3)).toEqual({ wood: 30, stone: 30, iron: 0, wheat: 0 });
+        expect(KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.walls).toBe(3);
     });
 
     it("reads what the stores are short of, and prints only what is owed", () => {

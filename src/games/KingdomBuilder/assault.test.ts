@@ -42,7 +42,7 @@ describe("pushAttack", () => {
     function besieging(garrison: object, attackers: object[]) {
         const findOne = vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue(chain({ _id: armyId, targetNodeId: "town", besiegingSince: 4 }));
         vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReturnValue(chain({ _id: settlementId, ownerId: "defender", garrison }));
-        const find = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue(chain(attackers));
+        const find = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue(chain(attackers.map(attacker => ({ besiegingSince: 4, ...attacker }))));
         return { findOne, find };
     }
 
@@ -121,6 +121,23 @@ describe("pushAttack", () => {
         besieging({ militia: 1 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5 } }, { _id: otherArmyId, ownerId: "attacker", units: { cavalry: 2 } }]);
 
         await expect(pushAttack(worldId, "attacker", armyId.toString())).rejects.toMatchObject({ code: "ARMY_BUSY", message: "No commander to lead the attack" });
+        expect(KingdomBuilderBattleModel.create).not.toHaveBeenCalled();
+        expect(KingdomBuilderSettlementModel.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("refuses a full attack until the defender's walls have held for their minimum time", async () => {
+        besieging({ militia: 1 }, [{ _id: armyId, ownerId: "attacker", units: { militia: 5, commander: 1 } }]);
+        vi.mocked(KingdomBuilderSettlementModel.findOne).mockReturnValue(chain({
+            _id: settlementId,
+            ownerId: "defender",
+            garrison: { militia: 1 },
+            tiles: [{ position: 0, building: { type: "walls", level: 3 } }],
+        }));
+
+        await expect(pushAttack(worldId, "attacker", armyId.toString())).rejects.toMatchObject({
+            code: "ARMY_BUSY",
+            message: "The walls hold off a full attack until tick 16",
+        });
         expect(KingdomBuilderBattleModel.create).not.toHaveBeenCalled();
         expect(KingdomBuilderSettlementModel.updateOne).not.toHaveBeenCalled();
     });
