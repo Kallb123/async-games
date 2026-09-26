@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID, EVENT_CARD_FORECAST, ROLES } from "./board";
+import { ADJACENCY, ATLANTA_CITY_ID, CITIES, EPIDEMIC_CARD_ID, EVENT_CARD_AIRLIFT, EVENT_CARD_FORECAST, EVENT_CARD_GOVERNMENT_GRANT, EVENT_CARD_ONE_QUIET_NIGHT, EVENT_CARD_RESILIENT_POPULATION, ROLES } from "./board";
 import {
     buildEpidemicDeck,
     canDiscoverCure,
@@ -15,6 +15,7 @@ import {
     isProtectedByQuarantine,
     medicAutoClearColors,
     opsExpertBuildsFree,
+    outOfTurnPlayable,
     placeCubeOrOutbreak,
     placeEpidemicCubesOrOutbreak,
     shareKnowledgeCardMatchRequired,
@@ -24,6 +25,22 @@ import {
     INFECTION_RATE_TRACK,
     OUTBREAK_LOSS_THRESHOLD,
 } from "./rules";
+
+describe("outOfTurnPlayable (docs/out-of-turn-actions.md §5.5)", () => {
+    it("allows each single-step event during actions or discard", () => {
+        for (const phase of ['actions', 'discard'] as const) {
+            for (const card of [EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, EVENT_CARD_ONE_QUIET_NIGHT, EVENT_CARD_RESILIENT_POPULATION]) {
+                expect(outOfTurnPlayable(phase, card)).toBe(true);
+            }
+        }
+    });
+
+    it("refuses Forecast, non-events and a pending Forecast phase", () => {
+        expect(outOfTurnPlayable('actions', EVENT_CARD_FORECAST)).toBe(false);
+        expect(outOfTurnPlayable('actions', ATLANTA_CITY_ID)).toBe(false);
+        expect(outOfTurnPlayable('forecast', EVENT_CARD_AIRLIFT)).toBe(false);
+    });
+});
 
 function idFor(name: string): number {
     const city = CITIES.find(c => c.name === name);

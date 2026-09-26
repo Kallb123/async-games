@@ -9,11 +9,14 @@ import {
     CITY_COUNT,
     DISEASE_COLORS,
     EPIDEMIC_CARD_ID,
+    EVENT_CARD_FORECAST,
+    isEventCardId,
     isAdjacent,
     isCityCardId,
     OutbreakCureState,
     OutbreakDiseaseColor,
     OutbreakRoleId,
+    OutbreakPhase,
     ROLES,
 } from "./board";
 import { shuffle } from "@/utils/games/shuffle";
@@ -40,6 +43,29 @@ export const CARDS_DRAWN_PER_TURN = 2;
 
 /** Hand limit enforced at the end of Phase 2 — over this, discard down to it. */
 export const HAND_LIMIT = 7;
+
+/**
+ * Whether an event may be played between commands on a teammate's turn.
+ * Forecast stays on-turn because its second, ordering command would otherwise
+ * leave the active player's turn waiting on somebody else. Retrieval and that
+ * ordering step are command kinds rather than cards, so callers gate those
+ * separately (docs/out-of-turn-actions.md §5.5).
+ */
+export function outOfTurnPlayable(phase: OutbreakPhase, cardId: number): boolean {
+    return (phase === 'actions' || phase === 'discard')
+        && isEventCardId(cardId)
+        && cardId !== EVENT_CARD_FORECAST;
+}
+
+/** The sender's event cards currently available for an out-of-turn play. */
+export function outOfTurnEventsHeld(
+    phase: OutbreakPhase,
+    hand: readonly number[],
+    contingencyCard: number | null,
+): number[] {
+    return [...hand, ...(contingencyCard === null ? [] : [contingencyCard])]
+        .filter(cardId => outOfTurnPlayable(phase, cardId));
+}
 
 // §6 step 6: 2 players deal 4 cards each, 3 deal 3, 4 deal 2 — the official
 // "6 minus the seat count" shorthand.

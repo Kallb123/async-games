@@ -461,16 +461,14 @@ absence).
 Async play forces five, all of which should be recorded in a "Deviations"
 subsection of this document as they land:
 
-* **Event cards are playable only on your own turn**, at any point in your
-  action phase, and during your own draw phase to duck the hand limit. §12 says
-  they interrupt anyone at any moment; `POST /api/game/command` rejects every
-  command from a user who isn't `currentTurn`, and the right answer is to accept
-  that rather than build an out-of-turn authorisation path around it. With turns
-  hours or days apart, "interrupt the active player" has no meaning — by the
-  time a holder saw the situation and responded, the turn would be long
-  resolved. One Quiet Night and Resilient Population lose the least (both are
-  played in anticipation); Airlift loses the most, and is the one card whose
-  power this measurably cuts.
+* **Four event cards are playable on any player's turn**, between commands in
+  the action phase or while the active player discards: Airlift, Government
+  Grant, One Quiet Night and Resilient Population. That recovers §12's useful
+  async meaning without pausing a command already in flight. Forecast remains
+  own-turn-only because it needs a second command to put its six cards back;
+  allowing it as an interrupt would lock the active player out while somebody
+  else finishes the ordering. Contingency Planner retrieval still costs an
+  action and is therefore own-turn-only too.
 * **Airlift needs no consent.** There is nobody to ask in real time, and the
   moved player can see where they were put. Co-op means no adversarial use.
 * **Discussion is out of band.** §2's "shared table, shared brain" pillar rests
@@ -999,7 +997,8 @@ the deepest coverage, including the cross-command cases above.
 
 **10 — Event cards.** The five of §12 through `OutbreakPlayEvent`, including
 Forecast's ordering step and the Contingency Planner's retrieval (which is why
-this follows roles). Own-turn-only, per 21.3.
+this follows roles). Four single-step events may also be played on a
+teammate's turn, per 21.3; Forecast and retrieval remain own-turn-only.
 
 *Landed.* `OutbreakPlayEvent` covers all three kinds §21.4 named as one
 parameterised command: `play` for the five cards of §12, `retrieve` for the
@@ -1013,10 +1012,10 @@ everywhere a hand is read generically — `getLegalMoves`, Share Knowledge's
 Researcher exemption, and the board screen's discard/cure pickers, all of
 which assumed every hand card was a city card until an event card could
 actually land in one.
-§21.3's own-turn-only rule needed nothing new — it's the command route's
-existing `currentTurn` check, the same as every other command. What this
-step does add is `eventPlayableInPhase`: playable in the action phase, or
-your own draw phase to duck the hand limit (§9), never mid-resolution of
+§21.3's event timing now uses the shared out-of-turn command path, with
+`outOfTurnPlayable` as the isomorphic card-and-phase rule used by the server
+and board. `eventPlayableInPhase` remains the on-turn phase rule: playable in
+the action phase, or your own draw phase to duck the hand limit (§9), never mid-resolution of
 another event. That duck is shared code — `maybeFinishDrawPhase` is the one
 place that notices a hand back at the limit and runs the infect phase, and
 both `OutbreakDiscard` (refactored onto it) and `OutbreakPlayEvent` call it,

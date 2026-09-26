@@ -17,7 +17,7 @@ import {
     isEventCardId,
     roleDef,
 } from '@/games/Outbreak/board';
-import { stationCityIds } from '@/games/Outbreak/rules';
+import { outOfTurnEventsHeld, stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import { seatOrderFrom } from '@/utils/ui/players';
@@ -34,6 +34,7 @@ export type OutbreakEventTargeting =
 
 interface OutbreakEventTrayProps {
     gs: IOutbreakSpecificGameStateResponse;
+    isMyTurn: boolean;
     myUserId: string;
     userIdList: string[];
     /** Player seats in the real turn order (see OutbreakHands' prop docs) —
@@ -71,7 +72,7 @@ function PickerSheet({ hint, onCancel, children }: { hint: React.ReactNode; onCa
  * though — unlike playing one — it costs an action.
  */
 export default function OutbreakEventTray({
-    gs, myUserId, userIdList, turnOrder, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
+    gs, isMyTurn, myUserId, userIdList, turnOrder, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
 }: OutbreakEventTrayProps) {
     const [pickingAirliftTarget, setPickingAirliftTarget] = useState(false);
     const [pickingResilientPopulation, setPickingResilientPopulation] = useState(false);
@@ -252,8 +253,9 @@ export default function OutbreakEventTray({
     }
 
     // ── The tray itself: every event card this player can play right now ──
-    const playable = [...me.hand.filter(isEventCardId), ...(me.contingencyCard !== null ? [me.contingencyCard] : [])];
-    const canRetrieve = me.role === 'contingencyPlanner' && me.contingencyCard === null && me.actionsLeft > 0 && retrievableCards.length > 0
+    const heldEvents = [...me.hand.filter(isEventCardId), ...(me.contingencyCard !== null ? [me.contingencyCard] : [])];
+    const playable = isMyTurn ? heldEvents : outOfTurnEventsHeld(gs.phase, me.hand, me.contingencyCard);
+    const canRetrieve = isMyTurn && me.role === 'contingencyPlanner' && me.contingencyCard === null && me.actionsLeft > 0 && retrievableCards.length > 0
         && gs.phase === 'actions';
 
     if (playable.length === 0 && !canRetrieve) return null;

@@ -21,11 +21,11 @@ describe("boardCanMove", () => {
 
     it("stays quiet on the viewer's own turn in a game nobody can play out of turn in", () => {
         expect(boardCanMove(testBoard("snakesandladders"), "me")).toBe(false);
-        expect(boardCanMove(testBoard("outbreak"), "me")).toBe(false);
     });
 
     it("polls on the viewer's own turn in a game a teammate can play out of turn in", () => {
         expect(boardCanMove(testBoard(INTERRUPTS), "me")).toBe(true);
+        expect(boardCanMove(testBoard("outbreak"), "me")).toBe(true);
     });
 
     it("never polls a finished game, or one that hasn't loaded", () => {

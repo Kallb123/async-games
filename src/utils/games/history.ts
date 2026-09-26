@@ -47,6 +47,15 @@ export function userToken(userId: string): string {
 }
 
 /**
+ * History/review suffix for a command played during another player's turn,
+ * tokenised so the log and replay summary resolve changing names alike.
+ * Empty for a command played on its sender's own turn.
+ */
+export function onTurnOfClause(onTurnOf: string | undefined): string {
+    return onTurnOf ? `, on ${userToken(onTurnOf)}'s turn` : '';
+}
+
+/**
  * A line about a player's own action: their mention, then the rest of the
  * sentence. The shape almost every history line has.
  *

@@ -1,7 +1,6 @@
 # Out-of-turn actions
 
-**Status: engine, the active player's screen and Banned Islet built (PRs 2, 3
-and 5); Outbreak (PR 4) still to come.** PR 1 added this document and removed the one turn-gate
+**Status: built (PRs 1–5).** PR 1 added this document and removed the one turn-gate
 exemption the app had, which is why §3 exists. PR 2 built the engine half of
 §5 — the route, the pipeline, replay and recap — with one change from the
 design as first written: the stamp is `recordedOnTurnOf`, naming the player
@@ -11,8 +10,8 @@ game response (§5.7 says why). PR 5 shipped before PR 4, so it built the
 shared pick hook §5.8 asks for rather than reusing one; its section in §6
 says what else it found.
 
-Every command in the app today is played by the player whose turn it is. That
-rule is enforced in one place (the command route's turn gate) and *assumed* in
+Most commands in the app are played by the player whose turn it is. That
+default is enforced in one place (the command route's turn gate) and *assumed* in
 half a dozen more. This document is about cutting a small, deliberate hole in
 it, so that a card the printed rules let you play "at any time" can be played
 on a teammate's turn.
@@ -571,7 +570,7 @@ interrupt — the route's 409.
 Crew: `gremlin`, `caveman`.
 What's new: none — nothing uses it yet.
 
-### PR 4 — Outbreak: event cards on a teammate's turn
+### PR 4 — Outbreak: event cards on a teammate's turn *(built)*
 
 1. **`outOfTurnPlayable` in `Outbreak/rules.ts`**, with tests for the §5.5
    table.

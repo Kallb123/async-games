@@ -14,7 +14,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Spend 4 actions moving between cities, treating disease, building research stations, sharing knowledge, or curing a disease — then draw 2 player cards and infect cities equal to the current infection rate.",
+            body: "Spend 4 actions moving between cities, treating disease, building research stations, sharing knowledge, or curing a disease — then draw 2 player cards and infect cities equal to the current infection rate. Airlift, Government Grant, One Quiet Night and Resilient Population can also be played during a teammate's turn; Forecast waits for your own turn.",
         },
         {
             heading: "Outbreaks",

@@ -12,4 +12,5 @@ export const meta: GameMeta = {
     accent: "#c0392b",
     glyph: "🦠",
     available: true,
+    hasOutOfTurnPlays: true,
 };
