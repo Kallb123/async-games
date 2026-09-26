@@ -11,6 +11,7 @@ import AppRail from "@/components/ui/AppRail";
 import WhatsNew from "@/components/ui/WhatsNew";
 import Link from "next/link";
 import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
+import { useEffect, useRef } from "react";
 
 /**
  * The signed-in home screen. `HomeScreen` decides who gets this and who gets
@@ -37,6 +38,13 @@ import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
 export default function Dashboard() {
     useAuthGuard({ allowSignedOut: true });
     const { dashboard, isLoading, isRefreshing, refresh } = useDashboard();
+    const reportedUsable = useRef(false);
+    useEffect(() => {
+        if (!isLoading && !reportedUsable.current) {
+            reportedUsable.current = true;
+            requestAnimationFrame(() => window.__agPerformanceReport?.('dashboard_usable', performance.now()));
+        }
+    }, [isLoading]);
 
     return (
         <main className="ag-desk">
