@@ -32,7 +32,7 @@ import {
     type KingdomBuilderTrainingOrder,
     type KingdomBuilderUnitType,
 } from "@/games/KingdomBuilder/units";
-import { describeSiege } from "@/games/KingdomBuilder/siege";
+import { KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL, describeSiege } from "@/games/KingdomBuilder/siege";
 import { formatTicks } from "@/games/KingdomBuilder/tick";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
@@ -51,6 +51,7 @@ const BUILDING_DETAILS: Record<string, { name: string; icon: string; role?: stri
     barracks: { name: "Barracks", icon: "🏯", role: "trains army units" },
     market: { name: "Market", icon: "⚖️", role: "exchanges resources and sells caravans" },
     tavern: { name: "Tavern", icon: "🍺", role: "recruits commanders to lead armies" },
+    walls: { name: "Walls", icon: "🧱", role: "delay a besieger's full attack" },
 };
 
 /** What the land is called when it yields each resource — "Rich woodland" (§4.6). */
@@ -131,6 +132,7 @@ export default function KingdomBuilderSettlementPage({
     const barracksLevel = barracks?.building?.level ?? 0;
     const market = tileOf("market");
     const tavern = tileOf("tavern");
+    const walls = tileOf("walls");
     const tavernLevel = tavern?.building?.level ?? 0;
     const commanders = data?.commanders;
     const townCentre = tileOf("town-centre");
@@ -259,6 +261,14 @@ export default function KingdomBuilderSettlementPage({
                             <div className="ag-build-list">
                                 {upgradeRow("barracks", barracks, "unlocks stronger units, trains faster and watches farther")}
                                 {KINGDOM_BUILDER_MILITARY_UNIT_TYPES.map(unitType => unitRow(unitType, barracksLevel))}
+                            </div>
+                        </Section>
+                    )}
+
+                    {data && walls && (
+                        <Section label="Walls" action={<span className="ag-tag">Level {walls.building!.level}</span>}>
+                            <div className="ag-build-list">
+                                {upgradeRow("walls", walls, `holds off a full attack for another ${KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL} ticks`)}
                             </div>
                         </Section>
                     )}

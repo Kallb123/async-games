@@ -13,6 +13,7 @@ import { marketLevelOf } from "./market";
 import { tradeOffersIn, type KingdomBuilderTradeOfferView } from "./tradeBoard";
 import { resourcesOf } from "./resources";
 import type { KingdomBuilderSiege } from "./siege";
+import { assaultFromTick } from "./siege";
 import { armySight, isInSight, settlementSight, type KingdomBuilderSight } from "./sight";
 import { barracksLevelOf, garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { KingdomBuilderPersistenceError } from "./persistence";
@@ -120,6 +121,8 @@ export interface KingdomBuilderArmyView {
     arrivedAtTick?: number;
     /** The tick it began besieging the settlement it is camped at (§8), if it is. */
     besiegingSince?: number;
+    /** The first tick this army may push a full attack, when the target has walls. */
+    assaultFromTick?: number;
     /** The caravans travelling with it (PR 25), and what they carry — 0 and nothing for a stack with none. */
     caravans: number;
     cargo: KingdomBuilderResources;
@@ -316,7 +319,11 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
             nodeId: village.nodeId,
             ...(isScouted(village.nodeId) ? { garrison: garrisonOf(village.garrison) } : {}),
         })),
-        armies,
+        armies: armies.map(army => {
+            if (army.besiegingSince === undefined) return army;
+            const target = settlements.find(settlement => settlement.nodeId === army.targetNodeId);
+            return target ? { ...army, assaultFromTick: assaultFromTick(army.besiegingSince, target.tiles ?? []) } : army;
+        }),
         sight,
         sightings,
         battles,

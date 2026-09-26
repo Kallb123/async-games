@@ -6,7 +6,7 @@ import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
 import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources, type KingdomBuilderResourceType } from "./resources";
 import { outputPerLevelFor, type KingdomBuilderCatchment } from "./worldgen/catchment";
 
-export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks", "market", "tavern"] as const;
+export const KINGDOM_BUILDER_PROTOTYPE_BUILDINGS = ["lumber-camp", "quarry", "farm", "mine", "barracks", "market", "tavern", "walls"] as const;
 export type KingdomBuilderPrototypeBuilding = typeof KINGDOM_BUILDER_PROTOTYPE_BUILDINGS[number];
 /** Everything with a price: what can be built, and the town centre, which is only ever raised a level (PR 24). */
 export type KingdomBuilderUpgradableBuilding = KingdomBuilderPrototypeBuilding | "town-centre";
@@ -19,14 +19,15 @@ const TOWN_CENTRE_MAX_LEVEL = 2;
  * (§4.2), and the highest level of each: the barracks, whose levels unlock
  * units, the market (PR 25), whose levels better its rate, the town centre,
  * whose second level trains settlers (§4.4, PR 24), and the tavern (PR 26),
- * whose levels each recruit one more commander. Everything else is built
- * once, at level one.
+ * whose levels each recruit one more commander, and walls, whose three levels
+ * each delay a full attack. Everything else is built once, at level one.
  */
 export const KINGDOM_BUILDER_UPGRADABLE_BUILDINGS: Partial<Record<KingdomBuilderUpgradableBuilding, number>> = {
     barracks: 3,
     market: economy.marketRates.length,
     "town-centre": TOWN_CENTRE_MAX_LEVEL,
     tavern: TOWN_CENTRE_MAX_LEVEL,
+    walls: economy.wallCosts.length,
 };
 
 /** The level of a settlement's one building of this type, or 0 without one. */
@@ -73,9 +74,11 @@ export function buildTicksFor(targetLevel: number): number {
 
 // The prices, the first settlement's stockpile and the town centre's trickle
 // live in economy.ts, so a tuning pass edits numbers, not logic.
-const LEVEL_ONE_COSTS: Record<KingdomBuilderUpgradableBuilding, KingdomBuilderResources> = Object.fromEntries(
-    [...KINGDOM_BUILDER_PROTOTYPE_BUILDINGS, "town-centre" as const].map(type => [type, tunedResources(`buildingCosts.${type}`, economy.buildingCosts[type])]),
-) as Record<KingdomBuilderUpgradableBuilding, KingdomBuilderResources>;
+type RegularBuilding = Exclude<KingdomBuilderUpgradableBuilding, "walls">;
+const REGULAR_BUILDINGS = [...KINGDOM_BUILDER_PROTOTYPE_BUILDINGS.filter(type => type !== "walls"), "town-centre" as const] as RegularBuilding[];
+const LEVEL_ONE_COSTS: Record<RegularBuilding, KingdomBuilderResources> = Object.fromEntries(
+    REGULAR_BUILDINGS.map(type => [type, tunedResources(`buildingCosts.${type}`, economy.buildingCosts[type])]),
+) as Record<RegularBuilding, KingdomBuilderResources>;
 
 /** Resources a player's first settlement is founded with; later ones start empty. */
 export const KINGDOM_BUILDER_STARTING_STOCKPILE: KingdomBuilderResources = tunedResources("startingStockpile", economy.startingStockpile);
@@ -84,10 +87,16 @@ export const KINGDOM_BUILDER_STARTING_STOCKPILE: KingdomBuilderResources = tuned
 export const KINGDOM_BUILDER_TOWN_CENTRE_TRICKLE: KingdomBuilderResources = tunedResources("townCentreTrickle", economy.townCentreTrickle);
 
 /**
- * The whole price of raising a building to a level, paid when it is queued:
- * the level-one price × the target level, linear like `buildTicksFor`.
+ * The whole price of raising a building to a level, paid when it is queued.
+ * Most use the level-one price × the target level; walls instead have a
+ * material-specific price for each level.
  */
 export function buildingCostFor(type: KingdomBuilderUpgradableBuilding, targetLevel: number): KingdomBuilderResources {
+    if (type === "walls") {
+        const cost = economy.wallCosts[targetLevel - 1];
+        if (!cost) throw new RangeError(`Walls have no level ${targetLevel}`);
+        return tunedResources(`wallCosts.${targetLevel}`, cost);
+    }
     const levelOne = LEVEL_ONE_COSTS[type];
     return resourcesOf(Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [resource, levelOne[resource] * targetLevel])));
 }

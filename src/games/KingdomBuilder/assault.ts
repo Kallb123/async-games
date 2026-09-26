@@ -14,7 +14,7 @@ import { KINGDOM_BUILDER_NO_PUSH_COMMANDER, hasCommander } from "./commanders";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattle } from "./combat";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
-import { combinedUnits } from "./siege";
+import { assaultFromTick, combinedUnits } from "./siege";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
 
@@ -52,21 +52,21 @@ interface Fought {
  * One battle: claimed, fought and saved in one transaction, and kept for both
  * sides to read. The reply is the caller's view, whose `battles` begin with it.
  */
-async function runBattle(worldId: string, userId: string, kind: "push" | "sally", fight: (session: ClientSession) => Promise<Fought>): Promise<KingdomBuilderWorldView> {
+async function runBattle(worldId: string, userId: string, kind: "push" | "sally", fight: (session: ClientSession, tick: number) => Promise<Fought>): Promise<KingdomBuilderWorldView> {
     await mongoose.connection.transaction(async session => {
         const tick = await claimBattle(worldId, session);
-        const { battle, ...fought } = await fight(session);
+        const { battle, ...fought } = await fight(session, tick);
         await KingdomBuilderBattleModel.create([{ worldId, tick, kind, ...fought, rounds: battle.rounds }], { session });
     });
     return worldView(worldId, userId);
 }
 
-type Camp = { _id: Types.ObjectId; ownerId: string; units: KingdomBuilderGarrison; caravans?: number; cargo?: Partial<KingdomBuilderResources> };
+type Camp = { _id: Types.ObjectId; ownerId: string; units: KingdomBuilderGarrison; besiegingSince: number; caravans?: number; cargo?: Partial<KingdomBuilderResources> };
 
 /** The armies camped at a settlement that fought as one side, oldest first so their survivors are shared the same way every time. */
 function campsAt(filter: Record<string, unknown>, session: ClientSession) {
     return KingdomBuilderArmyModel.find({ ...filter, besiegingSince: { $ne: null } })
-        .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1, caravans: 1, cargo: 1 }).session(session).lean<Camp[]>();
+        .sort({ createdAt: 1, _id: 1 }).select({ ownerId: 1, units: 1, besiegingSince: 1, caravans: 1, cargo: 1 }).session(session).lean<Camp[]>();
 }
 
 /** Caravans and their load, left behind by an escort that fell (§4.7). */
@@ -128,12 +128,17 @@ export async function pushAttack(worldId: string, userId: string, armyId: unknow
         throw new KingdomBuilderPersistenceError("NO_SIEGE", "This army isn't besieging anywhere");
     }
 
-    return runBattle(worldId, userId, "push", async session => {
+    return runBattle(worldId, userId, "push", async (session, tick) => {
         const target = await KingdomBuilderSettlementModel.findOne({ worldId, nodeId: army.targetNodeId, ownerId: { $ne: userId } })
-            .select({ ownerId: 1, garrison: 1 }).session(session).lean();
+            .select({ ownerId: 1, garrison: 1, tiles: 1 }).session(session).lean();
         const attackers = await campsAt({ worldId, ownerId: userId, targetNodeId: army.targetNodeId }, session);
-        if (!target || !attackers.some(attacker => attacker._id.toString() === armyId)) {
+        const attackingArmy = attackers.find(attacker => attacker._id.toString() === armyId);
+        if (!target || !attackingArmy) {
             throw new KingdomBuilderPersistenceError("NO_SIEGE", "The siege ended before the attack could go in");
+        }
+        const attackTick = assaultFromTick(attackingArmy.besiegingSince, target.tiles ?? []);
+        if (tick < attackTick) {
+            throw new KingdomBuilderPersistenceError("ARMY_BUSY", `The walls hold off a full attack until tick ${attackTick}`);
         }
         // One commander among the caller's besiegers leads them all in (§6.5); scouts alone can watch, not push.
         if (!hasCommander(attackers)) throw new KingdomBuilderPersistenceError("ARMY_BUSY", KINGDOM_BUILDER_NO_PUSH_COMMANDER);

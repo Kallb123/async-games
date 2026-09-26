@@ -264,7 +264,7 @@ describe("Kingdom Builder world view", () => {
         function setUp(rivalGarrison: object = { militia: 24680 }) {
             mockSettlements([
                 { _id: new Types.ObjectId(), ownerId: "owner", nodeId: "start", tiles: [], garrison: { militia: 1 } },
-                { _id: new Types.ObjectId(), ownerId: "rival", nodeId: "other", tiles: [], garrison: rivalGarrison },
+                { _id: new Types.ObjectId(), ownerId: "rival", nodeId: "other", tiles: [{ position: 0, building: { type: "walls", level: 2 } }], garrison: rivalGarrison },
             ]);
             mockWorld({
                 hostId: "owner", terrainField: FIELD, nodes: NODES,
@@ -369,6 +369,7 @@ describe("Kingdom Builder world view", () => {
             expect(view.settlements.find(settlement => settlement.isMine)?.siege).toEqual({ sinceTick: 7, fullFromTick: 12 });
             expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("siege");
             expect(view.armies[0].besiegingSince).toBe(3);
+            expect(view.armies[0].assaultFromTick).toBe(11);
             // The camps are read at the viewer's own towns only, and only whose each is and since when.
             expect(find).toHaveBeenCalledWith({ worldId, targetNodeId: { $in: ["start"] }, besiegingSince: { $ne: null } });
         });
