@@ -346,6 +346,12 @@ button {
     padding: 0;
     white-space: nowrap;
 }
+/* More than one action on a heading (Copy beside Refresh) sits as one group
+   on the right rather than being spread apart by the head's space-between. */
+.ag-section-actions {
+    display: inline-flex;
+    gap: 12px;
+}
 /* A section action that is a single "?" — an explainer for the section, not a
    link out of it. Drawn as a circle so one character still reads as a control
    and is big enough to hit with a thumb. */
