@@ -32,6 +32,7 @@ import {
     type KingdomBuilderTrainingOrder,
     type KingdomBuilderUnitType,
 } from "@/games/KingdomBuilder/units";
+import { KINGDOM_BUILDER_COMBAT_STATS } from "@/games/KingdomBuilder/combat";
 import { KINGDOM_BUILDER_WALL_DELAY_TICKS_PER_LEVEL, describeSiege } from "@/games/KingdomBuilder/siege";
 import { formatTicks } from "@/games/KingdomBuilder/tick";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -381,6 +382,7 @@ function UnitRow({ unitType, level, resources, queueFull, locked, pending, disab
     onTrain: () => void;
 }) {
     const unit = KINGDOM_BUILDER_UNITS[unitType];
+    const stats = KINGDOM_BUILDER_COMBAT_STATS[unitType];
     const trainTicks = trainingTicksFor(unitType, level);
     const price = priceFor(unit.cost, resources);
     const blocker = trainTicks === null ? `Level ${unit.trainedAt.level}` : locked ? "Locked" : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
@@ -390,7 +392,7 @@ function UnitRow({ unitType, level, resources, queueFull, locked, pending, disab
             name={unit.name}
             cost={trainTicks === null
                 ? `${unit.role} · needs a level ${unit.trainedAt.level} ${BUILDING_DETAILS[unit.trainedAt.building].name.toLowerCase()}`
-                : locked ?? `${price.label} · ${formatTicks(trainTicks)} · ${unit.speed}`}
+                : locked ?? `${price.label} · ${formatTicks(trainTicks)} · ${stats.health} HP · ${stats.attack} attack · ${stats.defence} defence · ${unit.speed} move`}
             tag={pending ? "Queuing…" : blocker ?? "Train"}
             tagMuted={!!blocker}
             disabled={!!blocker || disabled}

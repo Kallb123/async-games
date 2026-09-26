@@ -46,7 +46,7 @@ describe("Kingdom Builder units", () => {
     it("recruits the commander at a tavern, faster at each level above the first, and never counts it as an escort", () => {
         const commander = KINGDOM_BUILDER_UNITS.commander;
         expect(commander.trainedAt).toEqual({ building: "tavern", level: 1 });
-        expect(commander.speed).toBe("fast");
+        expect(commander.speed).toBe(10);
         expect(commander.leader).toBe(true);
         expect(trainingTicksFor("commander", 0)).toBeNull();
         expect(trainingTicksFor("commander", 1)).toBe(4);
@@ -81,7 +81,7 @@ describe("Kingdom Builder units", () => {
     });
 
     it("reads a missing garrison as empty", () => {
-        expect(garrisonOf(undefined)).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
+        expect(garrisonOf(undefined)).toEqual({ militia: 0, scout: 0, spearman: 0, archer: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
         // A garrison or an army stored before commanders existed has no count for them.
         expect(garrisonOf({ militia: 3, settler: 1 }).commander).toBe(0);
         expect(garrisonOf({ cavalry: 2 }).cavalry).toBe(2);

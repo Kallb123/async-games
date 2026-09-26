@@ -351,7 +351,7 @@ describe("Kingdom Builder training", () => {
             },
             { new: true },
         );
-        expect(view.garrison).toEqual({ militia: 0, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
+        expect(view.garrison).toEqual({ militia: 0, scout: 0, spearman: 0, archer: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
     });
 
     it("reports a lost race instead of overdrawing", async () => {

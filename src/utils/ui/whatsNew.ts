@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Kingdom Builder armies have new battle lines",
+                detail: "Train archers and spearmen, build armies around five distinct stat lines, and fight through ordered volleys, attacker-first horsemen charges and spear interceptions.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Outbreak event cards work on a teammate's turn",
                 detail: "Play Airlift, Government Grant, One Quiet Night or Resilient Population while a teammate is taking their turn, so the whole crew can respond without waiting for the turn to come around. Forecast still stays on its holder's turn while they arrange the deck.",
                 game: "outbreak",
@@ -116,11 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Take it back",
                 detail: "Placed a settlement or a road you didn't mean to in Settlements & Cities? Tap Undo and put it where you meant. And if that was the last thing you could do, your turn now waits ten seconds before it passes, so you get the chance.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Race Cars now starts with a roll off the line",
-                detail: "Round one is the start, and it is one d20 a driver instead of a gear. Roll a 1 and the engine bogs down: no gear, no movement, and you are still in neutral when the race comes back round to you. Roll 2 to 16 and you get away cleanly in first, rolling its die for the move as usual. Roll 17 or more and it is a flying start — four spaces with no roll at all. Everybody who gets away is in first and can change gear from round two, and that is when normal racing begins. Out of neutral there is now one gear to take rather than two, so a car that bogged down — or spun — climbs the ladder from first like everybody else.",
-                game: "racecars",
             },
         ],
     },

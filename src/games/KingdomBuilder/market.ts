@@ -22,7 +22,7 @@ export const KINGDOM_BUILDER_CARAVAN_COST: KingdomBuilderResources = tunedResour
 export const KINGDOM_BUILDER_CARAVAN_CAPACITY = tunedCount("caravanCapacity", economy.caravanCapacity);
 export const KINGDOM_BUILDER_TRADE_OFFER_LIMIT = tunedCount("tradeOfferLimit", economy.tradeOfferLimit);
 /** Caravans are ox-carts: whatever they travel with goes at a slow stack's pace (§6.2). */
-export const KINGDOM_BUILDER_CARAVAN_SPEED: KingdomBuilderSpeed = "slow";
+export const KINGDOM_BUILDER_CARAVAN_SPEED: KingdomBuilderSpeed = 2;
 /** The most of one resource a request may name — far past any store, so it only turns away nonsense. */
 export const KINGDOM_BUILDER_MAX_AMOUNT = 100_000;
 

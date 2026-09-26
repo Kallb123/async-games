@@ -112,7 +112,7 @@ describe("Kingdom Builder tick engine", () => {
         expect(result.armies).toEqual([
             { ...army("elsewhere"), travelled: 2, arrivedAtTick: 5 },
             { ...army("site", "rival"), travelled: 2, arrivedAtTick: 5, besiegingSince: 5 },
-            { ...army("site"), pathCosts: [0, 20], travelled: 2 },
+            { ...army("site"), pathCosts: [0, 20], travelled: 5 },
         ]);
         expect(input.armies[0].travelled).toBe(0);
     });

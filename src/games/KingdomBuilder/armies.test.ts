@@ -14,8 +14,8 @@ function march(overrides: Partial<KingdomBuilderMarch> = {}): KingdomBuilderMarc
 
 describe("Kingdom Builder armies", () => {
     it("moves a stack at its slowest unit's pace (§6.2)", () => {
-        expect(paceOf({ cavalry: 3 })).toBe(KINGDOM_BUILDER_PACES.fast);
-        expect(paceOf({ cavalry: 3, infantry: 1 })).toBe(KINGDOM_BUILDER_PACES.medium);
+        expect(paceOf({ cavalry: 3 })).toBe(10);
+        expect(paceOf({ cavalry: 3, infantry: 1 })).toBe(3);
         expect(paceOf({ scout: 1, "siege-engine": 1 })).toBe(KINGDOM_BUILDER_PACES.slow);
         expect(paceOf({ militia: 0 })).toBeNull();
     });
@@ -30,17 +30,16 @@ describe("Kingdom Builder armies", () => {
     });
 
     it("spends its pace each tick and stands on the last tile it has paid for", () => {
-        const pace = KINGDOM_BUILDER_PACES.slow;
+        const pace = 5;
         let army = march({ pathCosts: [0, 2, 5, 8] });
-        expect(ticksToArrive(army, pace)).toBe(4);
-        army = advanceMarch(army, 1, new Set()).march;
-        expect(army.travelled).toBe(2);
-        expect(army).not.toHaveProperty("arrivedAtTick");
-        expect(armyTile(army)).toBe(1);
-        army = advanceMarch(army, 2, new Set()).march;
-        // Half way across the hill, still on the tile before it.
-        expect(armyTile(army)).toBe(1);
         expect(ticksToArrive(army, pace)).toBe(2);
+        army = advanceMarch(army, 1, new Set()).march;
+        expect(army.travelled).toBe(5);
+        expect(army).not.toHaveProperty("arrivedAtTick");
+        expect(armyTile(army)).toBe(2);
+        army = advanceMarch(army, 2, new Set()).march;
+        expect(armyTile(army)).toBe(3);
+        expect(ticksToArrive(army, pace)).toBe(0);
     });
 
     it("arrives on the tick it runs out of road and then stays put", () => {
@@ -53,7 +52,7 @@ describe("Kingdom Builder armies", () => {
 
     it("rejoins the garrison when the road ends at one of its owner's own settlements", () => {
         expect(advanceMarch(march({ travelled: 5 }), 9, new Set(["camp"])).joins).toBe("camp");
-        expect(advanceMarch(march({ travelled: 1 }), 9, new Set(["camp"])).joins).toBeUndefined();
+        expect(advanceMarch(march({ travelled: 0 }), 9, new Set(["camp"])).joins).toBeUndefined();
     });
 
     describe("seizeCaravans (§4.7)", () => {

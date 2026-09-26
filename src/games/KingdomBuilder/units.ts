@@ -8,26 +8,24 @@ import { tunedResources } from "./resources";
  * (§4.4, PR 24), which the town centre trains, and the commander (§6.5, PR 26),
  * which the tavern recruits.
  */
-export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "infantry", "cavalry", "siege-engine", "settler", "commander"] as const;
+export const KINGDOM_BUILDER_UNIT_TYPES = ["militia", "scout", "spearman", "archer", "infantry", "cavalry", "siege-engine", "settler", "commander"] as const;
 export type KingdomBuilderUnitType = typeof KINGDOM_BUILDER_UNIT_TYPES[number];
 
 export type KingdomBuilderGarrison = Record<KingdomBuilderUnitType, number>;
 
-export type KingdomBuilderSpeed = "slow" | "medium" | "fast";
+export type KingdomBuilderSpeed = number;
 
 /**
- * How much path cost (tilePath.ts) an army spends a tick at each speed (§6.2).
- * A straight step over grass costs 2 — a tile is 2 world units across — so a
- * slow stack walks open ground at a tile a tick, 15 minutes a tile, and a road
- * or a mountain pass scales that the way its weight says. First-pass numbers (§12).
+ * Named pace landmarks retained for terrain and movement tests. Unit speeds
+ * are numeric path-cost points spent per tick (§6.2).
  */
-export const KINGDOM_BUILDER_PACES: Record<KingdomBuilderSpeed, number> = { slow: 2, medium: 3, fast: 4 };
+export const KINGDOM_BUILDER_PACES = { slow: 2, medium: 5, fast: 10 } as const;
 
 export interface KingdomBuilderUnitDefinition {
     name: string;
     icon: string;
     role: string;
-    /** §6.2: a stack moves at the pace of its slowest unit — `KINGDOM_BUILDER_PACES` over the tiles (§3.8). */
+    /** §6.2: path-cost points spent per tick; a stack moves at its slowest unit's speed. */
     speed: KingdomBuilderSpeed;
     /** Paid in full when the unit is queued. Priced in economy.ts, beside the buildings. */
     cost: KingdomBuilderResources;
@@ -57,31 +55,39 @@ export interface KingdomBuilderUnitDefinition {
 
 export const KINGDOM_BUILDER_UNITS: Record<KingdomBuilderUnitType, KingdomBuilderUnitDefinition> = {
     militia: {
-        name: "Militia", icon: "🛡️", role: "Cheap garrison filler", speed: "slow",
+        name: "Militia", icon: "🛡️", role: "Cheap garrison filler", speed: 5,
         cost: tunedResources("unitCosts.militia", economy.unitCosts.militia), trainTicks: 2, trainedAt: { building: "barracks", level: 1 },
     },
     scout: {
-        name: "Scout", icon: "🔭", role: "Sees farther, and counts a rival town's garrison", speed: "fast",
+        name: "Scout", icon: "🔭", role: "Sees farther, and counts a rival town's garrison", speed: 10,
         cost: tunedResources("unitCosts.scout", economy.unitCosts.scout), trainTicks: 2, trainedAt: { building: "barracks", level: 1 },
     },
+    spearman: {
+        name: "Spearmen", icon: "🔱", role: "Intercept horsemen before they charge", speed: 5,
+        cost: tunedResources("unitCosts.spearman", economy.unitCosts.spearman), trainTicks: 2, trainedAt: { building: "barracks", level: 1 },
+    },
+    archer: {
+        name: "Archers", icon: "🏹", role: "Fire first and target spearmen", speed: 5,
+        cost: tunedResources("unitCosts.archer", economy.unitCosts.archer), trainTicks: 3, trainedAt: { building: "barracks", level: 2 },
+    },
     infantry: {
-        name: "Infantry", icon: "⚔️", role: "The main attacking stack", speed: "medium",
+        name: "Infantry", icon: "⚔️", role: "The main attacking stack", speed: 3,
         cost: tunedResources("unitCosts.infantry", economy.unitCosts.infantry), trainTicks: 3, trainedAt: { building: "barracks", level: 2 },
     },
     cavalry: {
-        name: "Cavalry", icon: "🐎", role: "Fast raids and reinforcement", speed: "fast",
+        name: "Horsemen", icon: "🐎", role: "Charge archers after spearmen intercept", speed: 10,
         cost: tunedResources("unitCosts.cavalry", economy.unitCosts.cavalry), trainTicks: 4, trainedAt: { building: "barracks", level: 3 },
     },
     "siege-engine": {
-        name: "Siege engine", icon: "🪓", role: "Breaks walls", speed: "slow",
+        name: "Siege engine", icon: "🪓", role: "Breaks walls", speed: 2,
         cost: tunedResources("unitCosts.siege-engine", economy.unitCosts["siege-engine"]), trainTicks: 6, trainedAt: { building: "barracks", level: 3 },
     },
     settler: {
-        name: "Settler", icon: "🧺", role: "Founds a new town on an open site", speed: "slow",
+        name: "Settler", icon: "🧺", role: "Founds a new town on an open site", speed: 2,
         cost: tunedResources("unitCosts.settler", economy.unitCosts.settler), trainTicks: 4, trainedAt: { building: "town-centre", level: 2 }, civilian: true,
     },
     commander: {
-        name: "Commander", icon: "🎖️", role: "Leads an army out of a settlement", speed: "fast",
+        name: "Commander", icon: "🎖️", role: "Leads an army out of a settlement", speed: 10,
         cost: tunedResources("unitCosts.commander", economy.unitCosts.commander), trainTicks: 4, trainedAt: { building: "tavern", level: 1 }, leader: true,
     },
 };

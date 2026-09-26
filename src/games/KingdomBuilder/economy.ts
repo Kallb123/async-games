@@ -72,6 +72,8 @@ export const KINGDOM_BUILDER_ECONOMY = {
     unitCosts: {
         militia: { wood: 10, iron: 5, wheat: 5 },
         scout: { wood: 8, iron: 4, wheat: 3 },
+        spearman: { wood: 10, iron: 10, wheat: 5 },
+        archer: { wood: 15, iron: 5, wheat: 5 },
         infantry: { wood: 10, iron: 15, wheat: 8 },
         cavalry: { wood: 20, iron: 25, wheat: 15 },
         "siege-engine": { wood: 40, stone: 20, iron: 15, wheat: 10 },
