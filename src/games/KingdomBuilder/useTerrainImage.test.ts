@@ -42,11 +42,13 @@ describe("the v2 terrain compositor model", () => {
     });
 
     it("places the padded image so its ground footprint remains in world coordinates", () => {
-        const bounds = terrainImageBounds(field("gggg"));
-        expect(bounds.x).toBeLessThan(0);
-        expect(bounds.y).toBeLessThan(0);
-        expect(bounds.x + 29 * 2 / 160).toBeCloseTo(0);
-        expect(bounds.y + 107 * 2 / 113).toBeCloseTo(0);
+        // The kit's dims(32): a 40x28 footprint with 7px sides, 27px above and 3px below.
+        const bounds = terrainImageBounds(field("gggg"), { Wt: 40, Ht: 28, PX: 7, HR: 27, BP: 3 });
+        expect(bounds.x).toBeCloseTo(-7 * 2 / 40);
+        expect(bounds.y).toBeCloseTo(-27 * 2 / 28);
+        // Two 2-unit tiles plus the padding either side, in world units.
+        expect(bounds.width).toBeCloseTo(4 + 14 * 2 / 40);
+        expect(bounds.height).toBeCloseTo(4 + 30 * 2 / 28);
     });
 
     it("keys overlays by content so polling does not redraw an unchanged map", () => {

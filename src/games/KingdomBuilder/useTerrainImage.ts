@@ -4,6 +4,11 @@
 // sprite sheet. It composes the ground first and overhanging mountains and
 // trees second, once per world, then gives the SVG one raster so panning, fog
 // and the node/route layers stay in the world-coordinate system they use.
+//
+// It paints at 32px a tile, not the kit's native 128. A world is 100x70 tiles,
+// and at 128 the one raster came to 16058x8031 — eight times the canvas area
+// iOS Safari allows, and ~500MB of per-tile canvases on top — so phones drew
+// no map at all. At 32 it is ~4000x2000, the old sprite-sheet map's detail.
 
 import { useEffect, useMemo } from "react";
 
@@ -12,11 +17,8 @@ import { overlayCodesByTile, type OverlayPlacement } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
 
 const ART_ROOT = "/art/kingdombuilder/v2";
-const TILE_WIDTH = 160;
-const TILE_HEIGHT = 113;
-const PAD_X = 29;
-const GROUND_Y = 107;
-const PAD_BOTTOM = 14;
+/** The kit's tile resolution; every pixel size below follows from it via the kit's own `dims()`. */
+const TILE_RESOLUTION = 32;
 
 export const TERRAIN_KEYS = ["sea", "lake", "coast", "grass", "wheat", "hills", "forest", "mountain"] as const;
 export type TerrainKey = typeof TERRAIN_KEYS[number];
@@ -97,6 +99,20 @@ export function terrainTileSpec(field: TerrainField, overlayByTile: ReadonlyMap<
     };
 }
 
+/** A tile's ground footprint and the overhang padding around the ground grid, in canvas pixels. */
+export interface TerrainKitDims {
+    /** Ground footprint of one tile. */
+    Wt: number;
+    Ht: number;
+    /** Padding left and right, above (for peaks and trees) and below. */
+    PX: number;
+    HR: number;
+    BP: number;
+}
+
+/** The kit's finished world raster, with the dimensions it was drawn at. */
+type ComposedTerrain = { canvas: HTMLCanvasElement } & TerrainKitDims;
+
 interface TerrainTilesApi {
     compose(
         resolution: number,
@@ -104,7 +120,9 @@ interface TerrainTilesApi {
         rows: number,
         tileAt: (col: number, row: number) => readonly [readonly number[], number, number, boolean, boolean],
         options: { grid: boolean },
-    ): { canvas: HTMLCanvasElement };
+    ): ComposedTerrain;
+    /** Frees every cached per-tile canvas. */
+    clearCache(): void;
 }
 
 declare global {
@@ -132,7 +150,7 @@ function loadTerrainKit(): Promise<TerrainTilesApi | null> {
     return kitPromise;
 }
 
-async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<HTMLCanvasElement | null> {
+async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<ComposedTerrain | null> {
     if (!terrainFieldMatchesGrid(field)) {
         if (!loggedFieldMismatch) {
             loggedFieldMismatch = true;
@@ -145,20 +163,30 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
     if (!kit) return null;
     const overlayByTile = overlayCodesByTile(overlays);
 
-    return kit.compose(128, field.columns, field.rows, (col, row) => {
-        const spec = terrainTileSpec(field, overlayByTile, col, row);
-        return [spec.corners, spec.variant, spec.river, spec.summit, spec.bridge];
-    }, { grid: false }).canvas;
+    try {
+        return kit.compose(TILE_RESOLUTION, field.columns, field.rows, (col, row) => {
+            const spec = terrainTileSpec(field, overlayByTile, col, row);
+            return [spec.corners, spec.variant, spec.river, spec.summit, spec.bridge];
+        }, { grid: false });
+    } catch (error) {
+        console.warn("Kingdom Builder: terrain generator failed to draw the map.", error);
+        return null;
+    } finally {
+        // The finished raster is all the map needs; the per-tile canvases
+        // behind it would otherwise hold their memory until the page closes.
+        kit.clearCache();
+    }
 }
 
-export function terrainImageBounds(field: TerrainField): NonNullable<TerrainImage["bounds"]> {
-    const scaleX = field.tileSize / TILE_WIDTH;
-    const scaleY = field.tileSize / TILE_HEIGHT;
+/** Where the padded raster sits in world units, so its ground grid lines up with the terrain field. */
+export function terrainImageBounds(field: TerrainField, dims: TerrainKitDims): NonNullable<TerrainImage["bounds"]> {
+    const scaleX = field.tileSize / dims.Wt;
+    const scaleY = field.tileSize / dims.Ht;
     return {
-        x: -PAD_X * scaleX,
-        y: -GROUND_Y * scaleY,
-        width: (field.columns * TILE_WIDTH + 2 * PAD_X) * scaleX,
-        height: (field.rows * TILE_HEIGHT + GROUND_Y + PAD_BOTTOM) * scaleY,
+        x: -dims.PX * scaleX,
+        y: -dims.HR * scaleY,
+        width: (field.columns * dims.Wt + 2 * dims.PX) * scaleX,
+        height: (field.rows * dims.Ht + dims.HR + dims.BP) * scaleY,
     };
 }
 
@@ -166,18 +194,21 @@ export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
     const field = world.terrainField;
     const fieldKey = field ? `${field.columns}x${field.rows}@${field.tileSize}:${field.codes}` : "";
     const overlayKey = useMemo(() => overlaysKey(world.overlays), [world.overlays]);
-    const [href, setHref] = useResettingState<string | null>(null, `${fieldKey}::${overlayKey}`);
+    const [image, setImage] = useResettingState<Required<TerrainImage> | null>(null, `${fieldKey}::${overlayKey}`);
 
     useEffect(() => {
         if (!field) return;
         let cancelled = false;
         let objectUrl: string | null = null;
-        compositeTerrain(field, world.overlays ?? []).then(canvas => {
-            if (cancelled || !canvas) return;
+        compositeTerrain(field, world.overlays ?? []).then(composed => {
+            if (cancelled || !composed) return;
+            const { canvas } = composed;
             canvas.toBlob(blob => {
+                // The blob is a copy; release the raster's pixels straight away.
+                canvas.width = canvas.height = 0;
                 if (cancelled || !blob) return;
                 objectUrl = URL.createObjectURL(blob);
-                setHref(objectUrl);
+                setImage({ href: objectUrl, bounds: terrainImageBounds(field, composed) });
             });
         });
         return () => {
@@ -188,5 +219,5 @@ export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fieldKey, overlayKey]);
 
-    return { href, ...(field ? { bounds: terrainImageBounds(field) } : {}) };
+    return image ?? { href: null };
 }

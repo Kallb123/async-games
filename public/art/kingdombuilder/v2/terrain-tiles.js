@@ -493,5 +493,14 @@ function genMap(W, H, seed) {
 }
 
 
-window.TerrainTiles = { TYPES, PAIRS, render, url, cornersFor, genMap, compose, dims };
+// Added for the app (not in the art-masters original): drop every cached tile and
+// shrink its canvases to 0x0 so the browser frees their backing stores at once —
+// iOS Safari counts undisposed canvases against a hard memory cap until GC runs.
+function clearCache() {
+  cache.forEach(cv => {
+    [cv.groundLayer, cv.featLayer, cv].forEach(layer => { layer.width = layer.height = 0; });
+  });
+  cache.clear(); urls.clear();
+}
+window.TerrainTiles = { TYPES, PAIRS, render, url, cornersFor, genMap, compose, dims, clearCache };
 })();
