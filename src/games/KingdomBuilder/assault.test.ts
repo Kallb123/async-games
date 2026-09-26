@@ -72,14 +72,13 @@ describe("pushAttack", () => {
     it("hands each attacking army back its share of the survivors, and disbands one left with none", async () => {
         besieging({ militia: 5 }, [{ _id: armyId, ownerId: "attacker", units: { infantry: 3, commander: 1 } }, { _id: otherArmyId, ownerId: "attacker", units: { scout: 1 } }]);
         const battle = resolveBattle({ infantry: 3, scout: 1, commander: 1 }, { militia: 5 }, { fortified: true });
-        // The infantry and their commander win without a loss, but the scout soaks its share of the blows and falls.
-        expect(battle.attacker).toEqual(garrisonOf({ infantry: 3, commander: 1 }));
+        expect(battle.attacker).toEqual(garrisonOf({ infantry: 2, scout: 1, commander: 1 }));
 
         await pushAttack(worldId, "attacker", armyId.toString());
 
         expect(KingdomBuilderArmyModel.bulkWrite).toHaveBeenCalledWith([
-            { updateOne: { filter: { _id: armyId, worldId }, update: { $set: { units: garrisonOf({ infantry: 3, commander: 1 }) } } } },
-            { deleteOne: { filter: { _id: otherArmyId, worldId } } },
+            { updateOne: { filter: { _id: armyId, worldId }, update: { $set: { units: garrisonOf({ infantry: 2, commander: 1 }) } } } },
+            { updateOne: { filter: { _id: otherArmyId, worldId }, update: { $set: { units: garrisonOf({ scout: 1 }) } } } },
         ], { session });
     });
 

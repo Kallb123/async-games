@@ -138,7 +138,7 @@ describe("POST /api/cron/kingdombuilder-tick", () => {
             .mockReturnValue({ select: () => ({ session: () => ({ lean: async () => ({ currentTick: 5, nextTickAt: new Date(Date.now() - 1000) }) }) }) } as never);
         vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
         vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ session: () => ({ lean: async () => [] }) } as never);
-        const units = (militia: number) => ({ militia, scout: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
+        const units = (militia: number) => ({ militia, scout: 0, spearman: 0, archer: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 });
         vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => [
             // The caravans reach the crossroads the rival is camped at.
             { _id: "c1", worldId, ownerId: "trader", units: units(0), caravans: 2, cargo: { iron: 60 }, path: [0, 1], pathCosts: [0, 2], travelled: 0, fromNodeId: "home", targetNodeId: "crossroads" },

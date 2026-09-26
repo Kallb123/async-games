@@ -7,7 +7,6 @@ import { KINGDOM_BUILDER_CARAVAN_SPEED } from "./market";
 import { addResources, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_MILITARY_UNIT_TYPES,
-    KINGDOM_BUILDER_PACES,
     KINGDOM_BUILDER_UNITS,
     KINGDOM_BUILDER_UNIT_TYPES,
     formatUnits,
@@ -99,8 +98,8 @@ export function unitCount(units: Partial<KingdomBuilderGarrison>): number {
 export function paceOf(units: Partial<KingdomBuilderGarrison>, caravans = 0): number | null {
     const paces = KINGDOM_BUILDER_UNIT_TYPES
         .filter(unitType => (units[unitType] ?? 0) > 0)
-        .map(unitType => KINGDOM_BUILDER_PACES[KINGDOM_BUILDER_UNITS[unitType].speed]);
-    if (caravans > 0) paces.push(KINGDOM_BUILDER_PACES[KINGDOM_BUILDER_CARAVAN_SPEED]);
+        .map(unitType => KINGDOM_BUILDER_UNITS[unitType].speed);
+    if (caravans > 0) paces.push(KINGDOM_BUILDER_CARAVAN_SPEED);
     return paces.length ? Math.min(...paces) : null;
 }
 

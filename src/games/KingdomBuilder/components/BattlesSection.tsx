@@ -59,13 +59,13 @@ function detailOf(report: KingdomBuilderBattleReport): string {
 /**
  * The player's latest battles (GDD §7.6), from either side — the ones they
  * started, and the ones fought against them while they were away — each with
- * what went in, what was lost, and the fight round by round. Hidden until
+ * what went in, what was lost, and the fight casualty by casualty. Hidden until
  * there has been one.
  */
 export default function BattlesSection({ view, placeName }: BattlesSectionProps) {
     return (
         <ListSection label="Battles" isLoading={false} skeletonRows={0}
-            hint="Battles are fought out over up to six rounds, both sides striking at once. Militia stop cavalry, cavalry ride down infantry, and infantry break militia. An army at a barbarian village fights it every tick until one side is gone. Caravans and settlers with no escort are taken by any rival army that meets them, and commanders with no escort are killed. An escort that falls leaves its caravans to whoever beat it.">
+            hint="Battles open with defending archers, who target spearmen. Attacking horsemen charge next, but opposing spearmen intercept them before they hit; then the remaining spearmen, militia and infantry fight with defenders first. An army at a barbarian village fights it every tick until one side is gone. Caravans and settlers with no escort are taken by any rival army that meets them, and commanders with no escort are killed. An escort that falls leaves its caravans to whoever beat it.">
             {view.battles.map(report => (
                 <ListRow key={report.battleId} icon={report.started ? "⚔️" : "🛡️"}
                     title={titleOf(report, report.nodeId === undefined ? undefined : placeName(report.nodeId))}
@@ -73,7 +73,7 @@ export default function BattlesSection({ view, placeName }: BattlesSectionProps)
                     sub={<>
                         {detailOf(report)}
                         {report.rounds.length > 0 && <details className="ag-disclosure">
-                            <summary className="ag-hint">Round by round <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span></summary>
+                            <summary className="ag-hint">Casualty by casualty <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span></summary>
                             <ol className="ag-hint">
                                 {report.rounds.map((round, number) => (
                                     <li key={number}>{round.lost && <>You lost {unitsOrNone(round.lost)}; </>}{round.lost ? "they" : "They"} lost {unitsOrNone(round.killed)}.</li>

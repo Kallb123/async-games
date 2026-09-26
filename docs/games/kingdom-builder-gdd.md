@@ -1605,14 +1605,16 @@ this game actually has. Everything from §6 onward assumes this model.
 A small roster keeps army composition legible without becoming a spreadsheet
 exercise:
 
-| Unit | Role | Speed | Notes |
-|---|---|---|---|
-| **Militia** | Cheap defence/offence | Slow | Cost-efficient garrison filler |
-| **Infantry** | Main-line offence | Medium | The default attacking stack |
-| **Cavalry** | Fast raiding/reinforcement | Fast | Expensive; sets a stack's speed if mixed in (see below) |
-| **Siege engine** | Needed to meaningfully damage walls | Slow | An attack without one against a walled settlement mostly just fails to break in |
-| **Scout** | Reveals a target's garrison/defences before committing | Fast | Cheap, disposable, answers "is this worth attacking" |
-| **Commander** | Leads an army out of a settlement | Fast | Shipped in PR 26 (§6.5): recruited at the tavern, one per tavern level, and needed by any stack of soldiers other than scouts that leaves a town |
+| Unit | HP / attack / defence | Move | Notes |
+|---|---:|---:|---|
+| **Militia** | 5 / 2 / 2 | 5 | Cheap garrison filler; fights after spearmen |
+| **Spearmen** | 5 / 3 / 3 | 5 | Intercept horsemen before each charge and then fight each other |
+| **Archers** | 3 / 4 / 1 | 5 | Open the battle, targeting spearmen first |
+| **Infantry** | 10 / 5 / 5 | 3 | The final and toughest foot formation |
+| **Horsemen** | 20 / 10 / 8 | 10 | Charge archers first; the attacking side charges before the defending side |
+| **Siege engine** | 10 / 1 / 0 | 2 | Breaks a settlement's fortification bonus |
+| **Scout** | 3 / 1 / 0 | 10 | Reveals a target's garrison/defences before committing |
+| **Commander** | 12 / 3 / 0 | 10 | Leads an army out of a settlement |
 
 ### 6.2 Dispatch and travel time
 
@@ -1913,23 +1915,23 @@ steps.
 
 ### 7.6 Decision, and future scope
 
-> As shipped in PR 22: `combat.ts`'s `resolveBattle` fights up to six rounds,
-> both sides striking at once from what stood at the start of each. Every unit
-> has an attack and a health (militia 2/6, scout 1/3, infantry 4/10, cavalry
-> 7/12, siege engine 1/10), spreads its attack over the other side by headcount,
-> and hits harder where a counter says: militia ×2 against cavalry, cavalry ×1.5
-> against infantry, infantry ×1.5 against militia, and everything ×1.5 (cavalry
-> ×2) against siege engines. Damage too small to kill carries over to the next
-> round. A garrison fighting from its own town divides the damage it takes by
+> `combat.ts`'s `resolveBattle` fights up to six passes through fixed
+> formations. Defending archers fire first and target spearmen before damage
+> overflows elsewhere. Attacking horsemen charge next, followed by defending
+> horsemen; immediately before either charge, the opposing spearmen strike
+> those horsemen without overflow. Remaining spearmen fight defender first,
+> followed by militia and then infantry, both defender first. Earlier
+> casualties cannot make their later strike. Damage too small to kill carries
+> into the next pass. A unit's defence is added to its HP when absorbing a
+> damage pool. A garrison fighting from its own town divides the damage it takes by
 > 1.25, and each siege engine in the attacking stack takes 0.05 off that bonus —
 > the walls of §8 do not exist yet, so this is the defence siege engines break.
 > The attacker wins only by leaving the defender with nothing and something of
-> their own; both gone, or both still standing after the sixth round, holds for
-> the defender. There are no archers, so the counter triangle is between the
-> three fighting units. First-pass numbers (§12).
+> their own; both gone, or both still standing after the sixth pass, holds for
+> the defender.
 
-**Option 3 — deterministic multi-round attrition with unit type counters —
-is the combat model**, reporting results as a round-by-round log (which also
+**Deterministic ordered attrition is the combat model**, reporting results as
+a casualty-by-casualty log (which also
 gives the combat report something worth reading, addressing Option 1's
 flattest weakness without importing Option 2's async-fairness problem).
 Depth comes from scouting and composition, which a patient, less
@@ -1937,7 +1939,7 @@ numerically-dominant player can act on, rather than from a die roll neither
 side is present to see — and §6.3's fog of war is what makes that depth real
 rather than academic: without a scout, a defender's composition is
 unknown to the attacker (and vice versa) until the siege report shows what
-actually landed on either side, so guessing the counter matchup correctly is
+actually landed on either side, so guessing the formation matchup correctly is
 itself a skill test, not just arithmetic once the numbers are visible.
 
 **Option 4's small bounded randomness (±10% on effective power) is
@@ -2487,12 +2489,12 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   queue on the barracks tile. Units accumulate in a garrison; nothing can
   leave it yet.
 
-  How it landed: `units.ts` is the roster — §6.1's five units, each with a
-  cost in all three resources, a base training time, the §6.2 speed label
-  PR 19 will turn into a pace over the tiles, and the barracks level that unlocks it.
+  How it landed: `units.ts` is the roster — §6.1's units, each with a
+  resource cost, a base training time, its numeric §6.2 movement, and the
+  barracks level that unlocks it.
   "Levels" are the barracks' own: a settlement may hold one barracks, the one
   building a player can raise a level (to 3, each level taking longer to
-  build), which unlocks infantry at 2 and cavalry and the siege engine at 3
+  build), which unlocks archers and infantry at 2 and horsemen and the siege engine at 3
   and takes a tick off every unit's training for each level above the one that
   unlocked it, never below one. Training is the first thing to *spend*
   resources (§4.3): a unit's whole cost is taken when it is queued, by one
@@ -2748,8 +2750,8 @@ reduced-motion rule in `ag-theme.css` — and PR 25's `step` on the shared
   it has `travelled`, the node it set out from and the one it is bound for, and
   `arrivedAtTick` once it gets there. `armies.ts` is the pure half, shared with
   the world map so the ETA it previews is the one the tick keeps: a stack's pace
-  is its slowest unit's (`KINGDOM_BUILDER_PACES` in `units.ts` — 2, 3 and 4 path
-  cost a tick, where a straight grass step costs 2), and each tick it spends that
+  is its slowest unit's numeric movement (2–10 path cost per tick, where a
+  straight grass step costs 2), and each tick it spends that
   pace against the route, standing on the last tile it has paid for. The cost is
   fixed at dispatch, so the ETA never moves under a march. `applyTick` marches
   armies after the settlements' own work; the cron loads only the ones still on
@@ -3378,10 +3380,9 @@ guessed at here:
   what happens at zero — desertion, a combat penalty, or simply no new
   training? Armies are in the field since PR 19, which still charges nothing to
   keep one there; this wants the numbers pass beside the paces below.
-- Army paces (§6.2): first pass 2, 3 and 4 path cost a tick for slow, medium and
-  fast stacks (`KINGDOM_BUILDER_PACES`) — a slow stack crosses open grass at a
-  tile a tick (15 minutes), so a neighbour two dozen grass tiles off is six hours
-  away for militia and three for cavalry, before hills and passes. Whether that is the right scale for a
+- Army paces (§6.2): units spend their movement rating in path cost each tick —
+  a siege engine moves 2, infantry 3, militia/archers/spearmen 5, and
+  scouts/horsemen/commanders 10. Whether that is the right scale for a
   world that runs for weeks is a playtest question.
 - Overlapping catchments (§4.6): two settlements close together share tiles.
   Does a woodland tile count for both, for the nearer, or split between them?

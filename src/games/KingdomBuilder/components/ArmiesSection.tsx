@@ -97,7 +97,7 @@ export default function ArmiesSection({ endpoint, view, march, onMarchChange, pr
                     <div className="ag-list">
                         {KINGDOM_BUILDER_UNIT_TYPES.filter(unitType => (origin.garrison?.[unitType] ?? 0) > 0).map(unitType => (
                             <ListRow key={unitType} icon={KINGDOM_BUILDER_UNITS[unitType].icon} title={KINGDOM_BUILDER_UNITS[unitType].name}
-                                sub={`${origin.garrison?.[unitType]} in the garrison · ${KINGDOM_BUILDER_UNITS[unitType].speed}`}
+                                sub={`${origin.garrison?.[unitType]} in the garrison · move ${KINGDOM_BUILDER_UNITS[unitType].speed}`}
                                 action={<Stepper value={march.units[unitType]} min={0} max={origin.garrison?.[unitType] ?? 0} label={KINGDOM_BUILDER_UNITS[unitType].name.toLowerCase()}
                                     onChange={count => onMarchChange({ ...march, units: { ...march.units, [unitType]: count } })} />} />
                         ))}

@@ -86,7 +86,8 @@ describe("assaultVillages", () => {
         const result = assaultVillages([village()], home, [camp({ units: garrisonOf({ militia: 3 }) })]);
         expect(result.armies).toEqual([]);
         expect(result.villages).toEqual([{ nodeId: "village", garrison: resolveBattle({ militia: 3 }, { militia: 4 }, { fortified: true }).defender }]);
-        expect(result.villages[0].garrison.militia).toBeLessThan(4);
+        // Militia fight after the attacker's militia have fallen, so the village takes no loss.
+        expect(result.villages[0].garrison.militia).toBe(4);
     });
 
     it("keeps both sides' survivors after a stand-off, for the next tick's fight", () => {
