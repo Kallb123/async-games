@@ -1,15 +1,15 @@
 {
-  "resolution": 32,
+  "resolution": 64,
   "dims": {
-    "Wt": 40,
-    "Ht": 28,
-    "PX": 7,
-    "HR": 27,
-    "BP": 3
+    "Wt": 80,
+    "Ht": 57,
+    "PX": 14,
+    "HR": 54,
+    "BP": 7
   },
   "cell": {
-    "width": 54,
-    "height": 58
+    "width": 108,
+    "height": 118
   },
   "columns": 16,
   "cells": [

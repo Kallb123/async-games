@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import ATLAS from "./terrainAtlas.json";
-import { atlasCellName, overlaysKey, riverMask, snapCorners, TERRAIN_KEYS, terrainCornerGrid, terrainFieldMatchesGrid, terrainImageBounds, terrainTileSpec } from "./useTerrainImage";
+import { atlasCellName, overlaysKey, riverMask, snapCorners, TERRAIN_KEYS, terrainCornerGrid, terrainFieldMatchesGrid, terrainStripBounds, terrainStripRows, terrainStripSize, terrainTileSpec, MAX_STRIP_PIXELS } from "./useTerrainImage";
 import { generateWorld } from "./worldgen/generateWorld";
 import { overlayCodesByTile } from "./worldgen/overlays";
 import type { TerrainField } from "./worldgen/terrainField";
@@ -81,14 +81,42 @@ describe("the v2 terrain tile model", () => {
         expect([...missing]).toEqual([]);
     });
 
-    it("places the padded image so its ground footprint remains in world coordinates", () => {
-        // A 40x28 footprint with 7px sides, 27px above and 3px below — the sheet's own 32px tiles.
-        const bounds = terrainImageBounds(field("gggg"), { Wt: 40, Ht: 28, PX: 7, HR: 27, BP: 3 });
-        expect(bounds.x).toBeCloseTo(-7 * 2 / 40);
-        expect(bounds.y).toBeCloseTo(-27 * 2 / 28);
+    it("places a one-band map so its ground footprint remains in world coordinates", () => {
+        // An 80x57 footprint with 14px sides, 54px above and 7px below — the sheet's own 64px tiles.
+        const dims = { Wt: 80, Ht: 57, PX: 14, HR: 54, BP: 7 };
+        const world = field("gggg");
+        expect(terrainStripRows(world, dims)).toEqual([{ first: 0, count: 2 }]);
+        const bounds = terrainStripBounds(world, { first: 0, count: 2 }, dims);
+        expect(bounds.x).toBeCloseTo(-14 * 2 / 80);
+        expect(bounds.y).toBeCloseTo(-54 * 2 / 57);
         // Two 2-unit tiles plus the padding either side, in world units.
-        expect(bounds.width).toBeCloseTo(4 + 14 * 2 / 40);
-        expect(bounds.height).toBeCloseTo(4 + 30 * 2 / 28);
+        expect(bounds.width).toBeCloseTo(4 + 28 * 2 / 80);
+        expect(bounds.height).toBeCloseTo(4 + 61 * 2 / 57);
+    });
+
+    it("splits a full-size world into bands of whole rows, each under iOS Safari's canvas limit", () => {
+        const world = generateWorld("atlas-bands").terrainField;
+        const strips = terrainStripRows(world);
+        expect(strips.length).toBeGreaterThan(1);
+        // Each band starts where the one above it ends, and the last ends on the last row.
+        let next = 0;
+        for (const strip of strips) {
+            expect(strip.first).toBe(next);
+            next += strip.count;
+        }
+        expect(next).toBe(world.rows);
+        expect(MAX_STRIP_PIXELS).toBeLessThan(16_777_216);
+        for (const strip of strips) {
+            const { width, height } = terrainStripSize(world, strip);
+            expect(width * height).toBeLessThanOrEqual(MAX_STRIP_PIXELS);
+        }
+    });
+
+    it("stacks the bands so each starts on its own first row's ground", () => {
+        const world = generateWorld("atlas-bands").terrainField;
+        const [, second] = terrainStripRows(world);
+        const { Ht, HR } = ATLAS.dims;
+        expect(terrainStripBounds(world, second).y + HR * world.tileSize / Ht).toBeCloseTo(second.first * world.tileSize);
     });
 
     it("keys overlays by content so polling does not redraw an unchanged map", () => {

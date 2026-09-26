@@ -1,10 +1,11 @@
 'use client'
 
-// The v2 world art is the kit's pre-rendered tiles, shrunk to 32px a tile and
+// The v2 world art is the kit's pre-rendered tiles, shrunk to 64px a tile and
 // packed into one sheet by `npm run kb-atlas` (scripts/kingdombuilder-atlas.mjs).
 // The world is composed from that sheet once, back row first so each tile's
-// trees and peaks overlap the row behind it, and the SVG is handed one raster
-// so panning, fog and the node/route layers stay in world coordinates.
+// trees and peaks overlap the row behind it, into a few horizontal bands (one
+// canvas would be over iOS Safari's size limit), and the SVG is handed those
+// rasters so panning, fog and the node/route layers stay in world coordinates.
 //
 // The kit pre-renders a tile for one terrain or a blend of two, and rivers only
 // on grass. A world's corner grid is nudged to fit that (see
@@ -39,10 +40,16 @@ export interface TerrainImageWorld {
     overlays?: OverlayPlacement[];
 }
 
+/** One horizontal band of the drawn map. */
+export interface TerrainStrip {
+    href: string;
+    /** Placement in world units, including the transparent overhang around its rows. */
+    bounds: { x: number; y: number; width: number; height: number };
+}
+
 export interface TerrainImage {
-    href: string | null;
-    /** Placement includes the transparent overhang around the ground grid. */
-    bounds?: { x: number; y: number; width: number; height: number };
+    /** Top to bottom, in drawing order; empty until the map is drawn. */
+    strips: TerrainStrip[];
 }
 
 /** A tile's ground footprint and the overhang padding around the ground grid, in sheet pixels. */
@@ -222,26 +229,66 @@ function loadAtlas(): Promise<HTMLImageElement | null> {
     return atlasPromise;
 }
 
-async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<HTMLCanvasElement | null> {
-    if (!terrainFieldMatchesGrid(field)) {
-        if (!loggedFieldMismatch) {
-            loggedFieldMismatch = true;
-            console.warn("Kingdom Builder: terrain field length disagrees with its grid — drawing no ground layer.");
-        }
-        return null;
-    }
+/**
+ * iOS Safari refuses any canvas over 16.7M pixels, and a 100x70 world at 64px a
+ * tile is twice that, so the map is drawn as bands of whole tile rows, each on
+ * a canvas of at most half the limit.
+ */
+export const MAX_STRIP_PIXELS = 8_000_000;
 
-    const atlas = await loadAtlas();
-    if (!atlas) return null;
+/** A band's rows: `count` of them from `first`. */
+export interface StripRows {
+    first: number;
+    count: number;
+}
+
+/**
+ * How many rows a band draws: its own, plus the next one down. Two images'
+ * ground edges meeting would each come out part-transparent as the browser
+ * scales them, a hairline of board showing through; the extra row puts an
+ * opaque copy under the next band's top edge instead.
+ */
+const drawnRows = (field: TerrainField, strip: StripRows) => Math.min(strip.count + 1, field.rows - strip.first);
+
+/** A canvas's size in pixels for `rows` rows of ground plus the overhang padding around them. */
+function stripSize(field: TerrainField, rows: number, dims: TerrainTileDims): { width: number; height: number } {
+    return { width: field.columns * dims.Wt + 2 * dims.PX, height: rows * dims.Ht + dims.HR + dims.BP };
+}
+
+/** The canvas one band is drawn on, in pixels. */
+export function terrainStripSize(field: TerrainField, strip: StripRows, dims: TerrainTileDims = ATLAS.dims): { width: number; height: number } {
+    return stripSize(field, drawnRows(field, strip), dims);
+}
+
+/** Splits the map into bands of whole rows, as even as they come, each under the canvas budget. */
+export function terrainStripRows(field: TerrainField, dims: TerrainTileDims = ATLAS.dims, maxPixels = MAX_STRIP_PIXELS): StripRows[] {
+    const { width } = stripSize(field, 0, dims);
+    // One row of each band's budget goes to the copy it draws of the next band's first row.
+    const fits = Math.max(1, Math.floor((maxPixels / width - dims.HR - dims.BP) / dims.Ht) - 1);
+    const bands = Math.ceil(field.rows / fits);
+    const perBand = Math.ceil(field.rows / bands);
+    const strips: StripRows[] = [];
+    for (let first = 0; first < field.rows; first += perBand) strips.push({ first, count: Math.min(perBand, field.rows - first) });
+    return strips;
+}
+
+/** Where a band's raster sits in world units, so its ground lines up with the terrain field. */
+export function terrainStripBounds(field: TerrainField, strip: StripRows, dims: TerrainTileDims = ATLAS.dims): TerrainStrip["bounds"] {
+    const scaleX = field.tileSize / dims.Wt;
+    const scaleY = field.tileSize / dims.Ht;
+    const { width, height } = terrainStripSize(field, strip, dims);
+    return { x: -dims.PX * scaleX, y: (strip.first * dims.Ht - dims.HR) * scaleY, width: width * scaleX, height: height * scaleY };
+}
+
+/** Draws one band from the sheet, back row first so each tile's trees and peaks overlap the row behind it. */
+function drawStrip(atlas: HTMLImageElement, field: TerrainField, grid: Uint8Array, overlayByTile: ReadonlyMap<number, string>, strip: StripRows): HTMLCanvasElement | null {
     const { dims, cell, columns } = ATLAS;
     const canvas = document.createElement("canvas");
-    Object.assign(canvas, rasterSize(field, dims));
+    Object.assign(canvas, terrainStripSize(field, strip, dims));
     const context = canvas.getContext("2d");
     if (!context) return null;
-
-    const grid = terrainCornerGrid(field);
-    const overlayByTile = overlayCodesByTile(overlays);
-    for (let row = 0; row < field.rows; row++) {
+    const lastRow = strip.first + drawnRows(field, strip);
+    for (let row = strip.first; row < lastRow; row++) {
         for (let col = 0; col < field.columns; col++) {
             const name = atlasCellName(terrainTileSpec(field, grid, overlayByTile, col, row));
             const index = CELL_INDEX.get(name);
@@ -253,52 +300,69 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
                 continue;
             }
             context.drawImage(atlas, (index % columns) * cell.width, Math.floor(index / columns) * cell.height, cell.width, cell.height,
-                col * dims.Wt, row * dims.Ht, cell.width, cell.height);
+                col * dims.Wt, (row - strip.first) * dims.Ht, cell.width, cell.height);
         }
     }
     return canvas;
 }
 
-/** The composed map's size in pixels: the ground grid plus the overhang padding around it. */
-function rasterSize(field: TerrainField, dims: TerrainTileDims): { width: number; height: number } {
-    return { width: field.columns * dims.Wt + 2 * dims.PX, height: field.rows * dims.Ht + dims.HR + dims.BP };
+/** A canvas's PNG, releasing the canvas's own pixels as soon as the copy is taken. */
+function takeBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+    return new Promise(resolve => canvas.toBlob(blob => {
+        canvas.width = canvas.height = 0;
+        resolve(blob);
+    }));
 }
 
-/** Where the padded raster sits in world units, so its ground grid lines up with the terrain field. */
-export function terrainImageBounds(field: TerrainField, dims: TerrainTileDims = ATLAS.dims): NonNullable<TerrainImage["bounds"]> {
-    const scaleX = field.tileSize / dims.Wt;
-    const scaleY = field.tileSize / dims.Ht;
-    const { width, height } = rasterSize(field, dims);
-    return { x: -dims.PX * scaleX, y: -dims.HR * scaleY, width: width * scaleX, height: height * scaleY };
+/** Every band of the map as an image, drawn one at a time so only one band's canvas is ever alive. */
+async function compositeTerrain(field: TerrainField, overlays: readonly OverlayPlacement[]): Promise<{ blob: Blob; strip: StripRows }[] | null> {
+    if (!terrainFieldMatchesGrid(field)) {
+        if (!loggedFieldMismatch) {
+            loggedFieldMismatch = true;
+            console.warn("Kingdom Builder: terrain field length disagrees with its grid — drawing no ground layer.");
+        }
+        return null;
+    }
+
+    const atlas = await loadAtlas();
+    if (!atlas) return null;
+    const grid = terrainCornerGrid(field);
+    const overlayByTile = overlayCodesByTile(overlays);
+    const drawn: { blob: Blob; strip: StripRows }[] = [];
+    for (const strip of terrainStripRows(field)) {
+        const canvas = drawStrip(atlas, field, grid, overlayByTile, strip);
+        const blob = canvas && await takeBlob(canvas);
+        if (!blob) return null;
+        drawn.push({ blob, strip });
+    }
+    return drawn;
 }
 
 export function useTerrainImage(world: TerrainImageWorld): TerrainImage {
     const field = world.terrainField;
     const fieldKey = field ? `${field.columns}x${field.rows}@${field.tileSize}:${field.codes}` : "";
     const overlayKey = useMemo(() => overlaysKey(world.overlays), [world.overlays]);
-    const [href, setHref] = useResettingState<string | null>(null, `${fieldKey}::${overlayKey}`);
+    const [strips, setStrips] = useResettingState<TerrainStrip[]>([], `${fieldKey}::${overlayKey}`);
 
     useEffect(() => {
         if (!field) return;
         let cancelled = false;
-        let objectUrl: string | null = null;
-        compositeTerrain(field, world.overlays ?? []).then(canvas => {
-            if (cancelled || !canvas) return;
-            canvas.toBlob(blob => {
-                // The blob is a copy; release the raster's pixels straight away.
-                canvas.width = canvas.height = 0;
-                if (cancelled || !blob) return;
-                objectUrl = URL.createObjectURL(blob);
-                setHref(objectUrl);
-            });
+        const objectUrls: string[] = [];
+        compositeTerrain(field, world.overlays ?? []).then(drawn => {
+            if (cancelled || !drawn) return;
+            setStrips(drawn.map(({ blob, strip }) => {
+                const href = URL.createObjectURL(blob);
+                objectUrls.push(href);
+                return { href, bounds: terrainStripBounds(field, strip) };
+            }));
         });
         return () => {
             cancelled = true;
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            objectUrls.forEach(url => URL.revokeObjectURL(url));
         };
         // Stable content keys prevent polling from recompositing equal data.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fieldKey, overlayKey]);
 
-    return { href, ...(field ? { bounds: terrainImageBounds(field) } : {}) };
+    return { strips };
 }

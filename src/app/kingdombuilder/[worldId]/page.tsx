@@ -163,11 +163,11 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
-                                        {terrain.href && terrain.bounds
-                                            // The kit's 45° tiles are 40x28px but the world's are square, so
-                                            // the raster has to stretch to its bounds: the default "meet"
+                                        {terrain.strips.length > 0
+                                            // The kit's 45° tiles are wider than tall but the world's are square,
+                                            // so each band stretches to its bounds: the default "meet"
                                             // letterboxed it and slid every route and site off its ground.
-                                            ? <image href={terrain.href} {...terrain.bounds} preserveAspectRatio="none" className={styles.ground} />
+                                            ? terrain.strips.map(strip => <image key={strip.href} href={strip.href} {...strip.bounds} preserveAspectRatio="none" className={styles.ground} />)
                                             : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.terrainField && players.length > 1 && <FogLayer field={data.terrainField} width={data.landmass.width} height={data.landmass.height} sight={data.sight} />}
@@ -228,7 +228,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                     <span key={player.seat} style={{ "--legend-colour": playerColour(player.seat) } as CSSProperties}>{player.isMe ? "You" : player.name}</span>
                                 ))}
                             </div>
-                            {terrain.href && (
+                            {terrain.strips.length > 0 && (
                                 <div className={styles.legend} aria-label="Ground legend">
                                     {AREAS.map(area => (
                                         <span key={area.code} className={styles.legendGround} style={{ "--legend-colour": area.fallbackColour } as CSSProperties}>

@@ -2,13 +2,14 @@
 // masters in /art-masters/kingdombuilder/v2:
 //
 //   public/art/kingdombuilder/v2/tiles.png       every pre-rendered tile, in one sheet
-//   public/art/kingdombuilder/v2/icons/*.png     the map markers, 32x32
+//   public/art/kingdombuilder/v2/icons/*.png     the map markers, 64x64
 //   src/games/KingdomBuilder/terrainAtlas.json   where each tile sits in the sheet
 //
 // The masters are drawn at 128px a tile (a 218x234 image around a 160x113
 // ground footprint). A 100x70 world at that size is a 16058x8031 map, which
-// phones refuse to draw, so the map is built at the kit's 32px size instead
-// and the sheet holds each tile already shrunk to it. One sheet rather than
+// phones refuse to draw, so the map is built at the kit's 64px size instead
+// (in bands; see useTerrainImage.ts) and the sheet holds each tile already
+// shrunk to it. One sheet rather than
 // ~500 files is one request, and composing a world from it is a loop of
 // drawImage copies, not the seconds of per-pixel generation the kit's own
 // script takes in the browser.
@@ -29,8 +30,8 @@ const SERVED = path.join(ROOT, 'public', 'art', 'kingdombuilder', 'v2');
 const MANIFEST = path.join(ROOT, 'src', 'games', 'KingdomBuilder', 'terrainAtlas.json');
 
 /** The tile resolution the map is drawn at. */
-const TILE_RESOLUTION = 32;
-const ICON_SIZE = 32;
+const TILE_RESOLUTION = 64;
+const ICON_SIZE = 64;
 const SHEET_COLUMNS = 16;
 
 /** The kit's own tile geometry for a resolution — `dims()` in source/terrain-tiles.js. */
