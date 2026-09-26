@@ -74,6 +74,11 @@ function codeAt(field: TerrainField, col: number, row: number): string {
     return field.codes[y * field.columns + x];
 }
 
+/** Whether an in-bounds cell holds a terrain code — the field's edge counts as neither. */
+function codeIs(field: TerrainField, col: number, row: number, code: string): boolean {
+    return col >= 0 && col < field.columns && row >= 0 && row < field.rows && field.codes[row * field.columns + col] === code;
+}
+
 /** Row-major indices into a corner grid of the tile's [TL, TR, BR, BL] corners. */
 function cornerIndices(field: TerrainField, col: number, row: number): [number, number, number, number] {
     const width = field.columns + 1;
@@ -156,7 +161,7 @@ export function terrainCornerGrid(field: TerrainField): Uint8Array {
 
 /** Kit bit order is N=8, E=4, S=2, W=1. */
 export function riverMask(field: TerrainField, col: number, row: number): number {
-    const river = (x: number, y: number) => x >= 0 && x < field.columns && y >= 0 && y < field.rows && codeAt(field, x, y) === "r";
+    const river = (x: number, y: number) => codeIs(field, x, y, "r");
     return (river(col, row - 1) ? 8 : 0) | (river(col + 1, row) ? 4 : 0) | (river(col, row + 1) ? 2 : 0) | (river(col - 1, row) ? 1 : 0);
 }
 
@@ -172,7 +177,7 @@ export interface TerrainTileSpec {
 export function terrainTileSpec(field: TerrainField, grid: Uint8Array, overlayByTile: ReadonlyMap<number, string>, col: number, row: number): TerrainTileSpec {
     const tile = row * field.columns + col;
     const river = field.codes[tile] === "r" ? riverMask(field, col, row) : 0;
-    const isMountain = (x: number, y: number) => x >= 0 && x < field.columns && y >= 0 && y < field.rows && codeAt(field, x, y) === "m";
+    const isMountain = (x: number, y: number) => codeIs(field, x, y, "m");
     return {
         corners: cornerIndices(field, col, row).map(corner => grid[corner]) as [number, number, number, number],
         variant: Math.abs(Math.imul(col, 374761393) ^ Math.imul(row, 668265263)) % 3,
@@ -230,8 +235,7 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
     if (!atlas) return null;
     const { dims, cell, columns } = ATLAS;
     const canvas = document.createElement("canvas");
-    canvas.width = field.columns * dims.Wt + 2 * dims.PX;
-    canvas.height = field.rows * dims.Ht + dims.HR + dims.BP;
+    Object.assign(canvas, rasterSize(field, dims));
     const context = canvas.getContext("2d");
     if (!context) return null;
 
@@ -255,16 +259,17 @@ async function compositeTerrain(field: TerrainField, overlays: readonly OverlayP
     return canvas;
 }
 
+/** The composed map's size in pixels: the ground grid plus the overhang padding around it. */
+function rasterSize(field: TerrainField, dims: TerrainTileDims): { width: number; height: number } {
+    return { width: field.columns * dims.Wt + 2 * dims.PX, height: field.rows * dims.Ht + dims.HR + dims.BP };
+}
+
 /** Where the padded raster sits in world units, so its ground grid lines up with the terrain field. */
 export function terrainImageBounds(field: TerrainField, dims: TerrainTileDims = ATLAS.dims): NonNullable<TerrainImage["bounds"]> {
     const scaleX = field.tileSize / dims.Wt;
     const scaleY = field.tileSize / dims.Ht;
-    return {
-        x: -dims.PX * scaleX,
-        y: -dims.HR * scaleY,
-        width: (field.columns * dims.Wt + 2 * dims.PX) * scaleX,
-        height: (field.rows * dims.Ht + dims.HR + dims.BP) * scaleY,
-    };
+    const { width, height } = rasterSize(field, dims);
+    return { x: -dims.PX * scaleX, y: -dims.HR * scaleY, width: width * scaleX, height: height * scaleY };
 }
 
 export function useTerrainImage(world: TerrainImageWorld): TerrainImage {

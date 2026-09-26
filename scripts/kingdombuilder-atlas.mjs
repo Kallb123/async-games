@@ -21,6 +21,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
+import { pngsUnder } from './lib/pngsUnder.mjs';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MASTERS = path.join(ROOT, 'art-masters', 'kingdombuilder', 'v2');
 const SERVED = path.join(ROOT, 'public', 'art', 'kingdombuilder', 'v2');
@@ -35,16 +37,6 @@ const SHEET_COLUMNS = 16;
 function dims(T) {
     const Wt = Math.round(T * 1.25), Ht = Math.round(Wt * Math.SQRT1_2), Z = Math.round(Wt * Math.SQRT1_2);
     return { Wt, Ht, PX: Math.round(Wt * 0.18), HR: Math.round(Z * 0.95), BP: Math.round(Ht * 0.12) };
-}
-
-async function pngsUnder(dir) {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const found = await Promise.all(entries.map(async (entry) => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) return pngsUnder(full);
-        return entry.name.endsWith('.png') ? [full] : [];
-    }));
-    return found.flat();
 }
 
 const master = JSON.parse(await readFile(path.join(MASTERS, 'manifest.json'), 'utf8'));

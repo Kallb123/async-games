@@ -20,10 +20,12 @@
 // It is safe to re-run: a file it has already been through no longer clears the
 // savings floor, so it is left alone.
 
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+
+import { pngsUnder } from './lib/pngsUnder.mjs';
 
 const ART = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'art');
 
@@ -36,22 +38,15 @@ const LARGE_BYTES = 400 * 1024;
  *  run leave an already-quantised file exactly as it is. */
 const MIN_SAVING = 0.1;
 
-/** Every .png under public/art, at any depth. The untouched originals live
- *  outside it, under /art-masters, so there is nothing here to step around:
- *  this only ever walks art the app actually serves. */
-async function pngsUnder(dir) {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const found = await Promise.all(entries.map(async (entry) => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) return pngsUnder(full);
-        return entry.name.endsWith('.png') ? [full] : [];
-    }));
-    return found.flat();
-}
 
 const kb = (bytes) => `${Math.round(bytes / 1024)}KB`;
 
-const files = (await pngsUnder(ART)).sort();
+// Every .png under public/art. The untouched originals live outside it, under
+// /art-masters, so this only ever walks art the app actually serves. Kingdom
+// Builder's world-map sheet is left out: `npm run kb-atlas` writes it whole
+// from its own masters, and two scripts rewriting one file would fight.
+const KB_ATLAS = path.join(ART, 'kingdombuilder', 'v2');
+const files = (await pngsUnder(ART)).filter(file => !file.startsWith(KB_ATLAS + path.sep)).sort();
 let saved = 0;
 
 for (const file of files) {
