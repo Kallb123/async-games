@@ -4,7 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
-import { KingdomBuilderPrototypeError, buyCaravan, cancelUnitTraining, exchangeAtMarket, queuePrototypeBuilding, queueUnitTraining } from "./prototype";
+import {
+    KingdomBuilderPrototypeError,
+    buyCaravan,
+    cancelBuildingConstruction,
+    cancelUnitTraining,
+    exchangeAtMarket,
+    queuePrototypeBuilding,
+    queueUnitTraining,
+    removeBuilding,
+} from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
 const settlementId = new Types.ObjectId().toString();
@@ -176,6 +185,64 @@ describe("Kingdom Builder building costs", () => {
         stubSettlement({ ownerId: "owner", tiles, resources: { wood: 15, stone: 0, iron: 0 } }, null);
         await expect(queuePrototypeBuilding(worldId, settlementId, "owner", 0, "lumber-camp"))
             .rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+});
+
+describe("Kingdom Builder building changes", () => {
+    it("cancels a build and atomically refunds its full price", async () => {
+        const construction = { tilePosition: 0, buildingType: "mine" as const, targetLevel: 2, ticksRemaining: 3 };
+        const update = stubSettlement({ ownerId: "owner", tiles, construction });
+
+        await cancelBuildingConstruction(worldId, settlementId, "owner");
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ ownerId: "owner", construction }),
+            { $unset: { construction: 1 }, $inc: { "resources.wood": 40, "resources.stone": 20 } },
+            { new: true },
+        );
+    });
+
+    it("does not refund when the construction changed before cancellation", async () => {
+        const construction = { tilePosition: 0, buildingType: "mine" as const, targetLevel: 1, ticksRemaining: 1 };
+        stubSettlement({ ownerId: "owner", tiles, construction }, null);
+
+        await expect(cancelBuildingConstruction(worldId, settlementId, "owner"))
+            .rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+    });
+
+    it("removes a completed outer building without refunding it", async () => {
+        const builtTiles = withBarracks(2);
+        const update = stubSettlement({ ownerId: "owner", tiles: builtTiles });
+
+        await removeBuilding(worldId, settlementId, "owner", 0);
+
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                ownerId: "owner",
+                "construction.tilePosition": { $ne: 0 },
+                tiles: { $elemMatch: { position: 0, "building.type": "barracks", "building.level": 2 } },
+            }),
+            { $unset: { "tiles.$.building": 1 } },
+            { new: true },
+        );
+    });
+
+    it("never removes the town centre or a building being upgraded", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles });
+        await expect(removeBuilding(worldId, settlementId, "owner", 4))
+            .rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
+        expect(update).not.toHaveBeenCalled();
+
+        vi.restoreAllMocks();
+        const builtTiles = withBarracks(1);
+        const busyUpdate = stubSettlement({
+            ownerId: "owner",
+            tiles: builtTiles,
+            construction: { tilePosition: 0, buildingType: "barracks", targetLevel: 2, ticksRemaining: 2 },
+        });
+        await expect(removeBuilding(worldId, settlementId, "owner", 0))
+            .rejects.toEqual(expect.objectContaining({ code: "QUEUE_BUSY" }));
+        expect(busyUpdate).not.toHaveBeenCalled();
     });
 });
 

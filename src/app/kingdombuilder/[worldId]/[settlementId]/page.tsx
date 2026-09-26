@@ -123,10 +123,19 @@ export default function KingdomBuilderSettlementPage({
     const queueBuilding = (buildingType: KingdomBuilderPrototypeBuilding) => {
         if (selectedTile !== null) void send(buildingType, { tilePosition: selectedTile, buildingType });
     };
+    const removeBuilding = (tilePosition: number, buildingType: KingdomBuilderBuildingType) => {
+        const name = BUILDING_DETAILS[buildingType]?.name.toLowerCase() ?? "building";
+        if (!window.confirm(`Remove this ${name}? The resources used to build it won't be returned.`)) return;
+        void send(`remove-${tilePosition}`, { action: "remove-building", tilePosition });
+    };
 
     const unavailable = status === 403 || status === 404;
-    const construction = data?.tiles.find(tile => tile.construction)?.construction;
+    const constructionTile = data?.tiles.find(tile => tile.construction);
+    const construction = constructionTile?.construction;
     const emptyTiles = data?.tiles.filter(tile => !tile.building && !tile.construction) ?? [];
+    const removableBuildings = data?.tiles.flatMap(tile => tile.building && tile.building.type !== "town-centre"
+        ? [{ position: tile.position, building: tile.building }]
+        : []) ?? [];
     const tileOf = (type: KingdomBuilderUpgradableBuilding) => data?.tiles.find(tile => tile.building?.type === type);
     const barracks = tileOf("barracks");
     const barracksLevel = barracks?.building?.level ?? 0;
@@ -216,10 +225,23 @@ export default function KingdomBuilderSettlementPage({
 
                     <Section label="Build" isLoading={isLoading}>
                         {construction ? (
-                            <p className={styles.status}>
-                                {BUILDING_DETAILS[construction.buildingType]?.name}
-                                {construction.targetLevel > 1 ? ` (level ${construction.targetLevel})` : ""} is under construction. This screen checks each tick for completion.
-                            </p>
+                            <>
+                                <p className={styles.status}>
+                                    {BUILDING_DETAILS[construction.buildingType]?.name}
+                                    {construction.targetLevel > 1 ? ` (level ${construction.targetLevel})` : ""} is under construction. This screen checks each tick for completion.
+                                </p>
+                                <div className="ag-build-list">
+                                    <BuildRow
+                                        icon="✕"
+                                        name="Cancel build"
+                                        cost={`Return ${formatResources(buildingCostFor(construction.buildingType as KingdomBuilderUpgradableBuilding, construction.targetLevel))} to your stores`}
+                                        tag={pending === "cancel-building" ? "Cancelling…" : "Cancel"}
+                                        pending={pending === "cancel-building"}
+                                        disabled={isPending}
+                                        onClick={() => void send("cancel-building", { action: "cancel-building" })}
+                                    />
+                                </div>
+                            </>
                         ) : emptyTiles.length === 0 && data ? (
                             <div className="ag-empty">Every building tile is occupied.</div>
                         ) : (
@@ -253,6 +275,27 @@ export default function KingdomBuilderSettlementPage({
                         )}
                         {isRefreshing && <span className="visually-hidden">Refreshing settlement</span>}
                     </Section>
+
+                    {removableBuildings.length > 0 && (
+                        <Section label="Remove a building">
+                            <p className={styles.status}>Clear a tile for something else. Removed buildings do not return resources.</p>
+                            <div className="ag-build-list">
+                                {removableBuildings.map(tile => (
+                                    <BuildRow
+                                        key={tile.position}
+                                        icon={BUILDING_DETAILS[tile.building.type].icon}
+                                        name={BUILDING_DETAILS[tile.building.type].name}
+                                        cost={`Level ${tile.building.level} · tile ${tile.position + 1}`}
+                                        tag={pending === `remove-${tile.position}` ? "Removing…" : constructionTile?.position === tile.position ? "Cancel upgrade first" : "Remove"}
+                                        tagMuted={constructionTile?.position === tile.position}
+                                        pending={pending === `remove-${tile.position}`}
+                                        disabled={isPending || constructionTile?.position === tile.position}
+                                        onClick={() => removeBuilding(tile.position, tile.building.type)}
+                                    />
+                                ))}
+                            </div>
+                        </Section>
+                    )}
 
                     {data && barracks && (
                         <Section label="Barracks" action={<span className="ag-tag">Level {barracksLevel}</span>}>
