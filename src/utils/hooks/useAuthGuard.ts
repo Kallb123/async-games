@@ -92,6 +92,15 @@ export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: bool
     const state = useIsAuthorised();
     const { user, isLoaded, isAuthorised } = state;
     const router = useRouter();
+    const reportedAuth = useRef(false);
+
+    useEffect(() => {
+        if (isLoaded && !reportedAuth.current) {
+            reportedAuth.current = true;
+            performance.mark('ag_auth_ready');
+            window.__agPerformanceReport?.('auth_ready', performance.now());
+        }
+    }, [isLoaded]);
 
     useEffect(() => {
         if (!isLoaded) {

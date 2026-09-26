@@ -9,6 +9,7 @@ import { useCapacitorBackButton } from '@/utils/hooks/useCapacitorBackButton';
 import { useCapacitorSplashScreen } from '@/utils/hooks/useCapacitorSplashScreen';
 import { useCapacitorDeepLinks } from '@/utils/hooks/useCapacitorDeepLinks';
 import { useCapacitorPush } from '@/utils/hooks/useCapacitorPush';
+import PerformanceReporter from './PerformanceReporter';
 
 export default function Providers({ children }: { children: ReactNode }) {
     // App-wide: the worker that makes the app installable and offline-capable,
@@ -30,6 +31,7 @@ export default function Providers({ children }: { children: ReactNode }) {
 
     return (
         <ToastProvider>
+            <PerformanceReporter />
             {children}
             <BottomBanner />
             {/* Catches a permission prompt the player answered with Block,

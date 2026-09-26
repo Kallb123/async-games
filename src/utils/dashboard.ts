@@ -118,12 +118,12 @@ function hasJoinedWorld(invite: IInvitationDataDocument, userId: string): boolea
     return !!worldIdOfInvitation(invite) && invite.userIdList.some(seat => seat.userId === userId && seat.inviteAccepted);
 }
 
-export async function buildDashboard(userId: string): Promise<IDashboardResponse> {
+export async function buildDashboard(userId: string, time: <T>(name: string, work: () => Promise<T>) => Promise<T> = (_name, work) => work()): Promise<IDashboardResponse> {
     // Three reads, then partitioned here. "My turn" and "their turn" were two
     // Mongo queries over the same set of games, and the two invite lists two
     // over the same set of invitations — splitting in memory is both cheaper
     // and the thing that makes the snapshot consistent.
-    const [games, invites, results] = await Promise.all([
+    const [games, invites, results] = await time('mongo_query', () => Promise.all([
         // A game that dropped this player for going quiet carries on without
         // them; it is theirs again, as a loss, once it finishes.
         GameDataModel.find({ userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } }).exec() as Promise<IGameDataDocument[]>,
@@ -131,15 +131,15 @@ export async function buildDashboard(userId: string): Promise<IDashboardResponse
             $or: [{ senderId: userId }, { "userIdList.userId": userId }]
         }).exec() as Promise<IInvitationDataDocument[]>,
         completedGameResults(userId),
-    ]);
+    ]));
 
     // A game names its winner and forfeiter from its own player list, so its
     // seats are the whole of what it needs resolved.
-    const directory = await buildUserDirectory([
+    const directory = await time('player_directory', () => buildUserDirectory([
         ...games.flatMap(game => game.userIdList),
         ...invites.flatMap(invitationUserIds),
         ...completedGameUserIds(results),
-    ]);
+    ]));
 
     const invitations = invites.map(invite => ({
         invite,
@@ -154,12 +154,12 @@ export async function buildDashboard(userId: string): Promise<IDashboardResponse
         kingdomBuilderWorlds(userId),
     ]);
 
-    return {
+    return time('response_build', async () => ({
         worlds,
         myTurn: games.filter(game => game.currentTurn === userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
         theirTurn: games.filter(game => game.currentTurn !== userId).map(game => withUnreadChat(game.CreateResponse(directory), unreadCounts)),
         incoming: invitations.filter(({ invite }) => invite.senderId !== userId && !hasJoinedWorld(invite, userId)).map(({ response }) => response),
         outgoing: invitations.filter(({ invite }) => invite.senderId === userId).map(({ response }) => response),
         completed: toCompletedGames(results, directory),
-    };
+    }));
 }
