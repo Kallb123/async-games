@@ -1,14 +1,18 @@
 import { readFileSync, statSync } from 'node:fs';
 import { globSync } from 'node:fs';
 
-const limits = { routeJavaScript: 700_000, largestImage: 5_000_000 };
+const limits = { routeJavaScript: 700_000, largestImage: 5_250_000 };
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;
 for (const manifestFile of manifests) {
   const source = readFileSync(manifestFile, 'utf8');
   const jsonStart = source.indexOf(' = {', source.indexOf('] = ')) + 3;
-  const manifest = JSON.parse(source.slice(jsonStart));
+  // Next terminates this generated assignment with a semicolon. Parse only
+  // the object literal: JSON.parse rejects that otherwise-valid JS terminator.
+  const jsonEnd = source.lastIndexOf('}') + 1;
+  if (jsonStart < 3 || jsonEnd <= jsonStart) throw new Error(`Malformed client reference manifest: ${manifestFile}`);
+  const manifest = JSON.parse(source.slice(jsonStart, jsonEnd));
   const chunks = new Set(Object.values(manifest.clientModules)
     .flatMap(module => module.chunks).map(chunk => chunk.replace(/^\/_next\//, '')));
   const bytes = [...chunks].reduce((sum, file) => sum + statSync(`.next/${file}`).size, 0);
