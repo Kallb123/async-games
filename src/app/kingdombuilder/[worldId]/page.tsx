@@ -164,7 +164,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
                                         {terrain.href && terrain.bounds
-                                            ? <image href={terrain.href} {...terrain.bounds} className={styles.ground} />
+                                            // The kit's 45° tiles are 40x28px but the world's are square, so
+                                            // the raster has to stretch to its bounds: the default "meet"
+                                            // letterboxed it and slid every route and site off its ground.
+                                            ? <image href={terrain.href} {...terrain.bounds} preserveAspectRatio="none" className={styles.ground} />
                                             : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.terrainField && players.length > 1 && <FogLayer field={data.terrainField} width={data.landmass.width} height={data.landmass.height} sight={data.sight} />}
