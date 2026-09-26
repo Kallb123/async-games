@@ -227,6 +227,90 @@ export async function queuePrototypeBuilding(
 }
 
 /**
+ * Stops the settlement's one building job and puts its full up-front price
+ * back in the stores. The construction fields are repeated in the write so a
+ * tick that completes or advances the job cannot make a stale cancel refund a
+ * building that is no longer being cancelled.
+ */
+export async function cancelBuildingConstruction(
+    worldId: string,
+    settlementId: string,
+    userId: string,
+): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    await assertWorldLive(worldId);
+
+    const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
+        .select({ ownerId: 1, construction: 1 })
+        .lean();
+    if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
+    if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
+    const construction = existing.construction;
+    if (!construction) throw new KingdomBuilderPrototypeError("INVALID_INPUT", "There is no building to cancel");
+
+    const refund = buildingCostFor(construction.buildingType as KingdomBuilderUpgradableBuilding, construction.targetLevel);
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        {
+            _id: settlementId,
+            worldId,
+            ownerId: userId,
+            construction: {
+                tilePosition: construction.tilePosition,
+                buildingType: construction.buildingType,
+                targetLevel: construction.targetLevel,
+                ticksRemaining: construction.ticksRemaining,
+            },
+        },
+        { $unset: { construction: 1 }, $inc: depositTo(refund) },
+        { new: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The building changed before it could be cancelled");
+
+    return settlementView(worldId, settlementId, userId);
+}
+
+/** Removes one completed outer building. The town centre is structural and can never be removed. */
+export async function removeBuilding(
+    worldId: string,
+    settlementId: string,
+    userId: string,
+    tilePosition: unknown,
+): Promise<KingdomBuilderSettlementView> {
+    validateIds(worldId, settlementId);
+    if (!Number.isInteger(tilePosition) || (tilePosition as number) < 0 || (tilePosition as number) > 8
+        || tilePosition === KINGDOM_BUILDER_TOWN_CENTRE_INDEX) {
+        throw new KingdomBuilderPrototypeError("INVALID_INPUT", "Choose a completed outer building to remove");
+    }
+    await assertWorldLive(worldId);
+
+    const existing = await KingdomBuilderSettlementModel.findOne({ _id: settlementId, worldId })
+        .select({ ownerId: 1, construction: 1, tiles: 1 })
+        .lean();
+    if (!existing) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
+    if (existing.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
+    const tile = existing.tiles.find((candidate: KingdomBuilderTile) => candidate.position === tilePosition);
+    if (!tile?.building) throw new KingdomBuilderPrototypeError("INVALID_INPUT", "There is no completed building on that tile");
+    if (existing.construction?.tilePosition === tilePosition) {
+        throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "Cancel this building's upgrade before removing it");
+    }
+
+    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+        {
+            _id: settlementId,
+            worldId,
+            ownerId: userId,
+            "construction.tilePosition": { $ne: tilePosition },
+            tiles: { $elemMatch: { position: tilePosition, "building.type": tile.building.type, "building.level": tile.building.level } },
+        },
+        { $unset: { "tiles.$.building": 1 } },
+        { new: true },
+    ).lean();
+    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The building changed before it could be removed");
+
+    return settlementView(worldId, settlementId, userId);
+}
+
+/**
  * Queues one unit where it trains — a soldier at the barracks, a settler at the
  * town centre (PR 24), a commander at the tavern (PR 26) — paying its whole
  * cost up front (§4.3). All of them join the settlement's one training queue.

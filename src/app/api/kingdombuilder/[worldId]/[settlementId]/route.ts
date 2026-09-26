@@ -3,11 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
     buyCaravan,
+    cancelBuildingConstruction,
     cancelUnitTraining,
     exchangeAtMarket,
     KingdomBuilderPrototypeError,
     queuePrototypeBuilding,
     queueUnitTraining,
+    removeBuilding,
     settlementView,
 } from "@/games/KingdomBuilder";
 import { readJsonBody } from "@/utils/api/requestBody";
@@ -62,6 +64,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (action === "caravan") return NextResponse.json(await buyCaravan(context.worldId, context.settlementId, context.userId));
         if (action === "cancel-training") {
             return NextResponse.json(await cancelUnitTraining(context.worldId, context.settlementId, context.userId, orderId));
+        }
+        if (action === "cancel-building") {
+            return NextResponse.json(await cancelBuildingConstruction(context.worldId, context.settlementId, context.userId));
+        }
+        if (action === "remove-building") {
+            return NextResponse.json(await removeBuilding(context.worldId, context.settlementId, context.userId, tilePosition));
         }
         if (action !== undefined) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
         // A body naming a unit trains it at the barracks; anything else queues a building.
