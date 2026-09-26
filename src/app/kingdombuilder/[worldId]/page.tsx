@@ -38,9 +38,9 @@ import { writeStoredValue } from "@/utils/hooks/useStoredValue";
 import styles from "./page.module.css";
 
 const TERRAIN = {
-    forest: { mark: "♣", name: "Forest" },
-    quarry: { mark: "◆", name: "Quarry" },
-    ore: { mark: "●", name: "Ore" },
+    forest: { name: "Forest" },
+    quarry: { name: "Quarry" },
+    ore: { name: "Ore" },
 } as const;
 // Smaller than World Domination or Outbreak's own node radii because Kingdom
 // Builder's world packs many more nodes into its viewBox (200×140 for a new
@@ -54,6 +54,13 @@ const TERRAIN_RADIUS = 1.15;
 // this is deliberately smaller than that rather than the 1.6 that used to
 // spill a filled disc a tile and a half wide over every neighbour's art.
 const SETTLEMENT_RADIUS = 0.85;
+const MAP_ICON_SIZE = 4;
+
+/** A v2 kit marker, bottom-centred on the same world point used by routes, fog and hit targets. */
+function MapArtIcon({ name, x, y }: { name: "barbarian" | "forest" | "quarry" | "iron" | "plot" | "village1"; x: number; y: number }) {
+    return <image className={styles.mapIcon} href={`/art/kingdombuilder/v2/icons/${name}.svg`}
+        x={x - MAP_ICON_SIZE / 2} y={y - MAP_ICON_SIZE * 0.78} width={MAP_ICON_SIZE} height={MAP_ICON_SIZE} />;
+}
 
 function landPath(view: KingdomBuilderWorldView): string {
     const { resolution, width, height, values, landThreshold } = view.landmass;
@@ -156,16 +163,16 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             <div className="ag-board-frame">
                                 <BoardZoom zoomWidth={zoomWidth} maxWidth={zoomWidth * 1.5}>
                                     <svg className={styles.map} viewBox={`0 0 ${data.landmass.width} ${data.landmass.height}`} role="img" aria-label="Kingdom Builder world map">
-                                        {terrain.href
-                                            ? <image href={terrain.href} x={0} y={0} width={data.landmass.width} height={data.landmass.height} className={styles.ground} />
+                                        {terrain.href && terrain.bounds
+                                            ? <image href={terrain.href} {...terrain.bounds} className={styles.ground} />
                                             : <path className={styles.land} d={map.path} />}
                                         <MapEdges nodes={map.edgeNodes} edges={map.edges} waypoints={map.waypoints} width={data.landmass.width} strokeOpacity={0.28} />
                                         {data.terrainField && players.length > 1 && <FogLayer field={data.terrainField} width={data.landmass.width} height={data.landmass.height} sight={data.sight} />}
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march && !homeOnly} isSelected={march?.targetNodeId === node.id} showRing={false}
                                                 onClick={() => !homeOnly && marchTo(node.id)} title={TERRAIN[node.terrain].name}>
-                                                <circle className={`${styles.terrain} ${styles[node.terrain]} ${march?.targetNodeId === node.id ? styles.selected : ""}`} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />
-                                                <text className={styles.keep} x={node.x} y={node.y}>{TERRAIN[node.terrain].mark}</text>
+                                                {march?.targetNodeId === node.id && <circle className={styles.selected} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />}
+                                                <MapArtIcon name={node.terrain === "ore" ? "iron" : node.terrain} x={node.x} y={node.y} />
                                             </ClickableMapNode>
                                         ))}
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
@@ -185,10 +192,10 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                                 onClick={march ? () => isTarget && marchTo(node.id)
                                                     : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isVillage ? "Barbarian village" : isOpen ? "Open settlement site" : "Free starting site"}>
-                                                {/* Every settlement's castle wears its owner's seat colour — the same one their row in "Players" is ringed in — and a barbarian village's flag the danger red, so who holds what reads straight off the map. The glyph is wider than the dot under it, so it's the glyph that carries the colour, over a dark dot. */}
-                                                <circle className={`${styles.site} ${settlement || isVillage ? styles.held : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS} />
-                                                {settlement && <text className={`${styles.keep} ${styles.icon}`} x={node.x} y={node.y} style={{ fill: playerColour(settlement.seat) }}>♜</text>}
-                                                {isVillage && <text className={`${styles.keep} ${styles.icon} ${styles.barbarian}`} x={node.x} y={node.y}>⚑</text>}
+                                                {/* The marker's base keeps the owner's seat colour visible around the painted village; barbarian sites stay dark. */}
+                                                <circle className={`${styles.site} ${isVillage ? styles.held : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
+                                                    style={settlement ? { fill: playerColour(settlement.seat) } : undefined} />
+                                                <MapArtIcon name={settlement ? "village1" : isVillage ? "barbarian" : "plot"} x={node.x} y={node.y} />
                                             </ClickableMapNode>;
                                         })}
                                         {data.terrainField && (

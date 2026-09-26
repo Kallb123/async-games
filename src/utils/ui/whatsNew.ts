@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Kingdom Builder has a new painted world map",
+                detail: "Forests, fields, coasts and mountain ranges now blend into a seamless tabletop landscape, with rivers and bridges drawn into the terrain.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "End-of-turn draws stay on the table",
                 detail: "Banned Islet and Outbreak now show the cards you just drew and your updated hand beside the flood or infection recap, so you can take in the whole end of your turn at once.",
             },
@@ -116,11 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Race Cars: get right in on the track",
                 detail: "The circuit is a big board with small spaces, so the zoom pill has grown a second step — and you can now pinch to zoom anywhere in between. Both work on every board with a zoom pill, Outbreak and World Domination and the rest, and Race Cars goes deepest of the lot. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
                 game: "racecars",
-            },
-            {
-                title: "Banned Islet shows which treasure is running out of island",
-                detail: "The \"Tiles left\" box on the board is now the four treasures, two by two — each showing how many of its two tiles are still above water, and turning red the moment one is down to its last. That is the count that actually ends the game: let both tiles of a treasure you haven't captured go under and the team loses, however much dry land is left over. A treasure already aboard ticks off instead. Your match review still charts the island shrinking, tile by tile, turn by turn.",
-                game: "bannedislet",
             },
         ],
     },
