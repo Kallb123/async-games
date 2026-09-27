@@ -113,9 +113,11 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     ],
     // docs/games/fires-out-gdd.md §17.6: step 3 added FiresOutGameType and a
     // skeleton FiresOutAction; step 4 filled Execute in (move, door,
-    // extinguish, chop, endTurn).
+    // extinguish, chop, endTurn). docs/undo.md adds FiresOutUndo: taking
+    // back an action that rolled nothing and revealed nothing.
     FiresOutGameType: [
         "FiresOutAction",
+        "FiresOutUndo",
     ],
     // docs/games/banned-islet.md §21.6: PR 2 added BannedIsletGameType and a
     // skeleton BannedIsletAction; PR 5 added BannedIsletEndTurn and

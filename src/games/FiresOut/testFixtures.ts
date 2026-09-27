@@ -36,6 +36,8 @@ export function baseState(owners: string[] = ["u1", "u2"]): IFiresOutSpecificGam
         hotspotReserve: 0,
         engine: ENGINE_START,
         ambulance: AMBULANCE_START,
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 

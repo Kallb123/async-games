@@ -52,6 +52,12 @@ export interface IFiresOutSpecificGameStateResponse {
     /** §12: parking spots — meaningful only once `ruleset === 'experienced'`. */
     engine: number;
     ambulance: number;
+    /**
+     * True when the viewer has a move of their own they can still take back
+     * (docs/undo.md). The only per-viewer field here; the stack it reads is
+     * never sent.
+     */
+    canUndo: boolean;
 }
 
 export interface IFiresOutGameDataResponse extends IGameDataResponse {

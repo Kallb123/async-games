@@ -15,6 +15,7 @@ import {
     canTreat,
     checkOutcome,
     chopApCost,
+    cloneFiresOutState,
     deckGunApCost,
     extinguishApCost,
     fireCaptainCanControlOthers,
@@ -31,11 +32,13 @@ import {
     refillFirefighterAp,
     replenishPoi,
     resolveAdvanceFire,
+    revealedAnyPoi,
     revealPoiAt,
     SpecialistId,
     SPECIALISTS,
     specialistDef,
     spendAp,
+    UNDO_STACK_DEPTH,
     VehicleId,
 } from "@/games/FiresOut/rules";
 import { playerHistory } from "@/utils/games/history";
@@ -62,6 +65,49 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 // markDirty for the same reason.
 function markDirty(gameData: IGameData): void {
     (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
+}
+
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The seventh game to take a move back, and shaped like Outbreak's and Banned
+// Islet's: a turn is spent on actions, and only End turn — the Advance Fire —
+// ever hands it on, and the player sends it. So there is no ten-second hold
+// (§5): the turn is already waiting on the player, and Undo is simply there
+// until they do something that isn't undoable.
+//
+// Undoable: every FiresOutAction kind but two — a move, a door, an extinguish,
+// a chop, a drive, a treat, an on-site hazmat disposal and a crew change.
+// Never: 'endTurn', which rolls the fire and replenishes POIs; 'deckGun',
+// which rolls for where the shot lands; and any action that turns a POI face
+// up — a move onto one, and the Imaging Technician's 'reveal' — because a
+// snapshot can put the marker back face down but can't make the crew forget
+// what it was (revealedAnyPoi). Nor the action that ends the game — the
+// seventh rescue, or the chop that brings the building down — which
+// CheckGameOver settles straight after, outside `specificGameState`, where no
+// snapshot can reach.
+
+/** The kinds that can ever be taken back — the rest consume dice (docs/undo.md, above). */
+const UNDOABLE_KINDS: ReadonlySet<FiresOutActionKind> = new Set([
+    'move', 'door', 'extinguish', 'chop', 'drive', 'treat', 'disposeHazmat', 'crewChange',
+]);
+
+/**
+ * Pushes a snapshot taken before `command`'s first mutation and moves the
+ * anchor onto `command`. Capped at UNDO_STACK_DEPTH — dropping the oldest only
+ * ever costs reach, never correctness, because the anchor is what decides
+ * whether a snapshot can still be restored.
+ */
+function commitUndo(gs: IFiresOutSpecificGameState, command: IGameCommand, preState: IFiresOutSpecificGameState): void {
+    gs.undoStack ??= [];
+    gs.undoStack.push({ by: command.senderId, state: preState });
+    if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
+    gs.undoAnchorId = command.id;
+}
+
+/** Forgets every snapshot: on a figure's hand-off, and when a player leaves. */
+function clearUndo(gs: IFiresOutSpecificGameState): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
 }
 
 @serializable
@@ -531,6 +577,11 @@ function flattenAdvanceFireChain(result: IFiresOutAdvanceFireResult): IFiresOutA
 // on the board, not just the figure whose turn is ending.
 function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): IFiresOutEndTurnOutcome {
     const previousOwner = ff.ownerId;
+    // Nothing on the stack can be restored past the fire anyway (the anchor
+    // sees to that), so it goes with the figure's turn rather than riding
+    // along on every save until the next action happens to push it out. Here
+    // rather than in CheckEndTurn, which a solo crew's hand-off never reaches.
+    clearUndo(gs);
     ff.bankedAp = Math.min(MAX_BANKED_AP, ff.bankedAp + ff.apLeft);
     ff.apLeft = 0;
     gs.activeFirefighter = (gs.activeFirefighter + 1) % gs.firefighters.length;
@@ -634,6 +685,9 @@ export class FiresOutAction implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className: string = "FiresOutAction";
     kind: FiresOutActionKind = 'endTurn';
+    // Only the kinds in UNDOABLE_KINDS, and only when nothing was revealed and
+    // the game goes on — enforced in Execute (docs/undo.md, above).
+    readonly undoable = true;
     /** The space a move/door/extinguish/chop targets — meaningless for 'endTurn'. */
     target?: number;
     /** 'move' only: pick up a revealed victim or a hazmat on the firefighter's current space as they leave it (§10.1-10.2, §8's hazmat-carry row). */
@@ -664,6 +718,9 @@ export class FiresOutAction implements IGameCommand {
         const ff = activeFirefighter(gs);
         if (!ff || ff.ownerId !== this.senderId) return INVALID;
 
+        // Before the first mutation, pushed only once the action has succeeded.
+        const preUndoState = UNDOABLE_KINDS.has(this.kind) ? cloneFiresOutState(gs) : null;
+
         let outcome: ICommandOutcome;
         switch (this.kind) {
             case 'move': outcome = applyMove(fo, gs, ff, this); break;
@@ -680,8 +737,54 @@ export class FiresOutAction implements IGameCommand {
             default: return INVALID;
         }
 
-        if (outcome.validMove) markDirty(gameData);
+        if (!outcome.validMove) return outcome;
+        // A face-down marker turned up can't be un-seen, and a finished game
+        // (the seventh rescue, the collapse) is settled by CheckGameOver
+        // outside specificGameState — neither can be taken back.
+        if (preUndoState && !revealedAnyPoi(preUndoState.spaces, gs.spaces) && !checkOutcome(gs.rescued, gs.lost, gs.edges)) {
+            commitUndo(gs, this, preUndoState);
+        }
+        markDirty(gameData);
         return outcome;
+    }
+}
+
+// ─── FiresOutUndo (docs/undo.md) ────────────────────────────────────────────
+
+@serializable
+export class FiresOutUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className: string = "FiresOutUndo";
+
+    myString(): string { return 'took back their last move'; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const fo = gameData as IFiresOutGameData;
+        const gs = fo.specificGameState;
+
+        // A snapshot is only good for the command directly behind it: refused
+        // once anything else has run since it was pushed — an End turn above
+        // all, whose Advance Fire no snapshot may rewind (docs/undo.md §4).
+        const lastCommand = fo.gameState.commandHistory.at(-1);
+        if (!lastCommand || gs.undoAnchorId !== lastCommand.id) return INVALID;
+
+        const entry = (gs.undoStack ?? []).at(-1);
+        if (!entry || entry.by !== this.senderId) return INVALID;
+
+        gs.undoStack.pop();
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        Object.assign(gs, restored);
+        gs.undoAnchorId = this.id;
+
+        // No `currentTurn` to put back, unlike Race Cars: nothing undoable here
+        // ever ends a turn, so the turn is still the sender's.
+        fo.gameState.history.unshift(playerHistory(this.senderId, 'took back their last move'));
+        markDirty(gameData);
+        return { validMove: true, turnOver: false };
     }
 }
 
@@ -711,5 +814,8 @@ registerPlayerDropoutAdapter({
             ff.ownerId = after[next % after.length];
             next++;
         }
+        // Every snapshot is a whole state taken before the drop, so restoring
+        // one would hand the leaver's figures back to them.
+        clearUndo(gs);
     },
 });

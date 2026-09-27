@@ -3,6 +3,7 @@ import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, clone
 import { INTERIOR_SPACE_COUNT, MAX_SOLO_CREW } from "./board";
 import type { IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import type { IReplayStep } from "@/utils/games/replay";
+import type { GameResultEvent } from "@/utils/apiModels/GameDataApi";
 
 // Regression test for a classic Mongoose footgun (see WorldDominationModels.test.ts
 // for the sibling one this game hit): a bare nested object schema path —
@@ -245,5 +246,16 @@ describe("detectRescueEvent", () => {
 
     it("reports nothing when rescued hasn't changed", () => {
         expect(detectRescueEvent(stepWithRescuedDelta(2, 2))).toBeUndefined();
+    });
+
+    it("takes its own last marker back when an undo lowers the count (docs/undo.md)", () => {
+        const step = { ...stepWithRescuedDelta(3, 2), command: { className: "FiresOutUndo" } } as unknown as IReplayStep;
+        const events = [
+            { icon: "rescue", title: "first", seriesKey: "damage", turnIndex: 1 },
+            { icon: "explosion", title: "boom", seriesKey: "damage", turnIndex: 2 },
+            { icon: "rescue", title: "second", seriesKey: "damage", turnIndex: 2 },
+        ] as GameResultEvent[];
+        expect(detectRescueEvent(step, events)).toBeUndefined();
+        expect(events.map(e => e.title)).toEqual(["first", "boom"]);
     });
 });

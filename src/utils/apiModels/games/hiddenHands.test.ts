@@ -305,6 +305,8 @@ function firesOutState(owners: string[] = ["u1"]): IFiresOutSpecificGameState {
         hotspotReserve: 0,
         engine: ENGINE_START,
         ambulance: AMBULANCE_START,
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 

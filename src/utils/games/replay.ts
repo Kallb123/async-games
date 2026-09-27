@@ -244,8 +244,10 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "FiresOutGameType",
     buildInitialSpecificGameState: (gameData) => buildInitialFiresOutStateFromGameData(gameData as IFiresOutGameData),
-    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
-        firesOutStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // canUndo needs the anchor to still match the tail of commandHistory, not
+    // just the stack's own owner — see gameStateToModel's lastCommandId.
+    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory) =>
+        firesOutStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null),
     // §17.5: both deck freeze and decoy are feasible — the d6/d8 are
     // memoryless and the POI pool's remaining composition is already public
     // — but no planning UI exists yet (steps 13/14). Empty until then.

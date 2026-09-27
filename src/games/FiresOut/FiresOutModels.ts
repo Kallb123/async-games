@@ -23,9 +23,11 @@ import {
     applyFamilySetup,
     boardAtCurrentLayout,
     buildEmptyEdges,
+    cloneFiresOutState,
     buildEmptySpaces,
     dealSpecialists,
     newFirefighter,
+    normalizedRestrictedAp,
     refillFirefighterAp,
     shuffledPoiPool,
     totalDamage,
@@ -192,71 +194,30 @@ export interface IFiresOutSpecificGameState {
     // driven or used as the rescue destination once `ruleset === 'experienced'`.
     engine: number;
     ambulance: number;
+    /**
+     * Snapshots of the whole state, newest last, pushed by FiresOutAction
+     * (docs/undo.md) — every kind but End turn and the deck gun, and never for
+     * an action that turns a POI face up or ends the game — before it changes
+     * anything. `by` is whose move it was. Never sent: it carries the POI pool's
+     * order and every face-down marker's identity. Capped at UNDO_STACK_DEPTH
+     * and emptied on every figure's hand-off.
+     */
+    undoStack: { by: string, state: IFiresOutSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot.
+     * FiresOutUndo refuses unless it is the tail of commandHistory, which is
+     * how the stack goes stale the moment anything else is played — an End
+     * turn's Advance Fire above all — without every other command having to
+     * clear it.
+     */
+    undoAnchorId: string | null;
 }
 
-// `poi` is named field-by-field rather than spread, and that is load-bearing:
-// it is the one path in this schema that is a real Mongoose *single nested
-// subdocument* (see firesOutStateSchemaDef below), and spreading one copies
-// its internals (`$__parent`, `$basePath`, `$__`, `_doc`) instead of
-// `id`/`revealed`/`victim`. cloneFiresOutState runs on a hydrated document on
-// the read path — buildInitialFiresOutStateFromGameData clones
-// `gameData.initialSpecificGameState` for every replay — so a spread handed
-// the timeline a starting board whose POIs had `revealed`/`victim`
-// `undefined`. revealPoiAt then read every setup marker as a false alarm and
-// deleted it, Replenish drew deeper into the pool than the live game ever
-// did, and those replay-only markers reached the wire with real `victim`
-// flags: turn review both diverged from the game actually played and could
-// name a marker still face down on the live board. Same field-by-field shape
-// as cloneFirefighterState below and Outbreak's cloneCityState.
-function cloneSpaceState(s: IFiresOutSpaceState): IFiresOutSpaceState {
-    return {
-        threat: s.threat,
-        poi: s.poi ? { id: s.poi.id, revealed: s.poi.revealed, victim: s.poi.victim } : null,
-        hazmat: s.hazmat,
-        hotspot: s.hotspot,
-    };
-}
-
-function cloneEdgeState(e: IFiresOutEdgeState): IFiresOutEdgeState {
-    return { kind: e.kind, damage: e.damage, doorOpen: e.doorOpen };
-}
-
-function cloneFirefighterState(ff: IFiresOutFirefighterState): IFiresOutFirefighterState {
-    return {
-        ownerId: ff.ownerId,
-        space: ff.space,
-        specialist: ff.specialist,
-        apLeft: ff.apLeft,
-        restrictedAp: normalizedRestrictedAp(ff.restrictedAp),
-        bankedAp: ff.bankedAp,
-        carrying: ff.carrying,
-    };
-}
-
-// Deep-clones a FiresOut state into independent plain objects — mirrors
-// Outbreak's cloneOutbreakState. Unlike Outbreak's player Map, firefighters
-// is a plain array built once in turnOrder order and never reordered, so
-// there's no per-player key to rebuild by; cloning it element-for-element is
-// enough to keep a persisted initialSpecificGameState snapshot independent of
-// the live one turn recap replays from (docs/new-game.md, "a reproducible
-// starting state").
-export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpecificGameState {
-    return {
-        ruleset: gs.ruleset,
-        difficulty: gs.difficulty,
-        spaces: gs.spaces.map(cloneSpaceState),
-        edges: gs.edges.map(cloneEdgeState),
-        poiPool: [...gs.poiPool],
-        nextPoiId: gs.nextPoiId,
-        rescued: gs.rescued,
-        lost: gs.lost,
-        firefighters: gs.firefighters.map(cloneFirefighterState),
-        activeFirefighter: gs.activeFirefighter,
-        hotspotReserve: gs.hotspotReserve,
-        engine: gs.engine,
-        ambulance: gs.ambulance,
-    };
-}
+// `cloneFiresOutState` moved to rules.ts (docs/undo.md): the undo command in
+// FiresOutLogic.ts needs it too, and rules.ts is the one file both it and this
+// one already import without the two of them importing each other.
+// Re-exported so nothing that already imports it from here has to change.
+export { cloneFiresOutState };
 
 // §6.1/§6.2: Family's fixed diagram or Experienced's rolled setup (§17.6 step
 // 8) — one real `nextRoll` here, the only place in this module randomness is
@@ -338,6 +299,8 @@ export function buildInitialFiresOutState(
             hotspotReserve,
             engine: ENGINE_START,
             ambulance: AMBULANCE_START,
+            undoStack: [],
+            undoAnchorId: null,
         },
         explosionLog,
     };
@@ -413,6 +376,9 @@ function firesOutStateSchemaDef() {
         hotspotReserve: Number,
         engine: Number,
         ambulance: Number,
+        // ─── Undo (docs/undo.md) ────────────────────────────────────────────
+        undoStack: [{ by: String, state: Schema.Types.Mixed }],
+        undoAnchorId: { type: String, default: null },
     };
 }
 
@@ -442,7 +408,12 @@ FiresOutGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        specificGameState: gameStateToModel(
+            doc.specificGameState,
+            userIdNameMap,
+            viewerId,
+            doc.gameState.commandHistory.at(-1)?.id ?? null,
+        ),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
@@ -456,30 +427,22 @@ function poiResponse(poi: IFiresOutPoiState | null): IFiresOutPoiResponse | null
     return poi.revealed ? { id: poi.id, revealed: true, victim: poi.victim } : { id: poi.id, revealed: false };
 }
 
-// `restrictedAp`'s two leaves (`kind`/`left`) are each individually
-// `default: null` in the schema below — the fix `poi` above needed, since
-// unlike `poi` there's no "the whole record is meaningless alone" problem —
-// so `kind` alone is always trustworthy read straight off a loaded document.
-// Checking the *parent* object's truthiness instead (as this used to) isn't:
-// a Mongoose nested-object path is never really `null` once loaded, so that
-// check always took the truthy branch, matching `poi`'s bug. Used by both
-// gameStateToModel (the outgoing DTO) and cloneFirefighterState (the
-// initialSpecificGameState snapshot) — it only normalises the value, no
-// redaction happens here, so both are safe to share it.
-function normalizedRestrictedAp(restrictedAp: IFiresOutFirefighterState['restrictedAp']): IFiresOutFirefighterState['restrictedAp'] {
-    return restrictedAp?.kind != null ? { kind: restrictedAp.kind, left: restrictedAp.left } : null;
-}
-
-// `_viewerId` is unused: nothing in this state is hidden per-player — POI
-// identity is redacted from *everybody* until revealed, not just from
-// opponents, and §17.3 requires every crewmate's AP, specialist and position
-// to be visible on every screen (the crew planner depends on it). Kept in the
-// signature to match the shared CreateDataResponse contract, the same as
-// Outbreak's gameStateToModel.
+// Nothing in this state is hidden per-player — POI identity is redacted from
+// *everybody* until revealed, not just from opponents, and §17.3 requires
+// every crewmate's AP, specialist and position to be visible on every screen
+// (the crew planner depends on it). The undo stack, which holds a copy of
+// every face-down marker and the POI pool's order, does not go at all.
+//
+// `viewerId` is read for one thing only: `canUndo`, which answers "have *you*
+// got a move you can still take back". `lastCommandId` (commandHistory's real
+// tail) is what makes it the same test FiresOutUndo runs on itself — the
+// stack's owner alone would still say yes after a command that pushed nothing
+// (docs/undo.md §7).
 export function gameStateToModel(
     gs: IFiresOutSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    _viewerId: string | null,
+    viewerId: string | null,
+    lastCommandId: string | null = null,
 ): IFiresOutSpecificGameStateResponse {
     // A game saved before the exterior became a full perimeter ring is short
     // of the spaces and edges the ring added — the board component indexes
@@ -520,6 +483,9 @@ export function gameStateToModel(
         hotspotReserve: gs.hotspotReserve,
         engine: gs.engine,
         ambulance: gs.ambulance,
+        // Absent (`?? []`) on a game that predates the stack; false for every
+        // viewer but the mover, and for a viewerless replay.
+        canUndo: (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
 }
 
@@ -587,10 +553,20 @@ export function detectExplosionEvent(step: IReplayStep): Omit<GameResultEvent, '
 // reads the delta between the step's two snapshots rather than any one
 // command's outcome. Exported so it can be unit-tested and wired straight
 // into GAME_RESULT_STATS.FiresOut.compute (GameResultData.ts).
-export function detectRescueEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+//
+// A rescue taken back (docs/undo.md) never happened as far as the board is
+// concerned, so the undo that lowers `rescued` takes the marker it left back
+// off `events` too — the only command that can lower it, and it only ever
+// reverses the one command behind it, which left exactly one marker.
+export function detectRescueEvent(step: IReplayStep, events: GameResultEvent[] = []): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
     const prevRescued = (step.prev.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
     const nextRescued = (step.next.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
     const rescued = nextRescued - prevRescued;
+    if (rescued < 0 && step.command.className === "FiresOutUndo") {
+        const index = events.findLastIndex(e => e.icon === 'rescue');
+        if (index >= 0) events.splice(index, 1);
+        return undefined;
+    }
     if (rescued <= 0) return undefined;
     const title = rescued > 1
         ? `${pluralize(rescued, 'victim')} got out! (${nextRescued}/${VICTIMS_TO_WIN})`
