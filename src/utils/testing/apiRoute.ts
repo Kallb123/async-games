@@ -63,7 +63,7 @@ let clerkUsers: User[] = [];
 type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string, actorId?: string, actorUsername?: string };
 
 const games = new Map<string, StoredGame>();
-const kingdomBuilderWorlds = new Map<string, { hostId?: string, roster?: Array<{ userId: string, joinedAt: Date }> }>();
+const kingdomBuilderWorlds = new Map<string, { hostId?: string, roster?: Array<{ userId: string, joinedAt: Date }>, endedAt?: Date }>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
 const gifCatalogue: StoredGifCatalogueItem[] = [];
@@ -341,10 +341,11 @@ export function seedGame(game: Record<string, unknown> & { gameId: string }) {
 }
 
 /** Seed the membership slice chat reads from a standalone Kingdom Builder world. */
-export function seedKingdomBuilderWorld(worldId: string, userIds: string[], joinedAt = new Date(0)) {
+export function seedKingdomBuilderWorld(worldId: string, userIds: string[], { joinedAt = new Date(0), endedAt }: { joinedAt?: Date, endedAt?: Date } = {}) {
     kingdomBuilderWorlds.set(worldId, {
         hostId: userIds[0],
         roster: userIds.map(userId => ({ userId, joinedAt })),
+        ...(endedAt ? { endedAt } : {}),
     });
 }
 
@@ -559,35 +560,42 @@ export function storedChatMessages(gameId: string): StoredChatMessage[] {
 function findChatFromStore(filter: Record<string, unknown>) {
     const gameId = filter?.gameId;
     const keys = Object.keys(filter);
+    if (!keys.includes('gameId') || keys.some(key => !['gameId', 'timestamp', '$or'].includes(key))) {
+        throw new Error(`The test chat store only looks messages up by gameId (and an optional joinedAt bound and before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
+    }
+    // A late joiner's lower bound, beside the cursor rather than inside it.
+    let matchesJoinedAt: (message: StoredChatMessage) => boolean = () => true;
+    if ('timestamp' in filter) {
+        const range = filter.timestamp as Record<string, unknown> | undefined;
+        const joinedAt = range?.$gte;
+        if (typeof joinedAt !== 'string' || Object.keys(range!).length !== 1) {
+            throw new Error(`The test chat store expected a joinedAt lower bound, not ${JSON.stringify(filter)}`);
+        }
+        matchesJoinedAt = message => message.timestamp >= joinedAt;
+    }
     let matchesCursor: (message: StoredChatMessage) => boolean = () => true;
-    if (keys.length === 2 && keys.includes('gameId') && keys.includes('$or')) {
+    if ('$or' in filter) {
         const or = filter.$or;
         const byTimestamp = Array.isArray(or) ? or[0] as Record<string, unknown> : undefined;
         const byTie = Array.isArray(or) ? or[1] as Record<string, unknown> : undefined;
-        const timestampRange = byTimestamp?.timestamp as { $lt?: string, $gte?: string } | undefined;
+        const timestampRange = byTimestamp?.timestamp as Record<string, unknown> | undefined;
         const beforeLt = timestampRange?.$lt;
-        const joinedAt = timestampRange?.$gte;
         const tieTimestamp = byTie?.timestamp;
         const tieMessageIdLt = (byTie?.messageId as { $lt?: string } | undefined)?.$lt;
         const shape = Array.isArray(or) && or.length === 2
-            && byTimestamp !== undefined && Object.keys(byTimestamp).length === 1 && typeof beforeLt === 'string'
+            && byTimestamp !== undefined && Object.keys(byTimestamp).length === 1
+            && timestampRange !== undefined && Object.keys(timestampRange).length === 1 && typeof beforeLt === 'string'
             && byTie !== undefined && Object.keys(byTie).length === 2 && typeof tieTimestamp === 'string' && typeof tieMessageIdLt === 'string';
         if (!shape) {
             throw new Error(`The test chat store's $or cursor didn't have the shape the route builds, not ${JSON.stringify(filter)}`);
         }
-        matchesCursor = (message) => (!joinedAt || message.timestamp >= joinedAt) && (message.timestamp < beforeLt!
-            || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!));
-    } else if (keys.length === 2 && keys.includes('gameId') && keys.includes('timestamp')) {
-        const joinedAt = (filter.timestamp as { $gte?: string } | undefined)?.$gte;
-        if (typeof joinedAt !== 'string') throw new Error(`The test chat store expected a joinedAt lower bound, not ${JSON.stringify(filter)}`);
-        matchesCursor = message => message.timestamp >= joinedAt;
-    } else if (keys.length !== 1 || keys[0] !== 'gameId') {
-        throw new Error(`The test chat store only looks messages up by gameId (and an optional before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
+        matchesCursor = (message) => message.timestamp < beforeLt
+            || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!);
     }
     if (typeof gameId !== 'string') {
         throw new Error(`The test chat store only looks messages up by gameId, not ${JSON.stringify(filter)}`);
     }
-    let results = chatMessages.filter(message => message.gameId === gameId && matchesCursor(message));
+    let results = chatMessages.filter(message => message.gameId === gameId && matchesJoinedAt(message) && matchesCursor(message));
     const query = {
         sort: (spec: Record<string, 1 | -1>) => {
             results = [...results].sort(bySortSpec(spec));

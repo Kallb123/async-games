@@ -21,6 +21,9 @@ export interface GameShellChat {
     gameId: string;
     userIdList: string[];
     usernameList: string[];
+    /** The viewer's own id as the thread sends it, when that isn't their
+     *  Clerk id — a Kingdom Builder world sends seat keys. */
+    viewerId?: string;
 }
 
 interface GameShellProps {

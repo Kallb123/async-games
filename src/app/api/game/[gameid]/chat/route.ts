@@ -141,15 +141,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
     // The cursor mirrors the sort key exactly: strictly older, or the same
     // millisecond and strictly on the other side of the tiebreak — "earlier in
     // { timestamp: -1, messageId: -1 } order than (before, beforeMessageId)".
-    const cursor = before === null ? {
+    //
+    // A late joiner's lower bound sits beside the cursor, not inside one arm of
+    // it: `before` is the client's to send, so the tie arm alone would hand back
+    // a millisecond from before they joined to anyone who named it.
+    const cursor = {
         gameId: gameid,
         ...(gameData.joinedAt ? { timestamp: { $gte: gameData.joinedAt } } : {}),
-    } : {
-        gameId: gameid,
-        $or: [
-            { timestamp: { $lt: before, ...(gameData.joinedAt ? { $gte: gameData.joinedAt } : {}) } },
-            { timestamp: before, messageId: { $lt: beforeMessageId } },
-        ],
+        ...(before === null ? {} : {
+            $or: [
+                { timestamp: { $lt: before } },
+                { timestamp: before, messageId: { $lt: beforeMessageId } },
+            ],
+        }),
     };
     const page: IChatMessageDataDocument[] = await ChatMessageModel
         // messageId is a deterministic tiebreaker: two messages written in the
@@ -167,8 +171,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
 
     const hasMore = page.length > CHAT_PAGE_SIZE;
     const newest = hasMore ? page.slice(0, CHAT_PAGE_SIZE) : page;
-    const messages = newest.reverse().map(message => toResponse(message,
-        gameData.senderIdList[gameData.userIdList.indexOf(message.senderId)] ?? message.senderId));
+    const messages = newest.reverse().map(message => toResponse(message, gameData.senderIdOf(message.senderId)));
 
     // The caller's own marker, from the same indexed lookup the read route
     // writes ({ gameId: 1, userId: 1 }) — never another player's (§13.2), and
@@ -359,6 +362,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // The stored message, for the route test to assert on. The client refetches
     // rather than rendering this directly — one source of truth, no optimistic
     // append (docs/in-game-chat.md §6).
-    return NextResponse.json({ success: true, message: toResponse(messageDoc,
-        gameData.senderIdList[gameData.userIdList.indexOf(userId)] ?? userId) });
+    return NextResponse.json({ success: true, message: toResponse(messageDoc, gameData.senderIdOf(userId)) });
 }

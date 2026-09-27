@@ -8,8 +8,6 @@ import { FriendshipModel } from '@/utils/mongodb/FriendshipData';
 import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
-import { KingdomBuilderWorldModel } from '@/games/KingdomBuilder/KingdomBuilderWorldModel';
-import { KingdomBuilderSettlementModel } from '@/games/KingdomBuilder/KingdomBuilderSettlementModel';
 
 // Deletes the signed-in player's account: everything of theirs in Mongo, then
 // the Clerk user itself. Clerk holds the account details, the registered device
@@ -52,20 +50,13 @@ export async function POST(request: NextRequest) {
     await ChatMessageModel.deleteMany({ gameId: { $in: gameIds } }).exec();
     await ChatReadModel.deleteMany({ gameId: { $in: gameIds } }).exec();
 
-    // Standalone Kingdom Builder worlds continue for the other members rather
-    // than being deleted with this account, so erase only this player's lines
-    // and marker there. Include settlement ownership for worlds created before
-    // rosters were introduced.
-    const [rosteredWorlds, legacySettlements] = await Promise.all([
-        KingdomBuilderWorldModel.find({ 'roster.userId': userId }).select({ _id: 1 }).lean(),
-        KingdomBuilderSettlementModel.find({ ownerId: userId }).select({ worldId: 1 }).lean(),
-    ]);
-    const worldIds = [...new Set([
-        ...rosteredWorlds.map(world => world._id.toString()),
-        ...legacySettlements.map(settlement => settlement.worldId.toString()),
-    ])];
-    await ChatMessageModel.deleteMany({ gameId: { $in: worldIds }, senderId: userId }).exec();
-    await ChatReadModel.deleteMany({ gameId: { $in: worldIds }, userId }).exec();
+    // Threads that outlive this account — a Kingdom Builder world goes on for
+    // its other members, including one this player has already left — keep
+    // everyone else's lines but lose every one of theirs, and their markers.
+    // Keyed by the player alone, so no membership lookup can miss a thread and
+    // a retry is as idempotent as the deletes below.
+    await ChatMessageModel.deleteMany({ senderId: userId }).exec();
+    await ChatReadModel.deleteMany({ userId }).exec();
 
     // Games: a game without one of its players cannot be played on or replayed,
     // so both the live game and its recorded result go, for everyone in it.

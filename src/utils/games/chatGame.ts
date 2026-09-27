@@ -1,13 +1,14 @@
 import { kingdomBuilderMemberIds, KingdomBuilderWorldModel } from "@/games/KingdomBuilder/KingdomBuilderWorldModel";
 import { KingdomBuilderSettlementModel } from "@/games/KingdomBuilder/KingdomBuilderSettlementModel";
 import { meta as kingdomBuilderMeta } from "@/games/KingdomBuilder/meta";
+import { FORMER_MEMBER_SENDER_ID } from "@/utils/chat";
 import { GameDataModel } from "@/utils/mongodb/GameData";
 import { Types } from "mongoose";
 
 export interface ChatGame {
     userIdList: string[];
-    /** IDs exposed in responses; worlds use seat keys so Clerk ids stay private. */
-    senderIdList: string[];
+    /** The senderId a stored author goes out as; worlds use seat keys so Clerk ids stay private. */
+    senderIdOf: (userId: string) => string;
     friendlyName: string;
     url: string;
     path: string;
@@ -25,7 +26,9 @@ export async function chatGame(gameId: string, userId?: string): Promise<ChatGam
     if (game) {
         return {
             userIdList: game.userIdList,
-            senderIdList: game.userIdList,
+            // A match already sends its players' ids (userIdList), so a sender
+            // goes out as it is stored.
+            senderIdOf: senderId => senderId,
             friendlyName: game.gameType.friendlyName,
             url: game.gameType.url,
             path: `/games/${game.gameType.url}/${gameId}`,
@@ -34,9 +37,12 @@ export async function chatGame(gameId: string, userId?: string): Promise<ChatGam
 
     if (!Types.ObjectId.isValid(gameId)) return null;
     const world = await KingdomBuilderWorldModel.findById(gameId)
-        .select({ roster: 1, hostId: 1 })
+        .select({ roster: 1, hostId: 1, endedAt: 1 })
         .lean();
-    if (!world) return null;
+    // An ended world is not there for anyone (§9.1) — the same answer
+    // worldView gives, so its thread closes with its map rather than lingering
+    // until the retention sweep removes it.
+    if (!world || world.endedAt) return null;
 
     let legacyOwnerIds: string[] = [];
     if (!world.roster?.length) {
@@ -49,7 +55,12 @@ export async function chatGame(gameId: string, userId?: string): Promise<ChatGam
     const userIdList = kingdomBuilderMemberIds(world, legacyOwnerIds);
     return {
         userIdList,
-        senderIdList: userIdList.map((_memberId, seatIndex) => String(seatIndex)),
+        // Seat keys, in the order worldView numbers its players. A member who
+        // has left has no seat, and their account id must not stand in for one.
+        senderIdOf: senderId => {
+            const seatIndex = userIdList.indexOf(senderId);
+            return seatIndex >= 0 ? String(seatIndex) : FORMER_MEMBER_SENDER_ID;
+        },
         friendlyName: kingdomBuilderMeta.name,
         url: kingdomBuilderMeta.url,
         path: `/kingdombuilder/${gameId}`,

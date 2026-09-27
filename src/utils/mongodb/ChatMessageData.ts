@@ -69,4 +69,6 @@ export var ChatMessageSchema = new Schema<IChatMessageDataDocument>({
 // game — find({ gameId }).sort({ timestamp: -1 }).limit(N) — served entirely by
 // this compound index.
 ChatMessageSchema.index({ gameId: 1, timestamp: -1 });
+// Account deletion erases a player's lines from threads that outlive them.
+ChatMessageSchema.index({ senderId: 1 });
 export var ChatMessageModel = models.ChatMessage || model<IChatMessageDataDocument, IChatMessageDataModel>('ChatMessage', ChatMessageSchema);

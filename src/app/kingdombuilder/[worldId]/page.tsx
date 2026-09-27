@@ -156,7 +156,8 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
             <GameIdentityHeader backHref="/" backLabel="Back to my games" meta={GAME_META.kingdombuilder} title="Kingdom Builder" subtitle="World map" />
             {data && <StandaloneGameChat gameId={worldId}
                 userIdList={data.players.map(player => String(player.seat))}
-                usernameList={data.players.map(player => player.name)} />}
+                usernameList={data.players.map(player => player.name)}
+                viewerId={data.players.filter(player => player.isMe).map(player => String(player.seat))[0]} />}
             {unavailable ? <Section><div className="ag-empty">This world is not available to you.</div></Section> : <>
                 <Section label="World" isLoading={isLoading} action={data && <span className="ag-tag">Tick {data.currentTick}</span>}>
                     {isLoading ? <Skeleton width="100%" height={320} radius={14} /> : data && map && (

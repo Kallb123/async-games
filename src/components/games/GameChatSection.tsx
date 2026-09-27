@@ -8,7 +8,7 @@ import { useScrollIntoViewOnOpen } from "@/utils/hooks/useScrollIntoViewOnOpen";
 
 export function useGameChatSection(chat: GameShellChat | undefined, open: boolean) {
     const enabled = !!chat && chat.userIdList.length >= 2;
-    const state = useGameChat(chat?.gameId ?? "", open, enabled);
+    const state = useGameChat(chat?.gameId ?? "", open, enabled, chat?.viewerId);
     const panelRef = useScrollIntoViewOnOpen(open && enabled);
     return [enabled, state, panelRef] as const;
 }
