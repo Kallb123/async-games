@@ -19,6 +19,7 @@ import {
     cloneResources,
     DEV_CARD_DECK,
     SAC_RESOURCES,
+    NO_RESOURCES,
     calculateVisibleVP,
     calculateLongestRoad,
     BOARD_TOPOLOGY,
@@ -616,11 +617,28 @@ export function computeSACRollFrequency(gameData: ISettlementsAndCitiesGameData)
     return { rollFrequency, rollFrequencyByPlayer };
 }
 
+// A by-resource count with every resource present, or undefined unless it
+// adds up to `total` — the player's resourcesGathered, which has been counted
+// all game. A count that falls short only started part-way through (a game
+// already in play when the split shipped), and a table of it would be wrong.
+function completeGatheredByType(counts: ISACResources | undefined, total: number): ISACResources | undefined {
+    if (!counts) return undefined;
+    const complete = { ...NO_RESOURCES };
+    for (const resource of SAC_RESOURCES) complete[resource] = counts[resource] ?? 0;
+    return SAC_RESOURCES.reduce((sum, resource) => sum + complete[resource], 0) === total ? complete : undefined;
+}
+
+// `replayedState` is the game re-run from its first move (replayFinalState,
+// replay.ts), whose by-resource counts are whole even for a game that was
+// already under way when they began being kept. The live document's own count
+// is the fallback, for a game replay can't run.
 export function computeSettlementsAndCitiesResultStats(
     gameData: ISettlementsAndCitiesGameData,
     resourcesPerTurn: Map<string, number>[],
+    replayedState?: ISACSpecificGameState,
 ): ISACGameResultStats {
     const gs = gameData.specificGameState;
+    const replayedPlayers = replayedState ? mongoMap(replayedState.playerStates) : undefined;
     const playerStats = new Map<string, ISACPlayerResultStats>();
     for (const [userId, ps] of mongoMap(gs.playerStates)) {
         const settlements = gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length;
@@ -638,7 +656,11 @@ export function computeSettlementsAndCitiesResultStats(
             knightsPlayed: ps.knightsPlayed,
             devCardsBought: ps.devCardsBought,
             resourcesGathered: ps.resourcesGathered,
-            resourcesGatheredByType: ps.resourcesGatheredByType ? cloneResources(ps.resourcesGatheredByType) : undefined,
+            // Checked against the live total too, so a replay that drifted
+            // from the game as played can't slip a wrong table through.
+            resourcesGatheredByType:
+                completeGatheredByType(replayedPlayers?.get(userId)?.resourcesGatheredByType, ps.resourcesGathered)
+                ?? completeGatheredByType(ps.resourcesGatheredByType, ps.resourcesGathered),
             robberUses: ps.robberUses,
             victoryPoints,
         });
@@ -690,10 +712,12 @@ function formatSACRollFrequencyChart(stats: ISACGameResultStats): GameResultBarC
 
 // Renders each player's resourcesGatheredByType as a table: a row per
 // resource, a column per player. Absent for a result recorded before the
-// split was tallied.
+// split was tallied, or one where any player's count was incomplete.
 function formatSACResourcesTable(stats: ISACGameResultStats): GameResultTable | undefined {
     const players = [...mongoMap(stats.playerStats)];
-    if (!players.some(([, s]) => s.resourcesGatheredByType)) return undefined;
+    // Every column or none: a player whose count couldn't be trusted would
+    // otherwise read as having gathered nothing.
+    if (!players.every(([, s]) => s.resourcesGatheredByType)) return undefined;
     return {
         kind: 'table',
         title: "Resources gathered",

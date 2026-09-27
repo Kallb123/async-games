@@ -17,7 +17,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat, computePerTurnEvents } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents, replayFinalState } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -43,6 +43,7 @@ import {
     playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
+import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -356,7 +357,10 @@ const GAME_RESULT_STATS: Record<string, {
                 sacGameData,
                 (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
             );
-            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
+            // The resources table is counted from the first move by replay,
+            // not read off the live game - see computeSettlementsAndCitiesResultStats.
+            const replayedState = await replayFinalState<ISACSpecificGameState>(sacGameData);
+            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn, replayedState);
         },
         format: formatSettlementsAndCitiesResultStats,
         charts: formatSettlementsAndCitiesCharts,
