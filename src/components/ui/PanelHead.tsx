@@ -11,6 +11,10 @@ interface PanelHeadProps {
     /** What the ✕ is called, for a screen reader: "Close chat", not "Close" —
      *  a board can have two of these panels open at once. */
     closeLabel: string;
+    /** Shows the shared loading bar along the header's bottom edge — the same
+     *  sweep `GameShell` insets under its top bar, for a panel whose contents
+     *  are being refreshed. */
+    busy?: boolean;
 }
 
 /**
@@ -23,7 +27,7 @@ interface PanelHeadProps {
  * means the fourth panel cannot forget the `type="button"` or the ✕'s
  * `aria-label`.
  */
-export default function PanelHead({ title, subtitle, onClose, closeLabel }: PanelHeadProps) {
+export default function PanelHead({ title, subtitle, onClose, closeLabel, busy = false }: PanelHeadProps) {
     return (
         <div className="ag-panel-head">
             <div>
@@ -31,6 +35,9 @@ export default function PanelHead({ title, subtitle, onClose, closeLabel }: Pane
                 {subtitle !== undefined && <div className="ag-panel-subtitle">{subtitle}</div>}
             </div>
             <button type="button" className="ag-panel-close" onClick={onClose} aria-label={closeLabel}>✕</button>
+            {/* Decorative: the top bar's own bar is the one a screen reader is
+                told about, so this copy of it stays out of the a11y tree. */}
+            {busy && <span className="ag-pending-bar ag-pending-bar--panel" aria-hidden />}
         </div>
     );
 }

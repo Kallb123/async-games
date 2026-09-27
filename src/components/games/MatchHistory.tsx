@@ -28,6 +28,10 @@ export interface MatchHistoryProps {
 }
 
 interface MatchHistoryComponentProps extends MatchHistoryProps {
+    /** True while the screen is waiting on the network — `GameShell`'s own
+     *  `busy`, echoed as a loading bar under the panel's header so a player
+     *  scrolled down to the log can see it's being refreshed. */
+    busy?: boolean;
     /** Closes the panel — the panel's own ✕, mirroring the top-bar 📜 toggle
      *  and the chat panel's close button. Supplied by `GameShell`, not by the
      *  game — the game only hands over what to show, not how it closes. */
@@ -50,28 +54,34 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 // from the recap screen. Without `onReact` (reviewing a past or hypothetical
 // turn, which isn't a real stored line to react to) it falls back to a
 // fully read-only row.
-export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
+export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose, busy = false }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
     const timelineRef = useRef<HTMLOListElement | null>(null);
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
     const now = useNowToTheMinute();
 
-    // Scroll to the latest entry when it changes: bottom when latest is at the
-    // bottom, top when latest is at the top.
+    // Scroll to the latest entry when a new one arrives: bottom when latest is
+    // at the bottom, top when latest is at the top. Keyed on the newest line
+    // rather than on `entries` itself — every background refresh hands over a
+    // fresh array, and following that snapped a player scrolling back through
+    // the game straight back to the end every few seconds.
+    const newest = entries[0];
+    const latestKey = `${entries.length}:${newest?.commandId ?? newest?.text ?? ''}`;
     useLayoutEffect(() => {
         if (timelineRef.current) {
             const targetScrollTop = oldestFirst ? timelineRef.current.scrollHeight : 0;
             timelineRef.current.scrollTop = targetScrollTop;
         }
-    }, [entries, oldestFirst]);
+    }, [latestKey, oldestFirst]);
 
     return (
-        <div className="ag-log ag-panel-open-pulse">
+        <div className="ag-log">
             <PanelHead
                 title="Match history"
                 subtitle={oldestFirst ? "Latest at the bottom" : "Latest at the top"}
                 onClose={onClose}
                 closeLabel="Close turn history"
+                busy={busy}
             />
             {lines.length === 0 ? (
                 <div className="ag-log-empty">No moves yet.</div>
