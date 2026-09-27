@@ -278,8 +278,9 @@ same picture as a match history:
   there is nothing to keep in step by hand;
 - the composer: an `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
   empty, over-length or sending;
-- `Skeleton` on first load, `Refreshable` around the rows on a refetch — the
-  `isLoading` / `isRefreshing` split `useRefreshableData` exists to give.
+- `Skeleton` on first load, and the header's loading bar (`PanelHead`'s `busy`,
+  the sweep the match history wears too) on a refetch — the `isLoading` /
+  `isRefreshing` split `useRefreshableData` exists to give.
 
 Message text is rendered as text. React escapes it; nothing here goes near
 `dangerouslySetInnerHTML`.

@@ -2313,7 +2313,7 @@ button.ag-chat-gif { cursor: pointer; }
    the player which end is newest, since the lists run in opposite directions
    (chat always oldest-to-newest; the turn-history log depends on the game —
    see MatchHistory's `oldestFirst`). */
-.ag-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.ag-panel-head { position: relative; display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .ag-panel-head .ag-hand-title { margin-bottom: 0; }
 .ag-panel-subtitle { font: 600 10.5px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 .ag-panel-close {
@@ -2343,23 +2343,6 @@ button.ag-chat-gif { cursor: pointer; }
     cursor: pointer;
 }
 .ag-panel-toggle-row:hover .ag-hand-title { color: var(--ag-ink); }
-
-/* The chat thread and turn-history panel both open at the bottom of the page
-   and can be short, so it's easy to miss even once scrolled into view. A
-   background pulse on open marks where it landed — a soft terracotta wash
-   that settles back to the page. It flashes three times (the iteration count)
-   so it's still going after the smooth scroll settles, not spent before the
-   panel is even on screen. It fires on mount because each panel mounts only
-   when opened (GameShell), so there's no class to toggle. */
-.ag-panel-open-pulse { animation: ag-panel-open-pulse 1100ms ease-out 3; }
-@keyframes ag-panel-open-pulse {
-    0% { background-color: transparent; }
-    28% { background-color: color-mix(in oklch, var(--ag-terracotta) 30%, var(--ag-surface)); }
-    100% { background-color: transparent; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .ag-panel-open-pulse { animation: none; }
-}
 
 /* Unread chat count — UnreadChatBadge, on the dashboard's turn card and list
    row. Solid terracotta by default (a light row); --on-dark swaps to the same
@@ -4290,6 +4273,20 @@ button.ag-tt-ticket { cursor: pointer; }
     background: linear-gradient(90deg, transparent, var(--ag-gold), transparent);
 }
 
+/* The same bar again under a panel's header (PanelHead's `busy` — the match
+   history while the game state refreshes, the chat while its thread does),
+   dressed for the cream panel in terracotta. It hangs in the gap below the
+   header, so the title and the ✕ don't move when it comes and goes. */
+.ag-pending-bar--panel {
+    bottom: -6px;
+    pointer-events: none;
+    background: color-mix(in oklch, var(--ag-terracotta) 14%, transparent);
+    animation: ag-pending-reveal 140ms ease-out both;
+}
+.ag-pending-bar--panel::after {
+    background: linear-gradient(90deg, transparent, var(--ag-terracotta), transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .ag-spinner,
     .ag-pending-skin::after,
@@ -4305,6 +4302,7 @@ button.ag-tt-ticket { cursor: pointer; }
        stalled — so either bar becomes a steady lit line instead. */
     .ag-pending-bar::after { width: 100%; opacity: 0.55; }
     .ag-pending-bar--topbar::after { background: var(--ag-gold); }
+    .ag-pending-bar--panel::after { background: var(--ag-terracotta); }
     /* Without the reveal animation the verb needs the label hidden outright. */
     .ag-btn--pending > .ag-btn-body { visibility: hidden; }
     .ag-spinner { border-top-color: currentColor; opacity: 0.6; }

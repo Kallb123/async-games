@@ -194,7 +194,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             {children}
             {log && (showLog ? (
                 <div ref={logPanelRef}>
-                    <MatchHistory {...log} onClose={() => setShowLog(false)} />
+                    <MatchHistory {...log} busy={busy} onClose={() => setShowLog(false)} />
                 </div>
             ) : (
                 <PanelToggleRow title="Match history" onOpen={() => setShowLog(true)} />
