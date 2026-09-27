@@ -31,7 +31,7 @@ import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
     ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker,
-    seedGifCatalogueItem, seedSnakesAndLadders,
+    seedGifCatalogueItem, seedKingdomBuilderWorld, seedSnakesAndLadders,
     sentPushes, signIn, storedChatMessages, storedChatReadMarker, storedGifCatalogueExpiry, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
@@ -110,6 +110,30 @@ beforeEach(async () => {
 });
 
 describe('GET /api/game/[gameid]/chat', () => {
+    it('uses a Kingdom Builder world roster as the thread membership', async () => {
+        const worldId = '64b000000000000000000001';
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+        seedChatMessage({ messageId: 'm1', gameId: worldId, senderId: BOB.id, text: 'meet at the ford', timestamp: '2026-01-01T00:00:00.000Z' });
+
+        const response = await readChatFor(worldId);
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).messages[0].text).toBe('meet at the ford');
+    });
+
+    it('does not show a Kingdom Builder player messages sent before they joined', async () => {
+        const worldId = '64b000000000000000000002';
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id], new Date('2026-01-02T00:00:00.000Z'));
+        seedChatMessage({ messageId: 'old', gameId: worldId, senderId: BOB.id, text: 'before', timestamp: '2026-01-01T00:00:00.000Z' });
+        seedChatMessage({ messageId: 'new', gameId: worldId, senderId: BOB.id, text: 'after', timestamp: '2026-01-03T00:00:00.000Z' });
+
+        const body = await (await readChatFor(worldId)).json();
+
+        expect(body.messages.map((message: { text: string }) => message.text)).toEqual(['after']);
+    });
+
     it('returns the thread oldest-first to a player in the game', async () => {
         signIn(ANN);
         seedSnakesAndLadders();

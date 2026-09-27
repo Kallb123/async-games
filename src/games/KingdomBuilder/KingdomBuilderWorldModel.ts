@@ -102,6 +102,14 @@ export interface IKingdomBuilderWorld {
 export interface IKingdomBuilderWorldDocument extends IKingdomBuilderWorld, Document {}
 export interface IKingdomBuilderWorldModel extends Model<IKingdomBuilderWorldDocument> {}
 
+/** The canonical member order for current and pre-roster worlds. */
+export function kingdomBuilderMemberIds(world: Pick<IKingdomBuilderWorld, "roster" | "hostId">, legacyOwnerIds: string[] = []): string[] {
+    const members = world.roster?.map(seat => seat.userId) ?? [];
+    if (members.length > 0) return members;
+    const legacy = [...new Set(legacyOwnerIds)];
+    return legacy.length > 0 ? legacy : world.hostId ? [world.hostId] : [];
+}
+
 const LandmassSchema = new Schema<Landmass>({
     width: { type: Number, required: true },
     height: { type: Number, required: true },

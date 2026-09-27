@@ -7,6 +7,8 @@ import { KingdomBuilderBattleModel } from "./KingdomBuilderBattleModel";
 import { KingdomBuilderInvitationModel } from "./KingdomBuilderInvitation";
 import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderTradeOfferModel } from "./KingdomBuilderTradeOfferModel";
+import { ChatMessageModel } from "@/utils/mongodb/ChatMessageData";
+import { ChatReadModel } from "@/utils/mongodb/ChatReadData";
 import { KingdomBuilderWorldModel, type KingdomBuilderEndReason, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { KingdomBuilderPersistenceError } from "./persistence";
 import { KINGDOM_BUILDER_ADMIN_BOOST, KINGDOM_BUILDER_RESOURCE_TYPES } from "./resources";
@@ -154,6 +156,8 @@ export async function removeWorld(worldId: string): Promise<void> {
     await KingdomBuilderBattleModel.deleteMany({ worldId });
     await KingdomBuilderTradeOfferModel.deleteMany({ worldId });
     await KingdomBuilderInvitationModel.deleteMany({ worldId });
+    await ChatMessageModel.deleteMany({ gameId: worldId });
+    await ChatReadModel.deleteMany({ gameId: worldId });
     await KingdomBuilderWorldModel.deleteOne({ _id: worldId, endedAt: { $ne: null } });
 }
 

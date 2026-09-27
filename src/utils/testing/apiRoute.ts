@@ -40,6 +40,7 @@ let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
 let gifCatalogueData: typeof import('@/utils/mongodb/GifCatalogueData');
 let reactionData: typeof import('@/utils/mongodb/ReactionData');
+let kingdomBuilderWorldData: typeof import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
 let nextServer: typeof import('next/server');
 
 /** A stored game, as the database would hold it: plain, with a version. */
@@ -62,6 +63,7 @@ let clerkUsers: User[] = [];
 type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string, actorId?: string, actorUsername?: string };
 
 const games = new Map<string, StoredGame>();
+const kingdomBuilderWorlds = new Map<string, { hostId?: string, roster?: Array<{ userId: string, joinedAt: Date }> }>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
 const gifCatalogue: StoredGifCatalogueItem[] = [];
@@ -90,6 +92,7 @@ export async function resetApiRouteStubs() {
     chatReadData = await import('@/utils/mongodb/ChatReadData');
     gifCatalogueData = await import('@/utils/mongodb/GifCatalogueData');
     reactionData = await import('@/utils/mongodb/ReactionData');
+    kingdomBuilderWorldData = await import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
     nextServer = await import('next/server');
 
     signedInUserId = null;
@@ -98,6 +101,7 @@ export async function resetApiRouteStubs() {
     mintedSignInTokens.length = 0;
     createdUsers.length = 0;
     games.clear();
+    kingdomBuilderWorlds.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
     gifCatalogue.length = 0;
@@ -125,6 +129,9 @@ export async function resetApiRouteStubs() {
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
+    vi.spyOn(kingdomBuilderWorldData.KingdomBuilderWorldModel, 'findById').mockImplementation(((worldId: string) => ({
+        select: () => ({ lean: async () => kingdomBuilderWorlds.get(worldId) ?? null }),
+    })) as unknown as typeof kingdomBuilderWorldData.KingdomBuilderWorldModel.findById);
 }
 
 // ---------------------------------------------------------------- Clerk
@@ -331,6 +338,14 @@ async function insertIntoStore(this: IGameDataDocument) {
 /** Puts a game in the store, as if it had been created earlier. */
 export function seedGame(game: Record<string, unknown> & { gameId: string }) {
     games.set(game.gameId, asStored({ __v: 0, _id: new mongoose.Types.ObjectId().toString(), ...game }));
+}
+
+/** Seed the membership slice chat reads from a standalone Kingdom Builder world. */
+export function seedKingdomBuilderWorld(worldId: string, userIds: string[], joinedAt = new Date(0)) {
+    kingdomBuilderWorlds.set(worldId, {
+        hostId: userIds[0],
+        roster: userIds.map(userId => ({ userId, joinedAt })),
+    });
 }
 
 /** Where the two players start in the game below, unless a test cares. */
@@ -549,7 +564,9 @@ function findChatFromStore(filter: Record<string, unknown>) {
         const or = filter.$or;
         const byTimestamp = Array.isArray(or) ? or[0] as Record<string, unknown> : undefined;
         const byTie = Array.isArray(or) ? or[1] as Record<string, unknown> : undefined;
-        const beforeLt = (byTimestamp?.timestamp as { $lt?: string } | undefined)?.$lt;
+        const timestampRange = byTimestamp?.timestamp as { $lt?: string, $gte?: string } | undefined;
+        const beforeLt = timestampRange?.$lt;
+        const joinedAt = timestampRange?.$gte;
         const tieTimestamp = byTie?.timestamp;
         const tieMessageIdLt = (byTie?.messageId as { $lt?: string } | undefined)?.$lt;
         const shape = Array.isArray(or) && or.length === 2
@@ -558,8 +575,12 @@ function findChatFromStore(filter: Record<string, unknown>) {
         if (!shape) {
             throw new Error(`The test chat store's $or cursor didn't have the shape the route builds, not ${JSON.stringify(filter)}`);
         }
-        matchesCursor = (message) => message.timestamp < beforeLt!
-            || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!);
+        matchesCursor = (message) => (!joinedAt || message.timestamp >= joinedAt) && (message.timestamp < beforeLt!
+            || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!));
+    } else if (keys.length === 2 && keys.includes('gameId') && keys.includes('timestamp')) {
+        const joinedAt = (filter.timestamp as { $gte?: string } | undefined)?.$gte;
+        if (typeof joinedAt !== 'string') throw new Error(`The test chat store expected a joinedAt lower bound, not ${JSON.stringify(filter)}`);
+        matchesCursor = message => message.timestamp >= joinedAt;
     } else if (keys.length !== 1 || keys[0] !== 'gameId') {
         throw new Error(`The test chat store only looks messages up by gameId (and an optional before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
     }

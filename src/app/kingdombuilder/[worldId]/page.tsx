@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 
 import BoardZoom from "@/components/ui/BoardZoom";
+import StandaloneGameChat from "@/components/games/StandaloneGameChat";
 import ClickableMapNode from "@/components/ui/ClickableMapNode";
 import Avatar from "@/components/ui/Avatar";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
@@ -153,6 +154,9 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     return (
         <main>
             <GameIdentityHeader backHref="/" backLabel="Back to my games" meta={GAME_META.kingdombuilder} title="Kingdom Builder" subtitle="World map" />
+            {data && <StandaloneGameChat gameId={worldId}
+                userIdList={data.players.map(player => String(player.seat))}
+                usernameList={data.players.map(player => player.name)} />}
             {unavailable ? <Section><div className="ag-empty">This world is not available to you.</div></Section> : <>
                 <Section label="World" isLoading={isLoading} action={data && <span className="ag-tag">Tick {data.currentTick}</span>}>
                     {isLoading ? <Skeleton width="100%" height={320} radius={14} /> : data && map && (

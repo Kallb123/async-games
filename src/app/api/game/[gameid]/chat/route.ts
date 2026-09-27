@@ -3,7 +3,6 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
@@ -11,9 +10,11 @@ import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody
 import { registerGifShare } from '@/utils/gif/klipy';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
-import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { buildChatNotification } from '@/utils/firebase/notificationContent';
 import { readableName } from '@/utils/ui/players';
+import { chatGame } from '@/utils/games/chatGame';
+import { APP_BASE_URL } from '@/utils/app';
 
 export interface IChatParams {
     gameid: string;
@@ -54,7 +55,7 @@ export interface IChatResponse {
     hasMore: boolean;
 }
 
-function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
+function toResponse(message: IChatMessageDataDocument, senderId = message.senderId): IChatMessageResponse {
     // normaliseAttachment does two jobs here, which is why it is worth the URL
     // parse per GIF rather than spreading the subdocument: it reduces a
     // Mongoose subdocument to exactly the seven fields that belong on the wire,
@@ -76,7 +77,7 @@ function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
         // messageId is a UUID field; String() gives its canonical form whether
         // the driver hands it back as a UUID object or already as a string.
         messageId: String(message.messageId),
-        senderId: message.senderId,
+        senderId,
         text: message.text,
         ...(attachment ? { attachment } : {}),
         timestamp: message.timestamp,
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
     await dbConnect();
 
     const { gameid } = await params;
-    const gameData: IGameDataDocument = await GameDataModel.findOne({ gameId: gameid }).exec();
+    const gameData = await chatGame(gameid, userId);
     if (!gameData) {
         return NextResponse.json({}, { status: 404, statusText: "Game not found" });
     }
@@ -140,10 +141,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
     // The cursor mirrors the sort key exactly: strictly older, or the same
     // millisecond and strictly on the other side of the tiebreak — "earlier in
     // { timestamp: -1, messageId: -1 } order than (before, beforeMessageId)".
-    const cursor = before === null ? { gameId: gameid } : {
+    const cursor = before === null ? {
+        gameId: gameid,
+        ...(gameData.joinedAt ? { timestamp: { $gte: gameData.joinedAt } } : {}),
+    } : {
         gameId: gameid,
         $or: [
-            { timestamp: { $lt: before } },
+            { timestamp: { $lt: before, ...(gameData.joinedAt ? { $gte: gameData.joinedAt } : {}) } },
             { timestamp: before, messageId: { $lt: beforeMessageId } },
         ],
     };
@@ -163,7 +167,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
 
     const hasMore = page.length > CHAT_PAGE_SIZE;
     const newest = hasMore ? page.slice(0, CHAT_PAGE_SIZE) : page;
-    const messages = newest.reverse().map(toResponse);
+    const messages = newest.reverse().map(message => toResponse(message,
+        gameData.senderIdList[gameData.userIdList.indexOf(message.senderId)] ?? message.senderId));
 
     // The caller's own marker, from the same indexed lookup the read route
     // writes ({ gameId: 1, userId: 1 }) — never another player's (§13.2), and
@@ -209,7 +214,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     await dbConnect();
 
     const { gameid } = await params;
-    const gameData: IGameDataDocument = await GameDataModel.findOne({ gameId: gameid }).exec();
+    const gameData = await chatGame(gameid, userId);
     if (!gameData) {
         return NextResponse.json({}, { status: 404, statusText: "Game not found" });
     }
@@ -331,7 +336,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
                 await sendPushToUsers(await usersById(notify), {
                     event: 'ChatMessage',
                     gameId: gameid,
-                    link: gameNotificationLink(gameData.gameType.url, gameid),
+                    link: `${APP_BASE_URL}${gameData.path}`,
                 }, buildChatNotification(senderName, gameData, messageBody.text), { channel: 'chat' });
             }
         } catch (error) {
@@ -354,5 +359,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // The stored message, for the route test to assert on. The client refetches
     // rather than rendering this directly — one source of truth, no optimistic
     // append (docs/in-game-chat.md §6).
-    return NextResponse.json({ success: true, message: toResponse(messageDoc) });
+    return NextResponse.json({ success: true, message: toResponse(messageDoc,
+        gameData.senderIdList[gameData.userIdList.indexOf(userId)] ?? userId) });
 }

@@ -5,11 +5,10 @@ import BackArrow from '@/components/ui/BackArrow';
 import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
 import DevGameMenu from '@/components/ui/DevGameMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
-import GameChat from '@/components/games/GameChat';
+import GameChatSection, { useGameChatSection } from '@/components/games/GameChatSection';
 import GameGuideModal from '@/components/ui/GameGuideModal';
 import GameTutorialOverlay from '@/components/ui/GameTutorialOverlay';
 import PanelToggleRow from '@/components/ui/PanelToggleRow';
-import { useGameChat } from '@/utils/hooks/useGameChat';
 import { GameIntro } from '@/utils/hooks/useGameIntro';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
 import { GameGuide } from '@/utils/ui/gameGuides';
@@ -119,14 +118,13 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
 
     // A game with fewer than two players (Solitaire) has no thread to read, so
     // the hook mounts but never fetches, and no button or panel renders.
-    const hasChat = !!chat && chat.userIdList.length >= 2;
-    const chatState = useGameChat(chat?.gameId ?? '', showChat, hasChat);
+    const chatController = useGameChatSection(chat, showChat);
+    const hasChat = chatController.enabled;
 
     // Both panels open below the board, at the bottom of the page — so on a
     // tall board the 💬/📜 button can flip one on with nothing changing in
     // view, reading as a dead tap. `useScrollIntoViewOnOpen` brings each into
     // view the moment it opens.
-    const chatPanelRef = useScrollIntoViewOnOpen(showChat && hasChat);
     const logPanelRef = useScrollIntoViewOnOpen(showLog && !!log);
 
     const shellOptions: GameOption[] = [
@@ -170,7 +168,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                         💬
                         {/* An unread dot can't be seen inside a closed kebab menu,
                             which is why chat is a button and not a menu row. */}
-                        {chatState.hasUnread && <span className="ag-topbar-dot" aria-hidden />}
+                        {chatController.state.hasUnread && <span className="ag-topbar-dot" aria-hidden />}
                     </button>
                 )}
                 {right ?? (options && <GameOptionsMenu options={[...shellOptions, ...options]} />)}
@@ -199,25 +197,8 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             ) : (
                 <PanelToggleRow title="Match history" onOpen={() => setShowLog(true)} />
             ))}
-            {hasChat && chat && (showChat ? (
-                <div ref={chatPanelRef}>
-                    <GameChat
-                        messages={chatState.messages}
-                        isLoading={chatState.isLoading}
-                        isRefreshing={chatState.isRefreshing}
-                        sending={chatState.sending}
-                        send={chatState.send}
-                        hasMoreEarlier={chatState.hasMoreEarlier}
-                        loadingEarlier={chatState.loadingEarlier}
-                        loadEarlier={chatState.loadEarlier}
-                        onClose={() => setShowChat(false)}
-                        userIdList={chat.userIdList}
-                        usernameList={chat.usernameList}
-                    />
-                </div>
-            ) : (
-                <PanelToggleRow title="Chat" onOpen={() => setShowChat(true)} />
-            ))}
+            {chat && <GameChatSection chat={chat} open={showChat} onOpen={() => setShowChat(true)}
+                onClose={() => setShowChat(false)} controller={chatController} />}
         </div>
     );
 }
