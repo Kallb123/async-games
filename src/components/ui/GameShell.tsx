@@ -118,8 +118,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
 
     // A game with fewer than two players (Solitaire) has no thread to read, so
     // the hook mounts but never fetches, and no button or panel renders.
-    const chatController = useGameChatSection(chat, showChat);
-    const hasChat = chatController.enabled;
+    const [hasChat, chatState, chatPanelRef] = useGameChatSection(chat, showChat);
 
     // Both panels open below the board, at the bottom of the page — so on a
     // tall board the 💬/📜 button can flip one on with nothing changing in
@@ -168,7 +167,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                         💬
                         {/* An unread dot can't be seen inside a closed kebab menu,
                             which is why chat is a button and not a menu row. */}
-                        {chatController.state.hasUnread && <span className="ag-topbar-dot" aria-hidden />}
+                        {chatState.hasUnread && <span className="ag-topbar-dot" aria-hidden />}
                     </button>
                 )}
                 {right ?? (options && <GameOptionsMenu options={[...shellOptions, ...options]} />)}
@@ -198,7 +197,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 <PanelToggleRow title="Match history" onOpen={() => setShowLog(true)} />
             ))}
             {chat && <GameChatSection chat={chat} open={showChat} onOpen={() => setShowChat(true)}
-                onClose={() => setShowChat(false)} controller={chatController} />}
+                onClose={() => setShowChat(false)} enabled={hasChat} state={chatState} panelRef={chatPanelRef} />}
         </div>
     );
 }

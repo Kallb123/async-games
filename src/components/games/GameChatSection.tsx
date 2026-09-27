@@ -10,23 +10,26 @@ export function useGameChatSection(chat: GameShellChat | undefined, open: boolea
     const enabled = !!chat && chat.userIdList.length >= 2;
     const state = useGameChat(chat?.gameId ?? "", open, enabled);
     const panelRef = useScrollIntoViewOnOpen(open && enabled);
-    return { enabled, state, panelRef };
+    return [enabled, state, panelRef] as const;
 }
 
-type Controller = ReturnType<typeof useGameChatSection>;
+type ChatState = ReturnType<typeof useGameChat>;
+type PanelRef = ReturnType<typeof useScrollIntoViewOnOpen>;
 
 /** The standard open/closed chat panel shared by shell and standalone games. */
-export default function GameChatSection({ chat, open, onOpen, onClose, controller }: {
+export default function GameChatSection({ chat, open, onOpen, onClose, enabled, state, panelRef }: {
     chat: GameShellChat;
     open: boolean;
     onOpen: () => void;
     onClose: () => void;
-    controller: Controller;
+    enabled: boolean;
+    state: ChatState;
+    panelRef: PanelRef;
 }) {
-    if (!controller.enabled) return null;
+    if (!enabled) return null;
     return open ? (
-        <div ref={controller.panelRef}>
-            <GameChat {...controller.state} onClose={onClose} userIdList={chat.userIdList} usernameList={chat.usernameList} />
+        <div ref={panelRef}>
+            <GameChat {...state} onClose={onClose} userIdList={chat.userIdList} usernameList={chat.usernameList} />
         </div>
-    ) : <PanelToggleRow title={controller.state.hasUnread ? "Chat · new messages" : "Chat"} onOpen={onOpen} />;
+    ) : <PanelToggleRow title={state.hasUnread ? "Chat · new messages" : "Chat"} onOpen={onOpen} />;
 }

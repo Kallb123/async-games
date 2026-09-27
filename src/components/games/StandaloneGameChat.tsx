@@ -9,6 +9,7 @@ import type { GameShellChat } from "@/components/ui/GameShell";
 export default function StandaloneGameChat({ gameId, userIdList, usernameList }: GameShellChat) {
     const [open, setOpen] = useState(false);
     const chat = { gameId, userIdList, usernameList };
-    const controller = useGameChatSection(chat, open);
-    return <GameChatSection chat={chat} open={open} onOpen={() => setOpen(true)} onClose={() => setOpen(false)} controller={controller} />;
+    const [enabled, state, panelRef] = useGameChatSection(chat, open);
+    return <GameChatSection chat={chat} open={open} onOpen={() => setOpen(true)} onClose={() => setOpen(false)}
+        enabled={enabled} state={state} panelRef={panelRef} />;
 }
