@@ -553,10 +553,20 @@ export function detectExplosionEvent(step: IReplayStep): Omit<GameResultEvent, '
 // reads the delta between the step's two snapshots rather than any one
 // command's outcome. Exported so it can be unit-tested and wired straight
 // into GAME_RESULT_STATS.FiresOut.compute (GameResultData.ts).
-export function detectRescueEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+//
+// A rescue taken back (docs/undo.md) never happened as far as the board is
+// concerned, so the undo that lowers `rescued` takes the marker it left back
+// off `events` too — the only command that can lower it, and it only ever
+// reverses the one command behind it, which left exactly one marker.
+export function detectRescueEvent(step: IReplayStep, events: GameResultEvent[] = []): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
     const prevRescued = (step.prev.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
     const nextRescued = (step.next.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
     const rescued = nextRescued - prevRescued;
+    if (rescued < 0 && step.command.className === "FiresOutUndo") {
+        const index = events.findLastIndex(e => e.icon === 'rescue');
+        if (index >= 0) events.splice(index, 1);
+        return undefined;
+    }
     if (rescued <= 0) return undefined;
     const title = rescued > 1
         ? `${pluralize(rescued, 'victim')} got out! (${nextRescued}/${VICTIMS_TO_WIN})`

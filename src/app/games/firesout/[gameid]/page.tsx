@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { FiresOutAction, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
+import { FiresOutAction, FiresOutUndo, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutGameDataResponse, IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
 import FiresOutBoard from "@/games/FiresOut/components/FiresOutBoard";
 import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/FiresOutActions";
@@ -217,6 +217,12 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         submitCommand(command, undefined, 'crewChange');
     }
 
+    // docs/undo.md: puts the board back as it was before the last action, so
+    // whatever the board was armed for goes with it.
+    function handleUndo() {
+        submitCommand(new FiresOutUndo(), () => setMode(null), 'undo');
+    }
+
     // The Advance Fire payoff screen (§17.6 step 7) — lives here, not inside
     // FiresOutActions, so it survives the endTurn command handing the turn
     // (and often activeFirefighter's owner) to someone else.
@@ -394,6 +400,9 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 onEndTurn={handleEndTurn}
                                 submitting={submitting}
                                 endTurnPending={pendingTarget === 'endTurn'}
+                                canUndo={gs.canUndo}
+                                onUndo={handleUndo}
+                                undoPending={pendingTarget === 'undo'}
                                 experienced={experienced}
                                 specialist={activeFf?.specialist ?? 'generalist'}
                                 directingName={directing !== null ? identityFor(directing).name : null}

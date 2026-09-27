@@ -3,6 +3,7 @@ import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import BuildRow from '@/components/ui/BuildRow';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
+import UndoButton from '@/components/ui/UndoButton';
 import { AP_COSTS, chopApCost, deckGunApCost, extinguishApCost, SPECIALISTS, SpecialistId } from '@/games/FiresOut/rules';
 
 export type FiresOutBoardMode = 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun' | 'reveal';
@@ -51,6 +52,10 @@ interface FiresOutActionsProps {
     onEndTurn: () => void;
     submitting: boolean;
     endTurnPending: boolean;
+    /** docs/undo.md: the viewer's last action can still be taken back. */
+    canUndo: boolean;
+    onUndo: () => void;
+    undoPending: boolean;
     /** §6.1 step 7: Drive, the deck gun and every Specialist ability only exist once vehicles/cards are in play. */
     experienced: boolean;
     specialist: SpecialistId;
@@ -83,7 +88,7 @@ interface FiresOutActionsProps {
 export default function FiresOutActions({
     apLeft, bankedAp, mode, onModeChange, targetCounts,
     carryToggleKind, carryOnMove, onCarryOnMoveChange,
-    onEndTurn, submitting, endTurnPending, experienced, specialist, directingName,
+    onEndTurn, submitting, endTurnPending, canUndo, onUndo, undoPending, experienced, specialist, directingName,
     showTreat, onTreat, treatPending,
     showDisposeHazmat, onDisposeHazmat, disposeHazmatPending,
     showCrewChange, onCrewChange, crewChangePending,
@@ -174,15 +179,21 @@ export default function FiresOutActions({
                 </>
             )}
 
-            <ActionButton
-                className="ag-btn ag-btn--primary ag-btn--block"
-                onClick={onEndTurn}
-                disabled={submitting}
-                pending={endTurnPending}
-                pendingLabel="Ending turn…"
-            >
-                🔔 End turn
-            </ActionButton>
+            {/* Taking back the last action (docs/undo.md) sits beside End turn:
+                `canUndo` is only ever true for the player who made the move,
+                and never once End turn has run the fire. */}
+            <div className="ag-action-grid">
+                {canUndo && <UndoButton pending={undoPending} disabled={submitting} onClick={onUndo} />}
+                <ActionButton
+                    className="ag-btn ag-btn--primary"
+                    onClick={onEndTurn}
+                    disabled={submitting}
+                    pending={endTurnPending}
+                    pendingLabel="Ending turn…"
+                >
+                    🔔 End turn
+                </ActionButton>
+            </div>
         </div>
     );
 }
