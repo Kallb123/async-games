@@ -12,6 +12,25 @@ const PULL_MAX_PX = 96;
 const PULL_DAMPING = 0.5;
 
 /**
+ * How far a pull has gone, in px, for a finger that started at `start` and is
+ * now at `now` — or null if this was never a pull: sideways (a carousel swipe),
+ * back up past where it began, or on a page that has scrolled under the finger.
+ * Pure, so the gesture's rules can be tested without a touchscreen.
+ */
+export function pullDistance(
+    start: { x: number; y: number },
+    now: { x: number; y: number },
+    scrollY: number,
+): number | null {
+    const dx = now.x - start.x;
+    const dy = now.y - start.y;
+    if (dy <= 0 || Math.abs(dx) > dy || scrollY > 0) {
+        return null;
+    }
+    return Math.min(PULL_MAX_PX, dy * PULL_DAMPING);
+}
+
+/**
  * Pull down from the top of the page to call `onRefresh` — the phone gesture
  * for "check again now", on a screen that otherwise only re-asks on its poll,
  * a push or a return to the foreground.
@@ -45,8 +64,10 @@ export function usePullToRefresh(onRefresh: () => void): number {
             setPull(0);
         };
         const onStart = (event: TouchEvent) => {
+            // A second finger landing mid-pull ends the pull outright, rather
+            // than leaving the badge parked where it was.
             if (event.touches.length !== 1 || window.scrollY > 0) {
-                start = null;
+                reset();
                 return;
             }
             start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
@@ -56,15 +77,14 @@ export function usePullToRefresh(onRefresh: () => void): number {
             if (start === null) {
                 return;
             }
-            const dx = event.touches[0].clientX - start.x;
-            const dy = event.touches[0].clientY - start.y;
-            // Sideways, back up, a second finger or a page that has scrolled
-            // under the finger: this was never a pull.
-            if (event.touches.length !== 1 || dy <= 0 || Math.abs(dx) > dy || window.scrollY > 0) {
+            const next = event.touches.length === 1
+                ? pullDistance(start, { x: event.touches[0].clientX, y: event.touches[0].clientY }, window.scrollY)
+                : null;
+            if (next === null) {
                 reset();
                 return;
             }
-            distance = Math.min(PULL_MAX_PX, dy * PULL_DAMPING);
+            distance = next;
             setPull(distance);
         };
         const onEnd = () => {
