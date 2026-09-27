@@ -17,7 +17,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat, computePerTurnEvents } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents, computePerTurnInternalStats } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -40,10 +40,8 @@ import {
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesCharts,
-    playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
-import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
+import { calculateTotalVP, type ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -353,18 +351,21 @@ const GAME_RESULT_STATS: Record<string, {
         model: SettlementsAndCitiesGameResultModel,
         compute: async (gameData) => {
             const sacGameData = gameData as ISettlementsAndCitiesGameData;
-            // The same replay also hands back the state it ends on, whose
-            // by-resource counts run from the first move - the resources
-            // table reads those rather than the live game's
+            // One replay, read off the internal state: the victory points
+            // chart counts the VP cards the response hides, and the state it
+            // ends on has by-resource counts that run from the first move -
+            // the resources table reads those rather than the live game's
             // (see computeSettlementsAndCitiesResultStats).
-            let replayedState: ISACSpecificGameState | undefined;
-            const resourcesPerTurn = await computePerTurnStat<ISACSpecificGameStateResponse>(
+            const replayed = await computePerTurnInternalStats<ISACSpecificGameState, 'resources' | 'victoryPoints'>(sacGameData, {
+                resources: (state, userId) => state.playerStates.get(userId)?.resourcesGathered ?? 0,
+                victoryPoints: (state, userId) => calculateTotalVP(userId, state),
+            });
+            return computeSettlementsAndCitiesResultStats(
                 sacGameData,
-                (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
-                sacGameData.userIdList,
-                (state) => { replayedState = state as ISACSpecificGameState; },
+                replayed?.perTurn.resources ?? [],
+                replayed?.finalState,
+                replayed?.perTurn.victoryPoints,
             );
-            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn, replayedState);
         },
         format: formatSettlementsAndCitiesResultStats,
         charts: formatSettlementsAndCitiesCharts,
