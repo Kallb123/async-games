@@ -4,13 +4,13 @@ import GameThumb from "@/components/ui/GameThumb";
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
 import { worldBuildsStorageKey, type KingdomBuilderWorldSummary } from "@/games/KingdomBuilder/worldSummaryTypes";
-import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useHydrated } from "@/utils/hooks/useNow";
 import { useStoredValue } from "@/utils/hooks/useStoredValue";
 import { GAME_META } from "@/utils/ui/games";
 import { pluralize } from "@/utils/ui/text";
 
-interface KingdomBuilderWorldListProps extends RefreshableState {
+interface KingdomBuilderWorldListProps {
+    isLoading: boolean;
     worlds: KingdomBuilderWorldSummary[];
 }
 
@@ -38,9 +38,9 @@ function WorldRow({ world }: { world: KingdomBuilderWorldSummary }) {
     />;
 }
 
-export default function KingdomBuilderWorldList({ worlds, isLoading, isRefreshing }: KingdomBuilderWorldListProps) {
+export default function KingdomBuilderWorldList({ worlds, isLoading }: KingdomBuilderWorldListProps) {
     return (
-        <ListSection label="Your worlds" isLoading={isLoading} isRefreshing={isRefreshing} skeletonIcon="thumb">
+        <ListSection label="Your worlds" isLoading={isLoading} skeletonIcon="thumb">
             {worlds.map(world => (
                 <WorldRow key={world.worldId} world={world} />
             ))}

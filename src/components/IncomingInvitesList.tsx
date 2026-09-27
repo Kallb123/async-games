@@ -9,15 +9,15 @@ import ListSection from "@/components/ui/ListSection";
 import ThumbBadge from "@/components/ui/ThumbBadge";
 import { metaForGame } from "@/utils/ui/games";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
-import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 
-interface IncomingInviteListProps extends RefreshableState {
+interface IncomingInviteListProps {
+    isLoading: boolean;
     invites: IInvitationResponse[];
     /** Re-reads the dashboard after this list changes something. */
     onChanged: () => void;
 }
 
-export default function IncomingInviteList({ invites, isLoading, isRefreshing, onChanged }: IncomingInviteListProps) {
+export default function IncomingInviteList({ invites, isLoading, onChanged }: IncomingInviteListProps) {
     const { userId } = useAuth();
     const { showToast } = useToast();
     const enterStartedGame = useEnterStartedGame();
@@ -50,7 +50,6 @@ export default function IncomingInviteList({ invites, isLoading, isRefreshing, o
             label="Invites"
             showCount
             isLoading={isLoading}
-            isRefreshing={isRefreshing}
         >
             {invites.map((invite) => {
                 const meta = metaForGame({ friendlyName: invite.gameFriendlyName });

@@ -21,6 +21,9 @@ interface AppRailProps {
     theirTurn?: IGameResponse[];
     /** Persistent Kingdom Builder worlds have no turn owner, but are still in play. */
     worlds?: KingdomBuilderWorldSummary[];
+    /** Shows the sweeping loading bar under the header while the screen waits
+     *  on the network. */
+    busy?: boolean;
 }
 
 // Where the rail can take you that isn't a game. Deliberately short: the
@@ -65,7 +68,7 @@ function RailGameLink({ href, name, thumb, status, isYours = false, onClick }: {
  * you and the ones waiting on somebody else — so a player who has scrolled to
  * the bottom of a long dashboard is still one click from any board.
  */
-export default function AppRail({ myTurn = [], theirTurn = [], worlds = [] }: AppRailProps) {
+export default function AppRail({ myTurn = [], theirTurn = [], worlds = [], busy = false }: AppRailProps) {
     const pathname = usePathname();
     const { user } = useIsAuthorised();
 
@@ -91,6 +94,12 @@ export default function AppRail({ myTurn = [], theirTurn = [], worlds = [] }: Ap
                             <Avatar name={displayName} imageUrl={profileImageUrl(user)} size={40} ring="var(--ag-terracotta)" />
                         </Link>
                     </div>
+                    {/* Absolutely positioned, so it adds no height and nothing
+                        below it moves as it comes and goes. The same indeterminate
+                        progressbar GameShell hangs under its bar, and for the same
+                        reason not a live region: it rises on every background
+                        refresh. */}
+                    {busy && <span className="ag-pending-bar ag-pending-bar--page" role="progressbar" aria-label="Loading" />}
                 </div>
 
                 <nav className="ag-rail-nav" aria-label="Sections">

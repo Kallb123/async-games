@@ -8,19 +8,18 @@ import GameThumb from "@/components/ui/GameThumb";
 import UnreadChatBadge from "@/components/ui/UnreadChatBadge";
 import { accentVar } from "@/utils/ui/colours";
 import CollapsingSection from "@/components/ui/CollapsingSection";
-import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCard } from "@/components/ui/Skeleton";
-import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 
-interface MyTurnListProps extends RefreshableState {
+interface MyTurnListProps {
+    isLoading: boolean;
     games: IGameResponse[];
 }
 
-export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnListProps) {
+export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
     const { user } = useIsAuthorised();
     const router = useRouter();
     const now = useNowToTheMinute();
@@ -87,7 +86,7 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
 
             {cards.length > 0 && (
                 <CollapsingSection collapsed={!isLoading && count === 0} isLoading={isLoading}>
-                    <Refreshable className="ag-stack" isRefreshing={isRefreshing}>{cards}</Refreshable>
+                    <div className="ag-stack">{cards}</div>
                 </CollapsingSection>
             )}
         </>

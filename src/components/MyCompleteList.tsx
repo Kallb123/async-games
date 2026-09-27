@@ -8,7 +8,10 @@ import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { finishedGameCopy } from "@/utils/ui/players";
 
-interface MyCompleteListProps extends RefreshableState {
+interface MyCompleteListProps extends Pick<RefreshableState, "isLoading"> {
+    /** The full /games/completed list shimmers its rows while it refetches; the
+     *  dashboard leaves this out and shows its one loading bar instead. */
+    isRefreshing?: boolean;
     games: ICompletedGame[];
     /** Caps the rows shown and adds a "See all" link to the full page. Omit for the full, unlimited list. */
     limit?: number;

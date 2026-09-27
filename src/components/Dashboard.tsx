@@ -50,18 +50,21 @@ export default function Dashboard() {
         <main className="ag-desk">
             <FcmTokenComp />
 
-            <AppRail myTurn={dashboard.myTurn} theirTurn={dashboard.theirTurn} worlds={dashboard.worlds} />
+            {/* The dashboard's one sign that it is waiting on the network — first
+                load and every background refresh alike — is the bar under the
+                header, not a shimmer over each list. */}
+            <AppRail busy={isLoading || isRefreshing} myTurn={dashboard.myTurn} theirTurn={dashboard.theirTurn} worlds={dashboard.worlds} />
 
             <div className="ag-desk-col ag-desk-col--main">
-                <MyTurnList games={dashboard.myTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
-                <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
-                <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
-                <KingdomBuilderWorldList worlds={dashboard.worlds} isLoading={isLoading} isRefreshing={isRefreshing} />
+                <MyTurnList games={dashboard.myTurn} isLoading={isLoading} />
+                <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} onChanged={refresh} />
+                <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} />
+                <KingdomBuilderWorldList worlds={dashboard.worlds} isLoading={isLoading} />
             </div>
 
             <aside className="ag-desk-col ag-desk-col--side">
-                <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
-                <MyCompleteList games={dashboard.completed} isLoading={isLoading} isRefreshing={isRefreshing} limit={10} />
+                <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} onChanged={refresh} />
+                <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={10} />
 
                 <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
                     <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">
