@@ -31,7 +31,7 @@ this folder, so the original stays as it arrived.
 `kingdombuilder/v2` is the one folder that doesn't mirror `public/art` file for
 file. Its ~500 tiles are served as a single sheet, shrunk to the size the map
 is drawn at, and its map badges as one small PNG per scene, rendered from the
-badge kit's own generator (`badges/map-badges-2d.js`). After changing anything in it, run
-`npm run kb-atlas` (not `optimise-art`) and commit the
+badge kit's own generator (`badges/map-badges-2d.js`). After changing anything
+in it, run `npm run kb-atlas` (not `optimise-art`) and commit the
 `public/art/kingdombuilder/v2/` files and `src/games/KingdomBuilder/terrainAtlas.json`
 it writes.

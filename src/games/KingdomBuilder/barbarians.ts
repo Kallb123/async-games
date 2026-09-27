@@ -53,7 +53,7 @@ export function barbarianBandsFor(nodes: readonly WorldNode[]): Map<string, numb
     return new Map(ranked.map(({ site }, rank) => [site.id, Math.floor(rank * bands / ranked.length)]));
 }
 
-/** Every barbarian site's starting garrison: its band's (see barbarianBandsFor). */
+/** Every barbarian site's starting garrison: the one for its band (see barbarianBandsFor). */
 export function barbarianVillagesFor(nodes: readonly WorldNode[]): KingdomBuilderBarbarianVillage[] {
     return [...barbarianBandsFor(nodes)].map(([nodeId, band]) => ({
         nodeId,

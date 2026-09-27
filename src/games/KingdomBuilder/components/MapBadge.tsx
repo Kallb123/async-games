@@ -12,6 +12,9 @@
 export type MapBadgeKind = "village" | "barbarian" | "forest" | "quarry" | "iron" | "plot";
 
 const OUTLINE = "#2b2320";
+const VILLAGE_SHIELD_TRIM = "#c9a24a";
+const BARBARIAN_RED = "#a8322f";
+const BARBARIAN_SHIELD_TRIM = "#e3b23c";
 const NUMERALS = ["I", "II", "III", "IV", "V"];
 /** The badge's disc, in badge units: the centre sits above the middle to leave room for its shadow. */
 const CENTRE_Y = 48;
@@ -62,8 +65,8 @@ export default function MapBadge({ kind, x, y, size, colour, level }: {
             <g pointerEvents="none">
                 <image href={`/art/kingdombuilder/v2/badges/${kind}.png`} width={100} height={100} />
                 {level !== undefined && (isVillage
-                    ? <LevelShield level={level} fill={ring} ink={inkOn(ring)} trim="#c9a24a" />
-                    : kind === "barbarian" && <LevelShield level={level} fill="#a8322f" ink="#ffffff" trim="#e3b23c" />)}
+                    ? <LevelShield level={level} fill={ring} ink={inkOn(ring)} trim={VILLAGE_SHIELD_TRIM} />
+                    : kind === "barbarian" && <LevelShield level={level} fill={BARBARIAN_RED} ink="#ffffff" trim={BARBARIAN_SHIELD_TRIM} />)}
             </g>
         </g>
     );
