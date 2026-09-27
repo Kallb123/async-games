@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { unitCount, type KingdomBuilderMarch } from "./armies";
-import { KINGDOM_BUILDER_BARBARIAN_GARRISONS, assaultVillages, barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
+import { KINGDOM_BUILDER_BARBARIAN_GARRISONS, assaultVillages, barbarianBandsFor, barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
 import { resolveBattle } from "./combat";
 import { garrisonOf, type KingdomBuilderGarrison } from "./units";
 import type { SettlementNode } from "./worldgen/landmass";
@@ -31,6 +31,8 @@ describe("barbarianVillagesFor", () => {
             { nodeId: "middle", garrison: KINGDOM_BUILDER_BARBARIAN_GARRISONS[1] },
             { nodeId: "near", garrison: KINGDOM_BUILDER_BARBARIAN_GARRISONS[0] },
         ]);
+        // The band the map shows as the village's level is the one its garrison came from.
+        expect(barbarianBandsFor(nodes)).toEqual(new Map([["near", 0], ["middle", 1], ["far", 2]]));
     });
 
     it("has nothing to garrison in a world with no barbarian sites", () => {

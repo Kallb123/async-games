@@ -22,6 +22,7 @@ import ArmiesSection, { type MarchDraft, type MarchPreview } from "@/games/Kingd
 import BattlesSection from "@/games/KingdomBuilder/components/BattlesSection";
 import ArmyLayer from "@/games/KingdomBuilder/components/ArmyLayer";
 import FogLayer from "@/games/KingdomBuilder/components/FogLayer";
+import MapBadge, { MAP_BADGE_RADIUS } from "@/games/KingdomBuilder/components/MapBadge";
 import SiegesSection from "@/games/KingdomBuilder/components/SiegesSection";
 import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection";
 import TradeSection from "@/games/KingdomBuilder/components/TradeSection";
@@ -43,25 +44,16 @@ const TERRAIN = {
     quarry: { name: "Quarry" },
     ore: { name: "Ore" },
 } as const;
-// Smaller than World Domination or Outbreak's own node radii because Kingdom
-// Builder's world packs many more nodes into its viewBox (200×140 for a new
-// world, 100×70 for one generated before it grew) — the original sizes
-// overlapped each other and read as an oversized graph.
-const TERRAIN_RADIUS = 1.15;
-// A settlement's own filled circle sits on top of the composited ground
-// (PR 11's tileset art), not a flat silhouette, so it has to stay small
-// enough that its own tile's art still reads underneath the marker — a
-// square of the field is TERRAIN_FIELD_TILE_SIZE (2 world units) across, and
-// this is deliberately smaller than that rather than the 1.6 that used to
-// spill a filled disc a tile and a half wide over every neighbour's art.
-const SETTLEMENT_RADIUS = 0.85;
-const MAP_ICON_SIZE = 4;
-
-/** A v2 kit marker, bottom-centred on the same world point used by routes, fog and hit targets. */
-function MapArtIcon({ name, x, y }: { name: "barbarian" | "forest" | "quarry" | "iron" | "plot" | "village1"; x: number; y: number }) {
-    return <image className={styles.mapIcon} href={`/art/kingdombuilder/v2/icons/${name}.png`}
-        x={x - MAP_ICON_SIZE / 2} y={y - MAP_ICON_SIZE * 0.78} width={MAP_ICON_SIZE} height={MAP_ICON_SIZE} />;
-}
+// A badge covers its node, centred on the same world point used by routes, fog
+// and hit targets. A site badge is a size up on a resource one, so towns and
+// villages lead the eye. Both are about two field tiles (2 world units each)
+// across: any bigger and a site-dense world's badges start to overlap.
+const SITE_BADGE_SIZE = 4;
+const TERRAIN_BADGE_SIZE = 3.2;
+const SITE_RADIUS = SITE_BADGE_SIZE * MAP_BADGE_RADIUS;
+const TERRAIN_RADIUS = TERRAIN_BADGE_SIZE * MAP_BADGE_RADIUS;
+/** How far the gold disc behind a picked target peeks out round its badge. */
+const SELECTED_RIM = 0.3;
 
 function landPath(view: KingdomBuilderWorldView): string {
     const { resolution, width, height, values, landThreshold } = view.landmass;
@@ -135,7 +127,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
     // proportionally deeper steps to put its pieces at the same size on screen.
     const zoomWidth = 240 * Math.max(1, (data?.landmass.width ?? 100) / 100);
     const occupiedByNode = new Map(data?.settlements.map(settlement => [settlement.nodeId, settlement]) ?? []);
-    const villages = new Set(data?.barbarians.map(village => village.nodeId));
+    const villages = new Map(data?.barbarians.map(village => [village.nodeId, village]));
     const open = new Set(data ? openSites(data).map(node => node.id) : []);
     const mySettlements = data?.settlements.filter(settlement => settlement.isMine) ?? [];
     const players = data?.players ?? [];
@@ -179,15 +171,16 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                         {data.nodes.filter((node): node is TerrainNode => node.kind === "terrain").map(node => (
                                             <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={TERRAIN_RADIUS} isValid={!!march && !homeOnly} isSelected={march?.targetNodeId === node.id} showRing={false}
                                                 onClick={() => !homeOnly && marchTo(node.id)} title={TERRAIN[node.terrain].name}>
-                                                {march?.targetNodeId === node.id && <circle className={styles.selected} cx={node.x} cy={node.y} r={TERRAIN_RADIUS} />}
-                                                <MapArtIcon name={node.terrain === "ore" ? "iron" : node.terrain} x={node.x} y={node.y} />
+                                                {march?.targetNodeId === node.id && <circle className={styles.selected} cx={node.x} cy={node.y} r={TERRAIN_RADIUS + SELECTED_RIM} />}
+                                                <MapBadge kind={node.terrain === "ore" ? "iron" : node.terrain} x={node.x} y={node.y} size={TERRAIN_BADGE_SIZE} />
                                             </ClickableMapNode>
                                         ))}
                                         {data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => {
                                             const settlement = occupiedByNode.get(node.id);
                                             const isMine = settlement?.isMine ?? false;
                                             const isOpen = open.has(node.id);
-                                            const isVillage = villages.has(node.id);
+                                            const village = villages.get(node.id);
+                                            const isVillage = !!village;
                                             const isTarget = !!march && node.id !== marchOrigin && (!homeOnly || isMine);
                                             const isSelected = march?.targetNodeId === node.id;
                                             // No ring: ClickableMapNode's default ring offset is sized for World
@@ -196,14 +189,14 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             // "Open site", "Your town", "Claimed" — is already the label under it;
                                             // "selected" is the one state a label can't say, so it gets its own
                                             // fill on the site's own dot instead (see .selected).
-                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SETTLEMENT_RADIUS} isValid={march ? isTarget : isMine} isSelected={isSelected} showRing={false}
+                                            return <ClickableMapNode key={node.id} x={node.x} y={node.y} radius={SITE_RADIUS} isValid={march ? isTarget : isMine} isSelected={isSelected} showRing={false}
                                                 onClick={march ? () => isTarget && marchTo(node.id)
                                                     : isMine ? () => router.push(`/kingdombuilder/${worldId}/${settlement?.settlementId}`) : undefined}
                                                 title={isMine ? "Your settlement" : settlement ? `${ownerName(settlement.seat)}'s settlement` : isVillage ? "Barbarian village" : isOpen ? "Open settlement site" : "Free starting site"}>
-                                                {/* The marker's base keeps the owner's seat colour visible around the painted village; barbarian sites stay dark. */}
-                                                <circle className={`${styles.site} ${isVillage ? styles.held : ""} ${isSelected ? styles.selected : ""}`} cx={node.x} cy={node.y} r={SETTLEMENT_RADIUS}
-                                                    style={settlement ? { fill: playerColour(settlement.seat) } : undefined} />
-                                                <MapArtIcon name={settlement ? "village1" : isVillage ? "barbarian" : "plot"} x={node.x} y={node.y} />
+                                                {isSelected && <circle className={styles.selected} cx={node.x} cy={node.y} r={SITE_RADIUS + SELECTED_RIM} />}
+                                                {/* A town wears its owner's colour on its ring; the shield is its town centre's level, sent for your own towns only. */}
+                                                <MapBadge kind={settlement ? "village" : isVillage ? "barbarian" : "plot"} x={node.x} y={node.y} size={SITE_BADGE_SIZE}
+                                                    colour={settlement && playerColour(settlement.seat)} level={settlement ? settlement.townCentreLevel : village?.level} />
                                             </ClickableMapNode>;
                                         })}
                                         {data.terrainField && (
@@ -219,7 +212,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                                             a tail pointing nowhere in particular). Scaled down to match. */}
                                         <MapLabelLayer width={data.landmass.width} height={data.landmass.height} offset={3} fontSize={1.8} strokeWidth={0.4}
                                             labels={data.nodes.filter((node): node is SettlementNode => node.kind === "settlement").map(node => ({
-                                                key: node.id, x: node.x, y: node.y, radius: SETTLEMENT_RADIUS,
+                                                key: node.id, x: node.x, y: node.y, radius: SITE_RADIUS,
                                                 text: settlementLabel(occupiedByNode.get(node.id), node, ownerName, villages.has(node.id)),
                                             }))} />
                                     </svg>

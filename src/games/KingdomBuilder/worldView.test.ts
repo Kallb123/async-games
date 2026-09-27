@@ -244,8 +244,8 @@ describe("Kingdom Builder world view", () => {
         // A garrison is its owner's to see: the rival's settlement carries none.
         expect(view.settlements.find(settlement => settlement.isMine)?.garrison?.militia).toBe(2);
         expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty("garrison");
-        // So are its stores, its caravans and its market (PR 25).
-        for (const field of ["resources", "caravans", "marketLevel"]) {
+        // So are its stores, its caravans, its market (PR 25) and its town centre's level.
+        for (const field of ["resources", "caravans", "marketLevel", "townCentreLevel"]) {
             expect(view.settlements.find(settlement => settlement.isMine)).toHaveProperty(field);
             expect(view.settlements.find(settlement => !settlement.isMine)).not.toHaveProperty(field);
         }
@@ -347,13 +347,13 @@ describe("Kingdom Builder world view", () => {
             withVillages();
             mockArmies([ownArmy(at(14, 2), { militia: 1 })]);
             const unscouted = await worldView(worldId, "owner");
-            expect(unscouted.barbarians).toEqual([{ nodeId: "village" }, { nodeId: "far" }]);
+            expect(unscouted.barbarians).toEqual([{ nodeId: "village", level: 1 }, { nodeId: "far", level: 1 }]);
             expect(JSON.stringify(unscouted)).not.toMatch(/86420|75319/);
 
             withVillages();
             mockArmies([ownArmy(at(14, 2), { scout: 1 })]);
             const scouted = await worldView(worldId, "owner");
-            expect(scouted.barbarians).toEqual([{ nodeId: "village", garrison: { militia: 86420, scout: 0, spearman: 0, archer: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 } }, { nodeId: "far" }]);
+            expect(scouted.barbarians).toEqual([{ nodeId: "village", level: 1, garrison: { militia: 86420, scout: 0, spearman: 0, archer: 0, infantry: 0, cavalry: 0, "siege-engine": 0, settler: 0, commander: 0 } }, { nodeId: "far", level: 1 }]);
         });
 
         it("tells the viewer their own town is besieged, and since when — and tells nobody else of anyone's", async () => {
