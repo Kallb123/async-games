@@ -593,10 +593,8 @@ What's genuinely new is two pieces, and both earn it by having two callers:
   The title row is a `PanelHead` — the picker was the *third* copy of a
   title-plus-subtitle-plus-✕ block that had only ever been shared by CSS class
   (the chat thread and the turn-history log are the other two), which is the
-  case AGENTS.md calls a defect rather than reuse. It does **not** wear
-  `ag-panel-open-pulse`: that animation drives `background-color`, so on a panel
-  with a surface of its own it reads as a hole rather than a flash, and the
-  picker already opens inside the chat panel's own pulse.
+  case AGENTS.md calls a defect rather than reuse. It passes no `busy`, so its
+  header never shows the loading bar the chat and history headers do.
 
 Rendering rules, each of which is a real decision rather than a detail:
 

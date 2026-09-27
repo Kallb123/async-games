@@ -5,7 +5,6 @@ import ChatGif from '@/components/ui/ChatGif';
 import AttachmentPicker, { AttachmentKind } from '@/components/games/AttachmentPicker';
 import PanelHead from '@/components/ui/PanelHead';
 import RecapTimeline, { RECAP_MARKER_SIZE } from '@/components/ui/RecapTimeline';
-import Refreshable from '@/components/ui/Refreshable';
 import Skeleton from '@/components/ui/Skeleton';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import { nameForUserId } from '@/utils/ui/players';
@@ -208,8 +207,11 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
     };
 
     return (
-        <div className="ag-log ag-panel-open-pulse">
-            <PanelHead title="Chat" subtitle="Latest at the bottom" onClose={onClose} closeLabel="Close chat" />
+        <div className="ag-log">
+            {/* A background refetch shows as the header's sweep rather than a
+                shimmer across the thread, the same bar the match history wears. */}
+            <PanelHead title="Chat" subtitle="Latest at the bottom" onClose={onClose} closeLabel="Close chat"
+                busy={isLoading || isRefreshing} />
             {isLoading ? (
                 <div className="ag-chat-skeleton" aria-hidden>
                     <Skeleton width="70%" height={14} />
@@ -219,7 +221,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
             ) : messages.length === 0 ? (
                 <div className="ag-log-empty">No messages yet. Say hello.</div>
             ) : (
-                <Refreshable isRefreshing={isRefreshing}>
+                <div aria-busy={isRefreshing || undefined}>
                     {hasMoreEarlier && (
                         <button
                             type="button"
@@ -258,7 +260,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                             };
                         })}
                     />
-                </Refreshable>
+                </div>
             )}
             {openPicker && (
                 <div ref={pickerRef}>

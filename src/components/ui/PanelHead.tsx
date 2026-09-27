@@ -35,8 +35,9 @@ export default function PanelHead({ title, subtitle, onClose, closeLabel, busy =
                 {subtitle !== undefined && <div className="ag-panel-subtitle">{subtitle}</div>}
             </div>
             <button type="button" className="ag-panel-close" onClick={onClose} aria-label={closeLabel}>✕</button>
-            {/* Decorative: the top bar's own bar is the one a screen reader is
-                told about, so this copy of it stays out of the a11y tree. */}
+            {/* Decorative: the busy state reaches a screen reader elsewhere (the
+                top bar's progressbar, the chat thread's aria-busy), so this
+                copy stays out of the a11y tree. */}
             {busy && <span className="ag-pending-bar ag-pending-bar--panel" aria-hidden />}
         </div>
     );

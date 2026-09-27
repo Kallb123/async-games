@@ -2344,23 +2344,6 @@ button.ag-chat-gif { cursor: pointer; }
 }
 .ag-panel-toggle-row:hover .ag-hand-title { color: var(--ag-ink); }
 
-/* The chat thread opens at the bottom of the page and can be short, so it's
-   easy to miss even once scrolled into view. A
-   background pulse on open marks where it landed — a soft terracotta wash
-   that settles back to the page. It flashes three times (the iteration count)
-   so it's still going after the smooth scroll settles, not spent before the
-   panel is even on screen. It fires on mount because each panel mounts only
-   when opened (GameShell), so there's no class to toggle. */
-.ag-panel-open-pulse { animation: ag-panel-open-pulse 1100ms ease-out 3; }
-@keyframes ag-panel-open-pulse {
-    0% { background-color: transparent; }
-    28% { background-color: color-mix(in oklch, var(--ag-terracotta) 30%, var(--ag-surface)); }
-    100% { background-color: transparent; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .ag-panel-open-pulse { animation: none; }
-}
-
 /* Unread chat count — UnreadChatBadge, on the dashboard's turn card and list
    row. Solid terracotta by default (a light row); --on-dark swaps to the same
    translucent-white pill .ag-turn-card-badge uses, for a card whose own
@@ -4291,9 +4274,9 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 
 /* The same bar again under a panel's header (PanelHead's `busy` — the match
-   history while the game state refreshes), dressed for the cream panel in
-   terracotta. It hangs in the gap below the header, so the title and the ✕
-   don't move when it comes and goes. */
+   history while the game state refreshes, the chat while its thread does),
+   dressed for the cream panel in terracotta. It hangs in the gap below the
+   header, so the title and the ✕ don't move when it comes and goes. */
 .ag-pending-bar--panel {
     bottom: -6px;
     pointer-events: none;
