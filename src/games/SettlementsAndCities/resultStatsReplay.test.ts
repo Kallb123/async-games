@@ -1,23 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { SettlementsAndCitiesGameType, SACPlayYearOfPlenty } from "./SettlementsAndCitiesLogic";
+import { SettlementsAndCitiesGameType, SACBuyDevCard, SACEndTurn, SACPlayKnight, SACPlayYearOfPlenty } from "./SettlementsAndCitiesLogic";
 import { computeSettlementsAndCitiesResultStats, formatSettlementsAndCitiesCharts } from "./SettlementsAndCitiesModels";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
-import { BOARD_TOPOLOGY, HEX_POSITIONS, NO_RESOURCES } from "./board";
+import { BOARD_TOPOLOGY, HEX_POSITIONS, NO_RESOURCES, calculateTotalVP } from "./board";
 import type { ISACPlayerState, ISACSpecificGameState } from "./board";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { runCommand } from "@/utils/games/commandPipeline";
-import { computePerTurnStat } from "@/utils/games/replay";
+import { computePerTurnInternalStats } from "@/utils/games/replay";
 
-// The internal state the game-end replay ends on, as GameResultData's
-// Settlements & Cities entry captures it.
-async function replayFinalState(game: ISettlementsAndCitiesGameData): Promise<ISACSpecificGameState | undefined> {
-    let replayed: ISACSpecificGameState | undefined;
-    await computePerTurnStat(game as unknown as IGameData, () => 0, game.userIdList, (state) => {
-        replayed = state as ISACSpecificGameState;
+// The game-end replay, read the way GameResultData's Settlements & Cities
+// entry reads it.
+function replayGame(game: ISettlementsAndCitiesGameData) {
+    return computePerTurnInternalStats<ISACSpecificGameState, "victoryPoints">(game as unknown as IGameData, {
+        victoryPoints: (state, userId) => calculateTotalVP(userId, state),
     });
-    return replayed;
+}
+
+async function replayFinalState(game: ISettlementsAndCitiesGameData): Promise<ISACSpecificGameState | undefined> {
+    return (await replayGame(game))?.finalState;
 }
 
 const NAMES = new Map([["u1", "Alice"], ["u2", "Bob"]]);
@@ -26,13 +28,19 @@ function run(game: ISettlementsAndCitiesGameData, command: IGameCommand) {
     return runCommand(game as unknown as IGameData, new SettlementsAndCitiesGameType(), command);
 }
 
+function emptyBoard() {
+    return {
+        vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
+        edges: Array.from({ length: BOARD_TOPOLOGY.numEdges }, () => ({ hasRoad: false, owner: null })),
+    };
+}
+
 // u1 holds a settlement on the one forest (an 8), and a Year of Plenty, then
 // rolls an 8 and plays it: 1 lumber from the roll, then a wool and an ore.
 async function playedGame() {
     const gs = makeState({
         hexes: HEX_POSITIONS.map((_, i) => (i === 0 ? { terrain: "forest", numberToken: 8 } : { terrain: "desert", numberToken: null })),
-        vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
-        edges: Array.from({ length: BOARD_TOPOLOGY.numEdges }, () => ({ hasRoad: false, owner: null })),
+        ...emptyBoard(),
         robberHexIndex: 1,
         hasRolled: false,
         lastRoll: null,
@@ -94,5 +102,47 @@ describe("Settlements & Cities' resources table, counted by replay", () => {
         const stats = computeSettlementsAndCitiesResultStats(game, [], replayed);
 
         expect(stats.playerStats.get("u1")?.resourcesGatheredByType).toEqual(EXPECTED_U1);
+    });
+});
+
+// Round 1: u1 rolls, buys the deck's one card - a hidden Victory Point - and
+// ends. u2 holds Largest Army (3 knights) and rolls, which ends their turn
+// with nothing to spend. Round 2: u1
+// plays their fourth knight and takes Largest Army off u2.
+async function armyChangesHands() {
+    const gs = makeState({ ...emptyBoard(), hasRolled: false, lastRoll: null, largestArmyOwner: "u2", devCardDeck: ["victoryPoint"] });
+    gs.playerStates.set("u1", player({ knightsPlayed: 3, devCards: { knight: 1 }, resources: { wool: 2, grain: 2, ore: 2 } }));
+    gs.playerStates.set("u2", player({ knightsPlayed: 3 }));
+    const game = makeGame(gs);
+
+    for (const command of [
+        rollOf(5, 3), cmd(new SACBuyDevCard()), cmd(new SACEndTurn()),
+        rollOf(5, 3, "u2"),
+        cmd(new SACPlayKnight()),
+    ]) {
+        expect((await run(game, command)).outcome.validMove).toBe(true);
+    }
+    return game;
+}
+
+describe("Settlements & Cities' victory points chart", () => {
+    it("plots every player's points each round, hidden VP cards and a lost Largest Army included", async () => {
+        const game = await armyChangesHands();
+        const replayed = await replayGame(game);
+        const stats = computeSettlementsAndCitiesResultStats(game, [], replayed?.finalState, replayed?.perTurn.victoryPoints);
+
+        const chart = formatSettlementsAndCitiesCharts(stats, NAMES)[0];
+        if (chart.kind) throw new Error("expected the line chart first");
+        expect(chart.title).toBe("Victory points per round");
+        // u1's VP card counts from the round it was bought; u2's line falls
+        // when Largest Army moves.
+        expect(chart.rounds).toEqual([{ u1: 1, u2: 2 }, { u1: 3, u2: 0 }]);
+        expect(chart.rounds.at(-1)).toEqual({ u1: stats.playerStats.get("u1")?.victoryPoints, u2: stats.playerStats.get("u2")?.victoryPoints });
+    });
+
+    it("is left off a result recorded before it", async () => {
+        const game = await armyChangesHands();
+        const stats = computeSettlementsAndCitiesResultStats(game, []);
+        expect(formatSettlementsAndCitiesCharts(stats, NAMES).some(c => !c.kind && c.title === "Victory points per round")).toBe(false);
     });
 });

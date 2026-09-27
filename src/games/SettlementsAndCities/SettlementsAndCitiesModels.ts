@@ -21,6 +21,7 @@ import {
     SAC_RESOURCES,
     NO_RESOURCES,
     calculateVisibleVP,
+    calculateTotalVP,
     calculateLongestRoad,
     BOARD_TOPOLOGY,
     ISACVertex,
@@ -548,6 +549,14 @@ export interface ISACGameResultStats {
     // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
     // tracked as history on specificGameState.
     resourcesPerTurn: Map<string, number>[];
+    // Each player's victory points at the end of each turn, in turn order -
+    // every point, the hidden VP cards included, since the game is over by the
+    // time anyone sees it. Rises and falls as Longest Road and Largest Army
+    // change hands. Read off the internal state by the same replay as
+    // resourcesPerTurn (computePerTurnInternalStats), so a game already under
+    // way when the chart shipped still gets it whole. Absent (or empty) on a
+    // result recorded before it, which then has no chart.
+    victoryPointsPerTurn?: Map<string, number>[];
     // How many times each roll total (2-12) came up over the whole game,
     // keyed by the total as a string (Mongoose's Schema.Types.Map only keys by
     // string - see resourcesPerTurn above for the same convention). Tallied
@@ -586,6 +595,7 @@ export const sacGameResultStatsSchemaDef = {
         },
     },
     resourcesPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    victoryPointsPerTurn: [{ type: Schema.Types.Map, of: Number }],
     rollFrequency: { type: Schema.Types.Map, of: Number },
     rollFrequencyByPlayer: { type: Schema.Types.Map, of: { type: Schema.Types.Map, of: Number } },
 };
@@ -629,13 +639,15 @@ function completeGatheredByType(counts: ISACResources | undefined, total: number
 }
 
 // `replayedState` is the game re-run from its first move (the game-end
-// replay's final state - see computePerTurnStat's onReplayed), whose by-resource counts are whole even for a game that was
-// already under way when they began being kept. The live document's own count
-// is the fallback, for a game replay can't run.
+// replay's final state - see computePerTurnInternalStats), whose by-resource
+// counts are whole even for a game that was already under way when they began
+// being kept. The live document's own count is the fallback, for a game
+// replay can't run.
 export function computeSettlementsAndCitiesResultStats(
     gameData: ISettlementsAndCitiesGameData,
     resourcesPerTurn: Map<string, number>[],
     replayedState?: ISACSpecificGameState,
+    victoryPointsPerTurn: Map<string, number>[] = [],
 ): ISACGameResultStats {
     const gs = gameData.specificGameState;
     const replayedPlayers = replayedState ? mongoMap(replayedState.playerStates) : undefined;
@@ -644,10 +656,8 @@ export function computeSettlementsAndCitiesResultStats(
         const settlements = gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length;
         const cities = gs.vertices.filter(v => v.owner === userId && v.building === 'city').length;
         const roads = gs.edges.filter(e => e.owner === userId && e.hasRoad).length;
-        // Hidden VP cards are revealed at game-end, so count both playable and
-        // freshly-bought-this-turn victory-point cards toward the final total.
-        const victoryPoints = calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner)
-            + ps.devCards.victoryPoint + ps.newDevCards.victoryPoint;
+        // Hidden VP cards are revealed at game-end, so they count here.
+        const victoryPoints = calculateTotalVP(userId, gs);
         playerStats.set(userId, {
             settlements,
             cities,
@@ -665,7 +675,7 @@ export function computeSettlementsAndCitiesResultStats(
             victoryPoints,
         });
     }
-    return { playerStats, resourcesPerTurn, ...computeSACRollFrequency(gameData) };
+    return { playerStats, resourcesPerTurn, victoryPointsPerTurn, ...computeSACRollFrequency(gameData) };
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared
@@ -731,14 +741,18 @@ function formatSACResourcesTable(stats: ISACGameResultStats): GameResultTable | 
     };
 }
 
-// Renders resourcesPerTurn, the resources table and rollFrequency as
-// GameResult charts: the resources/round line chart first, then the
-// whole-game summaries below it - the resources table, and the
-// roll-frequency bar chart last.
+// Renders victoryPointsPerTurn, resourcesPerTurn, the resources table and
+// rollFrequency as GameResult charts: the round-by-round line charts first -
+// victory points, the race the game was, at the top - then the whole-game
+// summaries below them - the resources table, and the roll-frequency bar
+// chart last.
 export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultAnyChart[] {
     const resourcesTable = formatSACResourcesTable(stats);
     return [
-        ...compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per round", "Resources", usernameById.size)),
+        ...compactCharts(
+            formatPerTurnChart(stats.victoryPointsPerTurn, "Victory points per round", "Victory points", usernameById.size),
+            formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per round", "Resources", usernameById.size),
+        ),
         ...(resourcesTable ? [resourcesTable] : []),
         formatSACRollFrequencyChart(stats),
     ];

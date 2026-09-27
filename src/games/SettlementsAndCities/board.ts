@@ -2,7 +2,7 @@ import type { SACExpansions } from './expansions';
 import { normaliseExpansions } from './expansions';
 import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 import { randomInt } from '@/utils/games/random';
-import { clonePlayerStates } from '@/utils/games/mongoMaps';
+import { clonePlayerStates, mongoMap } from '@/utils/games/mongoMaps';
 
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
@@ -758,15 +758,14 @@ export function calculateVisibleVP(
     return vp;
 }
 
-export function calculateTotalVP(
-    playerId: string,
-    vertices: ISACVertex[],
-    devCards: { victoryPoint: number },
-    longestRoadOwner: string | null,
-    largestArmyOwner: string | null,
-): number {
-    return calculateVisibleVP(playerId, vertices, longestRoadOwner, largestArmyOwner)
-        + devCards.victoryPoint;
+// Every point a player holds, the VP cards nobody else can see among them —
+// playable and bought-this-turn alike. For a finished game's results only (the
+// final tally and the round-by-round chart), where every card is revealed:
+// live, a player's VP cards are theirs alone.
+export function calculateTotalVP(playerId: string, gs: ISACSpecificGameState): number {
+    const ps = mongoMap(gs.playerStates).get(playerId);
+    return calculateVisibleVP(playerId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner)
+        + (ps ? ps.devCards.victoryPoint + ps.newDevCards.victoryPoint : 0);
 }
 
 // ─── Placement validation helpers ─────────────────────────────────────────────

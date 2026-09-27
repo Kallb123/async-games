@@ -81,8 +81,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 detail: "Drag the home screen down from the top and let go to check for new turns, invites and messages straight away, rather than waiting for it to catch up on its own.",
             },
             {
-                title: "Settlements & Cities: who rolled what, and who gathered what",
-                detail: "A finished game's results now split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered — the most of each in bold.",
+                title: "Settlements & Cities: the points race, who rolled what, and who gathered what",
+                detail: "A finished game's results now chart every player's victory points round by round — hidden Victory Point cards revealed, and the dips when Longest Road or Largest Army changed hands — split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered, the most of each in bold.",
                 game: "settlementsandcities",
             },
             {
