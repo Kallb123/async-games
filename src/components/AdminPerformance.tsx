@@ -21,11 +21,11 @@ export default function AdminPerformance() {
   return <>
     <Section label="Performance" isLoading={isLoading} action={<span className="ag-section-actions">{data && <CopyAction label="Copy as Markdown" text={() => performanceMarkdown(data)} />}<RefreshAction onClick={refresh} /></span>}>
       <div className="ag-stat-row"><Stat value={data?.totalSamples ?? '—'} label="Samples (7 days)" /><Stat value={data?.summaries.length ?? '—'} label="Metric / route pairs" /></div>
-      <p className="ag-hint">Anonymous browser and API timings. p75 is the main comparison.</p>
+      <p className="ag-hint">Anonymous browser and API timings. p75 is the main comparison. Journey timings (auth, first data, usable, navigation) run from the tap or page load and are split cold (a page load) and warm (an in-app navigation).</p>
       {data && <div className="ag-field-row"><label>Route <select value={route} onChange={event => setRoute(event.target.value)}><option value="all">All routes</option>{routes.map(value => <option key={value}>{value}</option>)}</select></label><label>Metric <select value={metric} onChange={event => setMetric(event.target.value)}><option value="all">All metrics</option>{metrics.map(value => <option key={value}>{value}</option>)}</select></label></div>}
     </Section>
     {data && <ListSection label="Timing percentiles" isLoading={false} isRefreshing={isRefreshing} skeletonRows={0} empty={<div className="ag-empty">No performance samples yet. Use the app, then refresh.</div>}>
-      {rows.map(row => <ListRow key={`${row.name}-${row.route}`} title={`${row.name} · ${row.route}`} sub={`${row.samples} samples · median ${value(row.name, row.median)} · p95 ${value(row.name, row.p95)}`} action={<strong>p75 {value(row.name, row.p75)}</strong>} />)}
+      {rows.map(row => <ListRow key={`${row.name}-${row.route}-${row.cache}`} title={`${row.name} · ${row.route}${row.cache ? ` · ${row.cache}` : ''}`} sub={`${row.samples} samples · median ${value(row.name, row.median)} · p95 ${value(row.name, row.p95)}`} action={<strong>p75 {value(row.name, row.p75)}</strong>} />)}
     </ListSection>}
   </>;
 }

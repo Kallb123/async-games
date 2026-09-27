@@ -2,12 +2,12 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { PerformanceMetricModel } from '@/utils/mongodb/PerformanceMetricData';
-import { PERFORMANCE_METRIC_NAMES, safeRoute, type PerformanceMetricInput } from '@/utils/performance';
+import { PERFORMANCE_CACHES, PERFORMANCE_METRIC_NAMES, safeRoute, type PerformanceMetricInput } from '@/utils/performance';
 import { consumeRateLimit } from '@/utils/rateLimit';
 
 const names = new Set<string>(PERFORMANCE_METRIC_NAMES);
 const sources = new Set(['link', 'history', 'load', 'deep-link']);
-const caches = new Set(['cold', 'warm']);
+const caches = new Set<string>(PERFORMANCE_CACHES);
 const connections = new Set(['slow-2g', '2g', '3g', '4g']);
 
 /** Accepts only bounded, allow-listed timings; never identities, game ids, names, or bodies. */

@@ -42,7 +42,7 @@ export default function Dashboard() {
     useEffect(() => {
         if (!isLoading && !reportedUsable.current) {
             reportedUsable.current = true;
-            requestAnimationFrame(() => window.__agPerformanceReport?.('dashboard_usable', performance.now()));
+            requestAnimationFrame(() => window.__agPerformanceMark?.('dashboard_usable'));
         }
     }, [isLoading]);
 

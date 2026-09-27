@@ -81,7 +81,7 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean, vie
     // something else in its place (a Kingdom Builder world's seat keys).
     const myId = viewerId ?? user?.id;
     const { data, isLoading, isRefreshing, refresh } =
-        useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS, { pollWhileWatching: open, enabled });
+        useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS, { pollWhileWatching: open, enabled, secondary: true });
     const [sending, setSending] = useState(false);
     const readAt = data?.readAt ?? null;
 

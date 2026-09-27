@@ -128,9 +128,12 @@ export function useRefreshableData<T>(
          *  which has no thread). `data` stays null and `isLoading` stays true, so
          *  a caller that only renders once enabled never sees a stale flag. */
         enabled?: boolean;
+        /** A side panel's data (the chat thread), whose first load is not the
+         *  screen's: it never marks the `first_data` performance milestone. */
+        secondary?: boolean;
     } = {}
 ): RefreshableData<T> {
-    const { pollWhileWatching = false, enabled = true } = options;
+    const { pollWhileWatching = false, enabled = true, secondary = false } = options;
     const { isAuthorised } = useIsAuthorised();
     // Stable, so it can sit in `refresh`'s dependencies without rebuilding it.
     const refreshSession = useSessionRefresh();
@@ -255,6 +258,10 @@ export function useRefreshableData<T>(
                     retryIn = retryDelayMs(null, attemptsRef.current);
                     continue;
                 }
+                // A big body can finish downloading after the screen has gone.
+                if (!mountedRef.current) {
+                    return;
+                }
                 retryIn = null;
                 attemptsRef.current = 0;
                 // Something loaded, so whatever the session was, it works now:
@@ -262,9 +269,8 @@ export function useRefreshableData<T>(
                 clearStaleSessionReload();
                 if (generationRef.current === generation) {
                     setDataState(body);
-                    if (!loadedRef.current) {
-                        performance.mark('ag_first_data');
-                        window.__agPerformanceReport?.('first_data', performance.now());
+                    if (!loadedRef.current && !secondary) {
+                        window.__agPerformanceMark?.('first_data');
                     }
                 }
             } while (rerunRef.current && mountedRef.current);
@@ -286,7 +292,7 @@ export function useRefreshableData<T>(
                 }
             }
         }
-    }, [url, isAuthorised, enabled, clearRetry, refreshSession]);
+    }, [url, isAuthorised, enabled, secondary, clearRetry, refreshSession]);
 
     useEffect(() => {
         refreshRef.current = refresh;
