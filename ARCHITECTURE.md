@@ -1061,6 +1061,10 @@ description or theme colour is exactly what those two files exist to prevent.
   never one they were playing. A local write
   (`setData`, used for the game state a command's own response carries)
   supersedes any fetch already in flight, so the two are not last-write-wins.
+  Every fetch also restarts the poll's countdown (`usePushEvents`'
+  `restartPoll`), so a refresh from anywhere else — the dashboard's pull to
+  refresh (`PullToRefresh`), a push, a foreground return — is not followed by
+  a poll asking the same thing a moment later.
 - **An expired session is a ladder, not a failure.** A tab that has been idle
   comes back with a session token that expired while nothing was running to
   renew it, and every request 401s until something asks Clerk for another.

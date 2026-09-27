@@ -124,7 +124,10 @@ out. A second copy is the signal to extract the first one.
   "who's playing" invite picker used by every game-setup screen), and
   `useStoredValue` — the one place in the app that touches `localStorage`, so
   anything remembered per browser (a dismissed banner, a guest's first turn) is
-  a call to it rather than another copy of the swallowed try/catch.
+  a call to it rather than another copy of the swallowed try/catch. A screen
+  that wants the phone's pull-down-to-check-again gesture mounts
+  `PullToRefresh` (in `src/components/ui/`, driven by `usePullToRefresh`) with
+  its `useRefreshableData` `refresh`, rather than listening for touches itself.
 
 New games should add their metadata to `src/utils/ui/games.ts` and reuse
 `GameSetupLayout`, `UserInviteList`, and `TurnTimerSelect` for their setup

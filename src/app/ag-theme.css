@@ -4326,7 +4326,40 @@ button.ag-tt-ticket { cursor: pointer; }
     }
 }
 
+/* ---- Pull to refresh (PullToRefresh) ----
+   A round badge parked just above the viewport that the finger drags down into
+   view. It follows the finger with no transition while dragging (the inline
+   transform changes every touchmove), and eases back up once let go. Fixed to
+   the viewport, not the page, so the rubber-band scroll iOS does at the top
+   of a page doesn't carry it off with the content. */
+.ag-pull {
+    position: fixed;
+    top: -40px;
+    left: 50%;
+    z-index: 20;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--ag-surface);
+    color: var(--ag-ink-soft);
+    box-shadow: var(--ag-shadow-lift);
+    font-weight: 700;
+    pointer-events: none;
+    transition: transform 180ms ease-out, opacity 180ms ease-out;
+}
+.ag-pull--dragging { transition: none; }
+.ag-pull-arrow { transition: transform 150ms ease-out; }
+.ag-pull--armed { color: var(--ag-terracotta); }
+.ag-pull--armed .ag-pull-arrow { transform: rotate(180deg); }
+/* The page is the pull now: without this, Chrome on Android would reload the
+   whole page on the same gesture, over the top of our refresh. */
+html:has(.ag-pull) { overscroll-behavior-y: contain; }
+
 @media (prefers-reduced-motion: reduce) {
+    .ag-pull,
+    .ag-pull-arrow,
     .ag-spinner,
     .ag-pending-skin::after,
     .ag-pending-tag,

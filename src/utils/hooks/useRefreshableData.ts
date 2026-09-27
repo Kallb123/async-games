@@ -183,6 +183,9 @@ export function useRefreshableData<T>(
     // time `refresh` may have been rebuilt around a new url — so it calls the
     // current one rather than the one it closed over.
     const refreshRef = useRef<() => void>(() => {});
+    // `usePushEvents` is called below `refresh`, which needs its `restartPoll`,
+    // so it reaches it through a ref kept current after each render.
+    const restartPollRef = useRef<() => void>(() => {});
 
     const clearRetry = useCallback(() => {
         if (retryTimerRef.current !== null) {
@@ -213,8 +216,10 @@ export function useRefreshableData<T>(
             return;
         }
         // Whatever asked for this supersedes a retry still on the clock — it is
-        // about to make the same request.
+        // about to make the same request — and the poll's next tick, which
+        // would ask again a moment after this answers (see `restartPoll`).
         clearRetry();
+        restartPollRef.current();
         inFlightRef.current = true;
         if (loadedRef.current) {
             setIsRefreshing(true);
@@ -306,10 +311,13 @@ export function useRefreshableData<T>(
         refresh();
     }, [refresh]);
 
-    usePushEvents(events, refresh, {
+    const { restartPoll } = usePushEvents(events, refresh, {
         refreshOnVisible: true,
         pollWhileWatching: typeof pollWhileWatching === 'function' ? pollWhileWatching(data) : pollWhileWatching,
     });
+    useEffect(() => {
+        restartPollRef.current = restartPoll;
+    }, [restartPoll]);
 
     return { data, setData, isLoading, isRefreshing, status, refresh };
 }

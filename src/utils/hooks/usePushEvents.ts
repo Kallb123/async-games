@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * Every event below is dispatched by `FcmTokenComp` from a push that *also*
@@ -182,12 +182,16 @@ const COALESCE_MS = 200;
  *
  * Pass `{ refreshOnVisible: true }` for screens that must also re-sync when the
  * tab is brought back to the foreground (see `PushEventsOptions`).
+ *
+ * Returns `restartPoll`, which starts the `POLL_MS` countdown again from now —
+ * for a caller that has just fetched by some other route (a pull to refresh)
+ * and so has nothing new to ask for until a full interval has gone by.
  */
 export function usePushEvents(
     events: readonly string[],
     handler: () => void,
     options: PushEventsOptions = {},
-) {
+): { restartPoll: () => void } {
     const { refreshOnVisible = false, pollWhileWatching = false } = options;
     const handlerRef = useRef(handler);
     // Whether polling is wanted flips as often as the turn does, so it is read
@@ -195,6 +199,9 @@ export function usePushEvents(
     // would tear down and rebuild every listener on every turn change, and the
     // teardown would discard a refetch already coalesced and waiting.
     const pollRef = useRef(pollWhileWatching);
+    // Set by the effect below, which owns the interval; a no-op until it has
+    // mounted and again once it has torn down.
+    const restartPollRef = useRef<() => void>(() => {});
     // Kept current after each render rather than during it — writing a ref while
     // rendering is a side effect (react-hooks/refs). Both are only ever read
     // from a timer callback, long after the commit.
@@ -232,17 +239,23 @@ export function usePushEvents(
         // them: waking to compare two booleans costs nothing next to the request
         // it skips, which is the part worth gating. Ticks go through `schedule`,
         // so a poll landing next to a push still refetches once.
-        const poll = setInterval(() => {
+        const tick = () => {
             if (pollRef.current && isWatching()) {
                 schedule();
             }
-        }, POLL_MS);
+        };
+        let poll = setInterval(tick, POLL_MS);
+        restartPollRef.current = () => {
+            clearInterval(poll);
+            poll = setInterval(tick, POLL_MS);
+        };
 
         return () => {
             if (timer !== null) {
                 clearTimeout(timer);
             }
             clearInterval(poll);
+            restartPollRef.current = () => {};
             events.forEach((event) => window.removeEventListener(event, schedule));
             if (refreshOnVisible) {
                 document.removeEventListener('visibilitychange', onVisibility);
@@ -251,4 +264,7 @@ export function usePushEvents(
         // The event list is a stable module-level constant at every call site.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [events.join(','), refreshOnVisible]);
+
+    const restartPoll = useCallback(() => restartPollRef.current(), []);
+    return { restartPoll };
 }
