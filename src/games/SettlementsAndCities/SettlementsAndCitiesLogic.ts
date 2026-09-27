@@ -1,16 +1,17 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
-import { sacRollSentence } from "@/games/SettlementsAndCities/ui";
+import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACResources, ISACRollChange } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, cloneResources, cloneTradeOffers, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
+import { sacAmountsText, sacRollSentence } from "@/games/SettlementsAndCities/ui";
+import { SAC_MAX_OFFERS_POSTED_PER_TURN, SAC_MAX_OPEN_OFFERS, sacCanCover, sacMainTurnPlayer, sacOfferEndsThisTurn, sacTradeSide, sacTradingOpen, sacValidTradeTerms } from "@/games/SettlementsAndCities/trading";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { recordedOnTurnOf, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
-import { playerHistory, userToken } from "@/utils/games/history";
+import { onTurnOfClause, playerHistory, userToken } from "@/utils/games/history";
 import { randomFloat, randomInt } from "@/utils/games/random";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -299,6 +300,7 @@ function sacFinishTurn(
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
     sacClearUndo(gs);
+    sacExpireTradeOffers(gs, sacData.currentTurn);
     gs.hasRolled = false;
     if (!gs.lastRollAutoEnded) {
         gs.lastRoll = null;
@@ -318,6 +320,16 @@ function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
         }
     }
     sacData.currentTurn = nextActivePlayer(sacData, sacData.currentTurn);
+}
+
+// The main turn of `endingPlayer` is over: every offer of theirs that was
+// waiting for this turn to end lapses, and the ones they posted during it now
+// wait for their next. The per-turn posting count starts again.
+function sacExpireTradeOffers(gs: ISettlementsAndCitiesGameData['specificGameState'], endingPlayer: string): void {
+    gs.tradeOffers = cloneTradeOffers(gs.tradeOffers)
+        .filter(offer => !sacOfferEndsThisTurn(offer, endingPlayer))
+        .map(offer => offer.proposerId === endingPlayer ? { ...offer, postedOnOwnTurn: false } : offer);
+    gs.tradeOffersPosted = [];
 }
 
 // Opens the Special Build Phase after the active player ends their main turn:
@@ -1142,6 +1154,159 @@ export class SACMaritimeTrade implements IGameCommand {
     }
 }
 
+// ─── Trading between players (docs/games/settlements-and-cities.md §10) ─────
+// Three commands, all playable on anyone's turn, so a trade never waits for a
+// turn to come round: post an offer, accept someone else's, withdraw your own.
+// None of them ends a turn, finishes a phase or reads the clock, and none is
+// undoable — an accepted trade moves two players' cards. Played out of turn,
+// the pipeline stamps whose turn it was (docs/out-of-turn-actions.md); an
+// active player's undo goes stale by itself once one of these is recorded
+// after the move it would take back (SACUndo's anchor check).
+
+const INVALID_TRADE: ICommandOutcome = { validMove: false, turnOver: false };
+
+@serializable
+export class SACOfferTrade implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    give: ISACResources = { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 };
+    want: ISACResources = { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 };
+    readonly className = 'SACOfferTrade';
+    readonly playableOutOfTurn = true;
+
+    myString() {
+        return `offered ${sacAmountsText(this.give)} for ${sacAmountsText(this.want)}${onTurnOfClause(recordedOnTurnOf(this))}`;
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        if (!sacTradingOpen(gs)) return INVALID_TRADE;
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return INVALID_TRADE;
+
+        // Both sides arrive from the client and are recorded as they are once
+        // this returns, so they're replaced with clean copies before anything
+        // reads them.
+        const give = sacTradeSide(this.give);
+        const want = sacTradeSide(this.want);
+        if (!give || !want || !sacValidTradeTerms(give, want)) return INVALID_TRADE;
+        // Their own hand, so refusing says nothing they didn't know. Checked
+        // again on acceptance, since nothing is held back from it meanwhile.
+        if (!sacCanCover(ps.resources, give)) return INVALID_TRADE;
+
+        const offers = cloneTradeOffers(gs.tradeOffers);
+        const posted = [...(gs.tradeOffersPosted ?? [])];
+        if (offers.filter(offer => offer.proposerId === this.senderId).length >= SAC_MAX_OPEN_OFFERS) return INVALID_TRADE;
+        if (posted.filter(userId => userId === this.senderId).length >= SAC_MAX_OFFERS_POSTED_PER_TURN) return INVALID_TRADE;
+
+        this.give = give;
+        this.want = want;
+        gs.tradeOffers = [...offers, {
+            offerId: this.id,
+            proposerId: this.senderId,
+            give,
+            want,
+            postedOnOwnTurn: sacMainTurnPlayer(gs, sacData.currentTurn) === this.senderId,
+        }];
+        gs.tradeOffersPosted = [...posted, this.senderId];
+
+        const onTurnOf = sacData.currentTurn !== this.senderId ? sacData.currentTurn : undefined;
+        sacData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `offered ${sacAmountsText(give)} for ${sacAmountsText(want)}${onTurnOfClause(onTurnOf)}`,
+        ));
+        return { validMove: true, turnOver: false };
+    }
+}
+
+@serializable
+export class SACAcceptTrade implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    offerId: string = '';
+    // The trade as it was settled, for myString() — which titles this step of
+    // a match review and is handed no state, by which time the offer is gone.
+    // Written by Execute, so whatever a client sends in its place is
+    // overwritten before a valid command is recorded.
+    settled?: { proposerId: string; give: ISACResources; want: ISACResources };
+    readonly className = 'SACAcceptTrade';
+    readonly playableOutOfTurn = true;
+
+    myString() {
+        if (!this.settled) return 'accepted a trade offer';
+        const { proposerId, give, want } = this.settled;
+        return `traded ${sacAmountsText(want)} to ${userToken(proposerId)} for ${sacAmountsText(give)}${onTurnOfClause(recordedOnTurnOf(this))}`;
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        this.settled = undefined;
+        if (!sacTradingOpen(gs)) return INVALID_TRADE;
+
+        const offers = cloneTradeOffers(gs.tradeOffers);
+        const offer = offers.find(o => o.offerId === this.offerId);
+        if (!offer || offer.proposerId === this.senderId) return INVALID_TRADE;
+
+        const accepter = gs.playerStates.get(this.senderId);
+        const proposer = gs.playerStates.get(offer.proposerId);
+        if (!accepter || !proposer) return INVALID_TRADE;
+        // Both hands, now: the proposer's can have changed since they offered.
+        if (!sacCanCover(proposer.resources, offer.give) || !sacCanCover(accepter.resources, offer.want)) return INVALID_TRADE;
+
+        // The offer goes first, so a second acceptance of it is refused.
+        gs.tradeOffers = offers.filter(o => o.offerId !== offer.offerId);
+        for (const resource of SAC_RESOURCES) {
+            proposer.resources[resource] += offer.want[resource] - offer.give[resource];
+            accepter.resources[resource] += offer.give[resource] - offer.want[resource];
+        }
+        this.settled = { proposerId: offer.proposerId, give: cloneResources(offer.give), want: cloneResources(offer.want) };
+
+        const onTurnOf = sacData.currentTurn !== this.senderId ? sacData.currentTurn : undefined;
+        sacData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `traded ${sacAmountsText(offer.want)} to ${userToken(offer.proposerId)} for ${sacAmountsText(offer.give)}${onTurnOfClause(onTurnOf)}`,
+        ));
+        return { validMove: true, turnOver: false };
+    }
+}
+
+@serializable
+export class SACWithdrawTrade implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    offerId: string = '';
+    readonly className = 'SACWithdrawTrade';
+    readonly playableOutOfTurn = true;
+
+    myString() { return `withdrew a trade offer${onTurnOfClause(recordedOnTurnOf(this))}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        const offers = cloneTradeOffers(gs.tradeOffers);
+        // Their own offer only — and allowed while the robber moves, since
+        // taking an offer down trades nothing.
+        if (!offers.some(o => o.offerId === this.offerId && o.proposerId === this.senderId)) return INVALID_TRADE;
+        gs.tradeOffers = offers.filter(o => o.offerId !== this.offerId);
+
+        const onTurnOf = sacData.currentTurn !== this.senderId ? sacData.currentTurn : undefined;
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `withdrew a trade offer${onTurnOfClause(onTurnOf)}`));
+        return { validMove: true, turnOver: false };
+    }
+}
+
 // ─── End turn ─────────────────────────────────────────────────────────────────
 
 @serializable
@@ -1268,5 +1433,6 @@ registerPlayerDropoutAdapter({
         sacUpdateLongestRoad(sacData);
         sacUpdateLargestArmy(sacData);
         sacClearUndo(gs);
+        gs.tradeOffers = cloneTradeOffers(gs.tradeOffers).filter(offer => offer.proposerId !== userId);
     },
 });

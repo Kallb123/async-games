@@ -10,6 +10,7 @@ import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@
 import { SAC_RANDOM_TILES_PARAM, SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
+import SACTradeOffers from "@/games/SettlementsAndCities/components/SACTradeOffers";
 import GameShell from "@/components/ui/GameShell";
 import RollReadout from "@/components/ui/RollReadout";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
@@ -27,6 +28,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
+import { useArmedPick } from "@/utils/hooks/useArmedPick";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -54,7 +56,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
     // The board spot we last tapped; only meaningful while its command is in flight.
     const [tappedSpot, setTappedSpot] = useState<{ kind: SACSpotKind; id: number } | null>(null);
 
@@ -62,6 +63,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISACGameDataResponse>(gameId);
+    // The build or robber move armed for a tap on the board. Trade offers land
+    // on anyone's turn, so it disarms whenever the board moves under it
+    // (docs/out-of-turn-actions.md §5.8), as well as when the turn passes.
+    const [armedMode, setArmedMode] = useArmedPick<SACBoardMode>(gameData?.currentTurn ?? '', gameData?.gameState?.commandCount);
+    const boardMode: SACBoardMode = armedMode ?? 'idle';
+    const setBoardMode = (mode: SACBoardMode) => setArmedMode(mode === 'idle' ? null : mode);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
@@ -490,6 +497,19 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {/* Live only: offers are posted and taken on anyone's turn,
+                        but never on a turn under review. */}
+                    {nav.isLive && !complete && gs.phase === 'main' && (
+                        <SACTradeOffers
+                            gs={gs}
+                            myUserId={myUserId}
+                            currentTurn={gameData?.currentTurn ?? ''}
+                            playerName={playerName}
+                            submitCommand={submitCommand}
+                            pendingTarget={pendingTarget}
+                        />
                     )}
 
                     {!complete && (

@@ -639,9 +639,10 @@ Crew: `rulebook`, `croupier`, `caveman`, `gremlin`.
 
 - **PR 6 — Tell the moved player.** A visible push for a player an interrupt
   moved, on a new notification channel with its preferences toggle.
-- **PR 7 — Settlements & Cities trade acceptance** adopts `playableOutOfTurn`
-  instead of SAC §10.3's route allowlist. Its own design already exists; the
-  engine work would be done.
+- **PR 7 — Settlements & Cities trade acceptance** *(built)*: posting,
+  accepting and withdrawing a trade offer all declare `playableOutOfTurn`,
+  with SAC §10's own status note saying what shipped. The rate limit open
+  question 2 asks for is a per-turn posting count kept in the game state.
 - **Option D as a house rule**, if tables ask for it.
 - **Option F (standing orders)** as its own design document, if Sandbags
   still feels weak after PR 5.

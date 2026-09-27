@@ -4,7 +4,8 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource, ISACRollChange } from "@/games/SettlementsAndCities/board";
 import { NO_RESOURCES } from "@/games/SettlementsAndCities/board";
-import { sacRollChangeLabel, sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
+import { sacAmountsText, sacRollChangeLabel, sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
+import type { SACAcceptTrade } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 
 type SACState = ISACSpecificGameStateResponse;
@@ -211,6 +212,27 @@ function toEvents(
                 title: `${name} played Monopoly on ${resource}`,
                 detail: affectedIds.length ? "swept the table" : undefined,
                 affectedIds,
+            });
+            break;
+        }
+
+        case "SACAcceptTrade": {
+            // A trade between players is the social beat the feed is for, so
+            // unlike a maritime trade it earns a row — read off the command,
+            // since the offer it settled is already gone from the state.
+            // Posting or withdrawing an offer doesn't: nothing changed hands.
+            const settled = (command as unknown as SACAcceptTrade).settled;
+            if (!settled) break;
+            const proposerName = playerByUserId(nextState, settled.proposerId)?.username
+                ?? playerByUserId(prevState, settled.proposerId)?.username
+                ?? "someone";
+            events.push({
+                ...base,
+                type: "sac_trade",
+                glyph: "🤝",
+                title: `${name} traded with ${proposerName}`,
+                detail: `gave ${sacAmountsText(settled.want)} for ${sacAmountsText(settled.give)}`,
+                affectedIds: [settled.proposerId],
             });
             break;
         }

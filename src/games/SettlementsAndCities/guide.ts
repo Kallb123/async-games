@@ -16,7 +16,11 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Roll the dice — everyone collects resources from hexes matching the roll which they have settlements/cities built on — then trade, build settlements, roads and cities, or buy a development card before passing the turn on. Built, traded or played a card you didn't mean to? Tap Undo to take it back — anything but a roll, the robber, buying a card or Monopoly — and if that was your last move, your turn waits ten seconds before it passes so you get the chance.",
+            body: "Roll the dice — everyone collects resources from hexes matching the roll which they have settlements/cities built on — then trade with the bank or other players, build settlements, roads and cities, or buy a development card before passing the turn on. Built, traded or played a card you didn't mean to? Tap Undo to take it back — anything but a roll, the robber, buying a card or Monopoly — and if that was your last move, your turn waits ten seconds before it passes so you get the chance.",
+        },
+        {
+            heading: "Trading with players",
+            body: "Post a trade offer from the Trade offers panel — say, 1 lumber for 1 wool — and any other player can accept it on any turn, yours or theirs, so nobody waits on the dice. Each offer says whether you have what it asks for. Nothing leaves your hand until someone accepts, and an offer comes down at the end of your next turn, or sooner if you withdraw it.",
         },
         {
             heading: "The robber",

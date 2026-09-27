@@ -4,7 +4,7 @@ import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
 import { NO_RESOURCES, SAC_RESOURCES, UNDO_WINDOW_MS } from '@/games/SettlementsAndCities/board';
-import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI } from '@/games/SettlementsAndCities/ui';
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacAmountsText as costText, sacShortfall as shortfall, type SACResourceAmounts } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
@@ -35,21 +35,7 @@ export type SACBoardMode =
     | 'placeCity'
     | 'moveRobber';
 
-type Cost = Partial<Record<SAC_Resource, number>>;
-
-function costText(cost: Cost): string {
-    return (Object.keys(cost) as SAC_Resource[])
-        .map(r => `${SAC_RESOURCE_EMOJI[r]}${cost[r]}`)
-        .join(' ');
-}
-
-/** Short "need N more 🧱" hint for the first resource the player is short on. */
-function shortfall(cost: Cost, res: Record<SAC_Resource, number>): string | null {
-    const parts = (Object.keys(cost) as SAC_Resource[])
-        .filter(r => (res[r] ?? 0) < (cost[r] ?? 0))
-        .map(r => `${(cost[r] ?? 0) - (res[r] ?? 0)} more ${SAC_RESOURCE_EMOJI[r]}`);
-    return parts.length ? `need ${parts.join(', ')}` : null;
-}
+type Cost = SACResourceAmounts;
 
 interface SettlementsAndCitiesActionsProps {
     gs: ISACSpecificGameStateResponse;

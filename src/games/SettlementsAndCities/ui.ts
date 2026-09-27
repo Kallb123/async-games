@@ -46,6 +46,28 @@ export const SAC_RESOURCE_EMOJI: Record<SAC_Resource, string> = {
     lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
 };
 
+// ─── Costs and trades ─────────────────────────────────────────────────────────
+// A handful of resources, the way the build list's costs and both sides of a
+// trade offer print them.
+
+export type SACResourceAmounts = Partial<Record<SAC_Resource, number>>;
+
+/** `🧱1 🪵1`: each resource with any in it, in the order `amounts` names them. */
+export function sacAmountsText(amounts: SACResourceAmounts): string {
+    return (Object.keys(amounts) as SAC_Resource[])
+        .filter(resource => (amounts[resource] ?? 0) > 0)
+        .map(resource => `${SAC_RESOURCE_EMOJI[resource]}${amounts[resource]}`)
+        .join(' ');
+}
+
+/** `need 1 more 🧱, 2 more 🐑` for whatever `hand` is short of, or null when it has enough. */
+export function sacShortfall(amounts: SACResourceAmounts, hand: Record<SAC_Resource, number>): string | null {
+    const parts = (Object.keys(amounts) as SAC_Resource[])
+        .filter(resource => (hand[resource] ?? 0) < (amounts[resource] ?? 0))
+        .map(resource => `${(amounts[resource] ?? 0) - (hand[resource] ?? 0)} more ${SAC_RESOURCE_EMOJI[resource]}`);
+    return parts.length ? `need ${parts.join(', ')}` : null;
+}
+
 // ─── What a roll moved ────────────────────────────────────────────────────────
 
 /**

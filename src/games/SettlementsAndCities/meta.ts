@@ -12,4 +12,8 @@ export const meta: GameMeta = {
     glyph: "🏘️",
     shape: "hexagon",
     available: true,
+    // Trade offers are posted and accepted on anyone's turn (docs/games/
+    // settlements-and-cities.md §10), so the board polls while it is yours and
+    // every move says which board it was built against.
+    hasOutOfTurnPlays: true,
 };

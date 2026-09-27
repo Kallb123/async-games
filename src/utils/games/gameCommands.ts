@@ -70,6 +70,9 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "SACMaritimeTrade",
         "SACEndTurn",
         "SACUndo",
+        "SACOfferTrade",
+        "SACAcceptTrade",
+        "SACWithdrawTrade",
     ],
     WorldDominationGameType: [
         "WorldDominationDeployArmies",
