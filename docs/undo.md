@@ -9,10 +9,11 @@ the hold, the board's Undo button and countdown, and this documentation. The
 pilot is **placing settlements and roads** — all four of them: the two setup
 placements and the two main-phase builds. Every other game, and every other
 Settlements & Cities command, is out of scope here and gains nothing until
-someone opts it in a line at a time (§14, §16). Five more games have since
+someone opts it in a line at a time (§14, §16). Six more games have since
 opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
 "The third game"), Outbreak (§16, "The fourth game"), Train Time (§16,
-"The fifth game") and Dice Cities (§16, "The sixth game").
+"The fifth game"), Dice Cities (§16, "The sixth game") and Fires Out (§16,
+"The seventh game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -1370,3 +1371,56 @@ earlier one rather than repeat it.
 - **The board.** While a hold is open, `UndoHold` is the whole turn sheet under
   the roll readout; on a doubles turn, Undo sits under the roll button until
   the dice are thrown.
+
+### The seventh game: Fires Out
+
+Outbreak's shape — actions, then an End turn nobody can take back — and the
+first opt-in where the line between undoable and not runs *through* one
+command rather than between commands: every move in Fires Out is one
+`FiresOutAction`, told apart by its `kind`.
+
+- **What is undoable.** A move, a door, an extinguish, a chop, a drive, a
+  Paramedic's treat, a Hazmat Technician's on-site disposal and a crew change
+  — every kind in `UNDOABLE_KINDS` (`FiresOutLogic.ts`). `FiresOutAction`
+  declares `readonly undoable = true`; the source scan in
+  `src/games/FiresOut/undo.test.ts` holds the list to that one command, and
+  the guard beside it holds every kind that pushed to no `recorded…` field.
+- **What is not.** `endTurn` runs the Advance Fire and replenishes POIs, and
+  `deckGun` rolls for where the shot lands, so neither kind ever pushes — and
+  since `endTurn` is the only hand-off, no snapshot survives one. Nor does
+  **anything that turns a POI face up**: a move onto a face-down marker
+  (§10.1 of the GDD) and the Imaging Technician's remote `reveal`. A snapshot
+  could put the marker back face down, but the crew has already seen whether
+  it was a victim, and taking the move back would be a free look. This is
+  decided off the board rather than off the kind — `revealedAnyPoi` (in
+  `rules.ts`) compares the snapshot with the state after the action, and any
+  marker face down before and face up or gone after means no push — so a kind
+  added later that happens to reveal a marker is covered without remembering
+  to be. It is Race Cars' "sometimes I push" shape again, decided by what the
+  command turned up rather than what it rolled. Last, the action that ends the
+  game — the seventh rescue, or the chop that brings the building down — is
+  settled by `CheckGameOver` outside `specificGameState` and pushes nothing,
+  the winning Helicopter Lift once more.
+- **No hold (§5)**, no `currentTurn` to restore: a turn only ever ends on the
+  player's own End turn. The stack is emptied by `applyEndTurn` rather than
+  `CheckEndTurn`, because a solo crew's hand-off from one figure to the next
+  never gets as far as `CheckEndTurn` (it returns `turnOver: false`); and by
+  the dropout adapter, because a snapshot taken before a player left would
+  hand their figures back to them. Depth `AP_PER_TURN` (four): an ordinary
+  turn of 1-AP actions, one at a time. A turn run on banked or specialist AP
+  can hold more actions than that, which only costs reach.
+- **The cloner moved.** `cloneFiresOutState` moved from `FiresOutModels.ts` to
+  `rules.ts`, as Outbreak's and Banned Islet's did, and `FiresOutModels.ts`
+  re-exports it. `rules.ts` takes the state's type with an `import type`, so it
+  still never loads the models at runtime.
+- **Hidden information.** Every face-down POI's identity and the POI pool's
+  order are the secrets here, and a snapshot carries both. It is never sent:
+  `gameStateToModel` builds its return field by field and gains `canUndo`
+  alone — the same expression the other games use.
+- **Recap and charts.** The shared recap engine drops an undo together with the
+  command it reversed. A rescue taken back comes off the result page's
+  damage chart too: `detectRescueEvent` takes its own last marker back when an
+  undo lowers `rescued`, as Dice Cities' `detectLandmarkEvent` does for a
+  landmark.
+- **The button.** `UndoButton`, beside End turn in one `.ag-action-grid` row —
+  End turn is always on the sheet here, so it never needs a row of its own.
