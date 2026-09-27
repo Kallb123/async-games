@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Dice Cities: play on the Outer Rim",
+                detail: "Pick the new Outer Rim theme when you set up a game and your city becomes a frontier outpost on a galactic trade lane: Moisture Farms and Spice Mines, cantinas that charge the pilot, credits from the Exchange, and a Docking Bay and Sensor Array to finish. Same rules and numbers as ever — only the names change, and its own card art is on the way.",
+                game: "dicecities",
+            },
+            {
                 title: "Kingdom Builder's world map has new badges",
                 detail: "Towns, barbarian camps, open sites, forests, quarries and mines each wear a round painted badge. Every town's ring is its owner's colour, your own towns show their town centre level, and each barbarian camp shows how tough it is, from I to III.",
                 game: "kingdombuilder",
@@ -118,10 +123,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "End-of-turn draws stay on the table",
                 detail: "Banned Islet and Outbreak now show the cards you just drew and your updated hand beside the flood or infection recap, so you can take in the whole end of your turn at once.",
-            },
-            {
-                title: "One quiet player no longer ends the game for everyone",
-                detail: "Miss three turns in a row and, in most games, you now leave the game rather than ending it: everyone else plays on without you. In a race your counter or car drops out, in Dice Cities and Settlements & Cities your city stops collecting, Train Time keeps your track on the map but not in the scores, World Domination leaves your armies standing to be conquered, and the co-op teams share out or discard what you held and carry on — even down to one player. Two-player games, Smartthink and Solitaire still end as before.",
             },
         ],
     },

@@ -2,9 +2,11 @@
 
 How a game gets more than one dressing: the same rules, costs and numbers,
 played under different names and artwork. Dice Cities is the first game to use
-it — the shipped Japanese-inspired region of rival towns, and the post-nuclear
+it — the shipped Japanese-inspired region of rival towns, the post-nuclear
 "Rust & Bottlecaps" re-skin written up in
-[`docs/games/dice-cities.md` §12](./games/dice-cities.md#12-appendix-alternative-theme--rust--bottlecaps).
+[`docs/games/dice-cities.md` §12](./games/dice-cities.md#12-appendix-alternative-theme--rust--bottlecaps),
+and the galactic-frontier "Outer Rim" one in
+[§13](./games/dice-cities.md#13-appendix-alternative-theme--outer-rim).
 
 ## 1. What a theme is (and is not)
 
