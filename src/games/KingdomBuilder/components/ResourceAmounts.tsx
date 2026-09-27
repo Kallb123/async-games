@@ -1,7 +1,7 @@
 'use client'
 
-import ListRow from "@/components/ui/ListRow";
-import Stepper from "@/components/ui/Stepper";
+import AmountSteppers from "@/components/ui/AmountSteppers";
+import { capitalise } from "@/utils/ui/text";
 
 import type { KingdomBuilderResources } from "../KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_RESOURCE_ICONS, KINGDOM_BUILDER_RESOURCE_TYPES, type KingdomBuilderResourceType } from "../resources";
@@ -23,12 +23,8 @@ interface ResourceAmountsProps {
  */
 export default function ResourceAmounts({ amounts, max, onChange, sub, step = 5 }: ResourceAmountsProps) {
     return (
-        <div className="ag-list">
-            {KINGDOM_BUILDER_RESOURCE_TYPES.filter(resource => max(resource) > 0).map(resource => (
-                <ListRow key={resource} icon={KINGDOM_BUILDER_RESOURCE_ICONS[resource]} title={resource[0].toUpperCase() + resource.slice(1)} sub={sub?.(resource)}
-                    action={<Stepper value={amounts[resource]} min={0} max={max(resource)} step={step} label={resource}
-                        onChange={amount => onChange({ ...amounts, [resource]: amount })} />} />
-            ))}
-        </div>
+        <AmountSteppers kinds={KINGDOM_BUILDER_RESOURCE_TYPES} icon={resource => KINGDOM_BUILDER_RESOURCE_ICONS[resource]}
+            title={capitalise}
+            amounts={amounts} max={max} onChange={onChange} sub={sub} step={step} />
     );
 }

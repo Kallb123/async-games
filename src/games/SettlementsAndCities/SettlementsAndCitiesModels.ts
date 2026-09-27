@@ -15,6 +15,7 @@ import {
     createInitialPlayerState,
     cloneSACState,
     cloneRollChanges,
+    cloneTradeOffers,
     DEV_CARD_DECK,
     calculateVisibleVP,
     calculateLongestRoad,
@@ -183,6 +184,8 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         undoStack: [],
         undoAnchorId: null,
         autoEndTurnAt: null,
+        tradeOffers: [],
+        tradeOffersPosted: [],
     };
 
     const gameData: ISettlementsAndCitiesGameData = {
@@ -308,6 +311,8 @@ function makeSACStateSchemaDef() {
         undoStack: [{ by: String, state: Schema.Types.Mixed }],
         undoAnchorId: { type: String, default: null },
         autoEndTurnAt: { type: String, default: null },
+        tradeOffers: [{ offerId: String, proposerId: String, give: resourcesSubSchema, want: resourcesSubSchema, postedOnOwnTurn: Boolean }],
+        tradeOffersPosted: [String],
     };
 }
 
@@ -480,6 +485,10 @@ export function gameStateToResponse(
         victoryTarget: gs.victoryTarget ?? 10,
         canUndo,
         autoEndTurnAt,
+        // Every open offer is public in full — its proposer chose to show it.
+        tradeOffers: cloneTradeOffers(gs.tradeOffers),
+        // The viewer's own count. Everyone saw each post land in the log.
+        myTradeOffersPosted: viewerId === null ? 0 : (gs.tradeOffersPosted ?? []).filter(userId => userId === viewerId).length,
     };
 }
 

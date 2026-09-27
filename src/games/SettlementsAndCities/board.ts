@@ -113,6 +113,32 @@ export interface ISACRollChange {
     discarded: number;
 }
 
+// ─── Trade offers between players ─────────────────────────────────────────────
+
+/**
+ * One standing offer on the table: "I'll give this for that", open to every
+ * other player at once and settled by whoever accepts it first — on anyone's
+ * turn, so a trade never waits for a turn to come round (docs/games/
+ * settlements-and-cities.md §10). Nothing is held back from the proposer's
+ * hand while it's open, so both hands are checked again when it's accepted.
+ *
+ * Public in full: the proposer chose to show what they'd give, and the rest of
+ * their hand stays a count.
+ */
+export interface ISACTradeOffer {
+    /** The id of the command that posted it — server-stamped, so unique. */
+    offerId: string;
+    proposerId: string;
+    give: ISACResources;
+    want: ISACResources;
+    /**
+     * True while the offer was posted during its proposer's own turn and that
+     * turn hasn't ended yet. An offer lasts until the end of its proposer's
+     * *next* turn, and the turn it was posted in doesn't count as that.
+     */
+    postedOnOwnTurn: boolean;
+}
+
 // ─── Full specific game state ─────────────────────────────────────────────────
 
 export interface ISACSpecificGameState {
@@ -212,6 +238,15 @@ export interface ISACSpecificGameState {
      * this field along with everything else.
      */
     autoEndTurnAt: string | null;
+    // ─── Trade offers (docs/games/settlements-and-cities.md §10) ─────────────
+    /** Every open offer, oldest first. Absent on a game from before trading. */
+    tradeOffers?: ISACTradeOffer[];
+    /**
+     * One entry per offer posted since the current main turn began, naming who
+     * posted it — withdrawn ones included, so posting and withdrawing can't be
+     * looped to flood the log. Cleared when the main turn passes.
+     */
+    tradeOffersPosted?: string[];
 }
 
 // How long a player has to take an undoable move back, once the turn it would
@@ -238,7 +273,9 @@ export const UNDO_STACK_DEPTH = 3;
 // mongoose at its top, and a command class reaching anything from it would
 // drag the driver into the client bundle through the GameLogic barrel.
 
-function cloneResources(r: ISACResources): ISACResources {
+// Exported for the trade commands, which copy an offer's sides off a live
+// Mongoose document — a spread would carry the subdocument's internals along.
+export function cloneResources(r: ISACResources): ISACResources {
     return { lumber: r.lumber, wool: r.wool, grain: r.grain, brick: r.brick, ore: r.ore };
 }
 
@@ -263,6 +300,18 @@ export function cloneRollChanges(changes: ISACRollChange[] | undefined): ISACRol
         userId: change.userId,
         gained: cloneResources(change.gained),
         discarded: change.discarded,
+    }));
+}
+
+// Exported for the same reason as cloneRollChanges: the response builds its
+// copy of each offer field by field off a live Mongoose document too.
+export function cloneTradeOffers(offers: ISACTradeOffer[] | undefined): ISACTradeOffer[] {
+    return (offers ?? []).map((offer): ISACTradeOffer => ({
+        offerId: offer.offerId,
+        proposerId: offer.proposerId,
+        give: cloneResources(offer.give),
+        want: cloneResources(offer.want),
+        postedOnOwnTurn: offer.postedOnOwnTurn,
     }));
 }
 
@@ -327,6 +376,8 @@ export function cloneSACState(
         // undone command ran — null, since a command that leaves something to
         // take back is exactly the one that would otherwise have set it.
         autoEndTurnAt: gs.autoEndTurnAt ?? null,
+        tradeOffers: cloneTradeOffers(gs.tradeOffers),
+        tradeOffersPosted: [...(gs.tradeOffersPosted ?? [])],
     };
 }
 

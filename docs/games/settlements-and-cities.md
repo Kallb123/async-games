@@ -70,9 +70,9 @@ The active player may trade resources to acquire what they need to build.
 * **Domestic Trade:** The active player negotiates trades with other players. Any ratio and combination of resources can be traded, but the active player must be involved in all transactions.
 * **Maritime Trade:** The active player trades directly with the bank. Standard rate is 4:1 (four of identical resource for any one resource). Controlling harbors reduces this rate to 3:1 (generic harbor) or 2:1 (specialized harbor).
 
-> **Implementation note:** Maritime trade is built; **domestic (player-to-player)
-> trade is not**. It is the one part of the core loop still missing. See
-> [§10](#10-player-to-player-trading-design-proposal) for the design proposal.
+> **Implementation note:** Both are built. Domestic trade is a deliberate house
+> rule: standing offers any two players settle on any turn, not only the active
+> player's — see [§10](#10-player-to-player-trading-design-proposal).
 
 ### Phase 3: Build
 
@@ -330,11 +330,10 @@ mechanics. Outstanding work, by expansion:
 * **Explorers & Pirates (§8.4):** face-down sea-tile exploration, cargo ships
   carrying crews/settlers, and the mission-based scoring campaign.
 
-Separately from the expansions, the base game is also missing **domestic
-(player-to-player) trade** from §5 Phase 2 — the largest outstanding gap in the
-core loop. That is designed in [§10](#10-player-to-player-trading-design-proposal)
-rather than here, because it needs a change to the shared engine (off-turn
-commands) that the expansions do not.
+Separately from the expansions, **domestic (player-to-player) trade** from §5
+Phase 2 — once the largest gap in the core loop — is now built, on the shared
+engine's out-of-turn commands; [§10](#10-player-to-player-trading-design-proposal)
+covers it.
 
 Each of these is a substantial feature in its own right. They should be added
 incrementally on top of the existing framework — new commands in
@@ -385,7 +384,45 @@ of that loop this implementation has never had. Everything else a turn does —
 produce, rob, build, buy, bank-trade — is built; the "negotiate with the table"
 half of Phase 2 is missing entirely.
 
-**This section is a proposal. None of it is implemented.**
+> **Status: built, as standing offers** — the shape §10.5 calls the standing
+> want-ad, skipping the turn-scoped first cut. What shipped, and where it
+> departs from the proposal below:
+>
+> * **Three commands, all `playableOutOfTurn`** (docs/out-of-turn-actions.md):
+>   `SACOfferTrade`, `SACAcceptTrade` and `SACWithdrawTrade`. Any seated player
+>   posts, accepts or withdraws on any turn — the **open market** of §10.8.
+>   None ends a turn, runs `sacFinishTurn` or is undoable; an active player's
+>   undo goes stale by itself once one lands after the move (SACUndo's anchor).
+> * **State:** `tradeOffers` (typed sub-schema, cloned in `cloneSACState`,
+>   sent whole in the response — an offer is public) and `tradeOffersPosted`.
+>   The rules both sides read are in `trading.ts`.
+> * **Lifetime without a clock.** Instead of §10.7's deadline buckets, an offer
+>   lapses at the end of its proposer's *next* main turn — the turn it was
+>   posted in doesn't count (`postedOnOwnTurn`). `sacAdvanceMainTurn` does it,
+>   so there's no sweep and no time read, and a player who drops out takes
+>   their offers with them.
+> * **Limits:** three open offers a player (`SAC_MAX_OPEN_OFFERS`), six posted
+>   per main turn, withdrawn ones included (`SAC_MAX_OFFERS_POSTED_PER_TURN`) —
+>   the per-proposer rate limit §10.11 asks for, counted in the state so it
+>   replays. Each side up to 19 of a resource; something each way, nothing on
+>   both sides.
+> * **No escrow**, as §10.10 recommends: both hands are checked at acceptance.
+>   An offer its proposer can no longer cover stays listed, and only its
+>   proposer is told (from their own hand) — pruning it would tell the table
+>   what they'd spent or had stolen.
+> * **Blocked during setup and while the robber moves** (§10.8's last guard);
+>   withdrawing is allowed then.
+> * **UI:** a *Trade offers* `ListSection` beside the hand, outside the turn
+>   sheet's `ReadOnlyPanel`. Each row says whether the viewer can fill it —
+>   from the viewer's own hand only. The composer is `AmountSteppers`, shared
+>   with Kingdom Builder's trade board.
+> * **Recap:** one `🤝` event per settled trade, read off the command's
+>   `settled` terms (§10.10's clear-first collision).
+> * **Not built yet:** the `TradeOffered`/`TradeAccepted` pushes and `trade`
+>   channel of §10.11. Open boards pick offers up by polling (`hasOutOfTurnPlays`).
+>   Declines stay implicit — you just don't accept.
+>
+> The proposal is kept below for its reasoning.
 
 ### 10.1 Why trading is the hard one
 

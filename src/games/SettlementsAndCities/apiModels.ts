@@ -1,5 +1,5 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { ISACRollChange, SAC_Resource, SAC_DevCard, SAC_Terrain, SAC_Harbor } from "./board";
+import type { ISACRollChange, ISACTradeOffer, SAC_Resource, SAC_DevCard, SAC_Terrain, SAC_Harbor } from "./board";
 import type { SACExpansions } from "./expansions";
 
 export interface ISACHexResponse {
@@ -124,6 +124,13 @@ export interface ISACSpecificGameStateResponse {
     // move back first (docs/undo.md §5). ISO, or null — including for anyone
     // it isn't held for, same as canUndo.
     autoEndTurnAt: string | null;
+    // Every open trade offer between players, oldest first — the state's own
+    // shape, since nothing in one is hidden (see ISACTradeOffer).
+    tradeOffers: ISACTradeOffer[];
+    // How many offers the viewer has posted this main turn, withdrawn ones
+    // included — what SAC_MAX_OFFERS_POSTED_PER_TURN counts. 0 for a
+    // viewerless view.
+    myTradeOffersPosted: number;
 }
 
 export interface ISACGameDataResponse extends IGameDataResponse {

@@ -105,7 +105,10 @@ out. A second copy is the signal to extract the first one.
   `BuildRow` — the icon, the name over what it costs, and the trailing tag —
   whether the row arms the board for a tap, fires a command outright, or picks
   one card out of a list. Wrap a run of them in `.ag-build-list` yourself, and
-  don't hand-write that markup again.
+  don't hand-write that markup again. Picking an amount of each of several
+  things — either side of a trade offer, a caravan's load — is
+  `AmountSteppers`: one `ag-list` with a `Stepper` per row, shared by Kingdom
+  Builder's trade board and Settlements & Cities' trade offers.
   A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`
   — one child of an `.ag-action-grid` row beside whatever it shares the row
   with — rather than another hand-built "↩ Undo". A game whose undoable move

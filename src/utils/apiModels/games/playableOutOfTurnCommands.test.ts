@@ -34,6 +34,14 @@ const PLAYABLE_OUT_OF_TURN: string[] = [
     // Four single-step event cards in actions/discard; Forecast, retrieval and
     // forecast ordering are refused, and an interrupt never closes discard.
     "OutbreakPlayEvent",
+    // Settlements & Cities trading: post, accept or withdraw an offer on any
+    // turn, never in setup or (post/accept) while the robber moves. Each moves
+    // only the sender's own cards — an accept moves the proposer's too, with
+    // their consent given by posting it, and both hands checked again at that
+    // moment. None ends a turn, finishes a phase or runs sacFinishTurn.
+    "SACOfferTrade",
+    "SACAcceptTrade",
+    "SACWithdrawTrade",
 ];
 
 describe("commands playable out of turn", () => {

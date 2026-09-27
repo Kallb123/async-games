@@ -58,6 +58,8 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         victoryTarget: 10,
         canUndo: false,
         autoEndTurnAt: null,
+        tradeOffers: [],
+        myTradeOffersPosted: 0,
         ...overrides,
     };
 }

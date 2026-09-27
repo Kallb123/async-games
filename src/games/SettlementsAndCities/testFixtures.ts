@@ -75,6 +75,8 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         undoStack: [],
         undoAnchorId: null,
         autoEndTurnAt: null,
+        tradeOffers: [],
+        tradeOffersPosted: [],
         ...overrides,
     };
 }
