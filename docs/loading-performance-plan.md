@@ -55,6 +55,12 @@ Do this before selecting an architectural fix.
 5. Capture a repeatable Playwright trace for dashboard → game, game → home, home → profile, home → new game, and push/deep-link → game under cold and warm caches with mobile CPU/network throttling.
 6. Create a small performance budget checked in CI: route JavaScript, first-game JSON, and largest required image. Use a scheduled or deployment smoke test for latency percentiles; do not make noisy Internet timings a per-commit gate.
 
+### How the client timings are measured
+
+`PerformanceReporter` keeps one **journey** per route arrival, and every milestone a screen marks (`auth_ready`, `first_data`, `dashboard_usable`, `game_board_painted`, `game_usable`, via `window.__agPerformanceMark`) is timed from that journey's start, never from when the tab opened. A document load starts at the time origin and is `cold`. An in-app route change is `warm` and starts at the tap or key press that caused it, or at the back/forward. That includes `router.push` from a clickable row, not just `<Link>`. A route change with no tap or back/forward in the previous thirty seconds is a redirect: it starts a journey but reports no `navigation`. Each milestone counts once per journey. A side panel's data (the chat thread) never marks `first_data`. A journey that goes to the background part-way through reports no more milestones. Web Vitals always belong to the document load (`cold`).
+
+The admin report splits journey metrics into cold and warm, and ignores journey samples recorded before this scheme (they carry no `cache`). Those samples counted from when the tab opened, which is why a game opened after a minute on the dashboard looked like a one-minute load.
+
 **Exit criterion:** a trace can attribute the median and p75 game-entry time among route/RSC, JavaScript, Clerk readiness, API/server work, JSON transfer, render, and images.
 
 ## Phase 1 — remove the game-entry waterfall

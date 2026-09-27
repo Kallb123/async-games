@@ -99,9 +99,8 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         if (gameData && !reportedUsable.current) {
             reportedUsable.current = true;
             requestAnimationFrame(() => requestAnimationFrame(() => {
-                performance.mark('ag_board_painted');
-                window.__agPerformanceReport?.('game_board_painted', performance.now());
-                window.__agPerformanceReport?.('game_usable', performance.now());
+                window.__agPerformanceMark?.('game_board_painted');
+                window.__agPerformanceMark?.('game_usable');
             }));
         }
     }, [gameData]);

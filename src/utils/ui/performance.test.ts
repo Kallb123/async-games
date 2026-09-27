@@ -7,20 +7,22 @@ describe('performanceMarkdown', () => {
 
     it('writes the header and every row as a table in each metric’s unit', () => {
         const markdown = performanceMarkdown({
-            since, totalSamples: 12, summaries: [
+            since, totalSamples: 15, summaries: [
                 { name: 'LCP', route: '/game/[id]', samples: 10, median: 1200.4, p75: 1800, p95: 3000.6 },
                 { name: 'CLS', route: '/', samples: 2, median: 0.01, p75: 0.1, p95: 0.25 },
+                { name: 'game_usable', route: '/game/[id]', cache: 'warm', samples: 3, median: 400, p75: 600, p95: 900 },
             ],
         }, generatedAt);
-        expect(markdown).toContain('- Samples: 12');
+        expect(markdown).toContain('- Samples: 15');
         expect(markdown).toContain(`- Window: ${since} → 2026-09-26T12:00:00.000Z (7 days)`);
-        expect(markdown).toContain('| LCP | /game/[id] | 10 | 1200 ms | 1800 ms | 3001 ms |');
-        expect(markdown).toContain('| CLS | / | 2 | 0.010 | 0.100 | 0.250 |');
+        expect(markdown).toContain('| LCP | /game/[id] |  | 10 | 1200 ms | 1800 ms | 3001 ms |');
+        expect(markdown).toContain('| CLS | / |  | 2 | 0.010 | 0.100 | 0.250 |');
+        expect(markdown).toContain('| game_usable | /game/[id] | warm | 3 | 400 ms | 600 ms | 900 ms |');
     });
 
     it('escapes a pipe in a route so the table keeps its columns', () => {
         const markdown = performanceMarkdown({ since, totalSamples: 1, summaries: [{ name: 'api', route: '/a|b', samples: 1, median: 1, p75: 1, p95: 1 }] }, generatedAt);
-        expect(markdown).toContain('| api | /a\\|b | 1 |');
+        expect(markdown).toContain('| api | /a\\|b |  | 1 |');
     });
 
     it('says so when there is nothing to report', () => {

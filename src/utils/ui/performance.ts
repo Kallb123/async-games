@@ -25,9 +25,9 @@ export function performanceMarkdown(data: AdminPerformanceResponse, generatedAt:
   if (data.summaries.length === 0) return [...lines, '_No performance samples in this window._', ''].join('\n');
   return [
     ...lines,
-    '| Metric | Route | Samples | Median | p75 | p95 |',
-    '| --- | --- | ---: | ---: | ---: | ---: |',
-    ...data.summaries.map(row => `| ${cell(row.name)} | ${cell(row.route)} | ${row.samples} | ${[row.median, row.p75, row.p95].map(n => formatPerformanceValue(row.name, n)).join(' | ')} |`),
+    '| Metric | Route | Load | Samples | Median | p75 | p95 |',
+    '| --- | --- | --- | ---: | ---: | ---: | ---: |',
+    ...data.summaries.map(row => `| ${cell(row.name)} | ${cell(row.route)} | ${row.cache ?? ''} | ${row.samples} | ${[row.median, row.p75, row.p95].map(n => formatPerformanceValue(row.name, n)).join(' | ')} |`),
     '',
   ].join('\n');
 }

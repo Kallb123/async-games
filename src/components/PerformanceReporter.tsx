@@ -2,10 +2,17 @@
 
 import { usePathname } from 'next/navigation';
 import { useReportWebVitals } from 'next/web-vitals';
-import { useCallback, useEffect, useRef } from 'react';
-import { safeRoute, type PerformanceMetricInput, type PerformanceMetricName } from '@/utils/performance';
+import { useEffect } from 'react';
+import { loadJourney, nextJourney, safeRoute, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName } from '@/utils/performance';
 
-declare global { interface Window { __agPerformanceReport?: (name: PerformanceMetricName, value: number) => void; } }
+declare global {
+  interface Window {
+    /** A duration measured by the caller (a server span, a byte count). */
+    __agPerformanceReport?: (name: PerformanceMetricName, value: number) => void;
+    /** A milestone reached now, timed from the start of the current journey. */
+    __agPerformanceMark?: (name: JourneyMilestone) => void;
+  }
+}
 const queue: PerformanceMetricInput[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -23,51 +30,103 @@ function enqueue(metric: PerformanceMetricInput) {
   if (queue.length >= 10) send(); else timer ??= setTimeout(send, 5000);
 }
 
+let journey: Journey | undefined;
+let lastIntent: number | undefined;
+let lastPopstate: number | undefined;
+let navigationReported = false;
+
+/** Whether the document has been hidden since it loaded — including before this code ran, where the browser recorded it. */
+function hiddenSinceLoad() {
+  return document.visibilityState === 'hidden'
+    || performance.getEntriesByType('visibility-state').some(entry => entry.name === 'hidden');
+}
+
+/**
+ * The journey the page is on now. Read from `location` rather than from this
+ * component's `pathname`, so it is right whichever runs first after a route
+ * change: this component's effect, or the new screen's marking a milestone.
+ */
+function currentJourney(): Journey {
+  const path = location.pathname;
+  if (!journey) {
+    journey = loadJourney(path, hiddenSinceLoad());
+  } else if (journey.path !== path) {
+    journey = nextJourney(path, performance.now(), lastIntent, lastPopstate);
+    navigationReported = false;
+  }
+  return journey;
+}
+
+function report(name: PerformanceMetricName, value: number) {
+  const { source, cache } = currentJourney();
+  const connection = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection?.effectiveType;
+  enqueue({ name, value: Math.max(0, value), route: safeRoute(location.pathname), source, cache, connection,
+    build: process.env.NEXT_PUBLIC_BUILD_TIME });
+}
+
+function mark(name: JourneyMilestone) {
+  const now = performance.now();
+  performance.mark(`ag_${name}`);
+  const current = currentJourney();
+  if (current.hidden || current.marked.has(name)) return;
+  current.marked.add(name);
+  report(name, now - current.start);
+}
+
 /** App-wide route, Core Web Vital, and custom journey timing collector. */
 export default function PerformanceReporter() {
   const pathname = usePathname();
-  const previous = useRef(pathname);
-  const routeStarted = useRef(0);
-  const report = useCallback((name: PerformanceMetricName, value: number) => {
-    const connection = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection?.effectiveType;
-    enqueue({ name, value: Math.max(0, value), route: safeRoute(location.pathname),
-      source: name === 'navigation' ? 'history' : 'load', connection,
-      build: process.env.NEXT_PUBLIC_BUILD_TIME });
-  }, []);
 
+  // Vitals belong to the document load, whichever route they are reported from.
   useReportWebVitals(metric => enqueue({ name: metric.name as PerformanceMetricName, value: metric.value,
-    route: safeRoute(location.pathname), source: 'load', build: process.env.NEXT_PUBLIC_BUILD_TIME }));
+    route: safeRoute(location.pathname), source: 'load', cache: 'cold', build: process.env.NEXT_PUBLIC_BUILD_TIME }));
 
   useEffect(() => {
     window.__agPerformanceReport = report;
-    const intent = (event: Event) => {
-      const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
-      if (!target) return;
-      routeStarted.current = performance.now(); performance.mark('ag_navigation_intent');
+    window.__agPerformanceMark = mark;
+    currentJourney();
+    // Any tap or key press may be the one that navigates: dashboard rows call
+    // `router.push` rather than being `<a href>`, so a link-only listener
+    // would miss the app's most important journey.
+    const intent = () => { lastIntent = performance.now(); };
+    const keyboardIntent = (event: KeyboardEvent) => {
+      // Typing in a field (a chat message) is not asking to go anywhere.
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.isContentEditable || target?.closest('input, textarea, select')) return;
+      if (event.key === 'Enter' || event.key === ' ') intent();
     };
+    const popstate = () => { lastPopstate = performance.now(); };
+    const visibility = () => { if (document.visibilityState === 'hidden') currentJourney().hidden = true; };
     document.addEventListener('pointerdown', intent, true);
-    const keyboardIntent = (event: KeyboardEvent) => { if (event.key === 'Enter') intent(event); };
     document.addEventListener('keydown', keyboardIntent, true);
+    window.addEventListener('popstate', popstate);
+    document.addEventListener('visibilitychange', visibility);
     const observer = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
         const resource = entry as PerformanceResourceTiming;
-        if (resource.initiatorType === 'img') enqueue({ name: 'image_load', value: resource.duration, route: safeRoute(location.pathname), source: 'load' });
+        if (resource.initiatorType === 'img') report('image_load', resource.duration);
       }
     });
     observer.observe({ type: 'resource', buffered: true });
     return () => {
       delete window.__agPerformanceReport;
+      delete window.__agPerformanceMark;
       document.removeEventListener('pointerdown', intent, true);
       document.removeEventListener('keydown', keyboardIntent, true);
+      window.removeEventListener('popstate', popstate);
+      document.removeEventListener('visibilitychange', visibility);
       observer.disconnect();
       if (timer) { clearTimeout(timer); send(); }
     };
-  }, [report]);
+  }, []);
 
   useEffect(() => {
     performance.mark('ag_route_commit');
-    if (previous.current !== pathname) report('navigation', performance.now() - routeStarted.current);
-    previous.current = pathname;
-  }, [pathname, report]);
+    const current = currentJourney();
+    if (current.source !== 'load' && current.hasIntent && !current.hidden && !navigationReported) {
+      navigationReported = true;
+      report('navigation', performance.now() - current.start);
+    }
+  }, [pathname]);
   return null;
 }
