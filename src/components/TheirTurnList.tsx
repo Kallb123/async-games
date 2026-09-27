@@ -7,17 +7,17 @@ import { opponentsById } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
 import UnreadChatBadge from "@/components/ui/UnreadChatBadge";
-import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useToast } from "@/components/ToastContext";
 
-interface TheirTurnListProps extends RefreshableState {
+interface TheirTurnListProps {
+    isLoading: boolean;
     games: IGameResponse[];
 }
 
-export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirTurnListProps) {
+export default function TheirTurnList({ games, isLoading }: TheirTurnListProps) {
     const { user } = useIsAuthorised();
     const { showToast } = useToast();
     const now = useNowToTheMinute();
@@ -58,7 +58,6 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
         <ListSection
             label="Waiting on others"
             isLoading={isLoading}
-            isRefreshing={isRefreshing}
             skeletonIcon="dot"
             hint="Use 👉 to send a nudge to move things along"
         >

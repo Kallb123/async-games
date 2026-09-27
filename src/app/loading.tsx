@@ -23,6 +23,9 @@ import WhatsNew from "@/components/ui/WhatsNew";
  * and no player, and a visitor who follows one lands on /login, which is where
  * they were going anyway.
  *
+ * The rail's loading bar is already sweeping, as `Dashboard`'s is until its
+ * first response lands, so the handover doesn't blink it off and on.
+ *
  * `WhatsNew` is rendered for real rather than skeletoned, as the rail is: it
  * waits on no request, so there is nothing for a placeholder to stand in for,
  * and it holds open the region the grid puts under the queue.
@@ -30,7 +33,7 @@ import WhatsNew from "@/components/ui/WhatsNew";
 export default function Loading() {
     return (
         <main className="ag-desk">
-            <AppRail />
+            <AppRail busy />
 
             <div className="ag-desk-col ag-desk-col--main">
                 <div className="ag-hero" aria-hidden>

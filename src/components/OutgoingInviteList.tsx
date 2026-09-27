@@ -5,15 +5,15 @@ import moment from 'moment';
 import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import { lobbyPath } from "@/utils/games/lobby";
-import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 
-interface OutgoingInviteListProps extends RefreshableState {
+interface OutgoingInviteListProps {
+    isLoading: boolean;
     invites: IInvitationResponse[];
     /** Re-reads the dashboard after this list changes something. */
     onChanged: () => void;
 }
 
-export default function OutgoingInviteList({ invites, isLoading, isRefreshing, onChanged }: OutgoingInviteListProps) {
+export default function OutgoingInviteList({ invites, isLoading, onChanged }: OutgoingInviteListProps) {
 
     const handleCancel = async (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/cancel', {
@@ -35,7 +35,6 @@ export default function OutgoingInviteList({ invites, isLoading, isRefreshing, o
         <ListSection
             label="Awaiting response"
             isLoading={isLoading}
-            isRefreshing={isRefreshing}
             skeletonIcon="dot"
         >
             {invites.map((invite) => {

@@ -1047,8 +1047,9 @@ description or theme colour is exactly what those two files exist to prevent.
   `useRefreshableData` (`src/utils/hooks/useRefreshableData.ts`) fetches a JSON
   endpoint once the viewer is authorised, re-fetches on the push events it is
   given, on a foreground return and (where asked) on a poll, drops overlapping
-  refreshes, and hands back `isLoading`/`isRefreshing` so a refresh shimmers
-  instead of swapping live content for skeletons. `useGameData` is that hook
+  refreshes, and hands back `isLoading`/`isRefreshing` so a refresh shows as a
+  shimmer or a loading bar (the home dashboard, a game board, the chat) instead
+  of swapping live content for skeletons. `useGameData` is that hook
   pointed at `/api/game/[gameid]`, `useDashboard` at `/api/dashboard`,
   `useGameChat` at a game's thread. **A failed fetch is not a verdict:** the
   last good body stays on screen and the hook retries on a short backoff

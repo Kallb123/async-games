@@ -4277,14 +4277,34 @@ button.ag-tt-ticket { cursor: pointer; }
    history while the game state refreshes, the chat while its thread does),
    dressed for the cream panel in terracotta. It hangs in the gap below the
    header, so the title and the ✕ don't move when it comes and goes. */
-.ag-pending-bar--panel {
-    bottom: -6px;
+.ag-pending-bar--panel,
+.ag-pending-bar--page {
     pointer-events: none;
     background: color-mix(in oklch, var(--ag-terracotta) 14%, transparent);
     animation: ag-pending-reveal 140ms ease-out both;
 }
-.ag-pending-bar--panel::after {
+.ag-pending-bar--panel { bottom: -6px; }
+.ag-pending-bar--panel::after,
+.ag-pending-bar--page::after {
     background: linear-gradient(90deg, transparent, var(--ag-terracotta), transparent);
+}
+
+/* And under the home dashboard's header (AppRail's `busy`), in place of the
+   shimmer each list used to wear while it refetched. On a phone it runs the
+   width of the column in the gap between the top bar and the hero; past 900px
+   the header has stood up into the rail, so it runs along the top of the window
+   instead, across everything beside the rail. Either way it is out of flow, so
+   nothing on the page moves when it comes and goes. */
+.ag-rail .ag-topbar { position: relative; }
+.ag-pending-bar--page { bottom: -8px; }
+@media (min-width: 900px) {
+    .ag-pending-bar--page {
+        position: fixed;
+        top: 0;
+        bottom: auto;
+        left: var(--ag-rail-width);
+        z-index: 10;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4302,7 +4322,8 @@ button.ag-tt-ticket { cursor: pointer; }
        stalled — so either bar becomes a steady lit line instead. */
     .ag-pending-bar::after { width: 100%; opacity: 0.55; }
     .ag-pending-bar--topbar::after { background: var(--ag-gold); }
-    .ag-pending-bar--panel::after { background: var(--ag-terracotta); }
+    .ag-pending-bar--panel::after,
+    .ag-pending-bar--page::after { background: var(--ag-terracotta); }
     /* Without the reveal animation the verb needs the label hidden outright. */
     .ag-btn--pending > .ag-btn-body { visibility: hidden; }
     .ag-spinner { border-top-color: currentColor; opacity: 0.6; }
