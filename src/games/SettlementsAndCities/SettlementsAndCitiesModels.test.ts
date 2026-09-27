@@ -5,7 +5,9 @@ import {
     gameStateToResponse,
     computeSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesCharts,
+    sacGameResultStatsSchemaDef,
 } from "./SettlementsAndCitiesModels";
+import { Schema, model } from "mongoose";
 import { makeState, player } from "./testFixtures";
 import type { ISACRollChange, ISACSpecificGameState } from "./board";
 import { BOARD_TOPOLOGY, NO_RESOURCES } from "./board";
@@ -222,8 +224,8 @@ describe("Settlements & Cities' held turn on the wire", () => {
 // prove the tally against the shape commandHistory actually stores rolls in,
 // not just a made-up input.
 describe("Settlements & Cities' roll-frequency stat", () => {
-    function rollCommand(recordedRoll1: number, recordedRoll2: number) {
-        return { className: "SACRollDice", senderId: "u1", recordedRoll1, recordedRoll2 };
+    function rollCommand(recordedRoll1: number, recordedRoll2: number, senderId = "u1") {
+        return { className: "SACRollDice", senderId, recordedRoll1, recordedRoll2 };
     }
 
     it("tallies every roll's total, seeding every possible total (2-12) at zero", () => {
@@ -257,16 +259,15 @@ describe("Settlements & Cities' roll-frequency stat", () => {
         expect([...stats.rollFrequency.values()].reduce((a, b) => a + b, 0)).toBe(1);
     });
 
-    it("appears as the last chart, after the resources/round line chart, with one bar per total", () => {
+    it("appears as the last chart, after the resources charts, with one bar per total", () => {
         const doc = docFor(stateWith(undefined));
         doc.gameState.commandHistory.push(rollCommand(4, 5)); // 9
 
         const stats = computeSettlementsAndCitiesResultStats(doc, [new Map([["u1", 3]])]);
         const charts = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES)));
 
-        expect(charts).toHaveLength(2);
-        expect(charts[0].title).toBe("Resources gathered per round");
-        const rollChart = charts[1];
+        expect(charts.map(c => c.title)).toEqual(["Resources gathered per round", "Resources gathered", "Dice roll frequency"]);
+        const rollChart = charts[2];
         expect(rollChart.title).toBe("Dice roll frequency");
         expect(rollChart.kind).toBe("bar");
         if (rollChart.kind !== "bar") throw new Error("expected a bar chart");
@@ -277,12 +278,94 @@ describe("Settlements & Cities' roll-frequency stat", () => {
         expect(rollChart.bars.find(b => b.label === "2")?.value).toBe(0);
     });
 
+    it("splits each total by who rolled it, so the bars can stack by player", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(
+            rollCommand(3, 4, "u1"), // 7
+            rollCommand(2, 5, "u2"), // 7
+            rollCommand(1, 5, "u2"), // 6
+            rollCommand(6, 6, "someone-not-seated"), // counted in the total only
+        );
+
+        const stats = computeSettlementsAndCitiesResultStats(doc, []);
+        const chart = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES))).at(-1);
+        if (chart?.kind !== "bar") throw new Error("expected a bar chart");
+
+        expect(chart.bars.find(b => b.label === "7")).toEqual({ label: "7", value: 2, segments: { u1: 1, u2: 1 } });
+        expect(chart.bars.find(b => b.label === "6")?.segments).toEqual({ u1: 0, u2: 1 });
+        expect(chart.bars.find(b => b.label === "12")).toEqual({ label: "12", value: 1, segments: { u1: 0, u2: 0 } });
+    });
+
+    it("survives a save and read back through the result schema", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(rollCommand(4, 4, "u2"));
+        const stats = computeSettlementsAndCitiesResultStats(doc, []);
+
+        const StatsModel = model("SACResultStatsRoundTrip", new Schema({ stats: sacGameResultStatsSchemaDef }));
+        const read = new StatsModel({ stats }).toObject().stats as typeof stats;
+        const chart = formatSettlementsAndCitiesCharts(read, new Map(Object.entries(NAMES))).at(-1);
+        if (chart?.kind !== "bar") throw new Error("expected a bar chart");
+
+        expect(chart.bars.find(b => b.label === "8")?.segments).toEqual({ u1: 0, u2: 1 });
+    });
+
+    it("leaves the bars unsplit on a result recorded before the split", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(rollCommand(4, 5));
+        const { rollFrequencyByPlayer: _dropped, ...stats } = computeSettlementsAndCitiesResultStats(doc, []);
+
+        const chart = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES))).at(-1);
+        if (chart?.kind !== "bar") throw new Error("expected a bar chart");
+        expect(chart.bars.every(b => b.segments === undefined)).toBe(true);
+    });
+
     it("still charts the roll frequency even when no resources chart is recorded", () => {
         const doc = docFor(stateWith(undefined));
         const stats = computeSettlementsAndCitiesResultStats(doc, []);
         const charts = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES)));
 
-        expect(charts).toHaveLength(1);
-        expect(charts[0].title).toBe("Dice roll frequency");
+        expect(charts.map(c => c.title)).toEqual(["Resources gathered", "Dice roll frequency"]);
+    });
+});
+
+describe("Settlements & Cities' resources-gathered table", () => {
+    function docWithGathered() {
+        const state = stateWith(undefined);
+        state.playerStates.set("u1", player({ resourcesGathered: 5, resourcesGatheredByType: { ...NO_RESOURCES, lumber: 3, ore: 2 } }));
+        state.playerStates.set("u2", player({ resourcesGathered: 4, resourcesGatheredByType: { ...NO_RESOURCES, lumber: 1, wool: 3 } }));
+        return docFor(state);
+    }
+
+    it("has a row per resource and a column per player, before the roll chart", () => {
+        const stats = computeSettlementsAndCitiesResultStats(docWithGathered(), []);
+        const charts = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES)));
+
+        expect(charts.map(c => c.kind)).toEqual(["table", "bar"]);
+        const table = charts[0];
+        if (table.kind !== "table") throw new Error("expected a table");
+        expect(table.title).toBe("Resources gathered");
+        expect(table.rows.map(r => r.label)).toEqual(["🪵 Lumber", "🐑 Wool", "🌾 Grain", "🧱 Brick", "⛏️ Ore"]);
+        expect(table.rows[0].values).toEqual({ u1: 3, u2: 1 });
+        expect(table.rows[1].values).toEqual({ u1: 0, u2: 3 });
+    });
+
+    it("survives a save and read back through the result schema", () => {
+        const stats = computeSettlementsAndCitiesResultStats(docWithGathered(), []);
+        const StatsModel = model("SACResultStatsTableRoundTrip", new Schema({ stats: sacGameResultStatsSchemaDef }));
+        const read = new StatsModel({ stats }).toObject().stats as typeof stats;
+
+        const table = formatSettlementsAndCitiesCharts(read, new Map(Object.entries(NAMES)))[0];
+        if (table.kind !== "table") throw new Error("expected a table");
+        expect(table.rows[4].values).toEqual({ u1: 2, u2: 0 });
+    });
+
+    it("is left off a result recorded before the split", () => {
+        const stats = computeSettlementsAndCitiesResultStats(docWithGathered(), []);
+        for (const s of stats.playerStats.values()) delete s.resourcesGatheredByType;
+        const StatsModel = model("SACResultStatsLegacyRoundTrip", new Schema({ stats: sacGameResultStatsSchemaDef }));
+        const read = new StatsModel({ stats }).toObject().stats as typeof stats;
+
+        const charts = formatSettlementsAndCitiesCharts(read, new Map(Object.entries(NAMES)));
+        expect(charts.map(c => c.kind)).toEqual(["bar"]);
     });
 });

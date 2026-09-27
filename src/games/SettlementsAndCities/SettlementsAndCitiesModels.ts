@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultBarChart, GameResultAnyChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultBarChart, GameResultTable, GameResultAnyChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -16,7 +16,9 @@ import {
     cloneSACState,
     cloneRollChanges,
     cloneTradeOffers,
+    cloneResources,
     DEV_CARD_DECK,
+    SAC_RESOURCES,
     calculateVisibleVP,
     calculateLongestRoad,
     BOARD_TOPOLOGY,
@@ -33,6 +35,7 @@ import {
     computeVictoryTarget,
     enabledExpansionNames,
 } from "./expansions";
+import { SAC_RESOURCE_EMOJI } from "./ui";
 
 // ─── Invitation ──────────────────────────────────────────────────────────────
 
@@ -272,6 +275,7 @@ function makeSACStateSchemaDef() {
                 remainingCities: Number,
                 devCardsBought: Number,
                 resourcesGathered: Number,
+                resourcesGatheredByType: resourcesSubSchema,
                 robberUses: Number,
             },
         },
@@ -518,7 +522,9 @@ export var SettlementsAndCitiesGameDataModel =
 // (production, setup, robber steals, Year of Plenty, Monopoly) but not
 // maritime trades, which convert existing resources rather than gather new
 // ones. `robberUses` counts times a player triggered a robber move, by
-// rolling a 7 or by playing a Knight.
+// rolling a 7 or by playing a Knight. `resourcesGatheredByType` is
+// resourcesGathered split by resource - absent on a result recorded before
+// the split was tallied, which then has no resources table.
 export interface ISACPlayerResultStats {
     settlements: number;
     cities: number;
@@ -527,6 +533,7 @@ export interface ISACPlayerResultStats {
     knightsPlayed: number;
     devCardsBought: number;
     resourcesGathered: number;
+    resourcesGatheredByType?: ISACResources;
     robberUses: number;
     victoryPoints: number;
 }
@@ -548,6 +555,10 @@ export interface ISACGameResultStats {
     // whole-game distribution with no round axis. Powers the roll-frequency
     // bar chart at the bottom of the result page.
     rollFrequency: Map<string, number>;
+    // rollFrequency split by who rolled: userId -> roll total -> count, so
+    // each bar can be stacked by player. Absent on a result recorded before
+    // the split, whose bars stay unsplit.
+    rollFrequencyByPlayer?: Map<string, Map<string, number>>;
 }
 
 // The possible totals of two six-sided dice, lowest to highest - the fixed set
@@ -566,12 +577,16 @@ export const sacGameResultStatsSchemaDef = {
             knightsPlayed: Number,
             devCardsBought: Number,
             resourcesGathered: Number,
+            // `default: undefined` so a result recorded before the split reads
+            // back as absent rather than as a player who gathered nothing.
+            resourcesGatheredByType: { type: resourcesSubSchema, default: undefined },
             robberUses: Number,
             victoryPoints: Number,
         },
     },
     resourcesPerTurn: [{ type: Schema.Types.Map, of: Number }],
     rollFrequency: { type: Schema.Types.Map, of: Number },
+    rollFrequencyByPlayer: { type: Schema.Types.Map, of: { type: Schema.Types.Map, of: Number } },
 };
 
 // Tallies every dice roll's total (2-12) across the whole game, read straight
@@ -579,17 +594,26 @@ export const sacGameResultStatsSchemaDef = {
 // same "read the field the command recorded" shortcut BannedIslet's and
 // Outbreak's turnsLasted use for a plain command count. A roll from before
 // recordedRoll1/2 existed (there shouldn't be one - see SACRollDice) is
-// skipped rather than guessed at.
-export function computeSACRollFrequency(gameData: ISettlementsAndCitiesGameData): Map<string, number> {
-    const frequency = new Map<string, number>(SAC_ROLL_VALUES.map(v => [String(v), 0]));
+// skipped rather than guessed at. Tallied twice over: once for the whole
+// table and once per roller (the command's senderId), seeding every seated
+// player so one who never rolled a given total still reads as zero.
+export function computeSACRollFrequency(gameData: ISettlementsAndCitiesGameData): {
+    rollFrequency: Map<string, number>;
+    rollFrequencyByPlayer: Map<string, Map<string, number>>;
+} {
+    const seeded = () => new Map<string, number>(SAC_ROLL_VALUES.map(v => [String(v), 0]));
+    const rollFrequency = seeded();
+    const rollFrequencyByPlayer = new Map(gameData.userIdList.map(userId => [userId, seeded()]));
     for (const command of gameData.gameState.commandHistory) {
         if (command.className !== 'SACRollDice') continue;
         const { recordedRoll1, recordedRoll2 } = command as unknown as { recordedRoll1?: number; recordedRoll2?: number };
         if (recordedRoll1 === undefined || recordedRoll2 === undefined) continue;
         const roll = String(recordedRoll1 + recordedRoll2);
-        frequency.set(roll, (frequency.get(roll) ?? 0) + 1);
+        rollFrequency.set(roll, (rollFrequency.get(roll) ?? 0) + 1);
+        const byRoller = rollFrequencyByPlayer.get(command.senderId);
+        if (byRoller) byRoller.set(roll, (byRoller.get(roll) ?? 0) + 1);
     }
-    return frequency;
+    return { rollFrequency, rollFrequencyByPlayer };
 }
 
 export function computeSettlementsAndCitiesResultStats(
@@ -614,11 +638,12 @@ export function computeSettlementsAndCitiesResultStats(
             knightsPlayed: ps.knightsPlayed,
             devCardsBought: ps.devCardsBought,
             resourcesGathered: ps.resourcesGathered,
+            resourcesGatheredByType: ps.resourcesGatheredByType ? cloneResources(ps.resourcesGatheredByType) : undefined,
             robberUses: ps.robberUses,
             victoryPoints,
         });
     }
-    return { playerStats, resourcesPerTurn, rollFrequency: computeSACRollFrequency(gameData) };
+    return { playerStats, resourcesPerTurn, ...computeSACRollFrequency(gameData) };
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared
@@ -643,24 +668,54 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
 }
 
 // Renders rollFrequency as a bar chart: one bar per roll total (2-12), in
-// order, with nothing to key by player since every roll belongs to whoever's
-// turn it was, not to one line on a chart.
-function formatSACRollFrequencyChart(rollFrequency: Map<string, number>): GameResultBarChart {
+// order, each stacked by who rolled it when the result recorded that.
+function formatSACRollFrequencyChart(stats: ISACGameResultStats): GameResultBarChart {
+    const byPlayer = stats.rollFrequencyByPlayer ? mongoMap(stats.rollFrequencyByPlayer) : undefined;
     return {
         kind: 'bar',
         title: "Dice roll frequency",
         yLabel: "Rolls",
-        bars: SAC_ROLL_VALUES.map(roll => ({ label: String(roll), value: rollFrequency.get(String(roll)) ?? 0 })),
+        bars: SAC_ROLL_VALUES.map(roll => {
+            const label = String(roll);
+            return {
+                label,
+                value: stats.rollFrequency.get(label) ?? 0,
+                segments: byPlayer && Object.fromEntries(
+                    [...byPlayer].map(([userId, counts]) => [userId, mongoMap(counts).get(label) ?? 0])
+                ),
+            };
+        }),
     };
 }
 
-// Renders resourcesPerTurn and rollFrequency as GameResult charts: the
-// resources/round line chart first, then the roll-frequency bar chart last -
-// it summarises the whole game rather than one round, so it belongs at the
-// bottom of the result page, below every round-by-round chart.
+// Renders each player's resourcesGatheredByType as a table: a row per
+// resource, a column per player. Absent for a result recorded before the
+// split was tallied.
+function formatSACResourcesTable(stats: ISACGameResultStats): GameResultTable | undefined {
+    const players = [...mongoMap(stats.playerStats)];
+    if (!players.some(([, s]) => s.resourcesGatheredByType)) return undefined;
+    return {
+        kind: 'table',
+        title: "Resources gathered",
+        rowLabel: "Resource",
+        rows: SAC_RESOURCES.map(resource => ({
+            label: `${SAC_RESOURCE_EMOJI[resource]} ${resource[0].toUpperCase()}${resource.slice(1)}`,
+            values: Object.fromEntries(
+                players.map(([userId, s]) => [userId, s.resourcesGatheredByType?.[resource] ?? 0])
+            ),
+        })),
+    };
+}
+
+// Renders resourcesPerTurn, the resources table and rollFrequency as
+// GameResult charts: the resources/round line chart first, then the
+// whole-game summaries below it - the resources table, and the
+// roll-frequency bar chart last.
 export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultAnyChart[] {
+    const resourcesTable = formatSACResourcesTable(stats);
     return [
         ...compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per round", "Resources", usernameById.size)),
-        formatSACRollFrequencyChart(stats.rollFrequency),
+        ...(resourcesTable ? [resourcesTable] : []),
+        formatSACRollFrequencyChart(stats),
     ];
 }

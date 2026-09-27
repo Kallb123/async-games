@@ -2647,6 +2647,11 @@ button.ag-chat-gif { cursor: pointer; }
     font-weight: 800;
     color: var(--ag-ink-softer);
 }
+/* The row's highest count on a ResultTable. */
+.ag-chart-table td.ag-chart-table-best {
+    font-weight: 800;
+    color: var(--ag-ink);
+}
 
 /* ---- GameResult frequency bar chart (BarChart) ---- */
 .ag-barchart-plot {
@@ -2686,6 +2691,20 @@ button.ag-chat-gif { cursor: pointer; }
     min-height: 2px;
     background: var(--ag-terracotta);
     border-radius: 4px 4px 0 0;
+}
+/* A stacked bar's segments (BarChart with `segments`): its own box, clipped to
+   the bar's rounded top, so the value riding above the bar isn't clipped too.
+   First seat at the bottom; each segment grows by its share of the total. */
+.ag-barchart-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    height: 100%;
+    border-radius: inherit;
+    overflow: hidden;
+}
+.ag-barchart-segment {
+    flex-basis: 0;
+    min-height: 0;
 }
 .ag-barchart-value {
     position: absolute;

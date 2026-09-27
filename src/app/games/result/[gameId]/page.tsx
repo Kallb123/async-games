@@ -9,6 +9,7 @@ import Section from "@/components/ui/Section";
 import { gameResultStatRows } from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
 import BarChart from "@/components/ui/BarChart";
+import ResultTable from "@/components/ui/ResultTable";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
@@ -68,8 +69,10 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                 {result?.charts.map(chart => (
                     <Section label={chart.title} key={chart.title}>
                         {chart.kind === 'bar'
-                            ? <BarChart chart={chart} />
-                            : <LineChart chart={chart} players={result.players} playerIds={result.playerIds} />}
+                            ? <BarChart chart={chart} players={result.players} playerIds={result.playerIds} />
+                            : chart.kind === 'table'
+                                ? <ResultTable table={chart} players={result.players} playerIds={result.playerIds} />
+                                : <LineChart chart={chart} players={result.players} playerIds={result.playerIds} />}
                     </Section>
                 ))}
             </>)}

@@ -85,6 +85,10 @@ export interface ISACPlayerState {
     // at game-end by computeSettlementsAndCitiesResultStats.
     devCardsBought: number;
     resourcesGathered: number;
+    // resourcesGathered split by resource — for the result page's
+    // resources-by-player table. Optional because a game started before it
+    // existed has no such field until its first gather (see sacGather).
+    resourcesGatheredByType?: ISACResources;
     robberUses: number;
 }
 
@@ -326,8 +330,22 @@ function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
         remainingCities: ps.remainingCities,
         devCardsBought: ps.devCardsBought,
         resourcesGathered: ps.resourcesGathered,
+        resourcesGatheredByType: ps.resourcesGatheredByType ? cloneResources(ps.resourcesGatheredByType) : undefined,
         robberUses: ps.robberUses,
     };
+}
+
+// Puts `amount` of a resource into a player's hand from outside it —
+// production, a setup placement, a steal, Year of Plenty, Monopoly — and
+// counts it towards what they gathered, in total and by resource. Not for a
+// maritime or player trade, which swaps cards rather than gathers them.
+export function sacGather(ps: ISACPlayerState, resource: SAC_Resource, amount: number): void {
+    ps.resources[resource] += amount;
+    ps.resourcesGathered += amount;
+    ps.resourcesGatheredByType ??= { ...NO_RESOURCES };
+    // `?? 0`: Mongoose hands back the nested object with every count
+    // undefined on a game saved before the field existed.
+    ps.resourcesGatheredByType[resource] = (ps.resourcesGatheredByType[resource] ?? 0) + amount;
 }
 
 // Deep-clones a SAC game state into independent plain objects. The player map
@@ -672,6 +690,7 @@ export function createInitialPlayerState(): ISACPlayerState {
         remainingCities: 4,
         devCardsBought: 0,
         resourcesGathered: 0,
+        resourcesGatheredByType: { ...NO_RESOURCES },
         robberUses: 0,
     };
 }
