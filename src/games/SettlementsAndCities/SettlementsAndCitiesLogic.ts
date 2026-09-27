@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACResources, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, cloneResources, cloneTradeOffers, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacResourceCount } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, cloneResources, cloneTradeOffers, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacGather, sacResourceCount } from "@/games/SettlementsAndCities/board";
 import { sacAmountsText, sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import { SAC_MAX_OFFERS_POSTED_PER_TURN, SAC_MAX_OPEN_OFFERS, sacCanCover, sacMainTurnPlayer, sacOfferEndsThisTurn, sacTradeSide, sacTradingOpen, sacValidTradeTerms } from "@/games/SettlementsAndCities/trading";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -481,8 +481,7 @@ export class SACPlaceSettlementSetup implements IGameCommand {
                     if (hex.numberToken !== null) {
                         const resource = TERRAIN_TO_RESOURCE[hex.terrain];
                         if (resource) {
-                            ps.resources[resource]++;
-                            ps.resourcesGathered++;
+                            sacGather(ps, resource, 1);
                         }
                     }
                 }
@@ -693,8 +692,7 @@ export class SACRollDice implements IGameCommand {
                     const ps = gs.playerStates.get(vertex.owner);
                     if (!ps) continue;
                     const amount = vertex.building === 'city' ? 2 : 1;
-                    ps.resources[resource] += amount;
-                    ps.resourcesGathered += amount;
+                    sacGather(ps, resource, amount);
                     changeFor(vertex.owner).gained[resource] += amount;
                 }
             }
@@ -774,8 +772,7 @@ export class SACMoveRobber implements IGameCommand {
                 victim.resources[stolen]--;
                 const thief = gs.playerStates.get(this.senderId);
                 if (thief) {
-                    thief.resources[stolen]++;
-                    thief.resourcesGathered++;
+                    sacGather(thief, stolen, 1);
                 }
                 sacData.gameState.history.unshift(playerHistory(this.senderId, `moved the robber and stole a resource`));
             }
@@ -1058,9 +1055,8 @@ export class SACPlayYearOfPlenty implements IGameCommand {
 
         ps.devCards.yearOfPlenty--;
         gs.playedDevCard = true;
-        ps.resources[this.resource1]++;
-        ps.resources[this.resource2]++;
-        ps.resourcesGathered += 2;
+        sacGather(ps, this.resource1, 1);
+        sacGather(ps, this.resource2, 1);
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Year of Plenty (+${this.resource1}, +${this.resource2})`));
         return sacFinishTurn(sacData, this.senderId, this);
@@ -1099,8 +1095,7 @@ export class SACPlayMonopoly implements IGameCommand {
             total += other.resources[this.resource];
             other.resources[this.resource] = 0;
         }
-        ps.resources[this.resource] += total;
-        ps.resourcesGathered += total;
+        sacGather(ps, this.resource, total);
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Monopoly on ${this.resource} (+${total})`));
         return sacFinishTurn(sacData, this.senderId, this);

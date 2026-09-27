@@ -235,6 +235,22 @@ describe("Settlements & Cities' response", () => {
         expect(response.playerStates.u2.resourceCount).toBe(4);
     });
 
+    // What each player gathered, by resource, is kept for the post-game
+    // results table and revealed only there: mid-game it would name a robber
+    // steal's resource. Nobody's is sent while the game is live — not even
+    // the viewer's own, which their hand already covers.
+    it("never sends what anyone gathered by resource", () => {
+        const gs = sacState();
+        for (const ps of gs.playerStates.values()) {
+            ps.resourcesGatheredByType = { lumber: 7, wool: 0, grain: 0, brick: 0, ore: 5 };
+        }
+
+        for (const viewerId of ["u1", "u2", null]) {
+            const wire = JSON.stringify(sacStateToResponse(gs, NAMES, viewerId));
+            expect(wire).not.toContain("resourcesGatheredByType");
+        }
+    });
+
     // The undo stack (docs/undo.md §8) is a copy of every player's hand, dev
     // cards and deck — strictly more sensitive than the resources/dev cards
     // above — so it gets the same three-viewer treatment: the mover, an

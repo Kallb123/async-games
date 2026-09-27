@@ -1,3 +1,5 @@
+import type { GameResultChartSeries } from "@/utils/apiModels/GameDataApi";
+
 // The shared per-player swatch palette. Players are coloured by their index in
 // the game's user list, so a player keeps the same colour across the board, the
 // scoreboard and the turn recap. Reuse this rather than redeclaring the array.
@@ -23,4 +25,12 @@ export const NEUTRAL_PLAYER_COLOUR = "var(--ag-ink-softer)";
 export function playerColourForId(userId: string | null | undefined, userIdList: string[]): string {
     const index = userId ? userIdList.indexOf(userId) : -1;
     return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;
+}
+
+// One chart series per player on a GameResult chart — keyed by userId, named
+// by username and painted in their seat colour — so a line, a stacked bar and
+// a legend all agree on who is who. `players` and `playerIds` are the result's
+// parallel roster lists.
+export function playerChartSeries(players: string[], playerIds: string[]): GameResultChartSeries[] {
+    return players.map((name, i) => ({ key: playerIds[i], name, color: playerColour(i) }));
 }

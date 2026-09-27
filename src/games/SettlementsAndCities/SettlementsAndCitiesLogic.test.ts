@@ -119,6 +119,9 @@ describe("Settlements & Cities — development cards", () => {
         expect(p.resources.ore).toBe(1);
         expect(p.resources.grain).toBe(1);
         expect(p.devCards.yearOfPlenty).toBe(0);
+        // Counted as gathered, in total and by resource, for the result page.
+        expect(p.resourcesGathered).toBe(2);
+        expect(p.resourcesGatheredByType).toEqual({ ...NO_RESOURCES, ore: 1, grain: 1 });
     });
 
     it("plays Monopoly to sweep a resource from every other player", async () => {
@@ -135,6 +138,21 @@ describe("Settlements & Cities — development cards", () => {
         expect(outcome.validMove).toBe(true);
         expect(me.resources.wool).toBe(3);
         expect(bob.resources.wool).toBe(0);
+        expect(me.resourcesGatheredByType?.wool).toBe(3);
+    });
+
+    it("starts a by-resource tally on a player saved before it existed", async () => {
+        const p = player({ devCards: { yearOfPlenty: 1 } as ISACPlayerState["devCards"] });
+        delete p.resourcesGatheredByType;
+        const gs = makeState();
+        gs.playerStates.set("u1", p);
+        const game = makeGame(gs);
+
+        const c = cmd(new SACPlayYearOfPlenty());
+        c.resource1 = "brick";
+        c.resource2 = "brick";
+        await c.Execute(game as unknown as IGameData);
+        expect(p.resourcesGatheredByType).toEqual({ ...NO_RESOURCES, brick: 2 });
     });
 
     it("plays Road Building to queue two free roads", async () => {

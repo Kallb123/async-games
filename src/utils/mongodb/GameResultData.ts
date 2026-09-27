@@ -43,6 +43,7 @@ import {
     playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
+import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -352,11 +353,18 @@ const GAME_RESULT_STATS: Record<string, {
         model: SettlementsAndCitiesGameResultModel,
         compute: async (gameData) => {
             const sacGameData = gameData as ISettlementsAndCitiesGameData;
+            // The same replay also hands back the state it ends on, whose
+            // by-resource counts run from the first move - the resources
+            // table reads those rather than the live game's
+            // (see computeSettlementsAndCitiesResultStats).
+            let replayedState: ISACSpecificGameState | undefined;
             const resourcesPerTurn = await computePerTurnStat<ISACSpecificGameStateResponse>(
                 sacGameData,
                 (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
+                sacGameData.userIdList,
+                (state) => { replayedState = state as ISACSpecificGameState; },
             );
-            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
+            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn, replayedState);
         },
         format: formatSettlementsAndCitiesResultStats,
         charts: formatSettlementsAndCitiesCharts,

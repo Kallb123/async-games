@@ -269,6 +269,12 @@ export function compactCharts(...charts: (GameResultChart | undefined)[]): GameR
 export interface GameResultBarChartBucket {
     label: string;
     value: number;
+    // Who the bar is made of, keyed by userId, when it's one: each player's
+    // share is stacked in their own colour, bottom to top in seat order, so the
+    // bar's height is still `value` and the stack says who put it there —
+    // Settlements & Cities splits each roll total by who rolled it. Absent on
+    // an unsplit bar, and on every bar recorded before the split existed.
+    segments?: Record<string, number>;
 }
 
 // A bar chart for the GameResult page: a fixed category on the x-axis (not a
@@ -282,12 +288,32 @@ export interface GameResultBarChart {
     bars: GameResultBarChartBucket[];
 }
 
-// Either shape a game's GAME_RESULT_STATS.charts entry can hand back: a
-// round-by-round GameResultChart (no `kind`, the common case) or a
-// GameResultBarChart (`kind: 'bar'`). Kept as one union rather than two
-// separate chart lists so the result page renders whatever a game sends back,
-// in the order the game names it, with one `.map()`.
-export type GameResultAnyChart = GameResultChart | GameResultBarChart;
+// One row of a GameResultTable: what the row counts, and each player's count,
+// keyed by userId.
+export interface GameResultTableRow {
+    label: string;
+    values: Record<string, number>;
+}
+
+// A whole-game tally laid out as a table for the GameResult page: one row per
+// thing counted, one column per player (the result's own roster, in seat
+// order), with each row's highest count in bold. For numbers that belong to
+// no round and don't read as a shape — Settlements & Cities' resources
+// gathered, by resource.
+export interface GameResultTable {
+    kind: 'table';
+    title: string;
+    // The header over the row labels ("Resource").
+    rowLabel: string;
+    rows: GameResultTableRow[];
+}
+
+// Every shape a game's GAME_RESULT_STATS.charts entry can hand back: a
+// round-by-round GameResultChart (no `kind`, the common case), a
+// GameResultBarChart (`kind: 'bar'`) or a GameResultTable (`kind: 'table'`).
+// Kept as one union rather than separate lists so the result page renders
+// whatever a game sends back, in the order the game names it, with one `.map()`.
+export type GameResultAnyChart = GameResultChart | GameResultBarChart | GameResultTable;
 
 // Look a player up in a response-shaped game state by their Clerk userId —
 // what commands and replay carry, and what playerStates is keyed by. Scans

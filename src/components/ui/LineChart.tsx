@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { GameResultChart, GameResultChartSeries } from "@/utils/apiModels/GameDataApi";
-import { playerColour } from "@/utils/ui/playerColours";
+import { playerChartSeries } from "@/utils/ui/playerColours";
 import ChartEventIcon, { CHART_EVENT_ICON_SIZE } from "./ChartEventIcon";
+import ChartLegend from "./ChartLegend";
 
 interface LineChartProps {
     chart: GameResultChart;
@@ -51,8 +52,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
     const roundCount = chart.rounds.length;
     const series = useMemo(() => {
-        const lines: GameResultChartSeries[] = chart.series
-            ?? players.map((name, i) => ({ key: playerIds[i], name, color: playerColour(i) }));
+        const lines: GameResultChartSeries[] = chart.series ?? playerChartSeries(players, playerIds);
         return lines.map(line => ({
             ...line,
             values: chart.rounds.map(round => round[line.key] ?? 0),
@@ -203,14 +203,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                 )}
             </div>
 
-            <div className="ag-chart-legend">
-                {series.map(s => (
-                    <span key={s.key} className="ag-chart-legend-item">
-                        <span className="ag-chart-legend-dot" style={{ background: s.color }} />
-                        {s.name}
-                    </span>
-                ))}
-            </div>
+            <ChartLegend series={series} />
 
             <button type="button" className="ag-chart-table-toggle" onClick={() => setShowTable(v => !v)}>
                 {showTable ? "Hide round-by-round table" : "Show round-by-round table"}

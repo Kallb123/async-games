@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Settlements & Cities: who rolled what, and who gathered what",
+                detail: "A finished game's results now split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered — the most of each in bold.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Settlements & Cities: trade with other players",
                 detail: "Post an offer — \"1 🪵 for 1 🐑, anyone?\" — and any other player can take it up on any turn, so a trade never waits for the dice to come round. The new Trade offers panel lists every open offer and tells you straight away whether you have what it asks for.",
                 game: "settlementsandcities",
@@ -117,10 +122,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Your Kingdom Builder worlds are always within reach",
                 detail: "Return to every world from your home dashboard or the game switcher, with its current tick and your settlement count shown at a glance.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Guided tutorials for Dice Cities and Settlements & Cities",
-                detail: "First game in either one now opens with a two-minute guided tour of your own board instead of a wall of rules: a spotlight finds the thing being talked about, waits for you to roll or build where a step asks for it, and never blocks the board underneath. Skip ahead any time, or take it again later from the ⋮ menu, where the how-to-play guide still lives too.",
             },
         ],
     },
