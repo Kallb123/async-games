@@ -49,6 +49,9 @@ import {
     VICTIMS_TO_WIN,
 } from "./board";
 import { shuffle } from "@/utils/games/shuffle";
+// Type-only, so erased: this module still never loads FiresOutModels.ts at
+// runtime (which imports it). cloneFiresOutState below needs the state's name.
+import type { IFiresOutSpecificGameState } from "./FiresOutModels";
 
 // ─── Firefighter / turn shape ───────────────────────────────────────────────
 
@@ -78,6 +81,15 @@ export interface IFiresOutFirefighterState {
 /** §7 Phase 1, §8: 4 AP per turn plus up to `MAX_BANKED_AP` carried over — the Family game's flat allowance, and the Experienced game's before any specialist modifies it (see SPECIALISTS below). */
 export const AP_PER_TURN = 4;
 export const MAX_BANKED_AP = 4;
+
+/**
+ * How many snapshots the undo stack keeps (docs/undo.md): a turn's worth of
+ * 1-AP actions, so an ordinary turn can be taken back one action at a time.
+ * A turn run on banked or specialist AP can hold more actions than this, which
+ * only ever costs reach — the anchor is what keeps an older entry from being
+ * restored, not the cap.
+ */
+export const UNDO_STACK_DEPTH = AP_PER_TURN;
 
 export function newFirefighter(ownerId: string, space: number = START_SPACE): IFiresOutFirefighterState {
     return {
@@ -1098,4 +1110,106 @@ export function canDisposeHazmatOnSite(spaces: SpacesWithHazmat, ff: IFiresOutFi
 /** §8: whether `ff` can swap Specialist cards right now — must begin the turn at the Engine (Experienced only; Family has no vehicles or cards to swap). */
 export function canCrewChange(ruleset: RulesetId, ff: IFiresOutFirefighterState, engineSpace: number): boolean {
     return ruleset === 'experienced' && ff.space === engineSpace && canAffordAp(ff, AP_COSTS.crewChange, null);
+}
+
+// ─── Cloning the state (docs/undo.md, turn recap) ───────────────────────────
+
+// `poi` is named field-by-field rather than spread, and that is load-bearing:
+// it is the one path in this schema that is a real Mongoose *single nested
+// subdocument* (see firesOutStateSchemaDef in FiresOutModels.ts), and
+// spreading one copies its internals (`$__parent`, `$basePath`, `$__`, `_doc`)
+// instead of `id`/`revealed`/`victim`. cloneFiresOutState runs on a hydrated
+// document on the read path — buildInitialFiresOutStateFromGameData clones
+// `gameData.initialSpecificGameState` for every replay — so a spread handed
+// the timeline a starting board whose POIs had `revealed`/`victim`
+// `undefined`. revealPoiAt then read every setup marker as a false alarm and
+// deleted it, Replenish drew deeper into the pool than the live game ever
+// did, and those replay-only markers reached the wire with real `victim`
+// flags: turn review both diverged from the game actually played and could
+// name a marker still face down on the live board. Same field-by-field shape
+// as cloneFirefighterState below and Outbreak's cloneCityState.
+function cloneSpaceState(s: IFiresOutSpaceState): IFiresOutSpaceState {
+    return {
+        threat: s.threat,
+        poi: s.poi ? { id: s.poi.id, revealed: s.poi.revealed, victim: s.poi.victim } : null,
+        hazmat: s.hazmat,
+        hotspot: s.hotspot,
+    };
+}
+
+function cloneEdgeState(e: IFiresOutEdgeState): IFiresOutEdgeState {
+    return { kind: e.kind, damage: e.damage, doorOpen: e.doorOpen };
+}
+
+// `restrictedAp`'s two leaves (`kind`/`left`) are each individually
+// `default: null` in the schema (FiresOutModels.ts) — the fix `poi` above
+// needed, since unlike `poi` there's no "the whole record is meaningless
+// alone" problem — so `kind` alone is always trustworthy read straight off a
+// loaded document. Checking the *parent* object's truthiness instead (as this
+// used to) isn't: a Mongoose nested-object path is never really `null` once
+// loaded, so that check always took the truthy branch, matching `poi`'s bug.
+// Used by both gameStateToModel (the outgoing DTO) and cloneFirefighterState
+// (every snapshot) — it only normalises the value, no redaction happens here,
+// so both are safe to share it.
+export function normalizedRestrictedAp(restrictedAp: IFiresOutFirefighterState['restrictedAp']): IFiresOutFirefighterState['restrictedAp'] {
+    return restrictedAp?.kind != null ? { kind: restrictedAp.kind, left: restrictedAp.left } : null;
+}
+
+function cloneFirefighterState(ff: IFiresOutFirefighterState): IFiresOutFirefighterState {
+    return {
+        ownerId: ff.ownerId,
+        space: ff.space,
+        specialist: ff.specialist,
+        apLeft: ff.apLeft,
+        restrictedAp: normalizedRestrictedAp(ff.restrictedAp),
+        bankedAp: ff.bankedAp,
+        carrying: ff.carrying,
+    };
+}
+
+// Deep-clones a FiresOut state into independent plain objects — mirrors
+// Outbreak's cloneOutbreakState. Unlike Outbreak's player Map, firefighters
+// is a plain array built once in turnOrder order and never reordered, so
+// there's no per-player key to rebuild by; cloning it element-for-element is
+// enough to keep a persisted initialSpecificGameState snapshot independent of
+// the live one turn recap replays from (docs/new-game.md, "a reproducible
+// starting state"). Also the snapshot FiresOutUndo restores.
+export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpecificGameState {
+    return {
+        ruleset: gs.ruleset,
+        difficulty: gs.difficulty,
+        spaces: gs.spaces.map(cloneSpaceState),
+        edges: gs.edges.map(cloneEdgeState),
+        poiPool: [...gs.poiPool],
+        nextPoiId: gs.nextPoiId,
+        rescued: gs.rescued,
+        lost: gs.lost,
+        firefighters: gs.firefighters.map(cloneFirefighterState),
+        activeFirefighter: gs.activeFirefighter,
+        hotspotReserve: gs.hotspotReserve,
+        engine: gs.engine,
+        ambulance: gs.ambulance,
+        // Never nested: a snapshot of a snapshot's stack is bytes for nothing,
+        // and FiresOutUndo leaves the live stack where it is anyway.
+        undoStack: [],
+        undoAnchorId: null,
+    };
+}
+
+/**
+ * docs/undo.md: whether anything between `before` and `after` turned a POI
+ * face up — a move onto one (§10.1), or the Imaging Technician's remote reveal
+ * (§11). A marker still face down in `before` that is face up or gone in
+ * `after` has been seen, and a snapshot can put it back but can't make the
+ * crew forget what it was, so a command that does this is never undoable.
+ * Asked of the board rather than of each action kind, so a kind added later
+ * that happens to reveal a marker is covered without remembering to be.
+ */
+export function revealedAnyPoi(before: readonly IFiresOutSpaceState[], after: readonly IFiresOutSpaceState[]): boolean {
+    return before.some((space, index) => {
+        const poi = space.poi;
+        if (!poi || poi.revealed) return false;
+        const now = after[index]?.poi;
+        return !now || now.id !== poi.id || now.revealed;
+    });
 }
