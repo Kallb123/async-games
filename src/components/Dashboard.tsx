@@ -9,6 +9,7 @@ import MyCompleteList from "@/components/MyCompleteList";
 import { useDashboard } from "@/utils/hooks/useDashboard";
 import AppRail from "@/components/ui/AppRail";
 import WhatsNew from "@/components/ui/WhatsNew";
+import PullToRefresh from "@/components/ui/PullToRefresh";
 import Link from "next/link";
 import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
 import { useEffect, useRef } from "react";
@@ -49,6 +50,9 @@ export default function Dashboard() {
     return (
         <main className="ag-desk">
             <FcmTokenComp />
+            {/* A pull asks the same one fetch the poll does, and so starts the
+                poll's countdown again (see `useRefreshableData`). */}
+            <PullToRefresh onRefresh={refresh} />
 
             {/* The dashboard's one sign that it is waiting on the network — first
                 load and every background refresh alike — is the bar under the

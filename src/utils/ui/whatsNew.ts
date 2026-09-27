@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Pull down to refresh your games",
+                detail: "Drag the home screen down from the top and let go to check for new turns, invites and messages straight away, rather than waiting for it to catch up on its own.",
+            },
+            {
                 title: "Settlements & Cities: who rolled what, and who gathered what",
                 detail: "A finished game's results now split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered — the most of each in bold.",
                 game: "settlementsandcities",
@@ -117,11 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Pinch to zoom feels like a map app now",
                 detail: "Zooming a board — the pill or a pinch — now zooms inside its frame instead of stretching the page, so everything around the board stays put. A pinch follows your fingers: whatever was under them stays under them as you spread and slide, on every board with a zoom pill.",
-            },
-            {
-                title: "Your Kingdom Builder worlds are always within reach",
-                detail: "Return to every world from your home dashboard or the game switcher, with its current tick and your settlement count shown at a glance.",
-                game: "kingdombuilder",
             },
         ],
     },
