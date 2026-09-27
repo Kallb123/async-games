@@ -21,6 +21,7 @@ import AmountSteppers from '@/components/ui/AmountSteppers';
 import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
 import { useToast } from '@/components/ToastContext';
+import { capitalise } from '@/utils/ui/text';
 
 interface SACTradeOffersProps {
     gs: ISACSpecificGameStateResponse;
@@ -30,8 +31,6 @@ interface SACTradeOffersProps {
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
 }
-
-const resourceTitle = (resource: string) => resource[0].toUpperCase() + resource.slice(1);
 
 /**
  * The table's standing trade offers (docs/games/settlements-and-cities.md §10):
@@ -148,12 +147,12 @@ export default function SACTradeOffers({ gs, myUserId, currentTurn, playerName, 
     });
 
     const composer = draft ? (
-        <div style={{ marginBottom: 12 }}>
+        <div className="ag-stack" style={{ marginBottom: 12 }}>
             <p className="ag-hint">You give</p>
             <AmountSteppers
                 kinds={SAC_RESOURCES}
                 icon={resource => SAC_RESOURCE_EMOJI[resource]}
-                title={resourceTitle}
+                title={capitalise}
                 amounts={draft.give}
                 max={resource => hand[resource]}
                 sub={resource => `you have ${hand[resource]}`}
@@ -163,12 +162,12 @@ export default function SACTradeOffers({ gs, myUserId, currentTurn, playerName, 
             <AmountSteppers
                 kinds={SAC_RESOURCES}
                 icon={resource => SAC_RESOURCE_EMOJI[resource]}
-                title={resourceTitle}
+                title={capitalise}
                 amounts={draft.want}
                 max={() => SAC_MAX_TRADE_AMOUNT}
                 onChange={want => setDraft({ ...draft, want })}
             />
-            {draftValid && <div className="ag-trade-preview" style={{ marginTop: 10 }}>
+            {draftValid && <div className="ag-trade-preview">
                 <span>{sacAmountsText(draft.give)}</span>
                 <span className="ag-trade-preview-arrow">→</span>
                 <span>{sacAmountsText(draft.want)}</span>

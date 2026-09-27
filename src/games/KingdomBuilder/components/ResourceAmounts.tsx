@@ -1,6 +1,7 @@
 'use client'
 
 import AmountSteppers from "@/components/ui/AmountSteppers";
+import { capitalise } from "@/utils/ui/text";
 
 import type { KingdomBuilderResources } from "../KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_RESOURCE_ICONS, KINGDOM_BUILDER_RESOURCE_TYPES, type KingdomBuilderResourceType } from "../resources";
@@ -23,7 +24,7 @@ interface ResourceAmountsProps {
 export default function ResourceAmounts({ amounts, max, onChange, sub, step = 5 }: ResourceAmountsProps) {
     return (
         <AmountSteppers kinds={KINGDOM_BUILDER_RESOURCE_TYPES} icon={resource => KINGDOM_BUILDER_RESOURCE_ICONS[resource]}
-            title={resource => resource[0].toUpperCase() + resource.slice(1)}
+            title={capitalise}
             amounts={amounts} max={max} onChange={onChange} sub={sub} step={step} />
     );
 }
