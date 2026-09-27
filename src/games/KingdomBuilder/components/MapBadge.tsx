@@ -53,6 +53,7 @@ export default function MapBadge({ kind, x, y, size, colour, level }: {
 }) {
     const scale = size / 100;
     const isVillage = kind === "village";
+    // The kit's own default ring, for a village drawn without an owner.
     const ring = colour ?? "#ffffff";
     return (
         <g transform={`translate(${x - size / 2} ${y - CENTRE_Y * scale}) scale(${scale})`}>
