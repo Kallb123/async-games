@@ -305,7 +305,7 @@ export async function buildTimeline(
     // Optional observer handed the internal specificGameState the recorded
     // commands left behind — before any planned command, and unredacted:
     // every player's hand. For a server-side game-end stat only (see
-    // replayFinalState); it never goes near a snapshot or a response.
+    // computePerTurnStat); it never goes near a snapshot or a response.
     onReplayed?: (specificGameState: unknown) => void
 ): Promise<ITimeline> {
     const adapter = getReplayAdapter(gameData.gameType.className);
@@ -551,10 +551,19 @@ async function replayTurnByTurn(
 // (Outbreak's four disease colours) for a series whose lines aren't players,
 // and each turn's Map comes back keyed by those instead, ready for
 // formatPerTurnChart's `series`.
+//
+// `onReplayed`, when given, is also handed the internal specificGameState the
+// replay ends on — not a snapshot's response shape — for a game-end stat that
+// has to be counted from the first move but that the live document only began
+// counting part-way through some games (Settlements & Cities' resources
+// gathered by type). Riding on this pass rather than a replay of its own keeps
+// the last move to one replay. Server-only: it is every player's hand, so it
+// must never reach a response. Never called when the replay fails.
 export async function computePerTurnStat<TState>(
     gameData: IGameData,
     extractValue: (state: TState, key: string) => number | undefined,
     keys: string[] = gameData.userIdList,
+    onReplayed?: (specificGameState: unknown) => void,
 ): Promise<Map<string, number>[]> {
     const perTurn: Map<string, number>[] = [];
     const pushEntry = (responseState: TState) => {
@@ -570,28 +579,12 @@ export async function computePerTurnStat<TState>(
             pushEntry(latestState);
         }
         latestState = step.next.specificGameState as TState;
-    }, "per-turn stat");
+    }, "per-turn stat", onReplayed);
     if (!ok) return [];
     if (latestState) {
         pushEntry(latestState);
     }
     return perTurn;
-}
-
-// Replays a whole game and hands back the internal specificGameState its
-// recorded commands leave behind — not a snapshot's response shape — for a
-// game-end stat that has to be counted from the first move but that the live
-// document only started counting part-way through some games (Settlements &
-// Cities' resources gathered by type). Replay starts from the game's initial
-// state and re-runs every command, so whatever the commands tally comes back
-// complete. Server-only: it is every player's hand, so it must never reach a
-// response. Undefined when the game can't be replayed (see replayTurnByTurn).
-export async function replayFinalState<TState>(gameData: IGameData): Promise<TState | undefined> {
-    let finalState: TState | undefined;
-    const ok = await replayTurnByTurn(gameData, () => {}, "final replay state", (state) => {
-        finalState = state as TState;
-    });
-    return ok ? finalState : undefined;
 }
 
 // Replays a game via buildTimeline, calling `detect` once per applied command

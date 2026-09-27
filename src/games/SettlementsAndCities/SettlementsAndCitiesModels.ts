@@ -628,8 +628,8 @@ function completeGatheredByType(counts: ISACResources | undefined, total: number
     return SAC_RESOURCES.reduce((sum, resource) => sum + complete[resource], 0) === total ? complete : undefined;
 }
 
-// `replayedState` is the game re-run from its first move (replayFinalState,
-// replay.ts), whose by-resource counts are whole even for a game that was
+// `replayedState` is the game re-run from its first move (the game-end
+// replay's final state - see computePerTurnStat's onReplayed), whose by-resource counts are whole even for a game that was
 // already under way when they began being kept. The live document's own count
 // is the fallback, for a game replay can't run.
 export function computeSettlementsAndCitiesResultStats(

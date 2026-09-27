@@ -8,7 +8,17 @@ import type { ISACPlayerState, ISACSpecificGameState } from "./board";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { runCommand } from "@/utils/games/commandPipeline";
-import { replayFinalState } from "@/utils/games/replay";
+import { computePerTurnStat } from "@/utils/games/replay";
+
+// The internal state the game-end replay ends on, as GameResultData's
+// Settlements & Cities entry captures it.
+async function replayFinalState(game: ISettlementsAndCitiesGameData): Promise<ISACSpecificGameState | undefined> {
+    let replayed: ISACSpecificGameState | undefined;
+    await computePerTurnStat(game as unknown as IGameData, () => 0, game.userIdList, (state) => {
+        replayed = state as ISACSpecificGameState;
+    });
+    return replayed;
+}
 
 const NAMES = new Map([["u1", "Alice"], ["u2", "Bob"]]);
 
@@ -47,7 +57,7 @@ describe("Settlements & Cities' resources table, counted by replay", () => {
         const game = await playedGame();
         expect(game.specificGameState.playerStates.get("u1")?.resourcesGatheredByType).toEqual(EXPECTED_U1);
 
-        const replayed = await replayFinalState<ISACSpecificGameState>(game as unknown as IGameData);
+        const replayed = await replayFinalState(game);
         expect(replayed?.playerStates.get("u1")?.resourcesGatheredByType).toEqual(EXPECTED_U1);
     });
 
@@ -56,7 +66,7 @@ describe("Settlements & Cities' resources table, counted by replay", () => {
         // The live game only started counting by resource after the roll.
         game.specificGameState.playerStates.get("u1")!.resourcesGatheredByType = { ...NO_RESOURCES, wool: 1, ore: 1 };
 
-        const replayed = await replayFinalState<ISACSpecificGameState>(game as unknown as IGameData);
+        const replayed = await replayFinalState(game);
         const stats = computeSettlementsAndCitiesResultStats(game, [], replayed);
 
         expect(stats.playerStats.get("u1")?.resourcesGatheredByType).toEqual(EXPECTED_U1);
@@ -78,7 +88,7 @@ describe("Settlements & Cities' resources table, counted by replay", () => {
 
     it("falls back to the live count when the replay disagrees with the game as played", async () => {
         const game = await playedGame();
-        const replayed = await replayFinalState<ISACSpecificGameState>(game as unknown as IGameData);
+        const replayed = await replayFinalState(game);
         replayed!.playerStates.get("u1")!.resourcesGatheredByType = { ...NO_RESOURCES, brick: 9 };
 
         const stats = computeSettlementsAndCitiesResultStats(game, [], replayed);

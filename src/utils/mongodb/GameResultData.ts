@@ -17,7 +17,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat, computePerTurnEvents, replayFinalState } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -353,13 +353,17 @@ const GAME_RESULT_STATS: Record<string, {
         model: SettlementsAndCitiesGameResultModel,
         compute: async (gameData) => {
             const sacGameData = gameData as ISettlementsAndCitiesGameData;
+            // The same replay also hands back the state it ends on, whose
+            // by-resource counts run from the first move - the resources
+            // table reads those rather than the live game's
+            // (see computeSettlementsAndCitiesResultStats).
+            let replayedState: ISACSpecificGameState | undefined;
             const resourcesPerTurn = await computePerTurnStat<ISACSpecificGameStateResponse>(
                 sacGameData,
                 (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
+                sacGameData.userIdList,
+                (state) => { replayedState = state as ISACSpecificGameState; },
             );
-            // The resources table is counted from the first move by replay,
-            // not read off the live game - see computeSettlementsAndCitiesResultStats.
-            const replayedState = await replayFinalState<ISACSpecificGameState>(sacGameData);
             return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn, replayedState);
         },
         format: formatSettlementsAndCitiesResultStats,
