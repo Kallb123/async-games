@@ -561,25 +561,29 @@ export async function computePerTurnStat<TState>(
     extractValue: (state: TState, key: string) => number | undefined,
     keys: string[] = gameData.userIdList,
 ): Promise<Map<string, number>[]> {
-    const perTurn: Map<string, number>[] = [];
-    const pushEntry = (responseState: TState) => {
-        const entry = new Map<string, number>();
-        for (const key of keys) {
-            entry.set(key, extractValue(responseState, key) ?? 0);
-        }
-        perTurn.push(entry);
-    };
-    let latestState: TState | undefined;
-    const ok = await replayTurnByTurn(gameData, (step, _turnIndex, isFirstStepOfTurn) => {
-        if (isFirstStepOfTurn && latestState) {
-            pushEntry(latestState);
-        }
-        latestState = step.next.specificGameState as TState;
-    }, "per-turn stat");
-    if (!ok) return [];
-    if (latestState) {
-        pushEntry(latestState);
-    }
+    // A snapshot's response state is a fresh object per step, so it can be
+    // held until its turn ends and read then.
+    const perTurn = await lastOfEachTurn(gameData, (step) => step.next.specificGameState as TState, "per-turn stat");
+    return perTurn?.map(state => new Map(keys.map(key => [key, extractValue(state, key) ?? 0]))) ?? [];
+}
+
+// What `read` made of the last step of every turn, oldest first — the turn
+// boundary every per-turn stat shares — or undefined, having warned, when the
+// replay fails. `onReplayed` is replayTurnByTurn's.
+async function lastOfEachTurn<T>(
+    gameData: IGameData,
+    read: (step: IReplayStep, specificGameState: unknown) => T,
+    what: string,
+    onReplayed?: (specificGameState: unknown) => void,
+): Promise<T[] | undefined> {
+    const perTurn: T[] = [];
+    let latest: { value: T } | undefined;
+    const ok = await replayTurnByTurn(gameData, (step, _turnIndex, isFirstStepOfTurn, specificGameState) => {
+        if (isFirstStepOfTurn && latest) perTurn.push(latest.value);
+        latest = { value: read(step, specificGameState) };
+    }, what, onReplayed);
+    if (!ok) return undefined;
+    if (latest) perTurn.push(latest.value);
     return perTurn;
 }
 
@@ -601,21 +605,16 @@ export async function computePerTurnInternalStats<TState, K extends string>(
     keys: string[] = gameData.userIdList,
 ): Promise<{ perTurn: Record<K, Map<string, number>[]>; finalState: TState } | undefined> {
     const names = Object.keys(extractors) as K[];
-    const perTurn = Object.fromEntries(names.map(name => [name, []])) as unknown as Record<K, Map<string, number>[]>;
+    let finalState: TState | undefined;
     // Read eagerly, at every step: the internal state is one object the next
     // step mutates in place, so holding it until the turn ends would read the
     // wrong turn.
-    const read = (state: TState) => Object.fromEntries(names.map(name =>
-        [name, new Map(keys.map(key => [key, extractors[name](state, key)]))])) as Record<K, Map<string, number>>;
-    const push = (entry: Record<K, Map<string, number>>) => names.forEach(name => perTurn[name].push(entry[name]));
-    let latest: Record<K, Map<string, number>> | undefined;
-    let finalState: TState | undefined;
-    const ok = await replayTurnByTurn(gameData, (_step, _turnIndex, isFirstStepOfTurn, specificGameState) => {
-        if (isFirstStepOfTurn && latest) push(latest);
-        latest = read(specificGameState as TState);
+    const entries = await lastOfEachTurn(gameData, (_step, specificGameState) => {
+        const state = specificGameState as TState;
+        return names.map(name => new Map(keys.map(key => [key, extractors[name](state, key)])));
     }, "per-turn stats", (state) => { finalState = state as TState; });
-    if (!ok || finalState === undefined) return undefined;
-    if (latest) push(latest);
+    if (!entries || finalState === undefined) return undefined;
+    const perTurn = Object.fromEntries(names.map((name, i) => [name, entries.map(entry => entry[i])])) as Record<K, Map<string, number>[]>;
     return { perTurn, finalState };
 }
 
