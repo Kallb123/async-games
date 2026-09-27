@@ -2,7 +2,7 @@
 // masters in /art-masters/kingdombuilder/v2:
 //
 //   public/art/kingdombuilder/v2/tiles.png       every pre-rendered tile, in one sheet
-//   public/art/kingdombuilder/v2/icons/*.png     the map markers, 64x64
+//   public/art/kingdombuilder/v2/badges/*.png    the map badges' painted scenes
 //   src/games/KingdomBuilder/terrainAtlas.json   where each tile sits in the sheet
 //
 // The masters are drawn at 128px a tile (a 218x234 image around a 160x113
@@ -14,10 +14,17 @@
 // drawImage copies, not the seconds of per-pixel generation the kit's own
 // script takes in the browser.
 //
+// The badges are drawn by the kit's own generator (badges/map-badges-2d.js)
+// rather than read from its exports, because the village is rendered with its
+// ring left see-through: the map paints each owner's colour beneath it, and
+// the level shield over it, as live SVG (components/MapBadge.tsx). One image
+// per scene serves every seat colour and every level.
+//
 // Run with `npm run kb-atlas` after changing the masters, and commit what it
 // writes. It rebuilds everything from scratch each time.
 
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -31,7 +38,10 @@ const MANIFEST = path.join(ROOT, 'src', 'games', 'KingdomBuilder', 'terrainAtlas
 
 /** The tile resolution the map is drawn at. */
 const TILE_RESOLUTION = 64;
-const ICON_SIZE = 64;
+/** Big enough to stay sharp at BoardZoom's deepest step on a 3x screen. */
+const BADGE_SIZE = 192;
+/** The badge scenes the map draws — kept in step with MapBadgeKind in components/MapBadge.tsx. */
+const BADGES = ['village', 'barbarian', 'forest', 'quarry', 'iron', 'plot'];
 const SHEET_COLUMNS = 16;
 
 /** The kit's own tile geometry for a resolution — `dims()` in source/terrain-tiles.js. */
@@ -89,7 +99,7 @@ const composites = await Promise.all(files.map(async (file, index) => ({
     top: Math.floor(index / SHEET_COLUMNS) * cell.height,
 })));
 
-await mkdir(path.join(SERVED, 'icons'), { recursive: true });
+await mkdir(path.join(SERVED, 'badges'), { recursive: true });
 const sheet = await sharp({ create: { width: SHEET_COLUMNS * cell.width, height: rows * cell.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(composites)
     .png({ compressionLevel: 9, effort: 10 })
@@ -98,11 +108,12 @@ await writeFile(path.join(SERVED, 'tiles.png'), sheet);
 
 await writeFile(MANIFEST, `${JSON.stringify({ resolution: TILE_RESOLUTION, dims: to, cell, columns: SHEET_COLUMNS, cells }, null, 2)}\n`);
 
-const icons = (await readdir(path.join(MASTERS, 'icons'))).filter(name => name.endsWith('.png')).sort();
-for (const name of icons) {
-    const icon = await sharp(path.join(MASTERS, 'icons', name)).resize(ICON_SIZE, ICON_SIZE, { kernel: 'lanczos3' }).png({ compressionLevel: 9 }).toBuffer();
-    await writeFile(path.join(SERVED, 'icons', name), icon);
+const MapBadges = createRequire(import.meta.url)(path.join(MASTERS, 'badges', 'map-badges-2d.js'));
+for (const key of BADGES) {
+    const svg = MapBadges.build(key, { size: BADGE_SIZE, ...(key === 'village' ? { ring: 'none' } : {}) });
+    const badge = await sharp(Buffer.from(svg)).png({ palette: true, colours: 256, dither: 1, effort: 10 }).toBuffer();
+    await writeFile(path.join(SERVED, 'badges', `${key}.png`), badge);
 }
 
 console.log(`tiles.png: ${cells.length} tiles, ${SHEET_COLUMNS * cell.width}x${rows * cell.height}, ${Math.round(sheet.length / 1024)}KB`);
-console.log(`icons: ${icons.length} at ${ICON_SIZE}x${ICON_SIZE}`);
+console.log(`badges: ${BADGES.length} at ${BADGE_SIZE}x${BADGE_SIZE}`);

@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Kingdom Builder's world map has new badges",
+                detail: "Towns, barbarian camps, open sites, forests, quarries and mines each wear a round painted badge. Every town's ring is its owner's colour, your own towns show their town centre level, and each barbarian camp shows how tough it is, from I to III.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Pull down to refresh your games",
                 detail: "Drag the home screen down from the top and let go to check for new turns, invites and messages straight away, rather than waiting for it to catch up on its own.",
             },
@@ -117,10 +122,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "One quiet player no longer ends the game for everyone",
                 detail: "Miss three turns in a row and, in most games, you now leave the game rather than ending it: everyone else plays on without you. In a race your counter or car drops out, in Dice Cities and Settlements & Cities your city stops collecting, Train Time keeps your track on the map but not in the scores, World Domination leaves your armies standing to be conquered, and the co-op teams share out or discard what you held and carry on — even down to one player. Two-player games, Smartthink and Solitaire still end as before.",
-            },
-            {
-                title: "Pinch to zoom feels like a map app now",
-                detail: "Zooming a board — the pill or a pinch — now zooms inside its frame instead of stretching the page, so everything around the board stays put. A pinch follows your fingers: whatever was under them stays under them as you spread and slide, on every board with a zoom pill.",
             },
         ],
     },

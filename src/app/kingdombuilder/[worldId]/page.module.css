@@ -2,12 +2,8 @@
 .land { fill: var(--ag-gold-soft); }
 /* The painted v2 tiles are composited at their native resolution; normal image smoothing keeps their soft shading intact when BoardZoom scales the map. */
 .ground { pointer-events: none; }
-.site { fill: var(--ag-surface); stroke: var(--ag-dark); stroke-width: 0.5; }
-/* A held site — a settlement or a barbarian village: a dark dot, so the coloured castle or flag drawn over it reads against any ground. */
-.held { fill: var(--ag-dark); }
-/* The one settlement state a label can't say by itself — "you've picked this one, tap Found here to confirm" — so it still gets its own look now that the oversized ring is gone. */
+/* The one state a label can't say by itself — "you've picked this one, tap Found here to confirm" — so it gets a gold disc peeking out round the picked badge. */
 .selected { fill: var(--ag-gold); stroke: var(--ag-terracotta-deep); stroke-width: 0.6; }
-.mapIcon { pointer-events: none; }
 .hint { margin: 0 0 10px; font: 600 12px/1.4 var(--ag-font); color: var(--ag-ink-soft); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font: 700 10px/1 var(--ag-font); color: var(--ag-ink-soft); }
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--legend-colour); }

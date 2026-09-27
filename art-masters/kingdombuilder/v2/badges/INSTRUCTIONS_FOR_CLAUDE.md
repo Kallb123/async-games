@@ -55,3 +55,6 @@ In Node, rasterise the SVG with `sharp` or `resvg-js`.
 - Numerals use SVG text (`Trajan Pro`/`Cinzel` → Georgia fallback). For identical rendering everywhere, rasterise on a machine with Cinzel installed, or convert the text to paths.
 - Each SVG uses clip-path ids `bcv`, `bcb`, etc. When inlining several badges in one HTML page, prefix those ids per badge to avoid collisions.
 - Level 1–5 only; for more levels extend the numeral list `['I','II','III','IV','V']` in `build()`.
+
+## How the app draws them
+The world map doesn't serve these exports. `npm run kb-atlas` calls `build()` for each scene (village, barbarian, forest, quarry, iron, plot) and writes one 192px PNG per scene to `public/art/kingdombuilder/v2/badges/`. The village is built with `ring: 'none'`, so its ring is see-through. `src/games/KingdomBuilder/components/MapBadge.tsx` then paints the owner's colour under that ring, and draws the level shield and numeral over it, as live SVG in the same 100×100 badge space. So one image covers every seat colour and every level. If you change the art here, re-run `npm run kb-atlas`. If you change the shield in `build()`, mirror the change in `MapBadge.tsx`.

@@ -35,12 +35,14 @@ export const KINGDOM_BUILDER_BARBARIAN_GARRISONS: readonly KingdomBuilderGarriso
 const SETTLEMENT_SLOTS = Array.from({ length: KINGDOM_BUILDER_SETTLEMENT_LIMIT }, (_, slot) => slot);
 
 /**
- * Every barbarian site's starting garrison. The villages are ranked by how far
- * each stands from its nearest player start and split into as many bands as
- * there are garrisons, so every world has the same graduated on-ramp however
- * its starts fell.
+ * Every barbarian site's strength band, 0 for the ring nearest the player
+ * starts. The villages are ranked by how far each stands from its nearest
+ * player start and split into as many bands as there are garrisons, so every
+ * world has the same graduated on-ramp however its starts fell. It reads only
+ * the public node layout, so the band is no secret: the map shows it as the
+ * village's level (§3.4).
  */
-export function barbarianVillagesFor(nodes: readonly WorldNode[]): KingdomBuilderBarbarianVillage[] {
+export function barbarianBandsFor(nodes: readonly WorldNode[]): Map<string, number> {
     const sites = nodes.filter((node): node is SettlementNode => node.kind === "settlement");
     const starts = sites.filter(site => site.siteType === "player-start");
     const nearestStart = (site: SettlementNode) => Math.min(...starts.map(start => pointDistance(start, site)));
@@ -48,9 +50,14 @@ export function barbarianVillagesFor(nodes: readonly WorldNode[]): KingdomBuilde
         .map(site => ({ site, distance: nearestStart(site) }))
         .sort((a, b) => a.distance - b.distance || a.site.id.localeCompare(b.site.id));
     const bands = KINGDOM_BUILDER_BARBARIAN_GARRISONS.length;
-    return ranked.map(({ site }, rank) => ({
-        nodeId: site.id,
-        garrison: garrisonOf(KINGDOM_BUILDER_BARBARIAN_GARRISONS[Math.floor(rank * bands / ranked.length)]),
+    return new Map(ranked.map(({ site }, rank) => [site.id, Math.floor(rank * bands / ranked.length)]));
+}
+
+/** Every barbarian site's starting garrison: its band's (see barbarianBandsFor). */
+export function barbarianVillagesFor(nodes: readonly WorldNode[]): KingdomBuilderBarbarianVillage[] {
+    return [...barbarianBandsFor(nodes)].map(([nodeId, band]) => ({
+        nodeId,
+        garrison: garrisonOf(KINGDOM_BUILDER_BARBARIAN_GARRISONS[band]),
     })).sort((a, b) => a.nodeId.localeCompare(b.nodeId));
 }
 

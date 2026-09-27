@@ -6,7 +6,8 @@ import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, type KingdomBuilderResources, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { kingdomBuilderMemberIds, KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
-import type { KingdomBuilderBarbarianVillage } from "./barbarians";
+import { barbarianBandsFor, type KingdomBuilderBarbarianVillage } from "./barbarians";
+import { buildingLevelOf } from "./buildings";
 import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
 import { siegesOn } from "./besiegers";
 import { marketLevelOf } from "./market";
@@ -74,13 +75,20 @@ export interface KingdomBuilderWorldView {
         caravans?: number;
         /** Yours only: its market's level, 0 without one. */
         marketLevel?: number;
+        /** Yours only: its town centre's level — the shield on its map badge. */
+        townCentreLevel?: number;
     }>;
     /**
      * The barbarian villages still standing (§3.4) — public, like every
      * settlement. What is left of a garrison is shown only while a scouting
      * army of the viewer's can see the village, as with a rival's town (§6.3).
      */
-    barbarians: Array<{ nodeId: string; garrison?: KingdomBuilderGarrison }>;
+    barbarians: Array<{
+        nodeId: string;
+        /** Its strength band, 1 for the ring nearest the starts — worked out from the public node layout, so no secret. */
+        level: number;
+        garrison?: KingdomBuilderGarrison;
+    }>;
     /** Your own armies in the field (§6.2), with their roads and orders — nobody else's army appears here. */
     armies: KingdomBuilderArmyView[];
     /**
@@ -231,6 +239,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
     const memberIds = kingdomBuilderMemberIds(world, settlements.map(settlement => settlement.ownerId));
     const seatOf = new Map(memberIds.map((memberId, index) => [memberId, index]));
     const onTiles = worldOnTiles(world);
+    const bands = barbarianBandsFor(onTiles.nodes);
     if (onTiles.changed && world.terrainField) {
         // Once per world from before PR 16 (§3.8): the snap and the re-drawn
         // routes are the same on every read, so the first viewer saves them.
@@ -310,11 +319,13 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
                     resources: resourcesOf(settlement.resources),
                     caravans: settlement.caravans ?? 0,
                     marketLevel: marketLevelOf(settlement.tiles ?? []),
+                    townCentreLevel: buildingLevelOf(settlement.tiles ?? [], "town-centre"),
                 } : {}),
             }];
         }),
         barbarians: villages.map(village => ({
             nodeId: village.nodeId,
+            level: (bands.get(village.nodeId) ?? 0) + 1,
             ...(isScouted(village.nodeId) ? { garrison: garrisonOf(village.garrison) } : {}),
         })),
         armies: armies.map(army => {
