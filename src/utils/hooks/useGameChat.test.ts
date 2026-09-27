@@ -21,10 +21,10 @@ import { useGameChat } from "./useGameChat";
 beforeEach(() => { refreshableData.data = { messages: [], readAt: null, hasMore: false }; });
 
 /** Renders the hook the way an open chat panel does, and hands back its result. */
-function renderOpenChat() {
+function renderOpenChat(viewerId?: string) {
     let result: ReturnType<typeof useGameChat> | null = null;
     function Harness() {
-        result = useGameChat("game-1", true, true);
+        result = useGameChat("game-1", true, true, viewerId);
         return null;
     }
     renderToString(React.createElement(Harness));
@@ -62,6 +62,19 @@ describe("useGameChat", () => {
 
         expect(renderOpenChat().messages.map((m) => m.unread)).toEqual([false, false]);
         expect(renderOpenChat().hasUnread).toBe(false);
+    });
+
+    // A Kingdom Builder world sends seat keys, so the viewer's own lines carry
+    // their seat rather than their Clerk id ("me" in the stub).
+    it("counts the viewer's own messages as read when the thread names them by a seat", () => {
+        refreshableData.data = {
+            messages: [{ ...message("m1", "2026-01-01T00:00:00.000Z"), senderId: "0" }],
+            readAt: null,
+            hasMore: false,
+        };
+
+        expect(renderOpenChat("0").messages.map((m) => m.unread)).toEqual([false]);
+        expect(renderOpenChat("0").hasUnread).toBe(false);
     });
 
     // The roll-forward that happens as a poll brings messages in *while the

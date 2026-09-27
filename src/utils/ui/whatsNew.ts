@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Kingdom Builder worlds have chat",
+                detail: "Talk strategy with everyone in your world from the world map, with the same messages, GIFs and notifications as your other games.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Kingdom Builder armies have new battle lines",
                 detail: "Train archers and spearmen, build armies around five distinct stat lines, and fight through ordered volleys, attacker-first horsemen charges and spear interceptions.",
                 game: "kingdombuilder",
@@ -116,11 +121,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Race Cars: take a move or a tow back",
                 detail: "Picked the wrong space, or took a slipstream tow you didn't mean to? Tap Undo and put the car back where it was — everything except the roll itself, which stays exactly as thrown. And if that move ended your turn, it now waits ten seconds before it passes, so you get the chance.",
                 game: "racecars",
-            },
-            {
-                title: "Take it back",
-                detail: "Placed a settlement or a road you didn't mean to in Settlements & Cities? Tap Undo and put it where you meant. And if that was the last thing you could do, your turn now waits ten seconds before it passes, so you get the chance.",
-                game: "settlementsandcities",
             },
         ],
     },

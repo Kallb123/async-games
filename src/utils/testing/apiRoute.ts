@@ -40,6 +40,7 @@ let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
 let gifCatalogueData: typeof import('@/utils/mongodb/GifCatalogueData');
 let reactionData: typeof import('@/utils/mongodb/ReactionData');
+let kingdomBuilderWorldData: typeof import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
 let nextServer: typeof import('next/server');
 
 /** A stored game, as the database would hold it: plain, with a version. */
@@ -62,6 +63,7 @@ let clerkUsers: User[] = [];
 type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string, actorId?: string, actorUsername?: string };
 
 const games = new Map<string, StoredGame>();
+const kingdomBuilderWorlds = new Map<string, { hostId?: string, roster?: Array<{ userId: string, joinedAt: Date }>, endedAt?: Date }>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
 const gifCatalogue: StoredGifCatalogueItem[] = [];
@@ -90,6 +92,7 @@ export async function resetApiRouteStubs() {
     chatReadData = await import('@/utils/mongodb/ChatReadData');
     gifCatalogueData = await import('@/utils/mongodb/GifCatalogueData');
     reactionData = await import('@/utils/mongodb/ReactionData');
+    kingdomBuilderWorldData = await import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
     nextServer = await import('next/server');
 
     signedInUserId = null;
@@ -98,6 +101,7 @@ export async function resetApiRouteStubs() {
     mintedSignInTokens.length = 0;
     createdUsers.length = 0;
     games.clear();
+    kingdomBuilderWorlds.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
     gifCatalogue.length = 0;
@@ -125,6 +129,9 @@ export async function resetApiRouteStubs() {
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
+    vi.spyOn(kingdomBuilderWorldData.KingdomBuilderWorldModel, 'findById').mockImplementation(((worldId: string) => ({
+        select: () => ({ lean: async () => kingdomBuilderWorlds.get(worldId) ?? null }),
+    })) as unknown as typeof kingdomBuilderWorldData.KingdomBuilderWorldModel.findById);
 }
 
 // ---------------------------------------------------------------- Clerk
@@ -331,6 +338,15 @@ async function insertIntoStore(this: IGameDataDocument) {
 /** Puts a game in the store, as if it had been created earlier. */
 export function seedGame(game: Record<string, unknown> & { gameId: string }) {
     games.set(game.gameId, asStored({ __v: 0, _id: new mongoose.Types.ObjectId().toString(), ...game }));
+}
+
+/** Seed the membership slice chat reads from a standalone Kingdom Builder world. */
+export function seedKingdomBuilderWorld(worldId: string, userIds: string[], { joinedAt = new Date(0), endedAt }: { joinedAt?: Date, endedAt?: Date } = {}) {
+    kingdomBuilderWorlds.set(worldId, {
+        hostId: userIds[0],
+        roster: userIds.map(userId => ({ userId, joinedAt })),
+        ...(endedAt ? { endedAt } : {}),
+    });
 }
 
 /** Where the two players start in the game below, unless a test cares. */
@@ -544,29 +560,42 @@ export function storedChatMessages(gameId: string): StoredChatMessage[] {
 function findChatFromStore(filter: Record<string, unknown>) {
     const gameId = filter?.gameId;
     const keys = Object.keys(filter);
+    if (!keys.includes('gameId') || keys.some(key => !['gameId', 'timestamp', '$or'].includes(key))) {
+        throw new Error(`The test chat store only looks messages up by gameId (and an optional joinedAt bound and before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
+    }
+    // A late joiner's lower bound, beside the cursor rather than inside it.
+    let matchesJoinedAt: (message: StoredChatMessage) => boolean = () => true;
+    if ('timestamp' in filter) {
+        const range = filter.timestamp as Record<string, unknown> | undefined;
+        const joinedAt = range?.$gte;
+        if (typeof joinedAt !== 'string' || Object.keys(range!).length !== 1) {
+            throw new Error(`The test chat store expected a joinedAt lower bound, not ${JSON.stringify(filter)}`);
+        }
+        matchesJoinedAt = message => message.timestamp >= joinedAt;
+    }
     let matchesCursor: (message: StoredChatMessage) => boolean = () => true;
-    if (keys.length === 2 && keys.includes('gameId') && keys.includes('$or')) {
+    if ('$or' in filter) {
         const or = filter.$or;
         const byTimestamp = Array.isArray(or) ? or[0] as Record<string, unknown> : undefined;
         const byTie = Array.isArray(or) ? or[1] as Record<string, unknown> : undefined;
-        const beforeLt = (byTimestamp?.timestamp as { $lt?: string } | undefined)?.$lt;
+        const timestampRange = byTimestamp?.timestamp as Record<string, unknown> | undefined;
+        const beforeLt = timestampRange?.$lt;
         const tieTimestamp = byTie?.timestamp;
         const tieMessageIdLt = (byTie?.messageId as { $lt?: string } | undefined)?.$lt;
         const shape = Array.isArray(or) && or.length === 2
-            && byTimestamp !== undefined && Object.keys(byTimestamp).length === 1 && typeof beforeLt === 'string'
+            && byTimestamp !== undefined && Object.keys(byTimestamp).length === 1
+            && timestampRange !== undefined && Object.keys(timestampRange).length === 1 && typeof beforeLt === 'string'
             && byTie !== undefined && Object.keys(byTie).length === 2 && typeof tieTimestamp === 'string' && typeof tieMessageIdLt === 'string';
         if (!shape) {
             throw new Error(`The test chat store's $or cursor didn't have the shape the route builds, not ${JSON.stringify(filter)}`);
         }
-        matchesCursor = (message) => message.timestamp < beforeLt!
+        matchesCursor = (message) => message.timestamp < beforeLt
             || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!);
-    } else if (keys.length !== 1 || keys[0] !== 'gameId') {
-        throw new Error(`The test chat store only looks messages up by gameId (and an optional before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
     }
     if (typeof gameId !== 'string') {
         throw new Error(`The test chat store only looks messages up by gameId, not ${JSON.stringify(filter)}`);
     }
-    let results = chatMessages.filter(message => message.gameId === gameId && matchesCursor(message));
+    let results = chatMessages.filter(message => message.gameId === gameId && matchesJoinedAt(message) && matchesCursor(message));
     const query = {
         sort: (spec: Record<string, 1 | -1>) => {
             results = [...results].sort(bySortSpec(spec));

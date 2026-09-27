@@ -2,11 +2,11 @@ import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { normaliseReadAt } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
+import { chatGame } from '@/utils/games/chatGame';
 
 export interface IChatReadParams {
     gameid: string;
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     await dbConnect();
 
     const { gameid } = await params;
-    const gameData: IGameDataDocument = await GameDataModel.findOne({ gameId: gameid }).exec();
+    const gameData = await chatGame(gameid, userId);
     if (!gameData) {
         return NextResponse.json({}, { status: 404, statusText: "Game not found" });
     }

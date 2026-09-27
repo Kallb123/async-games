@@ -50,6 +50,14 @@ export async function POST(request: NextRequest) {
     await ChatMessageModel.deleteMany({ gameId: { $in: gameIds } }).exec();
     await ChatReadModel.deleteMany({ gameId: { $in: gameIds } }).exec();
 
+    // Threads that outlive this account — a Kingdom Builder world goes on for
+    // its other members, including one this player has already left — keep
+    // everyone else's lines but lose every one of theirs, and their markers.
+    // Keyed by the player alone, so no membership lookup can miss a thread and
+    // a retry is as idempotent as the deletes below.
+    await ChatMessageModel.deleteMany({ senderId: userId }).exec();
+    await ChatReadModel.deleteMany({ userId }).exec();
+
     // Games: a game without one of its players cannot be played on or replayed,
     // so both the live game and its recorded result go, for everyone in it.
     await GameDataModel.deleteMany({ userIdList: userId }).exec();

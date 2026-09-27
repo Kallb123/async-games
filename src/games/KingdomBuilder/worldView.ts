@@ -4,7 +4,7 @@ import { buildUserDirectory } from "@/utils/users/clerk";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
 import { KingdomBuilderSettlementModel, type KingdomBuilderResources, type KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
-import { KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
+import { kingdomBuilderMemberIds, KingdomBuilderWorldModel, type KingdomBuilderSeat } from "./KingdomBuilderWorldModel";
 import { armyTile, paceOf, pathIndexOf, ticksToArrive } from "./armies";
 import type { KingdomBuilderBarbarianVillage } from "./barbarians";
 import { recentBattles, type KingdomBuilderBattleReport } from "./battleReports";
@@ -228,9 +228,7 @@ export async function worldView(worldId: string, userId: string): Promise<Kingdo
 
     // Join order is seat order. A pre-roster world has only its settlements'
     // owners to go on — a world of one, in practice.
-    const memberIds = roster.length > 0
-        ? roster.map(entry => entry.userId)
-        : [...new Set(settlements.map(settlement => settlement.ownerId))];
+    const memberIds = kingdomBuilderMemberIds(world, settlements.map(settlement => settlement.ownerId));
     const seatOf = new Map(memberIds.map((memberId, index) => [memberId, index]));
     const onTiles = worldOnTiles(world);
     if (onTiles.changed && world.terrainField) {

@@ -75,9 +75,11 @@ export interface GameChat {
  * the front, then reset when `gameId` changes. See docs/in-game-chat.md §13.7
  * commit 5.
  */
-export function useGameChat(gameId: string, open: boolean, enabled: boolean): GameChat {
+export function useGameChat(gameId: string, open: boolean, enabled: boolean, viewerId?: string): GameChat {
     const { user } = useUser();
-    const myId = user?.id;
+    // The viewer's own senderId: their Clerk id, unless the thread sends
+    // something else in its place (a Kingdom Builder world's seat keys).
+    const myId = viewerId ?? user?.id;
     const { data, isLoading, isRefreshing, refresh } =
         useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS, { pollWhileWatching: open, enabled });
     const [sending, setSending] = useState(false);

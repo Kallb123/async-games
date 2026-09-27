@@ -27,11 +27,12 @@ vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/
 vi.mock('@/utils/rateLimit', async () => (await import('@/utils/testing/apiRoute')).rateLimitStub());
 
 import { consumeRateLimit } from '@/utils/rateLimit';
+import { FORMER_MEMBER_SENDER_ID } from '@/utils/chat';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
     ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker,
-    seedGifCatalogueItem, seedSnakesAndLadders,
+    seedGifCatalogueItem, seedKingdomBuilderWorld, seedSnakesAndLadders,
     sentPushes, signIn, storedChatMessages, storedChatReadMarker, storedGifCatalogueExpiry, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
@@ -110,6 +111,30 @@ beforeEach(async () => {
 });
 
 describe('GET /api/game/[gameid]/chat', () => {
+    it('uses a Kingdom Builder world roster as the thread membership', async () => {
+        const worldId = '64b000000000000000000001';
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+        seedChatMessage({ messageId: 'm1', gameId: worldId, senderId: BOB.id, text: 'meet at the ford', timestamp: '2026-01-01T00:00:00.000Z' });
+
+        const response = await readChatFor(worldId);
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).messages[0].text).toBe('meet at the ford');
+    });
+
+    it('does not show a Kingdom Builder player messages sent before they joined', async () => {
+        const worldId = '64b000000000000000000002';
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id], { joinedAt: new Date('2026-01-02T00:00:00.000Z') });
+        seedChatMessage({ messageId: 'old', gameId: worldId, senderId: BOB.id, text: 'before', timestamp: '2026-01-01T00:00:00.000Z' });
+        seedChatMessage({ messageId: 'new', gameId: worldId, senderId: BOB.id, text: 'after', timestamp: '2026-01-03T00:00:00.000Z' });
+
+        const body = await (await readChatFor(worldId)).json();
+
+        expect(body.messages.map((message: { text: string }) => message.text)).toEqual(['after']);
+    });
+
     it('returns the thread oldest-first to a player in the game', async () => {
         signIn(ANN);
         seedSnakesAndLadders();
@@ -958,5 +983,94 @@ describe('POST /api/game/[gameid]/chat/read', () => {
         await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
 
         expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalled();
+    });
+});
+
+// A Kingdom Builder world has no GameData document: its roster is the thread's
+// membership, and its players go out as seat keys rather than Clerk ids.
+describe('Kingdom Builder world chat', () => {
+    const worldId = '64b0000000000000000000aa';
+    const CAL = { id: 'user_cal', username: 'cal' };
+
+    it('sends seat keys, never Clerk ids, for the members\' messages', async () => {
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+        seedChatMessage({ messageId: 'm1', gameId: worldId, senderId: BOB.id, text: 'hi', timestamp: '2026-01-01T00:00:00.000Z' });
+        seedChatMessage({ messageId: 'm2', gameId: worldId, senderId: ANN.id, text: 'hello', timestamp: '2026-01-02T00:00:00.000Z' });
+
+        const response = await readChatFor(worldId);
+        const text = await response.text();
+
+        expect(JSON.parse(text).messages.map((message: { senderId: string }) => message.senderId)).toEqual(['1', '0']);
+        expect(text).not.toContain(ANN.id);
+        expect(text).not.toContain(BOB.id);
+    });
+
+    it('sends a member who has since left as the former-member key, not their Clerk id', async () => {
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id]);
+        seedChatMessage({ messageId: 'm1', gameId: worldId, senderId: BOB.id, text: 'bye all', timestamp: '2026-01-01T00:00:00.000Z' });
+
+        const text = await (await readChatFor(worldId)).text();
+
+        expect(JSON.parse(text).messages[0].senderId).toBe(FORMER_MEMBER_SENDER_ID);
+        expect(text).not.toContain(BOB.id);
+    });
+
+    it('keeps messages from before a late joiner arrived out of reach of a forged tie cursor', async () => {
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id], { joinedAt: new Date('2026-01-02T00:00:00.000Z') });
+        seedChatMessage({ messageId: uuidFor(5), gameId: worldId, senderId: BOB.id, text: 'secret plan', timestamp: '2026-01-01T00:00:00.000Z' });
+
+        // Naming that exact millisecond, with a messageId above the old one's,
+        // would satisfy the tie arm of the cursor on its own.
+        const body = await (await readChatBefore(worldId, '2026-01-01T00:00:00.000Z', uuidFor(9))).json();
+
+        expect(body.messages).toEqual([]);
+    });
+
+    it('refuses a signed-in player who is not in the world', async () => {
+        signIn(CAL);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+
+        expect((await readChatFor(worldId)).status).toBe(403);
+        expect((await postChatTo(worldId, { text: 'let me in' })).status).toBe(403);
+        expect((await postChatReadTo(worldId, { readAt: '2026-01-01T00:00:00.000Z' })).status).toBe(403);
+        expect(storedChatMessages(worldId)).toEqual([]);
+    });
+
+    it('treats an ended world as not there', async () => {
+        signIn(ANN);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id], { endedAt: new Date('2026-01-05T00:00:00.000Z') });
+
+        expect((await readChatFor(worldId)).status).toBe(404);
+        expect((await postChatTo(worldId, { text: 'gg' })).status).toBe(404);
+    });
+
+    it('stores a post, answers with the sender\'s seat and pushes a link to the world', async () => {
+        signIn(ANN);
+        stubClerkUsers(BOB);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+
+        const response = await postChatTo(worldId, { text: 'meet at the ford' });
+        await runAfterCallbacks();
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).message.senderId).toBe('0');
+        expect(storedChatMessages(worldId).map(message => message.senderId)).toEqual([ANN.id]);
+        expect(sentPushes).toHaveLength(1);
+        expect(sentPushes[0].userIds).toEqual([BOB.id]);
+        expect(sentPushes[0].data.link).toMatch(new RegExp(`/kingdombuilder/${worldId}$`));
+        expect(sentPushes[0].notification.title).toBe('ann in Kingdom Builder');
+    });
+
+    it('writes a member\'s read marker', async () => {
+        signIn(BOB);
+        seedKingdomBuilderWorld(worldId, [ANN.id, BOB.id]);
+
+        const response = await postChatReadTo(worldId, { readAt: '2026-01-01T00:00:00.000Z' });
+
+        expect(response.status).toBe(200);
+        expect(storedChatReadMarker(worldId, BOB.id)).toBe('2026-01-01T00:00:00.000Z');
     });
 });

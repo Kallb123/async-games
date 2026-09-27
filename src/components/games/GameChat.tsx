@@ -12,7 +12,7 @@ import { nameForUserId } from '@/utils/ui/players';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
-import { IChatAttachment, IChatGifRef, MAX_MESSAGE_LENGTH } from '@/utils/chat';
+import { FORMER_MEMBER_SENDER_ID, IChatAttachment, IChatGifRef, MAX_MESSAGE_LENGTH } from '@/utils/chat';
 import type { GameChatMessage } from '@/utils/hooks/useGameChat';
 
 interface GameChatProps {
@@ -234,7 +234,9 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                         ref={attachListRef}
                         compact
                         events={messages.map((message, index) => {
-                            const senderName = nameForUserId({ userIdList, usernameList }, message.senderId);
+                            const senderName = message.senderId === FORMER_MEMBER_SENDER_ID
+                                ? 'Former player'
+                                : nameForUserId({ userIdList, usernameList }, message.senderId);
                             return {
                                 id: message.messageId,
                                 marker: (

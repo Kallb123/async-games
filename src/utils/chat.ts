@@ -7,6 +7,14 @@
 export const MAX_MESSAGE_LENGTH = 500;
 
 /**
+ * The senderId a thread that hides account ids (a Kingdom Builder world, which
+ * sends seat keys) gives a message whose author is no longer a member. Their
+ * seat is gone, and falling back to the stored account id would put it on the
+ * wire, so every departed author collapses to this one key instead.
+ */
+export const FORMER_MEMBER_SENDER_ID = 'left';
+
+/**
  * The message as it will be stored, or `null` if it isn't a message.
  *
  * Trims, rejects a non-string, rejects empty, rejects anything over
