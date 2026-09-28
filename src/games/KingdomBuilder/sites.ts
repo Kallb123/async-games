@@ -5,8 +5,18 @@
 import type { KingdomBuilderWorldView } from "./worldView";
 import type { SettlementNode } from "./worldgen/landmass";
 
-/** How many settlements one player may hold in a world: a first, and one founded or taken after it. */
-export const KINGDOM_BUILDER_SETTLEMENT_LIMIT = 2;
+/**
+ * The number a player's next settlement takes: the lowest one none of theirs
+ * holds. There is no cap on how many a player holds — the settler's doubling
+ * price is what slows expansion (units.ts) — so the number only keeps each of
+ * a player's settlements distinct for the unique owner/number index.
+ */
+export function nextSettlementNumber(taken: Iterable<number | undefined>): number {
+    const held = new Set([...taken].map(number => number ?? 0));
+    let number = 0;
+    while (held.has(number)) number++;
+    return number;
+}
 
 /**
  * The sites a settler could found a town on: an expansion site nobody holds,

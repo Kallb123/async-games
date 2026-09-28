@@ -156,7 +156,8 @@ export default function KingdomBuilderSettlementPage({
     );
     const trainingQueueChips = <TrainingQueue className={styles.queue} queue={trainingQueue} pending={pending} disabled={isPending} onCancel={send} />;
     const unitRow = (unitType: KingdomBuilderUnitType, level: number, locked?: string) => data && (
-        <UnitRow key={unitType} unitType={unitType} level={level} resources={data.resources} queueFull={queueFull} locked={locked}
+        <UnitRow key={unitType} unitType={unitType} level={level} cost={unitType === "settler" ? data.settlerCost : undefined}
+            resources={data.resources} queueFull={queueFull} locked={locked}
             pending={pending === unitType} disabled={isPending} onTrain={() => send(unitType, { unitType })} />
     );
     // A tavern never stands above its town centre (§6.5), and a player's commanders never outnumber their taverns' levels.
@@ -336,7 +337,7 @@ export default function KingdomBuilderSettlementPage({
                         <Section label="Town centre" action={<span className="ag-tag">Level {townCentre.building.level}</span>}>
                             <p className={styles.status}>
                                 {barracks ? "Settlers share the barracks' training queue. " : `${trainingStatus(trainingQueue)} `}
-                                March a settler to an open site on the world map to found a new town there.
+                                March a settler to an open site on the world map to found a new town there. Each settler costs double the last one you trained.
                             </p>
                             {!barracks && trainingQueueChips}
                             <div className="ag-build-list">
@@ -369,8 +370,10 @@ export default function KingdomBuilderSettlementPage({
     );
 }
 
-function UnitRow({ unitType, level, resources, queueFull, locked, pending, disabled, onTrain }: {
+function UnitRow({ unitType, level, cost, resources, queueFull, locked, pending, disabled, onTrain }: {
     unitType: KingdomBuilderUnitType;
+    /** What this one costs, when that isn't the listed price — a settler's, which doubles with each one trained. */
+    cost?: KingdomBuilderSettlementView["resources"];
     /** The level of the building it trains at — the barracks, the town centre for a settler, the tavern for a commander. */
     level: number;
     resources: KingdomBuilderSettlementView["resources"];
@@ -384,7 +387,7 @@ function UnitRow({ unitType, level, resources, queueFull, locked, pending, disab
     const unit = KINGDOM_BUILDER_UNITS[unitType];
     const stats = KINGDOM_BUILDER_COMBAT_STATS[unitType];
     const trainTicks = trainingTicksFor(unitType, level);
-    const price = priceFor(unit.cost, resources);
+    const price = priceFor(cost ?? unit.cost, resources);
     const blocker = trainTicks === null ? `Level ${unit.trainedAt.level}` : locked ? "Locked" : queueFull ? "Queue full" : !price.affordable ? "Can't afford" : null;
     return (
         <BuildRow

@@ -8,6 +8,7 @@ import { barbarianVillagesFor, type KingdomBuilderBarbarianVillage } from "./bar
 import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { catchmentForSettlement } from "./land";
 import { resourcesOf } from "./resources";
+import { nextSettlementNumber } from "./sites";
 import type { KingdomBuilderGarrison } from "./units";
 import { generateWorld } from "./worldgen";
 import type { SettlementNode, WorldNode } from "./worldgen/landmass";
@@ -80,9 +81,10 @@ export interface KingdomBuilderSettlementStock {
 }
 
 /**
- * Claims either a player's starting slot or their one expansion slot. Unique
- * world/node and world/owner/settlement-number indexes arbitrate concurrent
- * claims, so neither a site nor a player's second-settlement slot can race.
+ * Claims either a player's starting site or an expansion site — as many of
+ * those as they can found. Unique world/node and world/owner/settlement-number
+ * indexes arbitrate concurrent claims, so neither a site nor the number a
+ * player's next settlement takes can race.
  * An expansion is founded by a settler (PR 24), whose stack is its `stock`.
  */
 export async function foundSettlement(
@@ -114,17 +116,22 @@ export async function foundSettlement(
         throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", `The site is not available for ${kind === "first" ? "a first" : "an expansion"} settlement`);
     }
 
+    let settlementNumber = 0;
     if (kind === "first") {
         const ownerQuery = KingdomBuilderSettlementModel.exists({ worldId, ownerId: userId.trim() });
         const existing = await (session ? ownerQuery.session(session) : ownerQuery);
         if (existing) throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "This player already has a settlement in the world");
+    } else {
+        const heldQuery = KingdomBuilderSettlementModel.find({ worldId, ownerId: userId.trim() }).select({ settlementNumber: 1 });
+        const held: { settlementNumber?: number }[] = await (session ? heldQuery.session(session) : heldQuery).lean();
+        settlementNumber = nextSettlementNumber(held.map(settlement => settlement.settlementNumber));
     }
 
     const values = {
         worldId: new Types.ObjectId(worldId),
         ownerId: userId.trim(),
         nodeId: siteId,
-        settlementNumber: kind === "first" ? 0 : 1,
+        settlementNumber,
         tiles: startingTiles(),
         // A first settlement gets the stockpile (§4.5); an expansion only what
         // its settler brought, which paid for its own.

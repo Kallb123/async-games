@@ -76,12 +76,11 @@ describe("assaultVillages", () => {
         expect(result.armies).toEqual([caravans]);
     });
 
-    it("burns a village won by a player who already holds two settlements, and leaves the army camped on the open site", () => {
-        const result = assaultVillages([village()], [...home, { ownerId: "alice", settlementNumber: 1 }], [camp()]);
+    it("gives a village to a player however many settlements they already hold, under their next number", () => {
+        const result = assaultVillages([village()], [...home, { ownerId: "alice", settlementNumber: 1 }, { ownerId: "alice", settlementNumber: 2 }], [camp()]);
         expect(result.villages).toEqual([]);
-        expect(result.captures).toEqual([]);
-        expect(result.armies).toHaveLength(1);
-        expect(result.armies[0].targetNodeId).toBe("village");
+        expect(result.captures).toEqual([expect.objectContaining({ ownerId: "alice", nodeId: "village", settlementNumber: 3 })]);
+        expect(result.armies).toEqual([]);
     });
 
     it("wipes out an army that loses, and keeps what the village has left", () => {

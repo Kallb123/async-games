@@ -2,12 +2,13 @@
 // stands from the world's birth with a fixed garrison that never trains,
 // builds or marches. There is no siege at one: an army camped there fights it
 // on the tick it arrives, and again every tick after until one side is gone.
-// Won, the village becomes the attacker's settlement — or, for a player who
-// already holds two, is burnt, leaving open ground anyone can found on.
+// Won, the village becomes the attacker's settlement, however many they
+// already hold. (A village burnt under the old two-settlement limit is open
+// ground anyone can found on.)
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { addUnits, combineCaravans, isCamped, isEscorted, unitCount, type KingdomBuilderMarch } from "./armies";
-import { KINGDOM_BUILDER_SETTLEMENT_LIMIT } from "./sites";
+import { nextSettlementNumber } from "./sites";
 import { addResources, resourcesOf } from "./resources";
 import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { combinedUnits } from "./siege";
@@ -30,9 +31,6 @@ export const KINGDOM_BUILDER_BARBARIAN_GARRISONS: readonly KingdomBuilderGarriso
     garrisonOf({ militia: 6, infantry: 3 }),
     garrisonOf({ militia: 8, infantry: 6, cavalry: 2 }),
 ];
-
-/** The slots a player's settlements fill — a village taken by someone already at the limit is burnt instead. */
-const SETTLEMENT_SLOTS = Array.from({ length: KINGDOM_BUILDER_SETTLEMENT_LIMIT }, (_, slot) => slot);
 
 /**
  * Every barbarian site's strength band, 0 for the ring nearest the player
@@ -72,7 +70,7 @@ export interface KingdomBuilderVillageBattle {
 }
 
 /**
- * A village taken: the settlement it becomes, in the owner's free slot,
+ * A village taken: the settlement it becomes, under the owner's next number,
  * garrisoned by the survivors — and stocked with whatever the caravans that
  * came with them carried (PR 25), which stand in its market yard after.
  */
@@ -140,8 +138,7 @@ export function assaultVillages<T extends KingdomBuilderMarch>(
             }
             standing.delete(nodeId);
             const taken = slots.get(ownerId) ?? new Set<number>();
-            const slot = SETTLEMENT_SLOTS.find(number => !taken.has(number));
-            if (slot === undefined) continue;
+            const slot = nextSettlementNumber(taken);
             taken.add(slot);
             slots.set(ownerId, taken);
             const { caravans, cargo } = combineCaravans(camps);
