@@ -1453,6 +1453,15 @@ Caravans are never simply lost to another player — they change hands:
   (the oldest, if several could), which carries them on wherever it was
   going. A rival's caravans alone take nothing, and a town's garrison takes
   nothing that camps at its gate: that is how a delivery is made.
+- **Fought for, when scouts guard them.** Scouts are the weak escort (§6.5).
+  A player whose only units on a tile are scouts, settlers and commanders is
+  guarded by those scouts, all of them together, whichever stack each is in.
+  A rival's stack with soldiers in it (anything but scouts) on that tile fights
+  them at the end of the tick, with §7.6's engine on open ground. It takes
+  the caravans and settlers, and kills the commanders, only once the last
+  scout falls. Scouts that hold keep them until the next tick's fight. A
+  rival's party of scouts never attacks them. Both sides are told of it as a
+  skirmish, in which each sees what the other fought with, as in any battle.
 - **Left on the field.** If a push or a sally wipes an escort out, its caravans
   and load go to the town that beat it — into its yard and its stores. Only a
   barbarian village, which is nobody, still plunders them outright.
@@ -1750,7 +1759,8 @@ leave without a commander:
 
 Scouts may take caravans or settlers along with them. That makes them the one
 escort without a commander, but a weak one (§7.6 gives a scout 1 attack and 3
-health).
+health, and no strike of its own). A rival's party of scouts can't take what
+they guard, but a rival's army with soldiers in it fights them for it (§4.7).
 
 **The tavern.** A new building, one per settlement, raised a level at a time
 like the barracks and the market. Two rules cap it:
