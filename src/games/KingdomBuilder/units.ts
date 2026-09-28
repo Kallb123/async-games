@@ -1,7 +1,7 @@
 import type { KingdomBuilderResources, KingdomBuilderTile } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_UPGRADABLE_BUILDINGS, buildingLevelOf } from "./buildings";
 import { KINGDOM_BUILDER_ECONOMY as economy } from "./economy";
-import { tunedResources } from "./resources";
+import { KINGDOM_BUILDER_RESOURCE_TYPES, resourcesOf, tunedResources } from "./resources";
 
 /**
  * GDD §6.1's roster, in the order the barracks unlocks them — then the settler
@@ -133,7 +133,7 @@ const KINGDOM_BUILDER_SETTLER_MAX_DOUBLINGS = 30;
 export function settlerCostFor(trained: number): KingdomBuilderResources {
     const factor = 2 ** Math.min(Math.max(0, Math.floor(trained)), KINGDOM_BUILDER_SETTLER_MAX_DOUBLINGS);
     const { cost } = KINGDOM_BUILDER_UNITS.settler;
-    return { wood: cost.wood * factor, stone: cost.stone * factor, iron: cost.iron * factor, wheat: cost.wheat * factor };
+    return resourcesOf(Object.fromEntries(KINGDOM_BUILDER_RESOURCE_TYPES.map(resource => [resource, cost[resource] * factor])));
 }
 
 export function isUnitType(value: unknown): value is KingdomBuilderUnitType {

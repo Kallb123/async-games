@@ -241,8 +241,9 @@ spawns in a resource desert. Concrete constraints:
 > and — since a stand-off isn't a siege either — again every tick until one
 > side is gone or the army is ordered away. Won, the village becomes the
 > winner's settlement: a fresh town centre on the site's own land, garrisoned by
-> the survivors. A player already holding two settlements burns it instead, and
-> the site is open ground anyone can found on. The villages are public; what is
+> the survivors, however many settlements the winner already holds. (A village
+> won under the old two-settlement limit was burnt instead, leaving open ground
+> anyone can found on.) The villages are public; what is
 > left of a garrison is not, and shows only to a scouting army in sight (§6.3).
 > First-pass numbers (§12).
 
@@ -1217,7 +1218,10 @@ sprawling resource list.
 > whose village has burnt — it founds a town there, bringing a first
 > settlement's stockpile (40 wood, 20 stone, 20 wheat) from the town that
 > trained it; every other stack of the player's camped there moves in with it.
-> A player still holds two settlements at most. Unguarded settlers are taken on
+> There is no cap on how many settlements a player holds: instead each settler
+> a player queues costs double the one before it (the world keeps each
+> player's count, and a cancelled settler gives its place back), so a third
+> town costs twice what the second did, a fourth four times. Unguarded settlers are taken on
 > the road like caravans (§4.7), and found towns for whoever took them. The free
 > "Found here" of PR 6 is gone. First-pass numbers (§12).
 
@@ -1764,7 +1768,7 @@ like the barracks and the market. Two rules cap it:
   one still under construction. So the town centre's cap is the tavern's cap
   (`KINGDOM_BUILDER_UPGRADABLE_BUILDINGS.tavern` is read from the town
   centre's entry, not written down twice). Today that is 2 levels, and so 2
-  commanders a settlement and 4 for a player holding the two-settlement limit.
+  commanders a settlement, and 4 for a player holding two settlements.
   A future town-centre level raises all three at once.
 
 A player who loses a town, or a tavern with it, can end up holding more

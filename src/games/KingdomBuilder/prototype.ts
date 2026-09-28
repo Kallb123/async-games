@@ -457,7 +457,8 @@ export async function cancelUnitTraining(
     // The filter repeats the order, so one that finished training in between
     // fails this write rather than being refunded after it joined the garrison.
     // A settler refunds the price it was queued at, and gives back its place
-    // in the doubling, in one transaction with the refund (§4.4).
+    // in the doubling, in one transaction with the refund (§4.4) — unless it
+    // was queued before the doubling, and so never took a place.
     const refund = async (session?: ClientSession) => {
         const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
             { _id: settlementId, worldId, ownerId: userId, trainingQueue: { $elemMatch: { orderId, unitType: order.unitType } } },
@@ -466,7 +467,7 @@ export async function cancelUnitTraining(
         ).lean();
         if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "That unit is no longer in the queue");
     };
-    if (order.unitType === "settler") {
+    if (order.unitType === "settler" && order.cost) {
         const path = settlersTrainedPath(userId);
         await mongoose.connection.transaction(async session => {
             await KingdomBuilderWorldModel.updateOne({ _id: worldId, [path]: { $gt: 0 } }, { $inc: { [path]: -1 } }, { session });

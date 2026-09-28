@@ -499,6 +499,21 @@ describe("Kingdom Builder town centre and settlers (PR 24)", () => {
         );
     });
 
+    it("refunds a settler queued before the doubling its listed cost, without giving back a place it never took", async () => {
+        const orderId = new Types.ObjectId().toString();
+        const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), trainingQueue: [{ unitType: "settler", ticksRemaining: 4, orderId }] });
+        const uncount = vi.spyOn(KingdomBuilderWorldModel, "updateOne");
+
+        await cancelUnitTraining(worldId, settlementId, "owner", orderId);
+
+        expect(uncount).not.toHaveBeenCalled();
+        expect(update).toHaveBeenCalledWith(
+            expect.anything(),
+            { $pull: { trainingQueue: { orderId } }, $inc: { "resources.wood": 60, "resources.stone": 40, "resources.iron": 10, "resources.wheat": 40 } },
+            { new: true },
+        );
+    });
+
     it("shows the owner what their next settler costs, reading only their own count", async () => {
         stubSettlement({ ownerId: "owner", tiles: withTownCentre(2) });
         vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReset().mockReturnValue({
