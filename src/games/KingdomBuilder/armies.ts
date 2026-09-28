@@ -233,7 +233,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
         for (const ownerId of new Set(here.map(index => armies[index].ownerId))) {
             const own = here.filter(index => armies[index].ownerId === ownerId && !gone.has(index));
             if (!own.some(index => hasSpoils(now[index])) || own.some(index => needsCommander(now[index].units))) continue;
-            const scouts = own.reduce((total, index) => total + (now[index].units.scout ?? 0), 0);
+            const scouts = own.map(index => now[index].units).reduce(addUnits, garrisonOf()).scout;
             const rivals = here.filter(index => armies[index].ownerId !== ownerId && !gone.has(index));
             const captor = rivals.find(index => needsCommander(now[index].units)) ?? (scouts ? undefined : rivals.find(index => isEscorted(now[index])));
             if (captor === undefined) continue;
@@ -257,9 +257,8 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
 
             const taken = own.map(index => now[index]);
             own.forEach(index => gone.add(index));
-            const settlers = taken.reduce((total, army) => total + (army.units.settler ?? 0), 0);
-            const commanders = taken.reduce((total, army) => total + (army.units.commander ?? 0), 0);
-            const caravans = taken.reduce((total, army) => total + (army.caravans ?? 0), 0);
+            const { settler: settlers, commander: commanders } = taken.map(army => army.units).reduce(addUnits, garrisonOf());
+            const { caravans } = combineCaravans(taken);
             // The commanders among the spoils are dead, and the scouts with them: they join nobody.
             now[captor] = { ...now[captor], units: addUnits(now[captor].units, { settler: settlers }), ...combineCaravans([now[captor], ...taken]) };
             seized.push({

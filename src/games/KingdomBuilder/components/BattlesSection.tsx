@@ -29,8 +29,8 @@ function changedHands(caravans = 0, settlers = 0, commanders = 0): string {
 
 function titleOf(report: KingdomBuilderBattleReport, place: string | undefined): string {
     if (report.kind === "barbarian") return "Your attack on a barbarian village";
+    const where = place ? ` at ${place}` : " on the road";
     if (report.kind === "raid") {
-        const where = place ? ` at ${place}` : " on the road";
         const what = [report.caravansTaken || report.caravansLost ? "caravans" : "", report.settlersTaken || report.settlersLost ? "settlers" : ""]
             .filter(Boolean).join(" and ");
         // Nothing taken is a raid that only killed commanders (§6.5) — which the taker isn't told of.
@@ -38,7 +38,6 @@ function titleOf(report: KingdomBuilderBattleReport, place: string | undefined):
         return report.started ? `${what[0].toUpperCase()}${what.slice(1)} taken${where}` : `Your ${what}, taken${where}`;
     }
     if (report.kind === "skirmish") {
-        const where = place ? ` at ${place}` : " on the road";
         if (report.started) return report.outcome === "won" ? `A scout escort beaten${where}` : `A scout escort fought${where}`;
         return report.outcome === "lost" ? `Your scouts beaten${where}` : `Your scouts attacked${where}`;
     }

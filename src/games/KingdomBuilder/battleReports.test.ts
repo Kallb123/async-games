@@ -141,3 +141,26 @@ describe("recentBattles", () => {
         expect(reports.map(report => report.started)).toEqual([false]);
     });
 });
+
+describe("reportFor a skirmish with a scout escort (§6.5)", () => {
+    const skirmish = {
+        _id: battleId, kind: "skirmish" as const, tick: 9, attackerIds: ["raider"], defenderIds: ["scout"],
+        attacker: garrisonOf({ militia: 2 }), defender: garrisonOf({ scout: 1 }),
+        rounds: [{ attacker: garrisonOf(), defender: garrisonOf({ scout: 1 }) }],
+        shares: [
+            { ownerId: "raider", sent: garrisonOf({ militia: 2 }), left: garrisonOf({ militia: 2 }), settlersTaken: 2 },
+            { ownerId: "scout", sent: garrisonOf({ scout: 1 }), left: garrisonOf(), settlersLost: 2, commandersLost: 3 },
+        ],
+    };
+
+    it("shows the taker only the scouts it fought and what it took", () => {
+        const report = reportFor(skirmish, "raider");
+        expect(report).toMatchObject({ kind: "skirmish", outcome: "won", faced: garrisonOf({ scout: 1 }), settlersTaken: 2 });
+        expect(report).not.toHaveProperty("commandersLost");
+        expect(report).not.toHaveProperty("nodeId");
+    });
+
+    it("shows the loser the army that beat their scouts, as any battle does", () => {
+        expect(reportFor(skirmish, "scout")).toMatchObject({ outcome: "lost", faced: garrisonOf({ militia: 2 }), settlersLost: 2, commandersLost: 3 });
+    });
+});

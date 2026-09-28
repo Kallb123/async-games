@@ -106,18 +106,18 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     // both sides then see what the other fought with, as in any battle.
     if (seized.length) {
         await KingdomBuilderBattleModel.create(seized.map(raid => {
-            const scouts = raid.skirmish && garrisonOf({ scout: raid.skirmish.scouts });
+            const scouts = garrisonOf({ scout: raid.skirmish?.scouts });
             return {
                 worldId, tick: raid.tick, kind: raid.skirmish ? "skirmish" : "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
                 attackerIds: [raid.captorId], defenderIds: [raid.ownerId],
-                attacker: raid.skirmish ? raid.captor : garrisonOf(), defender: scouts ?? garrisonOf(), rounds: raid.skirmish?.rounds ?? [],
+                attacker: raid.skirmish ? raid.captor : garrisonOf(), defender: scouts, rounds: raid.skirmish?.rounds ?? [],
                 shares: [
                     {
                         ownerId: raid.captorId, sent: raid.captor, left: raid.skirmish?.captorLeft ?? raid.captor,
                         ...(raid.caravans ? { caravansTaken: raid.caravans } : {}), ...(raid.settlers ? { settlersTaken: raid.settlers } : {}),
                     },
                     {
-                        ownerId: raid.ownerId, sent: scouts ?? garrisonOf(), left: raid.skirmish ? garrisonOf({ scout: raid.skirmish.scoutsLeft }) : garrisonOf(),
+                        ownerId: raid.ownerId, sent: scouts, left: garrisonOf({ scout: raid.skirmish?.scoutsLeft }),
                         ...(raid.caravans ? { caravansLost: raid.caravans } : {}), ...(raid.settlers ? { settlersLost: raid.settlers } : {}),
                         ...(raid.commandersLost ? { commandersLost: raid.commandersLost } : {}),
                     },

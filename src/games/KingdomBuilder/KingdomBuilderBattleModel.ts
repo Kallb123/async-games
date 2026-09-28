@@ -13,7 +13,7 @@ import type { KingdomBuilderGarrison } from "./units";
 export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid", "skirmish"] as const;
 
 /** Raids and skirmishes are fought wherever two stacks meet, so one out on the road names no place. */
-export const isFieldBattle = (kind: KingdomBuilderBattleKind) => kind === "raid" || kind === "skirmish";
+const isFieldBattle = (kind: KingdomBuilderBattleKind) => kind === "raid" || kind === "skirmish";
 export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
 
 /**
