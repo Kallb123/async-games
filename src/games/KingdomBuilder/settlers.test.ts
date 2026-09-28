@@ -12,7 +12,6 @@ vi.mock("./persistence", async importOriginal => ({
 }));
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
-import { KingdomBuilderSettlementModel } from "./KingdomBuilderSettlementModel";
 import { KingdomBuilderWorldModel } from "./KingdomBuilderWorldModel";
 import { foundSettlement } from "./persistence";
 import { foundWithSettler } from "./settlers";
@@ -25,9 +24,8 @@ const escortId = new Types.ObjectId();
 const settler = { _id: armyId, ownerId: "owner", units: garrisonOf({ settler: 2 }), targetNodeId: "open", arrivedAtTick: 5, caravans: 1, cargo: { iron: 30 } };
 const escort = { _id: escortId, ownerId: "owner", units: garrisonOf({ militia: 3 }), targetNodeId: "open", arrivedAtTick: 4 };
 
-function stub({ army = settler as object | null, owned = 1, camped = [settler, escort] as object[] } = {}) {
+function stub({ army = settler as object | null, camped = [settler, escort] as object[] } = {}) {
     vi.spyOn(KingdomBuilderArmyModel, "findOne").mockReturnValue({ session: () => ({ lean: async () => army }) } as never);
-    vi.spyOn(KingdomBuilderSettlementModel, "countDocuments").mockReturnValue({ session: async () => owned } as never);
     const find = vi.spyOn(KingdomBuilderArmyModel, "find").mockReturnValue({ sort: () => ({ session: () => ({ lean: async () => camped }) }) } as never);
     const remove = vi.spyOn(KingdomBuilderArmyModel, "deleteMany").mockResolvedValue({ deletedCount: camped.length } as never);
     return { find, remove };
@@ -64,7 +62,7 @@ describe("foundWithSettler (PR 24)", () => {
         expect(KingdomBuilderWorldModel.updateOne).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { armiesDispatched: 1 } }, { session: {} });
     });
 
-    it("refuses a stack with no settler, one still marching, a stranger's, and a player at the limit", async () => {
+    it("refuses a stack with no settler, one still marching, and a stranger's", async () => {
         stub({ army: { ...escort } });
         await expect(foundWithSettler(worldId, "owner", armyId.toString())).rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
 
@@ -73,9 +71,6 @@ describe("foundWithSettler (PR 24)", () => {
 
         stub({ army: null });
         await expect(foundWithSettler(worldId, "stranger", armyId.toString())).rejects.toEqual(expect.objectContaining({ code: "ARMY_NOT_FOUND" }));
-
-        stub({ owned: 2 });
-        await expect(foundWithSettler(worldId, "owner", armyId.toString())).rejects.toEqual(expect.objectContaining({ code: "SITE_NOT_AVAILABLE" }));
         expect(foundSettlement).not.toHaveBeenCalled();
     });
 

@@ -12,7 +12,6 @@ import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "./buildings";
 import { campedArmy, inCamp } from "./march";
 import { foundSettlement, KingdomBuilderPersistenceError } from "./persistence";
 import { addResources } from "./resources";
-import { KINGDOM_BUILDER_SETTLEMENT_LIMIT } from "./sites";
 import { garrisonOf } from "./units";
 import { worldView, type KingdomBuilderWorldView } from "./worldView";
 
@@ -31,7 +30,7 @@ function isDuplicateKey(error: unknown): boolean {
  *
  * It claims the world first, as every camp command does, so it can't
  * interleave with a tick moving or fighting those stacks; the unique indexes
- * decide a race for the site, or for the player's second slot.
+ * decide a race for the site, or for the number the new town takes.
  */
 export async function foundWithSettler(worldId: string, userId: string, armyId: unknown): Promise<KingdomBuilderWorldView> {
     if (!Types.ObjectId.isValid(worldId)) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "A valid world is required");
@@ -43,9 +42,6 @@ export async function foundWithSettler(worldId: string, userId: string, armyId: 
             if (!army) throw new KingdomBuilderPersistenceError("ARMY_NOT_FOUND", "Army not found");
             if (garrisonOf(army.units).settler < 1) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "This army has no settler to found a town");
             if (!isCamped(army)) throw new KingdomBuilderPersistenceError("INVALID_INPUT", "The settler has to arrive before it can found a town");
-            if (await KingdomBuilderSettlementModel.countDocuments({ worldId, ownerId: userId }).session(session) >= KINGDOM_BUILDER_SETTLEMENT_LIMIT) {
-                throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", `You already have ${KINGDOM_BUILDER_SETTLEMENT_LIMIT} settlements`);
-            }
             const camped = await KingdomBuilderArmyModel.find({ worldId, ownerId: userId, targetNodeId: army.targetNodeId, arrivedAtTick: { $ne: null } })
                 .sort({ createdAt: 1, _id: 1 }).session(session).lean();
             const { caravans, cargo } = combineCaravans(camped);
@@ -57,7 +53,7 @@ export async function foundWithSettler(worldId: string, userId: string, armyId: 
             await KingdomBuilderArmyModel.deleteMany({ worldId, _id: { $in: camped.map(stack => stack._id) } }, { session });
         });
     } catch (error) {
-        if (isDuplicateKey(error)) throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "That site has been claimed, or you already have two settlements");
+        if (isDuplicateKey(error)) throw new KingdomBuilderPersistenceError("SITE_NOT_AVAILABLE", "That site has been claimed");
         throw error;
     }
     return worldView(worldId, userId);

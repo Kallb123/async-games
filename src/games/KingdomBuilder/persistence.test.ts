@@ -10,11 +10,14 @@ import type { TerrainField } from "./worldgen/terrainField";
 
 afterEach(() => vi.restoreAllMocks());
 
-function mockWorldNodes(nodes: WorldNode[], terrainField?: TerrainField, barbarians?: object[]) {
+function mockWorldNodes(nodes: WorldNode[], terrainField?: TerrainField, barbarians?: object[], held: number[] = [0]) {
     const lean = vi.fn().mockResolvedValue({ nodes, terrainField, barbarians });
     const select = vi.fn().mockReturnValue({ lean });
     vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({ select } as never);
     vi.spyOn(KingdomBuilderSettlementModel, "exists").mockResolvedValue(null);
+    // The numbers the player's settlements already hold, which an expansion's follows.
+    const heldLean = vi.fn().mockResolvedValue(held.map(settlementNumber => ({ settlementNumber })));
+    vi.spyOn(KingdomBuilderSettlementModel, "find").mockReturnValue({ select: () => ({ lean: heldLean }) } as never);
 }
 
 describe("Kingdom Builder persistence", () => {
@@ -82,6 +85,17 @@ describe("Kingdom Builder persistence", () => {
         expect(create.mock.calls[0][0]).toMatchObject({
             ownerId: "user-1", nodeId: "expansion-1", settlementNumber: 1, resources: { wood: 0, stone: 0, iron: 0, wheat: 0 },
         });
+    });
+
+    it("numbers an expansion past every settlement the owner holds, with no cap on how many", async () => {
+        const worldId = new Types.ObjectId().toString();
+        mockWorldNodes([{ id: "expansion-1", x: 10, y: 10, tile: 0, kind: "settlement", siteType: "expansion" }], undefined, undefined, [0, 1, 2, 4]);
+        const create = vi.spyOn(KingdomBuilderSettlementModel, "create").mockImplementation(async (value) => value as never);
+
+        await foundSettlement(worldId, "user-1", "expansion-1", undefined, "expansion");
+
+        // The lowest free number: 3, left by nothing, before 5.
+        expect(create.mock.calls[0][0]).toMatchObject({ settlementNumber: 3 });
     });
 
     it("founds on a barbarian site only once its village has been burnt", async () => {

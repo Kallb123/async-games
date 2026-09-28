@@ -12,7 +12,7 @@ import { KINGDOM_BUILDER_STARTING_STOCKPILE } from "../buildings";
 import { KINGDOM_BUILDER_HOME_ONLY, KINGDOM_BUILDER_NEEDS_COMMANDER, isLeaderless } from "../commanders";
 import { KINGDOM_BUILDER_CARAVAN_CAPACITY, caravanCapacityOf, resourceTotal } from "../market";
 import { formatResources, resourcesOf } from "../resources";
-import { KINGDOM_BUILDER_SETTLEMENT_LIMIT, openSites } from "../sites";
+import { openSites } from "../sites";
 import { formatTicks } from "../tick";
 import { KINGDOM_BUILDER_UNIT_TYPES, KINGDOM_BUILDER_UNITS, garrisonOf, type KingdomBuilderGarrison } from "../units";
 import type { KingdomBuilderArmyView, KingdomBuilderWorldView } from "../worldView";
@@ -202,8 +202,7 @@ function CampActions({ army, view, placeName, disabled, onAction }: {
     const others = view.armies.filter(other => other.armyId !== army.armyId && isCamped(other) && other.targetNodeId === army.targetNodeId);
     const canDetach = army.caravans > 0 && isEscorted(army) && !villages.has(army.targetNodeId);
     const canUnload = resourceTotal(army.cargo) > 0 && army.besiegingSince === undefined && view.settlements.some(settlement => settlement.nodeId === army.targetNodeId);
-    const canSettle = army.units.settler > 0 && openSites(view).some(node => node.id === army.targetNodeId)
-        && view.settlements.filter(settlement => settlement.isMine).length < KINGDOM_BUILDER_SETTLEMENT_LIMIT;
+    const canSettle = army.units.settler > 0 && openSites(view).some(node => node.id === army.targetNodeId);
     if (!canDetach && !canUnload && !canSettle && others.length === 0) return null;
     return (
         <div className="ag-build-list">

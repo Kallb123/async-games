@@ -28,7 +28,7 @@ import SightingsSection from "@/games/KingdomBuilder/components/SightingsSection
 import TradeSection from "@/games/KingdomBuilder/components/TradeSection";
 import WorldExitSection from "@/games/KingdomBuilder/components/WorldExitSection";
 import { useTerrainImage } from "@/games/KingdomBuilder/useTerrainImage";
-import { KINGDOM_BUILDER_SETTLEMENT_LIMIT, openSites } from "@/games/KingdomBuilder/sites";
+import { openSites } from "@/games/KingdomBuilder/sites";
 import { AREAS, tileIndexCentre, travelGridFor, type SettlementNode, type TerrainNode } from "@/games/KingdomBuilder/worldgen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -265,7 +265,7 @@ export default function KingdomBuilderWorldPage({ params }: { params: Promise<{ 
                             </button>
                         ))}
                     </div>
-                    {open.size > 0 && mySettlements.length < KINGDOM_BUILDER_SETTLEMENT_LIMIT && (
+                    {open.size > 0 && (
                         <p className={styles.hint}>Raise a town centre to level 2 to train a settler, then march it to an &quot;Open site&quot; to found your next settlement.</p>
                     )}
                     {open.size === 0 && data && <div className="ag-empty">Every expansion site has been claimed.</div>}

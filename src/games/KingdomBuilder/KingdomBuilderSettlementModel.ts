@@ -41,7 +41,11 @@ export interface IKingdomBuilderSettlement {
     worldId: Types.ObjectId;
     ownerId: string;
     nodeId: string;
-    /** Absent on Milestone A documents; Mongoose's default reads those as the first slot. */
+    /**
+     * Keeps a player's settlements distinct: 0 for the first, then the lowest
+     * free number (sites.ts). Absent on Milestone A documents; Mongoose's
+     * default reads those as the first.
+     */
     settlementNumber?: number;
     tiles: KingdomBuilderTile[];
     resources: KingdomBuilderResources;
@@ -118,7 +122,7 @@ export const KingdomBuilderSettlementSchema = new Schema<IKingdomBuilderSettleme
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     ownerId: { type: String, required: true },
     nodeId: { type: String, required: true },
-    settlementNumber: { type: Number, required: true, min: 0, max: 1, default: 0 },
+    settlementNumber: { type: Number, required: true, min: 0, default: 0 },
     tiles: {
         type: [TileSchema],
         required: true,
