@@ -130,6 +130,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Kingdom Builder armies fight the scouts they meet",
+                detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
+                game: "kingdombuilder",
+            },
+            {
                 title: "Turn recaps leave out moves that were taken back",
                 detail: "Undoing a move now removes both the move and the Undo from the recap and your next-turn notification. Plain passes stay quiet too, while a turn that pays out a card still tells you about the card.",
             },
@@ -167,11 +172,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The match history tells the setup story the right way round",
                 detail: "The setup lines at the start of a game were logged in reverse, so the match history read them backwards. In a game whose opening roll-off had to break a tie, the two re-rolls showed up above the line announcing the tie — which read as the game making two players roll again over numbers that plainly didn't match. Setup now reads in the order it happened, from the roll-off down to the options the host turned on, and a throw made to break a tie says it was a re-roll. Games already under way keep the log they were started with.",
-            },
-            {
-                title: "Race Cars: cars no longer start the Anglet track boxed in",
-                detail: "Four of the six cars on Anglet Chambre D'Amour were parked on a piece of road the track doesn't actually have, so those drivers were told \"boxed in — nothing is reachable\" on the first turn and every turn after it, whatever gear they picked. The grid now sits on the six spaces the art paints a car on.",
-                game: "racecars",
             },
         ],
     },

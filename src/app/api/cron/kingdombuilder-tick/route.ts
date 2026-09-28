@@ -102,22 +102,28 @@ async function tickWorld(worldId: string, now: Date, session: ClientSession): Pr
     // Caravans and settlers taken on the road (§4.7), and commanders killed there
     // (§6.5), are told to both sides as a raid: the taker learns what they took,
     // the loser only that it is gone — and only the loser how many commanders.
+    // One that scouts guarded is fought first (§6.5), and told as a skirmish:
+    // both sides then see what the other fought with, as in any battle.
     if (seized.length) {
-        await KingdomBuilderBattleModel.create(seized.map(raid => ({
-            worldId, tick: raid.tick, kind: "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
-            attackerIds: [raid.captorId], defenderIds: [raid.ownerId], attacker: garrisonOf(), defender: garrisonOf(), rounds: [],
-            shares: [
-                {
-                    ownerId: raid.captorId, sent: raid.captor, left: raid.captor,
-                    ...(raid.caravans ? { caravansTaken: raid.caravans } : {}), ...(raid.settlers ? { settlersTaken: raid.settlers } : {}),
-                },
-                {
-                    ownerId: raid.ownerId, sent: garrisonOf(), left: garrisonOf(),
-                    ...(raid.caravans ? { caravansLost: raid.caravans } : {}), ...(raid.settlers ? { settlersLost: raid.settlers } : {}),
-                    ...(raid.commandersLost ? { commandersLost: raid.commandersLost } : {}),
-                },
-            ],
-        })), { session, ordered: true });
+        await KingdomBuilderBattleModel.create(seized.map(raid => {
+            const scouts = garrisonOf({ scout: raid.skirmish?.scouts });
+            return {
+                worldId, tick: raid.tick, kind: raid.skirmish ? "skirmish" : "raid", ...(raid.nodeId === undefined ? {} : { nodeId: raid.nodeId }),
+                attackerIds: [raid.captorId], defenderIds: [raid.ownerId],
+                attacker: raid.skirmish ? raid.captor : garrisonOf(), defender: scouts, rounds: raid.skirmish?.rounds ?? [],
+                shares: [
+                    {
+                        ownerId: raid.captorId, sent: raid.captor, left: raid.skirmish?.captorLeft ?? raid.captor,
+                        ...(raid.caravans ? { caravansTaken: raid.caravans } : {}), ...(raid.settlers ? { settlersTaken: raid.settlers } : {}),
+                    },
+                    {
+                        ownerId: raid.ownerId, sent: scouts, left: garrisonOf({ scout: raid.skirmish?.scoutsLeft }),
+                        ...(raid.caravans ? { caravansLost: raid.caravans } : {}), ...(raid.settlers ? { settlersLost: raid.settlers } : {}),
+                        ...(raid.commandersLost ? { commandersLost: raid.commandersLost } : {}),
+                    },
+                ],
+            };
+        }), { session, ordered: true });
     }
     // An army missing from the list marched home and rejoined its garrison,
     // saved above, fell at (or took) a barbarian village — its caravans and

@@ -4,6 +4,8 @@
 
 import type { KingdomBuilderResources } from "./KingdomBuilderSettlementModel";
 import { KINGDOM_BUILDER_CARAVAN_SPEED } from "./market";
+import { needsCommander } from "./commanders";
+import { resolveBattle, shareSurvivors, type KingdomBuilderBattleRound } from "./combat";
 import { addResources, resourcesOf } from "./resources";
 import {
     KINGDOM_BUILDER_MILITARY_UNIT_TYPES,
@@ -175,7 +177,7 @@ export interface KingdomBuilderSeizure {
     nodeId?: string;
     ownerId: string;
     captorId: string;
-    /** The escort that took them — its owner is told, and nobody else. */
+    /** The escort that took them, as it came on them — its owner is told, and nobody else unless it had to fight. */
     captor: KingdomBuilderGarrison;
     caravans: number;
     /** Settlers taken with them, or alone — absent when there were none. */
@@ -186,48 +188,79 @@ export interface KingdomBuilderSeizure {
      * were none; only their owner is told.
      */
     commandersLost?: number;
+    /**
+     * The fight with their scouts (§6.5), when scouts were all that stood
+     * there to fight — absent when there were none. Scouts that held leave
+     * nothing taken, and `caravans` 0; so does a party of scouts alone.
+     */
+    skirmish?: {
+        /** What was left of the captor, and of the scouts. */
+        captorLeft: KingdomBuilderGarrison;
+        scouts: number;
+        scoutsLeft: number;
+        rounds: KingdomBuilderBattleRound[];
+    };
 }
 
 /**
  * Caravans and settlers with nobody to guard them are taken by a rival's
  * escorted stack on the same tile (§4.7): they and their load join the first
- * such stack — the oldest, in the order given — which drives them on wherever
- * it is going, and whose settlers they now are. Commanders with them, or on
- * their own, are killed (§6.5), never taken. A stack of their owner's with
- * fighting units on the tile guards them instead.
+ * such stack — a rival army with soldiers in it before a party of scouts, the
+ * oldest, in the order given — which drives them on wherever it is going, and
+ * whose settlers they now are. Commanders with them, or on their own, are
+ * killed (§6.5), never taken. A stack of their owner's with soldiers on the
+ * tile guards them instead.
+ *
+ * Scouts are cheap to send, not free (§6.5): a rival's army with soldiers in
+ * it fights every scout of their owner's on the tile — a party of scouts on
+ * its own too — and takes what they guarded only once the last of them falls.
+ * A party of scouts attacks no scouts, and takes nothing that scouts guard.
  */
 export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[], tick: number): { armies: T[]; seized: KingdomBuilderSeizure[] } {
-    const guards = new Map<number, T[]>();
-    for (const army of armies) {
-        if (!isEscorted(army)) continue;
+    const byTile = new Map<number, number[]>();
+    armies.forEach((army, index) => {
         const tile = armyTile(army);
-        guards.set(tile, [...(guards.get(tile) ?? []), army]);
-    }
-    const taken = new Map<T, T[]>();
+        byTile.set(tile, [...(byTile.get(tile) ?? []), index]);
+    });
+    const now = [...armies];
+    const gone = new Set<number>();
     const seized: KingdomBuilderSeizure[] = [];
-    for (const army of armies) {
-        const settlers = army.units.settler ?? 0;
-        const commanders = army.units.commander ?? 0;
-        if (isEscorted(army) || (!army.caravans && !settlers && !commanders)) continue;
-        const here = guards.get(armyTile(army)) ?? [];
-        const captor = here.some(guard => guard.ownerId === army.ownerId) ? undefined : here[0];
-        if (!captor) continue;
-        taken.set(captor, [...(taken.get(captor) ?? []), army]);
-        seized.push({
-            tick, ...(isCamped(army) ? { nodeId: army.targetNodeId } : {}), ownerId: army.ownerId, captorId: captor.ownerId,
-            captor: garrisonOf(captor.units), caravans: army.caravans ?? 0, ...(settlers ? { settlers } : {}),
-            ...(commanders ? { commandersLost: commanders } : {}),
-        });
+    for (const here of byTile.values()) {
+        for (const ownerId of new Set(here.map(index => armies[index].ownerId))) {
+            const own = here.filter(index => armies[index].ownerId === ownerId && !gone.has(index));
+            if (own.some(index => needsCommander(now[index].units))) continue;
+            const scouts = own.map(index => now[index].units).reduce(addUnits, garrisonOf()).scout;
+            const rivals = here.filter(index => armies[index].ownerId !== ownerId && !gone.has(index));
+            const captor = rivals.find(index => needsCommander(now[index].units)) ?? (scouts ? undefined : rivals.find(index => isEscorted(now[index])));
+            if (captor === undefined) continue;
+            const came = garrisonOf(now[captor].units);
+            const where = { tick, ...(isCamped(armies[own[0]]) ? { nodeId: armies[own[0]].targetNodeId } : {}), ownerId, captorId: now[captor].ownerId, captor: came };
+
+            let skirmish: KingdomBuilderSeizure["skirmish"];
+            if (scouts) {
+                const battle = resolveBattle(came, { scout: scouts }, { fortified: false });
+                if (battle.rounds.length === 0) continue;
+                skirmish = { captorLeft: battle.attacker, scouts, scoutsLeft: battle.defender.scout, rounds: battle.rounds };
+                now[captor] = { ...now[captor], units: battle.attacker };
+                if (!battle.attackerWon) {
+                    const guards = own.filter(index => (now[index].units.scout ?? 0) > 0);
+                    const kept = shareSurvivors(guards.map(index => ({ scout: now[index].units.scout })), battle.defender);
+                    guards.forEach((index, share) => { now[index] = { ...now[index], units: { ...now[index].units, scout: kept[share].scout } }; });
+                    seized.push({ ...where, caravans: 0, skirmish });
+                    continue;
+                }
+            }
+
+            const taken = own.map(index => now[index]);
+            own.forEach(index => gone.add(index));
+            const { settler: settlers, commander: commanders } = taken.map(army => army.units).reduce(addUnits, garrisonOf());
+            const { caravans } = combineCaravans(taken);
+            // The commanders among the spoils are dead, and the scouts with them: they join nobody.
+            now[captor] = { ...now[captor], units: addUnits(now[captor].units, { settler: settlers }), ...combineCaravans([now[captor], ...taken]) };
+            seized.push({
+                ...where, caravans, ...(settlers ? { settlers } : {}), ...(commanders ? { commandersLost: commanders } : {}), ...(skirmish ? { skirmish } : {}),
+            });
+        }
     }
-    if (seized.length === 0) return { armies: [...armies], seized };
-    const gone = new Set([...taken.values()].flat());
-    return {
-        armies: armies.flatMap(army => {
-            if (gone.has(army)) return [];
-            const spoils = taken.get(army);
-            // The commanders among the spoils are dead: they join nobody.
-            return spoils ? [{ ...army, units: spoils.reduce((units, spoil) => addUnits(units, { ...spoil.units, commander: 0 }), army.units), ...combineCaravans([army, ...spoils]) }] : [army];
-        }),
-        seized,
-    };
+    return { armies: seized.length ? now.filter((_, index) => !gone.has(index)) : [...armies], seized };
 }

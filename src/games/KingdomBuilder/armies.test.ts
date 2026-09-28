@@ -126,5 +126,44 @@ describe("Kingdom Builder armies", () => {
             const traders = [caravans(), caravans({ ownerId: "rival" })];
             expect(seizeCaravans(traders, 7).seized).toEqual([]);
         });
+
+        it("has a rival army fight a scout escort, and take what it guarded once the scouts fall (§6.5)", () => {
+            const rival = escort("rival");
+            const party = caravans({ units: garrisonOf({ scout: 1, settler: 1 }), caravans: undefined, cargo: undefined });
+            const result = seizeCaravans([party, rival], 8);
+            expect(result.armies).toEqual([{ ...rival, units: garrisonOf({ militia: 2, settler: 1 }), caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }]);
+            expect(result.seized).toEqual([{
+                tick: 8, nodeId: "camp", ownerId: "owner", captorId: "rival", captor: garrisonOf({ militia: 2 }), caravans: 0, settlers: 1,
+                skirmish: { captorLeft: garrisonOf({ militia: 2 }), scouts: 1, scoutsLeft: 0, rounds: [{ attacker: garrisonOf(), defender: garrisonOf({ scout: 1 }) }] },
+            }]);
+
+            // Scouts in a stack of their own guard the settlers beside them the same way — and fall with them.
+            const apart = seizeCaravans([caravans({ units: garrisonOf({ scout: 1 }), caravans: undefined, cargo: undefined }), caravans({ units: garrisonOf({ settler: 1 }), caravans: undefined, cargo: undefined }), rival], 8);
+            expect(apart.armies).toEqual([{ ...rival, units: garrisonOf({ militia: 2, settler: 1 }), caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }]);
+            expect(apart.seized[0]).toMatchObject({ settlers: 1, skirmish: { scouts: 1, scoutsLeft: 0 } });
+        });
+
+        it("leaves what scouts guard with them while any stand, and never lets a rival's scouts attack them", () => {
+            const rival = escort("rival", { units: garrisonOf({ militia: 1 }) });
+            const party = caravans({ units: garrisonOf({ scout: 6, settler: 1 }), caravans: undefined, cargo: undefined });
+            const held = seizeCaravans([party, rival], 9);
+            // Six passes of one militia's 2 attack cut down four of the six.
+            expect(held.armies).toEqual([{ ...party, units: { ...party.units, scout: 2 } }, { ...rival, units: garrisonOf({ militia: 1 }) }]);
+            expect(held.seized).toEqual([expect.objectContaining({ caravans: 0, skirmish: expect.objectContaining({ scouts: 6, scoutsLeft: 2 }) })]);
+            expect(held.seized[0]).not.toHaveProperty("settlers");
+
+            const scouting = [party, escort("rival", { units: garrisonOf({ scout: 3 }) })];
+            expect(seizeCaravans(scouting, 9)).toEqual({ armies: scouting, seized: [] });
+        });
+
+        it("fights a party of scouts guarding nothing too: cheap to send, not free", () => {
+            const rival = escort("rival");
+            const lookout = caravans({ units: garrisonOf({ scout: 1 }), caravans: undefined, cargo: undefined, travelled: 2, arrivedAtTick: undefined });
+            const onTheRoad = escort("rival", { path: [5, 1], pathCosts: [0, 2], travelled: 2 });
+            const result = seizeCaravans([lookout, onTheRoad, rival], 10);
+            expect(result.armies).toEqual([{ ...onTheRoad, caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }, rival]);
+            expect(result.seized).toEqual([expect.objectContaining({ captorId: "rival", caravans: 0, skirmish: expect.objectContaining({ scouts: 1, scoutsLeft: 0 }) })]);
+            expect(result.seized[0]).not.toHaveProperty("nodeId");
+        });
     });
 });

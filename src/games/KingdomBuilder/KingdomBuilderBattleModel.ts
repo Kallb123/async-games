@@ -7,9 +7,13 @@ import type { KingdomBuilderGarrison } from "./units";
 /**
  * How a battle came about: a push or a sally at a siege (§8), an army against
  * a barbarian village (§3.4), or a rival's army taking caravans or settlers
- * left with no escort (§4.7) — a raid, which has no rounds, since nobody fights it.
+ * left with no escort (§4.7) — a raid, which has no rounds, since nobody fights it —
+ * or with only scouts to guard them (§6.5), a skirmish, which is fought.
  */
-export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid"] as const;
+export const KINGDOM_BUILDER_BATTLE_KINDS = ["push", "sally", "barbarian", "raid", "skirmish"] as const;
+
+/** Raids and skirmishes are fought wherever two stacks meet, so one out on the road names no place. */
+const isFieldBattle = (kind: KingdomBuilderBattleKind) => kind === "raid" || kind === "skirmish";
 export type KingdomBuilderBattleKind = typeof KINGDOM_BUILDER_BATTLE_KINDS[number];
 
 /**
@@ -25,7 +29,7 @@ export interface IKingdomBuilderBattle {
     kind: KingdomBuilderBattleKind;
     /**
      * The settlement's (or village's) node it was fought at — absent only on
-     * a raid out on the road, which names nowhere (§4.7).
+     * a raid or skirmish out on the road, which names nowhere (§4.7).
      */
     nodeId?: string;
     /** Who fought on each side: the pusher or the sallying garrison's owner attacks. Barbarians are nobody, so a village's side is empty. */
@@ -83,7 +87,7 @@ export const KingdomBuilderBattleSchema = new Schema<IKingdomBuilderBattleDocume
     worldId: { type: Schema.Types.ObjectId, ref: "KingdomBuilderWorld", required: true },
     tick: { type: Number, required: true, min: 0 },
     kind: { type: String, enum: KINGDOM_BUILDER_BATTLE_KINDS, required: true },
-    nodeId: { type: String, required(this: IKingdomBuilderBattle) { return this.kind !== "raid"; } },
+    nodeId: { type: String, required(this: IKingdomBuilderBattle) { return !isFieldBattle(this.kind); } },
     attackerIds: { type: [String], required: true },
     defenderIds: { type: [String], required: true },
     attacker: { type: KingdomBuilderGarrisonSchema, required: true },
