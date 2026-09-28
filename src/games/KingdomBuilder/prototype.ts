@@ -32,6 +32,7 @@ import {
     KINGDOM_BUILDER_UNITS,
     garrisonOf,
     isUnitType,
+    settlerCostFor,
     trainingLevelFor,
     trainingTicksFor,
     type KingdomBuilderGarrison,
@@ -68,6 +69,8 @@ export interface KingdomBuilderSettlementView {
      * taverns allow. Only ever on the owner's own settlement.
      */
     commanders: { held: number; capacity: number };
+    /** What the owner's next settler costs (§4.4) — double the last one they trained. Only ever on the owner's own settlement. */
+    settlerCost: KingdomBuilderResources;
 }
 
 export class KingdomBuilderPrototypeError extends Error {
@@ -99,7 +102,9 @@ export async function settlementView(worldId: string, settlementId: string, user
     if (!settlement) throw new KingdomBuilderPrototypeError("NOT_FOUND", "Settlement not found");
     if (settlement.ownerId !== userId) throw new KingdomBuilderPrototypeError("FORBIDDEN", "This settlement belongs to another player");
 
-    const world = await KingdomBuilderWorldModel.findById(worldId).select({ currentTick: 1, nextTickAt: 1, endedAt: 1 }).lean();
+    // Only the caller's own settler count: nobody else's is theirs to read.
+    const world = await KingdomBuilderWorldModel.findById(worldId)
+        .select({ currentTick: 1, nextTickAt: 1, endedAt: 1, [settlersTrainedPath(userId)]: 1 }).lean();
     if (!world || world.endedAt) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
     const [ownerSettlements, ownerArmies, catchment, sieges] = await Promise.all([
         KingdomBuilderSettlementModel.find({ worldId, ownerId: userId }).select({ tiles: 1, garrison: 1, trainingQueue: 1 }).lean(),
@@ -142,7 +147,14 @@ export async function settlementView(worldId: string, settlementId: string, user
             held: commandersHeld({ settlements: ownerSettlements, armies: ownerArmies }),
             capacity: commanderCapacityOf(ownerSettlements),
         },
+        settlerCost: settlerCostFor(world.settlersTrained?.[userId] ?? 0),
     };
+}
+
+/** Where a player's settler count sits on the world — a user id is never a dotted or `$` path, but a key that were would write somewhere else. */
+function settlersTrainedPath(userId: string): string {
+    if (/[.$]/.test(userId)) throw new KingdomBuilderPrototypeError("INVALID_INPUT", "A valid player is required");
+    return `settlersTrained.${userId}`;
 }
 
 export async function queuePrototypeBuilding(
@@ -342,15 +354,15 @@ export async function queueUnitTraining(
     if ((existing.trainingQueue?.length ?? 0) >= KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT) {
         throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The training queue is full");
     }
-    if (!canAfford(resourcesOf(existing.resources), unit.cost)) {
-        throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough resources to train ${unit.name.toLowerCase()}`);
-    }
 
     // Every check above is repeated in the filter, so a tick or a second tab
     // landing in between fails this write rather than overdrawing the stores,
     // overfilling the queue, or pricing the unit at a level it lost.
-    const { filter: canPay, $inc } = spendFrom(unit.cost);
-    const queue = async (session?: ClientSession) => {
+    const queue = async (cost: KingdomBuilderResources, session?: ClientSession) => {
+        if (!canAfford(resourcesOf(existing.resources), cost)) {
+            throw new KingdomBuilderPrototypeError("CANNOT_AFFORD", `Not enough resources to train ${unit.name.toLowerCase()}`);
+        }
+        const { filter: canPay, $inc } = spendFrom(cost);
         const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
             {
                 _id: settlementId,
@@ -362,14 +374,15 @@ export async function queueUnitTraining(
             },
             {
                 $inc,
-                $push: { trainingQueue: { unitType, ticksRemaining, orderId: new Types.ObjectId().toString() } },
+                $push: { trainingQueue: { unitType, ticksRemaining, orderId: new Types.ObjectId().toString(), ...(unitType === "settler" ? { cost } : {}) } },
             },
             session ? { new: true, session } : { new: true },
         ).lean();
         if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "The settlement changed before this unit could be queued");
     };
-    if (unitType === "commander") await mongoose.connection.transaction(async session => recruitCommander(worldId, userId, session, queue));
-    else await queue();
+    if (unitType === "commander") await mongoose.connection.transaction(async session => recruitCommander(worldId, userId, session, session => queue(unit.cost, session)));
+    else if (unitType === "settler") await mongoose.connection.transaction(async session => trainSettler(worldId, userId, session, queue));
+    else await queue(unit.cost);
 
     return settlementView(worldId, settlementId, userId);
 }
@@ -394,6 +407,25 @@ async function recruitCommander(worldId: string, userId: string, session: Client
         throw new KingdomBuilderPrototypeError("LOCKED", `All ${capacity} commanders recruited — raise a tavern to recruit another`);
     }
     await queue(session);
+}
+
+/**
+ * Prices a settler at double the player's last (§4.4) and queues it. The count
+ * is bumped in the same transaction as the payment, so two settlers queued at
+ * once — two tabs, or two towns — conflict, and the one retried pays the
+ * doubled price; a payment that fails takes the bump back with it.
+ */
+async function trainSettler(
+    worldId: string,
+    userId: string,
+    session: ClientSession,
+    queue: (cost: KingdomBuilderResources, session: ClientSession) => Promise<void>,
+) {
+    const path = settlersTrainedPath(userId);
+    const before = await KingdomBuilderWorldModel.findOneAndUpdate({ _id: worldId, endedAt: null }, { $inc: { [path]: 1 } }, { session, new: false })
+        .select({ [path]: 1 }).lean();
+    if (!before) throw new KingdomBuilderPrototypeError("NOT_FOUND", "World not found");
+    await queue(settlerCostFor(before.settlersTrained?.[userId] ?? 0), session);
 }
 
 /**
@@ -424,12 +456,23 @@ export async function cancelUnitTraining(
 
     // The filter repeats the order, so one that finished training in between
     // fails this write rather than being refunded after it joined the garrison.
-    const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
-        { _id: settlementId, worldId, ownerId: userId, trainingQueue: { $elemMatch: { orderId, unitType: order.unitType } } },
-        { $pull: { trainingQueue: { orderId } }, $inc: depositTo(KINGDOM_BUILDER_UNITS[order.unitType].cost) },
-        { new: true },
-    ).lean();
-    if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "That unit is no longer in the queue");
+    // A settler refunds the price it was queued at, and gives back its place
+    // in the doubling, in one transaction with the refund (§4.4).
+    const refund = async (session?: ClientSession) => {
+        const updated = await KingdomBuilderSettlementModel.findOneAndUpdate(
+            { _id: settlementId, worldId, ownerId: userId, trainingQueue: { $elemMatch: { orderId, unitType: order.unitType } } },
+            { $pull: { trainingQueue: { orderId } }, $inc: depositTo(order.cost ? resourcesOf(order.cost) : KINGDOM_BUILDER_UNITS[order.unitType].cost) },
+            session ? { new: true, session } : { new: true },
+        ).lean();
+        if (!updated) throw new KingdomBuilderPrototypeError("QUEUE_BUSY", "That unit is no longer in the queue");
+    };
+    if (order.unitType === "settler") {
+        const path = settlersTrainedPath(userId);
+        await mongoose.connection.transaction(async session => {
+            await KingdomBuilderWorldModel.updateOne({ _id: worldId, [path]: { $gt: 0 } }, { $inc: { [path]: -1 } }, { session });
+            await refund(session);
+        });
+    } else await refund();
 
     return settlementView(worldId, settlementId, userId);
 }

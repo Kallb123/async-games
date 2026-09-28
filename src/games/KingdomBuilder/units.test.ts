@@ -10,6 +10,7 @@ import {
     barracksLevelOf,
     garrisonOf,
     isUnitType,
+    settlerCostFor,
     trainingLevelFor,
     trainingTicksFor,
 } from "./units";
@@ -107,5 +108,16 @@ describe("Kingdom Builder units", () => {
         ], { infantry: 4 });
         expect(result.trainingQueue.map(order => order.ticksRemaining)).toEqual([2, 3]);
         expect(result.garrison.infantry).toBe(4);
+    });
+});
+
+describe("settlerCostFor", () => {
+    it("doubles the listed price for each settler trained before, and stops climbing well short of inexact amounts", () => {
+        expect(settlerCostFor(0)).toEqual(KINGDOM_BUILDER_UNITS.settler.cost);
+        expect(settlerCostFor(1)).toEqual({ wood: 120, stone: 80, iron: 20, wheat: 80 });
+        expect(settlerCostFor(3)).toEqual({ wood: 480, stone: 320, iron: 80, wheat: 320 });
+        expect(settlerCostFor(-2)).toEqual(KINGDOM_BUILDER_UNITS.settler.cost);
+        expect(settlerCostFor(1000)).toEqual(settlerCostFor(30));
+        expect(Number.isSafeInteger(settlerCostFor(1000).wood)).toBe(true);
     });
 });

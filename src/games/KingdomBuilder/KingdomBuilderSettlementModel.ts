@@ -103,6 +103,7 @@ const TrainingOrderSchema = new Schema<KingdomBuilderTrainingOrder>({
     unitType: { type: String, enum: KINGDOM_BUILDER_UNIT_TYPES, required: true },
     ticksRemaining: { type: Number, required: true, min: 1 },
     orderId: { type: String },
+    cost: { type: KingdomBuilderResourcesSchema, required: false },
 }, { _id: false });
 
 /** A stack's units by type — a garrison's, an army's, a side's in a battle. */

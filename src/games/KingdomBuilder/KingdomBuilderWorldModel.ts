@@ -90,6 +90,14 @@ export interface IKingdomBuilderWorld {
      */
     commandersRecruited?: number;
     /**
+     * How many settlers each player has queued in this world, by user id
+     * (§4.4): each one costs double the one before, which is what slows a
+     * player's spread now nothing caps their settlements. Queueing one bumps
+     * it in the same transaction as the payment, and cancelling one takes it
+     * back. Absent until a player's first settler.
+     */
+    settlersTrained?: Record<string, number>;
+    /**
      * The barbarian villages still standing (§3.4, PR 23), each with what is
      * left of its garrison; a village taken or burnt drops out. Absent on a
      * world generated before them, which has no barbarian sites either.
@@ -191,6 +199,7 @@ export const KingdomBuilderWorldSchema = new Schema<IKingdomBuilderWorldDocument
     battlesFought: { type: Number, min: 0 },
     tradesMade: { type: Number, min: 0 },
     commandersRecruited: { type: Number, min: 0 },
+    settlersTrained: { type: Map, of: { type: Number, min: 0 }, required: false, default: undefined },
     barbarians: { type: [BarbarianVillageSchema], required: false, default: undefined },
 }, { timestamps: true });
 

@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KingdomBuilderArmyModel } from "./KingdomBuilderArmyModel";
@@ -13,6 +13,7 @@ import {
     queuePrototypeBuilding,
     queueUnitTraining,
     removeBuilding,
+    settlementView,
 } from "./prototype";
 
 const worldId = new Types.ObjectId().toString();
@@ -430,18 +431,86 @@ describe("Kingdom Builder town centre and settlers (PR 24)", () => {
             .rejects.toEqual(expect.objectContaining({ code: "INVALID_INPUT" }));
     });
 
+    /** The player has trained `trained` settlers before this one; the transaction runs straight through. */
+    function settlerWorld(trained?: number) {
+        vi.spyOn(mongoose.connection, "transaction").mockImplementation((async (callback: (session: object) => Promise<unknown>) => callback({})) as never);
+        return vi.spyOn(KingdomBuilderWorldModel, "findOneAndUpdate").mockReturnValue({
+            select: () => ({ lean: async () => ({ _id: worldId, ...(trained === undefined ? {} : { settlersTrained: { owner: trained } }) }) }),
+        } as never);
+    }
+
     it("trains a settler only at a level-two town centre, with no barracks needed", async () => {
         stubSettlement({ ownerId: "owner", tiles, resources: plenty });
         await expect(queueUnitTraining(worldId, settlementId, "owner", "settler")).rejects.toEqual(expect.objectContaining({ code: "LOCKED" }));
 
         vi.restoreAllMocks();
         const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), resources: plenty });
+        settlerWorld();
         await queueUnitTraining(worldId, settlementId, "owner", "settler");
+        const cost = { wood: 60, stone: 40, iron: 10, wheat: 40 };
         expect(update).toHaveBeenCalledWith(
             expect.objectContaining({ tiles: { $elemMatch: { "building.type": "town-centre", "building.level": 2 } } }),
-            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4, orderId: expect.any(String) } } }),
-            { new: true },
+            expect.objectContaining({ $push: { trainingQueue: { unitType: "settler", ticksRemaining: 4, orderId: expect.any(String), cost } } }),
+            { new: true, session: {} },
         );
+    });
+
+    it("prices each settler at double the last, counting in the same transaction as the payment", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), resources: plenty });
+        const count = settlerWorld(2);
+
+        await queueUnitTraining(worldId, settlementId, "owner", "settler");
+
+        expect(count).toHaveBeenCalledWith({ _id: worldId, endedAt: null }, { $inc: { "settlersTrained.owner": 1 } }, { session: {}, new: false });
+        // Two before it: four times the listed 60 wood, 40 stone, 10 iron and 40 wheat.
+        const cost = { wood: 240, stone: 160, iron: 40, wheat: 160 };
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ "resources.wood": { $gte: 240 }, "resources.stone": { $gte: 160 }, "resources.iron": { $gte: 40 }, "resources.wheat": { $gte: 160 } }),
+            expect.objectContaining({
+                $inc: { "resources.wood": -240, "resources.stone": -160, "resources.iron": -40, "resources.wheat": -160 },
+                $push: { trainingQueue: expect.objectContaining({ unitType: "settler", cost }) },
+            }),
+            { new: true, session: {} },
+        );
+    });
+
+    it("refuses a settler the stores can't pay the doubled price for, before writing to the settlement", async () => {
+        const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), resources: plenty });
+        // Four before it: 960 wood, more than the 500 held.
+        settlerWorld(4);
+        await expect(queueUnitTraining(worldId, settlementId, "owner", "settler")).rejects.toEqual(expect.objectContaining({ code: "CANNOT_AFFORD" }));
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it("refunds a cancelled settler what it was queued at, and gives back its place in the doubling", async () => {
+        const orderId = new Types.ObjectId().toString();
+        const cost = { wood: 120, stone: 80, iron: 20, wheat: 80 };
+        const update = stubSettlement({ ownerId: "owner", tiles: withTownCentre(2), trainingQueue: [{ unitType: "settler", ticksRemaining: 4, orderId, cost }] });
+        vi.spyOn(mongoose.connection, "transaction").mockImplementation((async (callback: (session: object) => Promise<unknown>) => callback({})) as never);
+        const uncount = vi.spyOn(KingdomBuilderWorldModel, "updateOne").mockResolvedValue({ modifiedCount: 1 } as never);
+
+        await cancelUnitTraining(worldId, settlementId, "owner", orderId);
+
+        expect(uncount).toHaveBeenCalledWith({ _id: worldId, "settlersTrained.owner": { $gt: 0 } }, { $inc: { "settlersTrained.owner": -1 } }, { session: {} });
+        expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ trainingQueue: { $elemMatch: { orderId, unitType: "settler" } } }),
+            { $pull: { trainingQueue: { orderId } }, $inc: { "resources.wood": 120, "resources.stone": 80, "resources.iron": 20, "resources.wheat": 80 } },
+            { new: true, session: {} },
+        );
+    });
+
+    it("shows the owner what their next settler costs, reading only their own count", async () => {
+        stubSettlement({ ownerId: "owner", tiles: withTownCentre(2) });
+        vi.spyOn(KingdomBuilderSettlementModel, "findOne").mockReset().mockReturnValue({
+            lean: vi.fn().mockResolvedValue({ ownerId: "owner", nodeId: "start", tiles: withTownCentre(2), resources: plenty, catchment: land }),
+        } as never);
+        const select = vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ currentTick: 3, nextTickAt: new Date("2030-01-01T00:00:00Z"), settlersTrained: { owner: 1 } }) });
+        vi.spyOn(KingdomBuilderWorldModel, "findById").mockReturnValue({ select } as never);
+
+        const view = await settlementView(worldId, settlementId, "owner");
+
+        expect(select).toHaveBeenCalledWith({ currentTick: 1, nextTickAt: 1, endedAt: 1, "settlersTrained.owner": 1 });
+        expect(view.settlerCost).toEqual({ wood: 120, stone: 80, iron: 20, wheat: 80 });
     });
 });
 

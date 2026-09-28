@@ -101,6 +101,13 @@ export const KINGDOM_BUILDER_TRAINING_QUEUE_LIMIT = 20;
 
 export interface KingdomBuilderTrainingOrder {
     unitType: KingdomBuilderUnitType;
+    /**
+     * What was paid for it, when that isn't the unit's listed cost — a settler,
+     * whose price doubles with each one trained — so cancelling refunds exactly
+     * that. Absent on every other order, and on a settler queued before the
+     * price doubled, both of which paid the listed cost.
+     */
+    cost?: KingdomBuilderResources;
     /** Fixed when queued, so upgrading the barracks speeds up what is queued after it, not before. */
     ticksRemaining: number;
     /**
@@ -109,6 +116,24 @@ export interface KingdomBuilderTrainingOrder {
      * existed, which can't be cancelled and simply trains out.
      */
     orderId?: string;
+}
+
+/**
+ * Doublings past which the settler's price stops climbing — far beyond any
+ * store a town can hold, and short of where the amounts stop being exact.
+ */
+const KINGDOM_BUILDER_SETTLER_MAX_DOUBLINGS = 30;
+
+/**
+ * What a player's next settler costs, given how many they have trained in the
+ * world already: the listed cost, doubled for each one before it (§4.4). There
+ * is no cap on how many settlements a player holds — this is what slows the
+ * spread.
+ */
+export function settlerCostFor(trained: number): KingdomBuilderResources {
+    const factor = 2 ** Math.min(Math.max(0, Math.floor(trained)), KINGDOM_BUILDER_SETTLER_MAX_DOUBLINGS);
+    const { cost } = KINGDOM_BUILDER_UNITS.settler;
+    return { wood: cost.wood * factor, stone: cost.stone * factor, iron: cost.iron * factor, wheat: cost.wheat * factor };
 }
 
 export function isUnitType(value: unknown): value is KingdomBuilderUnitType {
