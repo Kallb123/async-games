@@ -38,7 +38,7 @@ function titleOf(report: KingdomBuilderBattleReport, place: string | undefined):
         return report.started ? `${what[0].toUpperCase()}${what.slice(1)} taken${where}` : `Your ${what}, taken${where}`;
     }
     if (report.kind === "skirmish") {
-        if (report.started) return report.outcome === "won" ? `A scout escort beaten${where}` : `A scout escort fought${where}`;
+        if (report.started) return report.outcome === "won" ? `Rival scouts beaten${where}` : `Rival scouts fought${where}`;
         return report.outcome === "lost" ? `Your scouts beaten${where}` : `Your scouts attacked${where}`;
     }
     if (report.kind === "push") return report.started ? `Your attack on ${place}` : "An attack on your town";
@@ -69,7 +69,7 @@ function detailOf(report: KingdomBuilderBattleReport): string {
 export default function BattlesSection({ view, placeName }: BattlesSectionProps) {
     return (
         <ListSection label="Battles" isLoading={false} skeletonRows={0}
-            hint="Battles open with defending archers, who target spearmen. Attacking horsemen charge next, but opposing spearmen intercept them before they hit; then the remaining spearmen, militia and infantry fight with defenders first. An army at a barbarian village fights it every tick until one side is gone. Caravans and settlers with no escort are taken by any rival army that meets them, and commanders with no escort are killed. Scouts are a weak escort: a rival army with soldiers fights them, and takes what they guarded once the last scout falls. An escort that falls leaves its caravans to whoever beat it.">
+            hint="Battles open with defending archers, who target spearmen. Attacking horsemen charge next, but opposing spearmen intercept them before they hit; then the remaining spearmen, militia and infantry fight with defenders first. An army at a barbarian village fights it every tick until one side is gone. Caravans and settlers with no escort are taken by any rival army that meets them, and commanders with no escort are killed. Scouts are cheap, not safe: a rival army with soldiers fights any it meets, and takes whatever they guarded once the last scout falls. An escort that falls leaves its caravans to whoever beat it.">
             {view.battles.map(report => (
                 <ListRow key={report.battleId} icon={report.started ? "⚔️" : "🛡️"}
                     title={titleOf(report, report.nodeId === undefined ? undefined : placeName(report.nodeId))}

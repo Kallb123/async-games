@@ -189,9 +189,9 @@ export interface KingdomBuilderSeizure {
      */
     commandersLost?: number;
     /**
-     * The fight with their scouts (§6.5), when only scouts guarded them —
-     * absent when nobody did. Scouts that held leave nothing taken, and
-     * `caravans` 0.
+     * The fight with their scouts (§6.5), when scouts were all that stood
+     * there to fight — absent when there were none. Scouts that held leave
+     * nothing taken, and `caravans` 0; so does a party of scouts alone.
      */
     skirmish?: {
         /** What was left of the captor, and of the scouts. */
@@ -200,11 +200,6 @@ export interface KingdomBuilderSeizure {
         scoutsLeft: number;
         rounds: KingdomBuilderBattleRound[];
     };
-}
-
-/** Whether the stack carries anything a rival takes, or kills: caravans, settlers or commanders. */
-function hasSpoils(army: KingdomBuilderMarch): boolean {
-    return (army.caravans ?? 0) > 0 || (army.units.settler ?? 0) > 0 || (army.units.commander ?? 0) > 0;
 }
 
 /**
@@ -216,9 +211,10 @@ function hasSpoils(army: KingdomBuilderMarch): boolean {
  * killed (§6.5), never taken. A stack of their owner's with soldiers on the
  * tile guards them instead.
  *
- * Scouts are a weak escort (§6.5): a rival's army with soldiers in it fights
- * every scout of their owner's on the tile, and takes what they guarded only
- * once the last of them falls. A party of scouts takes nothing that scouts guard.
+ * Scouts are cheap to send, not free (§6.5): a rival's army with soldiers in
+ * it fights every scout of their owner's on the tile — a party of scouts on
+ * its own too — and takes what they guarded only once the last of them falls.
+ * A party of scouts attacks no scouts, and takes nothing that scouts guard.
  */
 export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[], tick: number): { armies: T[]; seized: KingdomBuilderSeizure[] } {
     const byTile = new Map<number, number[]>();
@@ -232,7 +228,7 @@ export function seizeCaravans<T extends KingdomBuilderMarch>(armies: readonly T[
     for (const here of byTile.values()) {
         for (const ownerId of new Set(here.map(index => armies[index].ownerId))) {
             const own = here.filter(index => armies[index].ownerId === ownerId && !gone.has(index));
-            if (!own.some(index => hasSpoils(now[index])) || own.some(index => needsCommander(now[index].units))) continue;
+            if (own.some(index => needsCommander(now[index].units))) continue;
             const scouts = own.map(index => now[index].units).reduce(addUnits, garrisonOf()).scout;
             const rivals = here.filter(index => armies[index].ownerId !== ownerId && !gone.has(index));
             const captor = rivals.find(index => needsCommander(now[index].units)) ?? (scouts ? undefined : rivals.find(index => isEscorted(now[index])));

@@ -130,8 +130,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Kingdom Builder armies fight scouts escorting settlers",
-                detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now the weak escort they were meant to be: an army with soldiers in it fights them, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
+                title: "Kingdom Builder armies fight the scouts they meet",
+                detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
                 game: "kingdombuilder",
             },
             {

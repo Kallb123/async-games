@@ -1460,7 +1460,8 @@ Caravans are never simply lost to another player — they change hands:
   them at the end of the tick, with §7.6's engine on open ground. It takes
   the caravans and settlers, and kills the commanders, only once the last
   scout falls. Scouts that hold keep them until the next tick's fight. A
-  rival's party of scouts never attacks them. Both sides are told of it as a
+  party of scouts guarding nothing is fought the same way, and simply dies.
+  A rival's party of scouts never attacks them. Both sides are told of it as a
   skirmish, in which each sees what the other fought with, as in any battle.
 - **Left on the field.** If a push or a sally wipes an escort out, its caravans
   and load go to the town that beat it — into its yard and its stores. Only a
@@ -1750,8 +1751,10 @@ soldiers that count are militia, infantry, cavalry and siege engines.
 `militaryCount` counts, scouts aside, is in the stack. These stacks still
 leave without a commander:
 - **Scouts.** A stack of only scouts is a look, not an attack. Keeping it
-  cheap keeps scouting (§6.3) something a player does freely, before they
-  have committed an army.
+  cheap keeps scouting (§6.3) something a player does readily, before they
+  have committed an army. Cheap is not free: a rival's army with soldiers in
+  it fights any scouts that share its tile (§4.7), so a scout sent past an
+  army can be lost.
 - **Caravans and settlers** travelling on their own aren't an army, and go
   unguarded as they do today (§4.7, §4.4).
 - **A commander** travelling alone to another of its owner's towns, just as

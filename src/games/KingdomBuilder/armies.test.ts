@@ -155,5 +155,15 @@ describe("Kingdom Builder armies", () => {
             const scouting = [party, escort("rival", { units: garrisonOf({ scout: 3 }) })];
             expect(seizeCaravans(scouting, 9)).toEqual({ armies: scouting, seized: [] });
         });
+
+        it("fights a party of scouts guarding nothing too: cheap to send, not free", () => {
+            const rival = escort("rival");
+            const lookout = caravans({ units: garrisonOf({ scout: 1 }), caravans: undefined, cargo: undefined, travelled: 2, arrivedAtTick: undefined });
+            const onTheRoad = escort("rival", { path: [5, 1], pathCosts: [0, 2], travelled: 2 });
+            const result = seizeCaravans([lookout, onTheRoad, rival], 10);
+            expect(result.armies).toEqual([{ ...onTheRoad, caravans: 0, cargo: { wood: 0, stone: 0, iron: 0, wheat: 0 } }, rival]);
+            expect(result.seized).toEqual([expect.objectContaining({ captorId: "rival", caravans: 0, skirmish: expect.objectContaining({ scouts: 1, scoutsLeft: 0 }) })]);
+            expect(result.seized[0]).not.toHaveProperty("nodeId");
+        });
     });
 });
