@@ -263,11 +263,11 @@ const outerRim = buildTheme({
     name: "Outer Rim",
     description: "A contested frontier world on a galactic trade lane: governors running outposts for credits while the war passes overhead.",
     glyph: "🪐",
-    note: "Same rules, same numbers — only the names change. Its card art hasn't been drawn yet, so every card still wears its Rising Sun face.",
+    note: "Same rules, same numbers — only the names change. Its card art is still being drawn, so a few cards still wear the Rising Sun faces.",
     // Starts as a copy of the Rising Sun folder, like the wasteland's did:
     // redrawing a card is overwriting its file in
-    // `/public/art/dicecities/outerrim/` under the name it already has.
-    artDir: "outerrim",
+    // `/public/art/dicecities/outer-rim/` under the name it already has.
+    artDir: "outer-rim",
     sky: ["oklch(0.84 0.05 300)", "oklch(0.63 0.09 285)"],
     words: {
         coin: "credit",

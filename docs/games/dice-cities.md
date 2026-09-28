@@ -715,8 +715,8 @@ a Spice Mine is a Mine with a different picture on it.
 
 **This is implemented, apart from its art.** The host can pick "Outer Rim" on
 the New Game screen beside the other two themes, and the ★ names below live in
-`src/games/DiceCities/themes.ts`. Its card faces are still the Rising Sun ones
-— see §13.7 for what is left.
+`src/games/DiceCities/themes.ts`. Twenty of its 26 card faces are drawn; the
+rest still wear the Rising Sun ones — see §13.7 for what is left.
 
 ### 13.1 The three-column tables
 
@@ -935,14 +935,17 @@ the wasteland's:
    names wait for that expansion to be built).
 2. Its id, `outerrim`, is picked up by `GAME_THEMES` through
    `DICE_CITIES_THEMES`, with the "art is placeholder" note.
-3. `public/art/dicecities/outerrim/`, a copy of the Rising Sun folder so every
+3. `public/art/dicecities/outer-rim/`, a copy of the Rising Sun folder so every
    card is drawable from day one.
 
-**What is left is the art.** Redraw each face and save it under the name it
-already has — `wheat-field.png` is the Moisture Farm, `station.png` the Docking
-Bay — to both `art-masters/dicecities/outerrim/` and
-`public/art/dicecities/outerrim/`, then run `npm run optimise-art` and commit
-what it writes. No code changes per card. Once every face is redrawn, drop the
+**What is left is six faces**: the Orchard Terraces (`apple-orchard.png`) and
+the five Docks cards other than the Orbital Dock and Glowbloom Field —
+`sushi-bar.png`, `flower-shop.png`, `mackerel-boat.png`, `food-warehouse.png`
+and `tuna-boat.png`. Until then they show their Rising Sun face. Draw each
+face and save it under the name it already has — `wheat-field.png` is the
+Moisture Farm, `station.png` the Docking Bay — to both `art-masters/dicecities/outer-rim/` and
+`public/art/dicecities/outer-rim/`, then run `npm run optimise-art` and commit
+what it writes. No code changes per card. Once every face is drawn, drop the
 theme's `note` so the setup screen stops calling them placeholders.
 
 `themes.test.ts` walks every card of every theme and fails the build if a name
