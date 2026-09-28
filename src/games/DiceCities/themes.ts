@@ -257,16 +257,14 @@ const rustAndBottlecaps = buildTheme({
 // cards that reach into another player's pocket are the ones the war shows up
 // in. Names only, exactly as for the wasteland — and each is named after what
 // the card *does*, so three "places you trade" stay three different cards
-// while their faces are still placeholders (§13.1).
+// on the board and in the turn log (§13.1).
 const outerRim = buildTheme({
     id: "outerrim",
     name: "Outer Rim",
     description: "A contested frontier world on a galactic trade lane: governors running outposts for credits while the war passes overhead.",
     glyph: "🪐",
-    note: "Same rules, same numbers — only the names change. Its card art is still being drawn, so a few cards still wear the Rising Sun faces.",
-    // Starts as a copy of the Rising Sun folder, like the wasteland's did:
-    // redrawing a card is overwriting its file in
-    // `/public/art/dicecities/outer-rim/` under the name it already has.
+    // Every face drawn, so no placeholder `note`. The masters these were
+    // optimised from are in `art-masters/dicecities/outer-rim/`.
     artDir: "outer-rim",
     sky: ["oklch(0.84 0.05 300)", "oklch(0.63 0.09 285)"],
     words: {

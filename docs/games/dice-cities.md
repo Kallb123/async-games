@@ -713,10 +713,10 @@ Like §12 this is a naming reference only. **No cost, activation number,
 colour, icon group, per-player limit, bank total or win condition changes** —
 a Spice Mine is a Mine with a different picture on it.
 
-**This is implemented, apart from its art.** The host can pick "Outer Rim" on
-the New Game screen beside the other two themes, and the ★ names below live in
-`src/games/DiceCities/themes.ts`. Twenty of its 26 card faces are drawn; the
-rest still wear the Rising Sun ones — see §13.7 for what is left.
+**This is implemented.** The host can pick "Outer Rim" on the New Game screen
+beside the other two themes, and the ★ names below live in
+`src/games/DiceCities/themes.ts`. All 26 of its card faces are drawn — see
+§13.7.
 
 ### 13.1 The three-column tables
 
@@ -925,7 +925,7 @@ A "closed" operation in this theme is **impounded** — there is an Imperial
 seal across the door — and its owner **clears the seal** by working that type
 again on a later run.
 
-### 13.7 What shipped, and what is left
+### 13.7 What shipped
 
 Per [`docs/game-themes.md`](../game-themes.md), the work was the same shape as
 the wasteland's:
@@ -934,19 +934,13 @@ the wasteland's:
    §13.2 and the ★ names and rules text from §13.4–13.6 (the Billionaires Row
    names wait for that expansion to be built).
 2. Its id, `outerrim`, is picked up by `GAME_THEMES` through
-   `DICE_CITIES_THEMES`, with the "art is placeholder" note.
-3. `public/art/dicecities/outer-rim/`, a copy of the Rising Sun folder so every
-   card is drawable from day one.
-
-**What is left is six faces**: the Orchard Terraces (`apple-orchard.png`) and
-the five Docks cards other than the Orbital Dock and Glowbloom Field —
-`sushi-bar.png`, `flower-shop.png`, `mackerel-boat.png`, `food-warehouse.png`
-and `tuna-boat.png`. Until then they show their Rising Sun face. Draw each
-face and save it under the name it already has — `wheat-field.png` is the
-Moisture Farm, `station.png` the Docking Bay — to both `art-masters/dicecities/outer-rim/` and
-`public/art/dicecities/outer-rim/`, then run `npm run optimise-art` and commit
-what it writes. No code changes per card. Once every face is drawn, drop the
-theme's `note` so the setup screen stops calling them placeholders.
+   `DICE_CITIES_THEMES`.
+3. Its own face for every card: the untouched exports in
+   `art-masters/dicecities/outer-rim/`, and the copies `npm run optimise-art`
+   quantised from them in `public/art/dicecities/outer-rim/`, under the same
+   file names as every other theme's (`wheat-field.png` is the Moisture Farm,
+   `station.png` the Docking Bay). Redrawing one later is overwriting both
+   files under the name it already has and re-running the optimiser.
 
 `themes.test.ts` walks every card of every theme and fails the build if a name
 table changed a cost, a colour or an activation number, left a card on its
