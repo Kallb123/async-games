@@ -30,6 +30,7 @@ import {
     ISACResources,
     ISACDevCards,
     ISACSpecificGameState,
+    SAC_Resource,
 } from "./board";
 import {
     SACExpansions,
@@ -545,15 +546,18 @@ export interface ISACGameResultStats {
     // Cumulative resourcesGathered per player at the end of each turn, in turn
     // order - not derivable from playerStats above (that's the game-end total
     // only). Powers a resources/turn chart. Computed by replaying
-    // commandHistory via computePerTurnStat (see replay.ts), driven from this
-    // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
-    // tracked as history on specificGameState.
+    // commandHistory (SAC_REPLAYED_STATS, via computePerTurnInternalStats in
+    // replay.ts), driven from this game's GAME_RESULT_STATS entry in
+    // GameResultData.ts, since it isn't tracked as history on
+    // specificGameState. A dropped player's line holds at what they left
+    // with. Empty when the replay couldn't run or didn't end where the game
+    // did (see replayEndsWhereGameDid), which then has no chart.
     resourcesPerTurn: Map<string, number>[];
     // Each player's victory points at the end of each turn, in turn order -
     // every point, the hidden VP cards included, since the game is over by the
     // time anyone sees it. Rises and falls as Longest Road and Largest Army
     // change hands. Read off the internal state by the same replay as
-    // resourcesPerTurn (computePerTurnInternalStats), so a game already under
+    // resourcesPerTurn, and empty in the same cases, so a game already under
     // way when the chart shipped still gets it whole. Absent (or empty) on a
     // result recorded before it, which then has no chart.
     victoryPointsPerTurn?: Map<string, number>[];
@@ -638,44 +642,96 @@ function completeGatheredByType(counts: ISACResources | undefined, total: number
     return SAC_RESOURCES.reduce((sum, resource) => sum + complete[resource], 0) === total ? complete : undefined;
 }
 
-// `replayedState` is the game re-run from its first move (the game-end
-// replay's final state - see computePerTurnInternalStats), whose by-resource
-// counts are whole even for a game that was already under way when they began
-// being kept. The live document's own count is the fallback, for a game
-// replay can't run.
+// What the game-end replay reads off every seat after every turn
+// (computePerTurnInternalStats, driven from this game's GAME_RESULT_STATS
+// entry in GameResultData.ts): the two per-round charts, and every counter a
+// player's result is made of, by resource too — counted from the first move,
+// so whole even for a game already under way when the by-resource count
+// began. Each reads undefined once the game has dropped the seat, and so holds
+// at what that player left with: a dropped player's own state goes with them
+// (the dropout adapter in SettlementsAndCitiesLogic.ts), and the replay is the
+// only place left that knows it.
+type SACReplayedStat = (gs: ISACSpecificGameState, userId: string) => number | undefined;
+const seatStat = (read: (ps: ISACPlayerState, gs: ISACSpecificGameState, userId: string) => number): SACReplayedStat => (gs, userId) => {
+    const ps = mongoMap(gs.playerStates).get(userId);
+    return ps ? read(ps, gs, userId) : undefined;
+};
+export const SAC_REPLAYED_STATS = {
+    resourcesGathered: seatStat(ps => ps.resourcesGathered),
+    victoryPoints: seatStat((_ps, gs, userId) => calculateTotalVP(userId, gs)),
+    knightsPlayed: seatStat(ps => ps.knightsPlayed),
+    devCardsBought: seatStat(ps => ps.devCardsBought),
+    robberUses: seatStat(ps => ps.robberUses),
+    ...Object.fromEntries(SAC_RESOURCES.map(r => [r, seatStat(ps => ps.resourcesGatheredByType?.[r] ?? 0)])) as Record<SAC_Resource, SACReplayedStat>,
+};
+export type SACReplayedStats = Record<keyof typeof SAC_REPLAYED_STATS, Map<string, number>[]>;
+
+// Whether the replay ended where the game did: every seat still playing on
+// the resources and the points the live game ended on. A replay that drifted
+// from the game as played — a rule changed under a game already under way,
+// with nothing to teach the replay the old one (see sacUnrecordedHoldEnd for
+// the one that did) — refuses the moves it can no longer follow and carries on
+// without them, so its charts would stop early or tell a different game while
+// looking whole. Both totals have been counted the same way, live, all game.
+function replayEndsWhereGameDid(gs: ISACSpecificGameState, replayed: SACReplayedStats): boolean {
+    return [...mongoMap(gs.playerStates)].every(([userId, ps]) =>
+        replayed.resourcesGathered.at(-1)?.get(userId) === ps.resourcesGathered
+        && replayed.victoryPoints.at(-1)?.get(userId) === calculateTotalVP(userId, gs));
+}
+
+// `replayed` is the game re-run from its first move (see SAC_REPLAYED_STATS),
+// absent for a game replay can't run — one created before it could, or one
+// whose replay doesn't end where the game did, which is then left out rather
+// than trusted. Without it the result falls back on the live document alone:
+// no per-round charts, the resources table only where the live by-resource
+// count is whole, and nothing for a dropped player, whose state went with them.
 export function computeSettlementsAndCitiesResultStats(
     gameData: ISettlementsAndCitiesGameData,
-    resourcesPerTurn: Map<string, number>[],
-    replayedState?: ISACSpecificGameState,
-    victoryPointsPerTurn: Map<string, number>[] = [],
+    replayed?: SACReplayedStats,
 ): ISACGameResultStats {
     const gs = gameData.specificGameState;
-    const replayedPlayers = replayedState ? mongoMap(replayedState.playerStates) : undefined;
+    const live = mongoMap(gs.playerStates);
+    const trusted = replayed && replayEndsWhereGameDid(gs, replayed) ? replayed : undefined;
+    if (replayed && !trusted) {
+        console.warn(`Settlements & Cities game ${gameData.gameId}: the replay didn't end where the game did, so its result has no per-round charts`);
+    }
     const playerStats = new Map<string, ISACPlayerResultStats>();
-    for (const [userId, ps] of mongoMap(gs.playerStates)) {
-        const settlements = gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length;
-        const cities = gs.vertices.filter(v => v.owner === userId && v.building === 'city').length;
-        const roads = gs.edges.filter(e => e.owner === userId && e.hasRoad).length;
-        // Hidden VP cards are revealed at game-end, so they count here.
-        const victoryPoints = calculateTotalVP(userId, gs);
+    for (const userId of gameData.userIdList) {
+        const ps = live.get(userId);
+        if (!ps && !trusted) continue;
+        // What the replay last read for this seat — the end of the game, or
+        // the moment a dropped player left it.
+        const last = (stat: keyof SACReplayedStats) => trusted?.[stat].at(-1)?.get(userId) ?? 0;
+        // The live count for a seat still playing; the replay's for one that isn't.
+        const counted = (stat: 'knightsPlayed' | 'devCardsBought' | 'resourcesGathered' | 'robberUses') => ps ? ps[stat] : last(stat);
+        const replayedByType = trusted && SAC_RESOURCES.reduce((counts, r) => ({ ...counts, [r]: last(r) }), { ...NO_RESOURCES });
         playerStats.set(userId, {
-            settlements,
-            cities,
-            roads,
+            // A dropped player's buildings and roads stay on the board, so
+            // those come off it for everybody.
+            settlements: gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length,
+            cities: gs.vertices.filter(v => v.owner === userId && v.building === 'city').length,
+            roads: gs.edges.filter(e => e.owner === userId && e.hasRoad).length,
             longestRoad: calculateLongestRoad(userId, gs.vertices, gs.edges),
-            knightsPlayed: ps.knightsPlayed,
-            devCardsBought: ps.devCardsBought,
-            resourcesGathered: ps.resourcesGathered,
-            // Checked against the live total too, so a replay that drifted
-            // from the game as played can't slip a wrong table through.
-            resourcesGatheredByType:
-                completeGatheredByType(replayedPlayers?.get(userId)?.resourcesGatheredByType, ps.resourcesGathered)
-                ?? completeGatheredByType(ps.resourcesGatheredByType, ps.resourcesGathered),
-            robberUses: ps.robberUses,
-            victoryPoints,
+            knightsPlayed: counted('knightsPlayed'),
+            devCardsBought: counted('devCardsBought'),
+            resourcesGathered: counted('resourcesGathered'),
+            // The replay's count if it has one, which runs from the first
+            // move; for a seat still playing, the live one only if it too is
+            // whole.
+            resourcesGatheredByType: ps
+                ? completeGatheredByType(replayedByType, ps.resourcesGathered) ?? completeGatheredByType(ps.resourcesGatheredByType, ps.resourcesGathered)
+                : replayedByType,
+            robberUses: counted('robberUses'),
+            // Hidden VP cards are revealed at game-end, so they count here.
+            victoryPoints: ps ? calculateTotalVP(userId, gs) : last('victoryPoints'),
         });
     }
-    return { playerStats, resourcesPerTurn, victoryPointsPerTurn, ...computeSACRollFrequency(gameData) };
+    return {
+        playerStats,
+        resourcesPerTurn: trusted?.resourcesGathered ?? [],
+        victoryPointsPerTurn: trusted?.victoryPoints ?? [],
+        ...computeSACRollFrequency(gameData),
+    };
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared

@@ -13,6 +13,8 @@ import { LEGACY_BANK_TOTAL_COINS } from "@/games/DiceCities/cards";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { sacUnrecordedHoldEnd } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
+import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
@@ -100,6 +102,17 @@ export interface IReplayAdapter {
     // that hasn't built a planning UI. See plannableCommands() below for why
     // this is the control rather than `canPlan`.
     plannableCommands: string[];
+    // Optional, for a game that holds a turn open for its undo window
+    // (docs/undo.md §5) and had games under way before it did. There, the
+    // move that holds today ended the turn outright, so the recorded log goes
+    // straight on without the command that closes a hold. Replayed as it is,
+    // that hold never closes: the next move is refused, then every move after
+    // it, and the match review and the result charts stop following the game
+    // a turn or two in. Asked before each recorded command, handed the state,
+    // whose turn it is and that command: return the command that closes the
+    // hold (the replay sends it as the player holding it) when the recorded
+    // one is something the hold wouldn't have let through, or null.
+    closeUnrecordedHold?(specificGameState: unknown, holderId: string, next: IGameCommand): IGameCommand | null;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -186,6 +199,8 @@ registerReplayAdapter({
     // a real resource out of the victim's hand, and SACPlayMonopoly reads how
     // much of a resource every player is holding.
     plannableCommands: [],
+    closeUnrecordedHold: (specificGameState, holderId, next) =>
+        sacUnrecordedHoldEnd(specificGameState as ISACSpecificGameState, holderId, next),
 });
 
 registerReplayAdapter({
@@ -309,11 +324,6 @@ export async function buildTimeline(
     // Who the snapshots are for, when the game keeps per-player secrets — see
     // IReplayAdapter.toResponseState. Null builds the everybody-can-see-it view.
     viewerId: string | null = null,
-    // Optional observer handed the internal specificGameState the recorded
-    // commands left behind — before any planned command, and unredacted:
-    // every player's hand. For a server-side game-end stat only (see
-    // computePerTurnInternalStats); it never goes near a snapshot or a response.
-    onReplayed?: (specificGameState: unknown) => void
 ): Promise<ITimeline> {
     const adapter = getReplayAdapter(gameData.gameType.className);
     if (!adapter) {
@@ -406,6 +416,32 @@ export async function buildTimeline(
             // server doing it — isn't read back verbatim forever. historyNames
             // above already encodes that preference, recorded name and all.
             command.senderUsername = historyNames[command.senderId] ?? command.senderUsername;
+            // A hold the recorded log never closed, because the game was played
+            // before it held turns (IReplayAdapter.closeUnrecordedHold) — closed
+            // here, as its holder, before the command that moved on from it.
+            // Asked before `currentTurn` is put back to this command's, since
+            // while a hold is open the turn is still its holder's. Never for a
+            // planned command: a plan is today's rules.
+            const closeHold = planned ? null : adapter.closeUnrecordedHold?.(state.specificGameState, state.currentTurn, command);
+            if (closeHold) {
+                closeHold.gameId = command.gameId;
+                closeHold.senderId = state.currentTurn;
+                const closed = await runCommand(state, gameType, closeHold);
+                if (closed.outcome.validMove) {
+                    // Those rules ended the turn inside the move that holds it
+                    // today, with no command and no line of its own, so this
+                    // leaves neither — and no step: what it did is part of the
+                    // next one. Only its own lines go (the pipeline stamps them
+                    // with its id), not what the hand-off itself wrote, which
+                    // the game wrote too; the history has to stay the length the
+                    // game kept, or the creation-time lines sliced off its tail
+                    // below would come up short.
+                    state.gameState.commandHistory.pop();
+                    state.gameState.history = state.gameState.history.filter(line => line.commandId !== closeHold.id);
+                } else {
+                    console.warn(`Replay of game ${gameData.gameId} couldn't close a hold its log never closed; ${command.className} is likely refused next`);
+                }
+            }
             // Every command was executed on its sender's turn — except one
             // played out of turn, which ran on the turn of the player it names
             // (docs/out-of-turn-actions.md §5.4). Putting `currentTurn` back
@@ -474,7 +510,6 @@ export async function buildTimeline(
 
     const gameOver = await applyCommands(gameData.gameState.commandHistory ?? [], false, null);
     const currentIndex = snapshots.length - 1;
-    onReplayed?.(state.specificGameState);
 
     // Creation-time setup entries (e.g. the turn-order roll-off) predate
     // commandHistory, so replaying can't regenerate them. Commands unshift newer
@@ -526,7 +561,6 @@ async function replayTurnByTurn(
     gameData: IGameData,
     onStep: (step: IReplayStep, turnIndex: number, isFirstStepOfTurn: boolean, specificGameState: unknown) => void,
     what: string,
-    onReplayed?: (specificGameState: unknown) => void,
 ): Promise<boolean> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     let turnIndex = 0;
@@ -540,7 +574,7 @@ async function replayTurnByTurn(
             }
             onStep(step, turnIndex, isFirstStepOfTurn, specificGameState);
             previousTurnOf = turnOf;
-        }, null, onReplayed);
+        });
         return true;
     } catch (error) {
         console.warn(`No ${what} for game ${gameData.gameId}: ${error}`);
@@ -571,19 +605,18 @@ export async function computePerTurnStat<TState>(
 
 // What `read` made of the last step of every turn, oldest first — the turn
 // boundary every per-turn stat shares — or undefined, having warned, when the
-// replay fails. `onReplayed` is replayTurnByTurn's.
+// replay fails.
 async function lastOfEachTurn<T>(
     gameData: IGameData,
     read: (step: IReplayStep, specificGameState: unknown) => T,
     what: string,
-    onReplayed?: (specificGameState: unknown) => void,
 ): Promise<T[] | undefined> {
     const perTurn: T[] = [];
     let latest: { value: T } | undefined;
     const ok = await replayTurnByTurn(gameData, (step, _turnIndex, isFirstStepOfTurn, specificGameState) => {
         if (isFirstStepOfTurn && latest) perTurn.push(latest.value);
         latest = { value: read(step, specificGameState) };
-    }, what, onReplayed);
+    }, what);
     if (!ok) return undefined;
     if (latest) perTurn.push(latest.value);
     return perTurn;
@@ -593,31 +626,46 @@ async function lastOfEachTurn<T>(
 // hides, several stats from the one replay: each extractor is handed the
 // internal specificGameState — every player's hand — after every turn, which
 // is how Settlements & Cities' victory-points chart counts the VP cards
-// nobody else could see until the game ended. Comes back with the state the
-// replay ends on too, for a game-end stat that has to be counted from the
-// first move but that the live document only began counting part-way through
-// some games (Settlements & Cities' resources gathered by type). One pass
-// keeps the last move — which the turn-timer cron awaits inline — to one
-// replay. Server-only: nothing here may reach a response, so only a
-// finished game's own totals should ever be extracted. Undefined when the
-// replay fails.
+// nobody else could see until the game ended, and how its resources table
+// counts what each player gathered from the first move, in a game the live
+// document only began counting by resource part-way through. One pass keeps
+// the last move — which the turn-timer cron awaits inline — to one replay.
+//
+// An extractor returns undefined for a key that has left the state — a
+// player the game dropped (utils/games/playerDropout.ts), whose seat is
+// deleted with them — and that key holds the value it last had (nought
+// before it ever had one), so a line stops where its player left rather than
+// falling to nothing. The last turn's reading is then what every seat ended
+// the game on, a dropped player's as they left.
+//
+// Server-only: nothing here may reach a response, so only a finished game's
+// own totals should ever be extracted. Undefined when the replay fails.
 export async function computePerTurnInternalStats<TState, K extends string>(
     gameData: IGameData,
-    extractors: Record<K, (state: TState, key: string) => number>,
+    extractors: Record<K, (state: TState, key: string) => number | undefined>,
     keys: string[] = gameData.userIdList,
-): Promise<{ perTurn: Record<K, Map<string, number>[]>; finalState: TState } | undefined> {
+): Promise<Record<K, Map<string, number>[]> | undefined> {
     const names = Object.keys(extractors) as K[];
-    let finalState: TState | undefined;
     // Read eagerly, at every step: the internal state is one object the next
     // step mutates in place, so holding it until the turn ends would read the
     // wrong turn.
     const entries = await lastOfEachTurn(gameData, (_step, specificGameState) => {
         const state = specificGameState as TState;
         return names.map(name => new Map(keys.map(key => [key, extractors[name](state, key)])));
-    }, "per-turn stats", (state) => { finalState = state as TState; });
-    if (!entries || finalState === undefined) return undefined;
-    const perTurn = Object.fromEntries(names.map((name, i) => [name, entries.map(entry => entry[i])])) as Record<K, Map<string, number>[]>;
-    return { perTurn, finalState };
+    }, "per-turn stats");
+    if (!entries) return undefined;
+    return Object.fromEntries(names.map((name, i) => [name, holdingLastValues(entries.map(entry => entry[i]))])) as Record<K, Map<string, number>[]>;
+}
+
+// Each turn's reading with its gaps filled from the turn before — nought
+// before a key ever had a value.
+function holdingLastValues(perTurn: Map<string, number | undefined>[]): Map<string, number>[] {
+    const filled: Map<string, number>[] = [];
+    for (const turn of perTurn) {
+        const previous = filled.at(-1);
+        filled.push(new Map([...turn].map(([key, value]) => [key, value ?? previous?.get(key) ?? 0])));
+    }
+    return filled;
 }
 
 // Replays a game via buildTimeline, calling `detect` once per applied command

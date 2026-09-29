@@ -136,8 +136,8 @@ function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameComma
 
 // The hand-off is final — undo (and the hold it can trigger, §5) never crosses
 // a turn boundary, since the new mover may already have opened the board
-// (docs/undo.md §14). Called from both places currentTurn actually changes to
-// a different player.
+// (docs/undo.md §14). Called from every place currentTurn actually changes to
+// a different player — the Special Build Phase's hand-offs among them.
 function sacClearUndo(gs: ISettlementsAndCitiesGameData['specificGameState']): void {
     gs.undoStack = [];
     gs.undoAnchorId = null;
@@ -347,6 +347,8 @@ function sacStartSpecialBuild(sacData: ISettlementsAndCitiesGameData): boolean {
     }
     if (queue.length === 0) return false;
 
+    // A hand-off like any other: the main turn's hold and its undo end here.
+    sacClearUndo(gs);
     gs.specialBuildActive = true;
     gs.specialBuildQueue = queue;
     gs.specialBuildMainPlayer = sacData.currentTurn;
@@ -362,6 +364,7 @@ function sacAdvanceSpecialBuild(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
     gs.specialBuildQueue.shift();
     if (gs.specialBuildQueue.length > 0) {
+        sacClearUndo(gs);
         sacData.currentTurn = gs.specialBuildQueue[0];
         return;
     }
@@ -1354,6 +1357,34 @@ export class SACEndTurn implements IGameCommand {
         ));
         return { validMove: true, turnOver: true };
     }
+}
+
+// A game recorded before turns were held for undo (docs/undo.md §5, 19
+// September 2026) has no SACEndTurn after the moves that hold today: a setup
+// road, or a main-turn move that left nothing else to do, ended the turn there
+// and then. The replay engine asks this before each recorded command
+// (IReplayAdapter.closeUnrecordedHold), and while a hold is open, a command it
+// wouldn't have let through means the log never closed it — so it is closed
+// the way those rules did, with an SACEndTurn from the player holding it.
+//
+// What a hold lets through: its holder's own SACEndTurn or SACUndo; a trade
+// from another seat, stamped out of turn; and in the main phase anything else
+// of the holder's own, which is still their turn (an offer posted while the
+// countdown runs). Setup lets nothing else through, which is why the snake's
+// double placement — the last seat places twice running, and the first rolls
+// straight after their last road — needs this even though the sender never
+// changes. Every hold a game played since then opened was closed by a
+// recorded command, so for those this never fires. And only a hold that is
+// the holder's own — their snapshot on top of the stack, as the move that
+// opened it left it — since one the log did close can't leave anything else.
+export function sacUnrecordedHoldEnd(gs: ISettlementsAndCitiesGameData['specificGameState'], holderId: string, next: IGameCommand): SACEndTurn | null {
+    if (!gs.autoEndTurnAt || (gs.undoStack ?? []).at(-1)?.by !== holderId) return null;
+    if (recordedOnTurnOf(next) !== undefined) return null;
+    if (next.senderId === holderId) {
+        if (next.className === 'SACEndTurn' || next.className === 'SACUndo') return null;
+        if (gs.phase === 'main') return null;
+    }
+    return new SACEndTurn();
 }
 
 // ─── Undo ─────────────────────────────────────────────────────────────────────

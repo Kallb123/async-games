@@ -11,6 +11,9 @@ import LineChart from "@/components/ui/LineChart";
 import BarChart from "@/components/ui/BarChart";
 import ResultTable from "@/components/ui/ResultTable";
 import { useGameResult } from "@/utils/hooks/useGameResult";
+import { useToast } from "@/components/ToastContext";
+import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
+import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
@@ -19,7 +22,7 @@ import moment from 'moment';
 
 export default function GameResultPage({ params }: { params: Promise<{ gameId: string }> }) {
     const { gameId } = use(params);
-    const { result, isLoading, error } = useGameResult(gameId);
+    const { result, isLoading, error, replaceResult } = useGameResult(gameId);
     const meta = result ? GAME_META[result.url] : undefined;
     // A result that never arrived has nothing to lay out — the one state that
     // isn't the page in some stage of filling in.
@@ -75,7 +78,40 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                                 : <LineChart chart={chart} players={result.players} playerIds={result.playerIds} />}
                     </Section>
                 ))}
+
+                {result?.canRegenerate && <RegenerateResults gameId={gameId} onRegenerated={replaceResult} />}
             </>)}
         </main>
+    );
+}
+
+// Works this game's stats and charts out again from its moves, for a result
+// recorded before a fix to how they are worked out — a quiet footer action,
+// since a result that came out right never needs it. Given longer than the
+// usual request, since the route replays the whole game (its maxDuration).
+const REGENERATE_TIMEOUT_MS = 65_000;
+
+function RegenerateResults({ gameId, onRegenerated }: { gameId: string, onRegenerated: (result: IGameResultResponse) => void }) {
+    const { showToast } = useToast();
+    const { submit, isPending, message } = useJsonMutation<{ result: IGameResultResponse }>(
+        `/api/gameresult/${gameId}/regenerate`,
+        "Couldn't regenerate the results. Please try again.",
+        REGENERATE_TIMEOUT_MS,
+    );
+
+    const regenerate = async () => {
+        const regenerated = await submit({});
+        if (!regenerated) return;
+        onRegenerated(regenerated.result);
+        showToast("Results regenerated from the game's moves.", 'success');
+    };
+
+    return (
+        <div className="ag-footer">
+            <button type="button" className="ag-link-muted" disabled={isPending} onClick={regenerate}>
+                {isPending ? "Regenerating results…" : "Regenerate results"}
+            </button>
+            {message && <div className="ag-hint ag-hint--center" role="status">{message}</div>}
+        </div>
     );
 }

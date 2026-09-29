@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { IGameResultResponse } from "@/app/api/gameresult/[gameId]/route";
+import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
 
 // What one completed fetch left behind, tagged with the game it was for so a
 // result belonging to a previous gameId is never mistaken for the current one.
@@ -39,9 +39,16 @@ export function useGameResult(gameId: string | null) {
     // previous game's result.
     const current = fetched?.gameId === gameId ? fetched : null;
 
+    // Swaps in a result fetched some other way — the one the regenerate route
+    // hands back — without a second round trip for the same thing.
+    const replaceResult = (result: IGameResultResponse) => {
+        if (result.gameId === gameId) setFetched({ gameId, result });
+    };
+
     return {
         result: current?.result ?? null,
         isLoading: gameId !== null && current === null,
         error: current?.error ?? null,
+        replaceResult,
     };
 }
