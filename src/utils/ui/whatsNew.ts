@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Game results show each player's stats in their colour",
+                detail: "Every player's stats on a finished game's result carry a bar in their colour down the side, so you can match them to their line on the charts at a glance.",
+            },
+            {
                 title: "See the final board on a Settlements & Cities result",
                 detail: "A finished game's result page now shows the board as the game ended — every settlement, city and road in its owner's colour. Hover or press a bar in the dice roll chart to see how many of those rolls each player threw.",
                 game: "settlementsandcities",
@@ -119,11 +123,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Outbreak event cards work on a teammate's turn",
                 detail: "Play Airlift, Government Grant, One Quiet Night or Resilient Population while a teammate is taking their turn, so the whole crew can respond without waiting for the turn to come around. Forecast still stays on its holder's turn while they arrange the deck.",
                 game: "outbreak",
-            },
-            {
-                title: "Kingdom Builder has a new painted world map",
-                detail: "Forests, fields, coasts and mountain ranges now blend into a seamless tabletop landscape, with rivers and bridges drawn into the terrain.",
-                game: "kingdombuilder",
             },
         ],
     },

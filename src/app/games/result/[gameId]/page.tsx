@@ -69,7 +69,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                     skeletonIcon="none"
                     empty={<div className="ag-empty">No extra stats recorded for this game.</div>}
                 >
-                    {result ? gameResultStatRows(result.stats) : null}
+                    {result ? gameResultStatRows(result.stats, result.players) : null}
                 </ListSection>
 
                 {result?.charts.map(chart => (
