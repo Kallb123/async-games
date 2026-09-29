@@ -713,8 +713,10 @@ Like §12 this is a naming reference only. **No cost, activation number,
 colour, icon group, per-player limit, bank total or win condition changes** —
 a Spice Mine is a Mine with a different picture on it.
 
-**This one is on paper only.** Nothing in the app offers it yet; §13.7 is what
-building it would take.
+**This is implemented.** The host can pick "Outer Rim" on the New Game screen
+beside the other two themes, and the ★ names below live in
+`src/games/DiceCities/themes.ts`. All 26 of its card faces are drawn — see
+§13.7.
 
 ### 13.1 The three-column tables
 
@@ -923,22 +925,27 @@ A "closed" operation in this theme is **impounded** — there is an Imperial
 seal across the door — and its owner **clears the seal** by working that type
 again on a later run.
 
-### 13.7 What it would take to ship
+### 13.7 What shipped
 
-Nothing here is built. Per [`docs/game-themes.md`](../game-themes.md), the work
-is the same shape as the wasteland's was:
+Per [`docs/game-themes.md`](../game-themes.md), the work was the same shape as
+the wasteland's:
 
 1. A third entry in `src/games/DiceCities/themes.ts` — the `words` block from
-   §13.2 and the ★ names and rules text from §13.4–13.6.
-2. One line in `GAME_THEMES` in `src/utils/ui/gameThemes.ts` (id, name,
-   description, glyph, and the "art is placeholder" note while it is).
-3. `public/art/dicecities/outerrim/`, starting as a copy of the default
-   theme's folder so every card is drawable from day one, then redrawn one
-   file at a time under the names it already has.
-4. Nothing else: `themes.test.ts` already walks every card of every theme and
-   fails the build if a name table changed a cost, a colour or an activation
-   number, and `themeIdFor` already resolves an unknown id to the default, so
-   adding a theme cannot break a game in progress.
+   §13.2 and the ★ names and rules text from §13.4–13.6 (the Billionaires Row
+   names wait for that expansion to be built).
+2. Its id, `outerrim`, is picked up by `GAME_THEMES` through
+   `DICE_CITIES_THEMES`.
+3. Its own face for every card: the untouched exports in
+   `art-masters/dicecities/outer-rim/`, and the copies `npm run optimise-art`
+   quantised from them in `public/art/dicecities/outer-rim/`, under the same
+   file names as every other theme's (`wheat-field.png` is the Moisture Farm,
+   `station.png` the Docking Bay). Redrawing one later is overwriting both
+   files under the name it already has and re-running the optimiser.
+
+`themes.test.ts` walks every card of every theme and fails the build if a name
+table changed a cost, a colour or an activation number, left a card on its
+Rising Sun name, gave two cards the same name, or points at a face missing from
+the folder.
 
 Two things stay as they are, exactly as they do for the wasteland: app-level
 vocabulary ("Your turn", "End turn", the turn timer) belongs to Async Games

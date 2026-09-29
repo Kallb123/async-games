@@ -4,7 +4,7 @@
 // costs, activation numbers, activation colours, icon combos, bank total and
 // win condition, with different names, rules copy and card faces over the top.
 // A Brahmin Pen is a Ranch with a different picture on it — see
-// docs/games/dice-cities.md §12, which this file implements.
+// docs/games/dice-cities.md §12 and §13, which this file implements.
 //
 // Everything themed about a card lives on the themed card table below, so a
 // screen looks a card up in `theme.cards` exactly as it used to look it up in
@@ -252,8 +252,142 @@ const rustAndBottlecaps = buildTheme({
     },
 });
 
+// ── Outer Rim: the galactic frontier re-skin (dice-cities.md §13) ───────────
+// The ★ picks from the appendix: the everyday economy runs Neutral, and the
+// cards that reach into another player's pocket are the ones the war shows up
+// in. Names only, exactly as for the wasteland — and each is named after what
+// the card *does*, so three "places you trade" stay three different cards
+// on the board and in the turn log (§13.1).
+const outerRim = buildTheme({
+    id: "outerrim",
+    name: "Outer Rim",
+    description: "A contested frontier world on a galactic trade lane: governors running outposts for credits while the war passes overhead.",
+    glyph: "🪐",
+    // Every face drawn, so no placeholder `note`. The masters these were
+    // optimised from are in `art-masters/dicecities/outer-rim/`.
+    artDir: "outer-rim",
+    sky: ["oklch(0.84 0.05 300)", "oklch(0.63 0.09 285)"],
+    words: {
+        coin: "credit",
+        coins: "credits",
+        bank: "Exchange",
+        establishment: "operation",
+        establishments: "operations",
+        landmark: "installation",
+        landmarks: "installations",
+        city: "outpost",
+        market: "Trade Ring",
+    },
+    cards: {
+        [DiceCitiesCardIds.WHEAT_FIELD]: {
+            title: "Moisture Farm",
+            text: "Get 1 credit from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.RANCH]: {
+            title: "Grazer Pens",
+            text: "Get 1 credit from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.BAKERY]: {
+            title: "Portion-Bread Stall",
+            text: "Get 1 credit from the Exchange, on your turn only.",
+        },
+        [DiceCitiesCardIds.CAFE]: {
+            title: "Safehouse Cantina",
+            text: "Get 1 credit from the player who rolled the dice.",
+        },
+        [DiceCitiesCardIds.FAMILY_RESTAURANT]: {
+            title: "Spaceport Diner",
+            text: "Get 2 credits from the player who rolled the dice.",
+        },
+        [DiceCitiesCardIds.CONVENIENCE_STORE]: {
+            title: "Outfitter's Post",
+            text: "Get 3 credits from the Exchange, on your turn only.",
+        },
+        [DiceCitiesCardIds.FOREST]: {
+            title: "Timber Camp",
+            text: "Get 1 credit from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.MINE]: {
+            title: "Spice Mine",
+            text: "Get 5 credits from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.APPLE_ORCHARD]: {
+            title: "Orchard Terraces",
+            text: "Get 3 credits from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.CHEESE_FACTORY]: {
+            title: "Creamery Works",
+            text: "If this is your turn, get 3 credits from the Exchange for each Herd operation that you own",
+        },
+        [DiceCitiesCardIds.FURNITURE_FACTORY]: {
+            title: "Parts Foundry",
+            text: "If this is your turn, get 3 credits from the Exchange for each Extraction operation that you own",
+        },
+        [DiceCitiesCardIds.FRUIT_MARKET]: {
+            title: "Growers' Co-op",
+            text: "If this is your turn, get 2 credits from the Exchange for each Cropland operation that you own",
+        },
+        [DiceCitiesCardIds.STADIUM]: {
+            title: "Grav-Ball Arena",
+            text: "Get 2 credits from all players, on your turn only.",
+        },
+        [DiceCitiesCardIds.TV_STATION]: {
+            title: "Holovid Studio",
+            text: "If this is your turn, take 5 credits from any one player.",
+        },
+        [DiceCitiesCardIds.BUSINESS_CENTER]: {
+            title: "Claims Office",
+            text: "If this is your turn, trade one non-installation operation with another player.",
+        },
+        [DiceCitiesCardIds.TRAIN_STATION]: {
+            title: "Docking Bay",
+            text: "You may roll 1 or 2 dice.",
+        },
+        [DiceCitiesCardIds.SHOPPING_MALL]: {
+            title: "Way Station",
+            text: "Earn +1 credit from your own Cantina and Supply operations.",
+        },
+        [DiceCitiesCardIds.AMUSEMENT_PARK]: {
+            title: "Speeder Circuit",
+            text: "If you roll matching dice, take another turn after this one.",
+        },
+        [DiceCitiesCardIds.RADIO_TOWER]: {
+            title: "Sensor Array",
+            text: "Once every turn, you can choose to re-roll your dice.",
+        },
+        [DiceCitiesCardIds.HARBOUR]: {
+            title: "Orbital Dock",
+            text: "If you roll 10 or more, you may add 2 to the total.",
+        },
+        [DiceCitiesCardIds.SUSHI_BAR]: {
+            title: "Void-Crab Grill",
+            text: "If you have the Orbital Dock, get 3 credits from the player who rolled the dice.",
+        },
+        [DiceCitiesCardIds.FLOWER_ORCHARD]: {
+            title: "Glowbloom Field",
+            text: "Get 1 credit from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.FLOWER_SHOP]: {
+            title: "Bacta Apothecary",
+            text: "If this is your turn, get 1 credit from the Exchange for each Glowbloom Field that you own",
+        },
+        [DiceCitiesCardIds.MACKEREL_BOAT]: {
+            title: "Ore Hauler",
+            text: "If you have the Orbital Dock, get 3 credits from the Exchange, on anyone's turn.",
+        },
+        [DiceCitiesCardIds.FOOD_WAREHOUSE]: {
+            title: "Provisions Warehouse",
+            text: "If this is your turn, get 2 credits from the Exchange for each Cantina operation that you own",
+        },
+        [DiceCitiesCardIds.TUNA_BOAT]: {
+            title: "Bulk Freighter",
+            text: "If you have the Orbital Dock, get credits from the Exchange equal to the shared haul, on anyone's turn.",
+        },
+    },
+});
+
 /** Every theme Dice Cities can be played in. The first is the default. */
-export const DICE_CITIES_THEMES: DiceCitiesTheme[] = [risingSun, rustAndBottlecaps];
+export const DICE_CITIES_THEMES: DiceCitiesTheme[] = [risingSun, rustAndBottlecaps, outerRim];
 
 /** What a game with no stored theme — one created before themes — is played as. */
 export const DEFAULT_DICE_CITIES_THEME = risingSun;

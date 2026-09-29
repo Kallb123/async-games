@@ -151,7 +151,7 @@ the guide's auto-show on their first match — see
 
 A game can also offer **themes** — alternative dressings picked on the setup
 screen, changing every name, every piece of copy and the art while changing no
-rule, cost or number (Dice Cities ships two). That is a `themes.ts` beside the
+rule, cost or number (Dice Cities ships three). That is a `themes.ts` beside the
 game's `meta.ts`, one line in `GAME_THEMES` and one `<ThemeSelect>` on the setup
 screen; [`docs/game-themes.md`](./docs/game-themes.md) is the full recipe,
 including the guard test that keeps a theme from quietly changing a rule.

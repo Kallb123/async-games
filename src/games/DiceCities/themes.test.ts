@@ -46,25 +46,34 @@ describe.each(DICE_CITIES_THEMES.map(theme => [theme.name, theme] as const))('th
     });
 });
 
-describe('the Rust & Bottlecaps theme', () => {
-    const wasteland = diceCitiesTheme('wasteland');
+// Every theme but the default is a re-skin, and a re-skin owes the table a
+// name for every card and its own word for money.
+const reskins = DICE_CITIES_THEMES.filter(theme => theme !== DEFAULT_DICE_CITIES_THEME);
 
+describe.each(reskins.map(theme => [theme.name, theme] as const))('the %s re-skin', (_name, theme) => {
     it('renames every card in the game', () => {
-        // A card added to cards.ts without a wasteland name would silently keep
-        // its Japanese one and sit in the middle of the wasteland market — so
+        // A card added to cards.ts without a themed name would silently keep
+        // its Japanese one and sit in the middle of this theme's market — so
         // this fails here instead, naming the cards still to be written.
         const unrenamed = Object.entries(DiceCitiesCards)
-            .filter(([cardId, base]) => wasteland.cards[cardId].title === base.title)
+            .filter(([cardId, base]) => theme.cards[cardId].title === base.title)
             .map(([, base]) => base.title);
-        expect(unrenamed, `no wasteland name for: ${unrenamed.join(', ')}`).toEqual([]);
+        expect(unrenamed, `no ${theme.id} name for: ${unrenamed.join(', ')}`).toEqual([]);
+    });
+
+    it('gives every card a name of its own', () => {
+        // Two cards sharing a title are one card to a player reading the
+        // market or the turn log — docs/games/dice-cities.md §13.1.
+        const titles = Object.values(theme.cards).map(card => card.title);
+        expect(new Set(titles).size).toBe(titles.length);
     });
 
     it('spends its own vocabulary rather than the base game\'s', () => {
-        expect(wasteland.words.coins).toBe('caps');
+        expect(theme.words.coins).not.toBe(DEFAULT_DICE_CITIES_THEME.words.coins);
         // Every renamed card's rules text should talk in that vocabulary too:
         // a Brahmin Pen that pays "1 coin from the bank" is half-themed.
-        const stillOnCoins = Object.values(wasteland.cards)
-            .filter(card => /\bcoins?\b/.test(card.text))
+        const stillOnCoins = Object.values(theme.cards)
+            .filter(card => /\b(coins?|bank)\b/.test(card.text))
             .map(card => card.title);
         expect(stillOnCoins, `still paid in coins: ${stillOnCoins.join(', ')}`).toEqual([]);
     });
