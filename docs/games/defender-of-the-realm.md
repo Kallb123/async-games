@@ -1,10 +1,11 @@
 # Defender of the Realm — Game Design Document
 
-**Status:** Concept, v0.2. §7 records the answers to the first round of
-questions. §8–§12 turn them into three proposals for how the game plays
-asynchronously. Nothing is decided yet; §13 lists the questions that would
-decide it.
-**Working title:** Defender of the Realm (see §14)
+**Status:** Concept, v0.3. §7 records the answers from rounds 1 and 2.
+Round 2 ruled out Proposals 1–3 (§12) as they stood and brought two new
+proposals: sealed battle plans (§13) and a campaign of battles (§14). §15
+compares the two and recommends one. Nothing is decided yet; §16 lists the
+questions that would decide it.
+**Working title:** Defender of the Realm (see §17)
 **Genre:** Turn-based fantasy strategy: an overworld of factions, cities and
 armies, with tactical squad battles
 **Inspirations:** *Heroes of Might and Magic* (the overworld) and *XCOM* (the
@@ -141,7 +142,7 @@ tactical turn in every battle they're in.
 
 ### 4.3 Further ideas
 
-See §10–§12.
+See §10–§15.
 
 ---
 
@@ -152,15 +153,19 @@ The test to judge proposals against, updated with the answers in §7:
 1. **Battles are played, not simulated**, at least the ones against other
    players.
 2. **Nobody sits idle waiting on a battle they aren't in.**
-3. **A battle is over within one overworld turn** (answer 13). It doesn't
-   have to wipe an army out to be over.
-4. **The overworld stays consistent.** A battle ending later can't make an
+3. **A turn fits into a spare minute or two**, like waiting for a bus or for
+   the kettle to boil (round 2, answer 1). No turn asks a player to fight a
+   whole battle in one sitting.
+4. **A battle is over within one overworld turn** (answer 13). If it runs
+   longer, the overworld holds until it's over (round 2, answer 1). A battle
+   doesn't have to wipe an army out to be over.
+5. **The overworld stays consistent.** A battle ending later can't make an
    earlier action invalid.
-5. **An absent player isn't treated unfairly**, especially a defender who
+6. **An absent player isn't treated unfairly**, especially a defender who
    didn't choose to fight.
-6. **The less a player takes part, the less luck decides the result**
+7. **The less a player takes part, the less luck decides the result**
    (answer 10).
-7. **It fits the platform.** Where it needs something new, as Kingdom Builder
+8. **It fits the platform.** Where it needs something new, as Kingdom Builder
    needed its tick, the cost is named and worth paying.
 
 ---
@@ -174,7 +179,9 @@ and how much one overworld turn can ask of a player.
 
 ---
 
-## 7. Questions and answers (round 1)
+## 7. Questions and answers
+
+Round 1 is §7.1–§7.5 (answers 1–16). Round 2 is §7.6 (round-2 answers 1–5).
 
 ### 7.1 Shape of a match
 
@@ -227,6 +234,23 @@ and how much one overworld turn can ask of a player.
 16. **Anything not wanted?** Open to different solutions, to see how it could
     all fit together.
 
+### 7.6 Round 2
+
+1. **Should battles feel like XCOM, or should both players decide
+   mid-battle?** Getting close to XCOM would be nice, but it will be
+   difficult. Turns need to be fast: people check in while waiting for a bus
+   or for the kettle to boil, so they can't be asked to fight a whole battle
+   in one go. And if a battle overflows into several turns, the overworld
+   really has to hold.
+2. **Is "about 20 turns" 20 each, or 20 in total?** Battles could vary a lot,
+   from 20 turns in total to 20 turns each.
+3. **Is a forced siege turn before attacking a city acceptable?** Yes.
+4. **Are 10–20 rounds enough overworld for six players?** A full six-player
+   match could run longer. That's OK overall.
+5. **Heroes?** Can still be decided later.
+
+Round 2 also brought two new proposals, written up in §13 and §14.
+
 ---
 
 ## 8. What the answers settle
@@ -240,6 +264,11 @@ and how much one overworld turn can ask of a player.
 | A battle ends within one overworld turn, without needing a wipe-out | Battles need a **turn limit** and a way to **withdraw**. If the defender still holds at the limit, the attacker falls back |
 | Luck shrinks as player involvement shrinks | An autobattle is (nearly) deterministic. A battle a player fights by hand can carry hit chances |
 | The overworld decides the match, by conquest | Battles are the means; cities are what's won and lost |
+| A turn fits into a minute or two (round 2) | No sitting can hold a whole battle. That rules out Proposal 1 (§12.2) |
+| If a battle runs long, the overworld holds (round 2) | Most battles should end within one exchange of orders. A longer battle has to say what it holds (§13.4) |
+| Battles run anywhere from 20 turns in total to 20 each (round 2) | Counting a **battle round** as one turn for each side, that's 10–20 battle rounds. One set of orders can't always cover a whole battle |
+| A forced siege turn is fine (round 2) | Attacking a city always gives the defender a turn to respond |
+| Six-player matches may run longer (round 2) | The one-at-a-time overworld pace (§9) is acceptable |
 
 ---
 
@@ -255,7 +284,7 @@ overnight).
 | One overworld round, 6 players, one after another | 6 | ~18 hours, about a day |
 | A 20-turn battle, the two sides taking turns | 20 | ~60 hours: two and a half days or more |
 | A 20-turn battle played in four phases, both sides planning at once | 4 | ~16 hours |
-| A battle one player fights during their own turn | 0 | Minutes, while they're already playing |
+| A battle one player fights during their own turn | 0 | 10–15 minutes in one sitting, too long for a check-in (round 2, answer 1) |
 
 What follows from it:
 
@@ -270,6 +299,10 @@ What follows from it:
    A one-to-two-week match is then about 10–20 rounds, nowhere near HOMM's
    hundred-plus days. The overworld has to be designed for a small number of
    big turns, unless rounds are played by everyone at once (§12, O2).
+   Round 2 accepts this: six-player matches can run longer.
+4. **Each check-in has to be small as well** (round 2). So each hand-off has
+   to cover several battle turns (point 2) *and* be quick to give. That means
+   orders that are mostly defaults, adjusted only where it matters (§10).
 
 ---
 
@@ -358,6 +391,8 @@ standing orders, the way Outbreak's infect step is the game playing itself.
   advantages (walls, deploying first, holding at the turn limit). A turn with
   a battle in it is long: a 20-turn battle is perhaps 10–15 minutes on a
   phone, so a battle has to be able to pause and resume within the turn.
+- **Round 2 rules this out** for battles between players. It asks for a whole
+  battle in one sitting (§12.2).
 
 ### B4 — Phased battles, both sides planning at once
 
@@ -383,6 +418,7 @@ fill any gaps, such as a target that died before it was reached.
   submitted in secret are hidden state, which this app's other games mostly
   avoid by revealing choices in turn order. A battle takes most of a day in
   real time (§9).
+- **A variant with fewer hand-offs**, the leapfrog, is in §13.4.
 
 ### B5 — Both sides take turns by hand (XCOM proper)
 
@@ -416,6 +452,12 @@ costs the most and should wait.
 
 ### 12.2 Proposal 1 — "Your turn, your battle" (O1 + B3)
 
+> **Set aside after round 2.** The attacker has to fight the whole battle in
+> one sitting, which round-2 answer 1 rules out. Spreading the battle over
+> several of the attacker's check-ins would stall the rotation for everyone
+> else. Its siege turn and its "everyone fights the battles they start" carry
+> into Proposal 4.
+
 The overworld goes one player at a time. A battle against another player is
 fought by the attacker, by hand, during their own turn, against the
 defender's standing orders. Neutrals auto-resolve (B1), or can be fought by
@@ -435,6 +477,10 @@ autobattled (B2).
   well as defends, so everyone plays the battles they choose to start.
 
 ### 12.3 Proposal 2 — "Orders, then battle" (O2 + B4)
+
+> **Set aside after round 2, kept as a fallback.** The overworld stays one
+> player at a time (answer 11; Proposal 4 assumes it). This comes back if the
+> six-player pace turns out to be the problem after all.
 
 Each round has two steps:
 
@@ -456,6 +502,11 @@ Each round has two steps:
   rules. A player with no battle waits through the battle step.
 
 ### 12.4 Proposal 3 — "Battles alongside" (O1 + B4)
+
+> **Absorbed into Proposal 4.** Proposal 4 is this proposal with the first
+> exchange of orders taken on the players' own turns, so it costs no extra
+> hand-offs. Its locking rule and its deadline become §13.4's "hold the
+> pieces".
 
 The overworld goes one player at a time, as in Proposal 1. A battle against
 another player is fought by both sides in phases (B4), beside the overworld:
@@ -485,53 +536,267 @@ another player is fought by both sides in phases (B4), beside the overworld:
 | Overworld pace, 6 players | ~1 round a day | ~1 round a day with battles, more without | ~1 round a day |
 | Fit with the platform | Best: one active player | New: secret orders, rounds for both layers | Medium: battles are side games |
 | Build cost | Lowest | Highest | Middle to high |
+| After round 2 | Set aside: a whole battle in one sitting | Fallback | Absorbed into Proposal 4 |
 
-### 12.6 Recommendation
+### 12.6 Round 1's recommendation
 
-**Proposal 1**, unless the defender fighting by hand is essential.
-
-- It is the only proposal whose battles actually feel like XCOM.
-- It makes the "two battles at once" problem disappear, rather than managing
-  it.
-- It uses the one-active-player engine the platform already has.
-- The pieces it needs, a tactical engine and standing orders (§10), are
-  needed by every proposal anyway.
-
-The defender's part is real but comes before the battle: the siege warning,
-the garrison, the fortifications and the orders.
-
-If the defender must fight by hand, choose **Proposal 3** over Proposal 2. It
-keeps the one-at-a-time overworld that answer 11 prefers, and only the
-battles need the new simultaneous rulebook.
-
-Either way, **the choice between B3 and B4 has to be made before the battle
-rules are written**. They are different rulebooks, and one can't grow into
-the other later.
+Round 1 recommended Proposal 1. Round-2 answer 1 ruled it out, because it asks
+for a whole battle in one sitting. §15 has the current recommendation.
 
 ---
 
-## 13. Questions (round 2)
+## 13. Proposal 4 — Sealed battle plans (from round 2)
 
-1. **The main fork:** should a battle between players feel like XCOM (the
-   attacker commands, move by move, against the defender's orders:
-   Proposal 1), or should both players make decisions mid-battle, planning
-   several turns at a time (Proposals 2 and 3)?
-2. **"About 20 turns":** is that 20 turns each, or 20 in total (10 each)? It
-   decides how many phases a B4 battle needs, and how long a B3 battle keeps
-   the attacker at their phone.
-3. **Sieges:** is it acceptable that attacking a city takes two turns
-   (arrive and besiege, then assault), so the defender always gets one turn to
-   respond?
-4. **Overworld length:** at six players, taking turns one after another gives
-   about 10–20 rounds in a one-to-two-week match. Is that enough overworld, or
-   does it push you towards everyone moving at once (Proposal 2)?
-5. **Heroes:** if heroes lead armies, they're a natural home for standing
-   orders (a hero's command style) and for carrying progress between battles.
-   Worth deciding alongside question 1?
+> **As proposed.** The overworld is turn-based, like HOMM. When a battle
+> starts, the attacker lays out orders for each unit in their army on a
+> tactical map: move, sneak, shoot, use abilities. When the rotation reaches
+> the defender, they set out their orders too. Then the orders are carried out
+> and the combat plays out automatically and predictably. Battlefields are
+> fairly small, so battles resolve quickly.
+
+### 13.1 How a battle goes
+
+1. **A's turn: contact.** A's army moves onto B's army, or lays siege to B's
+   city (the forced siege turn, round-2 answer 3). A battlefield is drawn from
+   the ground where they meet. B's units stand where B's standing orders
+   deploy them (§10). A sees that, places their own units in their entry
+   zone, and gives each unit its orders. A's orders are sealed. A then
+   finishes the rest of their turn.
+2. **Other players' turns.** The two armies, and the city if there is one,
+   are **locked**. Nobody can move them, recruit into them or attack them.
+3. **B's turn begins with the battle.** B sees the battlefield and where A's
+   units stand, apart from any that sneaked in, but not A's orders. B gives
+   their own. When B submits, the battle plays out and B watches it. B then
+   takes the rest of their turn knowing the result.
+4. **A's next check-in** opens on the replay.
+
+Against neutrals, the neutrals' orders are their standing orders, so the
+battle plays out as soon as A submits, within A's own turn. A defender who is
+away when their turn times out fights on their standing orders.
+
+**Positions are public; orders are sealed.** The attacker places their units
+after seeing the defender's deployment, so they choose the flank. The
+defender gives orders after seeing the attacker's placement, so they choose
+the response. Neither ever sees the other's orders before they play out. That
+evens out who plans first.
+
+### 13.2 What orders look like
+
+XCOM's overwatch is already a standing order ("shoot the first enemy that
+moves where I can see"), so XCOM's vocabulary carries over well into orders:
+
+- **Move**, **Sneak** (slower, and unseen until it attacks or is spotted), or
+  **Charge**.
+- **Attack** a particular unit, or by rule: the nearest, the weakest, or
+  whoever enters this area.
+- **Overwatch** a lane or an area.
+- **Hunker down** in cover.
+- **Use an ability** on a target, or when something happens ("heal whoever
+  drops below half strength").
+- **Fall back.**
+
+Orders chain together: "move to that wall, then overwatch the gate."
+
+Every unit starts with its standing order already filled in, so a player only
+changes the few that matter. That's what keeps a turn to the length of a
+kettle boiling (§5, point 3). An order aimed at something that's gone, such as
+a target that died or a tile someone else took, falls back on the standing
+orders.
+
+### 13.3 Resolving orders
+
+Both sides' orders play out together, one battle round at a time. Within a
+round, units act in a fixed order (by speed, with ties alternating between
+the sides), so the same orders always give the same result (answer 10). This
+is the simultaneous rulebook from §11 B4, chosen up front. The only
+uncertainty left is the opponent: you don't know their orders. That makes it
+a battle of wits, not a roll of the dice.
+
+### 13.4 Battles longer than one set of orders
+
+A set of orders goes stale once the fighting starts. Battles run 10–20 battle
+rounds (round-2 answer 2), so a set of orders should cover a **phase** of
+about five battle rounds, and a long battle needs two to four phases.
+
+**The leapfrog.** Whoever submits second in a phase plays it out, watches it,
+and in the same sitting plans the next phase from what they just saw. Then
+the other player sees the same result and gives their orders for that phase,
+which plays it out, and so on. Every hand-off finishes one phase and starts
+the next. Both sides always plan each phase from the same position, without
+seeing the other's orders. Four phases take five hand-offs. The cost is that
+a sitting holds two sets of orders: the one that finishes this phase and the
+one that starts the next.
+
+Round-2 answer 1 says that when a battle overflows, the overworld has to
+hold. There are two ways to read that:
+
+| What holds | How | Cost |
+|---|---|---|
+| **The pieces** | After the first phase, the battle messages its two players directly, outside the rotation, with a deadline for each phase. A missed phase plays out on standing orders. Anything unfinished when the attacker's next turn comes round plays out on standing orders at once. Only the locked armies and city wait. | A battle becomes a small game with its own turns, running beside the main one. The platform's one-player-at-a-time turn doesn't do that today (§3.3). |
+| **The world** | The rotation stops until the battle ends, and the phases go back and forth between the two players. | At six players, four people wait on two. |
+
+At two players the difference hardly matters: the rotation already goes back
+and forth between the two players in the battle.
+
+**The simplest first version is a single phase.** Each side gives one set of
+orders. Whatever is left after it plays out on standing orders straight away
+(§11 B2). Every battle is then over on the defender's turn, and nothing is
+ever held past one round. Phases can come later, if playtesting shows that
+one set of orders decides too little.
+
+### 13.5 For and against
+
+**For**
+- It keeps the HOMM overworld whole, along with the conquest that happens
+  there.
+- The first exchange of orders costs no extra hand-offs. It rides the
+  rotation, the same wait the forced siege turn already has.
+- Every turn is short: watch what happened, then adjust a few orders.
+- Battles are predictable (answer 10). The drama comes from reading your
+  opponent.
+- One battle screen serves every kind of fight. Against neutrals, or an
+  absent defender, the battle plays out at once against their standing
+  orders.
+- It has been done before: *Laser Squad Nemesis* and *Frozen Synapse*
+  (§11 B4). *Dominions* scripts the opening turns of its battles in much the
+  same way.
+
+**Against**
+- It isn't XCOM's move by move: you plan, then watch. The feel of a battle
+  lives in the replay, so the replay has to make every shot, and every order
+  that fired, easy to follow.
+- Giving 6–10 units their orders on a phone in a minute or two is the hardest
+  screen in the game. Defaults do most of the work, but the order screen is
+  where this proposal lives or dies.
+- Sealed orders and sneaking units are hidden state. They must never reach the
+  other player before they play out.
+- A defender attacked by two players in one round starts their turn with two
+  battles to plan.
+- Long battles need phases. Phases need an answer to "what holds" (§13.4),
+  and a way for a battle to message its players outside the rotation.
 
 ---
 
-## 14. Working title
+## 14. Proposal 5 — The campaign of battles (from round 2)
+
+> **As proposed.** The overworld becomes less about movement and turns. It's a
+> single "prepare" phase between a series of battles, and the battles decide
+> the winner. The battles are the focus, with real XCOM-style turn-based
+> combat, and every player fights.
+
+### 14.1 How a campaign round goes
+
+1. **Prepare.** Everyone at once, in one short sitting: recruit, heal and
+   train troops, build in your city, and choose whom to attack.
+2. **Battle.** Each attack is a battle between two players, taking turns
+   XCOM-style. One turn moves your whole squad, which takes a minute or two
+   and fits a check-in. Every battle in the round is fought at the same time.
+3. **Results.** Territory changes hands. Survivors carry their wounds and
+   experience into the next prepare step.
+
+This is XCOM's own structure, a strategy layer between tactical missions,
+made multiplayer.
+
+For conquest to mean anything, the prepare step still needs somewhere to
+conquer: a small map of provinces, where you pick a neighbour to strike. That
+is answer 11's "less physical" overworld (§12.1, O3). Choices stay sealed
+until everyone has prepared, which makes the prepare step a small version of
+§12.1's O2.
+
+### 14.2 For and against
+
+**For**
+- Real XCOM combat: move by move, with reaction fire and hit chances. Players
+  are fully involved, so luck is fine (answer 10).
+- Every battle turn is short.
+- Each battle is exactly the two-player, one-at-a-time shape the platform
+  already has.
+- Most players are fighting at any one time, so during the battle step few
+  are waiting on someone else's battle.
+- Nothing overlaps. The overworld is the prepare step, and it waits for every
+  battle by design (answer 13).
+
+**Against**
+- **It's slow.** A battle of 10–20 battle rounds is 20–40 hand-offs: about
+  two and a half to five days at three hours each (§9). A campaign round then
+  takes three to six days, so a two-week match gives each player three to
+  five battles. Battles would need to sit at the short end of round-2 answer
+  2, with a turn limit and a timer on each tactical turn. A missed turn plays
+  out on standing orders.
+- **The round waits for its slowest battle.** Players who finish early have
+  to wait. They could fill the gap with battles against neutrals, which need
+  nobody else and so go at their own pace. Those need a computer opponent
+  good enough to play XCOM properly, which is a big thing to build.
+- **Some players end up without a battle.** A player nobody attacked, or the
+  odd one out when the player count is odd, has no fight. Battles against
+  neutrals fill that gap too.
+- **It gives up the HOMM half** of the pitch: marching, exploring and an
+  economy on the map. The overworld shrinks to a menu.
+
+---
+
+## 15. Proposals 4 and 5 compared
+
+| | P4: Sealed battle plans | P5: The campaign of battles |
+|---|---|---|
+| The overworld | HOMM: turn by turn, with marching, cities and resources | A prepare step between battles, on a small map of provinces |
+| A battle | Plan orders, then watch them play out | XCOM: taking turns, move by move |
+| Luck | None: the opponent is the uncertainty | Hit chances, as in XCOM |
+| A player's turn | Watch the last phase, adjust a few orders, take an overworld turn | Move your squad, or prepare |
+| Hand-offs per battle | 1 (one phase, riding the rotation) to about 5 (four phases) | 20–40 |
+| How long a battle takes | Within a round with one phase; half a day to a day with more | Two and a half to five days |
+| Battles in a two-week match | Many: any turn can start one | Three to five per player |
+| What holds during a battle | The armies and city in it | The whole overworld, by design |
+| Hardest part to build | The order screen, and a replay that's easy to follow | A computer opponent for neutral battles, and the pacing |
+| Fit with the platform | Needs sealed orders; phases need battles to message players outside the rotation | Needs one match to hold several two-player battles at once |
+
+### 15.1 Recommendation
+
+**Proposal 4, starting with a single phase.**
+
+The real question is which half is the heart of the game.
+
+- **Proposal 4 keeps the realm.** That's the half where conquest happens, and
+  it gives every battle its stakes. Battles stay quick and frequent. The cost
+  is XCOM's move by move.
+- **Proposal 5 keeps XCOM.** It pays for that with the realm and with pace:
+  a few big battles spread over weeks.
+
+Build Proposal 4 one step at a time:
+
+1. One set of orders per side per battle, finished on standing orders.
+2. See in playtesting whether that's enough.
+3. Add leapfrog phases only if battles feel decided too early.
+
+The order screen is the riskiest piece, so it's the first thing worth
+prototyping, before factions, the economy or the map.
+
+If move-by-move XCOM is the part you most want, Proposal 5 is the honest way
+to get it, and the rest of the design should shrink around it.
+
+---
+
+## 16. Questions (round 3)
+
+1. **The heart of the game:** is it the realm (Proposal 4: plan-and-watch
+   battles, and lots of them), or the battle (Proposal 5: move-by-move XCOM,
+   with a few big battles over weeks)?
+2. **For Proposal 4:** when a battle runs past one set of orders, what should
+   hold? Only the armies and city in the battle, with the battle messaging its
+   two players outside the rotation, or the whole rotation?
+3. **For Proposal 4:** is "positions public, orders sealed" the right
+   balance? That means the attacker chooses the flank after seeing the
+   defender's deployment, and the defender gives orders after seeing where the
+   attacker placed their units.
+4. **For Proposal 4:** is it worth trying a first version where each side
+   gives one set of orders and standing orders finish the battle, before
+   adding phases?
+5. **For Proposal 5:** would three to five battles per player over two weeks
+   feel like a campaign, or too few?
+
+---
+
+## 17. Working title
 
 "Defender of the Realm" is close to existing titles. There's the board game
 *Defenders of the Realm* (Richard Launius, 2010) and the computer game
@@ -546,3 +811,4 @@ before release.
 |---|---|
 | 0.1 | Concept recorded; the async problem set out; the two ideas raised so far (§4) written up; open questions listed. |
 | 0.2 | Round-1 answers recorded (§7) and their consequences listed (§8); the hand-off budget (§9); standing orders as the shared foundation (§10); five battle modes (§11); three proposals and a recommendation (§12); round-2 questions (§13). The working title moves from §8 to §14. |
+| 0.3 | Round-2 answers recorded (§7.6) and added to §5, §8 and §9; Proposals 1–3 given a status after round 2 (§12); the two round-2 proposals written up: sealed battle plans (§13, including the leapfrog and what holds during a long battle) and the campaign of battles (§14); compared, with a new recommendation (§15); round-3 questions (§16). The working title moves from §14 to §17. |
