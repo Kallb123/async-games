@@ -603,8 +603,12 @@ The gremlin's questions.
   match review and the result charts of a game started before then stopped a
   round or two in. The replay adapter's `closeUnrecordedHold`
   (`sacUnrecordedHoldEnd`) closes such a hold the way those rules did, as its
-  holder, before the recorded command it wouldn't have let through. Every
-  hold since was closed by a recorded command, so it never fires for those.
+  holder, before the recorded command it wouldn't have let through — and
+  leaves no step, command or line of its own, since the old rules ended the
+  turn inside the move that holds today. Only a hold that is its holder's
+  own, their snapshot on top of the stack: every hold since was closed by a
+  recorded command, and the Special Build Phase's hand-offs clear the undo
+  state like any other, so it never fires for those.
 - **No recap event.** Replay retains `SACUndo`, but the shared recap engine
   treats undo as an edit: it suppresses the Undo and every event produced by
   the command immediately before it. The recap therefore shows neither a

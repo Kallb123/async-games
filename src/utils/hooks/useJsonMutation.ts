@@ -5,8 +5,9 @@ import { useRef, useState } from "react";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 import { useSessionRefresh } from "./useAuthGuard";
 
-/** Shared guarded JSON POST state for small screens that update their loaded view in place. */
-export function useJsonMutation<T>(endpoint: string, fallbackMessage: string) {
+/** Shared guarded JSON POST state for small screens that update their loaded view in place.
+ *  `timeoutMs` is for a route that is allowed longer than the usual request to answer. */
+export function useJsonMutation<T>(endpoint: string, fallbackMessage: string, timeoutMs = REQUEST_TIMEOUT_MS) {
     const [isPending, setIsPending] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const submittingRef = useRef(false);
@@ -22,7 +23,7 @@ export function useJsonMutation<T>(endpoint: string, fallbackMessage: string) {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify(body),
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                signal: AbortSignal.timeout(timeoutMs),
             });
             let response = await request();
             if (response.status === 401) {

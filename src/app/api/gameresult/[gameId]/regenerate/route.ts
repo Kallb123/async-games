@@ -11,10 +11,19 @@ import { gameResultResponse } from '@/utils/api/gameResultResponse';
 export const maxDuration = 60;
 
 // A result only ever needs regenerating once a fix to how it is worked out
-// has shipped, so a handful an hour is plenty for anyone — and keeps a full
-// replay a request away from being something to hammer.
+// has shipped, so a handful an hour is plenty — and keeps a full replay a
+// request away from being something to hammer. Per player, and per game too:
+// every seat in a game (a guest's included) is a player who may ask, and the
+// same moves replay to the same stats however many of them do.
 const REGENERATE_LIMIT = 5;
+const REGENERATE_GAME_LIMIT = 3;
 const REGENERATE_WINDOW_MS = 60 * 60 * 1000;
+
+// Refusals go in the body, where the client reads them: a status line is
+// empty over HTTP/2, and one that isn't plain ASCII throws.
+function refuse(status: number, error: string) {
+    return NextResponse.json({ error }, { status });
+}
 
 // Works a finished game's stats and charts out again from its own moves (see
 // regenerateGameResultStats), for a player in it, while the game is still
@@ -24,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
+        return refuse(400, "Not signed in");
     }
 
     const { gameId } = await params;
@@ -33,28 +42,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const result = await GameResultModel.findOne({ gameId }).exec();
     if (!result) {
-        return NextResponse.json({}, { status: 404, statusText: "Game result not found" });
+        return refuse(404, "Game result not found");
     }
     // Players only: a friend may look at a result, but it isn't theirs to rewrite.
     if (!result.playerIds.includes(userId)) {
-        return NextResponse.json({}, { status: 403, statusText: "Only a player in this game can regenerate its results" });
+        return refuse(403, "Only a player in this game can regenerate its results");
     }
 
-    if (!(await consumeRateLimit('regenerate-result', userId, REGENERATE_LIMIT, REGENERATE_WINDOW_MS))) {
-        return NextResponse.json({}, { status: 429, statusText: "You've regenerated results a lot recently — try again later" });
+    if (!(await consumeRateLimit('regenerate-result', userId, REGENERATE_LIMIT, REGENERATE_WINDOW_MS))
+        || !(await consumeRateLimit('regenerate-result-game', gameId, REGENERATE_GAME_LIMIT, REGENERATE_WINDOW_MS))) {
+        return refuse(429, "These results have been regenerated a lot recently. Try again later.");
     }
 
     // Scoped to the caller's games as well, so the game is theirs whatever its
     // result says.
     const gameData = await GameDataModel.findOne({ gameId, complete: true, userIdList: userId }).exec();
     if (!gameData) {
-        return NextResponse.json({}, { status: 410, statusText: "This game's moves are no longer kept" });
+        return refuse(410, "This game's moves are no longer kept");
     }
 
-    if (!(await regenerateGameResultStats(gameData))) {
-        return NextResponse.json({}, { status: 400, statusText: "This game has no results to regenerate" });
+    const outcome = await regenerateGameResultStats(gameData);
+    if ('refused' in outcome) {
+        return outcome.refused === 'lossy'
+            ? refuse(409, "The game's moves no longer add up to these results, so they were kept as they were")
+            : refuse(400, "This game has no results to regenerate");
     }
 
-    const regenerated = await GameResultModel.findOne({ gameId }).exec();
-    return NextResponse.json({ success: true, result: await gameResultResponse(regenerated ?? result, userId) });
+    return NextResponse.json({ success: true, result: await gameResultResponse(outcome.regenerated, userId) });
 }

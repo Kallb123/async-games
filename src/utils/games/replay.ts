@@ -406,19 +406,6 @@ export async function buildTimeline(
         planned: boolean,
         resolvedOut: unknown[] | null
     ): Promise<boolean> => {
-        // Every command actually applied, the follow-ups among them.
-        const recordStep = (applied: IGameCommand, appliedOutcome: ICommandOutcome) => {
-            // This is the plan handed back to the client to resend.
-            resolvedOut?.push(applied);
-            snapshot(applied, planned);
-            onStep?.({
-                prev: snapshots[snapshots.length - 2],
-                next: snapshots[snapshots.length - 1],
-                command: applied,
-                outcome: appliedOutcome,
-                planned,
-            }, state.specificGameState);
-        };
         for (let index = 0; index < rawCommands.length; index++) {
             const raw = rawCommands[index];
             const command: IGameCommand = deserializeJSON(JSON.stringify(raw));
@@ -433,18 +420,26 @@ export async function buildTimeline(
             // before it held turns (IReplayAdapter.closeUnrecordedHold) — closed
             // here, as its holder, before the command that moved on from it.
             // Asked before `currentTurn` is put back to this command's, since
-            // while a hold is open the turn is still its holder's. Stamped with
-            // the time of the move that opened it, when those rules ended the
-            // turn. Never for a planned command: a plan is today's rules.
+            // while a hold is open the turn is still its holder's. Never for a
+            // planned command: a plan is today's rules.
             const closeHold = planned ? null : adapter.closeUnrecordedHold?.(state.specificGameState, state.currentTurn, command);
             if (closeHold) {
                 closeHold.gameId = command.gameId;
                 closeHold.senderId = state.currentTurn;
-                closeHold.senderUsername = historyNames[state.currentTurn] ?? state.currentTurn;
-                closeHold.timestamp = state.gameState.commandHistory.at(-1)?.timestamp ?? command.timestamp;
-                const closed = await runCommand(state, gameType, closeHold, { onStep: recordStep });
-                if (closed.gameOver) {
-                    return true;
+                const closed = await runCommand(state, gameType, closeHold);
+                if (closed.outcome.validMove) {
+                    // Those rules ended the turn inside the move that holds it
+                    // today, with no command and no line of its own, so this
+                    // leaves neither — and no step: what it did is part of the
+                    // next one. Only its own lines go (the pipeline stamps them
+                    // with its id), not what the hand-off itself wrote, which
+                    // the game wrote too; the history has to stay the length the
+                    // game kept, or the creation-time lines sliced off its tail
+                    // below would come up short.
+                    state.gameState.commandHistory.pop();
+                    state.gameState.history = state.gameState.history.filter(line => line.commandId !== closeHold.id);
+                } else {
+                    console.warn(`Replay of game ${gameData.gameId} couldn't close a hold its log never closed; ${command.className} is likely refused next`);
                 }
             }
             // Every command was executed on its sender's turn — except one
@@ -476,7 +471,19 @@ export async function buildTimeline(
             // see ICommandOutcome.followUpCommand.
             const { outcome, gameOver } = await runCommand(state, gameType, command, {
                 outOfTurn: onTurnOf !== undefined,
-                onStep: recordStep,
+                onStep: (applied, appliedOutcome) => {
+                    // Every command actually applied, the follow-ups among them:
+                    // this is the plan handed back to the client to resend.
+                    resolvedOut?.push(applied);
+                    snapshot(applied, planned);
+                    onStep?.({
+                        prev: snapshots[snapshots.length - 2],
+                        next: snapshots[snapshots.length - 1],
+                        command: applied,
+                        outcome: appliedOutcome,
+                        planned,
+                    }, state.specificGameState);
+                },
                 // A follow-up was recorded when it ran, marked with the id of the
                 // command it answered, so it is already the next entry in this very
                 // list and the loop will apply it in a moment — with the id and
@@ -644,17 +651,21 @@ export async function computePerTurnInternalStats<TState, K extends string>(
     // wrong turn.
     const entries = await lastOfEachTurn(gameData, (_step, specificGameState) => {
         const state = specificGameState as TState;
-        return names.map(name => keys.map(key => extractors[name](state, key)));
+        return names.map(name => new Map(keys.map(key => [key, extractors[name](state, key)])));
     }, "per-turn stats");
     if (!entries) return undefined;
-    return Object.fromEntries(names.map((name, i) => {
-        const held = new Map<string, number>();
-        return [name, entries.map(entry => new Map(keys.map((key, k) => {
-            const value = entry[i][k] ?? held.get(key) ?? 0;
-            held.set(key, value);
-            return [key, value];
-        })))];
-    })) as Record<K, Map<string, number>[]>;
+    return Object.fromEntries(names.map((name, i) => [name, holdingLastValues(entries.map(entry => entry[i]))])) as Record<K, Map<string, number>[]>;
+}
+
+// Each turn's reading with its gaps filled from the turn before — nought
+// before a key ever had a value.
+function holdingLastValues(perTurn: Map<string, number | undefined>[]): Map<string, number>[] {
+    const filled: Map<string, number>[] = [];
+    for (const turn of perTurn) {
+        const previous = filled.at(-1);
+        filled.push(new Map([...turn].map(([key, value]) => [key, value ?? previous?.get(key) ?? 0])));
+    }
+    return filled;
 }
 
 // Replays a game via buildTimeline, calling `detect` once per applied command

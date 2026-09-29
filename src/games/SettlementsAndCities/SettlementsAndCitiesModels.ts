@@ -30,6 +30,7 @@ import {
     ISACResources,
     ISACDevCards,
     ISACSpecificGameState,
+    SAC_Resource,
 } from "./board";
 import {
     SACExpansions,
@@ -650,22 +651,18 @@ function completeGatheredByType(counts: ISACResources | undefined, total: number
 // at what that player left with: a dropped player's own state goes with them
 // (the dropout adapter in SettlementsAndCitiesLogic.ts), and the replay is the
 // only place left that knows it.
-const replayedSeat = (gs: ISACSpecificGameState, userId: string) => mongoMap(gs.playerStates).get(userId);
-const replayedGathered = (resource: keyof ISACResources) => (gs: ISACSpecificGameState, userId: string) => {
-    const ps = replayedSeat(gs, userId);
-    return ps ? ps.resourcesGatheredByType?.[resource] ?? 0 : undefined;
+type SACReplayedStat = (gs: ISACSpecificGameState, userId: string) => number | undefined;
+const seatStat = (read: (ps: ISACPlayerState, gs: ISACSpecificGameState, userId: string) => number): SACReplayedStat => (gs, userId) => {
+    const ps = mongoMap(gs.playerStates).get(userId);
+    return ps ? read(ps, gs, userId) : undefined;
 };
 export const SAC_REPLAYED_STATS = {
-    resourcesGathered: (gs: ISACSpecificGameState, userId: string) => replayedSeat(gs, userId)?.resourcesGathered,
-    victoryPoints: (gs: ISACSpecificGameState, userId: string) => replayedSeat(gs, userId) ? calculateTotalVP(userId, gs) : undefined,
-    knightsPlayed: (gs: ISACSpecificGameState, userId: string) => replayedSeat(gs, userId)?.knightsPlayed,
-    devCardsBought: (gs: ISACSpecificGameState, userId: string) => replayedSeat(gs, userId)?.devCardsBought,
-    robberUses: (gs: ISACSpecificGameState, userId: string) => replayedSeat(gs, userId)?.robberUses,
-    lumber: replayedGathered('lumber'),
-    wool: replayedGathered('wool'),
-    grain: replayedGathered('grain'),
-    brick: replayedGathered('brick'),
-    ore: replayedGathered('ore'),
+    resourcesGathered: seatStat(ps => ps.resourcesGathered),
+    victoryPoints: seatStat((_ps, gs, userId) => calculateTotalVP(userId, gs)),
+    knightsPlayed: seatStat(ps => ps.knightsPlayed),
+    devCardsBought: seatStat(ps => ps.devCardsBought),
+    robberUses: seatStat(ps => ps.robberUses),
+    ...Object.fromEntries(SAC_RESOURCES.map(r => [r, seatStat(ps => ps.resourcesGatheredByType?.[r] ?? 0)])) as Record<SAC_Resource, SACReplayedStat>,
 };
 export type SACReplayedStats = Record<keyof typeof SAC_REPLAYED_STATS, Map<string, number>[]>;
 
@@ -705,38 +702,28 @@ export function computeSettlementsAndCitiesResultStats(
         // What the replay last read for this seat — the end of the game, or
         // the moment a dropped player left it.
         const last = (stat: keyof SACReplayedStats) => trusted?.[stat].at(-1)?.get(userId) ?? 0;
-        const replayedByType: ISACResources | undefined = trusted && {
-            lumber: last('lumber'), wool: last('wool'), grain: last('grain'), brick: last('brick'), ore: last('ore'),
-        };
-        // A dropped player's buildings and roads stay on the board, so those
-        // come off it for everybody.
-        const board = {
+        // The live count for a seat still playing; the replay's for one that isn't.
+        const counted = (stat: 'knightsPlayed' | 'devCardsBought' | 'resourcesGathered' | 'robberUses') => ps ? ps[stat] : last(stat);
+        const replayedByType = trusted && SAC_RESOURCES.reduce((counts, r) => ({ ...counts, [r]: last(r) }), { ...NO_RESOURCES });
+        playerStats.set(userId, {
+            // A dropped player's buildings and roads stay on the board, so
+            // those come off it for everybody.
             settlements: gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length,
             cities: gs.vertices.filter(v => v.owner === userId && v.building === 'city').length,
             roads: gs.edges.filter(e => e.owner === userId && e.hasRoad).length,
             longestRoad: calculateLongestRoad(userId, gs.vertices, gs.edges),
-        };
-        playerStats.set(userId, ps ? {
-            ...board,
-            knightsPlayed: ps.knightsPlayed,
-            devCardsBought: ps.devCardsBought,
-            resourcesGathered: ps.resourcesGathered,
+            knightsPlayed: counted('knightsPlayed'),
+            devCardsBought: counted('devCardsBought'),
+            resourcesGathered: counted('resourcesGathered'),
             // The replay's count if it has one, which runs from the first
-            // move; the live one only if it too is whole.
-            resourcesGatheredByType:
-                completeGatheredByType(replayedByType, ps.resourcesGathered)
-                ?? completeGatheredByType(ps.resourcesGatheredByType, ps.resourcesGathered),
-            robberUses: ps.robberUses,
+            // move; for a seat still playing, the live one only if it too is
+            // whole.
+            resourcesGatheredByType: ps
+                ? completeGatheredByType(replayedByType, ps.resourcesGathered) ?? completeGatheredByType(ps.resourcesGatheredByType, ps.resourcesGathered)
+                : replayedByType,
+            robberUses: counted('robberUses'),
             // Hidden VP cards are revealed at game-end, so they count here.
-            victoryPoints: calculateTotalVP(userId, gs),
-        } : {
-            ...board,
-            knightsPlayed: last('knightsPlayed'),
-            devCardsBought: last('devCardsBought'),
-            resourcesGathered: last('resourcesGathered'),
-            resourcesGatheredByType: replayedByType,
-            robberUses: last('robberUses'),
-            victoryPoints: last('victoryPoints'),
+            victoryPoints: ps ? calculateTotalVP(userId, gs) : last('victoryPoints'),
         });
     }
     return {

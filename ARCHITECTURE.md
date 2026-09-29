@@ -310,10 +310,14 @@ interface IGameResultData {
 
 Key properties:
 
-- **Append-only.** One record is written per finished game, via
-  `recordGameResult(gameData)`, and never updated afterwards. Because it's a
-  separate collection from `GameData`, match history/stats survive deletion of
-  the underlying game.
+- **Append-only, apart from `stats`.** One record is written per finished
+  game, via `recordGameResult(gameData)`. Who won, how it ended and when never
+  change. The game-specific `stats` may be worked out again from the game's
+  moves by `regenerateGameResultStats` (`POST
+  /api/gameresult/[gameId]/regenerate`, the result page's "Regenerate results"
+  link), while the `GameData` is still kept — and never into a result that
+  would chart less than before. Because it's a separate collection from
+  `GameData`, match history/stats survive deletion of the underlying game.
 - **Written once, from the one place a game becomes `complete`:**
   `finishGame()` in `src/utils/games/finishGame.ts`. Three callers finish games
   — the command pipeline's game-over branch (§6, step 8), the manual surrender

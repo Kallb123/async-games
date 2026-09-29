@@ -562,7 +562,10 @@ must only ever describe what the whole table can already see.
    If the starting state can't be rebuilt deterministically, persist a snapshot
    instead — see [Snapshot-replay games](#snapshot-replay-games).
 2. Register an `IReplayAdapter` in `replay.ts` keyed by the game's
-   `gameType.className`.
+   `gameType.className`. If a rule change leaves games already under way
+   with logs today's rules can't follow — a turn that now holds for undo
+   where it used to end — the optional `closeUnrecordedHold` is where the
+   replay learns the old shape (see [`docs/undo.md`](./undo.md) §10).
 3. Record RNG in any command whose `Execute` consumes randomness (see pattern
    above).
 4. Check every command's `myString()` reads as a phrase a player would say —

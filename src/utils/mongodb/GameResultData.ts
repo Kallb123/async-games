@@ -158,12 +158,15 @@ export interface IGameResultDataModel extends Model<IGameResultDataDocument> {
     // Static methods
 }
 
-// Append-only record of a finished game, written once via recordGameResult()
-// below - it's a read model for stats, not part of the game engine, and
-// survives deletion of the GameData it summarises. Per-game discriminators
-// (below) add a `stats` field boiling that game's specificGameState/command
-// history down into a handful of interesting numbers, following the same
-// discriminatorKey pattern as GameData's specificGameState.
+// The record of a finished game, written once via recordGameResult() below -
+// it's a read model for stats, not part of the game engine, and survives
+// deletion of the GameData it summarises. Append-only apart from `stats`,
+// which regenerateGameResultStats may work out again while that GameData is
+// still kept; who won, how it ended and when never change. Per-game
+// discriminators (below) add a `stats` field boiling that game's
+// specificGameState/command history down into a handful of interesting
+// numbers, following the same discriminatorKey pattern as GameData's
+// specificGameState.
 export var GameResultSchema = new Schema<IGameResultDataDocument>({
     gameId: { type: String, unique: true },
     gameType: String,
@@ -507,22 +510,50 @@ export function hasGameResultStats(gameType: string): boolean {
     return gameType in GAME_RESULT_STATS;
 }
 
+// Whether `fresh` would draw less than `stored` did: a chart gone, or a
+// round-by-round one with fewer rounds. Compared by title, which a game's
+// chart formatter fixes.
+export function losesCharts(stored: GameResultAnyChart[], fresh: GameResultAnyChart[]): boolean {
+    return stored.some(before => {
+        const after = fresh.find(chart => chart.title === before.title);
+        if (!after) return true;
+        return !before.kind && !after.kind && after.rounds.length < before.rounds.length;
+    });
+}
+
+export type RegenerateOutcome =
+    | { regenerated: IGameResultDataDocument }
+    // A live game (whose stats would read hidden state), a game with no stats
+    // of its own, or no result recorded with them.
+    | { refused: 'nothing' }
+    // The moves no longer replay to what the result already shows.
+    | { refused: 'lossy' };
+
 // Works a finished game's recorded stats out again from the game itself, for
 // a result recorded while its game's replay couldn't follow it — a rule that
 // changed under a game already under way (see IReplayAdapter's
 // closeUnrecordedHold) — once the replay can. Only the stats: who won, how it
 // ended and when are the record of what happened, and stay as they were.
-// Needs the game's GameData, which the result outlives, so the caller finds it
-// first. False when there was nothing to rewrite: a game with no stats of its
-// own, or no result recorded with them.
-export async function regenerateGameResultStats(gameData: IGameData): Promise<boolean> {
+// Needs the game's GameData, which the result outlives, so the caller finds
+// it first. Kept as it was when the fresh stats would chart less than the
+// stored ones (losesCharts): a later change that left an old game's moves
+// replaying worse must not take away a result that came out right.
+export async function regenerateGameResultStats(gameData: IGameData): Promise<RegenerateOutcome> {
     const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
-    if (!specific) return false;
+    // Every stat is worked out from the game's whole state, hands and all,
+    // which is only anybody's business once it is over.
+    if (!specific || !gameData.complete) return { refused: 'nothing' };
     const result = await specific.model.findOne({ gameId: gameData.gameId }).exec();
-    if (!result) return false;
-    result.set('stats', await specific.compute(gameData));
+    if (!result) return { refused: 'nothing' };
+    const stats = await specific.compute(gameData);
+    // The charts are laid out by player count and keyed by userId, so ids
+    // stand in for names here.
+    const byId = new Map(gameData.userIdList.map(userId => [userId, userId]));
+    const charts = (s: unknown) => (s ? specific.charts?.(s, byId) : undefined) ?? [];
+    if (losesCharts(charts(result.stats), charts(stats))) return { refused: 'lossy' };
+    result.set('stats', stats);
     await result.save();
-    return true;
+    return { regenerated: result };
 }
 
 // Renders a GameResult document's discriminated `stats` field into display-

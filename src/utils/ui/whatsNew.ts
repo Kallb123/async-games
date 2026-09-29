@@ -131,7 +131,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Settlements & Cities results cover the whole game",
-                detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. Every finished game's results page also has a Regenerate results link at the bottom, to work them out again from the game's moves.",
+                detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. The results page of a game you played in also has a Regenerate results link at the bottom, to work them out again from the game's moves while they're still kept.",
                 game: "settlementsandcities",
             },
             {

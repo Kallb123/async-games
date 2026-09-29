@@ -25,8 +25,8 @@ export interface IGameResultResponse {
     charts: GameResultAnyChart[];
     // Whether the viewer can have the stats and charts worked out again from
     // the game's own moves (POST /api/gameresult/[gameId]/regenerate): they
-    // played in it, the game has stats of its own, and its GameData — which
-    // the result outlives — is still kept.
+    // played in it, it was recorded with stats of its own, and its GameData —
+    // which the result outlives — is still kept.
     canRegenerate: boolean;
 }
 
@@ -38,7 +38,10 @@ export async function gameResultResponse(result: IGameResultDataDocument, viewer
     const playerIds: string[] = result.playerIds;
     const usernameById = await userIdListToUsernameMap(playerIds);
     const stats = (result as unknown as { stats?: unknown }).stats;
+    // A result recorded before its game kept stats has none to rewrite
+    // (regenerateGameResultStats finds only one that has).
     const canRegenerate = playerIds.includes(viewerId)
+        && stats !== undefined
         && hasGameResultStats(result.gameType)
         && !!(await GameDataModel.exists({ gameId: result.gameId, complete: true }));
 

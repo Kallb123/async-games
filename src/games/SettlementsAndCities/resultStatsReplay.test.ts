@@ -12,7 +12,7 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 import { RECORDED_ON_TURN_OF, type IGameCommand } from "@/utils/apiModels/GameLogic";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { PlayerDropped } from "@/utils/games/playerDropout";
-import { computePerTurnInternalStats } from "@/utils/games/replay";
+import { buildTimeline, computePerTurnInternalStats } from "@/utils/games/replay";
 
 // The game-end replay, read the way GameResultData's Settlements & Cities
 // entry reads it.
@@ -176,13 +176,17 @@ describe("Settlements & Cities' victory points chart", () => {
 // to do: those ended the turn there and then. Its log is today's with those
 // SACEndTurns taken out — and it should replay to exactly the same game.
 describe("Settlements & Cities' replay of a game recorded before turns were held", () => {
+    const SETUP_LINE = "Setup: first to 10 victory points wins";
+
     // The full setup snake (u1, u2, u2, u1) and a roll each, every hold closed
     // by the SACEndTurn a board sends today. Returns those closers' ids too.
     async function setUpAndRoll() {
         const gs = makeState({ phase: "setup", hexes: oneForest(), ...emptyBoard(), robberHexIndex: 1, hasRolled: false, lastRoll: null });
         gs.playerStates.set("u1", player());
         gs.playerStates.set("u2", player());
-        const game = makeGame(gs);
+        // A creation-time line, as CreateGame writes: the tail of the history,
+        // which the replay can't regenerate and copies from the stored one.
+        const game = makeGame(gs, { gameState: { turnOrder: ["u1", "u2"], history: [{ text: SETUP_LINE }], commandHistory: [] } });
         const closers = new Set<string>();
         for (const userId of ["u1", "u2", "u2", "u1"]) {
             const settlement = cmd(new SACPlaceSettlementSetup(), userId);
@@ -203,8 +207,17 @@ describe("Settlements & Cities' replay of a game recorded before turns were held
         return { game, closers };
     }
 
+    // The game as those rules would have stored it: without the commands, and
+    // without the lines they wrote.
     function withoutCommands(game: ISettlementsAndCitiesGameData, ids: Set<string>): ISettlementsAndCitiesGameData {
-        return { ...game, gameState: { ...game.gameState, commandHistory: game.gameState.commandHistory.filter(c => !ids.has(c.id)) } } as ISettlementsAndCitiesGameData;
+        return {
+            ...game,
+            gameState: {
+                ...game.gameState,
+                commandHistory: game.gameState.commandHistory.filter(c => !ids.has(c.id)),
+                history: game.gameState.history.filter(line => !line.commandId || !ids.has(line.commandId)),
+            },
+        } as ISettlementsAndCitiesGameData;
     }
 
     it("closes each setup hold its log never closed, the snake's double placements included", async () => {
@@ -218,6 +231,19 @@ describe("Settlements & Cities' replay of a game recorded before turns were held
         const stats = computeSettlementsAndCitiesResultStats(legacy, replayed);
         expect(stats.resourcesPerTurn).not.toEqual([]);
         expect(stats.playerStats.get("u1")?.settlements).toBe(2);
+    });
+
+    it("leaves no step or line of its own, so the match history keeps its setup lines", async () => {
+        const { game, closers } = await setUpAndRoll();
+        const legacy = withoutCommands(game, closers);
+
+        const timeline = await buildTimeline(legacy, { u1: "Alice", u2: "Bob" });
+
+        // One step per recorded command, and the history the game stored.
+        expect(timeline.snapshots).toHaveLength(legacy.gameState.commandHistory.length + 1);
+        const history = timeline.snapshots.at(-1)!.history.map(line => line.text);
+        expect(history).toHaveLength(legacy.gameState.history.length);
+        expect(history.filter(text => text === SETUP_LINE)).toHaveLength(1);
     });
 
     it("closes a main-turn hold its log went straight on from", async () => {
@@ -242,8 +268,36 @@ describe("Settlements & Cities' replay of a game recorded before turns were held
         expect(replayed).toEqual(await replayGame(game));
     });
 
+    it("never finds one in a game that closed its holds, the Special Build Phase included", async () => {
+        // u1's road leaves them nothing to do, so the turn holds; their
+        // SACEndTurn opens the Special Build Phase on the two other seats.
+        const gs = makeState({ ...emptyBoard(), expansions: { ...makeState().expansions, fiveSixPlayerExtension: true } });
+        const home = BOARD_TOPOLOGY.hexVertices[0][0];
+        gs.vertices[home] = { building: "settlement", owner: "u1" };
+        const seats = ["u1", "u2", "u3"];
+        for (const userId of seats) gs.playerStates.set(userId, player(userId === "u1" ? { resources: { brick: 1, lumber: 1 } } : {}));
+        const game = makeGame(gs, { userIdList: seats, gameState: { turnOrder: seats, history: [], commandHistory: [] } });
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = BOARD_TOPOLOGY.vertexEdges[home][0];
+        await play(game, road);
+        expect(gs.autoEndTurnAt).not.toBeNull();
+        await play(game, cmd(new SACEndTurn()));
+
+        expect(gs.specialBuildActive).toBe(true);
+        expect(game.currentTurn).toBe("u2");
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(gs.undoStack).toEqual([]);
+        // What the turn-timer cron would record if u3 were dropped now.
+        expect(sacUnrecordedHoldEnd(gs, "u2", cmd(new PlayerDropped(), "u3"))).toBeNull();
+    });
+
     describe("sacUnrecordedHoldEnd", () => {
-        const held = (phase: "setup" | "main") => makeState({ phase, autoEndTurnAt: "2026-09-18T12:00:10.000Z" });
+        // A hold as the move that opened it leaves one: its holder's snapshot on top.
+        const held = (phase: "setup" | "main") => makeState({ phase, autoEndTurnAt: "2026-09-18T12:00:10.000Z", undoStack: [{ by: "u1", state: makeState() }] });
+
+        it("leaves alone a hold that isn't the holder's own", () => {
+            expect(sacUnrecordedHoldEnd(held("main"), "u2", rollOf(3, 4, "u3"))).toBeNull();
+        });
 
         it("leaves a turn with no hold open alone", () => {
             expect(sacUnrecordedHoldEnd(makeState({ phase: "setup" }), "u1", cmd(new SACPlaceSettlementSetup()))).toBeNull();

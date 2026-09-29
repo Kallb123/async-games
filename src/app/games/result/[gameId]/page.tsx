@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState } from "react";
+import { use } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import BackLink from "@/components/ui/BackLink";
 import ListRow from "@/components/ui/ListRow";
@@ -12,6 +12,7 @@ import BarChart from "@/components/ui/BarChart";
 import ResultTable from "@/components/ui/ResultTable";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useToast } from "@/components/ToastContext";
+import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
@@ -86,35 +87,31 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 
 // Works this game's stats and charts out again from its moves, for a result
 // recorded before a fix to how they are worked out — a quiet footer action,
-// since a result that came out right never needs it.
+// since a result that came out right never needs it. Given longer than the
+// usual request, since the route replays the whole game (its maxDuration).
+const REGENERATE_TIMEOUT_MS = 65_000;
+
 function RegenerateResults({ gameId, onRegenerated }: { gameId: string, onRegenerated: (result: IGameResultResponse) => void }) {
     const { showToast } = useToast();
-    const [isRegenerating, setIsRegenerating] = useState(false);
+    const { submit, isPending, message } = useJsonMutation<{ result: IGameResultResponse }>(
+        `/api/gameresult/${gameId}/regenerate`,
+        "Couldn't regenerate the results. Please try again.",
+        REGENERATE_TIMEOUT_MS,
+    );
 
     const regenerate = async () => {
-        setIsRegenerating(true);
-        try {
-            const response = await fetch(`/api/gameresult/${gameId}/regenerate`, { method: "POST" });
-            if (!response.ok) {
-                showToast(response.statusText || "Couldn't regenerate the results.", 'danger');
-                return;
-            }
-            const data = await response.json();
-            if (data?.success) onRegenerated(data.result);
-            showToast("Results regenerated from the game's moves.", 'success');
-        } catch (error) {
-            console.error(error);
-            showToast("Couldn't regenerate the results. Please try again.", 'danger');
-        } finally {
-            setIsRegenerating(false);
-        }
+        const regenerated = await submit({});
+        if (!regenerated) return;
+        onRegenerated(regenerated.result);
+        showToast("Results regenerated from the game's moves.", 'success');
     };
 
     return (
         <div className="ag-footer">
-            <button type="button" className="ag-link-muted" disabled={isRegenerating} onClick={regenerate}>
-                {isRegenerating ? "Regenerating results…" : "Regenerate results"}
+            <button type="button" className="ag-link-muted" disabled={isPending} onClick={regenerate}>
+                {isPending ? "Regenerating results…" : "Regenerate results"}
             </button>
+            {message && <div className="ag-hint ag-hint--center" role="status">{message}</div>}
         </div>
     );
 }
