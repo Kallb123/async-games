@@ -1,7 +1,8 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
 import { IHistoryEntry, resolveHistory, resolveTokens, toTheMinute } from "./history";
-import { IGameCommand, IGameType, ICommandOutcome, recordedOnTurnOf, recordedTurnStartedAt } from "../apiModels/GameLogic";
+import { commandVersion, IGameCommand, IGameType, ICommandOutcome, recordedOnTurnOf, recordedTurnStartedAt } from "../apiModels/GameLogic";
+import { replayableCommandVersions } from "../ui/games";
 import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { isRecordedFollowUpOf, runCommand } from "./commandPipeline";
@@ -304,6 +305,27 @@ registerReplayAdapter({
     plannableCommands: [],
 });
 
+/**
+ * Refuses, by throwing, a game whose recorded log holds a command this server
+ * can't replay faithfully (docs/command-versions.md): one older than its
+ * game's `oldestReplayableCommandVersion`, whose rules have since been
+ * dropped, or one newer than the game's current version, recorded by a
+ * release this server isn't running. Replaying either would run the move under
+ * rules it was never played by, and quietly show a game that never happened —
+ * every caller already treats a timeline that can't be built as a recap or a
+ * chart it goes without.
+ */
+function assertReplayable(gameData: IGameData): void {
+    const { oldest, newest } = replayableCommandVersions(gameData.gameType);
+    for (const raw of gameData.gameState.commandHistory ?? []) {
+        const version = commandVersion(raw);
+        if (version < oldest || version > newest) {
+            const className = (raw as { className?: string } | null)?.className;
+            throw new Error(`Game ${gameData.gameId} holds a ${className} recorded at command version ${version}, outside the ${oldest}–${newest} this server replays`);
+        }
+    }
+}
+
 // Reconstructs a game's full timeline by replaying its recorded commandHistory
 // from a fresh initial state, then optionally applying hypothetical planned
 // commands on top. Mirrors the command route's per-command pipeline
@@ -329,6 +351,8 @@ export async function buildTimeline(
     if (!adapter) {
         throw new Error(`No replay adapter registered for ${gameData.gameType.className}`);
     }
+
+    assertReplayable(gameData);
 
     const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
 
@@ -426,6 +450,7 @@ export async function buildTimeline(
             if (closeHold) {
                 closeHold.gameId = command.gameId;
                 closeHold.senderId = state.currentTurn;
+                closeHold.version = command.version;
                 const closed = await runCommand(state, gameType, closeHold);
                 if (closed.outcome.validMove) {
                     // Those rules ended the turn inside the move that holds it

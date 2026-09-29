@@ -67,6 +67,18 @@ export interface IGameCommand {
      * (docs/out-of-turn-actions.md §5.7); absent, nothing is checked.
      */
     expectedCommandCount?: number;
+    /**
+     * The version of its game's rules the command was built for
+     * (`GameMeta.commandVersion`, docs/command-versions.md). A client stamps
+     * the version its bundle was built with; the command route refuses one
+     * that isn't the server's current version, so a recorded version is always
+     * one the server accepted. Commands the server builds itself — a
+     * follow-up, a turn-timeout move, a drop, a planned move — are stamped by
+     * whatever builds them. Recorded with the move, so a replay can run it
+     * under the rules it was played by: read it with `commandVersion(this)`,
+     * which answers UNVERSIONED_COMMAND for one recorded before versioning.
+     */
+    version?: number;
 
     myString: () => string;
     Execute: (gameData: IGameData) => Promise<ICommandOutcome>;
@@ -81,6 +93,20 @@ export interface IGameType {
 
     CheckEndTurn: (gameData: IGameData, commandOutcome: ICommandOutcome) => void;
     CheckGameOver: (gameData: IGameData) => boolean;
+}
+
+/** The version of a command recorded before commands carried one. */
+export const UNVERSIONED_COMMAND = 0;
+
+/**
+ * The rules version a command was played under — what an `Execute` that has
+ * changed between versions branches on, so a replay reproduces the move the
+ * way the live game ran it. UNVERSIONED_COMMAND for one recorded before
+ * commands carried a version.
+ */
+export function commandVersion(command: unknown): number {
+    const version = (command as Record<string, unknown> | null)?.version;
+    return typeof version === "number" ? version : UNVERSIONED_COMMAND;
 }
 
 // Recorded-RNG fields — the `recorded…` convention described in

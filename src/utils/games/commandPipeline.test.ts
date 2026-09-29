@@ -152,6 +152,15 @@ describe("a command that asks for a follow-up", () => {
         expect(outcome.followUpCommand).toBeUndefined();
     });
 
+    it("plays it under the rules its trigger was played by", async () => {
+        // docs/command-versions.md: the version the route accepted live, and
+        // the one recorded on the trigger when a replay regenerates it.
+        const gameData = makeGameData();
+        await runCommand(gameData, gameType, { ...asking(plain("follow")), version: 3 });
+
+        expect(gameData.gameState.commandHistory.map(c => (c as IGameCommand).version)).toEqual([3, 3]);
+    });
+
     it("lets each command keep its own step, in order", async () => {
         const gameData = makeGameData();
         const steps: string[] = [];

@@ -2,6 +2,7 @@ import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNoti
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
+import { FIRST_COMMAND_VERSION, gameCommandVersion } from '@/utils/ui/games';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -168,6 +169,28 @@ export async function POST(request: NextRequest) {
   if (!isCommandForGameType(gameData.gameType.className, commandRequest.className)) {
     console.warn(`POST ${request.nextUrl.pathname} 400: ${commandRequest.className} is not a ${gameData.gameType.className} command`);
     return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
+  }
+
+  // The rules the move was built for (docs/command-versions.md). A tab still
+  // running the bundle from before a game's rules changed builds its moves for
+  // the old rules, and a move that is still legal under the new ones can mean
+  // something its player never chose — so it is refused, and the client
+  // reloads onto the current release. A version the server doesn't have yet is
+  // a client ahead of a deploy that hasn't reached this instance: refused too,
+  // but the client only needs to try again. Kept on the command once it
+  // passes, so a replay knows which rules it was played by.
+  //
+  // A command with no version at all comes from a bundle built before
+  // commands carried one, which was built for the first version's rules — and
+  // knows nothing of the reload a 426 asks for, so refusing it outright would
+  // leave every tab open across that deploy failing its moves in silence.
+  commandRequest.version ??= FIRST_COMMAND_VERSION;
+  const version = gameCommandVersion(gameData.gameType);
+  if (commandRequest.version !== version) {
+    if (typeof commandRequest.version === 'number' && commandRequest.version > version) {
+      return NextResponse.json({}, {status: 409, statusText: "This game has just been updated, try again in a moment"});
+    }
+    return NextResponse.json({}, {status: 426, statusText: "This game has been updated, reload to keep playing"});
   }
 
   // The board the move was built against. In a game where a teammate may play

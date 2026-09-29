@@ -7,6 +7,7 @@ import { buildTimeline, plannableCommands } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { attachHistoryReactionsToEach } from '@/utils/games/historyReactions';
+import { gameCommandVersion } from '@/utils/ui/games';
 
 export interface IGetTimelineParams {
     gameid: string;
@@ -66,10 +67,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     }
 
     // Planned moves are hypothetical and never persisted; for v1 planning we only
-    // let a user plan their own moves.
+    // let a user plan their own moves, and only under today's rules.
+    const version = gameCommandVersion(gameData.gameType);
     plannedCommands.forEach((command) => {
         command.gameId = gameData.gameId;
         command.senderId = userId;
+        command.version = version;
     });
 
     const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);

@@ -188,6 +188,9 @@ export async function runCommand(
     }
 
     stampFollowUpOf(followUpCommand, command);
+    // Played under the rules its trigger was: the version the route accepted
+    // live, and the one recorded on the trigger when a replay regenerates it.
+    followUpCommand.version = command.version;
     const toRun = resolveFollowUp ? resolveFollowUp(followUpCommand, command) : followUpCommand;
     if (!toRun) return { outcome: spent, gameOver };
 

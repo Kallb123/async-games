@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { IGameDataResponse, uuidString } from "@/utils/apiModels/GameDataApi";
-import { gameHasOutOfTurnPlays } from "@/utils/ui/games";
+import { gameCommandVersion, gameHasOutOfTurnPlays } from "@/utils/ui/games";
 import { isGuest, type NamedUser } from "@/utils/ui/players";
 import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
 
@@ -32,6 +32,16 @@ export type SubmitCommand = (
  */
 export function expectedCommandCountFor(board: IGameDataResponse | null): number | undefined {
     return board && gameHasOutOfTurnPlays(board.gameType) ? board.gameState.commandCount : undefined;
+}
+
+/**
+ * The `version` a command sent from this board carries: the version of its
+ * game's rules this bundle was built with (docs/command-versions.md), which the
+ * route refuses unless it is the server's current one. Undefined before the
+ * board has loaded, when there is no game to name and nothing is sent.
+ */
+export function commandVersionFor(board: IGameDataResponse | null): number | undefined {
+    return board ? gameCommandVersion(board.gameType) : undefined;
 }
 
 /**
@@ -82,6 +92,7 @@ export function useSubmitCommand<T>(
     // A number rather than the board, so a poll that brings back the same
     // board doesn't rebuild `submitCommand` for every screen holding it.
     const expectedCommandCount = expectedCommandCountFor(board);
+    const version = commandVersionFor(board);
 
     const submitCommand = useCallback<SubmitCommand>(async (
         command: IGameCommand,
@@ -93,9 +104,14 @@ export function useSubmitCommand<T>(
             console.error("Unable to send command whilst not logged in");
             return;
         }
+        if (version === undefined) {
+            console.error("Unable to send command before the game has loaded");
+            return;
+        }
         inFlightRef.current = true;
         command.gameId = gameId;
         command.senderId = user.id;
+        command.version = version;
         // Assigned even when undefined, which JSON.stringify leaves out — so a
         // command object a board sends twice can't carry the first count along.
         command.expectedCommandCount = expectedCommandCount;
@@ -114,6 +130,13 @@ export function useSubmitCommand<T>(
                 // behind its own in-flight guard until the player reloaded.
                 signal: AbortSignal.timeout(COMMAND_TIMEOUT_MS),
             });
+            // Built for rules the server has since changed: resyncing would
+            // leave this tab on the old bundle, refusing every move it sends,
+            // so load the current release instead.
+            if (res.status === 426) {
+                window.location.reload();
+                return;
+            }
             const data: ICommandResponse | null = res.ok ? await res.json() : null;
             if (!data?.gameData) {
                 await getGameData();
@@ -135,7 +158,7 @@ export function useSubmitCommand<T>(
             setSubmitting(false);
             setPendingTarget(null);
         }
-    }, [user, gameId, setGameData, getGameData, expectedCommandCount]);
+    }, [user, gameId, setGameData, getGameData, expectedCommandCount, version]);
 
     return { submitCommand, submitting, pendingTarget };
 }

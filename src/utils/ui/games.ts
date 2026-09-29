@@ -49,10 +49,27 @@ export interface GameMeta {
     // against (useSubmitCommand's `expectedCommandCount`). Absent means false:
     // on your own turn nothing moves until you do.
     hasOutOfTurnPlays?: boolean;
+    // The version of this game's commands, which every command a client sends
+    // carries and the command route insists is current (docs/command-versions.md).
+    // Bump it whenever a change to the rules would make a command built by the
+    // previous release mean something different: a tab still running the old
+    // bundle is then refused and reloads, rather than playing a move its
+    // player chose under rules that no longer apply. The recorded version is
+    // what a command's Execute reads (`commandVersion(this)`) to replay a move
+    // under the rules it was played by. Absent means FIRST_COMMAND_VERSION.
+    commandVersion?: number;
+    // The oldest recorded command version this server still knows how to
+    // replay. A change to the rules that drops the branch for an old version
+    // raises it, and buildTimeline then refuses a game holding an older command
+    // instead of replaying it under rules it was never played by. Absent means
+    // every version back to UNVERSIONED_COMMAND — commands recorded before
+    // versioning existed.
+    oldestReplayableCommandVersion?: number;
     available: boolean;
 }
 
 import { pluralize } from "@/utils/ui/text";
+import { UNVERSIONED_COMMAND } from "@/utils/apiModels/gameCommand";
 import { OG_IMAGE } from "@/utils/app";
 import { meta as diceCitiesMeta } from "@/games/DiceCities/meta";
 import { meta as smartthinkMeta } from "@/games/Smartthink/meta";
@@ -89,6 +106,35 @@ export const GAME_META: Record<string, GameMeta> = {
  */
 export function gameHasOutOfTurnPlays(gameType: { url: string } | null | undefined): boolean {
     return !!gameType && GAME_META[gameType.url]?.hasOutOfTurnPlays === true;
+}
+
+/** The version every game's commands start at (see `GameMeta.commandVersion`). */
+export const FIRST_COMMAND_VERSION = 1;
+
+/**
+ * The version of `gameType`'s commands this bundle was built with. The client
+ * stamps it on every command it sends, and the command route compares it with
+ * its own: both read the same metadata, so they disagree only when one of
+ * them is running an older release. It has to be compiled into the client
+ * rather than echoed from a response — a stale tab echoing the server's
+ * version would pass a check it exists to fail.
+ */
+export function gameCommandVersion(gameType: { url: string }): number {
+    return GAME_META[gameType.url]?.commandVersion ?? FIRST_COMMAND_VERSION;
+}
+
+/**
+ * The recorded command versions this server can replay a game of `gameType`
+ * from: back to its `oldestReplayableCommandVersion` (every version, commands
+ * recorded before versioning included, unless a game says otherwise) and up
+ * to its current one — a newer command was recorded by a release this server
+ * isn't running, under rules it doesn't have.
+ */
+export function replayableCommandVersions(gameType: { url: string }): { oldest: number, newest: number } {
+    return {
+        oldest: GAME_META[gameType.url]?.oldestReplayableCommandVersion ?? UNVERSIONED_COMMAND,
+        newest: gameCommandVersion(gameType),
+    };
 }
 
 // Games that don't have an implementation yet but are teased in the library.

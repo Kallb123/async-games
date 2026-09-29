@@ -3,6 +3,8 @@ import { buildTimeline, computePerTurnEvents, computePerTurnStat, registerReplay
 import { countTurns } from "./turnCount";
 import { serializable } from "../apiModels/Serialisable";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
+import { commandVersion, UNVERSIONED_COMMAND } from "../apiModels/gameCommand";
+import { FIRST_COMMAND_VERSION } from "../ui/games";
 import type { IGameData } from "../mongodb/GameData";
 import type { uuidString } from "../apiModels/GameDataApi";
 
@@ -305,5 +307,36 @@ describe("a command played out of turn", () => {
         expect(countTurns(history)).toBe(2);
         expect([...perTurn[0].entries()]).toEqual([["u1", 1], ["u2", 0]]);
         expect([...perTurn[1].entries()]).toEqual([["u1", 11], ["u2", 1]]);
+    });
+});
+
+describe("a recorded command's rules version", () => {
+    /** `action`, recorded as the route accepted it under rules `version`. */
+    function versioned(senderId: string, version: number | undefined): TestBonusAction {
+        const command = action(senderId);
+        (command as IGameCommand).version = version;
+        return command;
+    }
+
+    it("replays one recorded before commands carried a version, and one at the current version", async () => {
+        const timeline = await buildTimeline(game([versioned("u1", undefined), versioned("u2", FIRST_COMMAND_VERSION)]), { u1: "u1", u2: "u2" });
+
+        expect(timeline.snapshots).toHaveLength(3);
+    });
+
+    it("hands Execute the version it was recorded at", async () => {
+        const seen: number[] = [];
+        await buildTimeline(game([versioned("u1", undefined), versioned("u2", FIRST_COMMAND_VERSION)]), { u1: "u1", u2: "u2" }, [], (step) => {
+            seen.push(commandVersion(step.command));
+        });
+
+        expect(seen).toEqual([UNVERSIONED_COMMAND, FIRST_COMMAND_VERSION]);
+    });
+
+    it("refuses a game holding one recorded under rules this server doesn't have", async () => {
+        // A release newer than this one recorded it: replaying it under older
+        // rules would show a game that never happened.
+        await expect(buildTimeline(game([versioned("u1", FIRST_COMMAND_VERSION + 1)]), { u1: "u1", u2: "u2" }))
+            .rejects.toThrow(/command version 2/);
     });
 });

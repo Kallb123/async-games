@@ -124,6 +124,7 @@ export class PlayerDropped implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "PlayerDropped";
+    version?: number;
     /**
      * Who held the turn when the player was dropped — somebody else by then,
      * since the cron plays out their last turn first. Only a replay needs it:

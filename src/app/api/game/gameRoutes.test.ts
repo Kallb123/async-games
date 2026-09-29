@@ -26,7 +26,7 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
+    ANN, BOB, commandPost, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
     signInUnresolvable, SQUARES, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
@@ -34,6 +34,7 @@ import { race } from '@/games/RaceCars/testFixtures';
 import { makeState, player } from '@/games/SettlementsAndCities/testFixtures';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import { mongoMap } from '@/utils/games/mongoMaps';
+import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
@@ -202,7 +203,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         seedSnakesAndLadders();
 
-        const response = await command(jsonPost('/api/game/command', diceRoll()));
+        const response = await command(commandPost(diceRoll()));
 
         expect(response.status).toBe(200);
         const body = await response.json();
@@ -247,7 +248,7 @@ describe('POST /api/game/command', () => {
             specificGameState: baseState([ANN.id, ANN.id]),
         });
 
-        const response = await command(jsonPost('/api/game/command', {
+        const response = await command(commandPost({
             id: '00000000-0000-0000-0000-00000000000f',
             timestamp: '2026-01-01T00:00:00.000Z',
             gameId: 'game_1',
@@ -289,7 +290,7 @@ describe('POST /api/game/command', () => {
         });
         seedReaction({ gameId: 'game_1', commandId: 'earlier-command', reaction: '😱' });
 
-        const response = await command(jsonPost('/api/game/command', diceRoll()));
+        const response = await command(commandPost(diceRoll()));
 
         expect(response.status).toBe(200);
         const history: { commandId?: string, reactions?: { reaction: string, actorId: string, actorUsername: string }[] }[] = (await response.json()).gameData.gameState.history;
@@ -302,9 +303,9 @@ describe('POST /api/game/command', () => {
         // could undo past a move it had already seen the outcome of.
         signIn(ANN);
         seedSnakesAndLadders();
-        await command(jsonPost('/api/game/command', diceRoll()));
+        await command(commandPost(diceRoll()));
         signIn(BOB);
-        await command(jsonPost('/api/game/command', diceRoll({ senderId: BOB.id, senderUsername: 'bob' })));
+        await command(commandPost(diceRoll({ senderId: BOB.id, senderUsername: 'bob' })));
 
         const saved = storedGame('game_1')!;
         const ids = (commandHistory(saved) as { id: string }[]).map(stored => stored.id);
@@ -354,7 +355,7 @@ describe('POST /api/game/command', () => {
             specificGameState: { ...gs, playerStates: Object.fromEntries(gs.playerStates) },
         });
         const sameId = '55555555-5555-5555-5555-555555555555';
-        const as = (className: string, extra: Record<string, unknown> = {}) => jsonPost('/api/game/command', {
+        const as = (className: string, extra: Record<string, unknown> = {}) => commandPost({
             id: sameId, timestamp: '2026-01-01T00:00:01.000Z', gameId: 'game_1',
             senderId: ANN.id, senderUsername: 'ann', className, ...extra,
         });
@@ -378,7 +379,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         seedSnakesAndLadders({ currentTurn: BOB.id });
 
-        const response = await command(jsonPost('/api/game/command', diceRoll({ ignoresTurnGate: true })));
+        const response = await command(commandPost(diceRoll({ ignoresTurnGate: true })));
 
         expect(response.status).toBe(400);
         expect(response.statusText).toBe('Not your turn in this game');
@@ -391,9 +392,62 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         seedSnakesAndLadders();
 
-        const response = await command(jsonPost('/api/game/command', diceRoll({ recordedRoll: 6 })));
+        const response = await command(commandPost(diceRoll({ recordedRoll: 6 })));
 
         expect((await response.json()).outcome.roll).toBe(3);
+    });
+
+    it('records the rules version the move was built for', async () => {
+        // docs/command-versions.md: the recorded version is what a replay
+        // branches on, so it is kept on the move rather than dropped.
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        await command(commandPost(diceRoll()));
+
+        expect(commandHistory(storedGame('game_1')!)[0]).toMatchObject({ version: FIRST_COMMAND_VERSION });
+    });
+
+    it.each([
+        ['one built for older rules', { version: FIRST_COMMAND_VERSION - 1 }],
+        ['one whose version isn\'t a number', { version: '1' }],
+    ])('refuses %s as out of date, and saves nothing', async (_, version) => {
+        // A tab still running the bundle from before a game's rules changed
+        // builds its moves for the old rules; it is told to reload.
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const response = await command(commandPost(diceRoll(version)));
+
+        expect(response.status).toBe(426);
+        const saved = storedGame('game_1')!;
+        expect(commandHistory(saved)).toHaveLength(0);
+        expect(positions(saved)[ANN.id].position).toBe(10);
+        expect(saved.currentTurn).toBe(ANN.id);
+    });
+
+    it('takes a move from a client too old to say as built for the first rules version', async () => {
+        // A bundle from before commands carried a version was built for the
+        // first version's rules, and doesn't know to reload on a 426.
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const response = await command(commandPost(diceRoll({ version: undefined })));
+
+        expect(response.status).toBe(200);
+        expect(commandHistory(storedGame('game_1')!)[0]).toMatchObject({ version: FIRST_COMMAND_VERSION });
+    });
+
+    it('refuses one built for rules the server doesn\'t have yet, without asking for a reload', async () => {
+        // A client ahead of a deploy that hasn't reached this instance: a
+        // reload would fetch the same bundle, so it is only told to try again.
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const response = await command(commandPost(diceRoll({ version: FIRST_COMMAND_VERSION + 1 })));
+
+        expect(response.status).toBe(409);
+        expect(commandHistory(storedGame('game_1')!)).toHaveLength(0);
     });
 
     it('names the mover itself, whatever name the request brought with it', async () => {
@@ -403,7 +457,7 @@ describe('POST /api/game/command', () => {
         // The history line every opponent reads is written from this field, so
         // a client that got to fill it in could put any text it liked in front
         // of another player.
-        await command(jsonPost('/api/game/command', diceRoll({
+        await command(commandPost(diceRoll({
             senderUsername: 'Async Games security — verify at evil.example'
         })));
 
@@ -425,7 +479,7 @@ describe('POST /api/game/command', () => {
         seedSnakesAndLadders({ userIdList: [guest.id, BOB.id], currentTurn: guest.id, gameState: { turnOrder: [guest.id, BOB.id], history: [], commandHistory: [] } },
             { [guest.id]: 10, [BOB.id]: 20 });
 
-        const response = await command(jsonPost('/api/game/command', diceRoll({ senderId: guest.id })));
+        const response = await command(commandPost(diceRoll({ senderId: guest.id })));
 
         // The name is resolved on the way out, so it is the response — what the
         // board actually reads — that has to say Dave.
@@ -447,7 +501,7 @@ describe('POST /api/game/command', () => {
         // Same player, but Clerk is now unreachable for them.
         signInUnresolvable(ANN.id);
 
-        const response = await command(jsonPost('/api/game/command', diceRoll()));
+        const response = await command(commandPost(diceRoll()));
 
         // The move is what the request was for; the name is not worth losing it.
         expect(response.status).toBe(200);
@@ -466,7 +520,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         seedSnakesAndLadders({ complete: true, endReason: 'ended' });
 
-        const response = await command(jsonPost('/api/game/command', diceRoll()));
+        const response = await command(commandPost(diceRoll()));
 
         expect(response.status).toBe(409);
         expect(commandHistory(storedGame('game_1')!)).toHaveLength(0);
@@ -478,7 +532,7 @@ describe('POST /api/game/command', () => {
 
         // A real Solitaire command, aimed at a Snakes & Ladders game: it would
         // reach Solitaire's rules holding state they were never written for.
-        const response = await command(jsonPost('/api/game/command', diceRoll({ className: 'SolitaireAutoSolve' })));
+        const response = await command(commandPost(diceRoll({ className: 'SolitaireAutoSolve' })));
 
         expect(response.status).toBe(400);
         expect(commandHistory(storedGame('game_1')!)).toHaveLength(0);
@@ -506,7 +560,7 @@ describe('POST /api/game/command', () => {
     it('answers 404 for a game that does not exist', async () => {
         signIn(ANN);
 
-        const response = await command(jsonPost('/api/game/command', diceRoll({ gameId: 'no_such_game' })));
+        const response = await command(commandPost(diceRoll({ gameId: 'no_such_game' })));
 
         expect(response.status).toBe(404);
     });
@@ -515,7 +569,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         seedSnakesAndLadders();
 
-        const response = await command(jsonPost('/api/game/command', diceRoll({ senderId: BOB.id })));
+        const response = await command(commandPost(diceRoll({ senderId: BOB.id })));
 
         expect(response.status).toBe(400);
     });
@@ -525,7 +579,7 @@ describe('POST /api/game/command', () => {
         // Three squares short of home, and the die always rolls a 3.
         seedSnakesAndLadders({}, { ...SQUARES, [ANN.id]: 97 });
 
-        const response = await command(jsonPost('/api/game/command', diceRoll()));
+        const response = await command(commandPost(diceRoll()));
 
         expect(response.status).toBe(200);
         const saved = storedGame('game_1')!;
@@ -576,7 +630,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         raceCarsGridWithAMoveOffered();
 
-        const moveResponse = await command(jsonPost('/api/game/command', {
+        const moveResponse = await command(commandPost({
             id: '22222222-2222-2222-2222-222222222222',
             timestamp: '2026-01-01T00:00:01.000Z',
             gameId: 'game_1',
@@ -592,7 +646,7 @@ describe('POST /api/game/command', () => {
         expect(storedGame('game_1')!.currentTurn).toBe(ANN.id);
         expect((storedGame('game_1')!.specificGameState as { autoEndTurnAt: string | null }).autoEndTurnAt).not.toBeNull();
 
-        const undoResponse = await command(jsonPost('/api/game/command', {
+        const undoResponse = await command(commandPost({
             id: '33333333-3333-3333-3333-333333333333',
             timestamp: '2026-01-01T00:00:02.000Z',
             gameId: 'game_1',
@@ -613,7 +667,7 @@ describe('POST /api/game/command', () => {
         signIn(ANN);
         raceCarsGridWithAMoveOffered();
 
-        await command(jsonPost('/api/game/command', {
+        await command(commandPost({
             id: '22222222-2222-2222-2222-222222222222',
             timestamp: '2026-01-01T00:00:01.000Z',
             gameId: 'game_1',
@@ -631,7 +685,7 @@ describe('POST /api/game/command', () => {
         // `Execute`'s ownership check is ever asked — an undo is played on the
         // turn it takes back, like every other command.
         signIn(BOB);
-        const undoResponse = await command(jsonPost('/api/game/command', {
+        const undoResponse = await command(commandPost({
             id: '44444444-4444-4444-4444-444444444444',
             timestamp: '2026-01-01T00:00:02.000Z',
             gameId: 'game_1',
@@ -710,7 +764,7 @@ describe('POST /api/game/end', () => {
         seedSnakesAndLadders();
 
         await end(jsonPost('/api/game/end', { gameId: 'game_1' }));
-        const move = await command(jsonPost('/api/game/command', diceRoll()));
+        const move = await command(commandPost(diceRoll()));
         const turn = await takeTurn(jsonPost('/api/game/taketurn', { gameId: 'game_1' }));
 
         expect(move.status).toBe(409);

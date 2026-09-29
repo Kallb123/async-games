@@ -11,6 +11,7 @@
 // a turn saved.
 
 import { describe, expect, it } from "vitest";
+import { FIRST_COMMAND_VERSION } from "@/utils/ui/games";
 import { registerTurnTimeoutAdapter, resolveStalledTurn } from "./turnTimeout";
 import { SnakesAndLaddersGameType } from "@/games/SnakesAndLadders/SnakesAndLaddersLogic";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
@@ -101,6 +102,8 @@ describe("resolveStalledTurn", () => {
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe('advanced');
         expect(commandHistory(game)).toHaveLength(2);
+        // Stamped with the game's current rules version, as the route stamps a player's own.
+        expect(commandHistory(game).map(c => (c as { version?: number }).version)).toEqual([FIRST_COMMAND_VERSION, FIRST_COMMAND_VERSION]);
         expect(game.currentTurn).toBe("u2"); // the game type's own CheckEndTurn ran
     });
 

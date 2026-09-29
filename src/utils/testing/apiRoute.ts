@@ -27,6 +27,7 @@ import type { IGameDataDocument } from '@/utils/mongodb/GameData';
 import type { IChatAttachment } from '@/utils/chat';
 import type { ActionableTurnBranch } from '@/utils/games/TurnTimer';
 import { clearAfterCallbacks } from '@/utils/testing/afterStub';
+import { gameCommandVersion } from '@/utils/ui/games';
 
 // Every module the stubs below stand in for is imported when `resetApiRouteStubs`
 // runs, never at the top of this file — the same rule afterStub.ts is a separate
@@ -868,6 +869,18 @@ export function get(path: string, headers?: Record<string, string>): NextRequest
 /** A POST of `body` as JSON, the way the client sends one. */
 export function jsonPost(path: string, body: unknown): NextRequest {
     return rawPost(path, JSON.stringify(body));
+}
+
+/**
+ * A POST of a command to /api/game/command, carrying the `version` an up to
+ * date client stamps on it — the current command version of the game the body
+ * names, as `useSubmitCommand` does. A body that already says which version it
+ * was built for keeps it, so a test can send a stale or unknown one.
+ */
+export function commandPost(body: { gameId?: string, version?: unknown } & Record<string, unknown>): NextRequest {
+    const game = body.gameId ? storedGame(body.gameId) : undefined;
+    const version = game ? gameCommandVersion(game.gameType as { url: string }) : undefined;
+    return jsonPost('/api/game/command', { version, ...body });
 }
 
 /** A POST of exactly `body`, for the bodies that aren't JSON at all. */
