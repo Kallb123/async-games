@@ -2,7 +2,8 @@
 // that can be asked a question without a browser and a network.
 
 import { describe, expect, it } from "vitest";
-import { expectedCommandCountFor } from "./useSubmitCommand";
+import { commandVersionFor, expectedCommandCountFor } from "./useSubmitCommand";
+import { FIRST_COMMAND_VERSION } from "@/utils/ui/games";
 import { OUT_OF_TURN_TEST_GAME as INTERRUPTS, registerOutOfTurnTestGame } from "@/utils/testing/outOfTurnGame";
 import { testBoard } from "@/utils/testing/testBoard";
 
@@ -21,5 +22,16 @@ describe("expectedCommandCountFor", () => {
 
     it("says nothing before the board has loaded", () => {
         expect(expectedCommandCountFor(null)).toBeUndefined();
+    });
+});
+
+describe("commandVersionFor", () => {
+    it("names the rules version this bundle was built with, for every game", () => {
+        expect(commandVersionFor(testBoard("snakesandladders", { commandCount: 7 }))).toBe(FIRST_COMMAND_VERSION);
+        expect(commandVersionFor(testBoard("outbreak", { commandCount: 7 }))).toBe(FIRST_COMMAND_VERSION);
+    });
+
+    it("says nothing before the board has loaded, when nothing is sent", () => {
+        expect(commandVersionFor(null)).toBeUndefined();
     });
 });

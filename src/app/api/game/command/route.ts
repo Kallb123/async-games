@@ -2,6 +2,7 @@ import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNoti
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
+import { FIRST_COMMAND_VERSION, gameCommandVersion } from '@/utils/ui/games';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -168,6 +169,20 @@ export async function POST(request: NextRequest) {
   if (!isCommandForGameType(gameData.gameType.className, commandRequest.className)) {
     console.warn(`POST ${request.nextUrl.pathname} 400: ${commandRequest.className} is not a ${gameData.gameType.className} command`);
     return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
+  }
+
+  // The rules the move was built for (docs/command-versions.md): older is a
+  // stale tab, told to reload; newer is a client ahead of this instance's
+  // deploy, told to try again. None at all is a bundle from before commands
+  // carried one, built for the first version's rules and unable to act on a
+  // 426. Kept on the command, so a replay knows which rules it was played by.
+  commandRequest.version ??= FIRST_COMMAND_VERSION;
+  const version = gameCommandVersion(gameData.gameType);
+  if (commandRequest.version !== version) {
+    if (typeof commandRequest.version === 'number' && commandRequest.version > version) {
+      return NextResponse.json({}, {status: 409, statusText: "This game has just been updated, try again in a moment"});
+    }
+    return NextResponse.json({}, {status: 426, statusText: "This game has been updated, reload to keep playing"});
   }
 
   // The board the move was built against. In a game where a teammate may play

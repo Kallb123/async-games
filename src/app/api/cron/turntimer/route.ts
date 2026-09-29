@@ -15,6 +15,7 @@ import { requireLiveGame } from '@/utils/games/liveGame';
 import { isAuthorisedCron } from '@/utils/cronAuth';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
+import { gameCommandVersion } from '@/utils/ui/games';
 
 /**
  * What one game's sweep did, which is also how the run tallies itself.
@@ -207,6 +208,7 @@ async function dropPlayer(gameData: IGameDataDocument, missingPlayerId: string):
     drop.senderId = missingPlayerId;
     drop.senderUsername = missingName;
     drop.resumesWith = gameData.currentTurn;
+    drop.version = gameCommandVersion(gameData.gameType);
 
     const { outcome, gameOver } = await runCommand(gameData, gameType, drop);
     if (!outcome.validMove) return abandonGame(gameData, missingPlayerId);

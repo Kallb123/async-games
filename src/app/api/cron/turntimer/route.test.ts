@@ -16,6 +16,7 @@
 // src/utils/games/turnTimeout.test.ts.)
 
 import { beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
+import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
 
 const { recordGameResult } = vi.hoisted(() => ({ recordGameResult: vi.fn() }));
 
@@ -173,7 +174,8 @@ describe('GET /api/cron/turntimer', () => {
             expect(gameState.turnOrder).toEqual([ANN.id, BOB.id, CAT.id]);
             expect(gameState.droppedPlayers).toEqual([ANN.id]);
             // Recorded like any other command, so a replay drops them too.
-            expect(gameState.commandHistory.at(-1)).toMatchObject({ className: 'PlayerDropped', senderId: ANN.id });
+            // Stamped with the game's current rules version, as the route stamps a player's own.
+            expect(gameState.commandHistory.at(-1)).toMatchObject({ className: 'PlayerDropped', senderId: ANN.id, version: FIRST_COMMAND_VERSION });
             // Their ladder is spent rather than left to climb.
             expect(saved.missedTurnCounts).toEqual({});
             expect(saved.lastTurnTimestamp).not.toBe(STALE);

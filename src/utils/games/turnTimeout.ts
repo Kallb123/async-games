@@ -2,6 +2,7 @@ import { IGameData, IGameDataDocument } from "../mongodb/GameData";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { IGameCommand, IGameType } from "../apiModels/gameCommand";
 import { runCommand } from "./commandPipeline";
+import { gameCommandVersion } from "@/utils/ui/games";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from "@/games/Outbreak/OutbreakLogic";
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
@@ -430,6 +431,7 @@ export async function resolveStalledTurn(
         command.gameId = gameData.gameId;
         command.senderId = userId;
         command.senderUsername = senderUsername;
+        command.version = gameCommandVersion(gameData.gameType);
 
         const { outcome, gameOver, followUpRefused } = await runCommand(gameData, gameType, command);
         // A refused command is recorded nowhere (commandPipeline), so nothing

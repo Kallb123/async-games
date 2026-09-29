@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
+import { FIRST_COMMAND_VERSION, GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
 import { OG_IMAGE } from '@/utils/app';
+import { UNVERSIONED_COMMAND } from '@/utils/apiModels/gameCommand';
 
 describe('partySizeErrorMessage', () => {
     const meta = { name: 'Dice Cities', players: '2–6 players', minPlayers: 2, maxPlayers: 6 };
@@ -78,5 +79,16 @@ describe('shareImageForGame', () => {
 
     it('falls back to the general card when the game is unknown', () => {
         expect(shareImageForGame(undefined, drawn)).toBe(OG_IMAGE);
+    });
+});
+
+describe('command versions', () => {
+    // A typo here makes the command route refuse every move in the game, or
+    // buildTimeline refuse to replay any of it (docs/command-versions.md).
+    it.each(Object.values(GAME_META).map(meta => [meta.url, meta] as const))('%s names a replayable range that includes its current version', (_, meta) => {
+        const version = meta.commandVersion ?? FIRST_COMMAND_VERSION;
+        const oldest = meta.oldestReplayableCommandVersion ?? UNVERSIONED_COMMAND;
+        expect(Number.isInteger(version) && version >= FIRST_COMMAND_VERSION).toBe(true);
+        expect(Number.isInteger(oldest) && oldest >= UNVERSIONED_COMMAND && oldest <= version).toBe(true);
     });
 });

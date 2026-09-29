@@ -38,7 +38,7 @@ vi.mock('@/utils/games/gameCommands', async (importOriginal) => {
 });
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
-import { ANN, BOB, jsonPost, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, commandPost, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { serializable } from '@/utils/apiModels/Serialisable';
 import { playerHistory } from '@/utils/games/history';
 import type { ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic';
@@ -99,7 +99,7 @@ class TestInterrupt implements IGameCommand {
 
 /** The interrupt as a client posts it. */
 function interrupt(sender: { id: string, username: string }, extra: Record<string, unknown> = {}) {
-    return jsonPost('/api/game/command', {
+    return commandPost({
         id: '11111111-1111-1111-1111-111111111111',
         timestamp: STALE,
         gameId: 'game_1',
@@ -182,7 +182,7 @@ describe('POST /api/game/command, off the sender\'s turn', () => {
         // the other. Each request reads who is signed in on its first line
         // (the stub's auth()), before the other signs in over it.
         const interrupting = (async () => { signIn(BOB); return command(interrupt(BOB, { jumpTo: 30 })); })();
-        const moving = (async () => { signIn(ANN); return command(jsonPost('/api/game/command', {
+        const moving = (async () => { signIn(ANN); return command(commandPost({
             gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'SnakesAndLaddersRequestDiceRoll',
         })); })();
 
@@ -228,7 +228,7 @@ describe('POST /api/game/command, off the sender\'s turn', () => {
     it('refuses a command whose class doesn\'t declare it, whatever the request claims', async () => {
         signIn(BOB);
 
-        const response = await command(jsonPost('/api/game/command', {
+        const response = await command(commandPost({
             gameId: 'game_1', senderId: BOB.id, senderUsername: 'bob',
             className: 'SnakesAndLaddersRequestDiceRoll', playableOutOfTurn: true,
         }));
@@ -294,7 +294,7 @@ describe('POST /api/game/command, a declared command on the sender\'s own turn',
 
 /** The active player's ordinary move, built against a board of `expectedCommandCount` commands (absent: unsaid). */
 function roll(extra: Record<string, unknown> = {}) {
-    return jsonPost('/api/game/command', {
+    return commandPost({
         gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'SnakesAndLaddersRequestDiceRoll',
         ...extra,
     });
@@ -391,7 +391,7 @@ function seedBannedIslet(gs: IBannedIsletSpecificGameState) {
 
 /** Bob's special, as his client posts it on Ann's turn. */
 function bobPlays(fields: Record<string, unknown>) {
-    return jsonPost('/api/game/command', {
+    return commandPost({
         gameId: 'game_1', senderId: BOB.id, senderUsername: 'bob', className: 'BannedIsletPlayCard', ...fields,
     });
 }

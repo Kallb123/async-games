@@ -498,6 +498,7 @@ interface IGameCommand {
     gameId: uuidString;
     senderId: string;        // who played it
     senderUsername: string;  // stamped by the server from senderId, never by the client
+    version?: number;        // the game's rules version it was built for — see below
     readonly className: string;
 
     myString(): string;                                   // player-facing summary (match review, logs)
@@ -572,6 +573,8 @@ regardless of game:
      (403 if not) — the out-of-turn path, below
    guard: not dropped from the game
    guard: userId === command.senderId      (not acting for someone else)
+   guard: command.version === the game's current commandVersion
+     (missing counts as 1; 426 if older — the client reloads; 409 if newer)
    guard: command.expectedCommandCount, if sent, === commandHistory.length
      (409 if not — the board moved under the sender, below), then deleted
 5. outcome = await command.Execute(gameData)
@@ -590,6 +593,18 @@ regardless of game:
 
 Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
 the replay engine and the turn-timer cron so all three run a move the same way.
+
+**Versions.** Every command carries the version of its game's rules it was
+built for (`GameMeta.commandVersion`, [`docs/command-versions.md`](./docs/command-versions.md)).
+`useSubmitCommand` stamps the version compiled into its bundle; the route
+refuses any other, so a tab left open across a rules change reloads rather than
+playing a move built for rules that no longer apply. The accepted version is
+recorded with the move — a follow-up inherits its trigger's, and every command
+the server builds itself is stamped with the current one — so a command's
+`Execute` can branch on `commandVersion(this)` to replay an old move under the
+rules it was played by. `buildTimeline` refuses a game holding a version it
+can't replay: older than the game's `oldestReplayableCommandVersion`, or newer
+than its current one.
 
 **Out of turn.** A command class may declare `readonly playableOutOfTurn = true`
 ([`docs/out-of-turn-actions.md`](./docs/out-of-turn-actions.md)). The route
