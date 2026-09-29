@@ -141,6 +141,10 @@ A `GameMeta` object: `url`, `name`, `categories` (from
 `GAME_CATEGORIES` in `src/utils/ui/games.ts` — add a new category there if
 none fit, it's a single source of truth other UI derives from), `players`,
 `tagline`, `accent`, `glyph` (or `art` if you have real artwork), `available`.
+Leave `commandVersion` out (it starts at 1) until a later change to the rules
+would make a command built by the previous release mean something different;
+then bump it and keep the old rule behind `commandVersion(this)` in `Execute`
+— see [`command-versions.md`](./command-versions.md).
 
 ### 5. UI
 

@@ -48,7 +48,7 @@ current one:
 |---|---|---|
 | the current version | runs it, and records the version on the move | carries on |
 | none at all | treats it as `FIRST_COMMAND_VERSION` (below) | — |
-| an older version, or not a number | **426** "This game has been updated, reload to keep playing" | reloads onto the current release |
+| an older version, or not a number | **426** "This game has been updated, reload to keep playing" | reloads onto the current release — once per version; a reload that comes back on the same bundle resyncs instead |
 | a newer version | **409** "This game has just been updated, try again in a moment" | resyncs; a reload would fetch the same bundle |
 
 A command with no version comes from a bundle built before commands carried

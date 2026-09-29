@@ -45,6 +45,37 @@ export function commandVersionFor(board: IGameDataResponse | null): number | und
 }
 
 /**
+ * Where a tab records the rules it has already reloaded to escape, as
+ * `<game url>@<version>` — `sessionStorage`, like `reloadForStaleSession`'s
+ * marker, because it is a fact about this tab's page and nothing else.
+ */
+const RULES_RELOAD_MARKER_KEY = 'ag-rules-reload';
+
+/**
+ * Reloads the page onto the current release after the route refused a command
+ * built for `sent` (docs/command-versions.md) — and reports whether it did.
+ *
+ * Once per version: a reload that comes back on the same bundle (a cached page,
+ * a deploy still reaching every instance) sends the same `sent`, finds the
+ * marker, and answers false, leaving the caller to resync rather than reload on
+ * every tap. The release it reloads onto sends a newer version, which the
+ * marker doesn't name. No storage to remember the attempt with means no reload,
+ * for the same reason.
+ */
+function reloadForNewRules(sent: string): boolean {
+    try {
+        if (window.sessionStorage.getItem(RULES_RELOAD_MARKER_KEY) === sent) {
+            return false;
+        }
+        window.sessionStorage.setItem(RULES_RELOAD_MARKER_KEY, sent);
+    } catch {
+        return false;
+    }
+    window.location.reload();
+    return true;
+}
+
+/**
  * Submits a game command to /api/game/command, shared by every game screen.
  * Guards against a double-tap or slow-network double-submit firing two
  * commands for the same turn before the first response lands — without this,
@@ -93,6 +124,7 @@ export function useSubmitCommand<T>(
     // board doesn't rebuild `submitCommand` for every screen holding it.
     const expectedCommandCount = expectedCommandCountFor(board);
     const version = commandVersionFor(board);
+    const gameUrl = board?.gameType.url;
 
     const submitCommand = useCallback<SubmitCommand>(async (
         command: IGameCommand,
@@ -132,9 +164,9 @@ export function useSubmitCommand<T>(
             });
             // Built for rules the server has since changed: resyncing would
             // leave this tab on the old bundle, refusing every move it sends,
-            // so load the current release instead.
-            if (res.status === 426) {
-                window.location.reload();
+            // so load the current release instead — once per version, and
+            // otherwise resync like any other refusal.
+            if (res.status === 426 && reloadForNewRules(`${gameUrl}@${version}`)) {
                 return;
             }
             const data: ICommandResponse | null = res.ok ? await res.json() : null;
@@ -158,7 +190,7 @@ export function useSubmitCommand<T>(
             setSubmitting(false);
             setPendingTarget(null);
         }
-    }, [user, gameId, setGameData, getGameData, expectedCommandCount, version]);
+    }, [user, gameId, setGameData, getGameData, expectedCommandCount, version, gameUrl]);
 
     return { submitCommand, submitting, pendingTarget };
 }

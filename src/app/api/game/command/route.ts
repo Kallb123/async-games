@@ -171,19 +171,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
   }
 
-  // The rules the move was built for (docs/command-versions.md). A tab still
-  // running the bundle from before a game's rules changed builds its moves for
-  // the old rules, and a move that is still legal under the new ones can mean
-  // something its player never chose — so it is refused, and the client
-  // reloads onto the current release. A version the server doesn't have yet is
-  // a client ahead of a deploy that hasn't reached this instance: refused too,
-  // but the client only needs to try again. Kept on the command once it
-  // passes, so a replay knows which rules it was played by.
-  //
-  // A command with no version at all comes from a bundle built before
-  // commands carried one, which was built for the first version's rules — and
-  // knows nothing of the reload a 426 asks for, so refusing it outright would
-  // leave every tab open across that deploy failing its moves in silence.
+  // The rules the move was built for (docs/command-versions.md): older is a
+  // stale tab, told to reload; newer is a client ahead of this instance's
+  // deploy, told to try again. None at all is a bundle from before commands
+  // carried one, built for the first version's rules and unable to act on a
+  // 426. Kept on the command, so a replay knows which rules it was played by.
   commandRequest.version ??= FIRST_COMMAND_VERSION;
   const version = gameCommandVersion(gameData.gameType);
   if (commandRequest.version !== version) {

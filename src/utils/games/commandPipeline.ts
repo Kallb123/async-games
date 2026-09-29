@@ -49,9 +49,12 @@ export interface RunCommandOptions {
     outOfTurn?: boolean;
 }
 
-/** Marks `followUp` as the command the pipeline ran for `trigger`. */
+/** Marks `followUp` as the command the pipeline ran for `trigger`, under the same rules version. */
 function stampFollowUpOf(followUp: IGameCommand, trigger: IGameCommand): void {
     (followUp as unknown as Record<string, unknown>)[RECORDED_FOLLOW_UP_TO_ID] = trigger.id;
+    // Played under the rules its trigger was: the version the route accepted
+    // live, and the one recorded on the trigger when a replay regenerates it.
+    followUp.version = trigger.version;
 }
 
 /** Marks `command` as played out of turn, on the turn of whoever holds it now. */
@@ -188,9 +191,6 @@ export async function runCommand(
     }
 
     stampFollowUpOf(followUpCommand, command);
-    // Played under the rules its trigger was: the version the route accepted
-    // live, and the one recorded on the trigger when a replay regenerates it.
-    followUpCommand.version = command.version;
     const toRun = resolveFollowUp ? resolveFollowUp(followUpCommand, command) : followUpCommand;
     if (!toRun) return { outcome: spent, gameOver };
 
