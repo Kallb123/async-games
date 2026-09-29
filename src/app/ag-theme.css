@@ -483,6 +483,26 @@ button {
     color: var(--ag-ink-soft);
 }
 
+/* A row that belongs to one player — a result's per-player stats — wearing
+   that player's seat colour as a bar down its leading edge, so it reads as
+   theirs at a glance, in the same colour as their line on the charts. The
+   caller sets `--ag-row-accent` to the colour. */
+.ag-list-row--player {
+    position: relative;
+    padding-left: 14px;
+}
+
+.ag-list-row--player::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 11px;
+    bottom: 11px;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--ag-row-accent);
+}
+
 /* Lets a <button> stand in for a .ag-list-row (e.g. a clickable list entry)
    without every call site re-deriving its own reset. */
 .ag-list-row--button {

@@ -53,7 +53,7 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
                                 {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
                             </div>
                             {result.stats.length > 0
-                                ? <GameResultStats groups={result.stats} />
+                                ? <GameResultStats groups={result.stats} players={result.players} />
                                 : <div className="ag-empty">No extra stats for this game.</div>}
                         </>
                     )}
