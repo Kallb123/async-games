@@ -596,6 +596,15 @@ The gremlin's questions.
   command; replaying it re-pops a snapshot that the same replay re-pushed. The
   hold changes nothing either: `autoEndTurnAt` is set and cleared by commands
   that replay in order.
+- **Except for a game recorded before the hold.** Its log has no `SACEndTurn`
+  after a setup road, or after a move that left nothing else to do: those
+  ended the turn outright. Replayed under today's rules the hold never
+  closes, the next move is refused and so is every move after it, so the
+  match review and the result charts of a game started before then stopped a
+  round or two in. The replay adapter's `closeUnrecordedHold`
+  (`sacUnrecordedHoldEnd`) closes such a hold the way those rules did, as its
+  holder, before the recorded command it wouldn't have let through. Every
+  hold since was closed by a recorded command, so it never fires for those.
 - **No recap event.** Replay retains `SACUndo`, but the shared recap engine
   treats undo as an edit: it suppresses the Undo and every event produced by
   the command immediately before it. The recap therefore shows neither a

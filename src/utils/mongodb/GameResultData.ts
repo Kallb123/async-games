@@ -40,8 +40,8 @@ import {
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesCharts,
+    SAC_REPLAYED_STATS,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import { calculateTotalVP, type ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -352,20 +352,11 @@ const GAME_RESULT_STATS: Record<string, {
         compute: async (gameData) => {
             const sacGameData = gameData as ISettlementsAndCitiesGameData;
             // One replay, read off the internal state: the victory points
-            // chart counts the VP cards the response hides, and the state it
-            // ends on has by-resource counts that run from the first move -
-            // the resources table reads those rather than the live game's
-            // (see computeSettlementsAndCitiesResultStats).
-            const replayed = await computePerTurnInternalStats<ISACSpecificGameState, 'resources' | 'victoryPoints'>(sacGameData, {
-                resources: (state, userId) => state.playerStates.get(userId)?.resourcesGathered ?? 0,
-                victoryPoints: (state, userId) => calculateTotalVP(userId, state),
-            });
-            return computeSettlementsAndCitiesResultStats(
-                sacGameData,
-                replayed?.perTurn.resources ?? [],
-                replayed?.finalState,
-                replayed?.perTurn.victoryPoints,
-            );
+            // chart counts the VP cards the response hides, the resources
+            // table counts by resource from the first move, and a dropped
+            // player's result is what they left with (see SAC_REPLAYED_STATS).
+            const replayed = await computePerTurnInternalStats(sacGameData, SAC_REPLAYED_STATS);
+            return computeSettlementsAndCitiesResultStats(sacGameData, replayed);
         },
         format: formatSettlementsAndCitiesResultStats,
         charts: formatSettlementsAndCitiesCharts,
@@ -509,6 +500,30 @@ const GAME_RESULT_STATS: Record<string, {
         charts: formatRaceCarsCharts,
     },
 };
+
+// Whether a game keeps stats of its own on its result — the ones
+// regenerateGameResultStats can work out again.
+export function hasGameResultStats(gameType: string): boolean {
+    return gameType in GAME_RESULT_STATS;
+}
+
+// Works a finished game's recorded stats out again from the game itself, for
+// a result recorded while its game's replay couldn't follow it — a rule that
+// changed under a game already under way (see IReplayAdapter's
+// closeUnrecordedHold) — once the replay can. Only the stats: who won, how it
+// ended and when are the record of what happened, and stay as they were.
+// Needs the game's GameData, which the result outlives, so the caller finds it
+// first. False when there was nothing to rewrite: a game with no stats of its
+// own, or no result recorded with them.
+export async function regenerateGameResultStats(gameData: IGameData): Promise<boolean> {
+    const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
+    if (!specific) return false;
+    const result = await specific.model.findOne({ gameId: gameData.gameId }).exec();
+    if (!result) return false;
+    result.set('stats', await specific.compute(gameData));
+    await result.save();
+    return true;
+}
 
 // Renders a GameResult document's discriminated `stats` field into display-
 // ready stat groups, for the recent-form popup and the full result page.

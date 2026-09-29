@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from "react";
+import { use, useState } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import BackLink from "@/components/ui/BackLink";
 import ListRow from "@/components/ui/ListRow";
@@ -11,6 +11,8 @@ import LineChart from "@/components/ui/LineChart";
 import BarChart from "@/components/ui/BarChart";
 import ResultTable from "@/components/ui/ResultTable";
 import { useGameResult } from "@/utils/hooks/useGameResult";
+import { useToast } from "@/components/ToastContext";
+import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
@@ -19,7 +21,7 @@ import moment from 'moment';
 
 export default function GameResultPage({ params }: { params: Promise<{ gameId: string }> }) {
     const { gameId } = use(params);
-    const { result, isLoading, error } = useGameResult(gameId);
+    const { result, isLoading, error, replaceResult } = useGameResult(gameId);
     const meta = result ? GAME_META[result.url] : undefined;
     // A result that never arrived has nothing to lay out — the one state that
     // isn't the page in some stage of filling in.
@@ -75,7 +77,44 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                                 : <LineChart chart={chart} players={result.players} playerIds={result.playerIds} />}
                     </Section>
                 ))}
+
+                {result?.canRegenerate && <RegenerateResults gameId={gameId} onRegenerated={replaceResult} />}
             </>)}
         </main>
+    );
+}
+
+// Works this game's stats and charts out again from its moves, for a result
+// recorded before a fix to how they are worked out — a quiet footer action,
+// since a result that came out right never needs it.
+function RegenerateResults({ gameId, onRegenerated }: { gameId: string, onRegenerated: (result: IGameResultResponse) => void }) {
+    const { showToast } = useToast();
+    const [isRegenerating, setIsRegenerating] = useState(false);
+
+    const regenerate = async () => {
+        setIsRegenerating(true);
+        try {
+            const response = await fetch(`/api/gameresult/${gameId}/regenerate`, { method: "POST" });
+            if (!response.ok) {
+                showToast(response.statusText || "Couldn't regenerate the results.", 'danger');
+                return;
+            }
+            const data = await response.json();
+            if (data?.success) onRegenerated(data.result);
+            showToast("Results regenerated from the game's moves.", 'success');
+        } catch (error) {
+            console.error(error);
+            showToast("Couldn't regenerate the results. Please try again.", 'danger');
+        } finally {
+            setIsRegenerating(false);
+        }
+    };
+
+    return (
+        <div className="ag-footer">
+            <button type="button" className="ag-link-muted" disabled={isRegenerating} onClick={regenerate}>
+                {isRegenerating ? "Regenerating results…" : "Regenerate results"}
+            </button>
+        </div>
     );
 }

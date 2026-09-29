@@ -1356,6 +1356,32 @@ export class SACEndTurn implements IGameCommand {
     }
 }
 
+// A game recorded before turns were held for undo (docs/undo.md §5, 19
+// September 2026) has no SACEndTurn after the moves that hold today: a setup
+// road, or a main-turn move that left nothing else to do, ended the turn there
+// and then. The replay engine asks this before each recorded command
+// (IReplayAdapter.closeUnrecordedHold), and while a hold is open, a command it
+// wouldn't have let through means the log never closed it — so it is closed
+// the way those rules did, with an SACEndTurn from the player holding it.
+//
+// What a hold lets through: its holder's own SACEndTurn or SACUndo; a trade
+// from another seat, stamped out of turn; and in the main phase anything else
+// of the holder's own, which is still their turn (an offer posted while the
+// countdown runs). Setup lets nothing else through, which is why the snake's
+// double placement — the last seat places twice running, and the first rolls
+// straight after their last road — needs this even though the sender never
+// changes. Every hold a game played since then opened was closed by a
+// recorded command, so for those this never fires.
+export function sacUnrecordedHoldEnd(gs: ISettlementsAndCitiesGameData['specificGameState'], holderId: string, next: IGameCommand): SACEndTurn | null {
+    if (!gs.autoEndTurnAt) return null;
+    if (recordedOnTurnOf(next) !== undefined) return null;
+    if (next.senderId === holderId) {
+        if (next.className === 'SACEndTurn' || next.className === 'SACUndo') return null;
+        if (gs.phase === 'main') return null;
+    }
+    return new SACEndTurn();
+}
+
 // ─── Undo ─────────────────────────────────────────────────────────────────────
 
 @serializable

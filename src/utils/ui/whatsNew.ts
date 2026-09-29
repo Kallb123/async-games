@@ -130,6 +130,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Settlements & Cities results cover the whole game",
+                detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. Every finished game's results page also has a Regenerate results link at the bottom, to work them out again from the game's moves.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Kingdom Builder armies fight the scouts they meet",
                 detail: "A rival army could share a tile with your scouts and their settlers or caravans and do nothing at all, since scouts counted as a full escort. Scouts are now cheap rather than untouchable: an army with soldiers in it fights any scouts on its tile, alone or escorting, and once the last scout falls it takes the settlers and caravans they guarded. Both sides get the fight in their Battles list.",
                 game: "kingdombuilder",
@@ -168,10 +173,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "A missed Settlements & Cities turn no longer breaks the board",
                 detail: "If nobody was around when your turn timer ran out, the game used to just skip straight to whoever was next without actually playing your turn for you — during setup that could scramble the placement order or leave the next player building a road onto your settlement, and on a main turn it skipped the whole table's roll, not just yours. A missed turn now plays itself out: a settlement and road go down somewhere legal during setup, the dice get rolled and the robber gets moved on a main turn, and anything left over is passed rather than lost.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "The match history tells the setup story the right way round",
-                detail: "The setup lines at the start of a game were logged in reverse, so the match history read them backwards. In a game whose opening roll-off had to break a tie, the two re-rolls showed up above the line announcing the tie — which read as the game making two players roll again over numbers that plainly didn't match. Setup now reads in the order it happened, from the roll-off down to the options the host turned on, and a throw made to break a tie says it was a re-roll. Games already under way keep the log they were started with.",
             },
         ],
     },
