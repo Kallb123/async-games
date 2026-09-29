@@ -10,6 +10,7 @@ import { gameResultStatRows } from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
 import BarChart from "@/components/ui/BarChart";
 import ResultTable from "@/components/ui/ResultTable";
+import ResultBoard from "@/components/games/ResultBoard";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useToast } from "@/components/ToastContext";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
@@ -59,6 +60,8 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                         />
                     )}
                 </ListSection>
+
+                {result && <ResultBoard result={result} />}
 
                 <ListSection
                     label="Stats"

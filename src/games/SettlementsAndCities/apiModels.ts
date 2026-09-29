@@ -54,16 +54,23 @@ export interface ISACPlayerStateResponse {
     visibleVP: number;
 }
 
-export interface ISACSpecificGameStateResponse {
+// The board itself — the tiles, the harbours, every building and road, and the
+// robber. All of it is on the table for everyone to see, so it is the same for
+// every viewer: the live response carries it, and a finished game's result keeps
+// a copy of the last one for its result page (see sacBoard).
+export interface ISACBoardResponse {
     hexes: ISACHexResponse[];
     vertices: ISACVertexResponse[];
     edges: ISACEdgeResponse[];
     harbors: ISACHarborResponse[];
+    robberHexIndex: number;
+}
+
+export interface ISACSpecificGameStateResponse extends ISACBoardResponse {
     // Keyed by the player's stable Clerk userId; each value carries the username
     // for display. Vertex/edge owners and the bonus/special-build fields below
     // are userIds too, resolved to names through this map.
     playerStates: { [userId: string]: ISACPlayerStateResponse };
-    robberHexIndex: number;
     phase: 'setup' | 'main';
     setupStep: number;
     pendingRoadSetup: boolean;

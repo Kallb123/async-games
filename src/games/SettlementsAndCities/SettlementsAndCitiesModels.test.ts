@@ -5,6 +5,7 @@ import {
     gameStateToResponse,
     computeSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesCharts,
+    formatSettlementsAndCitiesBoard,
     sacGameResultStatsSchemaDef,
     SAC_REPLAYED_STATS,
 } from "./SettlementsAndCitiesModels";
@@ -376,5 +377,47 @@ describe("Settlements & Cities' resources-gathered table", () => {
 
         const charts = formatSettlementsAndCitiesCharts(read, new Map(Object.entries(NAMES)));
         expect(charts.map(c => c.kind)).toEqual(["bar"]);
+    });
+});
+
+// The result keeps the board as the game ended, for the result page to draw
+// (formatSettlementsAndCitiesBoard, via GAME_RESULT_STATS' `board`).
+describe("Settlements & Cities' final board on the result", () => {
+    function finishedState(): ISACSpecificGameState {
+        const state = stateWith(undefined);
+        state.hexes = [{ terrain: "forest", numberToken: 8 }, { terrain: "desert", numberToken: null }];
+        state.harbors = [{ type: "3to1", vertices: [0, 1] }];
+        state.robberHexIndex = 1;
+        state.vertices[0] = { building: "city", owner: "u1" };
+        state.vertices[5] = { building: "settlement", owner: "u2" };
+        state.edges[3] = { hasRoad: true, owner: "u2" };
+        return state;
+    }
+
+    it("is the board the table saw at the end, and survives a save and read back through the result schema", () => {
+        const state = finishedState();
+        const stats = computeSettlementsAndCitiesResultStats(docFor(state));
+
+        const StatsModel = model("SACResultBoardRoundTrip", new Schema({ stats: sacGameResultStatsSchemaDef }));
+        const read = new StatsModel({ stats }).toObject().stats as typeof stats;
+        const board = formatSettlementsAndCitiesBoard(read);
+
+        const live = gameStateToResponse(state, NAMES, "u1");
+        expect(board).toEqual({
+            hexes: live.hexes,
+            vertices: live.vertices,
+            edges: live.edges,
+            harbors: live.harbors,
+            robberHexIndex: 1,
+        });
+        // Nothing but the board: no subdocument ids ride along to the page.
+        expect(JSON.stringify(board)).not.toContain("_id");
+    });
+
+    it("is absent from a result recorded before the board was kept", () => {
+        const stats = computeSettlementsAndCitiesResultStats(docFor(finishedState()));
+        delete stats.finalBoard;
+
+        expect(formatSettlementsAndCitiesBoard(stats)).toBeUndefined();
     });
 });

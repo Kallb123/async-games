@@ -1,5 +1,5 @@
 import { GameDataModel } from '@/utils/mongodb/GameData';
-import { IGameResultDataDocument, formatGameResultStats, formatGameResultCharts, hasGameResultStats } from '@/utils/mongodb/GameResultData';
+import { IGameResultDataDocument, formatGameResultStats, formatGameResultCharts, formatGameResultBoard, hasGameResultStats } from '@/utils/mongodb/GameResultData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
 import type { GameEndReason, GameResultStatGroup, GameResultAnyChart } from '@/utils/apiModels/GameDataApi';
 
@@ -23,6 +23,10 @@ export interface IGameResultResponse {
     totalTurns: number;
     stats: GameResultStatGroup[];
     charts: GameResultAnyChart[];
+    // The board as the game ended, for a game whose result keeps one — shaped
+    // by that game, and drawn by its entry in RESULT_BOARDS
+    // (components/games/ResultBoard.tsx). Absent for every other result.
+    board?: unknown;
     // Whether the viewer can have the stats and charts worked out again from
     // the game's own moves (POST /api/gameresult/[gameId]/regenerate): they
     // played in it, it was recorded with stats of its own, and its GameData —
@@ -59,6 +63,7 @@ export async function gameResultResponse(result: IGameResultDataDocument, viewer
         totalTurns: result.totalTurns,
         stats: formatGameResultStats(result.gameType, stats, usernameById),
         charts: formatGameResultCharts(result.gameType, stats, usernameById),
+        board: formatGameResultBoard(result.gameType, stats),
         canRegenerate,
     };
 }

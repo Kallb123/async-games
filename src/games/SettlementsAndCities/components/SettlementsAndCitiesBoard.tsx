@@ -2,7 +2,7 @@
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import { BOARD_TOPOLOGY, SAC_RESOURCES, isRedNumber } from '@/games/SettlementsAndCities/board';
-import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
+import type { ISACBoardResponse } from '@/games/SettlementsAndCities/apiModels';
 import { SAC_RESOURCE_EMOJI, type SACSpotKind } from '@/games/SettlementsAndCities/ui';
 
 const HEX_SIZE = 52;
@@ -39,12 +39,7 @@ function hexCenterPx(hexId: number): [number, number] {
     return [CX + HEX_SIZE * R3_2 * x, CY + HEX_SIZE / 2 * y];
 }
 
-interface SettlementsAndCitiesBoardProps {
-    hexes: ISACHexResponse[];
-    vertices: ISACVertexResponse[];
-    edges: ISACEdgeResponse[];
-    harbors: ISACHarborResponse[];
-    robberHexIndex: number;
+interface SettlementsAndCitiesBoardProps extends ISACBoardResponse {
     // owner userId (as carried on vertices/edges) → colour.
     colorForOwner: (owner: string | null) => string;
     // Interactive callbacks – undefined when board is view-only

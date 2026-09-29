@@ -349,6 +349,13 @@ Key properties:
   `endReason` must forward it too (`publicGameState.test.ts` holds them to
   that). It never carries a `{{userId}}` token: only `gameState.history` is
   run through `resolveHistory`, so a token would render raw in a push.
+- **A game may keep its final board.** A `board` formatter on the game's
+  `GAME_RESULT_STATS` entry hands back a copy its result kept (Settlements &
+  Cities saves `finalBoard` from `sacBoard(gs)`), which the response carries as
+  `board`; the result page draws it through `RESULT_BOARDS` in
+  `src/components/games/ResultBoard.tsx`, one lazily loaded line per game. The
+  result page is open to the players' friends, so only a board with nothing
+  hidden on it belongs there.
 - **Idempotent on `gameId`.** The schema has a unique index on `gameId`;
   `recordGameResult` swallows the resulting duplicate-key error, so calling it
   twice for the same game (e.g. a retried request) is a no-op rather than a

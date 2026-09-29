@@ -40,6 +40,7 @@ import {
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesCharts,
+    formatSettlementsAndCitiesBoard,
     SAC_REPLAYED_STATS,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import {
@@ -316,11 +317,18 @@ export var RaceCarsGameResultModel = models.RaceCarsGameResult || GameResultMode
 // a formatter that turns those numbers into display-ready stat groups. Games
 // with no entry here still get the base GameResult fields (including
 // totalTurns) via recordGameResult below.
+//
+// `board` is for a game whose result keeps its final board: it hands the saved
+// copy back in the shape that game's result-page board (RESULT_BOARDS, in
+// components/games/ResultBoard.tsx) draws, or undefined when this result has
+// none. Only a board with nothing hidden on it belongs here — the result page
+// is open to the players' friends, not just the table.
 const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
     compute: (gameData: IGameData) => unknown | Promise<unknown>,
     format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
     charts?: (stats: any, usernameById: Map<string, string>) => GameResultAnyChart[],
+    board?: (stats: any) => unknown,
 }> = {
     DiceCities: {
         model: DiceCitiesGameResultModel,
@@ -363,6 +371,7 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatSettlementsAndCitiesResultStats,
         charts: formatSettlementsAndCitiesCharts,
+        board: formatSettlementsAndCitiesBoard,
     },
     WorldDomination: {
         model: WorldDominationGameResultModel,
@@ -572,6 +581,16 @@ export function formatGameResultCharts(gameType: string, stats: unknown, usernam
     const specific = GAME_RESULT_STATS[gameType];
     if (!specific?.charts || !stats) return [];
     return specific.charts(stats, usernameById);
+}
+
+// The final board a GameResult document kept, for the result page to draw,
+// or undefined for a game that keeps none (or a result recorded before it
+// did). Its shape is the game's own; the page picks the board that draws it
+// by the result's gameType.
+export function formatGameResultBoard(gameType: string, stats: unknown): unknown {
+    const specific = GAME_RESULT_STATS[gameType];
+    if (!specific?.board || !stats) return undefined;
+    return specific.board(stats);
 }
 
 export type MatchOutcome = "win" | "loss" | "draw";

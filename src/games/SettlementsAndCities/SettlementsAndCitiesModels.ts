@@ -1,7 +1,7 @@
 import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
+import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse, ISACBoardResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup, GameResultBarChart, GameResultTable, GameResultAnyChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
@@ -257,15 +257,25 @@ const resourcesSubSchema = {
     ore: Number,
 };
 
-// The specificGameState sub-schema, produced fresh per path so `specificGameState`
-// (the live, mutable state) and `initialSpecificGameState` (the immutable recap
-// snapshot) don't share a schema definition object.
-function makeSACStateSchemaDef() {
+// The board's own fields (ISACBoardResponse), produced fresh per use like the
+// state schema below: the live state and a result's saved final board store it
+// the same way.
+function makeSACBoardSchemaDef() {
     return {
         hexes: [{ terrain: String, numberToken: { type: Number, default: null } }],
         vertices: [{ building: { type: String, default: null }, owner: { type: String, default: null } }],
         edges: [{ hasRoad: Boolean, owner: { type: String, default: null } }],
         harbors: [{ type: { type: String }, vertices: [Number] }],
+        robberHexIndex: Number,
+    };
+}
+
+// The specificGameState sub-schema, produced fresh per path so `specificGameState`
+// (the live, mutable state) and `initialSpecificGameState` (the immutable recap
+// snapshot) don't share a schema definition object.
+function makeSACStateSchemaDef() {
+    return {
+        ...makeSACBoardSchemaDef(),
         playerStates: {
             type: Schema.Types.Map,
             of: {
@@ -282,7 +292,6 @@ function makeSACStateSchemaDef() {
                 robberUses: Number,
             },
         },
-        robberHexIndex: Number,
         phase: String,
         setupStep: Number,
         pendingRoadSetup: Boolean,
@@ -361,6 +370,22 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     };
 };
 
+// The board as everyone at the table sees it: copied field by field, so
+// neither the live response nor a result's saved copy carries anything the
+// board doesn't (Mongoose's subdocument ids included). Ownership stays keyed by
+// the stable userId all the way to the client, which resolves a display name
+// from playerStates[userId] when it needs one — so a rename can't shift an
+// owner reference or a per-player key.
+export function sacBoard(board: ISACBoardResponse): ISACBoardResponse {
+    return {
+        hexes: board.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken ?? null })),
+        vertices: board.vertices.map(v => ({ building: v.building ?? null, owner: v.owner ?? null })),
+        edges: board.edges.map(e => ({ hasRoad: e.hasRoad, owner: e.owner ?? null })),
+        harbors: board.harbors.map(h => ({ type: h.type, vertices: [h.vertices[0], h.vertices[1]] })),
+        robberHexIndex: board.robberHexIndex,
+    };
+}
+
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
@@ -404,18 +429,6 @@ export function gameStateToResponse(
         }
     }
 
-    // Ownership stays keyed by the stable userId all the way to the client, which
-    // resolves a display name from playerStates[userId] when it needs one — so a
-    // rename can't shift an owner reference or a per-player key.
-    const vertices = gs.vertices.map(v => ({
-        building: v.building,
-        owner: v.owner ?? null,
-    }));
-    const edges = gs.edges.map(e => ({
-        hasRoad: e.hasRoad,
-        owner: e.owner ?? null,
-    }));
-
     // A roll held past the end of its turn is for the player it was held for and
     // nobody else: it is only ever held because that player could afford nothing,
     // so putting it in front of the table says so. Everyone else gets what an
@@ -457,12 +470,8 @@ export function gameStateToResponse(
     const autoEndTurnAt = canUndo ? (gs.autoEndTurnAt ?? null) : null;
 
     return {
-        hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
-        vertices,
-        edges,
-        harbors: gs.harbors.map(h => ({ type: h.type, vertices: h.vertices })),
+        ...sacBoard(gs),
         playerStates,
-        robberHexIndex: gs.robberHexIndex,
         phase: gs.phase,
         setupStep: gs.setupStep,
         pendingRoadSetup: gs.pendingRoadSetup,
@@ -573,6 +582,11 @@ export interface ISACGameResultStats {
     // each bar can be stacked by player. Absent on a result recorded before
     // the split, whose bars stay unsplit.
     rollFrequencyByPlayer?: Map<string, Map<string, number>>;
+    // The board as the game ended — every building, road and the robber where
+    // they stood — for the result page to draw. Kept on the result rather than
+    // read off the game, which the result outlives. Absent on a result
+    // recorded before it, which then has no board to show.
+    finalBoard?: ISACBoardResponse;
 }
 
 // The possible totals of two six-sided dice, lowest to highest - the fixed set
@@ -602,6 +616,7 @@ export const sacGameResultStatsSchemaDef = {
     victoryPointsPerTurn: [{ type: Schema.Types.Map, of: Number }],
     rollFrequency: { type: Schema.Types.Map, of: Number },
     rollFrequencyByPlayer: { type: Schema.Types.Map, of: { type: Schema.Types.Map, of: Number } },
+    finalBoard: { type: new Schema(makeSACBoardSchemaDef(), { _id: false }), default: undefined },
 };
 
 // Tallies every dice roll's total (2-12) across the whole game, read straight
@@ -731,7 +746,14 @@ export function computeSettlementsAndCitiesResultStats(
         resourcesPerTurn: trusted?.resourcesGathered ?? [],
         victoryPointsPerTurn: trusted?.victoryPoints ?? [],
         ...computeSACRollFrequency(gameData),
+        finalBoard: sacBoard(gs),
     };
+}
+
+// The saved final board, as the result page draws it — or undefined for a
+// result recorded before the board was kept.
+export function formatSettlementsAndCitiesBoard(stats: ISACGameResultStats): ISACBoardResponse | undefined {
+    return stats.finalBoard?.hexes?.length ? sacBoard(stats.finalBoard) : undefined;
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared

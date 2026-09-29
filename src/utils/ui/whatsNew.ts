@@ -77,6 +77,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "See the final board on a Settlements & Cities result",
+                detail: "A finished game's result page now shows the board as the game ended — every settlement, city and road in its owner's colour. Hover or press a bar in the dice roll chart to see how many of those rolls each player threw.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Dice Cities: play on the Outer Rim",
                 detail: "Pick the new Outer Rim theme when you set up a game and your city becomes a frontier outpost on a galactic trade lane: Moisture Farms and Spice Mines, cantinas that charge the pilot, credits from the Exchange, and a Docking Bay and Sensor Array to finish. Same rules and numbers as ever — only the names and the card art change.",
                 game: "dicecities",
@@ -119,10 +124,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder has a new painted world map",
                 detail: "Forests, fields, coasts and mountain ranges now blend into a seamless tabletop landscape, with rivers and bridges drawn into the terrain.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "End-of-turn draws stay on the table",
-                detail: "Banned Islet and Outbreak now show the cards you just drew and your updated hand beside the flood or infection recap, so you can take in the whole end of your turn at once.",
             },
         ],
     },

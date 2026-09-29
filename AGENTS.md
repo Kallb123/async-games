@@ -109,6 +109,8 @@ out. A second copy is the signal to extract the first one.
   things — either side of a trade offer, a caravan's load — is
   `AmountSteppers`: one `ag-list` with a `Stepper` per row, shared by Kingdom
   Builder's trade board and Settlements & Cities' trade offers.
+  Every hover card on a result chart is a `ChartTooltip` — the round on a
+  `LineChart`, a stacked bar's per-player breakdown on a `BarChart`.
   A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`
   — one child of an `.ag-action-grid` row beside whatever it shares the row
   with — rather than another hand-built "↩ Undo". A game whose undoable move
