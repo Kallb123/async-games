@@ -2567,7 +2567,6 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-chart-tooltip {
     position: absolute;
     top: 0;
-    transform: translateX(-50%);
     background: var(--ag-dark);
     color: var(--ag-on-dark);
     border-radius: 10px;
@@ -2578,7 +2577,7 @@ button.ag-chat-gif { cursor: pointer; }
     white-space: nowrap;
     z-index: 1;
 }
-.ag-chart-tooltip-round {
+.ag-chart-tooltip-title {
     font-weight: 800;
     opacity: 0.75;
     margin-bottom: 3px;
@@ -2655,6 +2654,7 @@ button.ag-chat-gif { cursor: pointer; }
 
 /* ---- GameResult frequency bar chart (BarChart) ---- */
 .ag-barchart-plot {
+    position: relative;
     display: flex;
     align-items: flex-end;
     gap: 4px;
@@ -2691,6 +2691,7 @@ button.ag-chat-gif { cursor: pointer; }
     min-height: 2px;
     background: var(--ag-terracotta);
     border-radius: 4px 4px 0 0;
+    transition: opacity 0.12s;
 }
 /* A stacked bar's segments (BarChart with `segments`): its own box, clipped to
    the bar's rounded top, so the value riding above the bar isn't clipped too.
@@ -2714,6 +2715,11 @@ button.ag-chat-gif { cursor: pointer; }
     margin-bottom: 3px;
     font: 700 10px var(--ag-font);
     color: var(--ag-ink-soft);
+}
+/* While a stacked bar's breakdown is up (BarChart's hover tooltip), the other
+   bars step back so it's plain which one the card is about. */
+.ag-barchart-plot--hovering .ag-barchart-col:not(.ag-barchart-col--hovered) .ag-barchart-bar {
+    opacity: 0.4;
 }
 .ag-barchart-label {
     margin-top: 6px;

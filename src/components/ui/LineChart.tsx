@@ -5,6 +5,7 @@ import type { GameResultChart, GameResultChartSeries } from "@/utils/apiModels/G
 import { playerChartSeries } from "@/utils/ui/playerColours";
 import ChartEventIcon, { CHART_EVENT_ICON_SIZE } from "./ChartEventIcon";
 import ChartLegend from "./ChartLegend";
+import ChartTooltip from "./ChartTooltip";
 
 interface LineChartProps {
     chart: GameResultChart;
@@ -190,16 +191,11 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                 ))}
 
                 {hoverIndex !== null && (
-                    <div className="ag-chart-tooltip" style={{ left: `${(xAt(hoverIndex) / VB_WIDTH) * 100}%` }}>
-                        <div className="ag-chart-tooltip-round">Round {hoverIndex + 1}</div>
-                        {series.map(s => (
-                            <div key={s.key} className="ag-chart-tooltip-row">
-                                <span className="ag-chart-tooltip-key" style={{ background: s.color }} />
-                                <span className="ag-chart-tooltip-name">{s.name}</span>
-                                <span className="ag-chart-tooltip-value">{s.values[hoverIndex]}</span>
-                            </div>
-                        ))}
-                    </div>
+                    <ChartTooltip
+                        left={(xAt(hoverIndex) / VB_WIDTH) * 100}
+                        title={`Round ${hoverIndex + 1}`}
+                        rows={series.map(s => ({ ...s, value: s.values[hoverIndex] }))}
+                    />
                 )}
             </div>
 

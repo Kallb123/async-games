@@ -1,6 +1,10 @@
+'use client'
+
+import { useState } from "react";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
 import { playerChartSeries } from "@/utils/ui/playerColours";
 import ChartLegend from "./ChartLegend";
+import ChartTooltip from "./ChartTooltip";
 
 interface BarChartProps {
     chart: GameResultBarChart;
@@ -25,18 +29,31 @@ interface BarChartProps {
 // A bar that records its `segments` is stacked: each player's share in their
 // own colour, first seat at the bottom, with a legend underneath naming them.
 // The total on top is unchanged, so the stack only adds who rolled it.
+// Hovering one (or pressing it, on a phone) brings up its breakdown — each
+// player's count in that bar — in the same card LineChart shows for a round.
 export default function BarChart({ chart, players, playerIds }: BarChartProps) {
+    const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     if (chart.bars.length === 0) return null;
     const maxValue = Math.max(1, ...chart.bars.map(b => b.value));
     const stacked = chart.bars.some(b => b.segments);
     const series = stacked ? playerChartSeries(players, playerIds) : [];
+    const hovered = hoverIndex !== null ? chart.bars[hoverIndex] : null;
+    const hover = (i: number) => () => setHoverIndex(chart.bars[i].segments ? i : null);
 
     return (
         <div className="ag-chart">
             <div className="ag-chart-ylabel">{chart.yLabel}</div>
-            <div className="ag-barchart-plot">
-                {chart.bars.map(bar => (
-                    <div key={bar.label} className="ag-barchart-col">
+            <div
+                className={`ag-barchart-plot${hovered ? " ag-barchart-plot--hovering" : ""}`}
+                onPointerLeave={() => setHoverIndex(null)}
+            >
+                {chart.bars.map((bar, i) => (
+                    <div
+                        key={bar.label}
+                        className={`ag-barchart-col${i === hoverIndex ? " ag-barchart-col--hovered" : ""}`}
+                        onPointerEnter={hover(i)}
+                        onPointerDown={hover(i)}
+                    >
                         <div className="ag-barchart-track">
                             <div className="ag-barchart-bar" style={{ height: `${(bar.value / maxValue) * 100}%` }}>
                                 {bar.segments && bar.value > 0 && (
@@ -47,7 +64,6 @@ export default function BarChart({ chart, players, playerIds }: BarChartProps) {
                                                 <div
                                                     key={s.key}
                                                     className="ag-barchart-segment"
-                                                    title={`${s.name}: ${count}`}
                                                     style={{ flexGrow: count, background: s.color }}
                                                 />
                                             );
@@ -60,6 +76,13 @@ export default function BarChart({ chart, players, playerIds }: BarChartProps) {
                         <div className="ag-barchart-label">{bar.label}</div>
                     </div>
                 ))}
+                {hoverIndex !== null && hovered && (
+                    <ChartTooltip
+                        left={((hoverIndex + 0.5) / chart.bars.length) * 100}
+                        title={`${hovered.label} — ${hovered.value} total`}
+                        rows={series.map(s => ({ ...s, value: hovered.segments?.[s.key] ?? 0 }))}
+                    />
+                )}
             </div>
             {stacked && <ChartLegend series={series} />}
         </div>
