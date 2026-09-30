@@ -306,6 +306,19 @@ export async function mongodbStub() {
     return { ...actual, dbConnect: vi.fn(async () => undefined) };
 }
 
+/**
+ * `@/utils/mongodb/GameResultData` with the exports a test names replaced by its
+ * own (`vi.hoisted` fakes, so the test can steer and count them). Pass to `vi.mock`.
+ *
+ * The rest of the module stays real. The judge for achievements reads more of it
+ * than the route or the ending under test does (countsAsPlayed, resultCounts,
+ * outcomeFor), and a mock that doesn't define an export throws on access.
+ */
+export async function gameResultDataStub(overrides: Record<string, unknown>) {
+    const actual = await vi.importActual<typeof import('@/utils/mongodb/GameResultData')>('@/utils/mongodb/GameResultData');
+    return { ...actual, ...overrides };
+}
+
 /** `@/utils/firebase/pushNotification` with the send recorded, not sent. Pass to `vi.mock`. */
 export async function pushNotificationStub() {
     const actual = await vi.importActual<typeof import('@/utils/firebase/pushNotification')>('@/utils/firebase/pushNotification');

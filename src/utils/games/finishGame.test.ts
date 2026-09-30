@@ -18,12 +18,7 @@ const { recordGameResult, judgeGameEnd } = vi.hoisted(() => ({ recordGameResult:
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-// The rest of the module stays real: the judge reads more of it than the ending
-// does, and a mock that doesn't define an export throws on access.
-vi.mock('@/utils/mongodb/GameResultData', async importOriginal => ({
-    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
-    recordGameResult,
-}));
+vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult }));
 vi.mock('@/utils/games/awardAchievements', async importOriginal => ({
     ...(await importOriginal<typeof import('@/utils/games/awardAchievements')>()),
     judgeGameEnd,

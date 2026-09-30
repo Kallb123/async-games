@@ -13,7 +13,7 @@ import {
     formatPerTurnChart,
     compactCharts,
 } from "@/utils/apiModels/GameDataApi";
-import { buildTimeline, IReplayStep } from "@/utils/games/replay";
+import { buildTimeline, identityNameMap, IReplayStep } from "@/utils/games/replay";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
@@ -521,7 +521,7 @@ async function computeArrivalTotals(gameData: IRaceCarsGameData): Promise<{
     const slicksHit = new Map<string, number>();
     const bump = (map: Map<string, number>, userId: string) => map.set(userId, (map.get(userId) ?? 0) + 1);
 
-    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    const identityMap = identityNameMap(gameData.userIdList);
     try {
         await buildTimeline(gameData, identityMap, [], (step) => {
             if (step.command.className !== "RaceCarsMove" && step.command.className !== "RaceCarsSlipstream") return;

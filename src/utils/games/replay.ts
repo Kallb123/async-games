@@ -556,6 +556,16 @@ export async function buildTimeline(
     return { currentIndex, snapshots, resolvedPlannedCommands };
 }
 
+// Every player's id standing in as their name, for a caller that needs a
+// userIdNameMap but only ever looks players up by id. Usernames aren't resolved
+// at game-end (recordGameResult only has userIds), matching the compute-by-userId
+// / format-by-username split every other game's result stats already use, so an
+// identity map is enough for any such caller: the result stats' replays, and the
+// table's view a check is judged on (awardAchievements.ts tableView).
+export function identityNameMap(userIdList: readonly string[]): { [userId: string]: string } {
+    return Object.fromEntries(userIdList.map(userId => [userId, userId]));
+}
+
 // Replays a game via buildTimeline, calling `onStep` for every applied
 // command together with the 0-based index of the turn it belongs to and
 // whether it's the first step of that turn — the shared bookkeeping
@@ -570,9 +580,7 @@ export async function buildTimeline(
 // countTurns() (turnCount.ts) uses for the result page's "N turns" line, so
 // every per-turn chart and that summary agree on how long the game ran.
 // Usernames aren't resolved yet at game-end (recordGameResult only has
-// userIds), matching the compute-by-userId / format-by-username split every
-// other game's result stats already use, so an arbitrary (identity)
-// userIdNameMap is enough here for either caller.
+// userIds), so both callers give it the identityNameMap.
 //
 // Returns false (having already warned) if the replay itself throws, rather
 // than letting the error propagate: a snapshot-replay game created before its
@@ -587,7 +595,7 @@ async function replayTurnByTurn(
     onStep: (step: IReplayStep, turnIndex: number, isFirstStepOfTurn: boolean, specificGameState: unknown) => void,
     what: string,
 ): Promise<boolean> {
-    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    const identityMap = identityNameMap(gameData.userIdList);
     let turnIndex = 0;
     let previousTurnOf: string | undefined;
     try {

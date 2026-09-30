@@ -15,10 +15,8 @@ import type { MockInstance } from 'vitest';
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
-vi.mock('@/utils/mongodb/GameResultData', async importOriginal => ({
-    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
-    getGameStatsByPlayer: vi.fn(),
-}));
+vi.mock('@/utils/mongodb/GameResultData', async () =>
+    (await import('@/utils/testing/apiRoute')).gameResultDataStub({ getGameStatsByPlayer: vi.fn() }));
 
 import type { User } from '@clerk/nextjs/server';
 import { PLAYERS, passCommand, replayableGame, rollCommand } from '@/games/DiceCities/testHarness';
@@ -33,7 +31,7 @@ import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import { getGameStatsByPlayer } from '@/utils/mongodb/GameResultData';
 import type { IGameStats } from '@/utils/mongodb/GameResultData';
-import { ending, ownCareer, platform, turnEnd } from '@/utils/testing/achievementFixtures';
+import { ending, ownCareer, platform, turnEnd, unlockRow } from '@/utils/testing/achievementFixtures';
 import { resetApiRouteStubs, seedAchievementUnlock, storedAchievementUnlocks } from '@/utils/testing/apiRoute';
 import { judgeGameEnd, judgeTurnEnd, NO_UNLOCKS, tableView } from './awardAchievements';
 import type {
@@ -125,6 +123,13 @@ afterEach(() => {
 
 const reads = () => vi.mocked(AchievementUnlockModel.find).mock.calls.length;
 
+/** A seat that already holds an achievement, earned in an earlier game. */
+const holds = (userId: string, achievementId: string) =>
+    seedAchievementUnlock({ userId, achievementId, unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+
+/** The unlock row this game leaves for a seat that earned `achievementId` in it. */
+const earnedHere = (userId: string, achievementId: string) => unlockRow(userId, achievementId, { gameId: GAME_ID, url: 'dicecities' });
+
 /** Watches the view being built, for the tests that assert it wasn't. */
 const viewsBuilt = () => vi.spyOn(getReplayAdapter('DiceCitiesGameType')!, 'toResponseState');
 
@@ -192,7 +197,13 @@ describe('the table view', () => {
     });
 
     it('takes the game and nothing else: there is no viewer to pass', () => {
-        expect(tableView).toHaveLength(1);
+        // A compile-time guard, so it is never run: the ts-expect-error fails
+        // `tsc --noEmit` (which CI runs) the day `tableView` accepts a viewer, even
+        // an optional one that defaults to null, which `Function.length` can't see.
+        if (false as boolean) {
+            // @ts-expect-error tableView takes no viewer: the null is written in (docs/achievements.md §9)
+            tableView(diceGame(), ANN);
+        }
     });
 
     it('refuses a game with no replay adapter, naming it', () => {
@@ -217,7 +228,7 @@ describe('judgeTurnEnd', () => {
         expect(earned).toEqual([{ userId: ANN, achievement }]);
         expect(earned[0].achievement).toBe(achievement);
         expect(storedAchievementUnlocks()).toEqual([
-            { userId: ANN, achievementId: 'dicecities.rich', gameId: GAME_ID, url: 'dicecities', unlockedAt: expect.any(String) },
+            earnedHere(ANN, 'dicecities.rich'),
         ]);
         // The judge's own clock, not the timestamp of any command.
         const unlockedAt = Date.parse(storedAchievementUnlocks()[0].unlockedAt);
@@ -265,7 +276,7 @@ describe('judgeTurnEnd', () => {
 
     it('does not ask a seat about an achievement it already holds', async () => {
         const check = vi.fn(isRich);
-        seedAchievementUnlock({ userId: ANN, achievementId: 'dicecities.rich', unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+        holds(ANN, 'dicecities.rich');
 
         const earned = await judgeTurnEnd(diceGame({ [ANN]: 99, [BOB]: 99 }), TABLE, catalogueOf([turnEnd('dicecities.rich', check)]));
 
@@ -276,7 +287,7 @@ describe('judgeTurnEnd', () => {
 
     it('builds no view once every seat holds everything', async () => {
         for (const userId of PLAYERS) {
-            seedAchievementUnlock({ userId, achievementId: 'dicecities.rich', unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+            holds(userId, 'dicecities.rich');
         }
         const build = viewsBuilt();
 
@@ -355,7 +366,7 @@ describe('judgeGameEnd', () => {
 
             expect(earned).toEqual([{ userId: ANN, achievement: victor }]);
             expect(storedAchievementUnlocks()).toEqual([
-                { userId: ANN, achievementId: 'dicecities.victor', gameId: GAME_ID, url: 'dicecities', unlockedAt: expect.any(String) },
+                earnedHere(ANN, 'dicecities.victor'),
             ]);
         });
 
@@ -375,7 +386,7 @@ describe('judgeGameEnd', () => {
 
             expect(earned).toEqual([{ userId: BOB, achievement }]);
             expect(storedAchievementUnlocks()).toEqual([
-                { userId: BOB, achievementId: 'dicecities.rich', gameId: GAME_ID, url: 'dicecities', unlockedAt: expect.any(String) },
+                earnedHere(BOB, 'dicecities.rich'),
             ]);
         });
 
@@ -428,7 +439,7 @@ describe('judgeGameEnd', () => {
             const victor = ending('dicecities.victor', (_view, seat) => seat.outcome === 'win');
             const mayor = ownCareer('dicecities.mayor', record => record.won, 1);
             for (const userId of PLAYERS) {
-                seedAchievementUnlock({ userId, achievementId: 'dicecities.rich', unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+                holds(userId, 'dicecities.rich');
             }
             recordsAre({ [ANN]: [tally('dicecities', 1, 1)] });
 
@@ -512,7 +523,7 @@ describe('judgeGameEnd', () => {
         it('judges the record without this game for the tipped-or-backfilled split', async () => {
             const progress = vi.fn<(record: GameRecord) => number>(record => record.won);
             // Bob already holds it, so Ann's are the only calls there are.
-            seedAchievementUnlock({ userId: BOB, achievementId: 'dicecities.won-3', unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+            holds(BOB, 'dicecities.won-3');
             recordsAre({ [ANN]: [tally('dicecities', 6, 3)] });
 
             await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([ownCareer('dicecities.won-3', progress, 3)]));
@@ -532,7 +543,7 @@ describe('judgeGameEnd', () => {
 
             expect(earned).toEqual([]);
             expect(storedAchievementUnlocks()).toEqual([
-                { userId: BOB, achievementId: 'dicecities.won-2', unlockedAt: expect.any(String) },
+                unlockRow(BOB, 'dicecities.won-2'),
             ]);
         });
 
@@ -544,7 +555,7 @@ describe('judgeGameEnd', () => {
 
             expect(earned).toEqual([{ userId: ANN, achievement: firstWin }]);
             expect(storedAchievementUnlocks()).toEqual([
-                { userId: ANN, achievementId: 'platform.first-win', gameId: GAME_ID, url: 'dicecities', unlockedAt: expect.any(String) },
+                earnedHere(ANN, 'platform.first-win'),
             ]);
         });
 
@@ -582,7 +593,7 @@ describe('judgeGameEnd', () => {
             // Ann played one game before this one; Bob's only game is this one, which doesn't count.
             expect(earned).toEqual([]);
             expect(storedAchievementUnlocks()).toEqual([
-                { userId: ANN, achievementId: 'platform.played-1', unlockedAt: expect.any(String) },
+                unlockRow(ANN, 'platform.played-1'),
             ]);
         });
 
@@ -590,7 +601,7 @@ describe('judgeGameEnd', () => {
             const mayor = ownCareer('dicecities.mayor', record => record.won, 100);
             const regular = platform('platform.regular', career => career.played, 100);
             // Ann holds the platform's, so only the game's own is left to judge.
-            seedAchievementUnlock({ userId: ANN, achievementId: 'platform.regular', unlockedAt: '2026-01-01T00:00:00.000Z' });
+            holds(ANN, 'platform.regular');
 
             await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([mayor], [regular]));
 
@@ -601,7 +612,7 @@ describe('judgeGameEnd', () => {
 
         it('judges a game\'s own achievement on the narrowed read', async () => {
             const mayor = ownCareer('dicecities.mayor', record => record.won, 2);
-            seedAchievementUnlock({ userId: ANN, achievementId: 'platform.first-win', unlockedAt: '2026-01-01T00:00:00.000Z' });
+            holds(ANN, 'platform.first-win');
             recordsAre({ [ANN]: [tally('dicecities', 2, 2), tally('settlementsandcities', 9, 9)] });
 
             const earned = await judgeGameEnd(finishedGame('win'), [registered(ANN), registered(BOB)], recorded,
@@ -614,7 +625,7 @@ describe('judgeGameEnd', () => {
             const mayor = ownCareer('dicecities.mayor', record => record.won, 1);
             const firstWin = platform('platform.first-win', career => career.won, 1);
             for (const achievementId of [mayor.id, firstWin.id]) {
-                seedAchievementUnlock({ userId: ANN, achievementId, unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
+                holds(ANN, achievementId);
             }
 
             await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([mayor], [firstWin]));

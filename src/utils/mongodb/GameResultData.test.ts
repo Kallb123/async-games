@@ -14,9 +14,11 @@ import {
     MIN_TURNS_TO_COUNT,
     RESULT_COUNTS_FILTER,
     countsAsPlayed,
+    endedByHand,
     foldGameStats,
     getGameStatsByPlayer,
     getPlayerStats,
+    matchResultOf,
     outcomeFor,
     recordGameResult,
     resultCounts,
@@ -125,6 +127,47 @@ describe('countsAsPlayed', () => {
     it('still counts a solo game its rules ended', () => {
         expect(countsAsPlayed(finished('win', [ANN], [ANN]))).toBe(true);
         expect(countsAsPlayed(finished(undefined, [ANN], [ANN, ANN]))).toBe(true);
+    });
+});
+
+describe('endedByHand', () => {
+    it('is true for a surrender and an abandonment, which somebody chose', () => {
+        expect(endedByHand('ended')).toBe(true);
+        expect(endedByHand('abandoned')).toBe(true);
+    });
+
+    it('is false for every ending the rules reached, and for a missing one, which is filed as a win', () => {
+        for (const endReason of ['win', 'teamwin', 'teamloss', undefined] as const) {
+            expect(endedByHand(endReason), String(endReason)).toBe(false);
+        }
+    });
+});
+
+describe('matchResultOf', () => {
+    const game = (droppedPlayers?: string[]) => ({
+        winner: ANN,
+        endReason: 'win',
+        forfeitedBy: BOB,
+        gameState: { droppedPlayers },
+    }) as unknown as IGameData;
+
+    it('reads the fields outcomeFor reads, off a live game', () => {
+        expect(matchResultOf(game([BOB]))).toEqual({ winner: ANN, endReason: 'win', forfeitedBy: BOB, droppedPlayers: [BOB] });
+    });
+
+    it('answers as a stored result does: a copy of the dropped players, and none when there were none', () => {
+        const dropped = [BOB];
+        const copy = matchResultOf(game(dropped)).droppedPlayers;
+        expect(copy).toEqual(dropped);
+        expect(copy).not.toBe(dropped);
+        expect(matchResultOf(game([])).droppedPlayers).toBeUndefined();
+        expect(matchResultOf(game()).droppedPlayers).toBeUndefined();
+    });
+
+    it('gives outcomeFor the answer the stored result would', () => {
+        expect(outcomeFor(matchResultOf(game()), ANN)).toBe('win');
+        expect(outcomeFor(matchResultOf(game()), BOB)).toBe('loss');
+        expect(outcomeFor(matchResultOf(game([ANN])), ANN)).toBe('loss');
     });
 });
 

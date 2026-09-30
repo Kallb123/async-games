@@ -15,10 +15,7 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: signedIn.u
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/rateLimit', () => ({ consumeRateLimit }));
 vi.mock('@/utils/api/gameResultResponse', () => ({ gameResultResponse }));
-vi.mock('@/utils/mongodb/GameResultData', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
-    regenerateGameResultStats,
-}));
+vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ regenerateGameResultStats }));
 
 import { NextRequest } from 'next/server';
 import { GameDataModel } from '@/utils/mongodb/GameData';

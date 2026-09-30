@@ -31,14 +31,9 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-// The judge reads more of GameResultData than the route ever did (countsAsPlayed,
-// resultCounts, outcomeFor), so the rest of the module stays real. Only the
-// write and the aggregation, which need a database, are stubbed.
-vi.mock('@/utils/mongodb/GameResultData', async importOriginal => ({
-    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
-    recordGameResult,
-    getGameStatsByPlayer,
-}));
+// Only the write and the aggregation, which need a database, are stubbed.
+vi.mock('@/utils/mongodb/GameResultData', async () =>
+    (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult, getGameStatsByPlayer }));
 vi.mock('@/utils/games/achievements', async importOriginal => ({
     ...(await importOriginal<typeof import('@/utils/games/achievements')>()),
     ACHIEVEMENT_CATALOGUE: testCatalogue,
@@ -47,7 +42,7 @@ vi.mock('@/utils/games/achievements', async importOriginal => ({
 vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: vi.fn(() => 3) }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
-import { ending, platform, turnEnd } from '@/utils/testing/achievementFixtures';
+import { ending, platform, turnEnd, unlockRow } from '@/utils/testing/achievementFixtures';
 import {
     ANN, BOB, commandPost, failNextAchievementUnlockWrite, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction,
     seedSnakesAndLadders, sentPushes, signIn, signInUnresolvable, SQUARES, storedAchievementUnlocks, storedGame, stubClerkUsers
@@ -768,9 +763,12 @@ describe('judging achievements', () => {
     const checking = (passes: (view: ISnakesAndLaddersGameStateResponse, userId: string) => boolean) =>
         vi.fn<(view: ISnakesAndLaddersGameStateResponse, seat: Seat) => boolean>((view, { userId }) => passes(view, userId));
 
-    /** What the judge stored, as a row carries it. */
-    const row = (userId: string, achievementId: string, url = 'snakesandladders') =>
-        ({ userId, achievementId, unlockedAt: expect.any(String), gameId: 'game_1', url });
+    /** The stand-in game's own achievement that Ann's first move, to 13, earns. */
+    const thirteen = () =>
+        turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13);
+
+    /** The game these tests play, which is what a stored unlock points back to. */
+    const inGame = { gameId: 'game_1', url: 'snakesandladders' };
 
     // A judge that fails logs it, and so does a push that can't be sent, and so
     // does a result that can't be recorded.
@@ -786,7 +784,7 @@ describe('judging achievements', () => {
         it('writes a row, after the response, when a check passes', async () => {
             signIn(ANN);
             seedSnakesAndLadders();
-            offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+            offer(thirteen());
 
             const response = await command(commandPost(diceRoll()));
 
@@ -796,7 +794,7 @@ describe('judging achievements', () => {
 
             await runAfterCallbacks();
 
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
             // Nothing is pushed or shown for it yet: the next player's "your move"
             // is the only push this turn sent.
             expect(sentPushes.map(push => push.options?.channel)).toEqual(['yourTurn']);
@@ -812,7 +810,7 @@ describe('judging achievements', () => {
             await command(commandPost(diceRoll()));
             await runAfterCallbacks();
 
-            expect(storedAchievementUnlocks()).toEqual([row(BOB.id, 'snakesandladders.twenty')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(BOB.id, 'snakesandladders.twenty', inGame)]);
         });
 
         it('writes nothing for a move that leaves the turn open, however true the state it leaves', async () => {
@@ -846,7 +844,7 @@ describe('judging achievements', () => {
             await command(commandPost(diceRoll()));
             await runAfterCallbacks();
 
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.past-fifteen')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.past-fifteen', inGame)]);
         });
 
         it("judges a Fires Out solitaire hand-off, which restarts the timer without handing over the turn", async () => {
@@ -859,7 +857,7 @@ describe('judging achievements', () => {
             expect((await response.json()).outcome).toMatchObject({ turnOver: false, timerRestarts: true });
             await runAfterCallbacks();
 
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'firesout.any', 'firesout')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'firesout.any', { ...inGame, url: 'firesout' })]);
             // ...and still nobody is told it's their move.
             expect(sentPushes).toEqual([]);
         });
@@ -871,7 +869,7 @@ describe('judging achievements', () => {
             // would instead fail the whole table closed, and judge nothing: §4.2
             // step 1.) The push has nobody to go to; the judge doesn't need them.
             seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, 'user_ghost'], history: [], commandHistory: [] } });
-            offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+            offer(thirteen());
 
             const response = await command(commandPost(diceRoll()));
             await runAfterCallbacks();
@@ -880,13 +878,13 @@ describe('judging achievements', () => {
             expect(storedGame('game_1')!.currentTurn).toBe('user_ghost');
             expect(errors).toHaveBeenCalledWith('Next user not found for game game_1');
             expect(sentPushes).toEqual([]);
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
         });
 
         it("judges even when the next player's push can't be sent", async () => {
             signIn(ANN);
             seedSnakesAndLadders();
-            offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+            offer(thirteen());
             vi.mocked(sendPushToUsers).mockRejectedValueOnce(new Error('FCM is down'));
 
             const response = await command(commandPost(diceRoll()));
@@ -894,7 +892,7 @@ describe('judging achievements', () => {
 
             expect(response.status).toBe(200);
             expect(errors).toHaveBeenCalledWith('Post-response turn-notification work failed for game game_1', expect.any(Error));
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
         });
 
         it('judges nothing at an exhibition table, and still tells the next player', async () => {
@@ -921,7 +919,7 @@ describe('judging achievements', () => {
         it("has nothing to judge or to tell when the roster can't be resolved, and the response is unaffected", async () => {
             signIn(ANN);
             seedSnakesAndLadders();
-            offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+            offer(thirteen());
             // Only the post-response lookup fails: the route resolved the mover's
             // name before it, and is done with Clerk by the time it answers.
             const roster = vi.spyOn(clerkUsers, 'usersById').mockRejectedValueOnce(new Error('Clerk is down'));
@@ -940,7 +938,7 @@ describe('judging achievements', () => {
         it("doesn't stop the next player being told, or fail the response, when the judge can't write", async () => {
             signIn(ANN);
             seedSnakesAndLadders();
-            offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+            offer(thirteen());
             failNextAchievementUnlockWrite(new Error('boom'));
 
             const response = await command(commandPost(diceRoll()));
@@ -988,8 +986,8 @@ describe('judging achievements', () => {
             const rows = storedAchievementUnlocks();
             expect(rows).toHaveLength(2);
             expect(rows).toEqual(expect.arrayContaining([
-                row(ANN.id, 'snakesandladders.home'),
-                row(ANN.id, 'snakesandladders.winner'),
+                unlockRow(ANN.id, 'snakesandladders.home', inGame),
+                unlockRow(ANN.id, 'snakesandladders.winner', inGame),
             ]));
             // The `end` check learns the result; a `turnEnd` one is handed the seat
             // alone, exactly as at a turn end, and is asked once per seat.
@@ -1028,7 +1026,7 @@ describe('judging achievements', () => {
             await winningMove();
             await runAfterCallbacks();
 
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'platform.first-win')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'platform.first-win', inGame)]);
         });
 
         it('still tells the table and judges the match when the result cannot be recorded, but leaves career for next time', async () => {
@@ -1044,7 +1042,7 @@ describe('judging achievements', () => {
 
             expect(errors).toHaveBeenCalledWith("Couldn't record the result of game game_1", expect.any(Error));
             expect(getGameStatsByPlayer).not.toHaveBeenCalled();
-            expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.winner')]);
+            expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.winner', inGame)]);
             expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
         });
     });

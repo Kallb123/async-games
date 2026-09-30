@@ -18,7 +18,7 @@ import {
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { computePerTurnStat, computePerTurnEvents, computePerTurnInternalStats } from "@/utils/games/replay";
-import { gameLength, lengthUnit } from "@/utils/games/turnCount";
+import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -684,6 +684,29 @@ export function outcomeFor(result: IMatchResult, userId: string): MatchOutcome {
     return "loss";
 }
 
+// The fields of a game that outcomeFor reads, as recordGameResult stores them:
+// `droppedPlayers` is a copy, and absent when nobody was dropped. The one place
+// a live game becomes an IMatchResult, so the judge for achievements asks
+// outcomeFor about a game in play exactly as a stored result is asked about later.
+export function matchResultOf(gameData: IGameData): IMatchResult {
+    return {
+        winner: gameData.winner,
+        endReason: gameData.endReason,
+        forfeitedBy: gameData.forfeitedBy,
+        droppedPlayers: gameData.gameState.droppedPlayers?.length ? [...gameData.gameState.droppedPlayers] : undefined,
+    };
+}
+
+// Whether somebody stopped the game, as opposed to the rules finishing it: a
+// surrender ('ended') or an abandonment ('abandoned'). Every other reason is a
+// rules ending, and so is a missing one, which the command route files as a
+// 'win'. A game stopped by hand counts toward a player's record only once it has
+// lasted (countsAsPlayed), and is never judged for a match achievement, which
+// reads what the rules decided (awardAchievements.ts judgeGameEnd).
+export function endedByHand(endReason: GameEndReason | undefined): boolean {
+    return endReason === 'ended' || endReason === 'abandoned';
+}
+
 // Stands in for "a player who isn't the one we're counting for" in the
 // grouping key below. Any non-empty string that can't be a Clerk user id does
 // — outcomeFor only ever asks whether the winner is this player, and whether
@@ -820,9 +843,9 @@ export const MIN_TURNS_TO_COUNT = 2;
 // when stats are read: the command history that decides it goes when the
 // GameData does, and the result outlives that.
 export function countsAsPlayed(gameData: IGameData): boolean {
-    if (gameData.endReason !== 'ended' && gameData.endReason !== 'abandoned') return true;
-    if (lengthUnit(gameData.userIdList.length) === "move") return false;
-    return gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count >= MIN_TURNS_TO_COUNT;
+    if (!endedByHand(gameData.endReason)) return true;
+    const { count, unit } = gameLength(gameData.gameState.commandHistory, gameData.userIdList.length);
+    return unit === "turn" && count >= MIN_TURNS_TO_COUNT;
 }
 
 // Writes the one, permanent result record for a finished game. Call this
@@ -843,11 +866,8 @@ export async function recordGameResult(
         gameType: gameData.gameType.gameType,
         url: gameData.gameType.url,
         playerIds: gameData.userIdList,
-        winner: gameData.winner,
-        endReason: gameData.endReason,
+        ...matchResultOf(gameData),
         endDetail: gameData.endDetail,
-        forfeitedBy: gameData.forfeitedBy,
-        droppedPlayers: gameData.gameState.droppedPlayers?.length ? [...gameData.gameState.droppedPlayers] : undefined,
         endedAt: new Date().toISOString(),
         // Turns for a game with opponents; moves for a solo game (Solitaire),
         // which has no turns to count — read back with the matching unit via

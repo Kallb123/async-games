@@ -18,19 +18,16 @@ import { ACHIEVEMENT_CATALOGUE, careerMet, careerRecord, withoutThisGame } from 
 import type {
     Achievement,
     AchievementCatalogue,
-    FinishedSeat,
     GameAchievement,
     MatchCriteria,
     PlatformAchievement,
 } from "./achievements";
-import { getReplayAdapter } from "./replay";
+import { getReplayAdapter, identityNameMap } from "./replay";
 import { gameLength } from "./turnCount";
-import type { GameEndReason } from "@/utils/apiModels/GameDataApi";
 import { AchievementUnlockModel, recordUnlocks } from "@/utils/mongodb/AchievementUnlockData";
 import type { IAchievementUnlockData, UnlockToRecord } from "@/utils/mongodb/AchievementUnlockData";
 import type { IGameData } from "@/utils/mongodb/GameData";
-import { countsAsPlayed, getGameStatsByPlayer, outcomeFor, resultCounts } from "@/utils/mongodb/GameResultData";
-import type { IMatchResult } from "@/utils/mongodb/GameResultData";
+import { countsAsPlayed, endedByHand, getGameStatsByPlayer, matchResultOf, outcomeFor, resultCounts } from "@/utils/mongodb/GameResultData";
 import { unclaimedGuestsOf } from "@/utils/users/guest";
 
 /** How long each checkpoint waits for judging (§4.2, §4.3). Callers wrap the judge in `withTimeout` with these. */
@@ -93,12 +90,10 @@ export function tableView(gameData: IGameData): unknown {
         throw new Error(`No replay adapter registered for ${className}, so there is no table view of ${url} to judge`);
     }
     // Checks look a player up by userId, never by name, so the names that would
-    // be resolved from Clerk can be the ids themselves (replayTurnByTurn does
-    // the same for the result stats).
-    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    // be resolved from Clerk can be the ids themselves.
     return adapter.toResponseState(
         (gameData as IGameData & { specificGameState: unknown }).specificGameState,
-        identityMap,
+        identityNameMap(gameData.userIdList),
         null, // load-bearing: see above. Never a viewer.
         gameData.gameState.commandHistory,
     );
@@ -262,25 +257,6 @@ export async function judgeTurnEnd(
 // ─── The end of a game (§4.3) ────────────────────────────────────────────────
 
 /**
- * Whether the rules ended the game, as opposed to somebody stopping it. A
- * surrender (`ended`) or an abandonment is a state a player chose, not one the
- * game settled, so no match achievement is judged on it (§4.1).
- */
-function isRulesEnding(endReason: GameEndReason | undefined): boolean {
-    return endReason === "win" || endReason === "teamwin" || endReason === "teamloss";
-}
-
-/** The table's view, or nothing if it can't be built: the career half still runs without it. */
-function tryTableView(gameData: IGameData): { view: unknown } | undefined {
-    try {
-        return { view: tableView(gameData) };
-    } catch (error) {
-        console.warn(`Achievements: no table view of game ${gameData.gameId}; its match achievements aren't judged.`, error);
-        return undefined;
-    }
-}
-
-/**
  * The career achievements this game's ending unlocked, per seat (§4.3).
  *
  * A seat is skipped if it already holds every one, which is the usual case for
@@ -305,9 +281,12 @@ async function careerUnlocks(
     held: Held,
     ownCareer: readonly GameAchievement<any>[],
     platformCareer: readonly PlatformAchievement[],
-    outcomeOf: (userId: string) => FinishedSeat["outcome"],
 ): Promise<UnlockToRecord[]> {
-    const { url: slug, gameType } = gameData.gameType;
+    const slug = gameData.gameType.url;
+    // "DiceCities", which a record read is narrowed by, not the url slug that the
+    // record is keyed by.
+    const storedGameType = gameData.gameType.gameType;
+    const result = matchResultOf(gameData);
     const played = countsAsPlayed(gameData);
     const perSeat = await Promise.all(seats.map(async (userId): Promise<UnlockToRecord[]> => {
         const lackingOwn = lacking(held, userId, ownCareer);
@@ -315,14 +294,14 @@ async function careerUnlocks(
         if (lackingOwn.length === 0 && lackingPlatform.length === 0) return [];
         try {
             const byGame = lackingPlatform.length === 0
-                ? await getGameStatsByPlayer(userId, gameType)
+                ? await getGameStatsByPlayer(userId, storedGameType)
                 : await getGameStatsByPlayer(userId);
             const career = careerRecord(byGame);
             const toJudge: AchievementCatalogue = { games: { [slug]: lackingOwn }, platform: lackingPlatform };
             const metNow = careerMet(career, toJudge);
             if (metNow.length === 0) return [];
             const before = new Set(
-                careerMet(withoutThisGame(career, slug, { played, won: outcomeOf(userId) === "win" }), toJudge).map(achievement => achievement.id),
+                careerMet(withoutThisGame(career, slug, { played, won: outcomeFor(result, userId) === "win" }), toJudge).map(achievement => achievement.id),
             );
             return metNow.map(achievement => before.has(achievement.id)
                 ? { userId, achievementId: achievement.id }
@@ -366,8 +345,11 @@ export async function judgeGameEnd(
     catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE,
 ): Promise<readonly EarnedAchievement[]> {
     const own = gameAchievements(catalogue, gameData.gameType.url);
-    const rulesEnding = isRulesEnding(gameData.endReason);
-    const matches: (TurnEndAchievement | EndAchievement)[] = rulesEnding ? [...own.filter(isTurnEnd), ...own.filter(isEnd)] : [];
+    // A match achievement reads what the rules decided, so it is judged only on a
+    // rules ending: a surrender or an abandonment is a state somebody chose (§4.1).
+    const matches: (TurnEndAchievement | EndAchievement)[] = endedByHand(gameData.endReason)
+        ? []
+        : [...own.filter(isTurnEnd), ...own.filter(isEnd)];
     const ownCareer = context.recorded ? own.filter(isCareer) : [];
     const platformCareer = context.recorded ? catalogue.platform : [];
 
@@ -380,13 +362,7 @@ export async function judgeGameEnd(
     const candidates = [...matches, ...ownCareer, ...platformCareer];
     const held = await heldBy(seats, candidates);
 
-    const result: IMatchResult = {
-        winner: gameData.winner,
-        endReason: gameData.endReason,
-        forfeitedBy: gameData.forfeitedBy,
-        droppedPlayers: gameData.gameState.droppedPlayers,
-    };
-    const outcomeOf = (userId: string) => outcomeFor(result, userId);
+    const result = matchResultOf(gameData);
     const turns = gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count;
 
     const unlocks: UnlockToRecord[] = [];
@@ -394,15 +370,17 @@ export async function judgeGameEnd(
     // The view is built only if a seat still lacks a match achievement, and if it
     // can't be, the career half below still runs.
     if (seats.some(userId => lacking(held, userId, matches).length > 0)) {
-        const table = tryTableView(gameData);
-        if (table) {
+        try {
+            const view = tableView(gameData);
             unlocks.push(...matchUnlocks(gameData, seats, held, matches, (achievement, userId) =>
                 achievement.criteria.at === "turnEnd"
-                    ? achievement.criteria.check(table.view, { userId })
-                    : achievement.criteria.check(table.view, { userId, outcome: outcomeOf(userId), turns })));
+                    ? achievement.criteria.check(view, { userId })
+                    : achievement.criteria.check(view, { userId, outcome: outcomeFor(result, userId), turns })));
+        } catch (error) {
+            console.warn(`Achievements: no table view of game ${gameData.gameId}; its match achievements aren't judged.`, error);
         }
     }
 
-    unlocks.push(...await careerUnlocks(gameData, seats, held, ownCareer, platformCareer, outcomeOf));
+    unlocks.push(...await careerUnlocks(gameData, seats, held, ownCareer, platformCareer));
     return store(unlocks, candidates);
 }
