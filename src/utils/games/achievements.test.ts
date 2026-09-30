@@ -51,7 +51,7 @@ import { reachableFrom, runtimeImports, SRC_ROOT } from "@/utils/testing/moduleG
  * that is about `canUndo` and replay parity, not about what the table can see,
  * so they're not here until their pin is written.
  */
-const NULL_VIEW_PINNED = ["traintime", "worlddomination", "settlementsandcities", "firesout", "racecars"];
+const NULL_VIEW_PINNED = ["traintime", "worlddomination", "settlementsandcities", "firesout", "racecars", "dicecities"];
 
 const GAMES_ROOT = path.join(SRC_ROOT, "games");
 
@@ -174,8 +174,8 @@ const gamesOnly = (games: Record<string, GameAchievement<unknown>[]>): Achieveme
 
 describe("the catalogue's integrity", () => {
     it("holds for every achievement in the real catalogue", () => {
-        // Vacuously, while the catalogue is empty. The table below is what
-        // shows each rule can fail.
+        // The table below is what shows each rule can fail, including any the
+        // real catalogue has nothing to break.
         expect(catalogueProblems(ACHIEVEMENT_CATALOGUE)).toEqual([]);
     });
 
@@ -361,7 +361,10 @@ function serverOnlyOffenders(entry: string): string[] {
     for (const [file, chain] of reachableFrom(entry)) {
         const shown = chain.map(fromSrc).join(" -> ");
         if (fromSrc(file).startsWith("utils/mongodb/")) offenders.push(`${shown} (under src/utils/mongodb/)`);
-        if (/Models\.tsx?$/.test(file)) offenders.push(`${shown} (a *Models.ts)`);
+        // A game's `apiModels.ts` is the exception the name has to allow for: it
+        // is the browser-safe response types a check is written against (§11),
+        // not a Mongoose model.
+        if (/Models\.tsx?$/.test(file) && !/(^|[\\/])apiModels\.tsx?$/.test(file)) offenders.push(`${shown} (a *Models.ts)`);
         for (const specifier of runtimeImports(file)) {
             if (SERVER_ONLY_PACKAGES.some(pkg => specifier === pkg || specifier.startsWith(`${pkg}/`))) {
                 offenders.push(`${shown} (imports ${specifier})`);
@@ -390,6 +393,8 @@ describe("what the catalogue reaches at runtime", () => {
             writeFileSync(at("rules/rule.ts"), `export const rule = 1;\n`);
             writeFileSync(at("reachesThing.ts"), `import { rule } from "./rules/rule";\nimport { model } from "./rules/ThingModels";\nexport const x = [rule, model];\n`);
             writeFileSync(at("rules/ThingModels.ts"), `export const model = 1;\n`);
+            writeFileSync(at("reachesDto.ts"), `import { dto } from "./rules/apiModels";\nexport const x = dto;\n`);
+            writeFileSync(at("rules/apiModels.ts"), `export const dto = 1;\n`);
             writeFileSync(at("viaClerk.ts"), `import { rule } from "./indirect";\nexport const x = rule;\n`);
             writeFileSync(at("indirect.ts"), `import { auth } from "@clerk/nextjs/server";\nexport const rule = auth;\n`);
             writeFileSync(at("viaMongoose.ts"), `import mongoose from "mongoose";\nexport const x = mongoose;\n`);
@@ -406,6 +411,10 @@ describe("what the catalogue reaches at runtime", () => {
 
         it("fails a module that reaches a *Models.ts", () => {
             expect(serverOnlyOffenders(at("reachesThing.ts"))).toEqual([expect.stringContaining("(a *Models.ts)")]);
+        });
+
+        it("passes a module that reaches a game's apiModels.ts, which is the browser-safe response types", () => {
+            expect(serverOnlyOffenders(at("reachesDto.ts"))).toEqual([]);
         });
 
         it("fails a module that imports Clerk's server SDK, however far down", () => {

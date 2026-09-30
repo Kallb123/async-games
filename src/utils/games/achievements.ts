@@ -17,6 +17,8 @@
 // game's achievements.ts, which this file imports, is held to the same rule.
 
 import type { IGameStats, MatchOutcome } from "@/utils/mongodb/GameResultData";
+import { achievements as diceCitiesAchievements } from "@/games/DiceCities/achievements";
+import { achievements as settlementsAndCitiesAchievements } from "@/games/SettlementsAndCities/achievements";
 
 // ─── The shape of one achievement ────────────────────────────────────────────
 
@@ -114,10 +116,39 @@ export interface FinishedSeat extends Seat {
 // listed here, so the two can't drift apart.
 
 /** Keyed by GAME_META slug. A game with no achievements.ts has no entry. */
-export const GAME_ACHIEVEMENTS: Record<string, GameAchievement<any>[]> = {};
+export const GAME_ACHIEVEMENTS: Record<string, GameAchievement<any>[]> = {
+    dicecities: diceCitiesAchievements,
+    settlementsandcities: settlementsAndCitiesAchievements,
+};
 
 /** The cross-game ones. Owned by the platform, not by any game. Career only, by type. */
-export const PLATFORM_ACHIEVEMENTS: PlatformAchievement[] = [];
+export const PLATFORM_ACHIEVEMENTS: PlatformAchievement[] = [
+    {
+        id: "platform.first-win",
+        title: "First win",
+        icon: "🏆",
+        description: "Win a game.",
+        criteria: { kind: "career", progress: career => career.won, target: 1 },
+    },
+    {
+        id: "platform.regular",
+        title: "Regular",
+        icon: "🎲",
+        description: "Play 25 games.",
+        criteria: { kind: "career", progress: career => career.played, target: 25 },
+    },
+    {
+        id: "platform.explorer",
+        title: "Explorer",
+        icon: "🧭",
+        description: "Play 5 different games.",
+        criteria: {
+            kind: "career",
+            progress: career => Object.values(career.games).filter(game => game.played > 0).length,
+            target: 5,
+        },
+    },
+];
 
 /**
  * Both registries, as one value. Every helper below that reads the catalogue

@@ -15,6 +15,9 @@ import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } 
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
 import { buildInitialRaceCarsState, gameStateToModel as raceCarsStateToModel } from "@/games/RaceCars/RaceCarsModels";
 import { mongoMap } from "@/utils/games/mongoMaps";
+import { getReplayAdapter } from "@/utils/games/replay";
+import { buildInitialDiceCitiesState } from "@/games/DiceCities/DiceCitiesModels";
+import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
@@ -464,3 +467,53 @@ describe("Race Cars' response", () => {
         expect(asNobody).toEqual(asU1);
     });
 });
+
+// ─── Dice Cities ────────────────────────────────────────────────────────────
+// Like Race Cars, Dice Cities hides nothing: the bank and every seat's cards and
+// coins are the board. It is pinned for the view an achievement's check is
+// handed (docs/achievements.md §9, §12 test 5) — the replay adapter asked for no
+// viewer, exactly as `tableView` asks — by its exact key set, which is what fails
+// the day a field arrives that the table shouldn't see. Asked of a game under
+// way as well as a fresh one, because a field that stays undefined until play
+// starts is dropped by JSON and would pass on the fresh one alone.
+
+describe("Dice Cities' response to a viewer with no seat", () => {
+    const DC_STATE_KEYS = [
+        "autoEndTurnAt", "awaitingBCSelectionOpponent", "awaitingBCSelectionOwn", "awaitingDoubleReroll",
+        "awaitingHarbourChoice", "awaitingTSSelection", "bankCards", "bankMoney", "bcSelectedOpponent",
+        "bcSelectedOpponentCard", "bcSelectedOwnCard", "canUndo", "enabledDocks", "harbourRoll1", "harbourRoll2",
+        "hasReRolled", "hasRolled", "playerStates", "theme",
+    ];
+    const DC_PLAYER_KEYS = [
+        "bonusDiningAndStore", "cards", "doubleUnlocked", "harbourUnlocked", "lastDiceSelection", "money",
+        "oneReroll", "rerollDoubles", "totalCoinsEarned", "userId", "username",
+    ];
+
+    const fresh = () => buildInitialDiceCitiesState(["u1", "u2"]);
+    const underway = () => {
+        const state = fresh();
+        const alice = state.playerStates.get("u1")!;
+        alice.cards.push({ card: DiceCitiesCardIds.MINE, amount: 2 });
+        alice.money = 17;
+        alice.doubleUnlocked = true;
+        state.hasRolled = true;
+        return state;
+    };
+    const tableView = (state: ReturnType<typeof fresh>) =>
+        JSON.parse(JSON.stringify(getReplayAdapter("DiceCitiesGameType")!.toResponseState(state, NAMES, null, [])));
+
+    it.each([
+        ["a fresh game", fresh],
+        ["a game under way", underway],
+    ])("carries exactly the public table and nothing else, in %s", (_when, build) => {
+        const wire = tableView(build());
+
+        expect(Object.keys(wire).sort()).toEqual(DC_STATE_KEYS);
+        expect(Object.keys(wire.playerStates.u1).sort()).toEqual(DC_PLAYER_KEYS);
+        expect(Object.keys(wire.playerStates.u2).sort()).toEqual(DC_PLAYER_KEYS);
+        // Nothing to act on belongs to a viewer who holds no seat.
+        expect(wire.canUndo).toBe(false);
+        expect(wire.autoEndTurnAt).toBeNull();
+    });
+});
+
