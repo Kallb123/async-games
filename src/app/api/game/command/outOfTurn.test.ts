@@ -18,13 +18,22 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { recordGameResult } = vi.hoisted(() => ({ recordGameResult: vi.fn() }));
+// The real catalogue is empty until the first achievements ship, so the judge is
+// given one the tests fill (see gameRoutes.test.ts, which does the same).
+const { recordGameResult, testCatalogue } = vi.hoisted(() => ({
+    recordGameResult: vi.fn(),
+    testCatalogue: { games: {}, platform: [] } as AchievementCatalogue,
+}));
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult }));
+vi.mock('@/utils/games/achievements', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/games/achievements')>()),
+    ACHIEVEMENT_CATALOGUE: testCatalogue,
+}));
 vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
 vi.mock('@/utils/games/gameCommands', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/utils/games/gameCommands')>();
@@ -38,7 +47,9 @@ vi.mock('@/utils/games/gameCommands', async (importOriginal) => {
 });
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
-import { ANN, BOB, commandPost, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, signIn, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, commandPost, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, signIn, storedAchievementUnlocks, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { turnEnd } from '@/utils/testing/achievementFixtures';
+import type { AchievementCatalogue } from '@/utils/games/achievements';
 import { serializable } from '@/utils/apiModels/Serialisable';
 import { playerHistory } from '@/utils/games/history';
 import type { ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic';
@@ -122,6 +133,7 @@ function positions(): Record<string, { position: number }> {
 beforeEach(async () => {
     await resetApiRouteStubs();
     recordGameResult.mockReset();
+    testCatalogue.games = {};
     stubClerkUsers(ANN, BOB);
     // Ann holds the turn, and both seats have a run of expiries banked, so
     // a test can see whose the route clears.
@@ -157,6 +169,30 @@ describe('POST /api/game/command, off the sender\'s turn', () => {
 
         await runAfterCallbacks();
         expect(sentPushes).toEqual([]);
+    });
+
+    it('never judges achievements: what it changes is judged when the turn it landed in ends', async () => {
+        signIn(BOB);
+        // True of any game at any moment, so the only thing between this and a
+        // stored unlock is whether the judge is ever asked.
+        const always = vi.fn(() => true);
+        testCatalogue.games.snakesandladders = [turnEnd('snakesandladders.always', always)];
+
+        const response = await command(interrupt(BOB, { jumpTo: 30 }));
+
+        expect(response.status).toBe(200);
+        await runAfterCallbacks();
+        expect(always).not.toHaveBeenCalled();
+        expect(storedAchievementUnlocks()).toEqual([]);
+
+        // The control: the same catalogue judges the active player's own move,
+        // which does end the turn, so the silence above is the interrupt's.
+        signIn(ANN);
+        await command(commandPost({
+            gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'SnakesAndLaddersRequestDiceRoll',
+        }));
+        await runAfterCallbacks();
+        expect(storedAchievementUnlocks().map(({ userId }) => userId)).toEqual([ANN.id, BOB.id]);
     });
 
     it('refuses one that tries to end the turn, and saves nothing', async () => {

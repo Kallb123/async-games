@@ -300,9 +300,10 @@ export async function POST(request: NextRequest) {
       gameData: await dataResponseWithReactions(gameData, userId)
     }
 
-    // Recording the match result and telling everyone the game is over doesn't
-    // change what this player sees, so it runs after the response has flushed
-    // rather than making them wait on a Clerk lookup and a fan-out of pushes.
+    // Recording the match result, judging achievements and telling everyone the
+    // game is over doesn't change what this player sees, so it runs after the
+    // response has flushed rather than making them wait on a Clerk lookup, a
+    // judgment and a fan-out of pushes.
     after(finished.announce);
 
     return NextResponse.json(response, {status: 200});

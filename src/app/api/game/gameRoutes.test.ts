@@ -56,6 +56,8 @@ import { DiceRoll } from '@/utils/games/DiceRoll';
 import { mongoMap } from '@/utils/games/mongoMaps';
 import type { IGameStats } from '@/utils/mongodb/GameResultData';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import * as clerkUsers from '@/utils/users/clerk';
 import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
 import { POST as command } from './command/route';
@@ -908,6 +910,52 @@ describe('judging achievements', () => {
             expect(response.status).toBe(200);
             expect(errors).toHaveBeenCalledWith('Post-response turn-notification work failed for game game_1', expect.any(Error));
             expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
+        });
+
+        it("judges beside the next player's push, not queued behind it: a push that never answers doesn't hold judging up", async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer(thirteen());
+            // FCM takes the connection and never answers. (Cleared first: the count
+            // carries over from every test before this one.)
+            vi.mocked(sendPushToUsers).mockClear();
+            vi.mocked(sendPushToUsers).mockReturnValueOnce(new Promise(() => { }));
+
+            await command(commandPost(diceRoll()));
+            // Not awaited: the work as a whole waits on that push for good.
+            void runAfterCallbacks();
+
+            await vi.waitFor(() => {
+                expect(sendPushToUsers).toHaveBeenCalledTimes(1);
+                expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
+            });
+        });
+
+        it("stops waiting on a judge that stalls once the turn-end budget is spent, and the next player has been told by then", async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer(thirteen());
+            // The one read the judge makes never answers.
+            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(() => ({ lean: () => ({ exec: () => new Promise(() => { }) }) }) as never);
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+            await command(commandPost(diceRoll()));
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            try {
+                let done = false;
+                const work = runAfterCallbacks().then(() => { done = true; });
+
+                await vi.advanceTimersByTimeAsync(TURN_END_BUDGET_MS - 1);
+                expect(sentPushes.map(push => push.userIds)).toEqual([[BOB.id]]);
+                expect(done).toBe(false);
+
+                await vi.advanceTimersByTimeAsync(1);
+                await work;
+                expect(done).toBe(true);
+                expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${TURN_END_BUDGET_MS}ms; not waiting for it`);
+                expect(storedAchievementUnlocks()).toEqual([]);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it('judges nothing at an exhibition table, and still tells the next player', async () => {
