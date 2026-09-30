@@ -18,7 +18,7 @@ import {
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { computePerTurnStat, computePerTurnEvents, computePerTurnInternalStats } from "@/utils/games/replay";
-import { gameLength } from "@/utils/games/turnCount";
+import { gameLength, lengthUnit } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -139,6 +139,11 @@ export interface IGameResultData {
     // game (Solitaire) that has no turns. Read it back with the matching unit
     // via lengthUnit(playerIds.length) — see utils/games/turnCount.ts.
     totalTurns: number,
+    // Whether the game counts as played for an achievement — countsAsPlayed()
+    // below: false for a surrender or an abandonment that never lasted
+    // MIN_TURNS_TO_COUNT turns. Optional because a record written before it was
+    // stored has none, and those count, as they always have on the profile.
+    countsAsPlayed?: boolean,
     // A guest still in this game's roster (docs/account-less-play.md §8): a
     // non-empty list means the game is an exhibition match that doesn't count
     // toward anyone's stats yet. Emptied by $pull when a guest claims their
@@ -180,6 +185,10 @@ export var GameResultSchema = new Schema<IGameResultDataDocument>({
     droppedPlayers: { type: [String], default: undefined },
     endedAt: String,
     totalTurns: Number,
+    // Declared so Mongoose keeps it: in strict mode it silently drops a field
+    // the schema doesn't know on create(), so every new record would read as
+    // having none, which counts, and the two-turn rule would quietly do nothing.
+    countsAsPlayed: Boolean,
     unclaimedPlayerIds: { type: [String], default: () => [] },
     guestNames: { type: Schema.Types.Map, of: String, default: () => new Map() },
 }, { discriminatorKey: 'kind' });
@@ -609,6 +618,11 @@ export interface IGameStats {
     losses: number;
     draws: number;
     total: number;
+    // The games in `total` that count as played for an achievement: all of them,
+    // less any surrender or abandonment that ended before MIN_TURNS_TO_COUNT
+    // turns (countsAsPlayed below). The profile keeps showing `total`, so this
+    // can sit a game or two behind the match count beside it.
+    played: number;
 }
 
 export interface IPlayerStats {
@@ -696,8 +710,8 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 // when only that game's own career achievements are still to be judged.
 export async function getGameStatsByPlayer(userId: string, gameType?: string): Promise<IGameStats[]> {
     // Mongo counts how many of this player's games ended each distinct way; the
-    // rule for what each of those endings was *worth to them* is applied here,
-    // by the one outcomeFor above.
+    // rule for what each of those endings was *worth to them* is applied
+    // afterwards, by the one outcomeFor above (see foldGameStats).
     //
     // The key is reduced to the *answers* outcomeFor needs rather than the raw
     // fields, because `winner` and `forfeitedBy` are user ids: keyed on those,
@@ -706,7 +720,7 @@ export async function getGameStatsByPlayer(userId: string, gameType?: string): P
     // to "me", "nobody" or "somebody else" first, which leaves the key bounded
     // by games × endings however long they have been playing — and means no
     // other player's id leaves the database for a tally that never shows one.
-    const byEndingAgg: { _id: IMatchResult & { url: string }, total: number }[] = await GameResultModel.aggregate([
+    const byEndingAgg: GameEndingRow[] = await GameResultModel.aggregate([
         { $match: { playerIds: userId, ...(gameType ? { gameType } : {}), ...RESULT_COUNTS_FILTER } },
         { $group: {
             _id: {
@@ -722,25 +736,80 @@ export async function getGameStatsByPlayer(userId: string, gameType?: string): P
                 endReason: '$endReason',
                 forfeitedBy: { $cond: [{ $eq: ['$forfeitedBy', userId] }, userId, null] },
                 droppedPlayers: { $cond: [{ $in: [userId, { $ifNull: ['$droppedPlayers', []] }] }, [userId], []] },
+                // Normalised to a boolean here, so a record from before the
+                // field (which has none) lands in the `true` group with the
+                // rest instead of a third one the fold would have to remember.
+                // It at most doubles the key, so it stays bounded by games ×
+                // endings rather than growing with the matches played.
+                countsAsPlayed: { $ne: ['$countsAsPlayed', false] },
             },
             total: { $sum: 1 },
         } },
     ]);
 
+    return foldGameStats(byEndingAgg, userId);
+}
+
+// One group of the aggregation above: how many of a player's games in one game
+// ended one way, with the key already reduced to the answers outcomeFor and
+// countsAsPlayed need.
+export interface GameEndingRow {
+    _id: IMatchResult & { url: string, countsAsPlayed?: boolean };
+    total: number;
+}
+
+// Sums the aggregation's groups into one IGameStats per game, most-played
+// first. Pure, like outcomeFor, so the rules it applies are testable without
+// a database: a group's outcome is whatever outcomeFor says it was to this
+// player, and it adds to `played` unless its key says the game didn't count.
+// A key with no `countsAsPlayed` at all counts — the aggregation never leaves
+// one out, but a caller with its own rows needn't know that.
+export function foldGameStats(rows: GameEndingRow[], userId: string): IGameStats[] {
     const statsByUrl = new Map<string, IGameStats>();
-    for (const { _id, total } of byEndingAgg) {
+    for (const { _id, total } of rows) {
         const stats = statsByUrl.get(_id.url)
-            ?? { url: _id.url, wins: 0, losses: 0, draws: 0, total: 0 };
+            ?? { url: _id.url, wins: 0, losses: 0, draws: 0, total: 0, played: 0 };
         const outcome = outcomeFor(_id, userId);
         if (outcome === "win") stats.wins += total;
         else if (outcome === "loss") stats.losses += total;
         else stats.draws += total;
         stats.total += total;
+        if (_id.countsAsPlayed !== false) stats.played += total;
         statsByUrl.set(_id.url, stats);
     }
 
     // Most-played game first, as the pipeline's own $sort used to leave it.
     return [...statsByUrl.values()].sort((a, b) => b.total - a.total);
+}
+
+// How many turns a game that was ended from outside its rules has to have
+// lasted before it counts as played (docs/achievements.md §8). It stops the
+// start-and-surrender pad, and it stops an opponent ending a game early to deny
+// everyone else the game. Counted the way `totalTurns` is. Raising it — to a
+// full round, say — is this one line.
+export const MIN_TURNS_TO_COUNT = 2;
+
+// Whether a finished game counts as played for an achievement (the `played` in
+// IGameStats), as opposed to merely being in the profile's `total`.
+//
+// Every ending the rules reached counts, however short: a win, a loss, a co-op
+// win or loss, and a game with no endReason at all, which the command route
+// files as a win. A surrender ('ended') or an abandonment ('abandoned') is
+// somebody stopping the game rather than the game finishing, so it counts only
+// once it has lasted MIN_TURNS_TO_COUNT turns — the same count as `totalTurns`.
+//
+// A solo game (Solitaire) ended any way other than by its rules never counts,
+// however many moves went into it: nobody else was there to end it on the
+// player, and two moves are no bar at all. The plan names only the solo
+// surrender; a solo abandonment is treated the same, for the same reason.
+//
+// Pure, and stored on the result by recordGameResult rather than worked out
+// when stats are read: the command history that decides it goes when the
+// GameData does, and the result outlives that.
+export function countsAsPlayed(gameData: IGameData): boolean {
+    if (gameData.endReason !== 'ended' && gameData.endReason !== 'abandoned') return true;
+    if (lengthUnit(gameData.userIdList.length) === "move") return false;
+    return gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count >= MIN_TURNS_TO_COUNT;
 }
 
 // Writes the one, permanent result record for a finished game. Call this
@@ -771,6 +840,9 @@ export async function recordGameResult(
         // which has no turns to count — read back with the matching unit via
         // lengthUnit(playerIds.length). See utils/games/turnCount.ts.
         totalTurns: gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count,
+        // Stored rather than re-derived at read time: by then the command
+        // history it is worked out from is gone with the game.
+        countsAsPlayed: countsAsPlayed(gameData),
         unclaimedPlayerIds,
         guestNames,
     };

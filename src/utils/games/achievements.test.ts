@@ -445,9 +445,14 @@ describe("what the catalogue reaches at runtime", () => {
 
 // ─── Test 3: the pure helpers ────────────────────────────────────────────────
 
-/** A byGame row, as the profile's aggregation builds it: `total` is every outcome added up. */
-const stats = (url: string, wins: number, losses = 0, draws = 0): IGameStats => ({
-    url, wins, losses, draws, total: wins + losses + draws,
+/**
+ * A byGame row, as the profile's aggregation builds it: `total` is every outcome
+ * added up. `played` is the same unless a row says otherwise: the games in it a
+ * surrender or an abandonment ended too early to count (§8) are in `total` and
+ * not in `played`.
+ */
+const stats = (url: string, wins: number, losses = 0, draws = 0, played = wins + losses + draws): IGameStats => ({
+    url, wins, losses, draws, total: wins + losses + draws, played,
 });
 
 // A small catalogue with one of each shape of `progress` the plan names (§3.2),
@@ -504,6 +509,16 @@ describe("careerRecord", () => {
                 settlementsandcities: { played: 5, won: 1 },
                 traintime: { played: 2, won: 2 },
             },
+        });
+    });
+
+    it("counts a game's `played`, not the `total` the profile shows", () => {
+        // Six finished games, two of them surrendered in the first turn: the
+        // profile says six, the record says four.
+        expect(careerRecord([stats("dicecities", 3, 1, 2, 4)])).toEqual({
+            played: 4,
+            won: 3,
+            games: { dicecities: { played: 4, won: 3 } },
         });
     });
 
@@ -596,6 +611,12 @@ describe("careerMet", () => {
 
     it("counts played, not just won, for a played achievement", () => {
         expect(met([stats("dicecities", 0, 2, 1)])).toEqual(["dicecities.regular"]);
+    });
+
+    it("leaves a played achievement unmet by games that only count toward the profile's total", () => {
+        // Three finished games, but one was surrendered in its first turn.
+        expect(met([stats("dicecities", 0, 1, 2, 2)])).toEqual([]);
+        expect(met([stats("dicecities", 0, 1, 2, 3)])).toEqual(["dicecities.regular"]);
     });
 
     it("leaves a platform win achievement unmet for a game with no wins", () => {
