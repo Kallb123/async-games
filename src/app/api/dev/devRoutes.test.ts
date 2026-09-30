@@ -1,5 +1,6 @@
 // Integration tests over the dev-only game duplication route, and over the
-// deep copy underneath it.
+// deep copy underneath it, plus the one thing the results wipe has to keep
+// doing: take the achievement unlocks with the results they link to.
 //
 // The copy is the part worth pinning down: "same game state" is only useful if
 // the two games are then independent, and a copy that shared so much as one
@@ -8,7 +9,8 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 
 // `isDevDeployment` is computed once, from the environment the module was
 // loaded in — which under vitest is neither Vercel nor `npm run dev`. A getter
@@ -25,12 +27,15 @@ vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/ap
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedSnakesAndLadders, signIn, storedGame
+    ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedSnakesAndLadders, signIn, storedGame
 } from '@/utils/testing/apiRoute';
 import { API_ROOT, apiRouteFiles } from '@/utils/testing/apiRoutes';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GameResultModel } from '@/utils/mongodb/GameResultData';
+import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import { duplicateGame } from '@/utils/games/duplicateGame';
 import { POST as duplicate } from './duplicategame/route';
+import { GET as clearResults } from './clearresults/route';
 
 /** A move in the replay log, so a test has a Mixed value to copy. */
 const ROLL = {
@@ -190,6 +195,45 @@ describe('duplicateGame', () => {
         expect(roll.recordedRoll).toBe(4);
         expect(game.gameState.history).toHaveLength(1);
         expect(game.gameState.turnOrder).toEqual([ANN.id, BOB.id]);
+    });
+});
+
+describe('GET /api/dev/clearresults', () => {
+    // The models have no store behind them here, so the deletes are caught
+    // where they are made: what matters is which collections get wiped.
+    let deleteResults: MockInstance;
+    let deleteUnlocks: MockInstance;
+
+    beforeEach(() => {
+        const done = { exec: async () => ({ deletedCount: 0 }) } as never;
+        deleteResults = vi.spyOn(GameResultModel, 'deleteMany').mockReturnValue(done);
+        deleteUnlocks = vi.spyOn(AchievementUnlockModel, 'deleteMany').mockReturnValue(done);
+    });
+
+    afterEach(() => {
+        deleteResults.mockRestore();
+        deleteUnlocks.mockRestore();
+    });
+
+    it('clears the achievement unlocks along with the results, which they link to', async () => {
+        signIn(ANN);
+
+        const response = await clearResults(get('/api/dev/clearresults'));
+
+        expect(response.status).toBe(200);
+        expect(deleteResults).toHaveBeenCalledWith({});
+        expect(deleteUnlocks).toHaveBeenCalledWith({});
+    });
+
+    it('clears nothing off a dev deployment', async () => {
+        deployment.isDev = false;
+        signIn(ANN);
+
+        const response = await clearResults(get('/api/dev/clearresults'));
+
+        expect(response.status).toBe(404);
+        expect(deleteResults).not.toHaveBeenCalled();
+        expect(deleteUnlocks).not.toHaveBeenCalled();
     });
 });
 

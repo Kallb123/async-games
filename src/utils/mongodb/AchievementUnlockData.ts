@@ -1,5 +1,4 @@
-import { MongoBulkWriteError } from "mongodb";
-import { Document, Model, Schema, model, models } from "mongoose";
+import mongoose, { Document, Model, Schema, model, models } from "mongoose";
 import { isOnlyDuplicateKeyErrors } from "./duplicateKey";
 
 // One player holding one achievement: a flat collection like ChatRead, one row
@@ -87,10 +86,14 @@ export type UnlockToRecord = Pick<IAchievementUnlockData, "userId" | "achievemen
  * beside another that genuinely failed). The error's own result still says
  * which rows were inserted, so those are the new ones and the duplicates are
  * "already held". Anything else is rethrown: a real write failure, a driver
- * error, a write-concern error, or a row that failed Mongoose's casting. This
- * is why the caller can't wrap the write in `isDuplicateKeyError`, which only
- * reads the top-level code — the first failure's, copied up — and would
- * swallow the answer to "which are new".
+ * error, a write-concern error, or a row that failed Mongoose's casting, alone
+ * or beside a lost race (beside one, the error's `upsertedIds` count the rows
+ * that were sent rather than the batch, so they can't be read by its
+ * positions). This is why the caller can't wrap the write in
+ * `isDuplicateKeyError`, which only reads the top-level code — the first
+ * failure's, copied up — and would swallow the answer to "which are new".
+ *
+ * A row that isn't a well-formed unlock is refused before anything is written.
  *
  * It doesn't connect: every caller is a route that has already called
  * `dbConnect`, like `recordGameResult`.
@@ -99,6 +102,29 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
     if (unlocks.length === 0) {
         return [];
     }
+
+    // Refused up front rather than left to the types, because the failure is
+    // quiet: a blank key would upsert a row with a blank key, which the unique
+    // index then allows once per achievement (this repo uses '' as "nobody"
+    // elsewhere, e.g. `currentTurn`), and a filter value that isn't a string
+    // could be an operator object — Mongoose lets one through a String path and
+    // `sanitizeFilter` isn't set. gameId and url are held to it too: a
+    // non-string there would fail casting, which the option below backstops.
+    unlocks.forEach(({ userId, achievementId, gameId, url }, index) => {
+        const isKey = (value: unknown) => typeof value === "string" && value !== "";
+        const isOptionalText = (value: unknown) => value === undefined || typeof value === "string";
+        if (!isKey(userId) || !isKey(achievementId) || !isOptionalText(gameId) || !isOptionalText(url)) {
+            throw new TypeError(`recordUnlocks was given a malformed unlock at index ${index}`);
+        }
+    });
+
+    // The unique index is the only thing that makes two racing passes leave one
+    // row, and a bulkWrite doesn't wait for autoIndex to finish building it (see
+    // the note on the schema). `init()` hands back Mongoose's cached promise, so
+    // this costs nothing after the first call — and if the build failed it
+    // throws, here, instead of the write going ahead without uniqueness
+    // (docs/achievements.md §5.2).
+    await AchievementUnlockModel.init();
 
     let upsertedIds: Record<number, unknown>;
     try {
@@ -119,11 +145,14 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
             // ordered: false Mongoose drops any operation that fails casting
             // *before* sending the rest — so the driver's indexes would then
             // count the survivors, and every row after a dropped one would be
-            // taken for its neighbour's. The two fields are strings, so nothing
-            // should fail casting; but if one ever did, the answer has to be a
-            // throw rather than a quietly wrong "new" list. (Mongoose still
-            // sends the operations that did cast before it throws — a bug
-            // loud enough to be noticed, not a batch that is rolled back.)
+            // taken for its neighbour's. The fields are strings and the check
+            // above keeps them so, meaning nothing should fail casting; but if
+            // one ever did, the answer has to be a throw rather than a quietly
+            // wrong "new" list. (Mongoose still sends the operations that did
+            // cast before it throws — a bug loud enough to be noticed, not a
+            // batch that is rolled back. And it throws this only once the
+            // driver call has succeeded; the catch below takes the one that
+            // didn't.)
             throwOnValidationError: true,
         });
         upsertedIds = result.upsertedIds;
@@ -131,7 +160,26 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
         // Checked by class, not by shape: only the driver's own error carries
         // the result that says which rows went in, so anything else that
         // happens to hold code 11000 has no answer to give and is rethrown.
-        if (!(err instanceof MongoBulkWriteError) || !isOnlyDuplicateKeyErrors(err)) {
+        //
+        // The class is Mongoose's own copy of the driver (`mongoose.mongo`),
+        // not an import of "mongodb". Mongoose pins its driver (~7.2) while
+        // package.json only asks for ^7, so a later bump of the root package
+        // can leave two copies installed, and every error Mongoose throws would
+        // then fail `instanceof` against ours — sending the lost-race path to a
+        // rethrow while tests that build their errors from the same root import
+        // stay green.
+        if (!(err instanceof mongoose.mongo.MongoBulkWriteError) || !isOnlyDuplicateKeyErrors(err)) {
+            throw err;
+        }
+        // A row that failed casting beside a lost race comes out here as the
+        // driver's error, not Mongoose's: it rethrows that before its own
+        // `throwOnValidationError` branch runs, so the option above never
+        // fires. What it does first is decorate the error with what it dropped
+        // (`err.mongoose.validationErrors`, see its decorateBulkWriteResult),
+        // and while anything was dropped this error's `upsertedIds` count the
+        // surviving rows, not the batch — the misattribution that option is
+        // for, so it is a throw here as well.
+        if ((err as { mongoose?: { validationErrors?: unknown[] } }).mongoose?.validationErrors?.length) {
             throw err;
         }
         upsertedIds = err.upsertedIds;

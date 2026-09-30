@@ -9,17 +9,24 @@
 // collection, because what a fake store can't show is what Mongoose does to
 // the operations on the way: the casting that drops one, and the error it
 // passes back up.
+//
+// Every driver class here comes from `mongoose.mongo`, the copy Mongoose itself
+// loaded, never from an import of "mongodb": recordUnlocks checks the errors it
+// catches against that copy, and a test that built them from another one would
+// stay green on the day the two stop being the same.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 
-import { MongoBulkWriteError, ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 import type { BulkWriteResult, WriteError } from 'mongodb';
 import { failNextAchievementUnlockWrite, resetApiRouteStubs, seedAchievementUnlock, storedAchievementUnlocks } from '@/utils/testing/apiRoute';
-import { AchievementUnlockModel, recordUnlocks } from './AchievementUnlockData';
+import { AchievementUnlockModel, AchievementUnlockSchema, recordUnlocks } from './AchievementUnlockData';
+
+const { MongoBulkWriteError, ObjectId } = mongoose.mongo;
 
 const ANN = 'user_ann';
 const BOB = 'user_bob';
@@ -57,6 +64,15 @@ function bulkWriteError({ upserted, failed }: { upserted: number[], failed: { in
 beforeEach(async () => {
     await resetApiRouteStubs();
     vi.mocked(AchievementUnlockModel.bulkWrite).mockClear();
+    vi.mocked(AchievementUnlockModel.init).mockClear();
+});
+
+// What keeps two racing passes to one row is the constraint, so the test that
+// matters most is the one that fails the day the line declaring it goes.
+describe('the AchievementUnlock schema', () => {
+    it('has a unique index on the player and the achievement', () => {
+        expect(AchievementUnlockSchema.indexes()).toContainEqual([{ userId: 1, achievementId: 1 }, expect.objectContaining({ unique: true })]);
+    });
 });
 
 describe('recordUnlocks', () => {
@@ -105,6 +121,41 @@ describe('recordUnlocks', () => {
 
     it('makes no write at all for an empty batch', async () => {
         await expect(recordUnlocks([], NOW)).resolves.toEqual([]);
+
+        expect(AchievementUnlockModel.bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a blank userId', { userId: '', achievementId: 'platform.first-win' }],
+        ['a blank achievementId', { userId: ANN, achievementId: '' }],
+        ['a missing userId', { achievementId: 'platform.first-win' }],
+        ['a null achievementId', { userId: ANN, achievementId: null }],
+        // What a filter would read as an operator rather than a value.
+        ['an operator object for a userId', { userId: { $ne: '' }, achievementId: 'platform.first-win' }],
+        ['a number for a gameId', { userId: ANN, achievementId: 'platform.first-win', gameId: 7 }],
+        ['an object for a url', { userId: ANN, achievementId: 'platform.first-win', url: {} }],
+    ])('refuses %s before writing anything, naming the row', async (_, bad) => {
+        const good = { userId: BOB, achievementId: 'platform.first-win' };
+
+        await expect(recordUnlocks([good, bad as unknown as typeof good], NOW)).rejects.toThrow(new TypeError('recordUnlocks was given a malformed unlock at index 1'));
+
+        expect(AchievementUnlockModel.bulkWrite).not.toHaveBeenCalled();
+        expect(storedAchievementUnlocks()).toEqual([]);
+    });
+
+    it('waits for the unique index to be built before its first write', async () => {
+        await recordUnlocks([{ userId: ANN, achievementId: 'platform.first-win' }], NOW);
+
+        expect(AchievementUnlockModel.init).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(AchievementUnlockModel.init).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(AchievementUnlockModel.bulkWrite).mock.invocationCallOrder[0]);
+    });
+
+    it('writes nothing when the index could not be built, rather than write without uniqueness', async () => {
+        const failure = new Error('index build failed');
+        vi.mocked(AchievementUnlockModel.init).mockRejectedValueOnce(failure);
+
+        await expect(recordUnlocks([{ userId: ANN, achievementId: 'platform.first-win' }], NOW)).rejects.toBe(failure);
 
         expect(AchievementUnlockModel.bulkWrite).not.toHaveBeenCalled();
     });
@@ -185,6 +236,15 @@ describe('recordUnlocks', () => {
             await expect(recordUnlocks(rows, NOW)).rejects.toBe(error);
         });
 
+        it('reads an error built from Mongoose\'s own copy of the driver as a lost race', async () => {
+            // `bulkWriteError` builds from `mongoose.mongo`, the class the check
+            // is made against; were it the root "mongodb" instead, this would be
+            // a rethrow the day the two copies diverge.
+            failNextAchievementUnlockWrite(bulkWriteError({ upserted: [], failed: [{ index: 0, code: DUPLICATE_KEY }] }));
+
+            await expect(recordUnlocks(rows.slice(0, 1), NOW)).resolves.toEqual([]);
+        });
+
         it('rethrows a duplicate-key code that has no result to read the new rows from', async () => {
             const error = Object.assign(new Error('E11000 duplicate key'), { code: DUPLICATE_KEY });
             failNextAchievementUnlockWrite(error);
@@ -199,6 +259,10 @@ describe('recordUnlocks', () => {
 describe('recordUnlocks through Mongoose', () => {
     type Collection = { bulkWrite: (operations: unknown[], options: unknown) => Promise<unknown> };
     let driver: MockInstance<Collection['bulkWrite']>;
+    let casting: MockInstance;
+
+    const UNCASTABLE = 'user_uncastable';
+    const uncastable = { userId: UNCASTABLE, achievementId: 'platform.first-win' };
 
     beforeEach(() => {
         // Put the real static back over the test store's, then catch the write
@@ -206,6 +270,23 @@ describe('recordUnlocks through Mongoose', () => {
         vi.mocked(AchievementUnlockModel.bulkWrite).mockRestore();
         const collection = (AchievementUnlockModel as unknown as { $__collection: Collection }).$__collection;
         driver = vi.spyOn(collection, 'bulkWrite');
+
+        // A string always casts to a string, and recordUnlocks refuses whatever
+        // isn't one, so no row a caller can send is ever dropped by casting. To
+        // see what happens if one were, the userId path refuses one value and
+        // casts every other as it always did.
+        const userId = AchievementUnlockModel.schema.path('userId') as unknown as { cast: (value: unknown, ...rest: unknown[]) => unknown };
+        const cast = userId.cast;
+        casting = vi.spyOn(userId, 'cast').mockImplementation(function (this: unknown, value, ...rest) {
+            if (value === UNCASTABLE) {
+                throw new mongoose.Error.CastError('string', value, 'userId');
+            }
+            return cast.call(this, value, ...rest);
+        });
+    });
+
+    afterEach(() => {
+        casting.mockRestore();
     });
 
     const rows = [
@@ -243,14 +324,27 @@ describe('recordUnlocks through Mongoose', () => {
         // *of those two*. Read against the batch as written, they would make the
         // bad row and the one after it "new" — and leave the real third one out.
         driver.mockResolvedValue({ upsertedIds: { 0: new ObjectId(), 1: new ObjectId() } });
-        const broken = { userId: { not: 'a string' } as unknown as string, achievementId: 'platform.first-win' };
 
-        await expect(recordUnlocks([rows[0], broken, rows[2]], NOW)).rejects.toThrow(/validation/i);
+        await expect(recordUnlocks([rows[0], uncastable, rows[2]], NOW)).rejects.toThrow(/validation/i);
     });
 
     it('passes the driver\'s lost-race error through Mongoose to be read', async () => {
         driver.mockRejectedValue(bulkWriteError({ upserted: [1], failed: [{ index: 0, code: DUPLICATE_KEY }, { index: 2, code: DUPLICATE_KEY }] }));
 
         await expect(recordUnlocks(rows, NOW)).resolves.toEqual([rows[1]]);
+    });
+
+    it('throws when a row failed casting beside a lost race, whose indexes count the survivors', async () => {
+        // Mongoose drops the middle row and sends two, so the driver counts them
+        // 0 and 1: its 0 (row 0) lost the race and its 1 (row 2) went in. Read
+        // against the batch as written, that would make row 1 the new one.
+        const lostRace = bulkWriteError({ upserted: [1], failed: [{ index: 0, code: DUPLICATE_KEY }] });
+        driver.mockRejectedValue(lostRace);
+
+        const thrown = await recordUnlocks([rows[0], uncastable, rows[2]], NOW).catch(err => err);
+
+        expect(thrown).toBe(lostRace);
+        // Put there by Mongoose before it rethrows, and what recordUnlocks reads.
+        expect(thrown.mongoose.validationErrors).toHaveLength(1);
     });
 });

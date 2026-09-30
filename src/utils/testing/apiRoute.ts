@@ -138,6 +138,10 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
     vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'bulkWrite').mockImplementation(bulkWriteAchievementUnlocksToStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.bulkWrite);
+    // recordUnlocks waits for the unique index before its first write, and
+    // with no connection that promise never settles — the real one is waiting
+    // for a database these tests don't have.
+    vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'init').mockResolvedValue(undefined as never);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
@@ -858,9 +862,10 @@ export function seedAchievementUnlock(unlock: StoredAchievementUnlock) {
  * `recordUnlocks` decides which rows were new from the error a lost race
  * throws, and a store that can only succeed never reaches that. The store
  * writes nothing for a failing call, so the error has to carry its own account
- * of what got in: build a real `MongoBulkWriteError` (its `result` holds the
- * `upsertedIds`) rather than a look-alike, since `recordUnlocks` checks the
- * class and reads the ids off it.
+ * of what got in: build a real `mongoose.mongo.MongoBulkWriteError` (its
+ * `result` holds the `upsertedIds`) rather than a look-alike, since
+ * `recordUnlocks` checks the class — Mongoose's own copy of it, not the root
+ * `mongodb` package's — and reads the ids off it.
  */
 export function failNextAchievementUnlockWrite(error: unknown) {
     achievementUnlockWriteError = error;
