@@ -5,6 +5,7 @@
 
 import {
     ACHIEVEMENT_CATALOGUE,
+    ACHIEVEMENT_NEWS_MS,
     achievementById,
     careerRecord,
     gameRecord,
@@ -146,4 +147,73 @@ export function gameAchievementRows(
             return achievement ? [{ userId: unlock.userId, achievement, unlockedAt: unlock.unlockedAt }] : [];
         })
         .sort((a, b) => seat(a.userId) - seat(b.userId) || a.unlockedAt.localeCompare(b.unlockedAt));
+}
+
+// ─── What the toaster celebrates ─────────────────────────────────────────────
+
+/** An unlock a screen hands the toaster: which, when, and the game that earned it. */
+export interface OfferedUnlock {
+    id: string;
+    unlockedAt: string;
+    gameId?: string;
+}
+
+/**
+ * What this browser has already celebrated: `gameId:achievementId` → when that
+ * unlock happened. The time is kept so the list can be pruned by the same
+ * one-week age that decides what's news, which bounds it without ever evicting
+ * something still worth a toast.
+ */
+export type CelebratedUnlocks = Record<string, string>;
+
+/** What `celebrate` decides: the unlocks to toast now, and the memory to keep. */
+export interface Celebration {
+    fresh: { key: string, achievement: Achievement }[];
+    celebrated: CelebratedUnlocks;
+}
+
+/**
+ * Which of `offered` to toast, given what this browser has celebrated before
+ * (docs/achievements.md §7.3): each unlock once, and only while it's news.
+ *
+ * - Only an unlock a game earned. A backfilled career unlock (no `gameId`) was
+ *   already true before this game, and isn't this game's to announce (§4.3).
+ * - Only one younger than `ACHIEVEMENT_NEWS_MS`, so a new device, cleared
+ *   storage or a private window celebrates at most the last week, not a whole
+ *   history.
+ * - Only one the catalogue knows: a withdrawn achievement has nothing to say.
+ * - Never twice: not one already remembered, and not one offered twice at once
+ *   (the board and the feed can both hand over the same unlock).
+ *
+ * The memory it hands back is pruned of anything older than the window, with
+ * the fresh ones added. Pure: the toaster passes the clock in.
+ */
+export function celebrate(
+    offered: readonly OfferedUnlock[],
+    celebrated: CelebratedUnlocks,
+    now: number,
+    catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE,
+): Celebration {
+    const isNews = (unlockedAt: string) => now - Date.parse(unlockedAt) < ACHIEVEMENT_NEWS_MS;
+    const kept: CelebratedUnlocks = Object.fromEntries(Object.entries(celebrated).filter(([, unlockedAt]) => isNews(unlockedAt)));
+    const fresh: Celebration["fresh"] = [];
+    for (const { id, unlockedAt, gameId } of offered) {
+        const key = `${gameId}:${id}`;
+        const achievement = achievementById(id, catalogue);
+        if (!gameId || !achievement || !isNews(unlockedAt) || Object.hasOwn(kept, key)) continue;
+        kept[key] = unlockedAt;
+        fresh.push({ key, achievement });
+    }
+    return { fresh, celebrated: kept };
+}
+
+/** The toaster's memory as stored: anything that isn't a map of strings reads as nothing celebrated yet. */
+export function parseCelebrated(stored: string | null): CelebratedUnlocks {
+    try {
+        const parsed: unknown = stored === null ? {} : JSON.parse(stored);
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+        return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    } catch {
+        return {};
+    }
 }

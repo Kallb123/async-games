@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from "react";
+import { use, useEffect } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import AchievementIcon from "@/components/ui/AchievementIcon";
 import BackLink from "@/components/ui/BackLink";
@@ -14,6 +14,8 @@ import ResultTable from "@/components/ui/ResultTable";
 import ResultBoard from "@/components/games/ResultBoard";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useToast } from "@/components/ToastContext";
+import { useAchievementToaster } from "@/components/AchievementToaster";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
 import { gameAchievementRows } from "@/utils/ui/achievements";
@@ -98,6 +100,15 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 // at all when the game unlocked nothing.
 function GameAchievements({ result }: { result: IGameResultResponse }) {
     const rows = gameAchievementRows(result.achievements ?? [], result.playerIds);
+    // The viewer's own, handed to the toaster: arriving at a just-finished game's
+    // results celebrates what the ending unlocked, before any push has landed.
+    const { user } = useIsAuthorised();
+    const { offer } = useAchievementToaster();
+    const viewerId = user?.id;
+    useEffect(() => {
+        if (!viewerId) return;
+        offer((result.achievements ?? []).filter(unlock => unlock.userId === viewerId).map(({ id, unlockedAt }) => ({ id, unlockedAt, gameId: result.gameId })));
+    }, [result, viewerId, offer]);
     const nameOf = (userId: string) => result.players[result.playerIds.indexOf(userId)] ?? "Someone";
     return (
         <ListSection label="Achievements" isLoading={false}>

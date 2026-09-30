@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContext";
+import { useAchievementToaster } from "@/components/AchievementToaster";
 import { reloadForStaleSession } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
-import { TURN_ADVANCED_EVENTS } from "./usePushEvents";
+import { BOARD_EVENTS } from "./usePushEvents";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import { gameHasOutOfTurnPlays } from "@/utils/ui/games";
@@ -82,7 +83,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
 
     const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
         `/api/game/${gameId}`,
-        TURN_ADVANCED_EVENTS,
+        BOARD_EVENTS,
         { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id) },
     );
 
@@ -94,6 +95,17 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     // code, so a new screen that forgets is a compile error rather than a
     // blank board and a thrown render.
     const gameData = data?.gameData ?? null;
+    // What the viewer has unlocked in this game, handed to the app-wide toaster,
+    // which decides what it hasn't celebrated yet (docs/achievements.md §7.3).
+    // Every response carries it — a poll, a push-driven refresh, a move's own
+    // answer — which is what makes an unlock show at the earner's next fetch of
+    // the board, the mover's included.
+    const { offer } = useAchievementToaster();
+    const unlockedHere = gameData?.unlockedHere;
+    useEffect(() => {
+        if (unlockedHere?.length) offer(unlockedHere.map(unlock => ({ ...unlock, gameId })));
+    }, [unlockedHere, gameId, offer]);
+
     const reportedUsable = useRef(false);
     useEffect(() => {
         if (gameData && !reportedUsable.current) {

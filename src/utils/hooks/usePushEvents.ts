@@ -68,6 +68,32 @@ export const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
 export const CHAT_EVENTS = ['ChatMessage'] as const;
 
 /**
+ * Push events that mean an achievement was just unlocked — just
+ * `AchievementUnlocked`, sent to the earner of one marked `notify` when it
+ * unlocks at the end of a turn (docs/achievements.md §7.4). The board re-reads on
+ * it, so the unlock it carries reaches the toaster (§7.3).
+ */
+export const ACHIEVEMENT_EVENTS = ['AchievementUnlocked'] as const;
+
+/**
+ * What a game board re-reads on: the turn moving on, and an achievement
+ * unlocked in it while the player was looking at something else.
+ */
+export const BOARD_EVENTS = [...TURN_ADVANCED_EVENTS, ...ACHIEVEMENT_EVENTS] as const;
+
+/**
+ * What the app-wide achievement toaster re-reads its recent unlocks on
+ * (docs/achievements.md §7.3): an `AchievementUnlocked` push; `GameOver`, which
+ * is sent after game-end judging, so the rows are already there; and
+ * `YourTurn`, which is sent beside turn-end judging, so it usually finds them.
+ */
+export const ACHIEVEMENT_FEED_EVENTS = [
+    ...ACHIEVEMENT_EVENTS,
+    ...TURN_ADVANCED_EVENTS,
+    ...COMPLETED_GAME_EVENTS,
+] as const;
+
+/**
  * Everything that changes the home screen: an invite arriving, the turn moving,
  * a game finishing, a chat message landing. One set because the dashboard is
  * now one read — see `buildDashboard` for why its five lists are no longer

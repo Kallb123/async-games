@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { gameAchievementRows, profileAchievements } from "./achievements";
+import { celebrate, gameAchievementRows, parseCelebrated, profileAchievements } from "./achievements";
 import type { AchievementCatalogue } from "@/utils/games/achievements";
 import type { IGameStats } from "@/utils/mongodb/GameResultData";
 import { ending, ownCareer, platform } from "@/utils/testing/achievementFixtures";
@@ -95,5 +95,62 @@ describe("gameAchievementRows", () => {
             ["user_ann", "dicecities.winner"],
             ["user_bob", "platform.first-win"],
         ]);
+    });
+});
+
+describe("celebrate", () => {
+    const NOW = Date.parse("2026-03-10T12:00:00Z");
+    const DAY = 24 * 60 * 60 * 1000;
+    const at = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString();
+    const keys = (result: ReturnType<typeof celebrate>) => result.fresh.map(({ key }) => key);
+
+    it("toasts a new unlock, and remembers it", () => {
+        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], {}, NOW, CATALOGUE);
+
+        expect(keys(result)).toEqual(["g1:dicecities.winner"]);
+        expect(result.fresh[0].achievement).toBe(CATALOGUE.games.dicecities[1]);
+        expect(result.celebrated).toEqual({ "g1:dicecities.winner": at(1) });
+    });
+
+    it("doesn't toast one already celebrated in this browser", () => {
+        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], { "g1:dicecities.winner": at(1) }, NOW, CATALOGUE);
+
+        expect(result.fresh).toEqual([]);
+    });
+
+    it("prunes what it remembers once it's no longer news, and doesn't toast it again for having forgotten", () => {
+        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(8), gameId: "g1" }], { "g1:dicecities.winner": at(8), "g2:platform.first-win": at(2) }, NOW, CATALOGUE);
+
+        expect(result.fresh).toEqual([]);
+        expect(result.celebrated).toEqual({ "g2:platform.first-win": at(2) });
+    });
+
+    it("doesn't toast one older than a week, however new to this browser", () => {
+        expect(celebrate([{ id: "dicecities.winner", unlockedAt: at(7.5), gameId: "g1" }], {}, NOW, CATALOGUE).fresh).toEqual([]);
+    });
+
+    it("doesn't toast a backfilled unlock, which no game earned, or an achievement the catalogue has withdrawn", () => {
+        const result = celebrate([
+            { id: "platform.first-win", unlockedAt: at(0) },
+            { id: "dicecities.withdrawn", unlockedAt: at(0), gameId: "g1" },
+        ], {}, NOW, CATALOGUE);
+
+        expect(result.fresh).toEqual([]);
+    });
+
+    it("toasts an unlock offered twice at once only once", () => {
+        const unlock = { id: "dicecities.winner", unlockedAt: at(0), gameId: "g1" };
+
+        expect(keys(celebrate([unlock, unlock], {}, NOW, CATALOGUE))).toEqual(["g1:dicecities.winner"]);
+    });
+});
+
+describe("parseCelebrated", () => {
+    it("reads what the toaster stored, and anything else as nothing celebrated yet", () => {
+        expect(parseCelebrated(JSON.stringify({ "g1:a": "2026-03-01" }))).toEqual({ "g1:a": "2026-03-01" });
+        expect(parseCelebrated(null)).toEqual({});
+        expect(parseCelebrated("not json")).toEqual({});
+        expect(parseCelebrated("[1,2]")).toEqual({});
+        expect(parseCelebrated(JSON.stringify({ "g1:a": 3 }))).toEqual({});
     });
 });

@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import { ToastProvider } from './ToastContext';
+import AchievementToaster from './AchievementToaster';
 import BottomBanner from './BottomBanner';
 import NotificationDeclinedPopup from './NotificationDeclinedPopup';
 import { useServiceWorker } from '@/utils/hooks/useServiceWorker';
@@ -31,12 +32,17 @@ export default function Providers({ children }: { children: ReactNode }) {
 
     return (
         <ToastProvider>
-            <PerformanceReporter />
-            {children}
-            <BottomBanner />
-            {/* Catches a permission prompt the player answered with Block,
-                wherever they started it from — see the component. */}
-            <NotificationDeclinedPopup />
+            {/* Celebrates an achievement unlocked, on whatever screen the
+                player is on. It wraps the screens because two of them (the
+                board, the results page) hand it the unlocks they already have. */}
+            <AchievementToaster>
+                <PerformanceReporter />
+                {children}
+                <BottomBanner />
+                {/* Catches a permission prompt the player answered with Block,
+                    wherever they started it from — see the component. */}
+                <NotificationDeclinedPopup />
+            </AchievementToaster>
         </ToastProvider>
     );
 }
