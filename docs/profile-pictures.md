@@ -111,6 +111,10 @@ greyed with the requirement ("win 10 games of Dice Cities"). That leans on the
 work is the unlock catalogue plus a check at selection time (validated
 server-side on save, not just hidden in the UI).
 
+The achievements themselves — what one is, when it is judged and where an
+unlock is kept — are planned in [`docs/achievements.md`](./achievements.md);
+this step is the first thing an unlock could grant.
+
 Sequencing note: do §2a before §2b. Achievements are a reason to pick from a
 set that has to exist first, and the picker is the same screen either way.
 
