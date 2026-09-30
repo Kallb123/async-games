@@ -25,7 +25,13 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
+// The rest of the module stays real: the achievements judge that an ending runs
+// reads more of it than the sweep does, and a mock that doesn't define an export
+// throws on access.
+vi.mock('@/utils/mongodb/GameResultData', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
+    recordGameResult,
+}));
 
 import {
     ANN, BOB, get, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers

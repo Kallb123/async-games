@@ -6,6 +6,8 @@ import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { GameEndReason } from '@/utils/apiModels/GameDataApi';
+import { GAME_END_BUDGET_MS, judgeGameEnd, NO_UNLOCKS } from '@/utils/games/awardAchievements';
+import { withTimeout } from '@/utils/withTimeout';
 
 /**
  * How a game finished, as the caller that finished it knows it.
@@ -32,10 +34,11 @@ export interface GameEnding {
 export interface FinishedGame {
     saved: boolean;
     /**
-     * Records the match result and tells every player the game is over.
+     * Records the match result, judges the game's achievements and tells every
+     * player the game is over.
      *
      * Hand it straight to `after(...)`: it touches nothing the response
-     * carries, it never throws (each half logs its own failure — see
+     * carries, it never throws (each part logs its own failure — see
      * announceGameOver), and `recordGameResult` is idempotent on gameId, so a
      * retried request still writes one record.
      */
@@ -81,10 +84,11 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
 }
 
 /**
- * The result record and the "game over" pushes, once the game itself is safely
- * saved. Neither can fail the other, and neither reaches the caller: the game
- * is already finished by the time this runs, so the worst either failure may
- * cost is a stats record or a notification — never the ending itself.
+ * The result record, the achievements the ending unlocked and the "game over"
+ * pushes, once the game itself is safely saved, in that order. None of them can
+ * fail another, and none reaches the caller: the game is already finished by the
+ * time this runs, so the worst any failure may cost is a stats record, an
+ * unlock or a notification — never the ending itself.
  */
 async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     let userList: User[];
@@ -101,12 +105,30 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // Its own try: a wobble on the read-model write must not swallow the pushes
     // as well, or the table would be left waiting on a turn that is never
     // coming — which is the thing this whole path exists to prevent.
+    //
+    // `recorded` is what lets career achievements be judged: they read the
+    // player's record from GameResult, and a record that doesn't hold this game
+    // yet would put the achievement ahead of the stats beside it.
+    let recorded = false;
     try {
         const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
         await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
+        recorded = true;
     } catch (error) {
         console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
     }
+
+    // Judged before the pushes, so that a push can name what the ending unlocked
+    // (a later change will; nothing reads the answer yet) and so that the
+    // toaster's refresh on a GameOver push finds the rows already written.
+    // withTimeout logs a judge that throws, so this needs no try of its own.
+    //
+    // The budget is short because the turn-timer cron awaits this inline and
+    // keeps only ten seconds of headroom for the last game it starts, which also
+    // has to fit the Clerk lookup above, recordGameResult and the pushes. A
+    // judgment that lands late misses only the push: the results page and the
+    // toast still show what it stored (docs/achievements.md §4.3).
+    await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
 
     // sendPushToUsers reports a failed send rather than throwing (see its own
     // comment), so the fan-out below needs no try of its own.
