@@ -489,6 +489,7 @@ describe("Dice Cities' response to a viewer with no seat", () => {
         "oneReroll", "rerollDoubles", "totalCoinsEarned", "userId", "username",
     ];
 
+    const UNDO_DEADLINE = "2026-03-01T00:00:10.000Z";
     const fresh = () => buildInitialDiceCitiesState(["u1", "u2"]);
     const underway = () => {
         const state = fresh();
@@ -497,6 +498,11 @@ describe("Dice Cities' response to a viewer with no seat", () => {
         alice.money = 17;
         alice.doubleUnlocked = true;
         state.hasRolled = true;
+        // Alice's purchase is inside its undo hold: the two fields that are
+        // hers alone to act on are live, so asserting they stay off the table's
+        // view means something.
+        state.undoStack = [{ by: "u1", turnStartedAt: "2026-03-01T00:00:00.000Z", state: {} } as never];
+        state.autoEndTurnAt = UNDO_DEADLINE;
         return state;
     };
     const tableView = (state: ReturnType<typeof fresh>) =>
@@ -511,9 +517,14 @@ describe("Dice Cities' response to a viewer with no seat", () => {
         expect(Object.keys(wire).sort()).toEqual(DC_STATE_KEYS);
         expect(Object.keys(wire.playerStates.u1).sort()).toEqual(DC_PLAYER_KEYS);
         expect(Object.keys(wire.playerStates.u2).sort()).toEqual(DC_PLAYER_KEYS);
+        // And the entries inside them: a field slipped into a card count would
+        // pass every assertion above.
+        expect(Object.keys(wire.bankCards[0]).sort()).toEqual(["amount", "card"]);
+        expect(Object.keys(wire.playerStates.u1.cards[0]).sort()).toEqual(["amount", "card"]);
         // Nothing to act on belongs to a viewer who holds no seat.
         expect(wire.canUndo).toBe(false);
         expect(wire.autoEndTurnAt).toBeNull();
+        expect(JSON.stringify(wire)).not.toContain(UNDO_DEADLINE);
     });
 });
 
