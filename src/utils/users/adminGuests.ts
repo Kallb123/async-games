@@ -2,7 +2,7 @@ import { User } from "@clerk/nextjs/server";
 import { GameDataModel } from "@/utils/mongodb/GameData";
 import { IUserIdAcceptance, InvitationModel } from "@/utils/mongodb/InvitationData";
 import { isOpenSeat, lobbyPath } from "@/utils/games/lobby";
-import { gamePath } from "@/utils/ui/games";
+import { gamePath, resultPath } from "@/utils/ui/games";
 import { buildUserDirectory, forEachClerkUser } from "@/utils/users/clerk";
 import { isGuest, readableName } from "@/utils/ui/players";
 
@@ -167,7 +167,7 @@ export async function listGuestAccounts(search: string): Promise<IAdminGuestsRes
             // answer: it needs only the gameId, so a game whose type didn't
             // come back is still a link rather than a dead `/games//id`.
             href: game.complete || !game.gameType?.url
-                ? `/games/result/${game.gameId}`
+                ? resultPath(game.gameId)
                 : gamePath(game.gameType.url, game.gameId),
         })),
         ...lobbies.filter(lobby => lobby.userIdList.some(seat => seat.userId === guestId)).map(lobby => ({

@@ -7,6 +7,7 @@ import ListSection from "@/components/ui/ListSection";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { finishedGameCopy } from "@/utils/ui/players";
+import { resultPath } from "@/utils/ui/games";
 
 interface MyCompleteListProps extends Pick<RefreshableState, "isLoading"> {
     /** The full /games/completed list shimmers its rows while it refetches; the
@@ -47,7 +48,7 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
                         key={game.gameId}
                         type="button"
                         className="ag-list-row ag-list-row--button"
-                        onClick={() => router.push(`/games/result/${game.gameId}`)}
+                        onClick={() => router.push(resultPath(game.gameId))}
                     >
                         <div style={{ font: "600 13px/1.35 var(--ag-font)", flex: 1, minWidth: 0 }}>
                             {game.friendlyName} — <strong style={{ fontWeight: 800, color: iWon ? "var(--ag-green)" : "var(--ag-ink)" }}>

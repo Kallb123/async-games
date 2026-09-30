@@ -48,7 +48,7 @@ export default function AchievementsSection({ unlocks, byGame, isLoading, isRefr
 
     return (
         <>
-            {groups.map((group, index) => list(group, index === 0 ? `${group.label} · ${unlocked} of ${total}` : group.label))}
+            {groups.map(group => list(group, group.key === "platform" ? `${group.label} · ${unlocked} of ${total}` : group.label))}
             {unplayed.length > 0 && (
                 <DisclosureSection level="section" title={`${pluralize(unplayed.length, "game")} you haven’t played`}>
                     {unplayed.map(group => list(group, group.label))}

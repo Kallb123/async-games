@@ -2,10 +2,8 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import type { Achievement } from "@/utils/games/achievements";
-
-/** The row box's size, in CSS pixels: `ag-icon-box`'s own. */
-const BOX_SIZE = 38;
 
 /**
  * The one place an achievement's icon is drawn (docs/achievements.md §7.2): its
@@ -25,9 +23,9 @@ export default function AchievementIcon({ achievement }: { achievement: Pick<Ach
     const [artFailed, setArtFailed] = useState(false);
     const art = artFailed ? undefined : achievement.art;
     return (
-        <span className="ag-icon-box" aria-hidden="true" style={art ? { overflow: "hidden" } : undefined}>
+        <span className="ag-icon-box" aria-hidden="true">
             {art
-                ? <Image src={art} alt="" width={BOX_SIZE} height={BOX_SIZE} style={{ objectFit: "cover" }} onError={() => setArtFailed(true)} />
+                ? <Image src={art} alt="" width={ROW_THUMB_SIZE} height={ROW_THUMB_SIZE} onError={() => setArtFailed(true)} />
                 : achievement.icon}
         </span>
     );

@@ -8,7 +8,7 @@ import { useIsAuthorised } from "./useAuthGuard";
 import { BOARD_EVENTS } from "./usePushEvents";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import { gameHasOutOfTurnPlays } from "@/utils/ui/games";
+import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
 
 /** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
 interface IGameDataBody<T> {
@@ -146,7 +146,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
             // `replace`, not `push`: Back from the result page should go
             // wherever they came from, not to the board that just sent them
             // here and would only send them straight back.
-            router.replace(`/games/result/${gameId}`);
+            router.replace(resultPath(gameId));
             return;
         }
         if (status === 403) {

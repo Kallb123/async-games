@@ -88,12 +88,12 @@ describe("gameAchievementRows", () => {
             { userId: "user_bob", id: "platform.first-win", unlockedAt: "2026-03-01T00:00:01Z" },
             { userId: "user_ann", id: "dicecities.withdrawn", unlockedAt: "2026-03-01T00:00:00Z" },
             { userId: "user_ann", id: "platform.first-win", unlockedAt: "2026-03-01T00:00:02Z" },
-        ], ["user_ann", "user_bob"], CATALOGUE);
+        ], ["user_ann", "user_bob"], ["Ann", "Bob"], CATALOGUE);
 
-        expect(rows.map(row => [row.userId, row.achievement.id])).toEqual([
-            ["user_ann", "platform.first-win"],
-            ["user_ann", "dicecities.winner"],
-            ["user_bob", "platform.first-win"],
+        expect(rows.map(row => [row.player, row.achievement.id])).toEqual([
+            ["Ann", "platform.first-win"],
+            ["Ann", "dicecities.winner"],
+            ["Bob", "platform.first-win"],
         ]);
     });
 });

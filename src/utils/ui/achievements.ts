@@ -14,7 +14,7 @@ import {
 import type { Achievement, AchievementCatalogue, CareerCriteria } from "@/utils/games/achievements";
 import type { IGameStats } from "@/utils/mongodb/GameResultData";
 import type { IAchievementUnlock, IGameAchievementUnlock } from "@/utils/mongodb/AchievementUnlockData";
-import { GAME_META } from "./games";
+import { GAME_META, resultPath } from "./games";
 
 /** One achievement as a profile lists it. */
 export interface ProfileAchievementRow {
@@ -45,9 +45,6 @@ export interface ProfileAchievements {
     /** The games they haven't played, in catalogue order: folded away on the profile. */
     unplayed: ProfileAchievementGroup[];
 }
-
-/** The results page a finished game's unlock links back to. */
-export const resultHref = (gameId: string) => `/games/result/${gameId}`;
 
 /**
  * "3 / 5": how far a record has got toward a career target, never past it.
@@ -90,7 +87,7 @@ export function profileAchievements(
                 achievement,
                 unlocked: true,
                 ...(unlock && { unlockedAt: unlock.unlockedAt }),
-                ...(unlock?.gameId && unlock.hasResult && { href: resultHref(unlock.gameId) }),
+                ...(unlock?.gameId && unlock.hasResult && { href: resultPath(unlock.gameId) }),
             };
         }
         const { criteria } = achievement;
@@ -120,9 +117,11 @@ export function profileAchievements(
     return { unlocked: rows.filter(row => row.unlocked).length, total: rows.length, groups, unplayed };
 }
 
-/** One unlock on a results page, with the achievement it names. */
+/** One unlock on a results page, with the achievement it names and who earned it. */
 export interface GameAchievementRow {
     userId: string;
+    /** Their name as the result names them, beside the stats table's. */
+    player: string;
     achievement: Achievement;
     unlockedAt: string;
 }
@@ -130,23 +129,27 @@ export interface GameAchievementRow {
 /**
  * What a finished game unlocked, grouped by player in seat order — the order
  * the stats table above it uses — and within a player in the order they were
- * earned. An id the catalogue no longer knows is dropped.
+ * earned. `players` is parallel to `playerIds`, as the result carries them. An
+ * id the catalogue no longer knows is dropped.
  */
 export function gameAchievementRows(
     unlocks: IGameAchievementUnlock[],
     playerIds: string[],
+    players: string[],
     catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE,
 ): GameAchievementRow[] {
-    const seat = (userId: string) => {
+    const seatOf = (userId: string) => {
         const index = playerIds.indexOf(userId);
         return index === -1 ? playerIds.length : index;
     };
     return unlocks
         .flatMap(unlock => {
             const achievement = achievementById(unlock.id, catalogue);
-            return achievement ? [{ userId: unlock.userId, achievement, unlockedAt: unlock.unlockedAt }] : [];
+            const seat = seatOf(unlock.userId);
+            return achievement ? [{ userId: unlock.userId, player: players[seat] ?? "Someone", achievement, unlockedAt: unlock.unlockedAt, seat }] : [];
         })
-        .sort((a, b) => seat(a.userId) - seat(b.userId) || a.unlockedAt.localeCompare(b.unlockedAt));
+        .sort((a, b) => a.seat - b.seat || a.unlockedAt.localeCompare(b.unlockedAt))
+        .map(({ seat: _seat, ...row }) => row);
 }
 
 // ─── What the toaster celebrates ─────────────────────────────────────────────

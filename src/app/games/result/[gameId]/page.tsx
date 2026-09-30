@@ -99,7 +99,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 // order, the order the stats above use (docs/achievements.md §7.5). No section
 // at all when the game unlocked nothing.
 function GameAchievements({ result }: { result: IGameResultResponse }) {
-    const rows = gameAchievementRows(result.achievements ?? [], result.playerIds);
+    const rows = gameAchievementRows(result.achievements ?? [], result.playerIds, result.players);
     // The viewer's own, handed to the toaster: arriving at a just-finished game's
     // results celebrates what the ending unlocked, before any push has landed.
     const { user } = useIsAuthorised();
@@ -109,15 +109,14 @@ function GameAchievements({ result }: { result: IGameResultResponse }) {
         if (!viewerId) return;
         offer((result.achievements ?? []).filter(unlock => unlock.userId === viewerId).map(({ id, unlockedAt }) => ({ id, unlockedAt, gameId: result.gameId })));
     }, [result, viewerId, offer]);
-    const nameOf = (userId: string) => result.players[result.playerIds.indexOf(userId)] ?? "Someone";
     return (
         <ListSection label="Achievements" isLoading={false}>
-            {rows.map(({ userId, achievement }) => (
+            {rows.map(({ userId, player, achievement }) => (
                 <ListRow
                     key={`${userId}:${achievement.id}`}
                     icon={<AchievementIcon achievement={achievement} />}
                     title={achievement.title}
-                    sub={`${nameOf(userId)} · ${achievement.description}`}
+                    sub={`${player} · ${achievement.description}`}
                 />
             ))}
         </ListSection>
