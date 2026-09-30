@@ -137,6 +137,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
+    vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'find').mockImplementation(findAchievementUnlocksFromStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.find);
     vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'bulkWrite').mockImplementation(bulkWriteAchievementUnlocksToStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.bulkWrite);
     // recordUnlocks waits for the unique index before its first write, and
     // with no connection that promise never settles — the real one is waiting
@@ -871,11 +872,38 @@ export function failNextAchievementUnlockWrite(error: unknown) {
     achievementUnlockWriteError = error;
 }
 
-/** Everything the collection holds, in the order it was written. Nothing reads
- *  the collection yet (docs/achievements.md §13 adds those with the routes that
- *  need them), so this is the only way a test can see what a write left. */
+/** Everything the collection holds, in the order it was written: what a write
+ *  left, read straight off the store rather than through the judge's own read
+ *  (which is projected to two fields, and so can't say what a row carries). */
 export function storedAchievementUnlocks(): StoredAchievementUnlock[] {
     return achievementUnlocks.map(unlock => ({ ...unlock }));
+}
+
+// The one read judging makes (docs/achievements.md §4.2 step 3): what do these
+// players already hold of these achievements — find({ userId: { $in },
+// achievementId: { $in } }, { userId: 1, achievementId: 1 }).lean().exec(),
+// served by the unique { userId, achievementId } index in production. Interprets
+// that shape only and throws on any other, like the stores above, so a judge
+// that reads the collection some other way fails here instead of passing by
+// reading nothing. The projection is honoured, because the judge relies on it:
+// a row comes back with those two fields and no more.
+function findAchievementUnlocksFromStore(filter: Record<string, unknown>, projection?: Record<string, unknown>) {
+    const inOf = (field: string) => {
+        const condition = filter?.[field] as { $in?: unknown } | undefined;
+        const ids = condition?.$in;
+        return Array.isArray(ids) && ids.every(id => typeof id === 'string') && Object.keys(condition!).length === 1
+            ? ids as string[]
+            : undefined;
+    };
+    const userIds = inOf('userId');
+    const achievementIds = inOf('achievementId');
+    if (!userIds || !achievementIds || Object.keys(filter).length !== 2 || JSON.stringify(projection) !== JSON.stringify({ userId: 1, achievementId: 1 })) {
+        throw new Error(`The test unlock store only finds by userId and achievementId $in, projected to those two, not ${JSON.stringify(filter)} ${JSON.stringify(projection)}`);
+    }
+    const matches = achievementUnlocks
+        .filter(unlock => userIds.includes(unlock.userId) && achievementIds.includes(unlock.achievementId))
+        .map(({ userId, achievementId }) => ({ userId, achievementId }));
+    return { lean: () => ({ exec: async () => matches }) };
 }
 
 // The one write `recordUnlocks` makes: an unordered bulkWrite of upserts, each

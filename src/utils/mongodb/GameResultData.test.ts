@@ -19,6 +19,7 @@ import {
     getPlayerStats,
     outcomeFor,
     recordGameResult,
+    resultCounts,
 } from './GameResultData';
 import type { GameEndingRow } from './GameResultData';
 import type { IGameData } from './GameData';
@@ -236,6 +237,19 @@ const ending = (
 });
 
 const aggregateReturning = (rows: unknown[]) => vi.spyOn(GameResultModel, 'aggregate').mockResolvedValue(rows as never);
+
+// The in-memory twin of RESULT_COUNTS_FILTER: the judge asks it of a game that
+// has no GameResult to filter on, so it has to answer what the filter would.
+describe('resultCounts', () => {
+    it('counts a table with no unclaimed guest at it', () => {
+        expect(resultCounts([])).toBe(true);
+    });
+
+    it('stops counting once any one seat is an unclaimed guest', () => {
+        expect(resultCounts([BOB])).toBe(false);
+        expect(resultCounts([ANN, BOB])).toBe(false);
+    });
+});
 
 describe('getGameStatsByPlayer', () => {
     afterEach(() => {

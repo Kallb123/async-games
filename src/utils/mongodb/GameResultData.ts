@@ -209,6 +209,19 @@ export const RESULT_COUNTS_FILTER = {
     ],
 };
 
+// The same rule as RESULT_COUNTS_FILTER, for a game whose result is being
+// decided in memory rather than read back from the database: it counts only when
+// nobody at the table is an unclaimed guest. The judge for achievements asks it
+// of a game that hasn't got a GameResult to filter on yet, or never will
+// (docs/achievements.md §8).
+//
+// The filter and this are one rule in two forms and must change together
+// (docs/account-less-play.md §8): a game that counts for a profile's stats must
+// count for its achievements too, or the two would disagree about the same table.
+export function resultCounts(unclaimedPlayerIds: readonly string[]): boolean {
+    return unclaimedPlayerIds.length === 0;
+}
+
 export var GameResultModel = models.GameResult || model<IGameResultDataDocument, IGameResultDataModel>('GameResult', GameResultSchema);
 
 export interface IDiceCitiesGameResultData extends IGameResultData {
