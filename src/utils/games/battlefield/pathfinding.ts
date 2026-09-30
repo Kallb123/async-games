@@ -7,7 +7,7 @@
 // Every cost is a whole number of half-points (terrain.ts), so the search is a
 // bucket queue over half-points — exact, with no floating-point ties to break.
 
-import { coordsOf, squareAt, type Battlefield, type Square } from "./terrain";
+import { coordsOf, isNeighbour, squareAt, type Battlefield, type Square } from "./terrain";
 
 /** A diagonal step costs this many times the square it lands on. */
 export const DIAGONAL_STEP = 1.5;
@@ -49,11 +49,10 @@ function enterable(field: Battlefield, square: Square | undefined): square is Sq
  * diagonally past the corner of something that can't.
  */
 export function stepCost(field: Battlefield, from: Square, to: Square): number | undefined {
+    if (!isNeighbour(field, from, to) || !enterable(field, to)) return undefined;
     const a = coordsOf(field, from), b = coordsOf(field, to);
-    const dc = b.col - a.col, dr = b.row - a.row;
-    if (Math.max(Math.abs(dc), Math.abs(dr)) !== 1 || !enterable(field, squareAt(field, b.col, b.row))) return undefined;
     const cost = field.terrain[to].moveCost;
-    if (dc === 0 || dr === 0) return cost;
+    if (a.col === b.col || a.row === b.row) return cost;
     const cutsCorner = !enterable(field, squareAt(field, b.col, a.row)) || !enterable(field, squareAt(field, a.col, b.row));
     return cutsCorner ? undefined : cost * DIAGONAL_STEP;
 }

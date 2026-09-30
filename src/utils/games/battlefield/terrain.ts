@@ -124,3 +124,9 @@ export function squareAt(field: Pick<Battlefield, "width" | "height">, col: numb
 export function coordsOf(field: Pick<Battlefield, "width">, square: Square): { col: number; row: number } {
     return { col: square % field.width, row: Math.floor(square / field.width) };
 }
+
+/** Whether two squares touch, along a side or at a corner. */
+export function isNeighbour(field: Pick<Battlefield, "width">, a: Square, b: Square): boolean {
+    const one = coordsOf(field, a), other = coordsOf(field, b);
+    return Math.max(Math.abs(one.col - other.col), Math.abs(one.row - other.row)) === 1;
+}

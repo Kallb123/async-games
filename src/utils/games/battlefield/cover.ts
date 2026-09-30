@@ -9,20 +9,15 @@
 // due east, who is looking along it.
 
 import { sightLine } from "./lineOfSight";
-import { coordsOf, type Battlefield, type Cover, type Square } from "./terrain";
+import { isNeighbour, type Battlefield, type Cover, type Square } from "./terrain";
 
 const RANK: Record<Cover, number> = { none: 0, half: 1, full: 2 };
 
 /** The cover `target` has against an attack from `attacker`. `"none"` means it's flanked. */
 export function coverAgainst(field: Battlefield, target: Square, attacker: Square): Cover {
     const { crossed, grazed } = sightLine(field, target, attacker);
-    const here = coordsOf(field, target);
-    const nextToTarget = (square: Square) => {
-        const { col, row } = coordsOf(field, square);
-        return Math.max(Math.abs(col - here.col), Math.abs(row - here.row)) === 1;
-    };
     return [...crossed, ...grazed.flat()]
-        .filter(nextToTarget)
+        .filter(square => isNeighbour(field, target, square))
         .map(square => field.terrain[square].cover)
         .reduce<Cover>((best, cover) => RANK[cover] > RANK[best] ? cover : best, "none");
 }
