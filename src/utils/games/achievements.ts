@@ -151,6 +151,14 @@ export function achievementById(
     return everyAchievement(catalogue).find(achievement => achievement.id === id);
 }
 
+/**
+ * How long an unlock stays news: a week (docs/achievements.md §7.3). The toaster
+ * celebrates an unlock only while it is younger than this, and the recent feed it
+ * reads (`GET /api/achievements/recent`) goes back exactly this far, so the two
+ * agree about what is still worth a toast.
+ */
+export const ACHIEVEMENT_NEWS_MS = 7 * 24 * 60 * 60 * 1000;
+
 // ─── The player's record ─────────────────────────────────────────────────────
 
 /**

@@ -1,5 +1,6 @@
 // The reads that carry a player's achievements to the screens that show them
-// (docs/achievements.md §6): both profiles, and a finished game's results page.
+// (docs/achievements.md §6): the toaster's recent feed, both profiles, and a
+// finished game's results page.
 // Each is gated exactly as it was before achievements (signed in and your own;
 // yourself or an accepted friend; a player or a friend of one), and what those
 // gates let through is pinned here: a profile carries only its own player's
@@ -37,6 +38,7 @@ import { GameDataModel } from '@/utils/mongodb/GameData';
 import { GET as stats } from '../stats/route';
 import { GET as profile } from '../profile/[userId]/route';
 import { GET as gameResult } from '../gameresult/[gameId]/route';
+import { GET as recent } from './recent/route';
 
 const CAROL = { id: 'user_carol', username: 'carol' };
 
@@ -85,6 +87,37 @@ const ANNS_ACHIEVEMENTS = [
     { id: 'dicecities.mine-baron', unlockedAt: '2026-03-02T00:00:00.000Z', gameId: 'game_live', url: 'dicecities', hasResult: false },
     { id: 'platform.first-win', unlockedAt: '2026-03-03T00:00:00.000Z' },
 ];
+
+describe('GET /api/achievements/recent', () => {
+    it("answers the caller's own unlocks from the last week, and nobody else's", async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            // Eight days after Ann's first unlock: that one is no longer news.
+            vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
+            signIn(ANN);
+
+            const response = await recent(request('/api/achievements/recent'));
+
+            expect(response.status).toBe(200);
+            expect(await response.json()).toEqual({
+                success: true,
+                unlocks: [
+                    { id: 'dicecities.mine-baron', unlockedAt: '2026-03-02T00:00:00.000Z', gameId: 'game_live', url: 'dicecities' },
+                    { id: 'platform.first-win', unlockedAt: '2026-03-03T00:00:00.000Z' },
+                ],
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('asks who is signed in, and answers nobody else', async () => {
+        const response = await recent(request('/api/achievements/recent'));
+
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({});
+    });
+});
 
 describe('GET /api/stats', () => {
     it("carries the caller's own unlocks, each marked with whether its game still has a results page", async () => {
