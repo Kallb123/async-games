@@ -425,7 +425,7 @@ describe('getPlayerStats', () => {
         expect(find).toHaveBeenCalledWith({ gameId: { $in: ['g_kept', 'g_gone'] } }, { _id: 0, gameId: 1 });
         expect(stats.achievements).toEqual([
             { id: 'platform.first-win', unlockedAt: '2026-03-01', gameId: 'g_kept', url: 'dicecities', hasResult: true },
-            { id: 'dicecities.mayor', unlockedAt: '2026-03-02', gameId: 'g_gone', url: 'dicecities', hasResult: false },
+            { id: 'dicecities.mayor', unlockedAt: '2026-03-02', url: 'dicecities', hasResult: false },
             { id: 'platform.regular', unlockedAt: '2026-03-03' },
         ]);
     });

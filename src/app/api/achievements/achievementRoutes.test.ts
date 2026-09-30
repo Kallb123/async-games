@@ -84,7 +84,7 @@ beforeEach(async () => {
 /** Ann's three unlocks as a profile carries them. */
 const ANNS_ACHIEVEMENTS = [
     { id: 'snakesandladders.home', unlockedAt: '2026-03-01T00:00:00.000Z', gameId: 'game_1', url: 'snakesandladders', hasResult: true },
-    { id: 'dicecities.mine-baron', unlockedAt: '2026-03-02T00:00:00.000Z', gameId: 'game_live', url: 'dicecities', hasResult: false },
+    { id: 'dicecities.mine-baron', unlockedAt: '2026-03-02T00:00:00.000Z', url: 'dicecities', hasResult: false },
     { id: 'platform.first-win', unlockedAt: '2026-03-03T00:00:00.000Z' },
 ];
 

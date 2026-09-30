@@ -201,7 +201,8 @@ export interface IAchievementUnlock {
     unlockedAt: string;
     gameId?: string;
     url?: string;
-    /** Whether that game's results page still exists, so a profile row can link to it. */
+    /** Whether that game's results page exists, so a profile row can link to it.
+     *  On a profile, a game without one keeps its `url` but not its `gameId`. */
     hasResult?: boolean;
 }
 

@@ -749,7 +749,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 }
 
 // A player's stored unlocks for their profile, each marked with whether the
-// game that earned it still has a results page to link to (docs/achievements.md
+// game that earned it has a results page to link to (docs/achievements.md
 // §6): a game still in play has none yet, and nor does one whose result went
 // with somebody's account deletion — `url` is on the row so the profile can
 // still say which game it was. One `$in` read over GameResult's unique gameId
@@ -769,7 +769,13 @@ async function achievementsOf(userId: string): Promise<IAchievementUnlock[]> {
             .lean()
             .exec();
         const hasResult = new Set(withResults.map(result => result.gameId));
-        return unlocks.map(unlock => unlock.gameId === undefined ? unlock : { ...unlock, hasResult: hasResult.has(unlock.gameId) });
+        // A game with no results page keeps its `url` ("in a game of Dice
+        // Cities") and loses its id: nothing on a profile needs the id of a game
+        // it can't link to, and a friend has no business holding the id of a
+        // game still in play that they aren't in.
+        return unlocks.map(({ gameId, ...unlock }) => gameId === undefined
+            ? unlock
+            : hasResult.has(gameId) ? { ...unlock, gameId, hasResult: true } : { ...unlock, hasResult: false });
     } catch (error) {
         console.error(`Couldn't read the achievements of ${userId}; the profile shows none this time`, error);
         return [];
