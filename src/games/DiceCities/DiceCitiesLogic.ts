@@ -179,7 +179,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         this.bankChange = outcome.bankChange;
         currentPlayerState!.lastDiceSelection = this.doubleDice ? 2 : 1;
 
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${formatRoll(outcome.roll1, outcome.roll2)}`));
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${formatRoll(outcome.roll1, outcome.roll2)}${payoutClause(dcGameData, outcome)}`));
 
         return outcome;
     }
@@ -456,9 +456,10 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
         gameState.harbourRoll2 = null;
 
         const harbour = logNames(dcGameData).cards[DiceCitiesCardIds.HARBOUR].title;
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, this.addBonus
+        const choice = this.addBonus
             ? `used the ${harbour} to turn a ${rolled} into a ${totalRoll}`
-            : `passed on the ${harbour}'s bonus and stayed on ${rolled}`));
+            : `passed on the ${harbour}'s bonus and stayed on ${rolled}`;
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `${choice}${payoutClause(dcGameData, outcome)}`));
         return outcome;
     }
 
@@ -822,7 +823,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         this.recordedRoll2 = outcome.roll2;
         this.recordedTunaRoll = outcome.tunaRoll ?? null;
         this.moneyChanges = outcome.moneyChanges;
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${formatRoll(outcome.roll1, outcome.roll2)}`));
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${formatRoll(outcome.roll1, outcome.roll2)}${payoutClause(dcGameData, outcome)}`));
         return outcome;
     }
 }
@@ -1113,16 +1114,26 @@ function cardTitle(cardId: uuidString): string {
     return DiceCitiesCards[cardId]?.title ?? "card";
 }
 
-// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands") for a settled
+// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands", in the theme's word) for a settled
 // roll's payout - the same coin-by-coin breakdown coinChangeParts (ui.ts)
 // already gives the recap and the live board, named by token rather than a
 // resolved name since myString() has no userIdNameMap of its own. The replay
 // engine resolves the tokens the same way it resolves history lines (see
 // resolveTokens, utils/games/history.ts). mongoMap covers a moneyChanges that
-// came back as a plain object rather than a live Map.
-function moneyChangeSummary(changes: Map<string, number> | Record<string, number>): string {
+// came back as a plain object rather than a live Map. `coins` is the played
+// theme's word, for the history log; myString() has no theme to read.
+function moneyChangeSummary(changes: Map<string, number> | Record<string, number>, coins = "coins"): string {
     const parts = coinChangeParts(mongoMap(changes), userToken);
-    return parts.length ? parts.join(", ") : "no coins changed hands";
+    return parts.length ? parts.join(", ") : `no ${coins} changed hands`;
+}
+
+// The same payout, as the tail of a roll's history line - so the match history
+// names the money a roll moved, as the review and the recap do. Nothing while
+// the roll is parked on the Harbour's offer: nobody has been paid yet, and the
+// line that settles it carries the payout instead.
+function payoutClause(dcGameData: IDiceCitiesGameData, outcome: IDiceCitiesDiceRollOutcome): string {
+    if (dcGameData.specificGameState.awaitingHarbourChoice) return "";
+    return ` — ${moneyChangeSummary(outcome.moneyChanges, logNames(dcGameData).words.coins)}`;
 }
 
 // True for the commands that can pay a roll out - so a Radio Tower re-roll can
