@@ -1,12 +1,12 @@
 # Realm Arena — Game Design Document
 
-**Status:** Concept, v0.5. Split out of Defender of the Realm in its third
-round of design, when one concept became two games
-([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This is the
-one to build first (§10). §11 records the answers so far. §13 is the first
-draft of the battle rules and the first characters, settled in rounds 3 and
-4. §15 sketches the first battlefield, a ruined fort. §16 asks about it, and
-about the last few rules the first playable version needs.
+**Status:** Design agreed for the first playable version, v0.6. Split out of
+Defender of the Realm in its third round of design, when one concept became
+two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
+is the one to build first (§10). §11 records the answers so far. §13 is the
+battle rules and the first characters, settled in rounds 3–5, and §15 the
+first battlefield, a ruined fort. §17 is the implementation plan, and §18
+asks the questions it raises.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -81,6 +81,8 @@ What's decided so far:
 | Speeds, ranges and battle length as proposed (§13.2, §13.6, §13.8) | §11.4, answers 5–6 |
 | Fog of war is revisited after the first playable version (§8) | §11.4, answer 7 |
 | The first battlefield is hand-made: a ruined fort (§15) | §11.4, answer 8 |
+| The fort's layout as sketched, and the rest of round 5's defaults (§15, §13) | §11.5 |
+| Every square has a movement cost, and low cover can be climbed over for extra movement. Each character has a movement allowance that 1 AP buys (§13.1, §13.2) | §11.5, answer 5 |
 | The same fantasy world as Defender of the Realm | §11.1, answer 4 |
 | Built before Defender of the Realm | §11.1, answer 7 |
 | The name: Realm Arena | §11.1, answer 6 |
@@ -376,6 +378,21 @@ default. Round 3 answered the four below. The other eleven (1, 3, 5–8 and
 8. **The first battlefield?** Hand-made first. A ruined fort would be good
    (§15).
 
+
+### 11.5 Round 5
+
+Round 5 answered the three below. The other six (2–4 and 6–8) took their
+defaults: the map is the same for both players turned upside down, the centre
+starts scoring in round 3, high ground is on the towers only, a target is
+flanked when none of its cover lies between it and the attacker, walls and
+full cover block sight, and only area abilities hit allies.
+
+1. **The fort's shape?** Yes.
+5. **Moving diagonally?** Yes, 1.5 squares. Squares also have a movement cost:
+   you can go over half cover for extra movement. Each character has a
+   movement allowance it can spend for 1 AP (§13.1, §13.2).
+9. **What next?** The implementation plan (§17).
+
 ---
 
 ## 12. Questions (round 2)
@@ -391,21 +408,35 @@ proposed default, the rule says so. The numbers are first guesses for playtestin
 
 ### 13.1 The battlefield
 
-- **Squares**, with cover along the edges between them.
+- **Squares.** Cover sits *in* squares, not along the edges between them.
+  This changed in round 5: once every square has a movement cost and low
+  cover can be climbed over (§11.5, answer 5), cover has to be something you
+  step across. One kind of terrain per square also makes a map a plain grid
+  of letters to draw by hand.
 - **Size:** 36×48 squares for two players, 48×48 for three or four (round 3).
   That's smaller than XCOM's smallest maps (48×72), because this is a phone.
-- **What's on it:**
-  - **Half cover** (low walls, fences, barrels) and **full cover** (high
-    walls, rocks), along the edges between squares.
-  - **Blocking terrain** (buildings, cliffs).
-  - **One level of high ground** (a hill or a rampart): +10% to hit from
-    above.
+- **What's on it**, and what each square costs to move into (round 5):
+
+  | Terrain | Movement cost | Cover for a character next to it | Sight |
+  |---|---:|---|---|
+  | Open ground | 1 | None | Clear |
+  | Low cover: rubble, low walls, fallen pillars, barrels | 3 to climb over. You can't stop on it | Half | Clear |
+  | High cover: walls, trees, fallen stone | Can't be entered | Full | Blocked |
+  | Tower stair | 2 | None | Clear |
+  | Tower top | 1 | None, but it's high ground: +10% to hit from above | Clear |
+
+  - **A diagonal step** costs 1.5 times the square's cost (round 5). Nobody can
+    cut diagonally past the corner of high cover.
+  - **Cover comes from the side the attack comes from.** A character has cover
+    against an attacker when a cover square is next to it on the attacker's
+    side. High cover there gives full cover; otherwise low cover gives half.
+    With neither, the character is flanked (§13.3).
   - Nothing destructible in the first playable version.
 - **Deployment zones** sit at opposite ends for two players, and in the
-  corners for three or four, about 40 squares apart. At the speeds in §13.2,
-  squads meet within two turns. A character can even reach the centre
-  (§13.7) on its first turn, which is why the centre starts scoring later
-  (§15.3).
+  corners for three or four, about 40 squares apart. At the movement
+  allowances in §13.2, squads meet within two turns. A character can even
+  reach the centre (§13.7) on its first turn, which is why the centre starts
+  scoring later (§15.3).
 
 **A big board on a small screen.** At phone width, 36 columns works out at
 about 10 pixels a square. That's fine for seeing the whole battle, and far too
@@ -430,16 +461,20 @@ its time zoomed in:
 
 | Action | AP |
 |---|---:|
-| Move, up to the character's speed | 1 |
-| Sneak (Scout only): move up to its speed without setting off reactions | 2 |
+| Move: spend up to the character's movement allowance | 1 |
+| Sneak (Scout only): the same, without setting off reactions | 2 |
 | Attack: shoot or strike | 2 |
 | Aimed shot (Archer only) | 3 |
 | Hunker down: double the cover against shots at it, until your next turn | 1, and ends the character's turn |
 | Go on overwatch or guard | All the AP it has left (§13.4) |
 | Use an ability | 1–3, depending on the ability (§13.6) |
 
-- **Speed**, in squares per move: Knight 4, most characters 6, Scout 8. With
-  all 4 AP spent on moving, that's 16–32 squares in a turn.
+- **Movement allowance** (round 5): each AP spent on moving buys the
+  character's allowance of movement points: Knight 4, most characters 6,
+  Scout 8. Each square along the way costs its movement cost (§13.1). A
+  move's total cost is rounded up to whole AP. Points left over from the
+  move's last AP are lost when it ends. Across open ground, all 4 AP on
+  moving is 16–32 squares in a turn; through rubble, much less.
 - **A charge is just moving and then striking** (1 + 2 AP), so it no longer
   needs a rule of its own.
 - **Spend AP however you like** (round 4). You can attack twice, attack and
@@ -451,7 +486,8 @@ its time zoomed in:
   XCOM-style lethality, and characters' HP (5–12) is the thing to tune if it's
   too much.
 - **Tap to move.** The board shades how far a character can go for 1, 2, 3 and
-  4 AP. Tapping a square spends what it takes.
+  4 AP, counting every square's cost. Tapping a square takes the cheapest path
+  there and spends what it takes.
 - **Characters act in any order**, and you can switch between them mid-turn.
 
 ### 13.3 Hitting and damage
@@ -511,7 +547,7 @@ As proposed in v0.3 (defaults taken), with AP costs added:
 As proposed in v0.3 (defaults taken): a human kingdom, the Realm that both
 games are named for. It would also be Defender of the Realm's first faction.
 
-| Character | Role | Speed | Attack | Ability (AP, cooldown) | Points |
+| Character | Role | Movement per AP | Attack | Ability (AP, cooldown) | Points |
 |---|---|---:|---|---|---:|
 | **Man-at-arms** | Cheap front line | 6 | Sword, melee, 4 | **Cleave:** strike two enemies next to them (2 AP, 3 turns) | 15 |
 | **Knight** | Slow and very tough | 4 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
@@ -596,13 +632,13 @@ along the bottom.
 |---|---|
 | `A`, `B` | The two deployment zones |
 | `.` | Open ground |
-| `,` | Rubble: half cover |
-| `T` | Trees and fallen stone: full cover |
+| `,` | Rubble: low cover (half cover; 3 movement to climb over) |
+| `T` | Trees and fallen stone: high cover (full cover; can't be entered) |
 | `#` | The fort's curtain wall: it blocks movement and sight, and gives full cover to anyone beside it |
 | `^` | A corner tower: high ground (+10% to hit), climbed by a stair from inside the walls |
 | `G` | The broken gate: a gap 6 squares wide |
-| `=` | A breach: a 3-square gap choked with rubble, which is half cover |
-| `o` | Fallen pillars and low walls in the courtyard: half cover |
+| `=` | A breach: a 3-square gap choked with rubble, which is low cover. The climb over it is what makes it slower than the gate |
+| `o` | Fallen pillars and low walls in the courtyard: low cover |
 | `C` | The keep's ruins: the centre, 6×6 squares |
 
 ### 15.2 How it plays
@@ -644,36 +680,288 @@ between each pair of gates.
 
 ## 16. Questions (round 5)
 
-The first five are about the fort. The last four are rules the first playable
-version still needs. Each comes with a proposed default.
+Answered in §11.5.
 
-1. **The shape** (§15.1): a square curtain wall, a gate facing each player,
-   one breach in each side wall, towers at the corners, and the keep's ruins
-   as the centre. Is that right? Should it have anything else, such as a dry
-   moat, a collapsed tower or buildings inside the walls?
-2. **Symmetry** (§15.2): the same map for both players, turned upside down. It's
-   fair but predictable. *Default: yes.*
-3. **Scoring starts in round 3** (§15.3), because a squad can reach the centre
-   on the first turn. *Default: yes.* The alternative is to deploy further
-   back or wall off the straight line.
-4. **Towers and walls:** high ground is on the towers only, reached by a stair
-   from inside the walls. Should characters also be able to walk along the
-   tops of the walls? *Default: no, towers only.*
-5. **Moving diagonally:** *Default: a diagonal step costs 1.5 squares of
-   movement, as in XCOM, and nobody can cut diagonally past the corner of a
-   wall.*
-6. **Flanking:** *Default: a target is flanked when none of its cover lies
-   between it and the attacker.* Cover on the far side of the target doesn't
-   help it.
-7. **Line of sight:** *Default: walls, buildings and full cover block sight.
-   Half cover doesn't, and neither do other characters.*
-8. **The Mage's fireball** hits friend and foe (§13.6). Does anything else
-   carry friendly fire, such as the Archer shooting past an ally? *Default:
-   no, only area abilities.*
-9. **After the fort:** should I write the implementation plan for the first
-   playable version next, broken into pull requests as Kingdom Builder's doc
-   is? Or keep designing: the game guide and tutorial every game here gets,
-   the art style, a second mission?
+---
+
+## 17. Implementation plan
+
+Two milestones. **A** is the first playable version agreed in §10: two
+players, one faction, Hold the Centre on the Ruined Fort. **B** is everything
+after it, in the order §10 set.
+
+### 17.1 Principles
+
+- **The game stays hidden until it's ready.** From PR 3, `meta.ts` carries
+  `available: false`, which keeps Realm Arena out of the game library
+  (`GameLibrary` filters on it). Its setup screen can still be reached by URL
+  for playtesting. PR 10 turns it on.
+- **Shared files change only when a guard test requires it.** The registry
+  tests (`gameRegistry.test.ts`, `serializableRegistry.test.ts`) fail as soon
+  as a `@serializable` class or a `meta.ts` exists without its wiring, so
+  PR 3 makes every engine one-liner at once. After that, each remaining
+  shared file is touched by one PR: the recap import (PR 8), the guide and
+  tutorial registries (PR 9), and What's new with the share card (PR 10).
+- **What the two games share is written to be shared from the start.** The
+  battlefield's geometry (terrain, paths, sight and cover) goes in
+  `src/utils/games/battlefield/`. It's game-agnostic, as `DiceRoll.ts` and
+  `Cards.ts` are, because Defender of the Realm is committed to reusing it
+  (§10). The board component starts in `src/games/RealmArena/components/`. It
+  moves to `src/components/ui/` when Defender of the Realm needs a second
+  copy, as AGENTS.md's second-copy rule says.
+- **Replay data from the first command.** Every command that rolls records its
+  rolls (PR 3), and the starting state is rebuilt from persisted fields. Those
+  are the two things recap can never get back later (`new-game.md` §7).
+- **Every PR passes the gates:** `npm run build`, `npx tsc --noEmit`,
+  `npm run lint` and `npm test`, plus the review crew for what it touches
+  (named for each PR below).
+- **No What's new line until the game is announced** (PR 10), as with Kingdom
+  Builder: one line, once.
+
+### 17.2 Engine decisions
+
+These are the decisions the PRs rest on. They're taken now because they can't
+be cheaply changed once games are being played.
+
+- **Three commands:**
+  - `RealmArenaMuster`: the squad, and where each character stands.
+  - `RealmArenaAct`: one action by one character. That's a move, a sneak, an
+    attack, an aimed shot, an ability, hunkering down, or going on watch.
+  - `RealmArenaEndTurn`: which characters keep still rather than go on watch.
+
+  That's one general-purpose `Act` rather than a class per action, as
+  `new-game.md` recommends (Solitaire has a single move command).
+- **One action per command.** A player has to see a shot land before choosing
+  the next action. So every action goes to the server and comes back with its
+  result. A turn is a run of `Act` commands and one `EndTurn`, like a
+  Settlements & Cities turn.
+- **Reactions happen inside the command that sets them off.** A move that
+  crosses an enemy's watch is one `Act`. The server walks the path, resolves
+  each reaction in turn (nearest watcher first), and stops the mover if
+  they're downed on the way. No out-of-turn commands are needed.
+- **Rolls are recorded in order.** A move can set off any number of reactions,
+  so each `Act` stores the rolls it used as a list (`recordedRolls`). Rolls
+  are 1–100, drawn with `randomInt`.
+- **The rules take rolls as inputs.** `rules.ts` never draws a random number.
+  A command draws, records, and hands the rolls to pure functions. So the
+  client can show the same hit chance the server will use, and tests can hand
+  in any roll.
+- **The muster is sealed.** Players muster in seat order, one turn each. Until
+  the last player has mustered, `gameStateToModel` sends each player only
+  their own squad. Everyone else's is left out of the response entirely, not
+  just hidden on screen (`new-game.md`, "Don't leak hidden information").
+  Recap follows the same rule.
+- **A timed-out turn ends the way the player would have ended it.** A
+  turn-timeout adapter runs `EndTurn`, so every character's AP go on watch,
+  as a missed turn should (§4). *Proposal:* a timed-out muster musters a
+  ready-made squad in the deployment zone, so the battle can still start
+  (§18, question 3).
+- **No dropout adapter at two players.** A two-player duel ends when one
+  player stops turning up, which is what the platform already does without
+  one. The adapter comes with free-for-all (B2).
+- **The squads live in plain arrays** (`Schema.Types.Mixed`), so every
+  `Execute` ends by calling one `markModified` helper (`new-game.md`,
+  "Gotchas").
+
+### 17.3 Milestone A: the first playable version
+
+**Goal:** two players can set up a match, muster sealed squads from the first
+six characters, and fight Hold the Centre on the Ruined Fort to a winner, with
+recap, a guide and a tutorial.
+
+**PR 1 — The battlefield (pure functions, no UI, no persistence).** New files
+only, and nothing imports them yet.
+
+1. `src/utils/games/battlefield/terrain.ts`: the terrain types, with their
+   movement costs, cover and sight (§13.1). Also the map format: one letter
+   per square, plus deployment zones and objective areas.
+2. `pathfinding.ts`: the cheapest path between two squares, with 1.5×
+   diagonals and no cutting corners. Also every square reachable for a given
+   number of movement points, which drives the tap-to-move shading.
+3. `lineOfSight.ts`: whether one square can see another.
+4. `cover.ts`: the cover a target has against an attacker: none (flanked),
+   half or full.
+5. `src/games/RealmArena/maps/ruinedFort.ts`: the Ruined Fort at full size
+   (§15). Its test checks the map is unchanged when turned upside down, and
+   that every deployment square can reach the centre.
+6. Unit tests for each.
+
+Reviewers: `caveman`.
+
+**PR 2 — The rules (pure functions).**
+
+1. `src/games/RealmArena/characters.ts`: the six characters and their
+   abilities as data (§13.6), and the points budget.
+2. `src/games/RealmArena/rules.ts`, importable by the client as well as the
+   server. It covers:
+   - the AP a path costs;
+   - hit chance, grazes and damage (§13.3);
+   - which watchers react to a move, and in what order (§13.4);
+   - each ability's targets and effect;
+   - knock-outs and raising;
+   - scoring for the centre and for knock-outs (§13.7);
+   - the end of the battle and the tie-break chain (§5.1).
+3. Tests. For example: an 80% shot hits on 1–80, grazes on 81–90, and misses
+   on 91–100.
+
+Reviewers: `caveman`.
+
+**PR 3 — The engine (models, commands and wiring; no UI).**
+
+1. `RealmArenaModels.ts`:
+   - the invitation, with `CreateGame` (two seats, seat order rolled);
+   - `buildInitialRealmArenaState` (the map, empty squads, the muster
+     phase);
+   - the game document;
+   - `gameStateToModel`, with the sealed muster.
+2. `apiModels.ts`: the response DTOs.
+3. `RealmArenaLogic.ts`: `RealmArenaGameType` (the rotation, the battle-round
+   counter, the turn limit and the winner), and the three commands, each
+   recording every roll it uses.
+4. `meta.ts` with `available: false`, and the engine's one-liners: the
+   `GameLogic` barrel, `gameCommands.ts`, `mongodb.ts` and `GAME_META`.
+5. The turn-timeout adapter, registered in `turnTimeout.ts`.
+6. Tests:
+   - a `makeGame()`/`cmd()` harness, per `new-game.md`;
+   - a whole battle played by two scripted squads, checking AP, HP and scores
+     stay consistent throughout;
+   - a sealed-muster test, asserting an opponent's squad is absent from
+     `JSON.stringify(response)` until both players have mustered.
+
+Reviewers: `croupier` (the sealed muster), `gremlin`, `rulebook` (the wiring).
+
+**PR 4 — Setting up a match.**
+
+1. `POST /api/newgame/realmarena`: creates the invitation, following the other
+   games' routes.
+2. `/newgame/realmarena`: a thin setup screen, built from `GameSetupLayout`,
+   `UserInviteList` and `TurnTimerSelect`. Two players for now.
+
+It's reachable by URL only, since the game is still unavailable in the
+library.
+
+Reviewers: `locksmith` and `gremlin` (the new route), `caveman`.
+
+**PR 5 — The board, read-only.**
+
+1. `components/RealmArenaBoard.tsx`: the fort drawn as one ground image, with
+   an SVG layer on top for characters, HP and highlights. It sits inside
+   `BoardZoom`, with a deep `maxWidth` and a `focus` on the selected character
+   (§13.1).
+2. `/games/realmarena/[gameid]`: the board screen, built on `GameShell`,
+   `useGameData`, `usePushEvents` and `useEndGame`. It shows the squads, the
+   scores, the round and whose turn it is.
+3. Placeholder ground drawn from the map's letters, so the art isn't holding
+   anything up (PR 9).
+
+Reviewers: `caveman`.
+
+**PR 6 — Mustering.**
+
+1. Picking the squad: one `AmountSteppers` row per character, up to two of
+   each, with the points left shown.
+2. Placing the squad in the deployment zone on the board, then sending the
+   sealed `Muster`.
+3. While waiting: "Bob is mustering", with nothing shown about Bob's squad.
+
+Reviewers: `caveman`, `croupier`.
+
+**PR 7 — Taking a turn.**
+
+1. Selecting a character shades its reach for 1–4 AP. Tapping a square
+   previews the path, flags any watcher it would set off, and sends the move.
+2. Tapping an enemy shows the hit chance, graze and damage before you commit.
+   Abilities are `BuildRow`s in the turn sheet.
+3. Buttons for hunker down, go on watch and End turn. Each character has a
+   switch to keep still rather than go on watch when the turn ends.
+4. Each result (hit, graze, miss, reactions set off) is shown as it comes
+   back.
+
+Reviewers: `caveman`.
+
+**PR 8 — Watching the other player's turn: replay and recap.**
+
+1. The replay adapter (`replay.ts`), which rebuilds from scratch since nothing
+   is shuffled. And `recap.ts`, whose events never show a squad before the
+   muster is over, wired in with `import "@/games/RealmArena/recap"` in
+   `src/utils/games/recap.ts`.
+2. On the board:
+   - `useTurnRecap` with `TurnRecapScreen`;
+   - `useTurnNavigation` with `TurnNavControls`, to step through the
+     opponent's turn one action at a time. The view follows each action
+     through `BoardZoom`'s `focus`, as Race Cars does.
+3. Tests and upkeep:
+   - `replay.test.ts`, with the random-number source stubbed to throw;
+   - `recap.test.ts`;
+   - Realm Arena's row in the per-game table in `turn-recap-and-planning.md`.
+     Planning: not offered, because every future attack would need a roll.
+
+Reviewers: `croupier`, `gremlin`.
+
+**PR 9 — Guide, tutorial and art.**
+
+1. `guide.ts` (Goal, Your turn, Action points, Cover and flanking, Overwatch
+   and guard), in `GAME_GUIDES`.
+2. `tutorial.ts`, in `GAME_TUTORIALS`: a tour of the live board covering your
+   squad, the reach shading, an enemy's hit chance, the centre, and End turn.
+3. The art: the fort's ground and the six figures, exported to `art-masters/`
+   and served through `npm run optimise-art`.
+
+Reviewers: `rulebook`, `caveman`.
+
+**PR 10 — Turn it on.**
+
+1. `available: true` in `meta.ts`.
+2. `npm run icons`, committing `public/icons/og-game-realmarena.png`.
+3. One line in the new-games group of `whatsNew.ts`.
+4. A full crew pass over the whole game.
+
+### 17.4 Milestone B: after the first playable version
+
+In the order §10 set, and in less detail for now:
+
+- **B1 — A second mission and battlefield.**
+- **B2 — Free-for-all for three and four players:**
+  - the 48×48 fort (§15.4);
+  - budgets and turn limits by player count (§13.6, §13.8);
+  - a dropout adapter, so a player who stops turning up has their squad
+    leave while their score stands (§4).
+- **B3 — Teams of two**, in alternate seats, with a team score (§5.2).
+- **B4 — Unlocks** (§7). This is the first state in the app that belongs to a
+  player rather than a game, so it needs its own collection and routes
+  (`locksmith`, `gremlin`).
+- **B5 — Fog of war**, if it's chosen (§8). It's hidden state in every
+  response and every replay (`croupier`).
+- **B6 — More factions.**
+- **Later platform work:** the shared team turn (§5.2), and undo for a move
+  that set off no reactions (`docs/undo.md`).
+
+### 17.5 The riskiest part
+
+The riskiest part is taking a turn on a phone (PR 7): choosing among up to
+six characters, reading a 36×48 board while zoomed in, and tapping
+accurately. It deserves the most attention in review and playtesting, so
+it's worth getting PRs 5 and 7 onto a real phone early, even with placeholder
+art.
+
+---
+
+## 18. Questions (round 6)
+
+1. **Stopping on low cover** (§13.1): can a character end its move on rubble
+   or a low wall? *Default: no, you climb over it.*
+2. **Cover in squares, not along edges** (§13.1): cover now sits in squares,
+   because squares have a movement cost. Is that all right?
+3. **A timed-out muster** (§17.2): should it muster a ready-made squad so the
+   battle can still start? Or should it wait, and let the missed turns end
+   the match? *Default: a ready-made squad.*
+4. **The plan** (§17.3): does the order suit you? Is there anything to cut
+   from the first playable version, or bring forward?
+5. **Art** (PR 9): will you draw the fort and the figures, or should the first
+   version ship with placeholder art?
+6. **Starting to build:** this session can only push to this branch
+   (`claude/defender-realm-design-yvefgv`). Should PR 1 start here, or on a
+   branch of its own?
 
 ---
 
@@ -693,3 +981,4 @@ Realm, its sibling in the same world.
 | 0.3 | Round-2 answers recorded (§11.2) and folded in: both free-for-all and teams, with teams taking alternate seats and a shared team turn as a later speed-up (§5.2); a similar pace at every player count, holding a battle to about 30 hand-offs (§4); unlocks as sidegrades earned across matches, and no permanent death (§7); single figures (§10); the first playable scope agreed (§10). Adds round-3 questions on the battle rules and the first characters, each with a proposed default (§13). The working title moves to an appendix. |
 | 0.4 | Round-3 answers recorded (§11.3). §13 becomes the first draft of the battle rules: a 36×48 or 48×48 battlefield, with how it's shown on a phone (§13.1); four action points per character, with a cost table, speeds, and a charge that is now just moving and striking (§13.2); ranges scaled to the bigger board (§13.3); overwatch and guard banking AP for several reactions (§13.4); AP costs for abilities (§13.5–§13.6); battle rounds falling gently with player count, so bigger battles last longer (§4, §13.8). Fog of war gains a point in its favour (§8). Round-4 questions (§14). |
 | 0.5 | Round-4 answers recorded (§11.4): every character has its own AP, spent however the player likes (with a balance note on two attacks a turn), the AP costs, automatic overwatch or guard, speeds, ranges and battle length agreed, fog of war left for later (§6, §8, §13). Adds the first battlefield, a hand-made ruined fort, with its layout, how it plays, a fix so the centre starts scoring in round 3, and the three- and four-player version (§15). Round-5 questions (§16). |
+| 0.6 | Round-5 answers recorded (§11.5). Every square has a movement cost and low cover can be climbed over, so cover moves from the edges between squares into the squares themselves, with a terrain table (§13.1); each AP buys a character's movement allowance (§13.2); the fort's legend updated to match (§15.1). Adds the implementation plan: principles, the engine decisions, ten PRs for the first playable version, the milestone after it, and the riskiest part (§17). Round-6 questions (§18). |
