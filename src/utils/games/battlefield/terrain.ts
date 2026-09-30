@@ -13,8 +13,9 @@ export interface Terrain {
     /**
      * Movement points to step onto the square orthogonally; a diagonal step
      * costs 1.5 times this (`pathfinding.ts`). `Infinity` where nothing can
-     * enter it. Always a whole number, which keeps every path's cost a whole
-     * number of half-points.
+     * enter it. Always a whole number of at least 1, which keeps every path's
+     * cost a whole number of half-points and every step at least two of them
+     * (the search in `pathfinding.ts` relies on both).
      */
     moveCost: number;
     /** Whether a move may end here. Low cover is climbed over, never stood on (§11.6, answer 1). */
@@ -100,7 +101,7 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
 
     const squaresIn = (area: Area, label: string): Square[] => {
         const { col, row, width: w, height: h } = area;
-        if (col < 0 || row < 0 || w < 1 || h < 1 || col + w > width || row + h > height) {
+        if (![col, row, w, h].every(Number.isInteger) || col < 0 || row < 0 || w < 1 || h < 1 || col + w > width || row + h > height) {
             throw new Error(`${map.name}: ${label} doesn't fit on the map`);
         }
         return Array.from({ length: w * h }, (_, i) => (row + Math.floor(i / w)) * width + col + (i % w));
@@ -111,7 +112,11 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
         if (squares.some(square => !terrain[square].standable)) throw new Error(`${map.name}: deployment ${seat} has a square nobody can stand on`);
         return squares;
     });
-    const objectives = Object.fromEntries(Object.entries(map.objectives).map(([id, area]) => [id, squaresIn(area, `objective "${id}"`)]));
+    const objectives = Object.fromEntries(Object.entries(map.objectives).map(([id, area]) => {
+        const squares = squaresIn(area, `objective "${id}"`);
+        if (!squares.some(square => terrain[square].standable)) throw new Error(`${map.name}: objective "${id}" has nowhere to stand`);
+        return [id, squares];
+    }));
 
     return { name: map.name, width, height, terrain, deployments, objectives };
 }

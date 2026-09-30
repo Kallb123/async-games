@@ -7,6 +7,10 @@
 // So a wall to the north covers against an attacker to the north-east as long
 // as the wall runs on to the north-east square too, and not against one almost
 // due east, who is looking along it.
+//
+// Cover says nothing about whether the shot can be taken at all: high cover
+// the line crosses also blocks sight, so ask `canSee` first. Full cover from
+// a visible attacker comes from high cover the line only grazes the corner of.
 
 import { sightLine } from "./lineOfSight";
 import { isNeighbour, type Battlefield, type Cover, type Square } from "./terrain";

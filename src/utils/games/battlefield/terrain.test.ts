@@ -10,9 +10,9 @@ const map = (overrides: Partial<BattlefieldMap>): BattlefieldMap => ({
 });
 
 describe("TERRAIN", () => {
-    it("gives every terrain a whole movement cost, or none at all", () => {
+    it("gives every terrain a whole movement cost of at least 1, or none at all", () => {
         for (const terrain of Object.values(TERRAIN)) {
-            expect(Number.isInteger(terrain.moveCost) || terrain.moveCost === Infinity, terrain.name).toBe(true);
+            expect((Number.isInteger(terrain.moveCost) && terrain.moveCost >= 1) || terrain.moveCost === Infinity, terrain.name).toBe(true);
         }
     });
 
@@ -49,6 +49,10 @@ describe("buildBattlefield", () => {
             .toThrow(/objective "centre" doesn't fit/);
         expect(() => buildBattlefield(map({ deployments: [{ col: 0, row: 1, width: 3, height: 1 }] })))
             .toThrow(/deployment 0 has a square nobody can stand on/);
+        expect(() => buildBattlefield(map({ objectives: { centre: { col: 1, row: 1, width: 1, height: 1 } } })))
+            .toThrow(/objective "centre" has nowhere to stand/);
+        expect(() => buildBattlefield(map({ objectives: { centre: { col: 0.5, row: 0, width: 1, height: 1 } } })))
+            .toThrow(/doesn't fit/);
     });
 
     it("doesn't take a letter from Object's prototype for terrain", () => {

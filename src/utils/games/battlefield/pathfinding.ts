@@ -38,9 +38,9 @@ export interface Path {
 // is the one that looks straighter.
 const STEPS: readonly (readonly [number, number])[] = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
 
-/** Whether anything can step onto a square. */
+/** Whether anything can step onto a square — which, off the map, nothing can. */
 function enterable(field: Battlefield, square: Square | undefined): square is Square {
-    return square !== undefined && field.terrain[square].moveCost !== Infinity;
+    return square !== undefined && (field.terrain[square]?.moveCost ?? Infinity) !== Infinity;
 }
 
 /**
@@ -49,7 +49,7 @@ function enterable(field: Battlefield, square: Square | undefined): square is Sq
  * diagonally past the corner of something that can't.
  */
 export function stepCost(field: Battlefield, from: Square, to: Square): number | undefined {
-    if (!isNeighbour(field, from, to) || !enterable(field, to)) return undefined;
+    if (field.terrain[from] === undefined || !enterable(field, to) || !isNeighbour(field, from, to)) return undefined;
     const a = coordsOf(field, from), b = coordsOf(field, to);
     const cost = field.terrain[to].moveCost;
     if (a.col === b.col || a.row === b.row) return cost;
@@ -102,6 +102,21 @@ export function pathTo(reach: Reach, to: Square): Path | undefined {
     const squares = [to];
     while (squares[squares.length - 1] !== reach.from) squares.push(reach.cameFrom[squares[squares.length - 1]]);
     return { squares: squares.reverse(), cost };
+}
+
+/**
+ * What walking a path costs, step by step, or undefined when any step can't be
+ * taken. For checking a path someone else chose — one sent by a client, say —
+ * rather than trusting it. Where it ends is the caller's to check.
+ */
+export function pathCost(field: Battlefield, squares: readonly Square[]): number | undefined {
+    let total = 0;
+    for (let i = 1; i < squares.length; i++) {
+        const step = stepCost(field, squares[i - 1], squares[i]);
+        if (step === undefined) return undefined;
+        total += step;
+    }
+    return total;
 }
 
 /** The cheapest path between two squares, or undefined when there's no way to stop on `to`. */

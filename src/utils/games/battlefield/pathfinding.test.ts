@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPath, pathTo, reachFrom, stepCost } from "./pathfinding";
+import { findPath, pathCost, pathTo, reachFrom, stepCost } from "./pathfinding";
 import { at, fieldOf } from "./testFixtures";
 
 describe("stepCost", () => {
@@ -26,6 +26,13 @@ describe("stepCost", () => {
         expect(stepCost(field, at(field, 1, 1), at(field, 2, 2))).toBeUndefined();
         expect(stepCost(field, at(field, 2, 2), at(field, 1, 1))).toBeUndefined();
         expect(stepCost(field, at(field, 0, 1), at(field, 1, 2))).toBe(1.5);
+    });
+
+    it("can't step on or off the map", () => {
+        const last = field.terrain.length - 1;
+        expect(stepCost(field, last, last + field.width)).toBeUndefined();
+        expect(stepCost(field, last + field.width, last)).toBeUndefined();
+        expect(stepCost(field, 0, -1)).toBeUndefined();
     });
 
     it("doesn't wrap a diagonal round the edge of the map", () => {
@@ -121,8 +128,7 @@ describe("findPath", () => {
         const squares = path?.squares ?? [];
         expect(squares[0]).toBe(at(field, 0, 1));
         expect(squares[squares.length - 1]).toBe(at(field, 4, 1));
-        const total = squares.slice(1).reduce((sum, square, i) => sum + (stepCost(field, squares[i], square) ?? NaN), 0);
-        expect(total).toBe(6);
+        expect(pathCost(field, squares)).toBe(6);
     });
 
     it("stands still for nothing", () => {
@@ -139,5 +145,23 @@ describe("findPath", () => {
         const there = findPath(field, at(field, 0, 0), at(field, 5, 2));
         const back = findPath(field, at(field, 5, 2), at(field, 0, 0));
         expect(there?.cost).toBe(back?.cost);
+    });
+});
+
+describe("pathCost", () => {
+    const field = fieldOf(
+        "..,",
+        ".#.",
+    );
+
+    it("adds up every step, and a lone square costs nothing", () => {
+        expect(pathCost(field, [at(field, 0, 1), at(field, 0, 0), at(field, 1, 0), at(field, 2, 0)])).toBe(5);
+        expect(pathCost(field, [at(field, 0, 0)])).toBe(0);
+    });
+
+    it("refuses a path with a jump, a wall or a cut corner in it", () => {
+        expect(pathCost(field, [at(field, 0, 0), at(field, 2, 0)])).toBeUndefined();
+        expect(pathCost(field, [at(field, 0, 0), at(field, 1, 1)])).toBeUndefined();
+        expect(pathCost(field, [at(field, 1, 0), at(field, 2, 1)])).toBeUndefined();
     });
 });
