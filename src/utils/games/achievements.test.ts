@@ -338,13 +338,20 @@ describe("the catalogue's integrity", () => {
 // ─── Test 1, cont.: nothing the browser loads is server-only ─────────────────
 //
 // achievements.ts ships to the client (it draws a locked row's "3 / 5"), and so
-// does every game's achievements.ts it imports. Mongoose, Clerk's server SDK and
-// the models that wrap them can't go there, and "can't" means "builds fine,
+// does every game's achievements.ts it imports. The server SDKs — Mongoose and
+// the MongoDB driver beneath it, Clerk's server entry, Firebase's Admin SDK —
+// and the models that wrap them can't go there, and "can't" means "builds fine,
 // throws in the browser". So walk what the catalogue reaches at runtime — which
 // catches the indirect case, `achievements.ts -> ./rules.ts -> ./XModels.ts`,
 // that a look at the file's own imports would not.
+//
+// Each is matched as the package or any path under it (`firebase-admin/app`,
+// `mongodb/lib/…`), because that is how they are usually imported. Nothing
+// matches on a folder: `utils/firebase/` holds the *client* Firebase app too,
+// which the browser is meant to load, so the admin SDK is caught by its package
+// name, wherever the file that imports it sits.
 
-const SERVER_ONLY_PACKAGES = ["mongoose", "@clerk/nextjs/server"];
+const SERVER_ONLY_PACKAGES = ["mongoose", "mongodb", "@clerk/nextjs/server", "firebase-admin"];
 
 const fromSrc = (file: string) => path.relative(SRC_ROOT, file).split(path.sep).join("/");
 
@@ -372,6 +379,10 @@ describe("what the catalogue reaches at runtime", () => {
     describe("the check that says so", () => {
         const scratch = mkdtempSync(path.join(tmpdir(), "achievements-graph-"));
         const at = (file: string) => path.join(scratch, file);
+        // A package by its own name and by a path under it, for each SDK added
+        // beside Mongoose and Clerk.
+        const SDK_SPECIFIERS = ["mongodb", "mongodb/lib/utils", "firebase-admin", "firebase-admin/app"];
+        const scratchName = (specifier: string) => `via-${specifier.replace(/\W/g, "-")}.ts`;
 
         beforeAll(() => {
             mkdirSync(at("rules"), { recursive: true });
@@ -382,6 +393,10 @@ describe("what the catalogue reaches at runtime", () => {
             writeFileSync(at("viaClerk.ts"), `import { rule } from "./indirect";\nexport const x = rule;\n`);
             writeFileSync(at("indirect.ts"), `import { auth } from "@clerk/nextjs/server";\nexport const rule = auth;\n`);
             writeFileSync(at("viaMongoose.ts"), `import mongoose from "mongoose";\nexport const x = mongoose;\n`);
+            writeFileSync(at("viaClientFirebase.ts"), `import { initializeApp } from "firebase/app";\nexport const x = initializeApp;\n`);
+            for (const specifier of SDK_SPECIFIERS) {
+                writeFileSync(at(scratchName(specifier)), `import * as sdk from "${specifier}";\nexport const x = sdk;\n`);
+            }
         });
         afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -399,6 +414,22 @@ describe("what the catalogue reaches at runtime", () => {
 
         it("fails a module that imports Mongoose", () => {
             expect(serverOnlyOffenders(at("viaMongoose.ts"))).toEqual([expect.stringContaining("(imports mongoose)")]);
+        });
+
+        it.each(SDK_SPECIFIERS)("fails a module that imports %s", (specifier) => {
+            expect(serverOnlyOffenders(at(scratchName(specifier)))).toEqual([expect.stringContaining(`(imports ${specifier})`)]);
+        });
+
+        it("passes a module that imports the client Firebase SDK, which is not the admin one", () => {
+            expect(serverOnlyOffenders(at("viaClientFirebase.ts"))).toEqual([]);
+        });
+
+        it("tells the admin Firebase module from the client one, though they share a folder", () => {
+            // adminFirebase.ts imports firebase-admin/app; firebase.ts is the
+            // browser's own app. Both sit in utils/firebase/, so only the package
+            // can tell them apart.
+            expect(serverOnlyOffenders(path.join(SRC_ROOT, "utils/firebase/adminFirebase.ts"))).toContainEqual(expect.stringContaining("(imports firebase-admin/app)"));
+            expect(serverOnlyOffenders(path.join(SRC_ROOT, "utils/firebase/firebase.ts"))).toEqual([]);
         });
 
         it("fails a real module that reaches the database, for all three reasons", () => {
