@@ -8,6 +8,7 @@ import { FriendshipModel } from '@/utils/mongodb/FriendshipData';
 import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
+import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 
 // Deletes the signed-in player's account: everything of theirs in Mongo, then
 // the Clerk user itself. Clerk holds the account details, the registered device
@@ -18,6 +19,8 @@ import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 // the players left behind get no push about any of it: an account going is not
 // worth interrupting them for, and there is no silent kind to send (see
 // usePushEvents). Their lists drop the removed player on the next foreground.
+// Achievement unlocks are the exception: each belongs to one player alone, so
+// they go by user and everyone else's from the same games stay.
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -83,6 +86,14 @@ export async function POST(request: NextRequest) {
     // Friendships in either direction, and every reaction they left or received.
     await FriendshipModel.deleteMany({ $or: [{ requesterId: userId }, { recipientId: userId }] }).exec();
     await ReactionModel.deleteMany({ $or: [{ actorId: userId }, { recipientId: userId }] }).exec();
+
+    // Achievement unlocks: by user, not by game. An unlock belongs to the player
+    // rather than the table, so the other players' unlocks from the games
+    // deleted above stay theirs — the `url` on each row is what keeps "in a game
+    // of Dice Cities" readable once that game's result is gone. A judging pass
+    // still running in some `after()` can land a row after this; that is the
+    // same race recordGameResult already has here (docs/achievements.md §5.4).
+    await AchievementUnlockModel.deleteMany({ userId }).exec();
 
     await (await clerkClient()).users.deleteUser(userId);
 

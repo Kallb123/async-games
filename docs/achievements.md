@@ -1,6 +1,8 @@
 # Achievements — plan
 
-**Status: plan, nothing built yet.** §13 has the build order: four PRs, the
+**Status: PR 1 of §13 is built, and nothing judges or shows an achievement
+yet.** The shapes, the empty registry and the `AchievementUnlock` collection are
+on `main`; PRs 2 to 4 are still to come. §13 has the build order: four PRs, the
 first two changing nothing a player can see, the third turning the feature on.
 The design has been through all five reviewers, and the product owner has
 settled its open questions; §15 records both.
@@ -305,7 +307,9 @@ it counts deserve a note:
   shows in one way: a game ended by a surrender or an abandonment only counts
   as played once it has lasted two turns (§8). So an achievement's progress
   can sit a game or two behind the profile's match count, because it skips the
-  games somebody ended almost as soon as they began.
+  games somebody ended almost as soon as they began. Until PR 2 adds that
+  field, `careerRecord` counts `total` as played, on one commented line that PR 2
+  then changes.
 
 ### 3.3 Match criteria: decided by the game's state
 
@@ -450,17 +454,37 @@ export const PLATFORM_ACHIEVEMENTS: PlatformAchievement[] = [
                    target: 5 } },
 ];
 
+/** Both registries as one value. Every helper below that reads the catalogue
+ *  takes it as an optional last parameter, defaulting to `ACHIEVEMENT_CATALOGUE`,
+ *  so it can be tested against a catalogue that isn't the (at first empty) real one. */
+export interface AchievementCatalogue {
+    games: Record<string, GameAchievement<any>[]>;
+    platform: PlatformAchievement[];
+}
+export const ACHIEVEMENT_CATALOGUE: AchievementCatalogue = {
+    games: GAME_ACHIEVEMENTS,
+    platform: PLATFORM_ACHIEVEMENTS,
+};
+
 /** Every achievement, by id. An unknown id comes back undefined, and readers drop it. */
-export function achievementById(id: string): Achievement | undefined;
+export function achievementById(id: string, catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE): Achievement | undefined;
 
 /** Both records, from the byGame the server and the client already have. */
 export function careerRecord(byGame: IGameStats[]): CareerRecord;
 
+/** The record at one game: what a game's own career achievement is judged on.
+ *  Zeroes for a game never played, so a `progress` needn't guard for a missing entry. */
+export function gameRecord(career: CareerRecord, slug: string): GameRecord;
+
 /** Every career achievement, across the catalogue, that `career` already meets. */
-export function careerMet(career: CareerRecord): Achievement[];
+export function careerMet(career: CareerRecord, catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE): Achievement[];
+
+/** The record as it stood before a game that has just finished: one off `played`
+ *  and/or `won` at the top level and under `games[slug]`, never below zero (§4.3). */
+export function withoutThisGame(career: CareerRecord, slug: string, thisGame: { played: boolean; won: boolean }): CareerRecord;
 
 /** Stored unlocks, plus every career achievement `byGame` already meets (§5.3). */
-export function unlockedIds(stored: string[], byGame: IGameStats[]): Set<string>;
+export function unlockedIds(stored: string[], byGame: IGameStats[], catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE): Set<string>;
 ```
 
 `achievementById` never throws, the same as `themeIdFor`
@@ -834,7 +858,9 @@ catches that error and:
 
 - treats `err.result`'s upserted ids as the new rows;
 - treats duplicate-key write errors as "already held";
-- rethrows anything else.
+- rethrows anything else, including a batch where a row failed casting beside
+  a lost race, because the error's indexes then count the rows Mongoose sent
+  rather than the batch.
 
 A plain `insertMany`, or catching the error with `isDuplicateKeyError`
 (`duplicateKey.ts`, which only looks at the top-level code), would swallow the
@@ -846,6 +872,10 @@ two upserts of the same pair land before the index exists, both insert, the
 build fails on the duplicate, and uniqueness is gone for good. The PR split
 closes that window: PR 2 loads the model with nothing to write, and PR 3
 checks the index exists in production before the catalogue ships (§13).
+`recordUnlocks` also awaits `AchievementUnlockModel.init()` before its first
+write, so a build that failed throws there instead of the write going ahead
+without uniqueness; the promise is cached, so it costs nothing after the first
+call.
 
 ### 5.3 Reading it: stored ∪ met
 
@@ -1336,6 +1366,7 @@ read. That's the design working, not a gap in it. It also covers a surrender:
 |---|---|
 | A check or a `progress` function throws | It's skipped for this pass, with a warning. The other checks, the pushes, the move and the game are unaffected (§4.2 step 5). |
 | Judging at a turn end fails or stalls (Mongo in its 30 s server selection, say) | It runs in `after()`, after the response, beside the `YourTurn` push rather than behind it, in its own `try` under `withTimeout` (§4.2). The move is already saved and the next player is told regardless. A condition that still holds is caught at the next turn end. |
+| `recordUnlocks` throws after some of its upserts landed (one row loses a race while another hits a real write error, or a write-concern error) | The rows that did land are stored, but the pass that wrote them never hears which, so they get no `notify` push and no game-over clause. The next pass sees them as already held, and the toaster still celebrates them from the recent-unlocks feed (§7.3). A batch where one row failed casting beside a lost race throws the same way, rather than name the wrong rows as new (§5.2). |
 | The `YourTurn` half is slow (a long game's replay, an FCM send with no deadline) | Judging doesn't wait for it, because the two halves run side by side. Queued behind it, judging could lose the function's time without ever starting, and nothing would log it. |
 | Judging at a turn end finishes after its budget | `withTimeout` stops waiting, but the work runs on. The `notify` push is chained onto that work, so a late unlock still pushes, rather than leaving a row whose push is never sent. |
 | A seat Clerk can't resolve (a guest the stale-guest sweeper deleted while still seated) | It's counted as an unclaimed guest, so the table counts as an exhibition and nothing is judged (§4.2 step 1). Failing open would let an exhibition table earn. The sweeper gap itself is a separate bug (§15). |
@@ -1578,8 +1609,10 @@ waits for PR 3.
    - the types from §3: `GameAchievement`, `PlatformAchievement`, both
      criteria kinds, `GameRecord` / `CareerRecord`, `art` and `notify`;
    - an empty `GAME_ACHIEVEMENTS` and `PLATFORM_ACHIEVEMENTS`;
-   - `achievementById`, `careerRecord`, `careerMet`, `withoutThisGame` and
-     `unlockedIds`.
+   - `achievementById`, `careerRecord`, `gameRecord`, `careerMet`,
+     `withoutThisGame` and `unlockedIds`, each of the ones that read the
+     catalogue taking it as an optional last parameter, so they can be tested
+     while the real one is empty.
 
    It comes with tests 1 and 3, except the `countsAsPlayed` cases, which come
    in PR 2. Nothing calls any of it yet.
@@ -1779,10 +1812,11 @@ for the split.
 Files touched, all told:
 
 ```
-PR 1  move   src/app/api/serverModuleGraph.test.ts → src/utils/testing/ (runtimeImports, reachableFrom)
+PR 1  move   src/app/api/serverModuleGraph.test.ts → src/utils/testing/moduleGraph.ts (+ test)   (runtimeImports, reachableFrom)
 PR 1  new    src/utils/games/achievements.ts (+ test)       (shapes, records, registry, helpers)
 PR 1  edit   src/games/gameRegistry.test.ts                 (one row)
 PR 1  new    src/utils/mongodb/AchievementUnlockData.ts
+PR 1  edit   src/utils/mongodb/duplicateKey.ts, src/utils/gif/klipySearch.ts   (isOnlyDuplicateKeyErrors moves out of the GIF search so recordUnlocks shares it)
 PR 1  edit   src/utils/testing/apiRoute.ts                  (fake store)
 PR 1  edit   src/app/api/user/delete/route.ts (+ test), src/app/api/dev/clearresults/route.ts
 PR 1  edit   ARCHITECTURE.md §5
