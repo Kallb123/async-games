@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
+import AchievementIcon from "@/components/ui/AchievementIcon";
 import BackLink from "@/components/ui/BackLink";
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
@@ -15,6 +16,7 @@ import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useToast } from "@/components/ToastContext";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
+import { gameAchievementRows } from "@/utils/ui/achievements";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
@@ -72,6 +74,8 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                     {result ? gameResultStatRows(result.stats, result.players) : null}
                 </ListSection>
 
+                {result && <GameAchievements result={result} />}
+
                 {result?.charts.map(chart => (
                     <Section label={chart.title} key={chart.title}>
                         {chart.kind === 'bar'
@@ -85,6 +89,27 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                 {result?.canRegenerate && <RegenerateResults gameId={gameId} onRegenerated={replaceResult} />}
             </>)}
         </main>
+    );
+}
+
+// Everything anyone at the table unlocked in this game, mid-game or at the end,
+// the game's own or the platform's: one row each, grouped by player in seat
+// order, the order the stats above use (docs/achievements.md §7.5). No section
+// at all when the game unlocked nothing.
+function GameAchievements({ result }: { result: IGameResultResponse }) {
+    const rows = gameAchievementRows(result.achievements ?? [], result.playerIds);
+    const nameOf = (userId: string) => result.players[result.playerIds.indexOf(userId)] ?? "Someone";
+    return (
+        <ListSection label="Achievements" isLoading={false}>
+            {rows.map(({ userId, achievement }) => (
+                <ListRow
+                    key={`${userId}:${achievement.id}`}
+                    icon={<AchievementIcon achievement={achievement} />}
+                    title={achievement.title}
+                    sub={`${nameOf(userId)} · ${achievement.description}`}
+                />
+            ))}
+        </ListSection>
     );
 }
 

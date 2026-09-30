@@ -5,13 +5,14 @@
 
 import {
     ACHIEVEMENT_CATALOGUE,
+    achievementById,
     careerRecord,
     gameRecord,
     unlockedIds,
 } from "@/utils/games/achievements";
 import type { Achievement, AchievementCatalogue, CareerCriteria } from "@/utils/games/achievements";
 import type { IGameStats } from "@/utils/mongodb/GameResultData";
-import type { IAchievementUnlock } from "@/utils/mongodb/AchievementUnlockData";
+import type { IAchievementUnlock, IGameAchievementUnlock } from "@/utils/mongodb/AchievementUnlockData";
 import { GAME_META } from "./games";
 
 /** One achievement as a profile lists it. */
@@ -116,4 +117,33 @@ export function profileAchievements(
 
     const rows = [...groups, ...unplayed].flatMap(group => group.rows);
     return { unlocked: rows.filter(row => row.unlocked).length, total: rows.length, groups, unplayed };
+}
+
+/** One unlock on a results page, with the achievement it names. */
+export interface GameAchievementRow {
+    userId: string;
+    achievement: Achievement;
+    unlockedAt: string;
+}
+
+/**
+ * What a finished game unlocked, grouped by player in seat order — the order
+ * the stats table above it uses — and within a player in the order they were
+ * earned. An id the catalogue no longer knows is dropped.
+ */
+export function gameAchievementRows(
+    unlocks: IGameAchievementUnlock[],
+    playerIds: string[],
+    catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE,
+): GameAchievementRow[] {
+    const seat = (userId: string) => {
+        const index = playerIds.indexOf(userId);
+        return index === -1 ? playerIds.length : index;
+    };
+    return unlocks
+        .flatMap(unlock => {
+            const achievement = achievementById(unlock.id, catalogue);
+            return achievement ? [{ userId: unlock.userId, achievement, unlockedAt: unlock.unlockedAt }] : [];
+        })
+        .sort((a, b) => seat(a.userId) - seat(b.userId) || a.unlockedAt.localeCompare(b.unlockedAt));
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { profileAchievements } from "./achievements";
+import { gameAchievementRows, profileAchievements } from "./achievements";
 import type { AchievementCatalogue } from "@/utils/games/achievements";
 import type { IGameStats } from "@/utils/mongodb/GameResultData";
 import { ending, ownCareer, platform } from "@/utils/testing/achievementFixtures";
@@ -78,5 +78,22 @@ describe("profileAchievements", () => {
 
     it("is empty for an empty catalogue", () => {
         expect(profileAchievements([], [stats("dicecities", 2, 1)], { games: {}, platform: [] })).toEqual({ unlocked: 0, total: 0, groups: [], unplayed: [] });
+    });
+});
+
+describe("gameAchievementRows", () => {
+    it("groups a game's unlocks by player in seat order, each in the order earned, and drops an unknown id", () => {
+        const rows = gameAchievementRows([
+            { userId: "user_ann", id: "dicecities.winner", unlockedAt: "2026-03-01T00:00:03Z" },
+            { userId: "user_bob", id: "platform.first-win", unlockedAt: "2026-03-01T00:00:01Z" },
+            { userId: "user_ann", id: "dicecities.withdrawn", unlockedAt: "2026-03-01T00:00:00Z" },
+            { userId: "user_ann", id: "platform.first-win", unlockedAt: "2026-03-01T00:00:02Z" },
+        ], ["user_ann", "user_bob"], CATALOGUE);
+
+        expect(rows.map(row => [row.userId, row.achievement.id])).toEqual([
+            ["user_ann", "platform.first-win"],
+            ["user_ann", "dicecities.winner"],
+            ["user_bob", "platform.first-win"],
+        ]);
     });
 });
