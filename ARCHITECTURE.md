@@ -557,13 +557,21 @@ Key properties:
   removes `{ userId }` — an unlock belongs to the player, not the table, so
   other players' unlocks from the same games stay theirs — and
   `/api/dev/clearresults` empties the collection along with `GameResult`.
-- **Judged at both checkpoints, but nothing is written yet.** `judgeTurnEnd`
-  and `judgeGameEnd` (`src/utils/games/awardAchievements.ts`) run at the end of
-  every turn and when a game ends
-  ([`docs/achievements.md`](./docs/achievements.md) §4) and write through
-  `recordUnlocks`. The catalogue is still empty, so nothing is stored until the
-  first achievements ship ([`docs/achievements.md`](./docs/achievements.md) §13,
-  PR 3); the reads and the screens arrive with them.
+- **Judged at both checkpoints.** `judgeTurnEnd` and `judgeGameEnd`
+  (`src/utils/games/awardAchievements.ts`) run at the end of every turn and when
+  a game ends ([`docs/achievements.md`](./docs/achievements.md) §4) and write
+  through `recordUnlocks`, against the catalogue in
+  `src/utils/games/achievements.ts` (`GAME_ACHIEVEMENTS`, one line per game's
+  `achievements.ts`, and `PLATFORM_ACHIEVEMENTS`).
+- **Read back by the screens, each by the `userId` prefix, each fail-soft and
+  under a server-side `maxTimeMS`.** `unlocksOf` feeds both profiles
+  (`getPlayerStats`' `achievements`, marked `hasResult` where the earning game
+  still has a results page) and `GET /api/achievements/recent`, the caller's own
+  last week; `unlocksInGame` feeds a result's `achievements` (every player's)
+  and the board's `unlockedHere` (the viewer's own, read only for a finished game
+  or one with `turnEnd` achievements — `src/utils/games/unlockedHere.ts`). Only
+  ids go over the wire; the title, icon and copy come from the catalogue on the
+  client.
 
 ## 6. The game engine: command pattern
 
@@ -993,7 +1001,7 @@ and rewrites only the metadata that actually changed.
   either display draws on the same `followLink` to get the tap into the app.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
-`TurnExpiringSoon`, `GameOver`, `ChatMessage`. `YourTurn` is also sent when a
+`TurnExpiringSoon`, `GameOver`, `ChatMessage`, `AchievementUnlocked`. `YourTurn` is also sent when a
 game starts, to whoever won the roll for turn order — everyone else just gets
 the silent `GameStart` refresh.
 
@@ -1012,6 +1020,17 @@ per line; the message is still stored and still shows in the thread, only the
 buzz is suppressed. Turning the `chat` channel off in Settings costs a player
 the interruption, not the messages: every read path (opening the board,
 returning to the tab, the open thread's poll) is independent of push.
+
+**Achievements ride it too** ([`docs/achievements.md`](./docs/achievements.md)
+§7.4). An achievement marked `notify` pushes its earner an `AchievementUnlocked`
+(`buildAchievementNotification`, the drawn icon as its image where there is
+one) on the `achievements` channel, from the command route's turn-end
+`after()`: chained onto the judging, which waits a grace period past its budget
+so a late judgment still sends. It opens the board and refreshes both the board
+(`BOARD_EVENTS`) and the achievement toaster. The game-over push is sent to each
+player separately, and `withUnlocked` adds what the ending unlocked for that
+player — "🏆 Unlocked Mayor" — after its body. The turn-timer cron hands
+announcing its hard stop, and judging only gets the time the pushes can spare.
 
 **No silent pushes on the turn path.** `TurnTaken` and `TurnExpired` were once
 sent to every player carrying no notification, purely to drive a refetch. WebKit
@@ -1205,6 +1224,18 @@ description or theme colour is exactly what those two files exist to prevent.
   trip to `/login`). The renewal above it is bounded too
   (`SESSION_REFRESH_TIMEOUT_MS`): an `await` with no deadline in front of the
   retry ladder would hang the screen on a repair that never arrives.
+- **Celebrating an achievement.** One `AchievementToaster`
+  (`src/components/AchievementToaster.tsx`), mounted once in `Providers` inside
+  `ToastProvider`, toasts each unlock once per browser and player while it is
+  younger than a week — the app's toast, "🏆 Achievement unlocked · ⛏️ Mine
+  Baron". It has one memory (through `useStoredValue`'s store) and three feeds:
+  its own `GET /api/achievements/recent`, refreshed on `AchievementUnlocked`,
+  `YourTurn` and `GameOver` and on a return to the tab; the board, whose
+  `useGameData` hands each response's `unlockedHere` to
+  `useAchievementToaster().offer`; and the results page, which offers the
+  viewer's own rows. What's new is decided by the pure `celebrate`
+  (`src/utils/ui/achievements.ts`). Profiles list every achievement through
+  `AchievementsSection`, and a result every unlock its game earned.
 - **Reading the clock.** Components never call `Date.now()` while rendering — not
   even inside a helper, where `react-hooks/purity` can't see it. `useNow`
   (`src/utils/hooks/useNow.ts`) reads the wall clock as the external source it is
@@ -1402,11 +1433,17 @@ in one new folder, `src/games/<Game>/`. Roughly:
    wire it into `GAME_TUTORIALS` in `src/utils/ui/gameTutorials.ts`. Passed to
    the same `GameShell` via its `tutorial` prop; see
    `docs/game-tutorials.md` for the anchor and signal conventions.
+9. *(Optional)* Add an `achievements.ts` exporting `achievements` — the game's
+   own achievements, typed against its response — and wire it into
+   `GAME_ACHIEVEMENTS` in `src/utils/games/achievements.ts`. A match check
+   reads only the null-viewer view, so pin that view in `hiddenHands.test.ts`
+   first; see `docs/achievements.md` §11.
 
 ### One-liners outside the game folder — and what guards each
 
 Steps 2–5 above each add a single line to a shared file *outside*
-`src/games/<Game>/`, as do steps 7 and 8's optional guide and tutorial. Every
+`src/games/<Game>/`, as do steps 7, 8 and 9's optional guide, tutorial and
+achievements. Every
 one of them is enforced by an automated test, so a game folder that's missing
 one fails CI instead of breaking silently at runtime:
 
@@ -1418,6 +1455,7 @@ one fails CI instead of breaking silently at runtime:
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 | `src/utils/ui/gameGuides.ts` | *(only if the game has a `guide.ts`)* import the guide and add it to `GAME_GUIDES` | `src/games/gameRegistry.test.ts` ("wires every game's how-to-play guide into GAME_GUIDES") — without it `/api/gameguides` rejects the "seen" write, so the popup re-shows on every visit |
 | `src/utils/ui/gameTutorials.ts` | *(only if the game has a `tutorial.ts`)* import it and add it to `GAME_TUTORIALS` | `src/games/gameRegistry.test.ts` ("wires every game's interactive tutorial into GAME_TUTORIALS") — the same "seen" rejection as the guide row, for the tutorial's own list |
+| `src/utils/games/achievements.ts` | *(only if the game has an `achievements.ts`)* import it and add it to `GAME_ACHIEVEMENTS` | `src/games/gameRegistry.test.ts` ("wires every game's achievements into GAME_ACHIEVEMENTS") — without it the game's achievements are never judged or shown; `achievements.test.ts` then checks the catalogue itself (ids, a pinned null view for a match achievement, nothing server-only reachable) |
 | `src/utils/ui/gameThemes.ts` | *(only if the game has a `themes.ts`)* import the theme list and add it to `GAME_THEMES` | `src/games/gameRegistry.test.ts` ("wires every themed game's themes into GAME_THEMES") — without it the game plays fine in its default theme and silently offers no picker, so the alternative dressing is unreachable |
 
 `src/games/gameRegistry.test.ts` discovers games the same way

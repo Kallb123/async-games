@@ -151,6 +151,34 @@ the game and describing the event the player missed. That copy lands on a lock
 screen. It must describe only what its recipient may see — the same redaction
 question, in prose.
 
+### I. A game's `achievements.ts` sees only what the table saw
+
+An unlock is announced mid-game — a push, a toast, a friend's view of a
+profile — so a check that could read a secret would publish it at the moment it
+became true (`docs/achievements.md` §9).
+
+- **A match check takes the game's response type**, from `./apiModels`, and is
+  handed only the view `tableView` builds: the game's own response builder asked
+  for a `null` viewer. Anything that builds a check's view another way, or gives
+  `tableView` a viewer parameter → **CARDS FACE UP**.
+- **It reads no viewer-only field** — any `my*` field, `resources`,
+  `playerDevCards` / `playerNewDevCards`, World Domination's `cards`, `canUndo`,
+  `autoEndTurnAt` — even though on the null view it can never pass. It is
+  either a check that never fires or a leak waiting for the `null` to loosen →
+  **CROUPIER SQUINTS**.
+- **The game's null view is pinned before its first match achievement**: a
+  sentinel in `hiddenHands.test.ts` for a game with hidden state, an exact key
+  set for one that hides nothing, and the slug on `NULL_VIEW_PINNED` in
+  `achievements.test.ts`. Missing → **CROUPIER SQUINTS**.
+- **A description names no hidden specific** ("hold the Knight card") even
+  where the check can't read it → **CROUPIER SQUINTS**.
+- **No secret achievement ships its text in the bundle.** The whole catalogue is
+  client code; a "???" row whose title is in it hides nothing → **CARDS FACE UP**.
+- **An unlock read goes to whom the route says** — the viewer's own on the board
+  (`unlockedHere`), everyone's on a finished game's result, a player's own on
+  their profile for their friends — and the game-over push names only its own
+  recipient's unlocks.
+
 ## Step 4 — Report
 
 Group by severity. Every finding names the **field**, the **viewer who
