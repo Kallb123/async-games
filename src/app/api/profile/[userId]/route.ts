@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const profileUser: IProfileUser = toUserDto(clerkUser);
 
-    const { recent, byGame } = await getPlayerStats(profileUserId, userId);
+    const { recent, byGame, achievements } = await getPlayerStats(profileUserId, userId);
 
-    return NextResponse.json({ success: true, user: profileUser, recent, byGame });
+    return NextResponse.json({ success: true, user: profileUser, recent, byGame, achievements });
 }

@@ -186,3 +186,70 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
     }
     return unlocks.filter((_, index) => index in upsertedIds);
 }
+
+// ─── Reading it back ─────────────────────────────────────────────────────────
+
+/**
+ * One unlock as a screen reads it (docs/achievements.md §6): which achievement,
+ * when, and the game that earned it. Only the id goes over the wire — the
+ * title, icon and description are looked up from the catalogue on the client,
+ * so the copy has one home and a typo fix needs no migration. An id the
+ * catalogue no longer knows is a withdrawn achievement, which the reader drops.
+ */
+export interface IAchievementUnlock {
+    id: string;
+    unlockedAt: string;
+    gameId?: string;
+    url?: string;
+    /** Whether that game's results page still exists, so a profile row can link to it. */
+    hasResult?: boolean;
+}
+
+/** An unlock in one game, as its results page lists it: whose, which, and when. */
+export interface IGameAchievementUnlock {
+    userId: string;
+    id: string;
+    unlockedAt: string;
+}
+
+/**
+ * Every unlock a player holds, or only those since `since` (an ISO time):
+ * the profile's read and the toaster's. Served by the unique index's `userId`
+ * prefix, and bounded by the catalogue's size, since a player holds each
+ * achievement at most once. Oldest first.
+ */
+export async function unlocksOf(userId: string, since?: string): Promise<IAchievementUnlock[]> {
+    const rows: Omit<IAchievementUnlockData, "userId">[] = await AchievementUnlockModel
+        .find(
+            { userId, ...(since !== undefined && { unlockedAt: { $gte: since } }) },
+            { _id: 0, achievementId: 1, unlockedAt: 1, gameId: 1, url: 1 },
+        )
+        .lean()
+        .exec();
+    return rows
+        .map(({ achievementId, unlockedAt, gameId, url }) => ({
+            id: achievementId,
+            unlockedAt,
+            ...(gameId !== undefined && { gameId }),
+            ...(url !== undefined && { url }),
+        }))
+        .sort((a, b) => a.unlockedAt.localeCompare(b.unlockedAt));
+}
+
+/**
+ * What these players unlocked in one game: the results page's list (every
+ * player at the table) and the board's (the viewer alone). Keyed by `userId`
+ * first, deliberately, rather than a bare `{ gameId }` that no index would
+ * serve. A backfilled career unlock has no `gameId`, so it is never here: the
+ * game didn't earn it. Oldest first.
+ */
+export async function unlocksInGame(userIds: string[], gameId: string): Promise<IGameAchievementUnlock[]> {
+    if (userIds.length === 0) return [];
+    const rows: Pick<IAchievementUnlockData, "userId" | "achievementId" | "unlockedAt">[] = await AchievementUnlockModel
+        .find({ userId: { $in: userIds }, gameId }, { _id: 0, userId: 1, achievementId: 1, unlockedAt: 1 })
+        .lean()
+        .exec();
+    return rows
+        .map(({ userId, achievementId, unlockedAt }) => ({ userId, id: achievementId, unlockedAt }))
+        .sort((a, b) => a.unlockedAt.localeCompare(b.unlockedAt));
+}

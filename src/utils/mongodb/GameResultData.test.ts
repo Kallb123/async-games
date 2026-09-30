@@ -24,6 +24,7 @@ import {
     resultCounts,
 } from './GameResultData';
 import type { GameEndingRow } from './GameResultData';
+import { AchievementUnlockModel } from './AchievementUnlockData';
 import type { IGameData } from './GameData';
 import type { GameEndReason } from '@/utils/apiModels/GameDataApi';
 
@@ -389,6 +390,7 @@ describe('getPlayerStats', () => {
             ] }) }),
         } as never);
         aggregateReturning([ending('dicecities', { winner: ANN }, 1)]);
+        vi.spyOn(AchievementUnlockModel, 'find').mockReturnValue({ lean: () => ({ exec: async () => [] }) } as never);
 
         const stats = await getPlayerStats(ANN, BOB);
 
@@ -397,5 +399,47 @@ describe('getPlayerStats', () => {
             { gameId: 'g1', url: 'dicecities', endedAt: '2026-01-02', outcome: 'win', sharedWithViewer: true },
         ]);
         expect(stats.byGame).toEqual(await getGameStatsByPlayer(ANN));
+        expect(stats.achievements).toEqual([]);
+    });
+
+    /** GameResultModel.find answering both reads getPlayerStats makes: the recent matches, and which games still have a result. */
+    const resultsFind = (gameIdsWithResults: string[]) => vi.spyOn(GameResultModel, 'find').mockImplementation(((filter: Record<string, unknown>) =>
+        'gameId' in filter
+            ? { lean: () => ({ exec: async () => gameIdsWithResults.map(gameId => ({ gameId })) }) }
+            : { sort: () => ({ limit: () => ({ exec: async () => [] }) }) }) as never);
+
+    it("lists the player's unlocks, marking each that still has a results page to link to", async () => {
+        const find = resultsFind(['g_kept']);
+        aggregateReturning([]);
+        const unlocks = vi.spyOn(AchievementUnlockModel, 'find').mockReturnValue({ lean: () => ({ exec: async () => [
+            { achievementId: 'dicecities.mayor', unlockedAt: '2026-03-02', gameId: 'g_gone', url: 'dicecities' },
+            { achievementId: 'platform.first-win', unlockedAt: '2026-03-01', gameId: 'g_kept', url: 'dicecities' },
+            // Backfilled: there was no game to point at, so there's nothing to link.
+            { achievementId: 'platform.regular', unlockedAt: '2026-03-03' },
+        ] }) } as never);
+
+        const stats = await getPlayerStats(ANN, BOB);
+
+        // Read by the unique index's userId prefix, and projected to what a row shows.
+        expect(unlocks).toHaveBeenCalledWith({ userId: ANN }, { _id: 0, achievementId: 1, unlockedAt: 1, gameId: 1, url: 1 });
+        expect(find).toHaveBeenCalledWith({ gameId: { $in: ['g_kept', 'g_gone'] } }, { _id: 0, gameId: 1 });
+        expect(stats.achievements).toEqual([
+            { id: 'platform.first-win', unlockedAt: '2026-03-01', gameId: 'g_kept', url: 'dicecities', hasResult: true },
+            { id: 'dicecities.mayor', unlockedAt: '2026-03-02', gameId: 'g_gone', url: 'dicecities', hasResult: false },
+            { id: 'platform.regular', unlockedAt: '2026-03-03' },
+        ]);
+    });
+
+    it('still answers with the stats when the unlocks cannot be read', async () => {
+        resultsFind([]);
+        aggregateReturning([ending('dicecities', { winner: ANN }, 1)]);
+        vi.spyOn(AchievementUnlockModel, 'find').mockReturnValue({ lean: () => ({ exec: async () => { throw new Error('Mongo said no'); } }) } as never);
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const stats = await getPlayerStats(ANN, ANN);
+
+        expect(stats.achievements).toEqual([]);
+        expect(stats.byGame).toHaveLength(1);
+        expect(errors).toHaveBeenCalledWith(`Couldn't read the achievements of ${ANN}; the profile shows none this time`, expect.any(Error));
     });
 });

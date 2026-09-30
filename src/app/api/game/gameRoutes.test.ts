@@ -44,7 +44,7 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: vi.fn(() => 3) }));
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import { ending, platform, turnEnd, unlockRow } from '@/utils/testing/achievementFixtures';
 import {
-    ANN, BOB, commandPost, failNextAchievementUnlockWrite, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction,
+    ANN, BOB, commandPost, failNextAchievementUnlockWrite, get, jsonPost, rawPost, resetApiRouteStubs, seedAchievementUnlock, seedGame, seedReaction,
     seedSnakesAndLadders, sentPushes, signIn, signInUnresolvable, SQUARES, storedAchievementUnlocks, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
@@ -61,6 +61,7 @@ import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import * as clerkUsers from '@/utils/users/clerk';
 import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
 import { POST as command } from './command/route';
+import { GET as getGame } from './[gameid]/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
 
@@ -935,10 +936,11 @@ describe('judging achievements', () => {
             signIn(ANN);
             seedSnakesAndLadders();
             offer(thirteen());
-            // The one read the judge makes never answers.
-            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(() => ({ lean: () => ({ exec: () => new Promise(() => { }) }) }) as never);
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
             await command(commandPost(diceRoll()));
+            // The one read the judge makes never answers. (Stalled only now: the
+            // response's own read of what the viewer has unlocked here is done.)
+            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(() => ({ lean: () => ({ exec: () => new Promise(() => { }) }) }) as never);
             vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
             try {
                 let done = false;
@@ -1107,6 +1109,87 @@ describe('judging achievements', () => {
             expect(getGameStatsByPlayer).not.toHaveBeenCalled();
             expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.winner', inGame)]);
             expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        });
+    });
+
+    describe("on the board's own response", () => {
+        const readGame = () => getGame(get('/api/game/game_1'), { params: Promise.resolve({ gameid: 'game_1' }) });
+        const seedUnlocks = () => {
+            seedAchievementUnlock({ userId: ANN.id, achievementId: 'snakesandladders.thirteen', unlockedAt: '2026-03-01T00:00:00.000Z', ...inGame });
+            // Somebody else's in this game, and Ann's own in another: neither is hers here.
+            seedAchievementUnlock({ userId: BOB.id, achievementId: 'snakesandladders.thirteen', unlockedAt: '2026-03-01T00:00:01.000Z', ...inGame });
+            seedAchievementUnlock({ userId: ANN.id, achievementId: 'snakesandladders.other', unlockedAt: '2026-03-01T00:00:02.000Z', gameId: 'game_2', url: 'snakesandladders' });
+        };
+        const ANNS_HERE = [{ id: 'snakesandladders.thirteen', unlockedAt: '2026-03-01T00:00:00.000Z' }];
+
+        it("carries the viewer's own unlocks in this game, and nobody else's", async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer(thirteen());
+            seedUnlocks();
+
+            const response = await readGame();
+
+            expect(response.status).toBe(200);
+            expect((await response.json()).gameData.unlockedHere).toEqual(ANNS_HERE);
+        });
+
+        it('carries them on the command response too', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer(thirteen());
+            seedUnlocks();
+
+            const response = await command(commandPost(diceRoll()));
+
+            expect(response.status).toBe(200);
+            expect((await response.json()).gameData.unlockedHere).toEqual(ANNS_HERE);
+        });
+
+        it('makes no read for a live game with no turnEnd achievements, where no unlock can exist yet', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            testCatalogue.platform = [platform('platform.first-win', record => record.won, 1)];
+            seedUnlocks();
+            // The count carries over from every test before this one.
+            vi.mocked(AchievementUnlockModel.find).mockClear();
+
+            const response = await readGame();
+
+            expect(response.status).toBe(200);
+            expect((await response.json()).gameData.unlockedHere).toEqual([]);
+            expect(AchievementUnlockModel.find).not.toHaveBeenCalled();
+        });
+
+        it('reads for a finished game, whatever its catalogue', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders({ complete: true, endReason: 'win', winner: ANN.id, currentTurn: '' });
+            seedUnlocks();
+
+            const response = await readGame();
+
+            expect((await response.json()).gameData.unlockedHere).toEqual(ANNS_HERE);
+        });
+
+        it('still answers 200, with none, when the read fails: on the command route the move is already saved', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer(thirteen());
+            const failing = () => ({ lean: () => ({ exec: async () => { throw new Error('Mongo said no'); } }) }) as never;
+            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(failing);
+
+            const moved = await command(commandPost(diceRoll()));
+
+            expect(moved.status).toBe(200);
+            expect((await moved.json()).gameData.unlockedHere).toEqual([]);
+            expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+
+            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(failing);
+            const read = await readGame();
+
+            expect(read.status).toBe(200);
+            expect((await read.json()).gameData.unlockedHere).toEqual([]);
+            expect(errors).toHaveBeenCalledWith(`Couldn't read ${ANN.id}'s achievements in game game_1; the board goes without them`, expect.any(Error));
         });
     });
 });

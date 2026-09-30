@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { dbConnect } from '../../../../utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
+import { unlockedHere } from '@/utils/games/unlockedHere';
 import { ServerTiming, timedJson } from '@/utils/api/serverTiming';
 export interface IGetGameParams { gameid: string }
 export async function GET(request: NextRequest, { params }: { params: Promise<IGetGameParams> }) {
@@ -16,6 +17,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
   if (!gameData) return timedJson({}, timing, { status: 404, statusText: 'Game not found' });
   if (!gameData.userIdList.includes(userId)) return timedJson({}, timing, { status: 403, statusText: 'Not a player in this game' });
   const gameDataResponse = await timing.time('response', () => gameData.CreateDataResponse(userId));
-  gameDataResponse.gameState.history = await timing.time('reactions', () => attachHistoryReactions(gameid, gameDataResponse.gameState.history));
+  // Side by side: both are one indexed read, and neither needs the other.
+  const [history, unlocks] = await Promise.all([
+    timing.time('reactions', () => attachHistoryReactions(gameid, gameDataResponse.gameState.history)),
+    timing.time('achievements', () => unlockedHere(gameData, userId)),
+  ]);
+  gameDataResponse.gameState.history = history;
+  gameDataResponse.unlockedHere = unlocks;
   return timedJson({ success: true, gameData: gameDataResponse }, timing);
 }

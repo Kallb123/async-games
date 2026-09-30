@@ -17,6 +17,7 @@ import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
+import { unlockedHere } from '@/utils/games/unlockedHere';
 import { hasTurnEndAchievements, judgeTurnEnd, NO_UNLOCKS, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
 import { withTimeout } from '@/utils/withTimeout';
 
@@ -25,10 +26,17 @@ export interface ICommandResponse {
   gameData: IGameDataResponse
 }
 
-/** The game's response, with each history line's reaction (if any) attached. */
+/** The game's response, with each history line's reaction (if any) attached,
+ *  and the achievements the viewer has unlocked in it — the same two things the
+ *  game GET attaches, fetched side by side. */
 async function dataResponseWithReactions(gameData: IGameDataDocument, userId: string): Promise<IGameDataResponse> {
   const response = await gameData.CreateDataResponse(userId);
-  response.gameState.history = await attachHistoryReactions(gameData.gameId, response.gameState.history);
+  const [history, unlocks] = await Promise.all([
+    attachHistoryReactions(gameData.gameId, response.gameState.history),
+    unlockedHere(gameData, userId),
+  ]);
+  response.gameState.history = history;
+  response.unlockedHere = unlocks;
   return response;
 }
 
