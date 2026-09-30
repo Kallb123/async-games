@@ -1,15 +1,16 @@
 # Defender of the Realm — Game Design Document
 
-**Status:** Concept, v0.3. §7 records the answers from rounds 1 and 2.
-Round 2 ruled out Proposals 1–3 (§12) as they stood and brought two new
-proposals: sealed battle plans (§13) and a campaign of battles (§14). §15
-compares the two and recommends one. Nothing is decided yet; §16 lists the
-questions that would decide it.
-**Working title:** Defender of the Realm (see §17)
-**Genre:** Turn-based fantasy strategy: an overworld of factions, cities and
-armies, with tactical squad battles
-**Inspirations:** *Heroes of Might and Magic* (the overworld) and *XCOM* (the
-battles)
+**Status:** Concept, v0.4. Round 3 split the concept into two games (§17).
+This doc now belongs to **Defender of the Realm**, the game with the HOMM
+heart. The game with the XCOM heart continues in
+[`squad-tactics.md`](./squad-tactics.md). §18 is the design so far and §19
+has the next questions. §3–§16 are kept as the reasoning that led here.
+**Working title:** Defender of the Realm (see the appendix)
+**Genre:** Turn-based fantasy strategy: a HOMM-style overworld of factions,
+cities and armies, with battles that are planned, then watched
+**Inspirations:** *Heroes of Might and Magic* (the overworld); *Laser Squad
+Nemesis* and *Frozen Synapse* (planned battles), in *XCOM*'s tactical
+vocabulary
 **Players:** 2–6, competitive, winner by conquest
 **Session shape:** a week or more, with players checking in a few times a day
 
@@ -182,6 +183,7 @@ and how much one overworld turn can ask of a player.
 ## 7. Questions and answers
 
 Round 1 is §7.1–§7.5 (answers 1–16). Round 2 is §7.6 (round-2 answers 1–5).
+Round 3 is §7.7 (round-3 answers 1–5).
 
 ### 7.1 Shape of a match
 
@@ -250,6 +252,31 @@ Round 1 is §7.1–§7.5 (answers 1–16). Round 2 is §7.6 (round-2 answers 1�
 5. **Heroes?** Can still be decided later.
 
 Round 2 also brought two new proposals, written up in §13 and §14.
+
+### 7.7 Round 3
+
+1. **Which half is the heart of the game?** We're describing two games. The
+   HOMM and XCOM sides can't be pulled together, so each becomes its own game,
+   one with a HOMM heart and one with an XCOM heart.
+   - One has a HOMM overworld, and its battles are planned and then watched.
+     Both players get to plan before the battle begins.
+   - The other is an XCOM-style game, with a limited number of points to build
+     your team. There may be something connecting the battles, but that could
+     be individual levelling and progression rather than an overworld.
+2. **What holds when a battle runs past one set of orders?** In the
+   plan-and-watch game, a battle could end with no winner if the result isn't
+   conclusive. The armies return to the overworld. In the XCOM game there
+   must be a winner.
+3. **Positions public, orders sealed?** Yes: positions are public in the
+   plan-and-watch game. The XCOM game could have fog of war, but that isn't
+   decided yet.
+4. **A single phase first?** Yes, a single phase first. Several phases could
+   be interesting later, to make sure battles reach a conclusion.
+5. **Would three to five battles feel like a campaign?** Take Proposal 5 in a
+   different direction: individual battles, with progression.
+
+Round 3's split is §17. The HOMM game's design continues in §18; the XCOM
+game's in [`squad-tactics.md`](./squad-tactics.md).
 
 ---
 
@@ -752,6 +779,10 @@ until everyone has prepared, which makes the prepare step a small version of
 
 ### 15.1 Recommendation
 
+> **Round 3 took both, as two separate games (§17).** Proposal 4 became
+> Defender of the Realm. Proposal 5, in a new direction, became
+> [`squad-tactics.md`](./squad-tactics.md).
+
 **Proposal 4, starting with a single phase.**
 
 The real question is which half is the heart of the game.
@@ -778,6 +809,8 @@ to get it, and the rest of the design should shrink around it.
 
 ## 16. Questions (round 3)
 
+Answered in §7.7.
+
 1. **The heart of the game:** is it the realm (Proposal 4: plan-and-watch
    battles, and lots of them), or the battle (Proposal 5: move-by-move XCOM,
    with a few big battles over weeks)?
@@ -796,12 +829,136 @@ to get it, and the rest of the design should shrink around it.
 
 ---
 
-## 17. Working title
+## 17. Two games (round 3)
 
-"Defender of the Realm" is close to existing titles. There's the board game
-*Defenders of the Realm* (Richard Launius, 2010) and the computer game
-*Defender of the Crown* (1986). It's fine as a working title, but check it
-before release.
+Round 3 decided that the concept is really two games (round-3 answer 1). The
+HOMM and XCOM halves can't be pulled together asynchronously. XCOM's
+move-by-move battle needs 20–40 hand-offs (§9), and an overworld shared by up
+to six players can't wait days for one battle. So each half becomes a game
+with its own heart:
+
+| | **Defender of the Realm** (this doc) | **Squad Tactics** (working title, [`squad-tactics.md`](./squad-tactics.md)) |
+|---|---|---|
+| The heart | The realm: HOMM's overworld | The battle: XCOM |
+| Came from | Proposal 4, sealed battle plans (§13) | Proposal 5, taken in a new direction (§14) |
+| A battle | Both sides plan before it starts, then watch it play out | Players take turns, move by move |
+| Between battles | The overworld: cities, resources, recruiting, marching | Progression: troops level up |
+| Can a battle end level? | Yes: the armies go back to the overworld | No: there must be a winner |
+| Hidden information on the battlefield | None: positions are public, orders sealed | Possibly fog of war (not decided) |
+| Luck | None | Hit chances |
+
+Both games fight on a small grid battlefield with troop types and abilities,
+so the battlefield is worth building once (`squad-tactics.md` §10).
+
+---
+
+## 18. Defender of the Realm: the design so far
+
+### 18.1 Decided
+
+| What | Where it was decided |
+|---|---|
+| The overworld goes one player at a time, HOMM-style | Answer 11; §13 |
+| A battle between players is a sealed plan from each side, made before it plays out: the attacker plans at contact, the defender on their own turn | §13.1; round-3 answer 1 |
+| Positions are public, orders sealed | Round-3 answer 3 |
+| Orders play out predictably, with no dice | Answer 10; §13.3 |
+| A battle can end with no winner, and the armies return to the overworld | Round-3 answer 2 |
+| One phase per battle to start with; more phases later if battles need to be more decisive | Round-3 answer 4 |
+| Attacking a city needs a siege turn first | Round-2 answer 3 |
+| Battles against neutrals play out at once, against the neutrals' standing orders, or auto-resolve | Answer 4; §13.1 |
+| 2–6 players, and conquest wins | Answers 1 and 15 |
+| One faction first, up to six in the end | Answer 14 |
+| Troops carry over between battles | Answer 9 |
+
+### 18.2 One battle is one phase; a long fight is several battles
+
+*Proposal.* Now that a battle can end level, the single-phase version gets
+simpler. Nothing needs standing orders to finish the battle off, as §13.4
+assumed it would. A battle is one phase of about six battle rounds. If
+neither side has won by the end, it's a draw, and both armies go back to the
+overworld with their survivors.
+
+A fight that isn't settled carries on as another battle on a later turn, if
+either side chooses. The defender can strike back on their own turn, straight
+after the draw, and the attacker can press again on its next turn. In
+between, both sides can reinforce, heal or pull away. So a long fight becomes
+a series of battles, one per turn, with the overworld carrying on between
+them. That gives fights of several phases without the overworld ever having
+to hold: nothing stays locked past the defender's turn. The leapfrog (§13.4)
+stays an option for a battle that needs settling in one go.
+
+After a draw:
+
+- **In the field,** the attacker falls back to the tile it came from, and the
+  defender holds its ground.
+- **At a siege,** the siege stays in place, so the next assault needs no new
+  siege turn.
+
+### 18.3 What wins a battle
+
+*Proposal.*
+
+- **In the field,** a side wins when the other is wiped out, or falls to its
+  withdrawal point (§10). The loser retreats towards its nearest city with
+  its survivors, and the winner holds the field.
+- **At a siege,** the attacker wins by routing the garrison, or by holding the
+  city's keep at the end of the phase. The city then changes hands.
+  Otherwise the siege goes on.
+- **Anything else is a draw.**
+
+### 18.4 Sneaking when positions are public
+
+With positions public, sneaking can't hide a unit. *Proposal:* a sneaking unit
+moves more slowly, doesn't set off overwatch, and can't be picked by
+rule-based targeting ("the nearest", "whoever enters this area") until it
+attacks. You can see it; you just can't easily plan against it.
+
+### 18.5 Troops, and damage without dice
+
+*Proposal:* a **troop** is a number of soldiers of one type, and that number is
+its strength. This is answer 7's second option, and how HOMM does it.
+
+- A troop's damage is its soldiers × their attack, changed by cover, flanking
+  and abilities.
+- The losses it causes are that damage divided by one soldier's HP.
+- There are no dice.
+
+A troop that shrinks hits less hard. That is easy to read in a replay ("12
+archers, now 9") and carries over cleanly between battles (answer 9).
+
+### 18.6 Sizes to start from
+
+To be playtested:
+
+- **A phase:** about six battle rounds.
+- **A battlefield:** small enough to read on a phone, say 10×8 squares. A
+  bigger one wears `BoardZoom`.
+- **An army:** 6–10 troops.
+- **Orders:** up to three steps per troop per phase ("move to the wall, then
+  overwatch the gate").
+
+---
+
+## 19. Questions (round 4)
+
+1. **After a draw** (§18.2): the attacker goes back to the tile it came from,
+   the defender holds its ground, and a siege stays in place. Is that right?
+2. **What wins** (§18.3): in the field, wiping out the enemy or routing them;
+   at a siege, routing the garrison or holding the keep. Is that right?
+3. **Sneaking with public positions** (§18.4): does it still earn its place?
+4. **Troops as numbers of soldiers**, with damage and no dice (§18.5)? Or single
+   figures, each with its own HP?
+5. **Build order:** build Squad Tactics first, since it builds the battlefield
+   both games need (`squad-tactics.md` §10)?
+
+---
+
+## Appendix: Working title
+
+The working title stays with the HOMM-hearted game. "Defender of the Realm" is
+close to existing titles. There's the board game *Defenders of the Realm*
+(Richard Launius, 2010) and the computer game *Defender of the Crown* (1986).
+It's fine as a working title, but check it before release.
 
 ---
 
@@ -812,3 +969,4 @@ before release.
 | 0.1 | Concept recorded; the async problem set out; the two ideas raised so far (§4) written up; open questions listed. |
 | 0.2 | Round-1 answers recorded (§7) and their consequences listed (§8); the hand-off budget (§9); standing orders as the shared foundation (§10); five battle modes (§11); three proposals and a recommendation (§12); round-2 questions (§13). The working title moves from §8 to §14. |
 | 0.3 | Round-2 answers recorded (§7.6) and added to §5, §8 and §9; Proposals 1–3 given a status after round 2 (§12); the two round-2 proposals written up: sealed battle plans (§13, including the leapfrog and what holds during a long battle) and the campaign of battles (§14); compared, with a new recommendation (§15); round-3 questions (§16). The working title moves from §14 to §17. |
+| 0.4 | Round-3 answers recorded (§7.7). The concept splits into two games (§17). This doc becomes Defender of the Realm's, the HOMM-hearted one; the XCOM-hearted one moves to `squad-tactics.md`. Adds the design so far (§18): one battle is one phase, a long fight is several battles, what wins, sneaking, troops and damage without dice, starting sizes. Adds round-4 questions (§19). The working title moves to an appendix. |
