@@ -18,7 +18,7 @@ import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
 import { unlockedHere } from '@/utils/games/unlockedHere';
-import { hasTurnEndAchievements, judgeTurnEnd, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { hasTurnEndAchievements, judgeTurnEnd, TURN_END_BUDGET_MS, TURN_END_PUSH_GRACE_MS } from '@/utils/games/awardAchievements';
 import type { EarnedAchievement } from '@/utils/games/awardAchievements';
 import type { Achievement } from '@/utils/games/achievements';
 import { withTimeout } from '@/utils/withTimeout';
@@ -140,10 +140,10 @@ async function notifyNextPlayer(gameData: IGameData, userList: User[]): Promise<
  * replaces the first on the lock screen. Tapping it opens the board. Everything
  * else a turn end unlocks is celebrated by the toast alone.
  *
- * Chained onto the judging itself, inside its deadline's work rather than after
- * it: `withTimeout` stops *waiting* at the budget but lets the work finish, and a
+ * Chained onto the judging itself rather than sent after its deadline: a
  * judgment that lands late must still push, or it would write a row whose push
- * nobody sends and the next turn end would see as already held.
+ * nobody sends and the next turn end would see as already held. The `after()`
+ * waits `TURN_END_PUSH_GRACE_MS` past the budget for exactly this.
  * `sendPushToUsers` never throws.
  */
 async function pushNotifyUnlocks(gameData: IGameData, userList: User[], unlocks: readonly EarnedAchievement[]): Promise<void> {
@@ -414,12 +414,23 @@ export async function POST(request: NextRequest) {
     // `notify` push rides inside the timed work (see pushNotifyUnlocks); the
     // toast needs nothing from here, since every board response carries what
     // its viewer has unlocked.
+    //
+    // Started once and waited on twice. `withTimeout` stops *waiting* at the
+    // budget, but `after()` ends — and the platform may stop the function —
+    // once this callback returns, so a judgment that lands late would write its
+    // rows and never send the push chained onto them. So after the budget, the
+    // callback stays a while longer for that push alone (TURN_END_PUSH_GRACE_MS),
+    // which holds nobody up: the response and the next player's push are
+    // already gone.
+    const label = `Judging achievements for ${gameData.gameId}`;
+    const judging = judgeTurnEnd(gameData, userList)
+      .then(unlocks => pushNotifyUnlocks(gameData, userList, unlocks))
+      .catch(error => console.error(`${label} failed`, error));
     await Promise.all([
       commandOutcome.turnOver ? notifyNextPlayer(gameData, userList) : undefined,
-      withTimeout(
-        () => judgeTurnEnd(gameData, userList).then(unlocks => pushNotifyUnlocks(gameData, userList, unlocks)),
-        TURN_END_BUDGET_MS, undefined, `Judging achievements for ${gameData.gameId}`),
+      withTimeout(() => judging, TURN_END_BUDGET_MS, undefined, label),
     ]);
+    await withTimeout(() => judging, TURN_END_PUSH_GRACE_MS, undefined, `${label}, and its push,`);
   });
 
   return NextResponse.json(response, {status: 200});

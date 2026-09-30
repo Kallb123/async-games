@@ -43,6 +43,15 @@ export const TURN_END_BUDGET_MS = 5_000;
 export const GAME_END_BUDGET_MS = 3_000;
 
 /**
+ * How much longer the command route's turn-end work waits, once judging has
+ * outrun `TURN_END_BUDGET_MS`, for it to finish and send the `notify` push
+ * chained onto it. `after()` ends when its callback returns, and a judgment
+ * that lands after that writes rows whose push nobody sends. Past this the push
+ * is given up on; the toast still celebrates the unlock from the rows written.
+ */
+export const TURN_END_PUSH_GRACE_MS = 10_000;
+
+/**
  * The limit handed to Mongo for one player's career read, just under
  * `GAME_END_BUDGET_MS`. `withTimeout` stops the judge waiting on a read but
  * can't cancel it, so without a limit of its own the scan of a veteran's whole

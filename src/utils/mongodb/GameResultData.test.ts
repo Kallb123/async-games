@@ -421,7 +421,7 @@ describe('getPlayerStats', () => {
         const stats = await getPlayerStats(ANN, BOB);
 
         // Read by the unique index's userId prefix, and projected to what a row shows.
-        expect(unlocks).toHaveBeenCalledWith({ userId: ANN }, { _id: 0, achievementId: 1, unlockedAt: 1, gameId: 1, url: 1 });
+        expect(unlocks).toHaveBeenCalledWith({ userId: ANN }, { _id: 0, achievementId: 1, unlockedAt: 1, gameId: 1, url: 1 }, { maxTimeMS: expect.any(Number) });
         expect(find).toHaveBeenCalledWith({ gameId: { $in: ['g_kept', 'g_gone'] } }, { _id: 0, gameId: 1 });
         expect(stats.achievements).toEqual([
             { id: 'platform.first-win', unlockedAt: '2026-03-01', gameId: 'g_kept', url: 'dicecities', hasResult: true },

@@ -2,6 +2,7 @@
 
 import { use, useEffect } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
+import { FcmTokenComp } from "@/components/FirebaseForeground";
 import AchievementIcon from "@/components/ui/AchievementIcon";
 import BackLink from "@/components/ui/BackLink";
 import ListRow from "@/components/ui/ListRow";
@@ -90,6 +91,11 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 
                 {result?.canRegenerate && <RegenerateResults gameId={gameId} onRegenerated={replaceResult} />}
             </>)}
+            {/* Turns a push arriving here into the window event the toaster
+                refreshes on: the GameOver push, a few seconds after a player
+                lands here from the board, is what brings what the ending
+                unlocked if this page's own read got here first. */}
+            <FcmTokenComp />
         </main>
     );
 }

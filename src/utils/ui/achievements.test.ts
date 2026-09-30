@@ -105,32 +105,32 @@ describe("celebrate", () => {
     const keys = (result: ReturnType<typeof celebrate>) => result.fresh.map(({ key }) => key);
 
     it("toasts a new unlock, and remembers it", () => {
-        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], {}, NOW, CATALOGUE);
+        const result = celebrate("u1", [{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], {}, NOW, CATALOGUE);
 
-        expect(keys(result)).toEqual(["g1:dicecities.winner"]);
+        expect(keys(result)).toEqual(["u1:g1:dicecities.winner"]);
         expect(result.fresh[0].achievement).toBe(CATALOGUE.games.dicecities[1]);
-        expect(result.celebrated).toEqual({ "g1:dicecities.winner": at(1) });
+        expect(result.celebrated).toEqual({ "u1:g1:dicecities.winner": at(1) });
     });
 
     it("doesn't toast one already celebrated in this browser", () => {
-        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], { "g1:dicecities.winner": at(1) }, NOW, CATALOGUE);
+        const result = celebrate("u1", [{ id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" }], { "u1:g1:dicecities.winner": at(1) }, NOW, CATALOGUE);
 
         expect(result.fresh).toEqual([]);
     });
 
     it("prunes what it remembers once it's no longer news, and doesn't toast it again for having forgotten", () => {
-        const result = celebrate([{ id: "dicecities.winner", unlockedAt: at(8), gameId: "g1" }], { "g1:dicecities.winner": at(8), "g2:platform.first-win": at(2) }, NOW, CATALOGUE);
+        const result = celebrate("u1", [{ id: "dicecities.winner", unlockedAt: at(8), gameId: "g1" }], { "u1:g1:dicecities.winner": at(8), "u1:g2:platform.first-win": at(2) }, NOW, CATALOGUE);
 
         expect(result.fresh).toEqual([]);
-        expect(result.celebrated).toEqual({ "g2:platform.first-win": at(2) });
+        expect(result.celebrated).toEqual({ "u1:g2:platform.first-win": at(2) });
     });
 
     it("doesn't toast one older than a week, however new to this browser", () => {
-        expect(celebrate([{ id: "dicecities.winner", unlockedAt: at(7.5), gameId: "g1" }], {}, NOW, CATALOGUE).fresh).toEqual([]);
+        expect(celebrate("u1", [{ id: "dicecities.winner", unlockedAt: at(7.5), gameId: "g1" }], {}, NOW, CATALOGUE).fresh).toEqual([]);
     });
 
     it("doesn't toast a backfilled unlock, which no game earned, or an achievement the catalogue has withdrawn", () => {
-        const result = celebrate([
+        const result = celebrate("u1", [
             { id: "platform.first-win", unlockedAt: at(0) },
             { id: "dicecities.withdrawn", unlockedAt: at(0), gameId: "g1" },
         ], {}, NOW, CATALOGUE);
@@ -138,10 +138,17 @@ describe("celebrate", () => {
         expect(result.fresh).toEqual([]);
     });
 
+    it("celebrates the same unlock for a second player sharing the browser", () => {
+        const unlock = { id: "dicecities.winner", unlockedAt: at(1), gameId: "g1" };
+        const first = celebrate("u1", [unlock], {}, NOW, CATALOGUE);
+
+        expect(keys(celebrate("u2", [unlock], first.celebrated, NOW, CATALOGUE))).toEqual(["u2:g1:dicecities.winner"]);
+    });
+
     it("toasts an unlock offered twice at once only once", () => {
         const unlock = { id: "dicecities.winner", unlockedAt: at(0), gameId: "g1" };
 
-        expect(keys(celebrate([unlock, unlock], {}, NOW, CATALOGUE))).toEqual(["g1:dicecities.winner"]);
+        expect(keys(celebrate("u1", [unlock, unlock], {}, NOW, CATALOGUE))).toEqual(["u1:g1:dicecities.winner"]);
     });
 });
 

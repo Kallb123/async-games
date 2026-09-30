@@ -4,12 +4,19 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { useToast } from './ToastContext';
 import type { IAchievementUnlock } from '@/app/api/achievements/recent/route';
 import { ACHIEVEMENT_FEED_EVENTS } from '@/utils/hooks/usePushEvents';
+import { useIsAuthorised } from '@/utils/hooks/useAuthGuard';
 import { useRefreshableData } from '@/utils/hooks/useRefreshableData';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 import { celebrate, parseCelebrated, type OfferedUnlock } from '@/utils/ui/achievements';
 
 /** Where this browser remembers what it has already celebrated. */
 const CELEBRATED_KEY = 'ag-achievements-celebrated';
+
+/**
+ * The most toasts one batch puts up; the rest are counted in one more. A new
+ * device after a busy week would otherwise stack a column of them over the board.
+ */
+const MAX_TOASTS = 3;
 
 interface AchievementToasterValue {
     /** Hand the toaster unlocks this screen already knows about. It decides what's new. */
@@ -40,8 +47,8 @@ export const useAchievementToaster = () => useContext(AchievementToasterContext)
  * - **The results page**, through `offer`, with the viewer's own rows, so a
  *   just-finished game celebrates what its ending unlocked before any push lands.
  *
- * Each unlock is toasted once per browser while it is younger than a week
- * (`celebrate`). What's been celebrated is kept through `useStoredValue`'s
+ * Each unlock is toasted once per browser and player while it is younger than
+ * a week (`celebrate`), and a batch puts up at most `MAX_TOASTS`. What's been celebrated is kept through `useStoredValue`'s
  * store, read and written in the same call, so two feeds handing over the same
  * unlock at once still toast it once.
  *
@@ -57,14 +64,22 @@ export default function AchievementToaster({ children }: { children: ReactNode }
         showToastRef.current = showToast;
     });
 
+    // Whose unlocks these are: a screen only ever offers the viewer's own.
+    const { user } = useIsAuthorised();
+    const viewerId = user?.id;
+
     const offer = useCallback((unlocks: readonly OfferedUnlock[]) => {
-        const { fresh, celebrated } = celebrate(unlocks, parseCelebrated(readStoredValue(CELEBRATED_KEY)), Date.now());
+        if (!viewerId) return;
+        const { fresh, celebrated } = celebrate(viewerId, unlocks, parseCelebrated(readStoredValue(CELEBRATED_KEY)), Date.now());
         if (fresh.length === 0) return;
         writeStoredValue(CELEBRATED_KEY, JSON.stringify(celebrated));
-        for (const { achievement } of fresh) {
+        for (const { achievement } of fresh.slice(0, MAX_TOASTS)) {
             showToastRef.current(`${achievement.icon} ${achievement.title}`, 'success', '🏆 Achievement unlocked');
         }
-    }, []);
+        if (fresh.length > MAX_TOASTS) {
+            showToastRef.current(`And ${fresh.length - MAX_TOASTS} more — see them on your profile.`, 'success', '🏆 Achievements unlocked');
+        }
+    }, [viewerId]);
 
     // A secondary read: it rides along on every screen, and its first answer is
     // never what the screen was waiting to show.

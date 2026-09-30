@@ -29,7 +29,7 @@ import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import { GAME_END_BUDGET_MS, NO_UNLOCKS } from './awardAchievements';
-import { finishGame, judgingBudget, PUSH_RESERVE_MS } from './finishGame';
+import { finishGame, judgingBudget, MIN_JUDGING_MS, PUSH_RESERVE_MS } from './finishGame';
 import { platform } from '@/utils/testing/achievementFixtures';
 
 /** The game as a route would hold it: a fresh document out of the store. */
@@ -214,6 +214,18 @@ describe('finishGame judging achievements', () => {
         expect(bodies[BOB.id]).not.toContain('Unlocked');
     });
 
+    it("keeps one teammate's unlock off the other's push at a co-op table, which is told one result", async () => {
+        judgeGameEnd.mockResolvedValue([{ userId: ANN.id, achievement: platform('platform.first-win', record => record.won, 1) }]);
+        const finished = await finishGame(await liveGame(), { endReason: 'teamwin' });
+
+        await finished.announce();
+
+        const bodies = Object.fromEntries(sentPushes.map(push => [push.userIds[0], push.notification.body]));
+        expect(bodies[ANN.id]).toMatch(/🏆 Unlocked platform\.first-win$/);
+        expect(bodies[BOB.id]).not.toContain('Unlocked');
+        expect(sentPushes.every(push => push.notification.title.includes('Your team won'))).toBe(true);
+    });
+
     it("judges only in the time a deadline leaves the pushes, and not at all when there is none to spare", async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
         const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
@@ -236,6 +248,10 @@ describe('judgingBudget', () => {
 
     it('shrinks to what the deadline leaves once the pushes have their reserve', () => {
         expect(judgingBudget(PUSH_RESERVE_MS + 1_000, 0)).toBe(1_000);
-        expect(judgingBudget(PUSH_RESERVE_MS - 1_000, 0)).toBe(-1_000);
+    });
+
+    it('is nothing when what is left is too little to be worth starting a judge in', () => {
+        expect(judgingBudget(PUSH_RESERVE_MS + MIN_JUDGING_MS - 1, 0)).toBe(0);
+        expect(judgingBudget(PUSH_RESERVE_MS - 1_000, 0)).toBe(0);
     });
 });

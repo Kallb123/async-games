@@ -304,6 +304,9 @@ export const maxDuration = 60;
 const SWEEP_BUDGET_MS = (maxDuration - 10) * 1000;
 
 export async function GET(request: NextRequest) {
+    // The run's clock starts the moment the platform's does, before a cold
+    // start's connection, so nothing below thinks it has longer than it has.
+    const startedAt = Date.now();
     console.log(`GET ${request.nextUrl.pathname}`);
 
     if (!isAuthorisedCron(request)) {
@@ -312,7 +315,6 @@ export async function GET(request: NextRequest) {
 
     await dbConnect();
 
-    const startedAt = Date.now();
     const deadline = startedAt + SWEEP_BUDGET_MS;
     // When the platform stops the run outright. A game started just before
     // `deadline` still has to fit its save, its announcement and its pushes in

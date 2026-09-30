@@ -190,6 +190,15 @@ export async function recordUnlocks(unlocks: UnlockToRecord[], unlockedAt: strin
 // ─── Reading it back ─────────────────────────────────────────────────────────
 
 /**
+ * The server-side time limit on every read below. Each is one indexed read that
+ * answers in milliseconds, and each sits on a screen's response — the board's
+ * is on the most-polled route in the app, and on the answer to a move that is
+ * already saved — so a collection that has gone slow costs those responses
+ * this much at most, and its caller's fail-soft answers none.
+ */
+const READ_MAX_MS = 2_000;
+
+/**
  * One unlock as a screen reads it (docs/achievements.md §6): which achievement,
  * when, and the game that earned it. Only the id goes over the wire — the
  * title, icon and description are looked up from the catalogue on the client,
@@ -224,6 +233,7 @@ export async function unlocksOf(userId: string, since?: string): Promise<IAchiev
         .find(
             { userId, ...(since !== undefined && { unlockedAt: { $gte: since } }) },
             { _id: 0, achievementId: 1, unlockedAt: 1, gameId: 1, url: 1 },
+            { maxTimeMS: READ_MAX_MS },
         )
         .lean()
         .exec();
@@ -247,7 +257,7 @@ export async function unlocksOf(userId: string, since?: string): Promise<IAchiev
 export async function unlocksInGame(userIds: string[], gameId: string): Promise<IGameAchievementUnlock[]> {
     if (userIds.length === 0) return [];
     const rows: Pick<IAchievementUnlockData, "userId" | "achievementId" | "unlockedAt">[] = await AchievementUnlockModel
-        .find({ userId: { $in: userIds }, gameId }, { _id: 0, userId: 1, achievementId: 1, unlockedAt: 1 })
+        .find({ userId: { $in: userIds }, gameId }, { _id: 0, userId: 1, achievementId: 1, unlockedAt: 1 }, { maxTimeMS: READ_MAX_MS })
         .lean()
         .exec();
     return rows

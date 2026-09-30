@@ -56,7 +56,7 @@ import { DiceRoll } from '@/utils/games/DiceRoll';
 import { mongoMap } from '@/utils/games/mongoMaps';
 import type { IGameStats } from '@/utils/mongodb/GameResultData';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
-import { TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { TURN_END_BUDGET_MS, TURN_END_PUSH_GRACE_MS } from '@/utils/games/awardAchievements';
 import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import * as clerkUsers from '@/utils/users/clerk';
 import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
@@ -820,6 +820,26 @@ describe('judging achievements', () => {
             expect(sentPushes.filter(push => push.options?.channel === 'yourTurn').map(push => push.userIds)).toEqual([[BOB.id]]);
         });
 
+        it('pushes each earner only their own, when one turn end unlocks something for two seats', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            // Ann lands on 13; Bob, who didn't move, is still on 20.
+            offer(
+                { ...thirteen(), notify: true },
+                { ...turnEnd('snakesandladders.twenty', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 20), notify: true },
+            );
+
+            await command(commandPost(diceRoll()));
+            await runAfterCallbacks();
+
+            const unlocked = sentPushes.filter(push => push.options?.channel === 'achievements');
+            expect(unlocked.map(push => [push.userIds, push.notification.body?.includes('thirteen'), push.notification.body?.includes('twenty')])).toEqual(expect.arrayContaining([
+                [[ANN.id], true, false],
+                [[BOB.id], false, true],
+            ]));
+            expect(unlocked).toHaveLength(2);
+        });
+
         it('still pushes an unlock whose judgment finishes after the budget', async () => {
             signIn(ANN);
             seedSnakesAndLadders();
@@ -834,17 +854,20 @@ describe('judging achievements', () => {
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
             vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
             try {
-                const work = runAfterCallbacks();
+                let done = false;
+                const work = runAfterCallbacks().then(() => { done = true; });
                 await vi.advanceTimersByTimeAsync(TURN_END_BUDGET_MS);
-                await work;
                 expect(warn).toHaveBeenCalled();
                 expect(sentPushes.filter(push => push.options?.channel === 'achievements')).toEqual([]);
+                // The post-response work is still running, so the function is too.
+                expect(done).toBe(false);
+
+                release();
+                await work;
+                expect(sentPushes.filter(push => push.options?.channel === 'achievements')).toHaveLength(1);
             } finally {
                 vi.useRealTimers();
             }
-
-            release();
-            await vi.waitFor(() => expect(sentPushes.filter(push => push.options?.channel === 'achievements')).toHaveLength(1));
         });
 
         it('judges every seat, not only the one who moved', async () => {
@@ -995,9 +1018,12 @@ describe('judging achievements', () => {
                 expect(done).toBe(false);
 
                 await vi.advanceTimersByTimeAsync(1);
+                expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${TURN_END_BUDGET_MS}ms; not waiting for it`);
+                // Still there for a push the judgment might yet send — but not for ever.
+                expect(done).toBe(false);
+                await vi.advanceTimersByTimeAsync(TURN_END_PUSH_GRACE_MS);
                 await work;
                 expect(done).toBe(true);
-                expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${TURN_END_BUDGET_MS}ms; not waiting for it`);
                 expect(storedAchievementUnlocks()).toEqual([]);
             } finally {
                 vi.useRealTimers();

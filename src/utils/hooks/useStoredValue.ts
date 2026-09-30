@@ -52,7 +52,14 @@ export function writeStoredValue(storageKey: string, value: string): void {
         window.localStorage.setItem(storageKey, value);
     } catch {
         // Storage blocked — the value takes effect now and holds until the page
-        // goes, which is the whole of what a dismissal needs to do.
+        // goes, which is the whole of what a dismissal needs to do. Or storage
+        // full, with an older value still sitting under the key: that one would
+        // go on being read ahead of this write, so it goes, and `session` answers.
+        try {
+            window.localStorage.removeItem(storageKey);
+        } catch {
+            // Blocked outright: there was nothing there to be stale.
+        }
     }
     listeners.forEach(listener => listener());
 }

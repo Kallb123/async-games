@@ -62,11 +62,21 @@ export interface AnnounceOptions {
 export const PUSH_RESERVE_MS = 3_000;
 
 /**
+ * The least time worth starting a judgment in. Below it the judge would be
+ * given up on at once and carry on in the background, until the platform
+ * stopped it part-way through a write — rows stored that nobody was told about.
+ */
+export const MIN_JUDGING_MS = 500;
+
+/**
  * How long judging may take: the usual budget, or less, to leave the pushes
- * their reserve before `finishBy`. Zero or below means don't judge at all.
+ * their reserve before `finishBy`. Zero means don't judge at all, which is the
+ * answer for anything under `MIN_JUDGING_MS`.
  */
 export function judgingBudget(finishBy: number | undefined, now: number): number {
-    return finishBy === undefined ? GAME_END_BUDGET_MS : Math.min(GAME_END_BUDGET_MS, finishBy - now - PUSH_RESERVE_MS);
+    if (finishBy === undefined) return GAME_END_BUDGET_MS;
+    const budget = Math.min(GAME_END_BUDGET_MS, finishBy - now - PUSH_RESERVE_MS);
+    return budget < MIN_JUDGING_MS ? 0 : budget;
 }
 
 /**

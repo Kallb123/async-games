@@ -162,8 +162,10 @@ export interface OfferedUnlock {
 }
 
 /**
- * What this browser has already celebrated: `gameId:achievementId` → when that
- * unlock happened. The time is kept so the list can be pruned by the same
+ * What this browser has already celebrated: `userId:gameId:achievementId` → when
+ * that unlock happened. The player is in the key because a browser can be
+ * shared — a household tablet, a guest's pass-and-play — and two accounts
+ * earning the same thing in the same game are two celebrations. The time is kept so the list can be pruned by the same
  * one-week age that decides what's news, which bounds it without ever evicting
  * something still worth a toast.
  */
@@ -176,8 +178,9 @@ export interface Celebration {
 }
 
 /**
- * Which of `offered` to toast, given what this browser has celebrated before
- * (docs/achievements.md §7.3): each unlock once, and only while it's news.
+ * Which of `offered` — the viewer's own unlocks — to toast, given what this
+ * browser has celebrated before (docs/achievements.md §7.3): each unlock once,
+ * and only while it's news.
  *
  * - Only an unlock a game earned. A backfilled career unlock (no `gameId`) was
  *   already true before this game, and isn't this game's to announce (§4.3).
@@ -192,6 +195,7 @@ export interface Celebration {
  * the fresh ones added. Pure: the toaster passes the clock in.
  */
 export function celebrate(
+    viewerId: string,
     offered: readonly OfferedUnlock[],
     celebrated: CelebratedUnlocks,
     now: number,
@@ -201,7 +205,7 @@ export function celebrate(
     const kept: CelebratedUnlocks = Object.fromEntries(Object.entries(celebrated).filter(([, unlockedAt]) => isNews(unlockedAt)));
     const fresh: Celebration["fresh"] = [];
     for (const { id, unlockedAt, gameId } of offered) {
-        const key = `${gameId}:${id}`;
+        const key = `${viewerId}:${gameId}:${id}`;
         const achievement = achievementById(id, catalogue);
         if (!gameId || !achievement || !isNews(unlockedAt) || Object.hasOwn(kept, key)) continue;
         kept[key] = unlockedAt;
