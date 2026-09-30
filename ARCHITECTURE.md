@@ -523,12 +523,21 @@ Key properties:
   so when two judging passes race for the same unlock, only one of them
   celebrates it. A lost race that comes back as an 11000 inside a
   `MongoBulkWriteError` is read, not swallowed; anything else is rethrown
-  (`docs/achievements.md` §5.2).
+  (`docs/achievements.md` §5.2). That includes a batch where a row failed
+  casting beside a lost race, whose `upsertedIds` count the rows Mongoose sent
+  rather than the batch. The error is recognised as an instance of
+  `mongoose.mongo.MongoBulkWriteError`, Mongoose's own copy of the driver,
+  because the root `mongodb` package can end up a second copy that Mongoose's
+  errors would never be `instanceof`. A row with a blank or non-string key is
+  refused with a `TypeError` before anything is written.
 - **The index has to exist before the first write.** The repo relies on
   Mongoose's `autoIndex`, and a `bulkWrite` doesn't wait for an index build: two
   upserts of the same pair landing first would both insert, and the build would
   then fail on the duplicate. So the model ships in a change that writes nothing,
   and the first write ships after the index is confirmed in production.
+  `recordUnlocks` also awaits `AchievementUnlockModel.init()` before its first
+  write — Mongoose's cached promise, free after the first call — so an index
+  build that failed throws instead of writing without uniqueness.
 - **Deleted by user, and wiped by the dev reset.** `POST /api/user/delete`
   removes `{ userId }` — an unlock belongs to the player, not the table, so
   other players' unlocks from the same games stay theirs — and
@@ -1469,7 +1478,10 @@ one-liner fails with a message naming the exact file and line to add.
       `src/games/` for folders with a `meta.ts`, so a new game folder missing any
       of these fails CI with a message naming the exact file to edit.
     - `src/app/api/serverModuleGraph.test.ts` walks what each route handler
-      imports at runtime and fails on a `'use client'` module in the chain, and
+      imports at runtime and fails on a `'use client'` module in the chain (the
+      same walker, `src/utils/testing/moduleGraph.ts`, also backs
+      `src/utils/games/achievements.test.ts`'s check that the browser-shipped
+      achievement catalogue reaches nothing server-only), and
       `src/app/api/malformedBody.test.ts` hands every route that takes a body one
       that isn't JSON and fails on anything that 500s.
 
@@ -1508,7 +1520,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/in-game-chat.md`](./docs/in-game-chat.md) — the chat thread in depth: the collections, the routes, the unread marker and the push throttle.
 - [`docs/chat-gifs.md`](./docs/chat-gifs.md) — GIFs in chat: why the client sends a catalogue id and never a URL, and what the picker is and isn't.
-- [`docs/achievements.md`](./docs/achievements.md) — plan for achievements: what one is as data (a per-game `achievements.ts`, like guides and tutorials), why they are judged once at game over rather than on every move, the `AchievementUnlock` collection, and the PR-by-PR build order.
+- [`docs/achievements.md`](./docs/achievements.md) — plan for achievements: what one is as data (a per-game `achievements.ts`, like guides and tutorials), why they are judged at the end of every turn and again when the game ends, the `AchievementUnlock` collection, and the PR-by-PR build order.
 - [`docs/undo.md`](./docs/undo.md) — taking a move back, piloted on Settlements & Cities placements: why an undo is a command restoring a snapshot rather than a per-command inverse or a rewind of `commandHistory`, what makes a move undoable, and the ten-second hold on a turn that is ready to end.
 - [`docs/games/`](./docs/games/) — one design document per game: the rules in full, and for the newer ones an implementation plan broken into PRs.
 - [`docs/admin-tools.md`](./docs/admin-tools.md) — the `/admin` support screen: who counts as an admin, how a guest who lost their resume link is let back in, and a build-time editor for authoring Race Cars circuits onto their art.
