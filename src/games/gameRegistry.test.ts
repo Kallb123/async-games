@@ -173,6 +173,28 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every game's achievements into GAME_ACHIEVEMENTS", () => {
+        // Achievements are opt-in per game via a src/games/<Game>/achievements.ts
+        // exporting `achievements` — same opt-in shape as guide.ts above. A game
+        // that ships one but isn't in GAME_ACHIEVEMENTS compiles and plays fine,
+        // and fails silently: the judge and every screen that lists achievements
+        // read the registry and never a game's folder, so the game's achievements
+        // are never judged, never stored and never shown. Nothing errors; they
+        // just don't exist. (docs/achievements.md §3.5.)
+        const registry = read("src/utils/games/achievements.ts");
+        const withAchievements = gameNames.filter((name) =>
+            existsSync(path.join(gamesRoot, name, "achievements.ts")),
+        );
+        const missing = withAchievements.filter((name) => !registry.includes(`@/games/${name}/achievements`));
+        expect(
+            missing,
+            `These games have an achievements.ts that isn't imported by ` +
+                `src/utils/games/achievements.ts, so their achievements are missing from GAME_ACHIEVEMENTS. Add:\n` +
+                missing.map((n) => `  import { achievements as ${n[0].toLowerCase()}${n.slice(1)}Achievements } from "@/games/${n}/achievements";\n` +
+                    `  …and a line for it in GAME_ACHIEVEMENTS, keyed by the game's meta.ts url`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("wires every game's result-stats calculator into the GameResult dispatch table", () => {
         // Per-game GameResult stats (AGENTS.md: "GameResult storage should include
         // some game specific statistics") are opt-in per game via a
