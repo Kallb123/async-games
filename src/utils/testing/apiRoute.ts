@@ -39,6 +39,7 @@ let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
 let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
+let achievementUnlockData: typeof import('@/utils/mongodb/AchievementUnlockData');
 let gifCatalogueData: typeof import('@/utils/mongodb/GifCatalogueData');
 let reactionData: typeof import('@/utils/mongodb/ReactionData');
 let kingdomBuilderWorldData: typeof import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
@@ -58,6 +59,10 @@ type StoredGifCatalogueItem = IChatAttachment & { expiresAt?: Date };
 /** A stored read marker, as the ChatRead collection would hold it. */
 type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
 
+/** A stored unlock, as the AchievementUnlock collection would hold it: one
+ *  player holding one achievement, and the game that earned it if there was one. */
+type StoredAchievementUnlock = { userId: string, achievementId: string, unlockedAt: string, gameId?: string, url?: string };
+
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
 /** A stored reaction, as the Reaction collection would hold it. */
@@ -67,6 +72,9 @@ const games = new Map<string, StoredGame>();
 const kingdomBuilderWorlds = new Map<string, { hostId?: string, roster?: Array<{ userId: string, joinedAt: Date }>, endedAt?: Date }>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
+const achievementUnlocks: StoredAchievementUnlock[] = [];
+/** Set by `failNextAchievementUnlockWrite`; thrown by the next bulk upsert. */
+let achievementUnlockWriteError: unknown = null;
 const gifCatalogue: StoredGifCatalogueItem[] = [];
 /** Set by `failNextGifCatalogueWrite`; thrown by the next bulk upsert. */
 let gifCatalogueWriteError: unknown = null;
@@ -91,6 +99,7 @@ export async function resetApiRouteStubs() {
     gameData = await import('@/utils/mongodb/GameData');
     chatMessageData = await import('@/utils/mongodb/ChatMessageData');
     chatReadData = await import('@/utils/mongodb/ChatReadData');
+    achievementUnlockData = await import('@/utils/mongodb/AchievementUnlockData');
     gifCatalogueData = await import('@/utils/mongodb/GifCatalogueData');
     reactionData = await import('@/utils/mongodb/ReactionData');
     kingdomBuilderWorldData = await import('@/games/KingdomBuilder/KingdomBuilderWorldModel');
@@ -105,6 +114,8 @@ export async function resetApiRouteStubs() {
     kingdomBuilderWorlds.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
+    achievementUnlocks.length = 0;
+    achievementUnlockWriteError = null;
     gifCatalogue.length = 0;
     gifCatalogueWriteError = null;
     reactions.length = 0;
@@ -126,6 +137,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
+    vi.spyOn(achievementUnlockData.AchievementUnlockModel, 'bulkWrite').mockImplementation(bulkWriteAchievementUnlocksToStore as unknown as typeof achievementUnlockData.AchievementUnlockModel.bulkWrite);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
@@ -829,6 +841,79 @@ function findOneAndUpdateChatReadFromStore(
             return chatReadData.ChatReadModel.hydrate(marker);
         }
     };
+}
+
+// ---------------------------------------------------------------- Achievement unlocks
+
+/** Puts an unlock in the store, as if the player had already earned it. */
+export function seedAchievementUnlock(unlock: StoredAchievementUnlock) {
+    // Copied, like seedGifCatalogueItem: a test that seeds a shared fixture
+    // object shouldn't find the store holding the same reference.
+    achievementUnlocks.push({ ...unlock });
+}
+
+/**
+ * Make the next unlock bulk upsert reject with `error`.
+ *
+ * `recordUnlocks` decides which rows were new from the error a lost race
+ * throws, and a store that can only succeed never reaches that. The store
+ * writes nothing for a failing call, so the error has to carry its own account
+ * of what got in: build a real `MongoBulkWriteError` (its `result` holds the
+ * `upsertedIds`) rather than a look-alike, since `recordUnlocks` checks the
+ * class and reads the ids off it.
+ */
+export function failNextAchievementUnlockWrite(error: unknown) {
+    achievementUnlockWriteError = error;
+}
+
+/** Everything the collection holds, in the order it was written. Nothing reads
+ *  the collection yet (docs/achievements.md §13 adds those with the routes that
+ *  need them), so this is the only way a test can see what a write left. */
+export function storedAchievementUnlocks(): StoredAchievementUnlock[] {
+    return achievementUnlocks.map(unlock => ({ ...unlock }));
+}
+
+// The one write `recordUnlocks` makes: an unordered bulkWrite of upserts, each
+// keyed by the unique { userId, achievementId } and setting the rest only on
+// insert (docs/achievements.md §5.2). Interprets that one shape rather than
+// being a general bulk engine, the same trade the stores above make — and, like
+// them, throws on anything else, because a shape it doesn't understand would
+// otherwise pass by doing nothing. Its answer is the part that matters: which
+// operations inserted a row, by position, exactly as the driver's `upsertedIds`
+// says it.
+function bulkWriteAchievementUnlocksToStore(operations: unknown[], options?: { ordered?: boolean }) {
+    if (achievementUnlockWriteError !== null) {
+        const failure = achievementUnlockWriteError;
+        achievementUnlockWriteError = null;
+        // Rejected, not thrown: the driver's is an async failure, and a caller
+        // that only wrapped its `await` would pass a synchronous throw.
+        return Promise.reject(failure);
+    }
+    // Unordered is what lets one row losing a race sit beside rows that still
+    // went in; an ordered batch would stop at the first one.
+    if (options?.ordered !== false) {
+        throw new Error(`The test unlock store only takes an unordered bulkWrite, not ${JSON.stringify(options)}`);
+    }
+    const upsertedIds: Record<number, unknown> = {};
+    operations.forEach((operation, index) => {
+        const one = (operation as { updateOne?: { filter?: Record<string, unknown>, update?: Record<string, unknown>, upsert?: boolean } }).updateOne;
+        const { userId, achievementId } = one?.filter ?? {};
+        if (!one?.upsert || typeof userId !== 'string' || typeof achievementId !== 'string' || Object.keys(one.filter ?? {}).length !== 2) {
+            throw new Error(`The test unlock store only upserts by exactly userId and achievementId, not ${JSON.stringify(operation)}`);
+        }
+        const setOnInsert = one.update?.$setOnInsert as Partial<StoredAchievementUnlock> | undefined;
+        // The filter's own fields must not be set again: the server copies them
+        // in by itself, and naming them would stop it retrying the upsert race.
+        if (!setOnInsert || Object.keys(one.update ?? {}).length !== 1 || 'userId' in setOnInsert || 'achievementId' in setOnInsert || typeof setOnInsert.unlockedAt !== 'string') {
+            throw new Error(`The test unlock store only takes a $setOnInsert of unlockedAt and the game link, not ${JSON.stringify(one.update)}`);
+        }
+        if (achievementUnlocks.some(held => held.userId === userId && held.achievementId === achievementId)) {
+            return;
+        }
+        achievementUnlocks.push({ userId, achievementId, ...setOnInsert } as StoredAchievementUnlock);
+        upsertedIds[index] = new mongoose.Types.ObjectId();
+    });
+    return Promise.resolve({ upsertedCount: Object.keys(upsertedIds).length, upsertedIds });
 }
 
 // ---------------------------------------------------------------- Reactions

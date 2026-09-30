@@ -485,6 +485,58 @@ Key properties:
   not: the account-deletion route deletes both in the same before-the-games
   step, on the same `gameId`s.
 
+### Achievement unlocks (`AchievementUnlock`)
+
+`src/utils/mongodb/AchievementUnlockData.ts` defines one more flat collection,
+one row per player per achievement they hold (§5 of
+[`docs/achievements.md`](./docs/achievements.md)). It isn't a discriminator, and
+it isn't a field on `GameData` or `GameResult`: a `GameResult` belongs to one
+game and doesn't exist until it ends, while an unlock belongs to one player and
+may be earned mid-game.
+
+```ts
+interface IAchievementUnlockData {
+    userId: string;         // Clerk userId
+    achievementId: string;  // "dicecities.mine-baron"
+    unlockedAt: string;     // ISO
+    gameId?: string;        // the game that earned it; absent when backfilled
+    url?: string;           // that game's GAME_META slug, kept for when its result is gone
+}
+```
+
+Key properties:
+
+- **The unlock links to the game; the achievement doesn't.** An achievement is a
+  definition, the same for everyone; an unlock is one player earning it in one
+  game. `gameId` is what lets the results page list everything a game unlocked
+  and a profile row say "in a game of Dice Cities". It is absent only for a
+  backfilled career unlock, which was already true before achievements existed
+  and has no game to point at. `url` is copied onto the row rather than looked
+  up, so "in a game of Dice Cities" outlives a deleted result.
+- **One index does all the work.** `{ userId: 1, achievementId: 1 }`, unique:
+  a player holds each achievement at most once, and its `userId` prefix serves
+  every read the collection gets (profile, judging's "what do they hold",
+  account deletion, the unlocks on a game response and on the results page).
+- **Written only by `recordUnlocks`, as upserts, and only the rows it really
+  inserted count as new.** One unordered `bulkWrite` of `$setOnInsert`
+  upserts, answering the rows whose position is in the result's `upsertedIds` —
+  so when two judging passes race for the same unlock, only one of them
+  celebrates it. A lost race that comes back as an 11000 inside a
+  `MongoBulkWriteError` is read, not swallowed; anything else is rethrown
+  (`docs/achievements.md` §5.2).
+- **The index has to exist before the first write.** The repo relies on
+  Mongoose's `autoIndex`, and a `bulkWrite` doesn't wait for an index build: two
+  upserts of the same pair landing first would both insert, and the build would
+  then fail on the duplicate. So the model ships in a change that writes nothing,
+  and the first write ships after the index is confirmed in production.
+- **Deleted by user, and wiped by the dev reset.** `POST /api/user/delete`
+  removes `{ userId }` — an unlock belongs to the player, not the table, so
+  other players' unlocks from the same games stay theirs — and
+  `/api/dev/clearresults` empties the collection along with `GameResult`.
+- **Nothing writes to it yet.** The model, `recordUnlocks` and its test store
+  land first; judging, the reads and the screens arrive with the later PRs of
+  `docs/achievements.md` §13.
+
 ## 6. The game engine: command pattern
 
 Game rules are expressed as classes implementing two interfaces. The two
