@@ -4,8 +4,8 @@
 // wrong in both places at once — and used to be wrong in only one of them,
 // when the profile totals were a second copy of the rule in Mongo `$cond`.
 
-import { describe, expect, it } from 'vitest';
-import { outcomeFor } from './GameResultData';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GameResultModel, RESULT_COUNTS_FILTER, getGameStatsByPlayer, getPlayerStats, outcomeFor } from './GameResultData';
 
 const ANN = 'user_ann';
 const BOB = 'user_bob';
@@ -50,5 +50,81 @@ describe('outcomeFor', () => {
         // `winner` has no schema default, so an old record may carry none —
         // which means nobody won it, not that everybody lost it.
         expect(outcomeFor({}, ANN)).toBe('draw');
+    });
+});
+
+// One row of the per-ending aggregation, as Mongo hands it back: the key has
+// already been reduced to the answers outcomeFor needs (see the $group in
+// getGameStatsByPlayer), so ANN's own win is her id in `winner`.
+const ending = (url: string, key: { winner?: string, endReason?: string }, total: number) => ({
+    _id: { url, winner: '', endReason: 'win', forfeitedBy: null, droppedPlayers: [], ...key },
+    total,
+});
+
+const aggregateReturning = (rows: unknown[]) => vi.spyOn(GameResultModel, 'aggregate').mockResolvedValue(rows as never);
+
+describe('getGameStatsByPlayer', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("matches only the player's counted games when no game is named", async () => {
+        const aggregate = aggregateReturning([]);
+
+        await getGameStatsByPlayer(ANN);
+
+        const [pipeline] = aggregate.mock.calls[0] as unknown as [{ $match: unknown }[]];
+        expect(pipeline[0]).toEqual({ $match: { playerIds: ANN, ...RESULT_COUNTS_FILTER } });
+    });
+
+    it('narrows the match to one game when asked, so the playerIds + gameType index serves it', async () => {
+        const aggregate = aggregateReturning([]);
+
+        await getGameStatsByPlayer(ANN, 'DiceCities');
+
+        const [pipeline] = aggregate.mock.calls[0] as unknown as [{ $match: unknown }[]];
+        expect(pipeline[0]).toEqual({ $match: { playerIds: ANN, gameType: 'DiceCities', ...RESULT_COUNTS_FILTER } });
+    });
+
+    it("tallies each game's endings through outcomeFor, most-played game first", async () => {
+        aggregateReturning([
+            ending('settlementsandcities', { winner: ANN }, 1),
+            ending('dicecities', { winner: ANN }, 2),
+            ending('dicecities', { winner: 'somebody else' }, 3),
+            ending('dicecities', { winner: '', endReason: 'ended' }, 1),
+        ]);
+
+        expect(await getGameStatsByPlayer(ANN)).toEqual([
+            { url: 'dicecities', wins: 2, losses: 3, draws: 1, total: 6 },
+            { url: 'settlementsandcities', wins: 1, losses: 0, draws: 0, total: 1 },
+        ]);
+    });
+
+    it('is nothing for a player with no finished games', async () => {
+        aggregateReturning([]);
+        expect(await getGameStatsByPlayer(ANN)).toEqual([]);
+    });
+});
+
+describe('getPlayerStats', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("puts the same per-game tally beside the player's last matches", async () => {
+        const find = vi.spyOn(GameResultModel, 'find').mockReturnValue({
+            sort: () => ({ limit: () => ({ exec: async () => [
+                { gameId: 'g1', url: 'dicecities', endedAt: '2026-01-02', winner: ANN, endReason: 'win', playerIds: [ANN, BOB] },
+            ] }) }),
+        } as never);
+        aggregateReturning([ending('dicecities', { winner: ANN }, 1)]);
+
+        const stats = await getPlayerStats(ANN, BOB);
+
+        expect(find).toHaveBeenCalledWith({ playerIds: ANN, ...RESULT_COUNTS_FILTER });
+        expect(stats.recent).toEqual([
+            { gameId: 'g1', url: 'dicecities', endedAt: '2026-01-02', outcome: 'win', sharedWithViewer: true },
+        ]);
+        expect(stats.byGame).toEqual(await getGameStatsByPlayer(ANN));
     });
 });

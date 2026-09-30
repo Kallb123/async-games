@@ -683,6 +683,18 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
         sharedWithViewer: result.playerIds.includes(viewerId),
     }));
 
+    return { recent, byGame: await getGameStatsByPlayer(userId) };
+}
+
+// One player's W/L/D per game, most-played first: the `byGame` half of
+// getPlayerStats, without the last ten matches beside it. It is its own
+// function because judging achievements needs the tally and nothing else, and
+// an aggregation over a player's whole history is not something to pay for
+// alongside a query it has no use for. Given a `gameType` (the stored field,
+// "DiceCities", not the url slug the tally is keyed by), the $match narrows to
+// that one game, which the { playerIds: 1, gameType: 1 } index serves — for
+// when only that game's own career achievements are still to be judged.
+export async function getGameStatsByPlayer(userId: string, gameType?: string): Promise<IGameStats[]> {
     // Mongo counts how many of this player's games ended each distinct way; the
     // rule for what each of those endings was *worth to them* is applied here,
     // by the one outcomeFor above.
@@ -695,7 +707,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
     // by games × endings however long they have been playing — and means no
     // other player's id leaves the database for a tally that never shows one.
     const byEndingAgg: { _id: IMatchResult & { url: string }, total: number }[] = await GameResultModel.aggregate([
-        { $match: { playerIds: userId, ...RESULT_COUNTS_FILTER } },
+        { $match: { playerIds: userId, ...(gameType ? { gameType } : {}), ...RESULT_COUNTS_FILTER } },
         { $group: {
             _id: {
                 url: '$url',
@@ -728,9 +740,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
     }
 
     // Most-played game first, as the pipeline's own $sort used to leave it.
-    const byGame: IGameStats[] = [...statsByUrl.values()].sort((a, b) => b.total - a.total);
-
-    return { recent, byGame };
+    return [...statsByUrl.values()].sort((a, b) => b.total - a.total);
 }
 
 // Writes the one, permanent result record for a finished game. Call this
