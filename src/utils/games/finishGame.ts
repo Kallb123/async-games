@@ -1,6 +1,7 @@
 import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
+import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification, withUnlocked } from '@/utils/firebase/notificationContent';
+import type { PushNotification } from '@/utils/firebase/pushNotification';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
@@ -118,33 +119,39 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
         console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
     }
 
-    // Judged before the pushes, so that a push can name what the ending unlocked
-    // (a later change will; nothing reads the answer yet) and so that the
-    // toaster's refresh on a GameOver push finds the rows already written.
-    // withTimeout logs a judge that throws, so this needs no try of its own.
+    // Judged before the pushes, so that each push can name what the ending
+    // unlocked for its player, and so that the toaster's refresh on a GameOver
+    // push finds the rows already written. withTimeout logs a judge that
+    // throws, so this needs no try of its own.
     //
     // The budget is short because the turn-timer cron awaits this inline and
     // keeps only ten seconds of headroom for the last game it starts, which also
     // has to fit the Clerk lookup above, recordGameResult and the pushes. A
-    // judgment that lands late misses only the push: the results page and the
-    // toast still show what it stored (docs/achievements.md §4.3).
-    await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
+    // judgment that lands late misses only the push's clause: the results page
+    // and the toast still show what it stored (docs/achievements.md §4.3).
+    const unlocked = await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
 
-    // sendPushToUsers reports a failed send rather than throwing (see its own
-    // comment), so the fan-out below needs no try of its own.
     const push = {
         event: 'GameOver',
         gameId: gameData.gameId,
         link: gameNotificationLink(gameData.gameType.url, gameData.gameId),
     };
+    // Every player gets a push of their own, naming what the ending unlocked for
+    // them and nobody else, so one seat's "🏆 Unlocked…" never lands on a
+    // teammate's lock screen (§7.4). They go out together: sendPushToUsers
+    // already sends one message per device, the largest table that reaches here
+    // has six seats, and the users are already loaded. It reports a failed send
+    // rather than throwing (see its own comment), so this needs no try either.
+    const sendTo = (user: User, notification: PushNotification) => sendPushToUsers([user], push,
+        withUnlocked(notification, unlocked.filter(unlock => unlock.userId === user.id).map(unlock => unlock.achievement)),
+        { channel: 'gameOver' });
 
-    // A co-op table shares one ending, so everybody gets the same push. Split
-    // into a winner and some losers, they'd each be told the opposite of what
-    // happened to the others at a table that only has one result.
+    // A co-op table shares one ending, so everybody is told the same thing.
+    // Split into a winner and some losers, they'd each be told the opposite of
+    // what happened to the others at a table that only has one result.
     if (gameData.endReason === 'teamwin' || gameData.endReason === 'teamloss') {
-        await sendPushToUsers(userList, push,
-            buildTeamResultNotification(gameData, gameData.endReason === 'teamwin'),
-            { channel: 'gameOver' });
+        const result = buildTeamResultNotification(gameData, gameData.endReason === 'teamwin');
+        await Promise.all(userList.map(user => sendTo(user, result)));
         return;
     }
 
@@ -154,14 +161,10 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // the sentence a per-user resolver writes when two players at the same
     // game share a display name.
     const nameOf = userListToUserIdNameMap(userList);
+    const lost = buildGameLostNotification(gameData, winnerUser ? nameOf[winnerUser.id] : '');
 
-    if (winnerUser) {
-        await sendPushToUsers([winnerUser], push,
-            buildGameWonNotification(gameData, losers.map(u => nameOf[u.id])),
-            { channel: 'gameOver' });
-    }
-
-    await sendPushToUsers(losers, push,
-        buildGameLostNotification(gameData, winnerUser ? nameOf[winnerUser.id] : ''),
-        { channel: 'gameOver' });
+    await Promise.all([
+        winnerUser && sendTo(winnerUser, buildGameWonNotification(gameData, losers.map(u => nameOf[u.id]))),
+        ...losers.map(user => sendTo(user, lost)),
+    ]);
 }

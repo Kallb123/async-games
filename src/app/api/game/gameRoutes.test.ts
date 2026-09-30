@@ -798,9 +798,53 @@ describe('judging achievements', () => {
             await runAfterCallbacks();
 
             expect(storedAchievementUnlocks()).toEqual([unlockRow(ANN.id, 'snakesandladders.thirteen', inGame)]);
-            // Nothing is pushed or shown for it yet: the next player's "your move"
-            // is the only push this turn sent.
+            // It isn't marked `notify`, so the toast is all it gets: the next
+            // player's "your move" is the only push this turn sent.
             expect(sentPushes.map(push => push.options?.channel)).toEqual(['yourTurn']);
+        });
+
+        it('pushes the earner of an achievement marked notify, on the achievements channel', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer({ ...thirteen(), notify: true });
+
+            await command(commandPost(diceRoll()));
+            await runAfterCallbacks();
+
+            const unlocked = sentPushes.filter(push => push.options?.channel === 'achievements');
+            expect(unlocked).toHaveLength(1);
+            expect(unlocked[0].userIds).toEqual([ANN.id]);
+            expect(unlocked[0].data).toMatchObject({ event: 'AchievementUnlocked', gameId: 'game_1' });
+            expect(unlocked[0].notification.body).toContain('snakesandladders.thirteen');
+            // ...beside the next player's "your move", which still goes out.
+            expect(sentPushes.filter(push => push.options?.channel === 'yourTurn').map(push => push.userIds)).toEqual([[BOB.id]]);
+        });
+
+        it('still pushes an unlock whose judgment finishes after the budget', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            offer({ ...thirteen(), notify: true });
+            await command(commandPost(diceRoll()));
+            // The judge's read answers, but only once the budget has been spent.
+            let release: () => void = () => { };
+            const late = new Promise<void>(resolve => { release = resolve; });
+            const read = vi.mocked(AchievementUnlockModel.find).getMockImplementation()!;
+            vi.mocked(AchievementUnlockModel.find).mockImplementationOnce(((...args: Parameters<typeof read>) =>
+                ({ lean: () => ({ exec: async () => { await late; return (read(...args) as never as { lean: () => { exec: () => Promise<unknown> } }).lean().exec(); } }) })) as never);
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            try {
+                const work = runAfterCallbacks();
+                await vi.advanceTimersByTimeAsync(TURN_END_BUDGET_MS);
+                await work;
+                expect(warn).toHaveBeenCalled();
+                expect(sentPushes.filter(push => push.options?.channel === 'achievements')).toEqual([]);
+            } finally {
+                vi.useRealTimers();
+            }
+
+            release();
+            await vi.waitFor(() => expect(sentPushes.filter(push => push.options?.channel === 'achievements')).toHaveLength(1));
         });
 
         it('judges every seat, not only the one who moved', async () => {
@@ -1059,8 +1103,11 @@ describe('judging achievements', () => {
             expect(wonIt).toHaveBeenCalledWith(expect.anything(), { userId: ANN.id, outcome: 'win', turns: expect.any(Number) });
             expect(wonIt).toHaveBeenCalledWith(expect.anything(), { userId: BOB.id, outcome: 'loss', turns: expect.any(Number) });
             expect(reachedHome.mock.calls.map(([, seat]) => seat)).toEqual([{ userId: ANN.id }, { userId: BOB.id }]);
-            // The pushes are the same as they were: nothing names an unlock yet.
-            expect(sentPushes.map(push => push.options?.channel)).toEqual(['gameOver', 'gameOver']);
+            // Each player's game-over push names what the ending unlocked for them.
+            expect(sentPushes.map(push => [push.userIds, push.notification.body?.match(/🏆 Unlocked .*$/)?.[0]])).toEqual([
+                [[ANN.id], '🏆 Unlocked snakesandladders.home and 1 more'],
+                [[BOB.id], undefined],
+            ]);
         });
 
         it('judges no match achievement for a game stopped by hand', async () => {
@@ -1080,7 +1127,7 @@ describe('judging achievements', () => {
             expect(storedAchievementUnlocks()).toEqual([]);
             // ...while the rest of what announcing does still happens.
             expect(recordGameResult).toHaveBeenCalledTimes(1);
-            expect(sentPushes).toHaveLength(1);
+            expect(sentPushes).toHaveLength(2);
         });
 
         it('judges career achievements once the game is on the record', async () => {
@@ -1228,9 +1275,9 @@ describe('POST /api/game/end', () => {
         // Ending a game by hand goes out to the table now, like every other
         // ending: it used to be silent, leaving everyone else waiting on a game
         // that was already over.
-        expect(sentPushes).toHaveLength(1);
-        expect([...sentPushes[0].userIds].sort()).toEqual([ANN.id, BOB.id].sort());
-        expect(sentPushes[0].options?.channel).toBe('gameOver');
+        // One push per player, so each can name what the ending unlocked for them.
+        expect(sentPushes.map(push => push.userIds).sort()).toEqual([[ANN.id], [BOB.id]]);
+        expect(sentPushes.every(push => push.options?.channel === 'gameOver')).toBe(true);
     });
 
     it('records one result however many times it is asked', async () => {

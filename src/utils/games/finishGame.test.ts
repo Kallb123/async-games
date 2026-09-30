@@ -78,10 +78,11 @@ describe('finishGame', () => {
         // The whole point of the team reasons: nobody won it on their own.
         expect(saved.winner).toBe('');
 
-        expect(sentPushes).toHaveLength(1);
-        expect(sentPushes[0].userIds).toEqual([ANN.id, BOB.id]);
-        expect(sentPushes[0].notification.title).toContain('Your team won');
-        expect(sentPushes[0].options?.channel).toBe('gameOver');
+        // One push each, all saying the same thing: each is its own so that one
+        // seat's unlocks never land on a teammate's lock screen.
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        expect(sentPushes.every(push => push.notification.title.includes('Your team won'))).toBe(true);
+        expect(sentPushes.every(push => push.options?.channel === 'gameOver')).toBe(true);
     });
 
     it('tells a co-op table it lost, rather than splitting it into a winner and losers', async () => {
@@ -89,9 +90,8 @@ describe('finishGame', () => {
         await finished.announce();
 
         expect(storedGame('game_1')!.endReason).toBe('teamloss');
-        expect(sentPushes).toHaveLength(1);
-        expect(sentPushes[0].userIds).toEqual([ANN.id, BOB.id]);
-        expect(sentPushes[0].notification.title).toContain('Your team lost');
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        expect(sentPushes.every(push => push.notification.title.includes('Your team lost'))).toBe(true);
     });
 
     it('records who went quiet when the timer abandons a game', async () => {
@@ -102,7 +102,7 @@ describe('finishGame', () => {
         expect(saved.endReason).toBe('abandoned');
         expect(saved.forfeitedBy).toBe(BOB.id);
         // No winner to congratulate, so the same "it's over" goes to everyone.
-        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id, BOB.id]]);
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
     });
 
     it('still tells the table when the result record cannot be written', async () => {

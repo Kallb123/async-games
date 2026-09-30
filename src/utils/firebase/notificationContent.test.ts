@@ -9,6 +9,7 @@ const hasRecapAdapter = vi.hoisted(() => vi.fn(() => false));
 vi.mock('@/utils/games/recap', () => ({ buildEventFeed, hasRecapAdapter }));
 
 import {
+    buildAchievementNotification,
     buildChatNotification,
     buildFriendAcceptedNotification,
     buildFriendInviteNotification,
@@ -20,7 +21,11 @@ import {
     buildTeamResultNotification,
     buildTurnExpiringNotification,
     buildYourTurnNotification,
+    withUnlocked,
 } from './notificationContent';
+import type { GameAchievement } from '@/utils/games/achievements';
+import { APP_BASE_URL } from '@/utils/app';
+import { gameNotificationImage } from './pushNotification';
 
 const NO_RECAP: IEventFeed = { hasRecap: false, events: [], summary: null, tip: null };
 
@@ -278,5 +283,50 @@ describe('other push copy', () => {
     it('points friend requests at playing together', () => {
         expect(buildFriendInviteNotification('Priya').title).toBe('Priya wants to be friends');
         expect(buildFriendAcceptedNotification('Priya').body).toContain('challenge them to a game');
+    });
+});
+
+describe('achievement push copy', () => {
+    const achievement = (title: string, extra: Partial<GameAchievement<unknown>> = {}): GameAchievement<unknown> => ({
+        id: `snakesandladders.${title.toLowerCase()}`,
+        title,
+        icon: '🪜',
+        description: 'Climb three ladders in one game.',
+        criteria: { kind: 'match', at: 'turnEnd', check: () => true },
+        ...extra,
+    });
+
+    it('names the achievement and what it asked for', () => {
+        const push = buildAchievementNotification(game(), [achievement('Climber')]);
+        expect(push.title).toBe('🏆 Achievement unlocked in Snakes and Ladders');
+        expect(push.body).toBe('🪜 Climber: climb three ladders in one game.');
+    });
+
+    it('names the first of several, and counts the rest', () => {
+        expect(buildAchievementNotification(game(), [achievement('Climber'), achievement('Summit')]).body)
+            .toBe('🪜 Climber: climb three ladders in one game. And 1 more.');
+    });
+
+    it("uses the achievement's drawn icon as its image when it has one, and the game's own art otherwise", () => {
+        const drawn = achievement('Climber', { art: '/art/achievements/snakesandladders/climber.png' });
+        expect(buildAchievementNotification(game(), [drawn]).imageUrl).toBe(`${APP_BASE_URL}/art/achievements/snakesandladders/climber.png`);
+        expect(buildAchievementNotification(game(), [achievement('Climber')]).imageUrl).toBe(gameNotificationImage('snakesandladders'));
+    });
+
+    it('adds what the ending unlocked after a game-over body, counting any more', () => {
+        const won = buildGameWonNotification(game({ gameState: { turnOrder: ['u1', 'u2'], history: [], commandHistory: historyOfTurns(14) } } as Partial<IGameData>), ['Priya']);
+        expect(withUnlocked(won, [achievement('Mayor')]).body).toBe(`${won.body} 🏆 Unlocked Mayor`);
+        expect(withUnlocked(won, [achievement('Mayor'), achievement('A'), achievement('B')]).body).toBe(`${won.body} 🏆 Unlocked Mayor and 2 more`);
+    });
+
+    it('leaves a game-over push alone when the ending unlocked nothing', () => {
+        const lost = buildGameLostNotification(game(), 'Priya');
+        expect(withUnlocked(lost, [])).toBe(lost);
+    });
+
+    it('keeps its clause when the body is already at the limit, by shortening the body first', () => {
+        const push = withUnlocked({ title: 'Game over', body: 'x'.repeat(140) }, [achievement('Mayor')]);
+        expect(push.body!.length).toBeLessThanOrEqual(140);
+        expect(push.body!.endsWith('🏆 Unlocked Mayor')).toBe(true);
     });
 });

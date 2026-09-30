@@ -8,6 +8,8 @@ import { gameNotificationImage, PushNotification } from './pushNotification';
 import { truncate, pluralize } from '@/utils/ui/text';
 import { resolveHistory } from "@/utils/games/history";
 import { gameLength } from "@/utils/games/turnCount";
+import type { Achievement } from "@/utils/games/achievements";
+import { APP_BASE_URL } from "@/utils/app";
 
 // Every piece of user-visible push copy in the app is written here rather than
 // inline in the route that sends it. Three routes can hand a player their turn
@@ -214,6 +216,46 @@ export function buildTeamResultNotification(gameData: IGameData, won: boolean): 
         ? `It got away from you after ${pluralize(count, unit)} — ${gameData.endDetail}. Try again?`
         : `It got away from you after ${pluralize(count, unit)}. Try again?`;
     return gamePush(gameData, `Your team lost ${friendlyName}`, detail);
+}
+
+/**
+ * The mid-game push for an achievement marked `notify` (docs/achievements.md
+ * §7.4): "🏆 Achievement unlocked in Dice Cities — ⛏️ Mine Baron: own all six
+ * Mines at the end of a turn." Sent to the earner only, and once per turn end
+ * however many it names, so a second unlock that turn is "and 1 more" rather
+ * than a second buzz. `unlocked` is never empty.
+ *
+ * The image is the achievement's drawn icon when it has one, and the game's own
+ * art otherwise. The emoji stays in the text, where an icon has to be a
+ * character.
+ */
+export function buildAchievementNotification(gameData: IGameData, unlocked: readonly Achievement[]): PushNotification {
+    const [first] = unlocked;
+    const others = unlocked.length - 1;
+    const requirement = first.description.charAt(0).toLowerCase() + first.description.slice(1);
+    return {
+        title: `🏆 Achievement unlocked in ${gameData.gameType.friendlyName}`,
+        body: truncate(`${first.icon} ${first.title}: ${sentence(requirement)}${others > 0 ? ` And ${others} more.` : ''}`, MAX_BODY_LENGTH),
+        imageUrl: first.art ? `${APP_BASE_URL}${first.art}` : gameNotificationImage(gameData.gameType.url),
+    };
+}
+
+/**
+ * `notification`, with "🏆 Unlocked Mayor" (or "… and 2 more") after its body:
+ * what a game's ending unlocked for the one player this game-over push is for
+ * (docs/achievements.md §7.4). Anything they earned earlier in the game has
+ * already had its moment, so only the ending's are named.
+ *
+ * The body is shortened first to make room: every game push is truncated to
+ * `MAX_BODY_LENGTH` already, and a clause added after that would be the first
+ * thing the limit cut.
+ */
+export function withUnlocked(notification: PushNotification, unlocked: readonly Achievement[]): PushNotification {
+    if (unlocked.length === 0) return notification;
+    const others = unlocked.length - 1;
+    const clause = `🏆 Unlocked ${unlocked[0].title}${others > 0 ? ` and ${others} more` : ''}`;
+    const body = notification.body ? `${truncate(notification.body, MAX_BODY_LENGTH - clause.length - 1)} ` : '';
+    return { ...notification, body: truncate(`${body}${clause}`, MAX_BODY_LENGTH) };
 }
 
 /**

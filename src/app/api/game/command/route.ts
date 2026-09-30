@@ -1,5 +1,5 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { buildAchievementNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { FIRST_COMMAND_VERSION, gameCommandVersion } from '@/utils/ui/games';
@@ -18,7 +18,9 @@ import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
 import { unlockedHere } from '@/utils/games/unlockedHere';
-import { hasTurnEndAchievements, judgeTurnEnd, NO_UNLOCKS, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { hasTurnEndAchievements, judgeTurnEnd, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import type { EarnedAchievement } from '@/utils/games/awardAchievements';
+import type { Achievement } from '@/utils/games/achievements';
 import { withTimeout } from '@/utils/withTimeout';
 
 export interface ICommandResponse {
@@ -129,6 +131,34 @@ async function notifyNextPlayer(gameData: IGameData, userList: User[]): Promise<
   } catch (error) {
     console.error(`Post-response turn-notification work failed for game ${gameData.gameId}`, error);
   }
+}
+
+/**
+ * Pushes each player what a turn end unlocked for them that is marked `notify`
+ * (docs/achievements.md §7.4): one push per player however many it names, on
+ * the `achievements` channel, tagged by game so a second unlock in the same game
+ * replaces the first on the lock screen. Tapping it opens the board. Everything
+ * else a turn end unlocks is celebrated by the toast alone.
+ *
+ * Chained onto the judging itself, inside its deadline's work rather than after
+ * it: `withTimeout` stops *waiting* at the budget but lets the work finish, and a
+ * judgment that lands late must still push, or it would write a row whose push
+ * nobody sends and the next turn end would see as already held.
+ * `sendPushToUsers` never throws.
+ */
+async function pushNotifyUnlocks(gameData: IGameData, userList: User[], unlocks: readonly EarnedAchievement[]): Promise<void> {
+  const byUser = new Map<string, Achievement[]>();
+  for (const { userId, achievement } of unlocks) {
+    if (achievement.notify) byUser.set(userId, [...(byUser.get(userId) ?? []), achievement]);
+  }
+  await Promise.all([...byUser].map(([userId, achievements]) => {
+    const user = userList.find(u => u.id === userId);
+    return user && sendPushToUsers([user], {
+      event: 'AchievementUnlocked',
+      gameId: gameData.gameId,
+      link: gameNotificationLink(gameData.gameType.url, gameData.gameId),
+    }, buildAchievementNotification(gameData, achievements), { channel: 'achievements' });
+  }));
 }
 
 export async function POST(request: NextRequest) {
@@ -380,11 +410,15 @@ export async function POST(request: NextRequest) {
     //
     // `notifyNextPlayer` has its own `try`, and `withTimeout` catches and logs
     // a judge that throws (and stops waiting on one that stalls), so neither
-    // half can fail the other and this needs no `try` of its own. What judging
-    // unlocked isn't pushed or shown yet, so the answer is ignored.
+    // half can fail the other and this needs no `try` of its own. The earner's
+    // `notify` push rides inside the timed work (see pushNotifyUnlocks); the
+    // toast needs nothing from here, since every board response carries what
+    // its viewer has unlocked.
     await Promise.all([
       commandOutcome.turnOver ? notifyNextPlayer(gameData, userList) : undefined,
-      withTimeout(() => judgeTurnEnd(gameData, userList), TURN_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`),
+      withTimeout(
+        () => judgeTurnEnd(gameData, userList).then(unlocks => pushNotifyUnlocks(gameData, userList, unlocks)),
+        TURN_END_BUDGET_MS, undefined, `Judging achievements for ${gameData.gameId}`),
     ]);
   });
 
