@@ -1895,7 +1895,7 @@ PR 3  edit   src/utils/api/gameResultResponse.ts
 PR 3  edit   src/app/api/game/[gameid]/route.ts, src/app/api/game/command/route.ts  (unlockedHere)
 PR 3  new    src/app/api/achievements/recent/route.ts (+ test)
 PR 3  new    src/components/ui/DisclosureSection.tsx        (out of WhatsNew)
-PR 3  edit   src/components/WhatsNew.tsx
+PR 3  edit   src/components/ui/WhatsNew.tsx
 PR 3  new    src/components/ui/AchievementIcon.tsx
 PR 3  new    src/components/ui/AchievementsSection.tsx
 PR 3  edit   src/components/ui/ListRow.tsx, src/app/ag-theme.css   (muted)

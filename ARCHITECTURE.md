@@ -329,10 +329,14 @@ Key properties:
   rest, so a route can flush its response before spending a Clerk lookup and a
   fan-out of pushes on it. `announce()` also judges the game's achievements
   ([`docs/achievements.md`](./docs/achievements.md) §4.3). Judging runs after
-  the result write and before the pushes, under a 3 s budget so the turn-timer
-  cron, which awaits it inline, keeps its headroom. If the result write failed,
+  the result write and before the pushes, under a 3 s budget; the turn-timer
+  cron, which awaits it inline, also passes its hard stop
+  (`AnnounceOptions.finishBy`), and `judgingBudget` then gives judging only what
+  leaves the pushes three seconds, or skips it. If the result write failed,
   career judging is skipped, because it reads the record that write would have
-  made, while match judging still runs.
+  made, while match judging still runs. The `GameOver` pushes go to each player
+  separately, sent together, each naming what the ending unlocked for that
+  player alone.
 - **`endReason` says what `winner` can't.** `'win'` names a winner; `'ended'`
   and `'abandoned'` are the two no-winner endings; `'teamwin'` and `'teamloss'`
   are the co-op pair, where the whole roster shares one result and `winner` is
@@ -684,8 +688,8 @@ regardless of game:
 12. save
 13. after the save, if the move ended the turn (turnOver or timerRestarts): judge
     turnEnd achievements beside the 'YourTurn' push (turnOver only), in
-    Promise.all, under a 5 s budget
-14. return { outcome, gameData: CreateDataResponse() }
+    Promise.all, under a 5 s budget, pushing each `notify` unlock's earner
+14. return { outcome, gameData: CreateDataResponse() + reactions + unlockedHere }
 ```
 
 Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
@@ -698,7 +702,15 @@ needed, and each one's failure is logged without touching the other or the saved
 move ([`docs/achievements.md`](./docs/achievements.md) §4.2). A
 `timerRestarts`-only boundary (Fires Out's solitaire crew) has no push, so the
 route enters `after()` for it only when `hasTurnEndAchievements(gameData)` is
-true: a game with nothing to judge pays no Clerk lookup per hand-off.
+true: a game with nothing to judge pays no Clerk lookup per hand-off. The
+`AchievementUnlocked` push is chained onto the judging, and once the 5 s budget
+is spent the `after()` waits `TURN_END_PUSH_GRACE_MS` (10 s) more for a late
+judgment's push, since the function may be stopped once `after()` returns.
+
+Step 14's response carries the viewer's own unlocks in this game
+(`unlockedHere`, `src/utils/games/unlockedHere.ts`), read beside the history's
+reactions, only where one can exist, and failing soft to none: the move is
+already saved, so a failed read must not report it as a failure.
 
 **Versions.** Every command carries the version of its game's rules it was
 built for (`GameMeta.commandVersion`, [`docs/command-versions.md`](./docs/command-versions.md)).
@@ -1001,7 +1013,8 @@ and rewrites only the metadata that actually changed.
   either display draws on the same `followLink` to get the tap into the app.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
-`TurnExpiringSoon`, `GameOver`, `ChatMessage`, `AchievementUnlocked`. `YourTurn` is also sent when a
+`TurnExpiringSoon`, `GameOver`, `ChatMessage`, `AchievementUnlocked`.
+`YourTurn` is also sent when a
 game starts, to whoever won the roll for turn order — everyone else just gets
 the silent `GameStart` refresh.
 
