@@ -1,11 +1,12 @@
 'use client'
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
+import AchievementsSection from "@/components/ui/AchievementsSection";
 import GameStatsList from "@/components/ui/GameStatsList";
 import BackLink from "@/components/ui/BackLink";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
-import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
+import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IProfileUser } from "@/app/api/profile/[userId]/route";
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from "react";
@@ -18,6 +19,7 @@ interface IProfileResponse {
     user: IProfileUser;
     recent: IRecentMatch[];
     byGame: IGameStats[];
+    achievements?: IAchievementUnlock[];
 }
 
 export default function FriendProfile({ params }: { params: Promise<{ userId: string }> }) {
@@ -70,6 +72,9 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
 
                         {/* Match outcome history, by game */}
                         <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+
+                        {/* Their achievements, read-only */}
+                        <AchievementsSection unlocks={data?.achievements ?? []} byGame={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
                         <FcmTokenComp />
                     </>
                 )}
