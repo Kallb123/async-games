@@ -93,10 +93,13 @@ A curated set of app-drawn avatars (`/public/avatars/*.png`, catalogued the way
 a photo. This is the first step that needs a *stored choice*, because the pick
 isn't Clerk's to hold:
 
-- Store the chosen key on the `UserProfile` read model
-  (`docs/social-features.md` §5) — e.g. `avatarKey: string | null`.
+- Store the chosen key somewhere of our own — e.g. `avatarKey: string | null`.
+  There is no per-user Mongo document to put it on yet (the `UserProfile` read
+  model `docs/social-features.md` §5 planned was never built), so this step
+  either adds one or keeps the key in Clerk metadata the way notification
+  preferences are kept.
 - Turn `profileImageUrl` into the resolver's Clerk *branch*, and add a server
-  resolver that reads `UserProfile` first: **chosen art → Clerk picture →
+  resolver that reads that stored choice first: **chosen art → Clerk picture →
   initials badge**. Routes call the resolver instead of `profileImageUrl`
   directly; the DTO field and every screen stay as they are.
 - Because it's our own art, `Avatar` can keep using `next/image` with a local
@@ -107,9 +110,9 @@ isn't Clerk's to hold:
 Same storage and same resolver as §2a — the only addition is *eligibility*:
 each curated avatar gains an unlock condition, and the picker shows locked ones
 greyed with the requirement ("win 10 games of Dice Cities"). That leans on the
-`GameResult` / `UserProfile` aggregates that already exist for stats, so the
-work is the unlock catalogue plus a check at selection time (validated
-server-side on save, not just hidden in the UI).
+per-game counts `getPlayerStats` already aggregates from `GameResult` for
+stats, so the work is the unlock catalogue plus a check at selection time
+(validated server-side on save, not just hidden in the UI).
 
 The achievements themselves — what one is, when it is judged and where an
 unlock is kept — are planned in [`docs/achievements.md`](./achievements.md);

@@ -41,7 +41,7 @@ rule, and it applies to server models and API contracts too).
 | **User directory** | `src/app/users/page.tsx`, `src/app/api/users/` | Built. Browse users to friend / invite. |
 | **Game invitations** | `src/utils/mongodb/InvitationData.ts`, `src/app/api/newgame/**`, `src/app/api/invite/**` | Built. Per-game invite → all-accept → `CreateGame()`. |
 | **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`, `ChatMessage`. |
-| **Notification preferences** | `src/utils/mongodb/UserProfile.ts`, `src/app/api/user/preferences/**` | Built. Per-user toggles for notification channels (push, in-app, etc.) and event-type batching. Checked before sending. |
+| **Notification preferences** | `src/utils/firebase/notificationPreferences.ts` (Clerk `privateMetadata`), `src/app/api/notificationpreferences/` | Built. Per-user toggles for notification channels (push, in-app, etc.) and event-type batching. Checked before sending. |
 | **Turn nudges** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/nudge/**` | Built. One-tap "your move!" nudge per turn, limited to 1 per opponent per turn cycle. Sends `TurnNudge` FCM event. |
 | **Turn/action reactions** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/reaction/**` | Built. Emoji reactions on turns. Append-only per-turn store, sent in `TurnReaction` FCM event. |
 | **In-game chat** | `src/utils/mongodb/ChatMessageData.ts`, `src/utils/mongodb/ChatReadData.ts`, `src/app/api/game/[gameid]/chat/**`, `src/components/games/GameChat.tsx` | Built. Per-game message thread on the board (Tier 1's flagship — §2). Flat collection keyed by `gameId`, membership-gated routes, `ChatMessage` FCM event throttled per recipient. Guests chat too. A server-side read marker (`ChatReadData`) clears the unread dot across devices, powers an unread-count badge on the home screen's turn cards, and a "who spoke while you were away" line on the recap — see [`docs/in-game-chat.md`](./in-game-chat.md). |
@@ -195,8 +195,8 @@ highest-value next step, and the activity surface has its first slice — the
 active-now dot on the friends list — with "who you have no game with" and the
 one-tap invite still to come.
 All ride existing FCM + friendship infra and have proven the best
-value-to-cost ratio on the board. Structural foundation (`GameResult` +
-`UserProfile`) now in place for Phase 2.
+value-to-cost ratio on the board. Structural foundation (`GameResult`) now in
+place for Phase 2.
 
 **Phase 1 — Conversation (friends-only) & richer notifications**
 Next priorities: richer turn notifications (what actually happened in the game,
@@ -208,7 +208,7 @@ moderation (report + block) as a forward investment, scoped to existing
 relationships.
 
 **Phase 2 — Identity & profiles** ✓ Foundation in place
-On top of the `GameResult` + `UserProfile` foundation (§5 — now implemented):
+On top of the `GameResult` foundation (§5 — now implemented):
 match history feed ✓ → user profiles (in progress) → stats & head-to-head.
 Profiles are the public identity face of the platform; completing them + stats
 closes out Tier 2's core value proposition.
@@ -228,11 +228,14 @@ remain out of scope until there's clear demand.
   command pipeline's game-over branch (`src/app/api/game/command/route.ts`) and
   in the cron timeout path. Captures game ID, players, outcome, timestamp, and
   game-specific metadata. Survives game deletion and is cheap to aggregate.
-- **`UserProfile`** — Document keyed by Clerk `userId` holding denormalised
-  aggregates (games played, per-game W/L/D, streaks) plus profile prefs
-  (privacy, favourite game). Updated incrementally on `GameResult` write, not
-  recomputed on read. Clerk stays the identity source of truth; this is a
-  *read model*, not a second identity store.
+- **`UserProfile`** — *planned here, never built.* The idea was a document
+  keyed by Clerk `userId` holding denormalised aggregates (games played,
+  per-game W/L/D, streaks), updated incrementally on each `GameResult` write.
+  There is no such collection: `getPlayerStats`
+  (`src/utils/mongodb/GameResultData.ts`) aggregates the per-game counts from
+  `GameResult` whenever a profile is read, over the `{ playerIds: 1, … }`
+  indexes, and that has been enough. Notification preferences, which this
+  bullet once also placed here, live in Clerk `privateMetadata`.
 - **No back-fill needed** — `GameResult` records started from a known point; no
   migration required for existing games.
 
@@ -275,7 +278,7 @@ the same dot are the second use that should lift it into
   traffic. Need per-user preferences and sensible batching before Phase 1 ships
   broadly, or notifications become noise and get muted (killing the async loop).
 - **Privacy defaults.** Are profiles/stats public, friends-only, or opt-in?
-  This decision shapes the `UserProfile` schema and every read path — settle it
+  This decision shapes every profile and stats read path — settle it
   before Phase 2.
 - **Moderation depth.** Block+report is the floor. Do we need proactive
   profanity filtering / rate limiting before *friends-only* messaging, or only
@@ -293,8 +296,8 @@ the same dot are the second use that should lift it into
   preferences ✓ are shipped. Next: richer turn notifications and a friends
   "who to play" surface (both still S-sized, low-risk, reuse FCM + friendship
   graph).
-- **Structural foundation is in.** `GameResult` (durable game-over record) and
-  `UserProfile` (incremental aggregates) are built and running (§5). Match
+- **Structural foundation is in.** `GameResult` (durable game-over record) is
+  built and running, and stats aggregate from it on read (§5). Match
   history is live; profiles are coming. Profiles, stats, head-to-head, and
   leaderboards all plug into this same store.
 - **Messaging is the flagship Phase 1 feature** but crosses into moderation;
