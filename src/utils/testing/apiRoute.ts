@@ -16,7 +16,7 @@
 // the indexes too, which is the next step and a bigger one; this covers the
 // handler logic that was going untested today.
 //
-// Test-only. Nothing under src/app imports this.
+// Test-only: test files import it, in src/utils and src/app alike; app code never does.
 
 import { vi } from 'vitest';
 import mongoose from 'mongoose';

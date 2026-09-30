@@ -7,7 +7,7 @@
 // Types only from achievements.ts, so this can be imported above or below a
 // `vi.mock` of that module without pulling the catalogue in early.
 //
-// Test-only: test files import it, in src/utils and src/app alike.
+// Test-only: test files import it, in src/utils and src/app alike; app code never does.
 
 import { expect } from 'vitest';
 import type { CareerRecord, FinishedSeat, GameAchievement, GameRecord, PlatformAchievement, Seat } from '@/utils/games/achievements';
