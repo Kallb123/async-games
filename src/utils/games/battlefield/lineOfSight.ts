@@ -1,0 +1,59 @@
+// Seeing across a battlefield (docs/games/realm-arena.md §13.1): one square
+// sees another when the straight line between their centres crosses nothing
+// that blocks sight. Low cover and characters never block it; walls and trees
+// do. The walk is exact integer arithmetic, so a line comes out the same from
+// either end and whether A sees B is always whether B sees A.
+
+import { coordsOf, type Battlefield, type Square } from "./terrain";
+
+/** The squares a line between two squares' centres passes through, ends left out. */
+export interface SightLine {
+    /** Squares the line crosses the inside of, in order from the start. */
+    crossed: Square[];
+    /**
+     * Pairs of squares the line only grazes, by passing exactly through the
+     * corner they share — the two either side of a diagonal step.
+     */
+    grazed: [Square, Square][];
+}
+
+/**
+ * Walks the line from one square's centre to another's, a square at a time:
+ * across a column edge or a row edge, whichever the line meets first, and
+ * straight through a corner when it meets both at once.
+ */
+export function sightLine(field: Battlefield, from: Square, to: Square): SightLine {
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    const across = Math.abs(b.col - a.col), down = Math.abs(b.row - a.row);
+    const stepCol = Math.sign(b.col - a.col), stepRow = Math.sign(b.row - a.row);
+    // Every square between two squares on the map is on the map too.
+    const at = (c: number, r: number): Square => r * field.width + c;
+    const line: SightLine = { crossed: [], grazed: [] };
+    let col = a.col, row = a.row;
+    for (let i = 0, j = 0; i < across || j < down;) {
+        // The next column edge is (i + ½) / across of the way along the line,
+        // the next row edge (j + ½) / down: whichever is nearer comes first.
+        const race = (1 + 2 * i) * down - (1 + 2 * j) * across;
+        if (race === 0) {
+            line.grazed.push([at(col + stepCol, row), at(col, row + stepRow)]);
+            col += stepCol; row += stepRow; i++; j++;
+        } else if (race < 0) {
+            col += stepCol; i++;
+        } else {
+            row += stepRow; j++;
+        }
+        if (i < across || j < down) line.crossed.push(at(col, row));
+    }
+    return line;
+}
+
+/**
+ * Whether one square can see another. A line through a corner is blocked only
+ * when the squares either side of it both block sight — a diagonal wall — so
+ * a single tree doesn't hide what's past its corner.
+ */
+export function canSee(field: Battlefield, from: Square, to: Square): boolean {
+    const blocks = (square: Square) => field.terrain[square].blocksSight;
+    const { crossed, grazed } = sightLine(field, from, to);
+    return !crossed.some(blocks) && !grazed.some(([one, other]) => blocks(one) && blocks(other));
+}

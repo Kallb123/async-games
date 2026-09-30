@@ -1166,6 +1166,82 @@ describe("Dice Cities: match review summaries", () => {
     });
 });
 
+// The match history log names the money a roll moved, as the review summaries
+// above and the recap do - the log is what a player scrolls back through, so a
+// roll that robbed them shouldn't read there as nothing but the dice.
+describe("Dice Cities: match history payouts", () => {
+    const latest = (game: IDiceCitiesGameData) => game.gameState.history[0].text;
+
+    it("names every coin a roll moved, steals included", async () => {
+        // u2's Café takes a coin from u1 on a 3.
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ money: 2 })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        await rollCommand(3).Execute(game);
+
+        expect(latest(game)).toBe("{{u1}} rolled a 3 — {{u1}} -1🪙, {{u2}} +1🪙");
+    });
+
+    it("says so when a roll moved nothing", async () => {
+        const game = makeGame(makeState());
+
+        await rollCommand(6).Execute(game);
+
+        expect(latest(game)).toBe("{{u1}} rolled a 6 — no coins changed hands");
+    });
+
+    it("leaves a roll parked on the Harbour's offer unpaid, and pays it on the answer", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
+                ["u2", player()],
+            ]),
+            enabledDocks: true,
+        });
+        const game = makeGame(gs, "u1");
+
+        await rollCommand(4, "u1", 6).Execute(game);
+        expect(latest(game)).toBe("{{u1}} rolled a 10 (4 and 6)");
+
+        await harbourCommand(false).Execute(game);
+        expect(latest(game)).toBe("{{u1}} passed on the Harbour's bonus and stayed on 10 — {{u1}} +3🪙");
+    });
+
+    it("names a Radio Tower re-roll's payout", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ oneReroll: true, cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+            ]),
+        });
+        const game = makeGame(gs);
+        const roll = rollCommand(6);
+        await roll.Execute(game);
+        game.gameState.commandHistory.push(roll);
+
+        const reroll = new DiceCitiesRequestRadioTowerReroll();
+        reroll.senderId = "u1";
+        reroll.senderUsername = "u1";
+        reroll.recordedRoll1 = 1;
+        await reroll.Execute(game);
+
+        expect(latest(game)).toBe("{{u1}} re-rolled for a 1 — {{u1}} +1🪙, {{u2}} +1🪙");
+    });
+
+    it("counts the money in the played theme's word", async () => {
+        const game = makeGame(makeState({ theme: "wasteland" }));
+
+        await rollCommand(6).Execute(game);
+
+        expect(latest(game)).toBe("{{u1}} rolled a 6 — no caps changed hands");
+    });
+});
+
 describe("Dice Cities themes", () => {
     // The rules never read a theme - but the history log does, and unlike a
     // screen string a log line is written into the game and kept. These play a
