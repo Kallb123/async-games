@@ -1,11 +1,12 @@
 # Realm Arena — Game Design Document
 
-**Status:** Concept, v0.4. Split out of Defender of the Realm in its third
+**Status:** Concept, v0.5. Split out of Defender of the Realm in its third
 round of design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This is the
 one to build first (§10). §11 records the answers so far. §13 is the first
-draft of the battle rules and the first characters, settled in round 3. §14
-asks the questions that draft raises.
+draft of the battle rules and the first characters, settled in rounds 3 and
+4. §15 sketches the first battlefield, a ruined fort. §16 asks about it, and
+about the last few rules the first playable version needs.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -75,6 +76,11 @@ What's decided so far:
 | About four action points per character per turn, with some things costing more than one (§13.2) | §11.3, answer 4 |
 | Overwatch can react more than once, depending on the AP left (§13.4) | §11.3, answer 9 |
 | The rest of the first battle rules and the first six characters, as proposed (§13) | §11.3 |
+| Every character has its own AP, spent however the player likes, at the costs in §13.2 | §11.4, answers 1–3 |
+| AP left at the end of a turn go into overwatch or guard automatically (§6) | §11.4, answer 4 |
+| Speeds, ranges and battle length as proposed (§13.2, §13.6, §13.8) | §11.4, answers 5–6 |
+| Fog of war is revisited after the first playable version (§8) | §11.4, answer 7 |
+| The first battlefield is hand-made: a ruined fort (§15) | §11.4, answer 8 |
 | The same fantasy world as Defender of the Realm | §11.1, answer 4 |
 | Built before Defender of the Realm | §11.1, answer 7 |
 | The name: Realm Arena | §11.1, answer 6 |
@@ -185,9 +191,11 @@ decisions. Three things keep it short:
 - **Tap to move.** The board shades how far a character can go for 1, 2, 3
   and 4 AP. Tapping a square spends what it takes, so a long move is one tap,
   not four (§13.2).
-- **Quick defaults.** When you end your turn, any character with AP left puts
-  them into overwatch (if it's ranged) or guard (if it fights in melee)
-  (§13.4). A turn where only two characters need to move takes seconds.
+- **Quick defaults** (agreed in round 4). When you end your turn, any
+  character with AP left puts them into overwatch (if it's ranged) or guard
+  (if it fights in melee) (§13.4). You can switch this off for a character
+  that should keep still and quiet. A turn where only two characters need to
+  move takes seconds.
 
 Alternating activations, where each turn moves only a few characters, would
 make battles more reactive. But it multiplies the hand-offs, so it doesn't fit
@@ -233,7 +241,8 @@ The series could still come back later as a match format built on top.
 
 ## 8. Fog of war (not decided)
 
-Still open. The first playable version has none (§10).
+Still open. Round 4 left it until after the first playable version, which has
+none (§11.4, answer 7; §10).
 
 **For**
 - It's what makes overwatch, flanking and scouting matter. It's XCOM.
@@ -354,6 +363,19 @@ default. Round 3 answered the four below. The other eleven (1, 3, 5–8 and
 15. **How long is a battle?** Bigger games shouldn't scale down as fast. They
     should last longer.
 
+### 11.4 Round 4
+
+1. **AP per character?** Each character gets around 4 AP.
+2. **The AP costs?** Look good.
+3. **One attack per turn, or does attacking end the turn?** Neither: the
+   player can spend their AP however they want.
+4. **Automatic overwatch or guard with AP left over?** Makes sense.
+5. **Speeds and ranges?** Look good.
+6. **Battle length: 15, 13 and 12 rounds?** Agreed.
+7. **Fog of war: now or later?** Revisit it later.
+8. **The first battlefield?** Hand-made first. A ruined fort would be good
+   (§15).
+
 ---
 
 ## 12. Questions (round 2)
@@ -364,8 +386,8 @@ Answered in §11.2.
 
 ## 13. Battle rules and the first characters (first draft)
 
-The result of round 3 (§11.3). Where round 3 changed a proposed default, the
-rule says so. The numbers are first guesses for playtesting, not balance.
+The result of rounds 3 and 4 (§11.3, §11.4). Where an answer changed a
+proposed default, the rule says so. The numbers are first guesses for playtesting, not balance.
 
 ### 13.1 The battlefield
 
@@ -381,7 +403,9 @@ rule says so. The numbers are first guesses for playtesting, not balance.
   - Nothing destructible in the first playable version.
 - **Deployment zones** sit at opposite ends for two players, and in the
   corners for three or four, about 40 squares apart. At the speeds in §13.2,
-  squads meet within two or three turns, and reach the centre (§13.7) sooner.
+  squads meet within two turns. A character can even reach the centre
+  (§13.7) on its first turn, which is why the centre starts scoring later
+  (§15.3).
 
 **A big board on a small screen.** At phone width, 36 columns works out at
 about 10 pixels a square. That's fine for seeing the whole battle, and far too
@@ -400,8 +424,9 @@ its time zoomed in:
 
 ### 13.2 A turn: action points
 
-**Each character has 4 action points (AP) per turn** (round 3). AP don't carry
-over to your next turn, except as banked reactions (§13.4).
+**Each character has its own 4 action points (AP) per turn** (rounds 3 and
+4). AP don't carry over to your next turn, except as banked reactions
+(§13.4). The costs below were agreed in round 4.
 
 | Action | AP |
 |---|---:|
@@ -417,9 +442,14 @@ over to your next turn, except as banked reactions (§13.4).
   all 4 AP spent on moving, that's 16–32 squares in a turn.
 - **A charge is just moving and then striking** (1 + 2 AP), so it no longer
   needs a rule of its own.
-- *Proposal:* **one attack per character per turn**, unless an ability says
-  otherwise. Moving after an attack is allowed if AP are left (§14,
-  question 3).
+- **Spend AP however you like** (round 4). You can attack twice, attack and
+  then move, or move, attack and move again. The only limits are the AP and
+  each ability's cooldown. Hunkering down is the one action that ends a
+  character's turn, because it's a stance held until your next turn.
+- **Balance to watch.** Two attacks in a turn double what one character can
+  deal. A Man-at-arms does 8 in a turn, enough to down a Mage. That's
+  XCOM-style lethality, and characters' HP (5–12) is the thing to tune if it's
+  too much.
 - **Tap to move.** The board shades how far a character can go for 1, 2, 3 and
   4 AP. Tapping a square spends what it takes.
 - **Characters act in any order**, and you can switch between them mid-turn.
@@ -511,7 +541,7 @@ teams.
 ### 13.8 How long a battle lasts
 
 *Changed in round 3:* bigger battles shouldn't lose rounds as fast, and should
-last longer. *Proposal:*
+last longer. *Agreed in round 4:*
 
 | Players | Battle rounds | Hand-offs | Roughly |
 |---:|---:|---:|---|
@@ -526,24 +556,124 @@ hand-offs.
 
 ## 14. Questions (round 4)
 
-1. **AP per character** (§13.2): does every character get its own 4 AP, rather
-   than the squad sharing a pool?
-2. **AP costs** (§13.2): move 1, sneak 2, attack 2, aimed shot 3, hunker down
-   1, overwatch or guard everything that's left. Is that about right?
-3. **Attacking** (§13.2): one attack per character per turn, with moving
-   afterwards allowed if AP are left? Or XCOM's rule, where attacking ends
-   the character's turn?
-4. **Quick defaults** (§6, §13.4): should AP left at the end of your turn go
-   into overwatch or guard automatically, with a way to switch it off for a
-   character?
-5. **Speeds and ranges** (§13.2, §13.6): speed 4, 6 or 8 squares a move, bow
-   range 20, bolt 10, fireball 12. About right for the bigger board?
-6. **Battle length** (§13.8): 15, 13 and 12 rounds, roughly four, five and six
-   days?
-7. **Fog of war** (§8): the bigger board makes it more worthwhile. Revisit it
-   now, or keep it for after the first playable?
-8. **Next, the first battlefield:** hand-made first and generated later? And
-   what should it be: a village square, a ruined fort, a forest crossroads?
+Answered in §11.4.
+
+---
+
+## 15. The first battlefield: the Ruined Fort (sketch)
+
+Hand-made, as round 4 asked (§11.4, answer 8). This is the two-player map,
+36 squares wide and 48 long (§13.1). Standing upright, it suits a phone held
+the usual way. The mission is Hold the Centre (§13.7), and the centre is the
+ruined keep.
+
+### 15.1 The layout
+
+Each cell below stands for a block of 3×3 squares, so this is the shape of
+the map rather than every wall. Player A deploys along the top edge, player B
+along the bottom.
+
+```
+     A  A  A  A  A  A  A  A  A  A  A  A
+     .  .  T  .  .  ,  .  .  .  T  .  .
+     .  ,  .  .  .  .  .  ,  .  .  .  T
+     T  .  .  ,  .  .  .  .  ,  .  .  .
+     .  .  ^  #  #  G  G  #  #  ^  .  .
+     .  T  #  .  o  .  .  .  .  #  T  .
+     .  .  =  .  .  .  .  o  .  #  .  .
+     ,  .  #  .  o  C  C  .  .  #  .  ,
+     ,  .  #  .  .  C  C  o  .  #  .  ,
+     .  .  #  .  o  .  .  .  .  =  .  .
+     .  T  #  .  .  .  .  o  .  #  T  .
+     .  .  ^  #  #  G  G  #  #  ^  .  .
+     .  .  .  ,  .  .  .  .  ,  .  .  T
+     T  .  .  .  ,  .  .  .  .  .  ,  .
+     .  .  T  .  .  .  ,  .  .  T  .  .
+     B  B  B  B  B  B  B  B  B  B  B  B
+```
+
+| Mark | What it is |
+|---|---|
+| `A`, `B` | The two deployment zones |
+| `.` | Open ground |
+| `,` | Rubble: half cover |
+| `T` | Trees and fallen stone: full cover |
+| `#` | The fort's curtain wall: it blocks movement and sight, and gives full cover to anyone beside it |
+| `^` | A corner tower: high ground (+10% to hit), climbed by a stair from inside the walls |
+| `G` | The broken gate: a gap 6 squares wide |
+| `=` | A breach: a 3-square gap choked with rubble, which is half cover |
+| `o` | Fallen pillars and low walls in the courtyard: half cover |
+| `C` | The keep's ruins: the centre, 6×6 squares |
+
+### 15.2 How it plays
+
+- **It's the same for both players.** Turn the map upside down and it's
+  unchanged, so neither side has the better approach.
+- **Three ways in** for each player:
+  - **The gate** is straight at the keep. It's the shortest way, and the most
+    exposed, because every tower looks down on the courtyard behind it.
+  - **The near breach** is on your side of a side wall: the west wall for A,
+    the east wall for B. It's slower, but covered by rubble.
+  - **Round the outside** runs along the flanks of the fort, past trees and
+    fallen stone, to the enemy's side of the walls. It's the Scout's route.
+- **The towers are the overwatch posts.** Your two nearer towers are a short
+  climb from your gate. An Archer on one covers most of the courtyard (bow
+  range 20; the keep is about a dozen squares away). Taking an enemy tower is how
+  you break their hold on the centre.
+- **The keep has cover inside**, from fallen pillars and low walls, so the
+  side holding the centre can dig in. The attacker's answer is to come from
+  two directions at once and flank.
+
+### 15.3 One fix the layout needs
+
+The deployment zones are about 20 squares from the keep, and straight
+through the gate. With 4 AP, a character moving 6 squares per AP covers 24
+squares, so it could reach the centre on the very first turn. The first
+player would then score before the second has moved. *Proposal:* **the centre
+starts scoring in round 3**, so both squads have two turns to get into
+position (§16, question 3).
+
+### 15.4 Three and four players
+
+The 48×48 version for three or four players (§13.1) comes with free-for-all
+(§10, build order step 2), so it can wait. The same idea carries over: a
+square fort with a gate facing each corner's deployment zone, and a tower
+between each pair of gates.
+
+---
+
+## 16. Questions (round 5)
+
+The first five are about the fort. The last four are rules the first playable
+version still needs. Each comes with a proposed default.
+
+1. **The shape** (§15.1): a square curtain wall, a gate facing each player,
+   one breach in each side wall, towers at the corners, and the keep's ruins
+   as the centre. Is that right? Should it have anything else, such as a dry
+   moat, a collapsed tower or buildings inside the walls?
+2. **Symmetry** (§15.2): the same map for both players, turned upside down. It's
+   fair but predictable. *Default: yes.*
+3. **Scoring starts in round 3** (§15.3), because a squad can reach the centre
+   on the first turn. *Default: yes.* The alternative is to deploy further
+   back or wall off the straight line.
+4. **Towers and walls:** high ground is on the towers only, reached by a stair
+   from inside the walls. Should characters also be able to walk along the
+   tops of the walls? *Default: no, towers only.*
+5. **Moving diagonally:** *Default: a diagonal step costs 1.5 squares of
+   movement, as in XCOM, and nobody can cut diagonally past the corner of a
+   wall.*
+6. **Flanking:** *Default: a target is flanked when none of its cover lies
+   between it and the attacker.* Cover on the far side of the target doesn't
+   help it.
+7. **Line of sight:** *Default: walls, buildings and full cover block sight.
+   Half cover doesn't, and neither do other characters.*
+8. **The Mage's fireball** hits friend and foe (§13.6). Does anything else
+   carry friendly fire, such as the Archer shooting past an ally? *Default:
+   no, only area abilities.*
+9. **After the fort:** should I write the implementation plan for the first
+   playable version next, broken into pull requests as Kingdom Builder's doc
+   is? Or keep designing: the game guide and tutorial every game here gets,
+   the art style, a second mission?
 
 ---
 
@@ -562,3 +692,4 @@ Realm, its sibling in the same world.
 | 0.2 | Named Realm Arena, renamed to `realm-arena.md`. Round-1 answers recorded (§11). 2–4 players: the hand-off budget by player count, with battles shrinking as players are added (§4), scoring and a winner for any number of players (§5.1), and free-for-all against teams (§5.2). Progression becomes unlocks, as sidegrades earned across all your matches (§7). Shares a fantasy world with Defender of the Realm; characters are single figures here and troops there (§10). A first playable scope (§10). Round-2 questions (§12). |
 | 0.3 | Round-2 answers recorded (§11.2) and folded in: both free-for-all and teams, with teams taking alternate seats and a shared team turn as a later speed-up (§5.2); a similar pace at every player count, holding a battle to about 30 hand-offs (§4); unlocks as sidegrades earned across matches, and no permanent death (§7); single figures (§10); the first playable scope agreed (§10). Adds round-3 questions on the battle rules and the first characters, each with a proposed default (§13). The working title moves to an appendix. |
 | 0.4 | Round-3 answers recorded (§11.3). §13 becomes the first draft of the battle rules: a 36×48 or 48×48 battlefield, with how it's shown on a phone (§13.1); four action points per character, with a cost table, speeds, and a charge that is now just moving and striking (§13.2); ranges scaled to the bigger board (§13.3); overwatch and guard banking AP for several reactions (§13.4); AP costs for abilities (§13.5–§13.6); battle rounds falling gently with player count, so bigger battles last longer (§4, §13.8). Fog of war gains a point in its favour (§8). Round-4 questions (§14). |
+| 0.5 | Round-4 answers recorded (§11.4): every character has its own AP, spent however the player likes (with a balance note on two attacks a turn), the AP costs, automatic overwatch or guard, speeds, ranges and battle length agreed, fog of war left for later (§6, §8, §13). Adds the first battlefield, a hand-made ruined fort, with its layout, how it plays, a fix so the centre starts scoring in round 3, and the three- and four-player version (§15). Round-5 questions (§16). |
