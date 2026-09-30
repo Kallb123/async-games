@@ -43,7 +43,30 @@ export interface FinishedGame {
      * announceGameOver), and `recordGameResult` is idempotent on gameId, so a
      * retried request still writes one record.
      */
-    announce: () => Promise<void>;
+    announce: (options?: AnnounceOptions) => Promise<void>;
+}
+
+/** How long announcing may take, for a caller racing a deadline of its own. */
+export interface AnnounceOptions {
+    /**
+     * When the caller will be stopped (epoch ms): the turn-timer cron's hard
+     * stop. Judging achievements is the one part of announcing that can wait —
+     * career ones catch up at the player's next game — so it is cut short, or
+     * skipped, to leave the pushes `PUSH_RESERVE_MS`. The table must still be
+     * told the game is over (docs/achievements.md §10).
+     */
+    finishBy?: number;
+}
+
+/** What announcing keeps back for the pushes when `finishBy` is close. */
+export const PUSH_RESERVE_MS = 3_000;
+
+/**
+ * How long judging may take: the usual budget, or less, to leave the pushes
+ * their reserve before `finishBy`. Zero or below means don't judge at all.
+ */
+export function judgingBudget(finishBy: number | undefined, now: number): number {
+    return finishBy === undefined ? GAME_END_BUDGET_MS : Math.min(GAME_END_BUDGET_MS, finishBy - now - PUSH_RESERVE_MS);
 }
 
 /**
@@ -81,7 +104,7 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
         return { saved: false, announce: async () => {} };
     }
 
-    return { saved: true, announce: () => announceGameOver(gameData) };
+    return { saved: true, announce: (options = {}) => announceGameOver(gameData, options) };
 }
 
 /**
@@ -91,7 +114,7 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
  * time this runs, so the worst any failure may cost is a stats record, an
  * unlock or a notification — never the ending itself.
  */
-async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
+async function announceGameOver(gameData: IGameDataDocument, { finishBy }: AnnounceOptions): Promise<void> {
     let userList: User[];
     try {
         userList = await usersById(gameData.userIdList);
@@ -129,7 +152,16 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // has to fit the Clerk lookup above, recordGameResult and the pushes. A
     // judgment that lands late misses only the push's clause: the results page
     // and the toast still show what it stored (docs/achievements.md §4.3).
-    const unlocked = await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
+    //
+    // A caller racing its own deadline (the cron) may leave less than that: the
+    // pushes come first, and what isn't judged now catches up later.
+    const budget = judgingBudget(finishBy, Date.now());
+    let unlocked = NO_UNLOCKS;
+    if (budget > 0) {
+        unlocked = await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), budget, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
+    } else {
+        console.warn(`Not judging achievements for ${gameData.gameId}: too close to the run's deadline to leave the pushes time`);
+    }
 
     const push = {
         event: 'GameOver',

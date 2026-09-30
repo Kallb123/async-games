@@ -29,7 +29,8 @@ import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import { GAME_END_BUDGET_MS, NO_UNLOCKS } from './awardAchievements';
-import { finishGame } from './finishGame';
+import { finishGame, judgingBudget, PUSH_RESERVE_MS } from './finishGame';
+import { platform } from '@/utils/testing/achievementFixtures';
 
 /** The game as a route would hold it: a fresh document out of the store. */
 async function liveGame(): Promise<IGameDataDocument> {
@@ -200,5 +201,41 @@ describe('finishGame judging achievements', () => {
         // that was only slow.
         expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${GAME_END_BUDGET_MS}ms; not waiting for it`);
         warn.mockRestore();
+    });
+
+    it("names what the ending unlocked in each player's own push, and only theirs", async () => {
+        judgeGameEnd.mockResolvedValue([{ userId: ANN.id, achievement: platform('platform.first-win', record => record.won, 1) }]);
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+
+        await finished.announce();
+
+        const bodies = Object.fromEntries(sentPushes.map(push => [push.userIds[0], push.notification.body]));
+        expect(bodies[ANN.id]).toMatch(/🏆 Unlocked platform\.first-win$/);
+        expect(bodies[BOB.id]).not.toContain('Unlocked');
+    });
+
+    it("judges only in the time a deadline leaves the pushes, and not at all when there is none to spare", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+
+        // The cron's last game, with its run about to be stopped.
+        await finished.announce({ finishBy: Date.now() + PUSH_RESERVE_MS });
+
+        expect(judgeGameEnd).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith("Not judging achievements for game_1: too close to the run's deadline to leave the pushes time");
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        warn.mockRestore();
+    });
+});
+
+describe('judgingBudget', () => {
+    it('is the usual budget with no deadline, or with one far enough off', () => {
+        expect(judgingBudget(undefined, 0)).toBe(GAME_END_BUDGET_MS);
+        expect(judgingBudget(60_000, 0)).toBe(GAME_END_BUDGET_MS);
+    });
+
+    it('shrinks to what the deadline leaves once the pushes have their reserve', () => {
+        expect(judgingBudget(PUSH_RESERVE_MS + 1_000, 0)).toBe(1_000);
+        expect(judgingBudget(PUSH_RESERVE_MS - 1_000, 0)).toBe(-1_000);
     });
 });
