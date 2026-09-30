@@ -17,7 +17,7 @@ import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
-import { judgeTurnEnd, NO_UNLOCKS, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { hasTurnEndAchievements, judgeTurnEnd, NO_UNLOCKS, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
 import { withTimeout } from '@/utils/withTimeout';
 
 export interface ICommandResponse {
@@ -334,7 +334,12 @@ export async function POST(request: NextRequest) {
 
   // The pipeline already refuses an out-of-turn `turnOver` that didn't end
   // the game; `onTurn` keeps this work from ever resting on that alone.
-  if (!turnBoundary) {
+  //
+  // A `timerRestarts`-only boundary has nobody to push, so judging is all the
+  // work there would be, and it is entered only if the game has something to
+  // judge: otherwise every figure hand-off in a solo Fires Out game would pay a
+  // Clerk roster lookup, forever, to learn there was nothing to do.
+  if (!turnBoundary || !(commandOutcome.turnOver || hasTurnEndAchievements(gameData))) {
     return NextResponse.json(response, {status: 200});
   }
 

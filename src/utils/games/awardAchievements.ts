@@ -30,9 +30,28 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 import { countsAsPlayed, endedByHand, getGameStatsByPlayer, matchResultOf, outcomeFor, resultCounts } from "@/utils/mongodb/GameResultData";
 import { unclaimedGuestsOf } from "@/utils/users/guest";
 
-/** How long each checkpoint waits for judging (§4.2, §4.3). Callers wrap the judge in `withTimeout` with these. */
+/**
+ * How long each checkpoint waits for judging (§4.2, §4.3). Callers wrap the
+ * judge in `withTimeout` with these.
+ *
+ * A turn end shares its `after()` with the YourTurn push and has the function's
+ * time to itself, so it gets 5 s. A game end is awaited inline by the turn-timer
+ * cron, which keeps 10 s of headroom for the last game it starts, and the
+ * result record and the pushes have to fit in that too, so it gets 3 s.
+ */
 export const TURN_END_BUDGET_MS = 5_000;
 export const GAME_END_BUDGET_MS = 3_000;
+
+/**
+ * The limit handed to Mongo for one player's career read, just under
+ * `GAME_END_BUDGET_MS`. `withTimeout` stops the judge waiting on a read but
+ * can't cancel it, so without a limit of its own the scan of a veteran's whole
+ * history would keep running on the database after the judge has given up, and
+ * a burst of games ending would stack them. Cut off instead, that player's
+ * career catches up at their next game, which is what §4.3 accepts of a read
+ * that can't be had in time.
+ */
+export const CAREER_READ_MAX_MS = 2_500;
 
 /** One unlock a judging pass just stored, new and not already held, for the player who earned it. */
 export interface EarnedAchievement {
@@ -79,6 +98,17 @@ const isCareer = (achievement: GameAchievement<any>): boolean => achievement.cri
  * Cities' `canUndo`) can. Synchronous, so it can't interleave with the save
  * beside it.
  *
+ * What a check is handed is a frozen copy of that response, not the response
+ * itself. The response is a wire DTO, so a JSON round trip is exactly what a
+ * client at the table receives, and it cuts the view off from the live
+ * document: a response builder may return a piece of the game by reference
+ * (Settlements & Cities' `specialBuildQueue`), and the YourTurn half of the
+ * turn-end `after()` is reading that document at the same time. Frozen all the
+ * way down, a check that sorts or splices an array in the view throws into its
+ * own `try` (`matchUnlocks`) and costs only itself, where on a shared view it
+ * would have reordered what every later check, and every other seat, goes on to
+ * see. (Not `structuredClone`, which throws on a Mongoose array.)
+ *
  * Throws for a game with no replay adapter (Solitaire). The catalogue's own
  * test refuses a match achievement for such a game, so reaching here is a bug,
  * and a loud one is better than a check that silently never runs.
@@ -91,12 +121,22 @@ export function tableView(gameData: IGameData): unknown {
     }
     // Checks look a player up by userId, never by name, so the names that would
     // be resolved from Clerk can be the ids themselves.
-    return adapter.toResponseState(
+    const view = adapter.toResponseState(
         (gameData as IGameData & { specificGameState: unknown }).specificGameState,
         identityNameMap(gameData.userIdList),
         null, // load-bearing: see above. Never a viewer.
         gameData.gameState.commandHistory,
     );
+    return deepFreeze(JSON.parse(JSON.stringify(view)));
+}
+
+/** Freezes a plain JSON value and everything inside it. */
+function deepFreeze<T>(value: T): T {
+    if (value !== null && typeof value === "object") {
+        Object.values(value).forEach(deepFreeze);
+        Object.freeze(value);
+    }
+    return value;
 }
 
 // ─── What both checkpoints share ─────────────────────────────────────────────
@@ -220,6 +260,21 @@ async function store(unlocks: UnlockToRecord[], candidates: readonly Achievement
 
 // ─── The end of a turn (§4.2) ────────────────────────────────────────────────
 
+/** This game's `turnEnd` match achievements. */
+const turnEndOf = (gameData: IGameData, catalogue: AchievementCatalogue): TurnEndAchievement[] =>
+    gameAchievements(catalogue, gameData.gameType.url).filter(isTurnEnd);
+
+/**
+ * Whether a turn ending in this game has anything to judge: step 0, before any
+ * read and before anything derived from Clerk's answer. `judgeTurnEnd` asks it
+ * of itself, and the command route asks it first, to decide whether a turn
+ * boundary with nobody to push (`timerRestarts` alone) is worth starting
+ * post-response work for at all. One predicate, so the two can't disagree.
+ */
+export function hasTurnEndAchievements(gameData: IGameData, catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE): boolean {
+    return turnEndOf(gameData, catalogue).length > 0;
+}
+
 /**
  * Judges this game's `turnEnd` match achievements after a move has ended a turn,
  * for every seat, on the live game. Answers what this pass newly unlocked, for
@@ -235,9 +290,8 @@ export async function judgeTurnEnd(
     userList: User[],
     catalogue: AchievementCatalogue = ACHIEVEMENT_CATALOGUE,
 ): Promise<readonly EarnedAchievement[]> {
-    // Step 0, before any read and before anything derived from Clerk's answer.
-    const turnEnd = gameAchievements(catalogue, gameData.gameType.url).filter(isTurnEnd);
-    if (turnEnd.length === 0) return NO_UNLOCKS;
+    if (!hasTurnEndAchievements(gameData, catalogue)) return NO_UNLOCKS;
+    const turnEnd = turnEndOf(gameData, catalogue);
 
     const seats = judgedSeats(gameData, userList);
     if (seats.length === 0) return NO_UNLOCKS;
@@ -293,9 +347,11 @@ async function careerUnlocks(
         const lackingPlatform = lacking(held, userId, platformCareer);
         if (lackingOwn.length === 0 && lackingPlatform.length === 0) return [];
         try {
-            const byGame = lackingPlatform.length === 0
-                ? await getGameStatsByPlayer(userId, storedGameType)
-                : await getGameStatsByPlayer(userId);
+            const byGame = await getGameStatsByPlayer(
+                userId,
+                lackingPlatform.length === 0 ? storedGameType : undefined,
+                { maxTimeMS: CAREER_READ_MAX_MS },
+            );
             const career = careerRecord(byGame);
             const toJudge: AchievementCatalogue = { games: { [slug]: lackingOwn }, platform: lackingPlatform };
             const metNow = careerMet(career, toJudge);

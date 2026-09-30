@@ -862,6 +862,21 @@ describe('judging achievements', () => {
             expect(sentPushes).toEqual([]);
         });
 
+        it("starts no post-response work for a Fires Out hand-off when the game has nothing to judge", async () => {
+            signIn(ANN);
+            seedSolitaireFiresOut();
+            const roster = vi.spyOn(clerkUsers, 'usersById');
+
+            const response = await command(solitaireEndTurn());
+
+            expect((await response.json()).outcome).toMatchObject({ turnOver: false, timerRestarts: true });
+            // Nobody to push and nothing to judge: a figure hand-off in a solo game
+            // would otherwise pay a Clerk roster lookup, every time, for nothing.
+            expect(await runAfterCallbacks()).toBe(0);
+            expect(roster).not.toHaveBeenCalled();
+            roster.mockRestore();
+        });
+
         it("judges even when there is nobody to tell it's their turn", async () => {
             signIn(ANN);
             // The turn order names a seat the roster doesn't hold, so the turn passes

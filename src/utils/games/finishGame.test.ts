@@ -185,6 +185,7 @@ describe('finishGame judging achievements', () => {
         // The cron awaits this inline, with ten seconds of headroom for the last
         // game it starts.
         judgeGameEnd.mockReturnValue(new Promise(() => { }));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
         const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
@@ -195,5 +196,9 @@ describe('finishGame judging achievements', () => {
         await vi.advanceTimersByTimeAsync(1);
         await announced;
         expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        // Giving up on it is said out loud, since nothing else records a judge
+        // that was only slow.
+        expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${GAME_END_BUDGET_MS}ms; not waiting for it`);
+        warn.mockRestore();
     });
 });

@@ -33,7 +33,7 @@ import { getGameStatsByPlayer } from '@/utils/mongodb/GameResultData';
 import type { IGameStats } from '@/utils/mongodb/GameResultData';
 import { ending, ownCareer, platform, turnEnd, unlockRow } from '@/utils/testing/achievementFixtures';
 import { resetApiRouteStubs, seedAchievementUnlock, storedAchievementUnlocks } from '@/utils/testing/apiRoute';
-import { judgeGameEnd, judgeTurnEnd, NO_UNLOCKS, tableView } from './awardAchievements';
+import { CAREER_READ_MAX_MS, GAME_END_BUDGET_MS, hasTurnEndAchievements, judgeGameEnd, judgeTurnEnd, NO_UNLOCKS, tableView } from './awardAchievements';
 import type {
     AchievementCatalogue,
     CareerRecord,
@@ -127,6 +127,9 @@ const reads = () => vi.mocked(AchievementUnlockModel.find).mock.calls.length;
 const holds = (userId: string, achievementId: string) =>
     seedAchievementUnlock({ userId, achievementId, unlockedAt: '2026-01-01T00:00:00.000Z', gameId: 'older', url: 'dicecities' });
 
+/** The limit every career read is given, for the tests that read what it was asked. */
+const READ_LIMIT = { maxTimeMS: CAREER_READ_MAX_MS };
+
 /** The unlock row this game leaves for a seat that earned `achievementId` in it. */
 const earnedHere = (userId: string, achievementId: string) => unlockRow(userId, achievementId, { gameId: GAME_ID, url: 'dicecities' });
 
@@ -206,6 +209,62 @@ describe('the table view', () => {
         }
     });
 
+    describe('is a frozen copy of the response', () => {
+        // Settlements & Cities hands back its special-build queue by reference,
+        // so it is the one array here that would be the live game's own.
+        const QUEUE = [BOB, ANN];
+        const sacCatalogue = (...achievements: GameAchievement<any>[]): AchievementCatalogue =>
+            ({ games: { settlementsandcities: achievements }, platform: [] });
+
+        it('is cut off from the live game, and frozen all the way down', () => {
+            const game = sacGame();
+            game.specificGameState.specialBuildQueue = [...QUEUE];
+
+            const view = tableView(game) as { specialBuildQueue: string[], playerStates: Record<string, object> };
+
+            expect(view.specialBuildQueue).toEqual(QUEUE);
+            expect(view.specialBuildQueue).not.toBe(game.specificGameState.specialBuildQueue);
+            expect(Object.isFrozen(view)).toBe(true);
+            expect(Object.isFrozen(view.specialBuildQueue)).toBe(true);
+            expect(Object.isFrozen(view.playerStates[ANN])).toBe(true);
+        });
+
+        it('turns a check that sorts a view array into its own failure, and leaves the order for everyone else', async () => {
+            const game = sacGame();
+            game.specificGameState.specialBuildQueue = [...QUEUE];
+            const seen: string[][] = [];
+            const sorter = turnEnd('sac.sorter', view => { view.specialBuildQueue.sort(); return true; });
+            // After the sorter, in the same pass and for the same seats: it has
+            // to see the queue as the game holds it, not as a neighbour left it.
+            const reader = turnEnd('sac.reader', (view, { userId }) => { seen.push([userId, ...view.specialBuildQueue]); return false; });
+
+            const earned = await judgeTurnEnd(game, TABLE, sacCatalogue(sorter, reader));
+
+            expect(earned).toEqual([]);
+            expect(storedAchievementUnlocks()).toEqual([]);
+            expect(warn).toHaveBeenCalledTimes(2);
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('sac.sorter'), expect.any(TypeError));
+            expect(seen).toEqual([[ANN, ...QUEUE], [BOB, ...QUEUE]]);
+            // ...and the game the YourTurn half is reading was never touched.
+            expect(game.specificGameState.specialBuildQueue).toEqual(QUEUE);
+        });
+
+        it('gives a game end the same view, frozen', async () => {
+            const game = sacGame();
+            game.specificGameState.specialBuildQueue = [...QUEUE];
+            game.complete = true;
+            game.winner = ANN;
+            game.endReason = 'win';
+            const sorter = ending('sac.sorter', view => { view.specialBuildQueue.reverse(); return true; });
+
+            const earned = await judgeGameEnd(game, TABLE, { recorded: true }, sacCatalogue(sorter));
+
+            expect(earned).toEqual([]);
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('sac.sorter'), expect.any(TypeError));
+            expect(game.specificGameState.specialBuildQueue).toEqual(QUEUE);
+        });
+    });
+
     it('refuses a game with no replay adapter, naming it', () => {
         const solitaire = { gameType: { className: 'SolitaireGameType', url: 'solitaire' }, userIdList: [ANN], gameState: { commandHistory: [] } } as unknown as IGameData;
         expect(() => tableView(solitaire)).toThrow(/SolitaireGameType/);
@@ -213,6 +272,19 @@ describe('the table view', () => {
 });
 
 // ─── The end of a turn ───────────────────────────────────────────────────────
+
+describe('hasTurnEndAchievements', () => {
+    it('is true only for a game whose catalogue has a turn-end achievement', () => {
+        const game = diceGame();
+
+        expect(hasTurnEndAchievements(game, catalogueOf([turnEnd('dicecities.rich', isRich)]))).toBe(true);
+        expect(hasTurnEndAchievements(game, catalogueOf([ending('dicecities.end', () => true), ownCareer('dicecities.mayor', record => record.won, 1)]))).toBe(false);
+        expect(hasTurnEndAchievements(game, catalogueOf([]))).toBe(false);
+        expect(hasTurnEndAchievements(game, { games: {}, platform: [platform('platform.first-win', career => career.won, 1)] })).toBe(false);
+        // Another game's turn-end achievement isn't this game's.
+        expect(hasTurnEndAchievements(game, { games: { settlementsandcities: [turnEnd('sac.any', () => true)] }, platform: [] })).toBe(false);
+    });
+});
 
 describe('judgeTurnEnd', () => {
     const rich = () => turnEnd('dicecities.rich', isRich);
@@ -605,9 +677,21 @@ describe('judgeGameEnd', () => {
 
             await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([mayor], [regular]));
 
-            expect(getGameStatsByPlayer).toHaveBeenCalledWith(ANN, 'DiceCities');
-            expect(getGameStatsByPlayer).toHaveBeenCalledWith(BOB);
+            expect(getGameStatsByPlayer).toHaveBeenCalledWith(ANN, 'DiceCities', READ_LIMIT);
+            expect(getGameStatsByPlayer).toHaveBeenCalledWith(BOB, undefined, READ_LIMIT);
             expect(getGameStatsByPlayer).toHaveBeenCalledTimes(2);
+        });
+
+        it('has Mongo stop a career read that outlives the game-end budget, rather than letting it run on', async () => {
+            // withTimeout can only stop waiting, so the limit has to be the
+            // database's own, and has to fall inside the time the judge waits.
+            expect(CAREER_READ_MAX_MS).toBeLessThan(GAME_END_BUDGET_MS);
+            recordsAre({ [ANN]: [tally('dicecities', 1, 1)] });
+
+            await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([ownCareer('dicecities.mayor', record => record.won, 1)]));
+
+            expect(vi.mocked(getGameStatsByPlayer).mock.calls.map(([, , options]) => options))
+                .toEqual([{ maxTimeMS: CAREER_READ_MAX_MS }, { maxTimeMS: CAREER_READ_MAX_MS }]);
         });
 
         it('judges a game\'s own achievement on the narrowed read', async () => {
@@ -631,7 +715,7 @@ describe('judgeGameEnd', () => {
             await judgeGameEnd(finishedGame('win'), TABLE, recorded, catalogueOf([mayor], [firstWin]));
 
             expect(getGameStatsByPlayer).toHaveBeenCalledTimes(1);
-            expect(getGameStatsByPlayer).toHaveBeenCalledWith(BOB);
+            expect(getGameStatsByPlayer).toHaveBeenCalledWith(BOB, undefined, READ_LIMIT);
         });
 
         it('costs only the seat whose record could not be read', async () => {

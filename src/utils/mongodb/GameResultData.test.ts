@@ -317,6 +317,34 @@ describe('getGameStatsByPlayer', () => {
         expect(pipeline[0]).toEqual({ $match: { playerIds: ANN, gameType: 'DiceCities', ...RESULT_COUNTS_FILTER } });
     });
 
+    it("won't put a game that isn't a string into the match, where Mongoose would not cast it", async () => {
+        const aggregate = aggregateReturning([]);
+
+        // What a caller forwarding a request field could hand it.
+        await getGameStatsByPlayer(ANN, { $ne: null } as unknown as string);
+
+        const [pipeline] = aggregate.mock.calls[0] as unknown as [{ $match: unknown }[]];
+        expect(pipeline[0]).toEqual({ $match: { playerIds: ANN, ...RESULT_COUNTS_FILTER } });
+    });
+
+    it("passes the caller's time limit to Mongo as the aggregation's own maxTimeMS", async () => {
+        const aggregate = aggregateReturning([]);
+
+        await getGameStatsByPlayer(ANN, 'DiceCities', { maxTimeMS: 2500 });
+
+        const [, options] = aggregate.mock.calls[0] as unknown as [unknown, unknown];
+        expect(options).toEqual({ maxTimeMS: 2500 });
+    });
+
+    it('sets no limit when the caller names none, as the profile reads it', async () => {
+        const aggregate = aggregateReturning([]);
+
+        await getGameStatsByPlayer(ANN);
+
+        const [, options] = aggregate.mock.calls[0] as unknown as [unknown, unknown];
+        expect(options).not.toHaveProperty('maxTimeMS');
+    });
+
     it('groups on a countsAsPlayed that is true for a record with no such field', async () => {
         const aggregate = aggregateReturning([]);
 

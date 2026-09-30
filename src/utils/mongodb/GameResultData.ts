@@ -744,7 +744,16 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 // "DiceCities", not the url slug the tally is keyed by), the $match narrows to
 // that one game, which the { playerIds: 1, gameType: 1 } index serves — for
 // when only that game's own career achievements are still to be judged.
-export async function getGameStatsByPlayer(userId: string, gameType?: string): Promise<IGameStats[]> {
+//
+// `maxTimeMS` is handed to Mongo as the aggregation's own server-side time
+// limit, for a caller that would rather lose the answer than wait for it. A
+// caller's own deadline (withTimeout) only stops *it* waiting: the scan carries
+// on running on the database whether or not anyone is left to read it.
+export async function getGameStatsByPlayer(
+    userId: string,
+    gameType?: string,
+    options: { maxTimeMS?: number } = {},
+): Promise<IGameStats[]> {
     // Mongo counts how many of this player's games ended each distinct way; the
     // rule for what each of those endings was *worth to them* is applied
     // afterwards, by the one outcomeFor above (see foldGameStats).
@@ -756,8 +765,14 @@ export async function getGameStatsByPlayer(userId: string, gameType?: string): P
     // to "me", "nobody" or "somebody else" first, which leaves the key bounded
     // by games × endings however long they have been playing — and means no
     // other player's id leaves the database for a tally that never shows one.
+    //
+    // `gameType` goes into the $match only as the string it is typed as.
+    // Mongoose casts a query's filter against the schema but not an aggregation
+    // stage, so a value that arrived as `{ $ne: null }` from a caller forwarding
+    // a request field would reach Mongo as an operator, not a name. Anything
+    // else is left out, which widens the read and never bends it.
     const byEndingAgg: GameEndingRow[] = await GameResultModel.aggregate([
-        { $match: { playerIds: userId, ...(gameType ? { gameType } : {}), ...RESULT_COUNTS_FILTER } },
+        { $match: { playerIds: userId, ...(typeof gameType === "string" ? { gameType } : {}), ...RESULT_COUNTS_FILTER } },
         { $group: {
             _id: {
                 url: '$url',
@@ -781,7 +796,7 @@ export async function getGameStatsByPlayer(userId: string, gameType?: string): P
             },
             total: { $sum: 1 },
         } },
-    ]);
+    ], options);
 
     return foldGameStats(byEndingAgg, userId);
 }
