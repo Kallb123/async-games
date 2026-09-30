@@ -1,10 +1,11 @@
 # Defender of the Realm — Game Design Document
 
-**Status:** Concept, v0.4. Round 3 split the concept into two games (§17).
+**Status:** Concept, v0.5. Round 3 split the concept into two games (§17).
 This doc now belongs to **Defender of the Realm**, the game with the HOMM
-heart. The game with the XCOM heart continues in
-[`squad-tactics.md`](./squad-tactics.md). §18 is the design so far and §19
-has the next questions. §3–§16 are kept as the reasoning that led here.
+heart. The game with the XCOM heart is **Realm Arena**
+([`realm-arena.md`](./realm-arena.md)), which is built first. §18 is the
+design so far, and round 4 settled what it proposed. §20 says what comes
+next. §3–§16 are kept as the reasoning that led here.
 **Working title:** Defender of the Realm (see the appendix)
 **Genre:** Turn-based fantasy strategy: a HOMM-style overworld of factions,
 cities and armies, with battles that are planned, then watched
@@ -183,7 +184,8 @@ and how much one overworld turn can ask of a player.
 ## 7. Questions and answers
 
 Round 1 is §7.1–§7.5 (answers 1–16). Round 2 is §7.6 (round-2 answers 1–5).
-Round 3 is §7.7 (round-3 answers 1–5).
+Round 3 is §7.7 (round-3 answers 1–5). Round 4 is §7.8 (round-4 answers
+1–5).
 
 ### 7.1 Shape of a match
 
@@ -276,7 +278,25 @@ Round 2 also brought two new proposals, written up in §13 and §14.
    different direction: individual battles, with progression.
 
 Round 3's split is §17. The HOMM game's design continues in §18; the XCOM
-game's in [`squad-tactics.md`](./squad-tactics.md).
+game's in [`realm-arena.md`](./realm-arena.md).
+
+### 7.8 Round 4
+
+These are the answers to §19's questions. The round's questions about Realm
+Arena are recorded in `realm-arena.md` §11.
+
+1. **After a draw:** yes: the attacker goes back to the tile it came from, the
+   defender holds its ground, and a siege stays in place. In future, battles
+   over several turns may be worth considering. But they bring complications,
+   such as reinforcements and a third army.
+2. **What wins:** yes, as proposed.
+3. **Sneaking:** as suggested. Sneaking avoids overwatch, at the cost of
+   movement speed or something similar.
+4. **Troops:** troops are numbers of soldiers. The soldiers can have HP, so
+   ten soldiers with 20 HP each take 200 damage to destroy.
+5. **Build order:** yes, build Realm Arena first.
+
+Also from round 4: the two games share a similar fantasy world.
 
 ---
 
@@ -781,7 +801,7 @@ until everyone has prepared, which makes the prepare step a small version of
 
 > **Round 3 took both, as two separate games (§17).** Proposal 4 became
 > Defender of the Realm. Proposal 5, in a new direction, became
-> [`squad-tactics.md`](./squad-tactics.md).
+> [`realm-arena.md`](./realm-arena.md).
 
 **Proposal 4, starting with a single phase.**
 
@@ -837,7 +857,7 @@ move-by-move battle needs 20–40 hand-offs (§9), and an overworld shared by up
 to six players can't wait days for one battle. So each half becomes a game
 with its own heart:
 
-| | **Defender of the Realm** (this doc) | **Squad Tactics** (working title, [`squad-tactics.md`](./squad-tactics.md)) |
+| | **Defender of the Realm** (this doc) | **Realm Arena** ([`realm-arena.md`](./realm-arena.md)) |
 |---|---|---|
 | The heart | The realm: HOMM's overworld | The battle: XCOM |
 | Came from | Proposal 4, sealed battle plans (§13) | Proposal 5, taken in a new direction (§14) |
@@ -848,7 +868,9 @@ with its own heart:
 | Luck | None | Hit chances |
 
 Both games fight on a small grid battlefield with troop types and abilities,
-so the battlefield is worth building once (`squad-tactics.md` §10).
+and they share a similar fantasy world (round-4 answer 5), so the battlefield
+and the troop catalogue are worth building once (`realm-arena.md` §10). Realm
+Arena is built first (round-4 answer 5).
 
 ---
 
@@ -869,6 +891,11 @@ so the battlefield is worth building once (`squad-tactics.md` §10).
 | 2–6 players, and conquest wins | Answers 1 and 15 |
 | One faction first, up to six in the end | Answer 14 |
 | Troops carry over between battles | Answer 9 |
+| After a draw, the attacker falls back, the defender holds, and a siege stays in place (§18.2) | Round-4 answer 1 |
+| What wins a battle (§18.3) | Round-4 answer 2 |
+| Sneaking avoids overwatch, at the cost of speed (§18.4) | Round-4 answer 3 |
+| A troop is a number of soldiers, each with HP (§18.5) | Round-4 answer 4 |
+| Shares a fantasy world with Realm Arena, which is built first | Round-4 answer 5 |
 
 ### 18.2 One battle is one phase; a long fight is several battles
 
@@ -894,9 +921,23 @@ After a draw:
 - **At a siege,** the siege stays in place, so the next assault needs no new
   siege turn.
 
+Round 4 accepted this, and left **one battle that lasts several turns** for
+later (round-4 answer 1). It brings two complications that this version
+avoids. Each needs its own rule before it can come in:
+
+- **Reinforcements.** An army that marches up while the battle is still going.
+  Does it join at the edge of the battlefield when the next phase starts, or
+  can nothing enter a battle already under way?
+- **A third army.** A third player's army arriving at a fight between two
+  others. Does it join one side, fight both, or have to wait until the battle
+  ends?
+
+A series of one-phase battles sidesteps both. Each battle starts from
+whoever is there when it begins.
+
 ### 18.3 What wins a battle
 
-*Proposal.*
+*Agreed in round 4.*
 
 - **In the field,** a side wins when the other is wiped out, or falls to its
   withdrawal point (§10). The loser retreats towards its nearest city with
@@ -908,19 +949,26 @@ After a draw:
 
 ### 18.4 Sneaking when positions are public
 
-With positions public, sneaking can't hide a unit. *Proposal:* a sneaking unit
-moves more slowly, doesn't set off overwatch, and can't be picked by
-rule-based targeting ("the nearest", "whoever enters this area") until it
-attacks. You can see it; you just can't easily plan against it.
+With positions public, sneaking can't hide a unit. *Agreed in round 4:* a
+sneaking unit moves more slowly, doesn't set off overwatch, and can't be
+picked by rule-based targeting ("the nearest", "whoever enters this area")
+until it attacks. You can see it; you just can't easily plan against it. The
+price might be speed or "something similar" (round-4 answer 3), so the exact
+cost is for playtesting. Halving its movement is a place to start.
 
 ### 18.5 Troops, and damage without dice
 
-*Proposal:* a **troop** is a number of soldiers of one type, and that number is
-its strength. This is answer 7's second option, and how HOMM does it.
+*Agreed in round 4:* a **troop** is a number of soldiers of one type, and each
+soldier has HP. Ten soldiers with 20 HP each take 200 damage to destroy
+(round-4 answer 4). This is answer 7's second option, and how HOMM does it.
 
 - A troop's damage is its soldiers × their attack, changed by cover, flanking
   and abilities.
-- The losses it causes are that damage divided by one soldier's HP.
+- The damage comes off the troop's total HP. Every 20 lost (for 20-HP
+  soldiers) is one soldier gone. 45 damage kills two and wounds the third.
+- *Proposal:* a wounded soldier heals after the battle, so only whole losses
+  carry over (answer 9). That's how HOMM treats its wounded top creature, and
+  it keeps a troop between battles down to one number.
 - There are no dice.
 
 A troop that shrinks hits less hard. That is easy to read in a replay ("12
@@ -941,6 +989,8 @@ To be playtested:
 
 ## 19. Questions (round 4)
 
+Answered in §7.8.
+
 1. **After a draw** (§18.2): the attacker goes back to the tile it came from,
    the defender holds its ground, and a siege stays in place. Is that right?
 2. **What wins** (§18.3): in the field, wiping out the enemy or routing them;
@@ -948,8 +998,27 @@ To be playtested:
 3. **Sneaking with public positions** (§18.4): does it still earn its place?
 4. **Troops as numbers of soldiers**, with damage and no dice (§18.5)? Or single
    figures, each with its own HP?
-5. **Build order:** build Squad Tactics first, since it builds the battlefield
-   both games need (`squad-tactics.md` §10)?
+5. **Build order:** build Realm Arena first, since it builds the battlefield
+   both games need (`realm-arena.md` §10)?
+
+---
+
+## 20. What comes next
+
+Defender of the Realm waits while Realm Arena is designed and built first
+(round-4 answer 5). Realm Arena builds the battlefield and the troop catalogue
+that this game then reuses (`realm-arena.md` §10). When this game resumes, the
+topics still open are:
+
+- **The overworld:** the map, resources, cities and buildings, and how far an
+  army moves in a turn.
+- **Factions:** the first one, and what makes each of the six different
+  (answer 14).
+- **Heroes:** whether armies have them, still to be decided (round-2 answer 5).
+- **The order screen:** the riskiest piece in the game (§13.5), and the first
+  thing worth prototyping once the battlefield exists.
+- **Battles over several turns**, with their reinforcements and third armies
+  (§18.2), if a series of one-phase battles turns out not to be enough.
 
 ---
 
@@ -970,3 +1039,4 @@ It's fine as a working title, but check it before release.
 | 0.2 | Round-1 answers recorded (§7) and their consequences listed (§8); the hand-off budget (§9); standing orders as the shared foundation (§10); five battle modes (§11); three proposals and a recommendation (§12); round-2 questions (§13). The working title moves from §8 to §14. |
 | 0.3 | Round-2 answers recorded (§7.6) and added to §5, §8 and §9; Proposals 1–3 given a status after round 2 (§12); the two round-2 proposals written up: sealed battle plans (§13, including the leapfrog and what holds during a long battle) and the campaign of battles (§14); compared, with a new recommendation (§15); round-3 questions (§16). The working title moves from §14 to §17. |
 | 0.4 | Round-3 answers recorded (§7.7). The concept splits into two games (§17). This doc becomes Defender of the Realm's, the HOMM-hearted one; the XCOM-hearted one moves to `squad-tactics.md`. Adds the design so far (§18): one battle is one phase, a long fight is several battles, what wins, sneaking, troops and damage without dice, starting sizes. Adds round-4 questions (§19). The working title moves to an appendix. |
+| 0.5 | Round-4 answers recorded (§7.8) and marked as agreed in §18: the draw and win rules, sneaking at the cost of speed, troops of soldiers that each have HP (with healing after battle proposed). Battles over several turns noted for later, with their two complications (§18.2). The XCOM-hearted game is named Realm Arena (`realm-arena.md`, renamed from `squad-tactics.md`), shares a fantasy world with this game, and is built first. Adds what comes next (§20). |
