@@ -63,10 +63,10 @@ forgotten. This document settles:
 When a turn ends with a player having earned something, **the achievement
 unlocks there and then**:
 
-- **The board celebrates it.** The next time the earner's board refreshes
-  (straight away for a push-driven refresh, or within one poll), it shows the
-  app's toast: *"🏆 Achievement unlocked · Mine Baron"*. Every unlock gets
-  this, and it's shown once per browser.
+- **The board celebrates it.** At the earner's next fetch, their board
+  shows the app's toast: *"🏆 Achievement unlocked · Mine Baron"*. Every unlock
+  gets this, and each is shown once per browser (§7.3 says how quickly that
+  fetch comes).
 - **The phone buzzes**, if the achievement says so. An achievement marked
   `notify` also sends the earner a push, on a new *Achievements* channel they
   can switch off in Settings. That's the one to use for the big moments, and
@@ -140,7 +140,7 @@ Most of this rests on pieces the repo already has. The new work is:
 | **The one place a game ends** | `finishGame()` / `announceGameOver()` in `src/utils/games/finishGame.ts` | Judging at game end (§4.3). Every ending goes through here: the command route's game-over branch, `POST /api/game/end`, and the turn-timer cron's two paths (its abandon, and `finishPlayedOut`). |
 | **`GameResult`**, one per finished game | `src/utils/mongodb/GameResultData.ts` | Counting achievements. Games played and won per game come out of one aggregation (`getPlayerStats` → `byGame`), and `outcomeFor` is the single rule for what a game was worth to a player. |
 | **`RESULT_COUNTS_FILTER`** | same | Which games count. A game with a guest who hasn't claimed their account is an exhibition match. It counts toward nobody's stats (`docs/account-less-play.md` §8), and so toward nobody's achievements. |
-| **Every game's response builder, with a null viewer** | each game's `IReplayAdapter.toResponseState(…, null, …)`, pinned by `src/utils/apiModels/games/hiddenHands.test.ts` | What a check is allowed to see (§9): the game as everyone at the table sees it, with nobody's hand in it. |
+| **Every game's response builder, with a null viewer** | each game's `IReplayAdapter.toResponseState(…, null, …)`; pinned today for Train Time, World Domination, Settlements & Cities, Fires Out and Race Cars in `src/utils/apiModels/games/hiddenHands.test.ts`, and for Banned Islet in its own models test (for a seated viewer only) | What a check is allowed to see (§9): the game as everyone at the table sees it, with nobody's hand in it. Every game that gets a match achievement also gets a null-viewer pin (§12, test 5). |
 | **Per-game registries with guard tests** | `src/utils/games/recap.ts` (one import per game), `GAME_GUIDES` / `GAME_TUTORIALS` / `GAME_THEMES`, `src/games/gameRegistry.test.ts` | The shape of `GAME_ACHIEVEMENTS`. Each game owns its file, the registry gets one import and one line per game, and a test fails CI if a game ships the file but misses the line. |
 | **Profile screens and their gate** | `src/app/profile/page.tsx`, `src/app/profile/[userId]/page.tsx`, `/api/stats`, `/api/profile/[userId]` (`areFriends`) | Where achievements show, and who may see them. Both screens already fetch `byGame`. |
 | **The game response, and the hook every board reads it through** | `GET /api/game/[gameid]` and the command route's response, which both attach reactions the same way; `useGameData` | Handing the viewer their own unlocks from this game, and celebrating the new ones, on every board at once (§7.3). |
@@ -288,9 +288,10 @@ export type MatchCriteria<R> =
 
 `R` is the game's **response** type, from its browser-safe `apiModels.ts`. The
 check is handed what that game's own response builder gives a viewer who holds
-no seat, and never the server's internal state. §9 explains why that matters.
-In short, it turns "a check can only reward what the table could see" into a
-property of the types, not a sentence for reviewers to remember. It's also what
+no seat, and never the server's internal state. The view comes from one
+function, `tableView`, which has the `null` viewer written into it (§4.2 step
+4). §9 explains why that matters, and why the type alone isn't the guard (the
+response type also describes each viewer's own private fields). This is what
 makes announcing an unlock mid-game safe.
 
 - **`turnEnd` is the default.** It's for anything about the state of the board
@@ -454,54 +455,96 @@ unlock can never reveal more than the board already shows.
 
 ### 4.2 At the end of a turn
 
-The command route already has a block that runs only on a turn-ending move,
-after the save, in `after()`. It's where the `YourTurn` push is built and sent.
-Judging goes into that block, after the push, in its own `try`, under
-`withTimeout`:
+The command route already has a block for a move that ends the turn. It runs
+after the save, in `after()`, and it's where the `YourTurn` push is built and
+sent. Judging joins that block, restructured so the two halves run side by
+side:
 
 ```
-POST /api/game/command, a move that ends the turn:
+POST /api/game/command: an on-turn move whose outcome has turnOver or timerRestarts
   … save, respond …
   after():
-    1. usersById(gameData.userIdList)                (already there)
-    2. send YourTurn to the next player              (already there)
-    3. unlocked = await withTimeout(                 NEW
-           () => judgeTurnEnd(gameData, userList),
-           TURN_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameId}`)
-    4. push AchievementUnlocked to each earner of a `notify` achievement
+    userList = usersById(gameData.userIdList)         (already there; hoisted out of the push's try)
+    await Promise.all([
+      notifyNextPlayer(userList),                      (already there; turnOver only; its own try)
+      withTimeout(                                     NEW; its own try
+        () => judgeTurnEnd(gameData, userList).then(pushNotifyUnlocks),
+        TURN_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameId}`),
+    ])
 ```
 
+- **Side by side, not queued.** The `YourTurn` half replays the whole game to
+  write its body, and it sends through FCM with no deadline of its own.
+  Queued behind that, judging could run out of the function's time before it
+  even started, and nothing would say so.
+  - Beside it, judging usually finishes first: it's one read, one view, a few
+    checks, and perhaps one write. So the next player's board, refreshed by
+    that push, often already has the unlock.
+  - `toResponseState` is synchronous, so the two halves never interleave on
+    the shared document.
+  - The existing `!turnUser` early return now guards only the push half.
+- **The push rides inside the timed work.** `withTimeout` stops *waiting* at
+  `TURN_END_BUDGET_MS` (5 s), but it lets the work finish. Because the `notify`
+  push is chained onto that work, a judgment that lands late still sends its
+  push. Otherwise it would write a row whose push nobody sends, and the next
+  turn end would see that row as already held.
+- **`timerRestarts` counts as a turn end too.** Fires Out's solitaire crew
+  hands the turn from figure to figure without ever reporting `turnOver`. Its
+  turn boundary is `timerRestarts`, which the route already treats as a turn
+  boundary for the clock.
+  - Judging on either flag means a solo Fires Out game is judged as it goes,
+    like any other game.
+  - On a boundary with only `timerRestarts` there's no `YourTurn` push, so
+    `Promise.all` holds just the judging half.
+
 `judgeTurnEnd` lives in `src/utils/games/awardAchievements.ts` and is
-server-only. It goes through these steps:
+server-only. It runs these steps:
 
 0. **Is there anything to judge?** If this game has no `turnEnd` achievements,
    return. This costs nothing until a game has some.
-1. **Does the game count?** Ask `resultCounts` about the unclaimed guests
-   `unclaimedGuestsOf(userList)` finds. `resultCounts` is exported beside
-   `RESULT_COUNTS_FILTER` so the rule has one home.
-   The roster is already loaded, so this costs nothing. If it doesn't count,
-   stop: an exhibition match earns nobody anything (§8).
+1. **Does the game count?** Ask `resultCounts`, which is exported beside
+   `RESULT_COUNTS_FILTER` so the rule has one home, about the unclaimed guests
+   `unclaimedGuestsOf(userList)` finds. **It fails closed:** a seat whose id
+   Clerk didn't return counts as an unclaimed guest.
+   - The stale-guest sweeper can delete a guest who is still seated (§10).
+   - `usersById` then quietly leaves them out.
+   - Without failing closed, an exhibition table would look registered.
+
+   If the game doesn't count, stop: an exhibition match earns nobody anything
+   (§8). The roster is already loaded, so this costs nothing.
 2. **Who's being judged?** The roster, minus `droppedPlayers`. That's every
    seat, not just the mover, because a move can hand someone else their
    achievement (the Business Center swap).
 3. **What do they already hold?** One read, served by the unique index:
    `AchievementUnlock.find({ userId: { $in: seats } })`. A seat that holds all
    of this game's `turnEnd` achievements is done.
-4. **The view.** Build `adapter.toResponseState(gameData.specificGameState,
-   identityMap, null, commandHistory)` once, from the live document the move
-   just saved. There's no replay.
+4. **The view.** `tableView(gameData)` builds it once, from the live document
+   the move just saved. It's the one function that builds a check's view:
+   `toResponseState(state, identityMap, null, commandHistory)`, with the
+   `null` written in and no viewer parameter to pass. That `null` is the
+   guarantee §9 rests on. There's no replay.
 5. **Check.** For each seat, and each `turnEnd` achievement it lacks, run
    `check(view, userId)`, each in its own `try`. One broken check costs only
-   its own achievement for this turn, and a warning.
+   its own achievement for this turn, plus a warning.
 6. **Write.** `recordUnlocks` (§5.2) upserts what passed, with this game's
-   `gameId` and `url`, and hands back only the rows it actually inserted.
-   Those, and only those, get celebrated and pushed.
+   `gameId` and `url` and an `unlockedAt` from the judge's own clock. It hands
+   back only the rows it actually inserted, and those, and only those, are
+   celebrated and pushed.
+   - `unlockedAt` is never copied from the command that ended the turn.
+     Settlements & Cities deliberately gives its follow-up end-turn a fresh
+     timestamp so that nothing pairs it with the move that triggered it, and
+     an unlock shouldn't undo that.
 
-**Turns the route doesn't see.** The turn-timer cron also ends turns: it plays
-a stalled turn out through the game's own commands, or advances past it. Those
-turn ends aren't judged. A state that's still true is caught at the next turn
-end the route sees, or on the final state. Only a state that exists *solely*
-at the end of a timed-out turn is missed. That's rare, and it's cheaper than
+**Turns the route doesn't judge.** Two other things end turns:
+
+- **The turn-timer cron.** It plays a stalled turn out through the game's own
+  commands, or advances past it.
+- **`POST /api/game/taketurn`.** A live route no client calls. It ends turns
+  for a game without a timeout adapter, in its own `after()`.
+
+Neither judges. A state that's still true is caught at the next turn end the
+command route sees, or on the final state. Only a state that exists *solely* at
+the end of a timed-out turn is missed. That's rare, and it's cheaper than
 adding a Clerk lookup and a push to every cron sweep.
 
 **A move made out of turn** (a card played "at any time",
@@ -520,66 +563,94 @@ announceGameOver(gameData)
   3. unlocked = await withTimeout(                   NEW
          () => judgeGameEnd(gameData, userList, { recorded }),
          GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameId}`)
-  4. the GameOver pushes, each naming that player's `unlocked` (§7.4)
+  4. the GameOver pushes, one per player, each naming that player's
+     `unlocked` (§7.4), sent together with Promise.all
 ```
 
-`judgeGameEnd` shares steps 0 to 3 and 6 with `judgeTurnEnd`. In between:
+`judgeGameEnd` shares `judgeTurnEnd`'s steps 1 (the fail-closed count), 2, 4,
+5 and 6. It doesn't share steps 0 and 3, which are only about `turnEnd`
+achievements. Those would skip career and `end` judging for any game without
+`turnEnd` achievements of its own, and that means Solitaire, and every game
+from PR 3 until PR 4 gives it a catalogue. It has its own versions instead:
 
-- **Match**, on a rules ending only: every `turnEnd` achievement a seat still
-  lacks, judged once more on the finished game's view, and every `end`
-  achievement, judged with that seat's `outcome`. The game-ending move is
-  judged here rather than in §4.2, because it goes down the route's game-over
-  branch instead of the turn-end block.
-- **Career**, only if `recorded`: the game that just finished must be in
-  `byGame` before "Win 5" is checked, and `byGame` is read from `GameResult`.
-  If the record failed, career achievements catch up at the player's next
-  finished game, so they never get ahead of the stats beside them.
-  - **Which achievements.** For each seat, the career achievements this game
-    *could* have advanced: the platform's, plus this game's own. A seat that
-    already holds all of them is skipped. That's the usual case for a heavy
-    player, and it's how they avoid paying a full-history aggregation every
-    time a table they sit at finishes.
-  - **The read.** Otherwise, read `byGame` through
-    `getGameStatsByPlayer(userId, gameType?)`, narrowed to the
-    `{ playerIds: 1, gameType: 1 }` index when only this game's own
-    achievements are missing. Then run `careerMet`.
-  - **Tipped or backfilled?** Sort each newly met achievement into one of two
-    kinds:
-    - **Tipped by this game.** Progress *without* this game is still short of
-      `target`. That means played − 1 (if this game counts as played), won − 1
-      (if this game was a win), and for `differentGames`, whether this game's
-      `played` is 1. These are stored with this `gameId` and `url`, and
-      announced.
-    - **Backfilled.** It was already met before this game, as happens to
-      every veteran at launch. These are stored without a `gameId`, and not
-      announced (§5.3).
-- **Ordering.** The career half depends on `recorded`; the match half reads
-  `gameData`, not `GameResult`, so it doesn't. Judging comes before the pushes,
-  so a push can name what the ending unlocked. It's under `withTimeout`, so it
-  can never be the reason a table doesn't hear its game has ended: on a throw
-  or a stall it answers with no unlocks, the pushes go out without the clause,
-  and the late work is logged.
+- **Is there anything to judge?** Yes if this game has `turnEnd` or `end`
+  achievements, or if any career achievement exists, this game's own or the
+  platform's. From PR 3 on, the platform list is non-empty, so a game with no
+  catalogue of its own still gets its platform career unlocks stored, dated
+  and announced.
+- **Done**, for a seat, means holding all of this game's `turnEnd` and `end`
+  achievements, all its career ones, and all the platform's.
+
+Between those it does two things.
+
+**Match, on a rules ending only.** Every `turnEnd` achievement a seat still
+lacks is judged once more, on the finished game's view. Every `end`
+achievement is judged with that seat's `outcome`. The game-ending move is
+judged here rather than in §4.2, because it goes down the route's game-over
+branch instead of the turn-end block.
+
+**Career, only if `recorded`.** The game that just finished has to be in
+`byGame` before "Win 5" is checked, and `byGame` is read from `GameResult`.
+If the record failed, career achievements catch up at the player's next
+finished game, so they never get ahead of the stats shown beside them.
+
+- **What it looks at.** For each seat: the career achievements this game
+  *could* have advanced, which are the platform's plus this game's own. A seat
+  that already holds all of them is skipped. That's the usual case for a
+  heavy player, and it's how they avoid paying for a full-history aggregation
+  every time a table they sit at finishes.
+- **The read.** For anyone else, it reads `byGame` through
+  `getGameStatsByPlayer(userId, gameType?)`, narrowed to the
+  `{ playerIds: 1, gameType: 1 }` index when only this game's own
+  achievements are missing, and then runs `careerMet`.
+- **Tipped or backfilled?** Each newly met achievement is one of two kinds:
+  - **Tipped by this game.** Progress *without* this game is still short of
+    `target`: played − 1 if this game counts as played; won − 1 if it was a
+    win; and for `differentGames`, whether this game's `played` is 1. These
+    are stored with this `gameId` and `url`, and announced.
+  - **Backfilled.** It was already met before this game, as happens to every
+    veteran at launch. These are stored without a `gameId`, and not announced
+    (§5.3).
+
+**Ordering and budget.**
+
+- **What waits on what.** The career half depends on `recorded`. The match
+  half reads `gameData`, not `GameResult`, so it doesn't. Judging runs before
+  the pushes, so a push can name what the ending unlocked.
+- **Why the budget is 3 s.** `withTimeout` means judging can never be the
+  reason a table doesn't hear its game has ended. `GAME_END_BUDGET_MS` is set
+  against the cron:
+  - the sweep keeps 10 s of headroom for the last game it starts;
+  - that game also has to fit a Clerk lookup, `recordGameResult` (whose stats
+    are replayed) and the pushes.
+- **The pushes go out together.** They're sent with `Promise.all`, not one
+  after another. `sendPushToUsers` never throws, so one failure can't sink the
+  rest.
+- **A late judgment can't reach the push.** Unlike at a turn end, a judgment
+  that lands late can't add its clause to pushes already sent. That's
+  accepted: the result page and the board's toast still show it.
 
 ### 4.4 What it costs
 
-- **At a turn end, in the common case:**
-  - one indexed read;
-  - one view built from the live document;
-  - a handful of microsecond checks.
-
-  This happens after the response, in the same `after()` that already replays
-  the whole game to write the next player's `YourTurn` body. By comparison
-  it's noise.
+- **At a turn end**, in the common case: one indexed read, one view built from
+  the live document, and a handful of microsecond checks.
+  - It runs after the response, beside the `YourTurn` half, which replays the
+    whole game to write the next player's body. By comparison it's noise.
 - **A write only when something unlocks**, which is at most once per player
   per achievement, ever.
-- **At game end:** the same, plus one aggregation per seat that could still
+- **At game end**: the same, plus one aggregation per seat that could still
   earn a career achievement from this game.
+- **On the game response**: one read, projected to `achievementId` and
+  `unlockedAt`, served by the unique index's `userId` prefix.
+  - It happens on every poll of a watched board and on every command
+    response, but only for a finished game or one whose game has `turnEnd`
+    achievements (§6). For every other game, no read at all.
 - **No replay, anywhere.** Judging live at each turn end is what makes one
   unnecessary. An earlier draft replayed each finished game to find "at any
-  turn end" states, and paid for it in the cron's budget, in replay drift and
-  in a strict mode for `buildTimeline` (§16).
+  turn end" states, and paid for it three ways: in the cron's budget, in
+  replay drift, and in a strict mode for `buildTimeline` (§16).
 - **The cron**, which `await`s `announce()` inline against its deadline, pays
-  only the game-end cost, and that's capped by `withTimeout`.
+  only the game-end cost, capped at `GAME_END_BUDGET_MS`.
 
 ## 5. Storage: one flat collection of unlocks
 
@@ -726,7 +797,7 @@ no write route at all.
 |---|---|---|
 | `GET /api/stats` | `achievements: IAchievementUnlock[]` | Signed in, your own |
 | `GET /api/profile/[userId]` | `achievements: IAchievementUnlock[]` | Self or an accepted friend (`areFriends`) |
-| `GET /api/game/[gameid]`, and the command route's response | `unlockedHere: string[]`: **the viewer's own** unlocks in this game, by id | A player in the game |
+| `GET /api/game/[gameid]`, and the command route's response | `unlockedHere: { id, unlockedAt }[]`: **the viewer's own** unlocks in this game | A player in the game |
 | `GET /api/gameresult/[gameId]` (and `POST …/regenerate`, which shares `gameResultResponse`) | `achievements: { userId, id }[]`: this game's match unlocks for every seat, and its career unlocks **for the viewer's own seat only** | A player in the game, or a friend of one |
 
 ```ts
@@ -746,10 +817,19 @@ export interface IAchievementUnlock {
   `achievements` explicitly.
 - **Both game responses change, through one helper.** The game GET and the
   command route already build the game response and attach reactions the same
-  way (`attachHistoryReactions`). `unlockedHere` is attached beside it by one
-  shared helper. It's skipped entirely, with no read, for a game with no
-  achievements registered. This is the one addition to the most-polled route
-  in the app, so it's one indexed read, bounded by the size of the catalogue.
+  way (`attachHistoryReactions`). One shared helper attaches `unlockedHere`
+  beside that, run in `Promise.all` with the reactions rather than after them.
+  This is the one addition to the most-polled route in the app, so three rules
+  apply:
+  - **It reads only when an unlock can exist.** That's a finished game, or a
+    live one whose game has `turnEnd` achievements. Mid-game, only a
+    `turnEnd` unlock can exist, and a finished board no longer polls. Every
+    other request makes no read.
+  - **It's one indexed read**, projected to `achievementId` and `unlockedAt`.
+  - **It fails soft.** A failed read is logged and answers `[]`, and the
+    client reads `unlockedHere ?? []`. On the command route that answer comes
+    after `trySave` has already committed the move, so a 500 there would
+    report a saved move as a failure.
 - **`unlockedHere` is the viewer's own and nobody else's.** What *you*
   unlocked this game is yours to be shown. What the others unlocked is on the
   result page, once the game is over.
@@ -823,18 +903,31 @@ character.
   inside `useGameData`, so every board gets the moment without adding a line
   of its own. It shows the app's existing toast (`ToastContext`) for each id
   it hasn't celebrated before: *"🏆 Achievement unlocked · Mine Baron"*.
-- **Only once.** What's been celebrated is remembered per browser with
-  `useStoredValue`, as a bounded list of `gameId:achievementId` pairs. So
-  reopening a board doesn't celebrate an old unlock again, but coming back to
-  one you earned while you were away (the swap case) does.
-- **How quickly it shows.** The earner's board fetches after the turn ends:
-  - immediately, for a `notify` achievement: its push fires an
-    `AchievementUnlocked` window event, which joins the events `useGameData`
-    refreshes on;
-  - otherwise within one poll, since the turn has just passed to somebody
-    else and a watched board polls every ten seconds.
-- **Unit-tested.** The decision of which ids are new is a pure function, so it
-  gets a plain unit test.
+- **Only once, and only while it's news.** A toast is shown for an unlock
+  that's younger than a week and not yet celebrated in this browser.
+  - What's been celebrated is remembered with `useStoredValue`, as
+    `gameId:achievementId` pairs, pruned by the same one-week age. So the age
+    is what bounds the list, and nothing is evicted while it still matters.
+  - Reopening a board doesn't celebrate an old unlock again, but coming back
+    to one you earned while you were away (the swap case) does.
+  - A new device, cleared storage or a private window celebrates at most the
+    last week's unlocks, not the whole history of every game opened.
+- **How quickly it shows.** At the earner's next fetch of the board:
+  - **Immediately, for a `notify` achievement.** Its push fires an
+    `AchievementUnlocked` window event, which is added to the events
+    `useGameData` refreshes on.
+  - **Within one poll, if it's now someone else's turn.** A watched board polls
+    every ten seconds while somebody else holds the turn. That's usually the
+    mover's situation.
+  - **Otherwise, on their next fetch after judging lands**: their next move's
+    response, or a return to the tab, if it's now their turn. That covers a
+    player who earns something on the previous player's move, a Dice Cities
+    doubles bonus turn, and any solo game. For the first of those, judging
+    running beside the `YourTurn` push (§4.2) usually means the refresh that
+    push triggers already carries it.
+- **Unit-tested.** Deciding which unlocks are new is a pure function, so it
+  gets a plain unit test, including a pair already pruned and an unlock older
+  than the window.
 
 ### 7.4 Pushes
 
@@ -940,10 +1033,20 @@ matters:
     have ended it on the player, and two Solitaire moves are no bar at all.
   - **How it's recorded.** `recordGameResult` works out whether the game
     counts as played, through one function, `countsAsPlayed(gameData)`, and
-    stores the answer on the `GameResult` as a boolean. The `byGame`
-    aggregation adds it to its group key (it's bounded, being a boolean) and
-    sums it into `played`. A record written before the field existed counts,
-    as it always has on the profile.
+    stores the answer on the `GameResult` as a boolean. Three details matter:
+    - **The field is declared on `GameResultSchema`.** Mongoose's strict mode
+      silently drops an undeclared field on `create`. Every new record would
+      then read as missing, and so count, and the two-turn rule would do
+      nothing, with no test to notice.
+    - **The `byGame` group key normalises it** as
+      `{ $ne: ['$countsAsPlayed', false] }`, so a missing field is `true` and
+      there's no third group for the fold to remember.
+    - **Summing into `played` is a pure fold**, like `outcomeFor`, and is
+      tested with a row that has no field.
+
+    A record written before the field existed therefore counts, as it always
+    has on the profile. That's a one-time grandfathering: an early surrender
+    from before launch counts as played.
 - **Wins are unaffected.** A surrender is a draw for everyone, and an
   abandonment is a loss for whoever went quiet.
 - **Solo games** (Solitaire, Smartthink solo) count toward career achievements
@@ -973,12 +1076,32 @@ grant something (an avatar, a theme).
 **The rule:** a match check sees the game as everyone at the table saw it at
 that moment (the game's response state for a null viewer), and nothing else.
 
-That's enforced by the check's parameter type (§3.3), not by a sentence authors
-have to remember. The view is built by the game's own response builder with
-`viewerId = null`, from the live document at a turn end or the finished
-document at the end. `hiddenHands.test.ts` already pins that projection for
-every game with hidden state. The judging step doesn't need a redaction of its
-own; it relies on the one every game already has.
+**What enforces it** is one function, not the type and not a sentence authors
+have to remember:
+
+- **`tableView(gameData)` is the only way a check's view is built** (§4.2 step
+  4). It calls the game's own response builder with `viewerId = null`, which
+  is written into the function, and it takes no viewer parameter at all. So
+  nobody can "fix" a check that never fires by passing the seat's id.
+- **A test that can fail pins that `null`** (§12, test 4). It uses a
+  Settlements & Cities fixture with sentinel values planted in one seat's hand
+  and development cards, and asserts that no view any check received contains
+  them.
+- **Each game's null view is pinned** by a wire test before that game gets
+  a match achievement (§12, test 5). The judging step has no redaction of its
+  own; it relies on the one every game already has, so that one has to be
+  tested.
+
+**The type is not the guard.** `R`, the response type, also describes each
+viewer's *own* private fields:
+
+- Train Time's `myHand`, `myTickets` and `myPendingTickets`;
+- Settlements & Cities' `resources`, `playerDevCards` and `playerNewDevCards`;
+- World Domination's `cards`.
+
+A check that reads one of these compiles. On the null view it can never pass,
+so today it's dead code. But it's exactly the check that would come alive if
+the `null` were ever loosened. That's why reading one is a finding (below).
 
 **Why this is what makes mid-game unlocks safe.** An unlock is a public
 statement about a game that may still be in play. It shows up in three places:
@@ -1009,14 +1132,20 @@ The worst variant is a check that hinges on *someone else's* hidden state
 ("win while an opponent held a Knight"), which would publish their secret on
 *your* profile, possibly mid-game.
 
-With the null view, none of these can even be written, because the field isn't
-there to read. That's the design working, not a gap in it. It also covers a
+On the null view, none of these can ever pass, because the field they need
+isn't there to read. That's the design working, not a gap in it. It also covers a
 surrender: a surrendered game is never judged on its final state (§4.1), and
 even if it were, its null view hides whatever it hid mid-game. Train Time's
 tickets stay hidden until `gs.gameOver`, not until `complete`.
 
-Two rules remain for authors, and `croupier` reviews every game's
+Three rules remain for authors, and `croupier` reviews every game's
 `achievements.ts` against them:
+
+- **A check must not read a viewer-only field.** That means any `my*` field,
+  `resources`, `playerDevCards` / `playerNewDevCards`, World Domination's
+  `cards`, `canUndo` and `autoEndTurnAt`. Reading one is a finding even though
+  it can't pass: it's either a check that never fires, or a leak waiting for
+  the `null` to be loosened.
 
 - **A description must not name a hidden specific**, even where the check
   can't read it. "Hold the Knight card at the end" is misleading, and it
@@ -1032,18 +1161,25 @@ Two rules remain for authors, and `croupier` reviews every game's
 | What could go wrong | What happens |
 |---|---|
 | A check throws | It's skipped for this judging pass, with a warning. The other checks, the pushes, the move and the game are unaffected (§4.2 step 5). |
-| Judging at a turn end fails or stalls (Mongo stuck in its 30s server selection, say) | It's in `after()`, after the response and after the `YourTurn` push, in its own `try` under `withTimeout`. The move is already saved and the next player already told. A condition that still holds is caught at the next turn end. |
-| Judging at game end fails or stalls | `withTimeout` answers with no unlocks, and the game-over pushes go out without the clause. Career achievements catch up at the player's next game. `turnEnd` achievements were already judged at every earlier turn end, so only what the final move alone earned, and `end` achievements, are lost. If the function is killed first (the cron's last game of a run), the same applies. |
+| Judging at a turn end fails or stalls (Mongo stuck in its 30s server selection, say) | It's in `after()`, after the response, beside the `YourTurn` push rather than behind it, in its own `try` under `withTimeout` (§4.2). The move is already saved and the next player is told regardless. A condition that still holds is caught at the next turn end. |
+| The `YourTurn` half is slow (a long game's replay, an FCM send with no deadline) | Judging doesn't wait for it: the two halves run side by side. Queued behind it, judging could lose the function's time without ever starting, and nothing would log it. |
+| Judging at a turn end finishes after its budget | `withTimeout` stops waiting, but the work runs on. The `notify` push is chained onto that work, so a late unlock still pushes, rather than leaving a row whose push is never sent. |
+| A seat Clerk can't resolve (a guest the stale-guest sweeper deleted while still seated) | Counted as an unclaimed guest, so the table counts as an exhibition and nothing is judged (§4.2 step 1). Failing open would have let an exhibition table earn achievements. The sweeper gap itself is a separate bug (§15). |
+| Judging at game end fails or stalls | `withTimeout` answers with no unlocks after `GAME_END_BUDGET_MS` (3 s, set against the cron's 10 s of headroom, §4.3), and the game-over pushes go out without the clause. Career achievements catch up at the player's next game. `turnEnd` achievements were already judged at every earlier turn end, so only what the final move alone earned, and `end` achievements, are lost. If the function is killed first (the cron's last game of a run), the same applies. |
 | `recordGameResult` fails | Career judging is skipped for this game and catches up at the player's next game (§4.3). Match judging doesn't depend on it, and still runs. |
 | Two judging passes race: overlapping turn ends, or two games finishing at once | Both upsert, one inserts, and only its unlock is celebrated and pushed. Neither throws (§5.2). |
 | The first writes arrive before the unique index exists | Uniqueness could be lost for good (§5.2). The PR split prevents it, and PR 3 checks for the index before the catalogue ships. |
-| A turn is ended by the cron | That turn end isn't judged. A state that persists is caught at the next turn end the route sees, or on the final state (§4.2). |
+| A turn is ended by the cron, or by `POST /api/game/taketurn` | That turn end isn't judged. A state that persists is caught at the next turn end the command route sees, or on the final state (§4.2). |
+| A game whose turns end with `timerRestarts` and never `turnOver` (Fires Out's solitaire crew) | Judged on either flag, so it's judged as it goes like any other game (§4.2). |
+| A game with no `turnEnd` or `end` achievements of its own | Its game end is still judged for career achievements, the platform's included, because `judgeGameEnd` has its own "anything to judge?" (§4.3). |
 | A state is reached and then undone | It never reaches a turn end, so it's never judged (§4.1). |
 | An opponent deletes their account | Stored unlocks stay. An unlock that's only derived can drop (§5.3, the accepted exception). "In a game of Dice Cities" survives, because `url` is on the row. |
 | A player deletes their account while one of their games is being judged | The pass can upsert a row after `deleteMany`, leaving an orphan with no account. That's the same race `recordGameResult` already has there, and an orphan row is unreachable: nothing reads it. |
 | An achievement is withdrawn from the catalogue | Its stored rows become unknown ids, and readers drop them (`achievementById`). The id must never be reused (§11). |
 | A player with thousands of games | At a turn end, career achievements aren't touched at all. At game end, a seat that already holds everything this game could advance is skipped. Otherwise it's the same `byGame` aggregation the profile runs, narrowed to one game where it can be. |
-| The game response's `unlockedHere` read fails | It's attached beside reactions and fails the same way reactions would, so it gets the same handling as that read. For a game with no achievements it's never made. |
+| The game response's `unlockedHere` read fails | It's logged and answers `[]`, and the response still goes out with a 200. On the command route the move is already saved, so a 500 there would misreport it. The read isn't made at all for a live game with no `turnEnd` achievements (§6). |
+| `countsAsPlayed` never reaches the database | The field is declared on the schema. Undeclared, strict mode would drop it, and every new game would count as played (§8). |
+| Toast memory: a new device, cleared storage, a private window, two tabs | At most the last week's unlocks are celebrated again. The list is bounded by age, not size, so nothing still news is evicted (§7.3). |
 
 `gremlin` reviews all of PR 2 against this table, and PR 3's pushes too.
 
@@ -1060,8 +1196,13 @@ For whoever writes the next game's `achievements.ts`:
 - **Write the description as the requirement**, precisely enough to settle an
   argument: "at the end of a turn", "in one game", "win" versus "play".
 - **Type the check against your game's response type**, from `./apiModels`,
-  never its internal state (§9). If a check can't be written against the view,
-  the achievement is asking about something the table never saw.
+  never its internal state, and **read only what every viewer gets**. No
+  `my*` field, no `resources`, no dev cards (§9). If a check can't be written
+  against the null view, the achievement is asking about something the table
+  never saw.
+- **Pin your game's null view** in `hiddenHands.test.ts` in the same commit as
+  its first match achievement: a sentinel for a game with hidden state, or an
+  exact key set for one that hides nothing (§12, test 5).
 - **Use `at: 'turnEnd'` for anything about the board**, and `at: 'end'` only
   when the check needs the result. A `turnEnd` achievement unlocks when it
   happens, and can't be lost to a surrender.
@@ -1107,7 +1248,9 @@ harness for the routes, and a structural guard for the registry.
    - **no `engine: "standalone"` game has an entry**, since Kingdom Builder's
      would be drawn but never judged;
    - **every game with a `match` achievement has a registered replay
-     adapter**;
+     adapter, and is on the list of games whose null view is pinned** (test
+     5). That list is written out explicitly, the way `RESPONSE_BUILDERS` is
+     in `publicGameState.test.ts`;
    - `target` is at least 1, and `title`, `icon` and `description` are
      non-empty;
    - **nothing reachable at runtime from `src/utils/games/achievements.ts` is
@@ -1130,16 +1273,31 @@ harness for the routes, and a structural guard for the registry.
    - the *tipped* versus *backfilled* split (§4.3);
    - `countsAsPlayed`: every rules ending counts; a surrender after one turn
      doesn't; a surrender after two does; an abandonment after two does; a
-     solo surrender never does.
-4. **Judging** (`awardAchievements.test.ts`), against the Dice Cities
-   `testHarness`, with a test catalogue passed in.
+     solo surrender never does;
+   - the `played` fold: a row with no `countsAsPlayed` counts as played;
+   - which unlocks the board toasts (§7.3): a new one does, one already
+     celebrated doesn't, one pruned from the list but older than a week
+     doesn't.
+4. **Judging** (`awardAchievements.test.ts`), with a test catalogue passed
+   in.
 
-   **`judgeTurnEnd`:**
-   - what a check receives deep-equals `toResponseState(…, null, …)`;
+   **The table view**, on a Settlements & Cities fixture, because Dice
+   Cities' adapter ignores the viewer and so couldn't catch a loosened
+   `null`:
+   - plant sentinels in one seat's `resources` (ore 9173) and development
+     cards;
+   - give a test check that records `JSON.stringify(view)`;
+   - run both judges;
+   - assert that no recorded view, for any seat judged, contains a sentinel,
+     and that `playerDevCards` is `{}`.
+
+   **`judgeTurnEnd`**, against the Dice Cities `testHarness`:
    - a check passes and fails on the live view;
    - every seat is judged, not only the mover (the Business Center swap);
    - a dropped seat isn't judged;
    - an exhibition game judges nothing;
+   - **a seat Clerk doesn't return judges nothing** (it fails closed);
+   - it still runs when the next player can't be resolved;
    - an empty catalogue returns before any read.
 
    **`judgeGameEnd`:**
@@ -1147,7 +1305,11 @@ harness for the routes, and a structural guard for the registry.
    - a rules ending judges the final state;
    - **a game ended by `POST /api/game/end` judges no match achievement**, but
      still counts toward career ones once it has lasted two turns;
-   - a failed `recordGameResult` skips career but not match.
+   - a failed `recordGameResult` skips career but not match;
+   - **a game with no catalogue of its own still tips a platform career
+     achievement**;
+   - a seat holding every `turnEnd` achievement still has its `end` and career
+     ones judged.
 
    **Both:**
    - a second run inserts nothing and returns nothing;
@@ -1155,9 +1317,19 @@ harness for the routes, and a structural guard for the registry.
      reports the unlock, and neither throws;
    - a throwing check costs only itself.
 5. **Every match achievement's `check`** gets a small unit test beside its
-   game: one view that passes, one that fails. For each game with hidden
-   state, also plant a sentinel value in the internal state (the
-   `hiddenHands` idiom), and assert it never reaches the view a check gets.
+   game, with one view that passes and one that fails.
+
+   **Every game with a match achievement gets its null view pinned** in
+   `hiddenHands.test.ts`, in the same commit as its first one:
+   - **a sentinel** for a game with hidden state, e.g. a Smartthink code of
+     424242, which no guess row can hold, or sentinel ids in both of
+     Outbreak's decks;
+   - **an exact key set** for a game that hides nothing, e.g. Dice Cities or
+     Snakes & Ladders, on the pattern of the Race Cars test;
+   - **Banned Islet's** existing models test gains the null viewer.
+
+   Before this plan, a regression in a null view was a dev-tools leak. With
+   mid-game unlocks it becomes a lock-screen sentence and a profile row.
 6. **Routes:**
    - **a turn-ending move through `POST /api/game/command` writes a row when a
      check passes**, and a `notify` achievement pushes its earner on the
@@ -1171,6 +1343,11 @@ harness for the routes, and a structural guard for the registry.
    - a finishing move writes the game-end unlocks;
    - the game response carries `unlockedHere` for the viewer, and nobody
      else's unlocks;
+   - the game GET and the command response still answer 200, with `[]`, when
+     the unlock read throws;
+   - a live game with no `turnEnd` achievements makes no unlock read;
+   - a Fires Out solitaire hand-off (`timerRestarts` without `turnOver`)
+     judges;
    - `/api/stats` and `/api/profile/[userId]` carry `achievements`;
    - `/api/gameresult/[gameId]`: **a friend of one player sees the other
      players' match unlocks but not their career ones**;
@@ -1251,18 +1428,30 @@ waits for PR 3.
 
    The profile keeps showing `total`, so nothing a player sees changes.
    Covered by test 3's `countsAsPlayed` cases, plus an aggregation case.
-3. **`Judge achievements`.** `src/utils/games/awardAchievements.ts`, with
-   `judgeTurnEnd` and `judgeGameEnd` over one shared core, and
-   `resultCounts` beside `RESULT_COUNTS_FILTER`. The catalogue is a parameter
-   that defaults to the real one. Test 4.
-4. **`Judge achievements at the end of every turn`.** The `withTimeout` call in
-   the command route's turn-end `after()`, after the `YourTurn` push (§4.2).
+3. **`Judge achievements`.** `src/utils/games/awardAchievements.ts`:
+   - `tableView`, with its `null` written in;
+   - `judgeTurnEnd` and `judgeGameEnd` over one shared core, each with its own
+     "anything to judge?" and "done" rules (§4.3);
+   - `resultCounts`, beside `RESULT_COUNTS_FILTER`, failing closed on a seat
+     Clerk didn't return.
+
+   The catalogue is a parameter that defaults to the real one. Test 4,
+   including the Settlements & Cities sentinel test that pins the `null`.
+4. **`Judge achievements at the end of every turn`.** The command route's
+   turn-end `after()` is restructured (§4.2):
+   - `userList` is resolved once, and the `YourTurn` half and the judging half
+     run side by side in `Promise.all`, each in its own `try`;
+   - judging runs under `TURN_END_BUDGET_MS`, on `turnOver` or
+     `timerRestarts`.
+
    Nothing is pushed or shown yet. Test 6's turn-end cases, run with a test
    catalogue and the extended mock.
-5. **`Judge achievements when a game ends`.** The `withTimeout` call in
-   `announceGameOver` (§4.3). The pushes don't mention unlocks yet. Also adds
-   the finishing-move case to `gameRoutes.test.ts`, and the judging steps to
-   ARCHITECTURE.md §5's `finishGame` bullet and §6's command pipeline.
+5. **`Judge achievements when a game ends`.** The call in `announceGameOver`,
+   under `GAME_END_BUDGET_MS` (§4.3). The pushes don't mention unlocks yet.
+   Also:
+   - the finishing-move case in `gameRoutes.test.ts`;
+   - the judging steps in ARCHITECTURE.md, in §5's `finishGame` bullet and
+     §6's command pipeline.
 
 ### PR 3 — Show them, and the first ones to earn
 
@@ -1274,10 +1463,11 @@ still empty.
    - `getPlayerStats` and both profile routes gain `achievements`;
    - `gameResultResponse` gains this game's unlocks, filtered as §6 says;
    - the game GET and the command response gain `unlockedHere`, through the
-     one helper beside `attachHistoryReactions`.
+     one helper beside `attachHistoryReactions`. It reads only when an unlock
+     can exist, and fails soft to `[]` (§6).
 
-   Route tests, including the friend-of-one-player case and "the viewer's own
-   only".
+   Route tests, including the friend-of-one-player case, "the viewer's own
+   only", and the failed read.
 2. **`Fold a section away in one place`.** Extract `DisclosureSection` from
    `WhatsNew`. No behaviour change.
 3. **`Draw an achievement's icon`.** `AchievementIcon`, with its drawn-art
@@ -1287,21 +1477,25 @@ still empty.
    screens, and `ListRow`'s `muted`.
 5. **`Show what a game unlocked on its result page`.** One more `ListSection`.
 6. **`Celebrate an unlock on the board`.** `useUnlockToasts`, called from
-   `useGameData`, and its unit test.
+   `useGameData`, with its one-week window, and its unit test.
+   `AchievementUnlocked` joins the events `useGameData` refreshes on.
 7. **`Push the achievements worth a push`.** This commit:
    - adds the `achievements` channel to preferences and Settings;
    - adds `buildAchievementNotification`;
-   - makes the turn-end `after()` send it for `notify` unlocks;
+   - chains `pushNotifyUnlocks` onto the timed turn-end work, so a late
+     judgment still pushes (§4.2);
    - adds `withUnlocked`;
    - makes `announceGameOver` send every player their own game-over push, in
-     all three branches (§7.4).
+     all three branches, sent together with `Promise.all` (§7.4).
 8. **`Check the unlock index before anything writes`.** This is a checklist
    step in the PR description, not a code commit, but it gates the next one:
    confirm `{ userId: 1, achievementId: 1 }` exists in production. PR 2's
    deploy will have built it; if it hasn't, build it now (§5.2).
 9. **`The first achievements`.** `PLATFORM_ACHIEVEMENTS`, and the two games
    from the original request:
-   - **Dice Cities**: as in §3.4, plus one more match achievement;
+   - **Dice Cities**: as in §3.4, plus one more match achievement, and its
+     null view pinned as an exact key set in `hiddenHands.test.ts` (test 5).
+     Settlements & Cities' is already pinned;
    - **Settlements & Cities**:
      - `settlementsandcities.settler` 🏘️ *"Play 5 games of Settlements &
        Cities"* (career, played, 5);
@@ -1331,15 +1525,20 @@ One commit per game: its `achievements.ts`, one registry line, and its checks'
 tests (including the sentinel test for games with hidden state). The easiest
 go first:
 
-1. Snakes & Ladders.
-2. Solitaire: career only, since it has no replay adapter.
-3. Race Cars.
-4. World Domination.
-5. Train Time.
-6. Smartthink.
-7. Outbreak, Fires Out! and Banned Islet. These are the co-ops: an achievement
-   for the table's win is earned by every seat, which `outcomeFor` already
-   gives.
+1. **Snakes & Ladders.** Its null view is pinned as an exact key set.
+2. **Solitaire.** Career only, since it has no replay adapter, so it needs no
+   pin.
+3. **Race Cars.** Already pinned.
+4. **World Domination.** Already pinned.
+5. **Train Time.** Already pinned.
+6. **Smartthink.** Its null view is pinned with a code sentinel (424242)
+   that no guess row can hold.
+7. **Outbreak, Fires Out! and Banned Islet.** These are the co-ops:
+   - an achievement for the table's win is earned by every seat, which
+     `outcomeFor` already gives;
+   - Outbreak's view is pinned with sentinel ids in both decks plus a key set;
+   - Banned Islet's existing test gains the null viewer;
+   - Fires Out is already pinned.
 
 The later ones hide the most, so some ideas for them won't be expressible
 against their view (§9). That's working as intended.
@@ -1449,6 +1648,11 @@ PR 4  edit   src/utils/ui/whatsNew.ts
 - **`.claude/skills/croupier-review/SKILL.md`** gets a short section on
   `achievements.ts`:
   - checks take the response type;
+  - a check reads no viewer-only field (`my*`, `resources`, the dev cards,
+    World Domination's `cards`, `canUndo`, `autoEndTurnAt`), even though it
+    couldn't pass;
+  - the view comes only from `tableView`;
+  - a game's null view is pinned before it gets a match achievement;
   - descriptions name no hidden specific;
   - no secret achievement ships its text in the bundle.
 
@@ -1465,12 +1669,30 @@ The product owner answered the first draft's open questions (rows 1–6). Rows
 | 4 | Icons | **Emoji, with drawn icons supported from the start**: `art` on the achievement, `AchievementIcon`, the art pipeline, and a guard test (§7.2). | Nothing further. Drawing one is one file and one field. |
 | 5 | Does a surrendered game count as played? | **Yes, once it has lasted two turns** (`MIN_TURNS_TO_COUNT`). A surrendered solo game never does. `turnEnd` achievements are awarded as they're earned, so a surrender can't take them away (§4.1, §8). | Raising the constant (to a full round, say) is one line. |
 | 6 | Backfill at launch | **Lazy**: derived at once for display, stored as each player finishes a relevant game (§5.3). | A one-shot admin backfill when PR 3 deploys would close the "an opponent's account deletion takes back a derived unlock" gap. |
-| 7 | What a check sees | The null-viewer response (§9). | This is load-bearing for mid-game unlocks. Don't reverse it. |
-| 8 | Judge turns the cron ends? | No (§4.2). | Call `judgeTurnEnd` from the cron after it saves a resolved turn, under `withTimeout`. It costs a Clerk lookup per swept game. |
+| 7 | What a check sees | The null-viewer response, built only by `tableView` (§9). | This is load-bearing for mid-game unlocks. Don't reverse it, and don't give `tableView` a viewer parameter. |
+| 8 | Judge turns the cron (or `taketurn`) ends? | No (§4.2). | Call `judgeTurnEnd` from the cron after it saves a resolved turn, under `withTimeout`. It costs a Clerk lookup per swept game. |
 | 9 | Toasts across devices | Per browser (§7.3). | A server-side "seen" marker (the `ChatRead` pattern). |
 | 10 | Kingdom Builder | Out of scope (§8). | Its own trigger, designed with seasons. |
 | 11 | Should achievements unlock anything: avatars, themes? | Open. | `docs/profile-pictures.md` §2b is the natural first. **Before any grant ships**: solo games left out of platform counts, a harder "played" bar, and a grant re-checked against `GameResult` when it's selected, rather than trusting the stored row. §8 lists the farming paths these close. |
 | 12 | Secret achievements, tiers, points? | Open. | Secret ones need their text sent from the server once unlocked, not shipped in the bundle (§9). Tiers and points are a presentation layer over the same rows. |
+
+### Found while reviewing, outside this plan
+
+Two existing bugs turned up during the reviews. Each deserves its own PR, not a
+place in this one:
+
+- **The stale-guest sweeper can delete a guest who is still seated.**
+  `/api/cron/staleguests` decides from `lastGameEndedAt` alone once a guest
+  has any `GameResult`, and only asks `stillHasSomewhereToBe` when they have
+  none. So a guest who finished a game more than a week ago and is sitting in
+  a live one gets deleted. That contradicts `docs/account-less-play.md` §8.
+  §4.2 step 1's fail-closed rule keeps achievements safe from it, but the
+  sweep itself wants fixing.
+- **Smartthink's secret code reaches the codebreaker.**
+  `SmartthinkSetSecretCode.myString()` prints the code, `buildTimeline` copies
+  it into every snapshot's `command.summary`, and `POST
+  /api/game/[gameid]/timeline` checks only membership. So in a two-player
+  game the codebreaker can read the code from the match review.
 
 ## 16. Rejected, and why
 
@@ -1489,7 +1711,8 @@ The product owner answered the first draft's open questions (rows 1–6). Rows
 - **Handing checks the internal state.** It's the easiest thing to write, and
   it's how "win holding an unplayed Knight" would publish a secret. Mid-game,
   it would publish it *during* the game. A sentence telling authors not to is
-  enforced only by review. The type rules it out instead (§9).
+  enforced only by review. Instead, `tableView` has the `null` viewer written
+  in, and a test that plants sentinels proves it (§9).
 - **Judging match achievements on a surrender.** Any player can end a game
   mid-turn, so the state judged would be a moment they chose, not one the game
   settled (§4.1).
