@@ -47,9 +47,10 @@ async function abandonGame(gameData: IGameDataDocument, missingPlayerId: string)
     const finished = await finishGame(gameData, { endReason: "abandoned", forfeitedBy: missingPlayerId });
     if (!finished.saved) return 'skipped';
 
-    // No response to flush here, so the cron waits on the result record and the
-    // pushes rather than handing them to `after`. It logs its own failures, so
-    // a game this run did abandon is never counted as one that failed.
+    // No response to flush here, so the cron waits on the result record, the
+    // achievements judgment and the pushes rather than handing them to `after`.
+    // It logs its own failures, so a game this run did abandon is never counted
+    // as one that failed.
     await finished.announce();
 
     return 'abandoned';

@@ -16,6 +16,12 @@
  * so a rejection that arrives late is logged rather than surfacing as an
  * unhandled rejection with nothing to attribute it to.
  *
+ * Giving up is logged (a warning naming `label` and the budget), because it is
+ * the one outcome nothing else records: a failure logs itself, but work that is
+ * merely slow answers nobody, and stopping to wait isn't stopping the work, which
+ * carries on behind the caller. Seeing how often the deadline wins is how a
+ * budget that has come to be too short gets noticed.
+ *
  * The timer is always cleared, so work that answers straight away doesn't leave
  * one behind on every call.
  */
@@ -26,7 +32,12 @@ export async function withTimeout<T>(work: () => Promise<T>, budgetMs: number, f
     });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), budgetMs); });
+    const expired = new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+            console.warn(`${label} still running after ${budgetMs}ms; not waiting for it`);
+            resolve(fallback);
+        }, budgetMs);
+    });
     try {
         return await Promise.race([settled, expired]);
     } finally {

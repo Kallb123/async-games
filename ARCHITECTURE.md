@@ -304,6 +304,7 @@ interface IGameResultData {
     endReason?: GameEndReason; // how it ended, when "" alone doesn't say
     endDetail?: string;        // which shape of that ending, in the player's words
     forfeitedBy?: string;      // who went quiet, for an abandoned game
+    countsAsPlayed?: boolean;  // whether it counts as played for an achievement
     endedAt: string;     // ISO, when the record was written
 }
 ```
@@ -326,7 +327,12 @@ Key properties:
   turn, save, record the result, resolve the roster, fan out the `GameOver`
   pushes). `finishGame` saves the game and hands back an `announce()` for the
   rest, so a route can flush its response before spending a Clerk lookup and a
-  fan-out of pushes on it.
+  fan-out of pushes on it. `announce()` also judges the game's achievements
+  ([`docs/achievements.md`](./docs/achievements.md) §4.3). Judging runs after
+  the result write and before the pushes, under a 3 s budget so the turn-timer
+  cron, which awaits it inline, keeps its headroom. If the result write failed,
+  career judging is skipped, because it reads the record that write would have
+  made, while match judging still runs.
 - **`endReason` says what `winner` can't.** `'win'` names a winner; `'ended'`
   and `'abandoned'` are the two no-winner endings; `'teamwin'` and `'teamloss'`
   are the co-op pair, where the whole roster shares one result and `winner` is
@@ -349,6 +355,15 @@ Key properties:
   `endReason` must forward it too (`publicGameState.test.ts` holds them to
   that). It never carries a `{{userId}}` token: only `gameState.history` is
   run through `resolveHistory`, so a token would render raw in a push.
+- **`countsAsPlayed` says whether the game counts as played for an
+  achievement.** `recordGameResult` stores it on each result, from
+  `countsAsPlayed(gameData)` in `GameResultData.ts`: every ending the rules
+  reached counts, but a surrender or an abandonment counts only once it has
+  lasted two turns (`MIN_TURNS_TO_COUNT`), and a solo game's surrender or
+  abandonment never does. It is worked out then rather than when stats are read,
+  because the command history that decides it goes when the `GameData` does, and
+  a record without it counts. The profile keeps showing the match total; the
+  counted games are `IGameStats.played` beside it.
 - **A game may keep its final board.** A `board` formatter on the game's
   `GAME_RESULT_STATS` entry hands back a copy its result kept (Settlements &
   Cities saves `finalBoard` from `sacBoard(gs)`), which the response carries as
@@ -542,9 +557,13 @@ Key properties:
   removes `{ userId }` — an unlock belongs to the player, not the table, so
   other players' unlocks from the same games stay theirs — and
   `/api/dev/clearresults` empties the collection along with `GameResult`.
-- **Nothing writes to it yet.** The model, `recordUnlocks` and its test store
-  land first; judging, the reads and the screens arrive with the later PRs of
-  `docs/achievements.md` §13.
+- **Judged at both checkpoints, but nothing is written yet.** `judgeTurnEnd`
+  and `judgeGameEnd` (`src/utils/games/awardAchievements.ts`) run at the end of
+  every turn and when a game ends
+  ([`docs/achievements.md`](./docs/achievements.md) §4) and write through
+  `recordUnlocks`. The catalogue is still empty, so nothing is stored until the
+  first achievements ship ([`docs/achievements.md`](./docs/achievements.md) §13,
+  PR 3); the reads and the screens arrive with them.
 
 ## 6. The game engine: command pattern
 
@@ -649,18 +668,29 @@ regardless of game:
    └─ if !outcome.validMove → 401
 6. push command onto gameState.commandHistory (markModified)
 7. gameType = deserializeJSON(gameData.gameType)
-8. if gameType.CheckGameOver(gameData):  save, record GameResult, push win/lose
-   notifications, return
+8. if gameType.CheckGameOver(gameData):  save, record GameResult, judge
+   achievements, push win/lose notifications, return
 9. gameType.CheckEndTurn(gameData, outcome)
 10. if outcome.followUpCommand: run it through 5–9 as well, and repeat
-11. if turnOver: bump lastTurnTimestamp, reset warning flag
+11. if turnOver or timerRestarts: bump lastTurnTimestamp, reset warning flag
 12. save
-13. if turnOver: push 'YourTurn' to the next player
+13. after the save, if the move ended the turn (turnOver or timerRestarts): judge
+    turnEnd achievements beside the 'YourTurn' push (turnOver only), in
+    Promise.all, under a 5 s budget
 14. return { outcome, gameData: CreateDataResponse() }
 ```
 
 Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
 the replay engine and the turn-timer cron so all three run a move the same way.
+
+Step 13 and the game-over branch of step 8 run in `after()`, once the response
+has flushed. At step 13 the push and the judge share one roster lookup and run
+side by side rather than queued, so a slow push can't use up the time the judge
+needed, and each one's failure is logged without touching the other or the saved
+move ([`docs/achievements.md`](./docs/achievements.md) §4.2). A
+`timerRestarts`-only boundary (Fires Out's solitaire crew) has no push, so the
+route enters `after()` for it only when `hasTurnEndAchievements(gameData)` is
+true: a game with nothing to judge pays no Clerk lookup per hand-off.
 
 **Versions.** Every command carries the version of its game's rules it was
 built for (`GameMeta.commandVersion`, [`docs/command-versions.md`](./docs/command-versions.md)).
@@ -798,12 +828,12 @@ enforcement job. It:
     and takes a loss in their stats (`GameResult.droppedPlayers`). Every other
     game — two left, Smartthink, Solitaire, a setup phase the game can't
     reshape — is abandoned through the shared `finishGame()` (§5), which
-    records the result and tells the table. An adapter may also answer that it *can't* resolve
-    this turn, and the two ways it can say so are handled differently: a game
-    shape it declines to play automatically (nothing ran) keeps the turn where
-    it is, but still banks the missed turn and restarts the timer, so the
-    abandon ladder ends the game on the third one; an adapter that ran commands
-    and still didn't finish the turn is a bug, so the document goes back
+    records the result, judges achievements and tells the table. An adapter may
+    also answer that it *can't* resolve this turn, and the two ways it can say
+    so are handled differently: a game shape it declines to play automatically
+    (nothing ran) keeps the turn where it is, but still banks the missed turn
+    and restarts the timer, so the abandon ladder ends the game on the third
+    one; an adapter that ran commands and still didn't finish the turn is a bug, so the document goes back
     **unsaved** — half a resolved turn is never persisted — and the next tick
     starts over;
   - else sends a `TurnExpiringSoon` push and sets

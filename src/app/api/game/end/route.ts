@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
   }
 
-  // Recording the match result and telling the table is a stats write and a
-  // fan-out of pushes, neither of which this response depends on, so both run
-  // after it has flushed.
+  // Recording the match result, judging achievements and telling the table is a
+  // stats write, a judgment and a fan-out of pushes, none of which this response
+  // depends on, so all of them run after it has flushed.
   after(finished.announce);
 
   return NextResponse.json({ success: true });

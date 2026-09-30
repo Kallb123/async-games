@@ -7,7 +7,7 @@
 // but vitest, and `utils/testing/apiRoute.ts` — which does hold a `next/server`
 // import, for NextRequest — is imported by the tests instead.
 //
-// Test-only. Nothing under src/app imports this.
+// Test-only: test files import it, in src/utils and src/app alike; app code never does.
 
 import { vi } from 'vitest';
 

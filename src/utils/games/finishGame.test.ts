@@ -5,18 +5,30 @@
 // What these guard is the shared outcome a co-op game needs — a table that wins
 // or loses as one — and the two things every ending has to leave behind
 // whatever route asked for it: a game nobody can play on, and one result record.
+// Announcing it then judges its achievements between the two halves that were
+// already there, so where that sits is pinned here too. What the judge itself
+// decides is awardAchievements.test.ts's business, and the routes' own cases in
+// gameRoutes.test.ts run the real one; here it is a stand-in that can be made to
+// stall or fail.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { recordGameResult } = vi.hoisted(() => ({ recordGameResult: vi.fn() }));
+const { recordGameResult, judgeGameEnd } = vi.hoisted(() => ({ recordGameResult: vi.fn(), judgeGameEnd: vi.fn() }));
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
+vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult }));
+vi.mock('@/utils/games/awardAchievements', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/games/awardAchievements')>()),
+    judgeGameEnd,
+}));
 
 import { ANN, BOB, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import type { IGameData } from '@/utils/mongodb/GameData';
+import { GAME_END_BUDGET_MS, NO_UNLOCKS } from './awardAchievements';
 import { finishGame } from './finishGame';
 
 /** The game as a route would hold it: a fresh document out of the store. */
@@ -29,8 +41,16 @@ async function liveGame(): Promise<IGameDataDocument> {
 beforeEach(async () => {
     await resetApiRouteStubs();
     recordGameResult.mockReset();
+    judgeGameEnd.mockReset();
+    judgeGameEnd.mockResolvedValue(NO_UNLOCKS);
+    // A call count that carries over from test to test can't say what came first.
+    vi.mocked(sendPushToUsers).mockClear();
     stubClerkUsers(ANN, BOB);
     seedSnakesAndLadders();
+});
+
+afterEach(() => {
+    vi.useRealTimers();
 });
 
 describe('finishGame', () => {
@@ -115,5 +135,70 @@ describe('finishGame', () => {
         // Nothing announced, so no result is written for a game still being played.
         expect(recordGameResult).not.toHaveBeenCalled();
         expect(sentPushes).toHaveLength(0);
+    });
+});
+
+describe('finishGame judging achievements', () => {
+    /** When the nth call to a mock happened, relative to every other mock's calls. */
+    const order = (mock: { mock: { invocationCallOrder: number[] } }, call = 0) => mock.mock.invocationCallOrder[call];
+
+    it('judges the finished game after its result is recorded and before anybody is told', async () => {
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        await finished.announce();
+
+        expect(judgeGameEnd).toHaveBeenCalledTimes(1);
+        const [judged, roster, context] = judgeGameEnd.mock.calls[0] as [IGameData, { id: string }[], { recorded: boolean }];
+        expect(judged.gameId).toBe('game_1');
+        expect(judged.complete).toBe(true);
+        expect(roster.map(user => user.id)).toEqual([ANN.id, BOB.id]);
+        expect(context).toEqual({ recorded: true });
+
+        // Recorded first, because career reads the record; judged before the
+        // pushes, so a push can name what it unlocked and the toaster's refresh
+        // finds the rows already written.
+        expect(order(recordGameResult)).toBeLessThan(order(judgeGameEnd));
+        expect(order(judgeGameEnd)).toBeLessThan(order(vi.mocked(sendPushToUsers)));
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+    });
+
+    it('says the result was not recorded when it could not be, and judges anyway', async () => {
+        recordGameResult.mockRejectedValueOnce(new Error('Mongo said no'));
+
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        await finished.announce();
+
+        expect(judgeGameEnd).toHaveBeenCalledTimes(1);
+        expect(judgeGameEnd.mock.calls[0][2]).toEqual({ recorded: false });
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+    });
+
+    it('still tells the table when the judge fails', async () => {
+        judgeGameEnd.mockRejectedValueOnce(new Error('Mongo said no'));
+
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        await expect(finished.announce()).resolves.toBeUndefined();
+
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+    });
+
+    it('stops waiting on a judge that stalls once its budget is spent, and then tells the table', async () => {
+        // The cron awaits this inline, with ten seconds of headroom for the last
+        // game it starts.
+        judgeGameEnd.mockReturnValue(new Promise(() => { }));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+        const announced = finished.announce();
+        await vi.advanceTimersByTimeAsync(GAME_END_BUDGET_MS - 1);
+        expect(sentPushes).toEqual([]);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await announced;
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        // Giving up on it is said out loud, since nothing else records a judge
+        // that was only slow.
+        expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${GAME_END_BUDGET_MS}ms; not waiting for it`);
+        warn.mockRestore();
     });
 });

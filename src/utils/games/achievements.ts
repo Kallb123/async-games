@@ -156,20 +156,18 @@ export function achievementById(
 /**
  * What one game's stats row counts for an achievement.
  *
- * The profile's `total` counts every finished game. An achievement's "played"
- * will count one fewer kind of game once `IGameStats.played` exists: a
- * surrender or an abandonment that lasted under two turns doesn't count (§8).
- * That field arrives with the two-turn rule, and until then `played` is `total`.
- * When it does, this is the one line that changes: `stats.total` becomes
- * `stats.played`.
+ * `played` is `IGameStats.played`, not the `total` the profile shows: a
+ * surrender or an abandonment that lasted under two turns is in `total` but not
+ * in `played` (§8). So an achievement's progress can sit a game or two behind the
+ * profile's match count, because it skips the games somebody ended almost as
+ * soon as they began.
  *
  * `won` is `wins` as it stands. `byGame` is already folded through `outcomeFor`,
  * so a co-op team win counts and a dropped player's game doesn't, and that rule
  * isn't written out a second time here.
  */
 function recordOf(stats: IGameStats): GameRecord {
-    // The one line the two-turn rule changes: `played` becomes `stats.played`.
-    return { played: stats.total, won: stats.wins };
+    return { played: stats.played, won: stats.wins };
 }
 
 /**

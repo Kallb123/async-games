@@ -4,8 +4,13 @@
 // here it only answers the way it can.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AchievementCatalogue } from '@/utils/games/achievements';
 
-const { signedIn, consumeRateLimit, regenerateGameResultStats, gameResultResponse } = vi.hoisted(() => ({
+// The real catalogue is empty until the first achievements ship, so the test
+// that regenerating judges nothing fills one for the judge to find if it were
+// ever asked (gameRoutes.test.ts does the same).
+const { signedIn, consumeRateLimit, regenerateGameResultStats, gameResultResponse, testCatalogue } = vi.hoisted(() => ({
+    testCatalogue: { games: {}, platform: [] } as AchievementCatalogue,
     signedIn: { userId: 'user_ann' as string | null },
     consumeRateLimit: vi.fn(async () => true),
     regenerateGameResultStats: vi.fn(),
@@ -15,14 +20,18 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: async () => ({ userId: signedIn.u
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/rateLimit', () => ({ consumeRateLimit }));
 vi.mock('@/utils/api/gameResultResponse', () => ({ gameResultResponse }));
-vi.mock('@/utils/mongodb/GameResultData', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
-    regenerateGameResultStats,
+vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ regenerateGameResultStats }));
+vi.mock('@/utils/games/achievements', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/games/achievements')>()),
+    ACHIEVEMENT_CATALOGUE: testCatalogue,
 }));
 
 import { NextRequest } from 'next/server';
+import * as awardAchievements from '@/utils/games/awardAchievements';
+import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
+import { ending, platform, turnEnd } from '@/utils/testing/achievementFixtures';
 import { POST } from './route';
 
 const query = (value: unknown) => ({ exec: async () => value }) as never;
@@ -35,6 +44,8 @@ beforeEach(() => {
     vi.restoreAllMocks();
     signedIn.userId = 'user_ann';
     consumeRateLimit.mockReset().mockResolvedValue(true);
+    testCatalogue.games = {};
+    testCatalogue.platform = [];
     regenerateGameResultStats.mockReset().mockResolvedValue({ regenerated: { gameId: 'game_1' } });
     vi.spyOn(GameResultModel, 'findOne').mockReturnValue(query(RESULT));
     findGame = vi.spyOn(GameDataModel, 'findOne').mockReturnValue(query(GAME));
@@ -57,6 +68,24 @@ describe('POST /api/gameresult/[gameId]/regenerate', () => {
         // The game is looked for among the caller's own finished games.
         expect(findGame).toHaveBeenCalledWith({ gameId: 'game_1', complete: true, userIdList: 'user_ann' });
         expect(regenerateGameResultStats).toHaveBeenCalledWith(GAME);
+    });
+
+    it('never judges achievements: a game is judged as it is played, and working its stats out again earns nothing', async () => {
+        // A catalogue with something for every kind of judging, all of it true:
+        // regenerating a result is a replay for its charts, and a player who
+        // regenerates a year-old game shouldn't be handed what the game didn't earn.
+        testCatalogue.games = {
+            snakesandladders: [turnEnd('snakesandladders.always', () => true), ending('snakesandladders.ended', () => true)],
+        };
+        testCatalogue.platform = [platform('platform.played-1', career => career.played, 1)];
+        const judges = [vi.spyOn(awardAchievements, 'judgeTurnEnd'), vi.spyOn(awardAchievements, 'judgeGameEnd')];
+        const write = vi.spyOn(AchievementUnlockModel, 'bulkWrite').mockResolvedValue({} as never);
+
+        expect((await regenerate()).status).toBe(200);
+
+        expect(regenerateGameResultStats).toHaveBeenCalledTimes(1);
+        for (const judge of judges) expect(judge).not.toHaveBeenCalled();
+        expect(write).not.toHaveBeenCalled();
     });
 
     it('refuses anybody signed out', async () => {

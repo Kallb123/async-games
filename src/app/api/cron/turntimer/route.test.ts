@@ -25,7 +25,7 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
+vi.mock('@/utils/mongodb/GameResultData', async () => (await import('@/utils/testing/apiRoute')).gameResultDataStub({ recordGameResult }));
 
 import {
     ANN, BOB, get, resetApiRouteStubs, seedGame, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers
