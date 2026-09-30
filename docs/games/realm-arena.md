@@ -1,12 +1,12 @@
 # Realm Arena — Game Design Document
 
-**Status:** Design agreed for the first playable version, v0.6. Split out of
+**Status:** Design agreed for the first playable version, v0.7. Split out of
 Defender of the Realm in its third round of design, when one concept became
 two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
-is the one to build first (§10). §11 records the answers so far. §13 is the
-battle rules and the first characters, settled in rounds 3–5, and §15 the
-first battlefield, a ruined fort. §17 is the implementation plan, and §18
-asks the questions it raises.
+is the one to build first (§10). §11 records every answer. §13 is the battle
+rules and the first characters, settled in rounds 3–6, and §15 is the first
+battlefield, a ruined fort. §17 is the implementation plan, agreed in round
+6. Building starts once this doc has merged (§11.6, answer 6).
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -83,6 +83,11 @@ What's decided so far:
 | The first battlefield is hand-made: a ruined fort (§15) | §11.4, answer 8 |
 | The fort's layout as sketched, and the rest of round 5's defaults (§15, §13) | §11.5 |
 | Every square has a movement cost, and low cover can be climbed over for extra movement. Each character has a movement allowance that 1 AP buys (§13.1, §13.2) | §11.5, answer 5 |
+| Nobody can stop on low cover; cover sits in squares (§13.1) | §11.6, answers 1–2 |
+| A timed-out muster musters a ready-made squad (§17.2) | §11.6, answer 3 |
+| The implementation plan, in its order (§17) | §11.6, answer 4 |
+| The first playable version ships with placeholder art (§17.3, PR 9) | §11.6, answer 5 |
+| No code until this design doc has merged | §11.6, answer 6 |
 | The same fantasy world as Defender of the Realm | §11.1, answer 4 |
 | Built before Defender of the Realm | §11.1, answer 7 |
 | The name: Realm Arena | §11.1, answer 6 |
@@ -392,6 +397,16 @@ full cover block sight, and only area abilities hit allies.
    you can go over half cover for extra movement. Each character has a
    movement allowance it can spend for 1 AP (§13.1, §13.2).
 9. **What next?** The implementation plan (§17).
+
+### 11.6 Round 6
+
+1. **Can a character stop on low cover?** No.
+2. **Cover in squares, not along edges?** Yes.
+3. **A timed-out muster?** A ready-made squad.
+4. **The plan's order?** Yes.
+5. **Art?** Placeholder art.
+6. **Where does PR 1 start?** No PR yet. The design document should merge
+   first.
 
 ---
 
@@ -753,9 +768,9 @@ be cheaply changed once games are being played.
   Recap follows the same rule.
 - **A timed-out turn ends the way the player would have ended it.** A
   turn-timeout adapter runs `EndTurn`, so every character's AP go on watch,
-  as a missed turn should (§4). *Proposal:* a timed-out muster musters a
-  ready-made squad in the deployment zone, so the battle can still start
-  (§18, question 3).
+  as a missed turn should (§4). A timed-out muster musters a ready-made
+  squad in the deployment zone, so the battle can still start (agreed in
+  round 6). Each faction's ready-made squad is part of its data (PR 2).
 - **No dropout adapter at two players.** A two-player duel ends when one
   player stops turning up, which is what the platform already does without
   one. The adapter comes with free-for-all (B2).
@@ -791,7 +806,8 @@ Reviewers: `caveman`.
 **PR 2 — The rules (pure functions).**
 
 1. `src/games/RealmArena/characters.ts`: the six characters and their
-   abilities as data (§13.6), and the points budget.
+   abilities as data (§13.6), the points budget, and the ready-made squad a
+   timed-out muster uses (§17.2).
 2. `src/games/RealmArena/rules.ts`, importable by the client as well as the
    server. It covers:
    - the AP a path costs;
@@ -898,14 +914,16 @@ Reviewers: `caveman`.
 
 Reviewers: `croupier`, `gremlin`.
 
-**PR 9 — Guide, tutorial and art.**
+**PR 9 — Guide, tutorial and placeholder art.**
 
 1. `guide.ts` (Goal, Your turn, Action points, Cover and flanking, Overwatch
    and guard), in `GAME_GUIDES`.
 2. `tutorial.ts`, in `GAME_TUTORIALS`: a tour of the live board covering your
    squad, the reach shading, an enemy's hit chance, the centre, and End turn.
-3. The art: the fort's ground and the six figures, exported to `art-masters/`
-   and served through `npm run optimise-art`.
+3. Placeholder art (round 6): the ground drawn in flat colours from the map's
+   letters (PR 5), and a simple marked figure for each of the six characters.
+   Real art can land later, whenever it's ready, exported to `art-masters/`
+   and served through `npm run optimise-art`, without touching the rules.
 
 Reviewers: `rulebook`, `caveman`.
 
@@ -948,20 +966,7 @@ art.
 
 ## 18. Questions (round 6)
 
-1. **Stopping on low cover** (§13.1): can a character end its move on rubble
-   or a low wall? *Default: no, you climb over it.*
-2. **Cover in squares, not along edges** (§13.1): cover now sits in squares,
-   because squares have a movement cost. Is that all right?
-3. **A timed-out muster** (§17.2): should it muster a ready-made squad so the
-   battle can still start? Or should it wait, and let the missed turns end
-   the match? *Default: a ready-made squad.*
-4. **The plan** (§17.3): does the order suit you? Is there anything to cut
-   from the first playable version, or bring forward?
-5. **Art** (PR 9): will you draw the fort and the figures, or should the first
-   version ship with placeholder art?
-6. **Starting to build:** this session can only push to this branch
-   (`claude/defender-realm-design-yvefgv`). Should PR 1 start here, or on a
-   branch of its own?
+Answered in §11.6.
 
 ---
 
@@ -982,3 +987,4 @@ Realm, its sibling in the same world.
 | 0.4 | Round-3 answers recorded (§11.3). §13 becomes the first draft of the battle rules: a 36×48 or 48×48 battlefield, with how it's shown on a phone (§13.1); four action points per character, with a cost table, speeds, and a charge that is now just moving and striking (§13.2); ranges scaled to the bigger board (§13.3); overwatch and guard banking AP for several reactions (§13.4); AP costs for abilities (§13.5–§13.6); battle rounds falling gently with player count, so bigger battles last longer (§4, §13.8). Fog of war gains a point in its favour (§8). Round-4 questions (§14). |
 | 0.5 | Round-4 answers recorded (§11.4): every character has its own AP, spent however the player likes (with a balance note on two attacks a turn), the AP costs, automatic overwatch or guard, speeds, ranges and battle length agreed, fog of war left for later (§6, §8, §13). Adds the first battlefield, a hand-made ruined fort, with its layout, how it plays, a fix so the centre starts scoring in round 3, and the three- and four-player version (§15). Round-5 questions (§16). |
 | 0.6 | Round-5 answers recorded (§11.5). Every square has a movement cost and low cover can be climbed over, so cover moves from the edges between squares into the squares themselves, with a terrain table (§13.1); each AP buys a character's movement allowance (§13.2); the fort's legend updated to match (§15.1). Adds the implementation plan: principles, the engine decisions, ten PRs for the first playable version, the milestone after it, and the riskiest part (§17). Round-6 questions (§18). |
+| 0.7 | Round-6 answers recorded (§11.6): nobody stops on low cover, cover sits in squares, a timed-out muster musters a ready-made squad, the plan's order is agreed, the first playable version ships with placeholder art (PR 9), and building waits until this doc has merged. |

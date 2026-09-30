@@ -1007,8 +1007,8 @@ Answered in §7.8.
 
 Defender of the Realm waits while Realm Arena is designed and built first
 (round-4 answer 5). Realm Arena builds the battlefield and the troop catalogue
-that this game then reuses (`realm-arena.md` §10). When this game resumes, the
-topics still open are:
+that this game then reuses (`realm-arena.md` §10); its implementation plan is
+`realm-arena.md` §17. When this game resumes, the topics still open are:
 
 - **The overworld:** the map, resources, cities and buildings, and how far an
   army moves in a turn.
