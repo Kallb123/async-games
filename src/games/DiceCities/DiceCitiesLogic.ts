@@ -456,9 +456,10 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
         gameState.harbourRoll2 = null;
 
         const harbour = logNames(dcGameData).cards[DiceCitiesCardIds.HARBOUR].title;
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, this.addBonus
-            ? `used the ${harbour} to turn a ${rolled} into a ${totalRoll}${payoutClause(dcGameData, outcome)}`
-            : `passed on the ${harbour}'s bonus and stayed on ${rolled}${payoutClause(dcGameData, outcome)}`));
+        const choice = this.addBonus
+            ? `used the ${harbour} to turn a ${rolled} into a ${totalRoll}`
+            : `passed on the ${harbour}'s bonus and stayed on ${rolled}`;
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `${choice}${payoutClause(dcGameData, outcome)}`));
         return outcome;
     }
 
@@ -1113,7 +1114,7 @@ function cardTitle(cardId: uuidString): string {
     return DiceCitiesCards[cardId]?.title ?? "card";
 }
 
-// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands") for a settled
+// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands", in the theme's word) for a settled
 // roll's payout - the same coin-by-coin breakdown coinChangeParts (ui.ts)
 // already gives the recap and the live board, named by token rather than a
 // resolved name since myString() has no userIdNameMap of its own. The replay
