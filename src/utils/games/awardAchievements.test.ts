@@ -33,6 +33,7 @@ import { AchievementUnlockModel } from '@/utils/mongodb/AchievementUnlockData';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import { getGameStatsByPlayer } from '@/utils/mongodb/GameResultData';
 import type { IGameStats } from '@/utils/mongodb/GameResultData';
+import { ending, ownCareer, platform, turnEnd } from '@/utils/testing/achievementFixtures';
 import { resetApiRouteStubs, seedAchievementUnlock, storedAchievementUnlocks } from '@/utils/testing/apiRoute';
 import { judgeGameEnd, judgeTurnEnd, NO_UNLOCKS, tableView } from './awardAchievements';
 import type {
@@ -59,18 +60,6 @@ const guest = (id: string) => ({ id, publicMetadata: { guest: true } }) as unkno
 const TABLE = PLAYERS.map(registered);
 
 // ─── Achievements ────────────────────────────────────────────────────────────
-
-const turnEnd = (id: string, check: (view: any, seat: Seat) => boolean): GameAchievement<any> =>
-    ({ id, title: id, icon: '🎲', description: id, criteria: { kind: 'match', at: 'turnEnd', check } });
-
-const ending = (id: string, check: (view: any, seat: FinishedSeat) => boolean): GameAchievement<any> =>
-    ({ id, title: id, icon: '🎲', description: id, criteria: { kind: 'match', at: 'end', check } });
-
-const ownCareer = (id: string, progress: (record: GameRecord) => number, target: number): GameAchievement<any> =>
-    ({ id, title: id, icon: '🎲', description: id, criteria: { kind: 'career', progress, target } });
-
-const platform = (id: string, progress: (record: CareerRecord) => number, target: number): PlatformAchievement =>
-    ({ id, title: id, icon: '🏆', description: id, criteria: { kind: 'career', progress, target } });
 
 /** Dice Cities' own achievements, and the platform's. */
 const catalogueOf = (games: GameAchievement<any>[], platformOnes: PlatformAchievement[] = []): AchievementCatalogue =>

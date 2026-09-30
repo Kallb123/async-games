@@ -3,7 +3,7 @@ import { buildYourTurnNotification } from '@/utils/firebase/notificationContent'
 import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { FIRST_COMMAND_VERSION, gameCommandVersion } from '@/utils/ui/games';
-import { auth } from '@clerk/nextjs/server';
+import { auth, User } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { ICommandOutcome, IGameCommand, IGameType, playableOutOfTurn, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
@@ -17,6 +17,8 @@ import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse, uuidString } from '@/utils/apiModels/GameDataApi';
 import { v4 as uuidv4 } from 'uuid';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
+import { judgeTurnEnd, NO_UNLOCKS, TURN_END_BUDGET_MS } from '@/utils/games/awardAchievements';
+import { withTimeout } from '@/utils/withTimeout';
 
 export interface ICommandResponse {
   outcome: ICommandOutcome,
@@ -89,6 +91,36 @@ function lastRecordedName(gameData: IGameData, userId: string): string | undefin
     }
   }
   return undefined;
+}
+
+/**
+ * Tells the player whose turn it now is. `userList` is the roster the caller
+ * already resolved, so this one is not another Clerk lookup.
+ *
+ * Its own `try`: a failure here can't cost a move that's already saved, and it
+ * can't stop the judging beside it either, so it's logged and swallowed rather
+ * than turned into an error. The `!turnUser` early return guards only this
+ * push; judging doesn't need the next player to be found.
+ */
+async function notifyNextPlayer(gameData: IGameData, userList: User[]): Promise<void> {
+  try {
+    const turnUser = userList.find(u => u.id === gameData.currentTurn);
+
+    if (!turnUser) {
+      console.error(`Next user not found for game ${gameData.gameId}`);
+      return;
+    }
+
+    await sendPushToUsers([turnUser], {
+      event: 'YourTurn',
+      gameId: gameData.gameId,
+      link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
+    }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
+      channel: 'yourTurn'
+    });
+  } catch (error) {
+    console.error(`Post-response turn-notification work failed for game ${gameData.gameId}`, error);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -279,10 +311,14 @@ export async function POST(request: NextRequest) {
   // A hand-off to somebody else, or a deadline boundary inside one player's
   // own turn (`timerRestarts` — Fires Out's solitaire crew, where each
   // figure's turn is its own deadline and `turnOver` never comes). Both
-  // restart the clock; only the first has anybody new to tell, which is why
-  // the push below stays on `turnOver` alone. Neither for an out-of-turn
-  // play: the clock is the active player's, and they're still on it.
-  if (onTurn && (commandOutcome.turnOver || commandOutcome.timerRestarts)) {
+  // restart the clock and both are a turn boundary worth judging achievements
+  // at (docs/achievements.md §4.2); only the first has anybody new to tell,
+  // which is why the push below stays on `turnOver` alone. Neither for an
+  // out-of-turn play: the clock is the active player's, and they're still on
+  // it, and what such a play changes is judged at the end of the turn it
+  // landed in.
+  const turnBoundary = onTurn && (commandOutcome.turnOver || commandOutcome.timerRestarts);
+  if (turnBoundary) {
     gameData.lastTurnTimestamp = new Date().toISOString();
     gameData.timerWarningNotificationSent = false;
   }
@@ -297,8 +333,8 @@ export async function POST(request: NextRequest) {
   }
 
   // The pipeline already refuses an out-of-turn `turnOver` that didn't end
-  // the game; `onTurn` keeps this push from ever resting on that alone.
-  if (!onTurn || !commandOutcome.turnOver) {
+  // the game; `onTurn` keeps this work from ever resting on that alone.
+  if (!turnBoundary) {
     return NextResponse.json(response, {status: 200});
   }
 
@@ -307,27 +343,35 @@ export async function POST(request: NextRequest) {
   // slowest part of a turn and none of it is anything the player who just moved
   // is waiting on. Run it after the response has flushed. A failure here can't
   // cost a move that's already saved, so it's logged and swallowed rather than
-  // turned into an error.
+  // turned into an error. Judging achievements for the turn that just ended
+  // (docs/achievements.md §4.2) shares that slot and that guarantee.
   after(async () => {
+    // Resolved once, for both halves. With no roster there is nobody to push
+    // and no way to tell an exhibition table from a counted one, so neither
+    // half has anything to do.
+    let userList: User[];
     try {
-      const userList = await usersById(gameData.userIdList);
-      const turnUser = userList.find(u => u.id === gameData.currentTurn);
-
-      if (!turnUser) {
-        console.error(`Next user not found for game ${gameData.gameId}`);
-        return;
-      }
-
-      await sendPushToUsers([turnUser], {
-        event: 'YourTurn',
-        gameId: commandRequest.gameId,
-        link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-      }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
-        channel: 'yourTurn'
-      });
+      userList = await usersById(gameData.userIdList);
     } catch (error) {
-      console.error(`Post-response turn-notification work failed for game ${gameData.gameId}`, error);
+      console.error(`Couldn't resolve the roster for the post-response work on game ${gameData.gameId}`, error);
+      return;
     }
+
+    // Side by side, not queued. The push replays the whole game and sends
+    // through FCM with no deadline of its own, so judging queued behind it
+    // could run out of the function's time before it ever started, and nothing
+    // would say so. Beside it, judging usually finishes first: one read, one
+    // view, a few checks. The two never interleave on the shared document,
+    // because building the view (`toResponseState`) is synchronous.
+    //
+    // `notifyNextPlayer` has its own `try`, and `withTimeout` catches and logs
+    // a judge that throws (and stops waiting on one that stalls), so neither
+    // half can fail the other and this needs no `try` of its own. What judging
+    // unlocked isn't pushed or shown yet, so the answer is ignored.
+    await Promise.all([
+      commandOutcome.turnOver ? notifyNextPlayer(gameData, userList) : undefined,
+      withTimeout(() => judgeTurnEnd(gameData, userList), TURN_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`),
+    ]);
   });
 
   return NextResponse.json(response, {status: 200});

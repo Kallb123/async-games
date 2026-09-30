@@ -2,38 +2,65 @@
 // playing a command, and ending a game by hand.
 //
 // Everything above the database is the real thing here — the handler, the
-// request and response objects, the turn rules, the command registry and the
-// Mongoose documents. Only Clerk, the connection, the push transport and the
-// result read-model are stubbed (see utils/testing/apiRoute.ts).
+// request and response objects, the turn rules, the command registry, the
+// Mongoose documents and the achievements judge. Only Clerk, the connection,
+// the push transport, the result read-model and the achievement catalogue are
+// stubbed (see utils/testing/apiRoute.ts).
 //
 // What they're guarding is docs/robustness-review.md's findings 2, 4, 5 and
 // 21: a finished game that could still be played, a missing null check that
 // made a bogus id a 500, a command executed against a game it didn't belong
 // to, and a request body nobody had checked was JSON.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+import type { AchievementCatalogue, GameAchievement, Seat } from '@/utils/games/achievements';
 
-const { recordGameResult } = vi.hoisted(() => ({ recordGameResult: vi.fn() }));
+// The real catalogue is empty until the first achievements ship, so the judge is
+// given one the tests fill: `ACHIEVEMENT_CATALOGUE` is mocked to this object,
+// which the judge reads as the default of its catalogue parameter. Emptied in
+// `beforeEach`, so a test that adds an achievement can't leak it into the next.
+const { recordGameResult, getGameStatsByPlayer, testCatalogue } = vi.hoisted(() => ({
+    recordGameResult: vi.fn(),
+    getGameStatsByPlayer: vi.fn(),
+    testCatalogue: { games: {}, platform: [] } as AchievementCatalogue,
+}));
 
 vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRoute')).clerkStub());
 // From afterStub rather than apiRoute — see the note in afterStub.ts.
 vi.mock('next/server', async () => (await import('@/utils/testing/afterStub')).nextServerStub());
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
-vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
+// The judge reads more of GameResultData than the route ever did (countsAsPlayed,
+// resultCounts, outcomeFor), so the rest of the module stays real. Only the
+// write and the aggregation, which need a database, are stubbed.
+vi.mock('@/utils/mongodb/GameResultData', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/mongodb/GameResultData')>()),
+    recordGameResult,
+    getGameStatsByPlayer,
+}));
+vi.mock('@/utils/games/achievements', async importOriginal => ({
+    ...(await importOriginal<typeof import('@/utils/games/achievements')>()),
+    ACHIEVEMENT_CATALOGUE: testCatalogue,
+}));
 // A fixed die, so a rolled position is something a test can assert.
-vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
+vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: vi.fn(() => 3) }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
+import { turnEnd } from '@/utils/testing/achievementFixtures';
 import {
-    ANN, BOB, commandPost, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
-    signInUnresolvable, SQUARES, storedGame, stubClerkUsers
+    ANN, BOB, commandPost, failNextAchievementUnlockWrite, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction,
+    seedSnakesAndLadders, sentPushes, signIn, signInUnresolvable, SQUARES, storedAchievementUnlocks, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
 import { race } from '@/games/RaceCars/testFixtures';
 import { makeState, player } from '@/games/SettlementsAndCities/testFixtures';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
+import type { ISnakesAndLaddersGameStateResponse } from '@/games/SnakesAndLadders/apiModels';
+import { DiceRoll } from '@/utils/games/DiceRoll';
 import { mongoMap } from '@/utils/games/mongoMaps';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import * as clerkUsers from '@/utils/users/clerk';
 import { FIRST_COMMAND_VERSION } from '@/utils/ui/games';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
@@ -70,6 +97,10 @@ function diceRoll(extra: Record<string, unknown> = {}) {
 beforeEach(async () => {
     await resetApiRouteStubs();
     recordGameResult.mockReset();
+    getGameStatsByPlayer.mockReset();
+    getGameStatsByPlayer.mockResolvedValue([]);
+    testCatalogue.games = {};
+    testCatalogue.platform = [];
     stubClerkUsers(BOB);
 });
 
@@ -198,6 +229,47 @@ describe('POST /api/game/taketurn', () => {
     });
 });
 
+/**
+ * A Fires Out solitaire board with a stale clock: Ann holds both figures, so
+ * ending one's turn never hands the turn to anybody else (`timerRestarts`
+ * without `turnOver`). Answers the stale timestamp, for a test that asserts the
+ * clock moved.
+ */
+function seedSolitaireFiresOut(): string {
+    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    seedGame({
+        gameId: 'game_1',
+        gameType: {
+            gameId: 'gametype_1', gameType: 'FiresOut', friendlyName: 'Fires Out!',
+            icon: '', url: 'firesout', className: 'FiresOutGameType'
+        },
+        kind: 'FiresOutGameData',
+        userIdList: [ANN.id],
+        turnTimer: '10m',
+        currentTurn: ANN.id,
+        lastTurnTimestamp: stale,
+        timerWarningNotificationSent: true,
+        gameState: { turnOrder: [ANN.id], history: [], commandHistory: [] },
+        complete: false,
+        winner: '',
+        specificGameState: baseState([ANN.id, ANN.id]),
+    });
+    return stale;
+}
+
+/** Ann ending one figure's turn on that board. */
+function solitaireEndTurn() {
+    return commandPost({
+        id: '00000000-0000-0000-0000-00000000000f',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        gameId: 'game_1',
+        senderId: ANN.id,
+        senderUsername: 'ann',
+        className: 'FiresOutAction',
+        kind: 'endTurn',
+    });
+}
+
 describe('POST /api/game/command', () => {
     it('plays the move, records it and passes the turn on', async () => {
         signIn(ANN);
@@ -229,34 +301,9 @@ describe('POST /api/game/command', () => {
         // was false in both halves. `timerRestarts` is the boundary that isn't
         // a hand-off.
         signIn(ANN);
-        const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        seedGame({
-            gameId: 'game_1',
-            gameType: {
-                gameId: 'gametype_1', gameType: 'FiresOut', friendlyName: 'Fires Out!',
-                icon: '', url: 'firesout', className: 'FiresOutGameType'
-            },
-            kind: 'FiresOutGameData',
-            userIdList: [ANN.id],
-            turnTimer: '10m',
-            currentTurn: ANN.id,
-            lastTurnTimestamp: stale,
-            timerWarningNotificationSent: true,
-            gameState: { turnOrder: [ANN.id], history: [], commandHistory: [] },
-            complete: false,
-            winner: '',
-            specificGameState: baseState([ANN.id, ANN.id]),
-        });
+        const stale = seedSolitaireFiresOut();
 
-        const response = await command(commandPost({
-            id: '00000000-0000-0000-0000-00000000000f',
-            timestamp: '2026-01-01T00:00:00.000Z',
-            gameId: 'game_1',
-            senderId: ANN.id,
-            senderUsername: 'ann',
-            className: 'FiresOutAction',
-            kind: 'endTurn',
-        }));
+        const response = await command(solitaireEndTurn());
 
         expect(response.status).toBe(200);
         const outcome = (await response.json()).outcome;
@@ -699,6 +746,208 @@ describe('POST /api/game/command', () => {
         const saved = storedGame('game_1')!;
         expect(saved.currentTurn).toBe(ANN.id);
         expect(commandHistory(saved)).toHaveLength(1);
+    });
+});
+
+// Judging achievements at the end of a turn (docs/achievements.md §4.2): the
+// `YourTurn` push's own slot in `after()`, shared with a judge that writes what
+// the turn just ended earned. Snakes & Ladders is the stand-in game, as it is
+// for the rest of the file: Ann is on 10 and Bob on 20, the die always rolls a
+// 3, so Ann's move lands her on 13 and hands the turn to Bob.
+describe('POST /api/game/command judging achievements', () => {
+    const squareOf = (view: ISnakesAndLaddersGameStateResponse, userId: string) => view.playerStates[userId].position;
+
+    /** Gives Snakes & Ladders these achievements for the test. */
+    const offer = (...achievements: GameAchievement<any>[]) => {
+        testCatalogue.games.snakesandladders = achievements;
+    };
+
+    /** A check that can be asked again, saying how it was called. */
+    const checking = (passes: (view: ISnakesAndLaddersGameStateResponse, userId: string) => boolean) =>
+        vi.fn<(view: ISnakesAndLaddersGameStateResponse, seat: Seat) => boolean>((view, { userId }) => passes(view, userId));
+
+    /** What the judge stored, as a row carries it. */
+    const row = (userId: string, achievementId: string, url = 'snakesandladders') =>
+        ({ userId, achievementId, unlockedAt: expect.any(String), gameId: 'game_1', url });
+
+    // A judge that fails logs it, and so does a push that can't be sent.
+    let errors: MockInstance<typeof console.error>;
+    beforeEach(() => {
+        errors = vi.spyOn(console, 'error').mockImplementation(() => { });
+    });
+    afterEach(() => {
+        errors.mockRestore();
+    });
+
+    it('writes a row, after the response, when a check passes at the end of a turn', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+
+        const response = await command(commandPost(diceRoll()));
+
+        expect(response.status).toBe(200);
+        // Nobody waits on it: it is the response's own `after()` that judges.
+        expect(storedAchievementUnlocks()).toEqual([]);
+
+        await runAfterCallbacks();
+
+        expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+        // Nothing is pushed or shown for it yet: the next player's "your move"
+        // is the only push this turn sent.
+        expect(sentPushes.map(push => push.options?.channel)).toEqual(['yourTurn']);
+    });
+
+    it('judges every seat, not only the one who moved', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        // Bob didn't move: he is still on 20, and a move can hand somebody else
+        // their achievement (Dice Cities' Business Center swap).
+        offer(turnEnd('snakesandladders.twenty', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 20));
+
+        await command(commandPost(diceRoll()));
+        await runAfterCallbacks();
+
+        expect(storedAchievementUnlocks()).toEqual([row(BOB.id, 'snakesandladders.twenty')]);
+    });
+
+    it('writes nothing for a move that leaves the turn open, however true the state it leaves', async () => {
+        signIn(ANN);
+        // A 6 hands the die straight back to the same player, so the turn isn't over.
+        seedSnakesAndLadders({
+            specificGameState: {
+                playerPositions: {
+                    [ANN.id]: { position: 10, laddersClimbed: 0, snakesHit: 0 },
+                    [BOB.id]: { position: 20, laddersClimbed: 0, snakesHit: 0 },
+                },
+                hasRolled: false,
+                reRollOnSix: true,
+            }
+        });
+        const pastFifteen = checking((view, userId) => userId === ANN.id && squareOf(view, userId) > 15);
+        offer(turnEnd('snakesandladders.past-fifteen', pastFifteen));
+        vi.mocked(DiceRoll).mockReturnValueOnce(6);
+
+        const sixed = await command(commandPost(diceRoll()));
+
+        expect((await sixed.json()).outcome).toMatchObject({ turnOver: false, extraRoll: true, newPosition: 16 });
+        expect(storedGame('game_1')!.currentTurn).toBe(ANN.id);
+        // The state passes, and is never looked at: no turn ended, so there is no
+        // post-response work to run at all.
+        expect(await runAfterCallbacks()).toBe(0);
+        expect(pastFifteen).not.toHaveBeenCalled();
+        expect(storedAchievementUnlocks()).toEqual([]);
+
+        // The roll that does end the turn (Ann is now on 19) is judged.
+        await command(commandPost(diceRoll()));
+        await runAfterCallbacks();
+
+        expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.past-fifteen')]);
+    });
+
+    it("judges a Fires Out solitaire hand-off, which restarts the timer without handing over the turn", async () => {
+        signIn(ANN);
+        seedSolitaireFiresOut();
+        testCatalogue.games.firesout = [turnEnd('firesout.any', () => true)];
+
+        const response = await command(solitaireEndTurn());
+
+        expect((await response.json()).outcome).toMatchObject({ turnOver: false, timerRestarts: true });
+        await runAfterCallbacks();
+
+        expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'firesout.any', 'firesout')]);
+        // ...and still nobody is told it's their move.
+        expect(sentPushes).toEqual([]);
+    });
+
+    it("judges even when there is nobody to tell it's their turn", async () => {
+        signIn(ANN);
+        // The turn order names a seat the roster doesn't hold, so the turn passes
+        // to somebody Clerk can't resolve. (A roster seat Clerk doesn't return
+        // would instead fail the whole table closed, and judge nothing: §4.2
+        // step 1.) The push has nobody to go to; the judge doesn't need them.
+        seedSnakesAndLadders({ gameState: { turnOrder: [ANN.id, 'user_ghost'], history: [], commandHistory: [] } });
+        offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+
+        const response = await command(commandPost(diceRoll()));
+        await runAfterCallbacks();
+
+        expect(response.status).toBe(200);
+        expect(storedGame('game_1')!.currentTurn).toBe('user_ghost');
+        expect(errors).toHaveBeenCalledWith('Next user not found for game game_1');
+        expect(sentPushes).toEqual([]);
+        expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+    });
+
+    it("judges even when the next player's push can't be sent", async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+        vi.mocked(sendPushToUsers).mockRejectedValueOnce(new Error('FCM is down'));
+
+        const response = await command(commandPost(diceRoll()));
+        await runAfterCallbacks();
+
+        expect(response.status).toBe(200);
+        expect(errors).toHaveBeenCalledWith('Post-response turn-notification work failed for game game_1', expect.any(Error));
+        expect(storedAchievementUnlocks()).toEqual([row(ANN.id, 'snakesandladders.thirteen')]);
+    });
+
+    it('judges nothing at an exhibition table, and still tells the next player', async () => {
+        // A guest who hasn't claimed an account: nobody at the table earns
+        // anything from a game that counts toward nobody's stats (§8).
+        const dave = { id: 'user_dave', username: 'guest_3f2ab9c14d', publicMetadata: { guest: true } };
+        signIn(ANN);
+        stubClerkUsers(dave);
+        seedSnakesAndLadders(
+            { userIdList: [ANN.id, dave.id], gameState: { turnOrder: [ANN.id, dave.id], history: [], commandHistory: [] } },
+            { [ANN.id]: 10, [dave.id]: 20 });
+        const always = checking(() => true);
+        offer(turnEnd('snakesandladders.always', always));
+
+        const response = await command(commandPost(diceRoll()));
+        await runAfterCallbacks();
+
+        expect(response.status).toBe(200);
+        expect(always).not.toHaveBeenCalled();
+        expect(storedAchievementUnlocks()).toEqual([]);
+        expect(sentPushes.map(push => push.userIds)).toEqual([[dave.id]]);
+    });
+
+    it("has nothing to judge or to tell when the roster can't be resolved, and the response is unaffected", async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+        // Only the post-response lookup fails: the route resolved the mover's
+        // name before it, and is done with Clerk by the time it answers.
+        const roster = vi.spyOn(clerkUsers, 'usersById').mockRejectedValueOnce(new Error('Clerk is down'));
+
+        const response = await command(commandPost(diceRoll()));
+        await expect(runAfterCallbacks()).resolves.toBe(1);
+
+        expect(response.status).toBe(200);
+        expect(errors).toHaveBeenCalledWith("Couldn't resolve the roster for the post-response work on game game_1", expect.any(Error));
+        expect(storedAchievementUnlocks()).toEqual([]);
+        expect(sentPushes).toEqual([]);
+        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
+        roster.mockRestore();
+    });
+
+    it("doesn't stop the next player being told, or fail the response, when the judge can't write", async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        offer(turnEnd('snakesandladders.thirteen', (view: ISnakesAndLaddersGameStateResponse, { userId }) => squareOf(view, userId) === 13));
+        failNextAchievementUnlockWrite(new Error('boom'));
+
+        const response = await command(commandPost(diceRoll()));
+        await expect(runAfterCallbacks()).resolves.toBe(1);
+
+        expect(response.status).toBe(200);
+        expect(errors).toHaveBeenCalledWith('Judging achievements for game_1 failed', expect.objectContaining({ message: 'boom' }));
+        expect(storedAchievementUnlocks()).toEqual([]);
+        expect(sentPushes.map(push => push.userIds)).toEqual([[BOB.id]]);
+        // The move itself is saved whatever happens after it.
+        expect(storedGame('game_1')!.currentTurn).toBe(BOB.id);
     });
 });
 
