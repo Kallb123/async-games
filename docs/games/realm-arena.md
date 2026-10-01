@@ -917,8 +917,9 @@ Reviewers: `locksmith` and `gremlin` (the new route), `caveman`.
    `BoardZoom`, with a deep `maxWidth` and a `focus` on the selected character
    (§13.1).
 2. `/games/realmarena/[gameid]`: the board screen, built on `GameShell`,
-   `useGameData`, `usePushEvents` and `useEndGame`. It shows the squads, the
-   scores, the round and whose turn it is.
+   `useGameData` (which listens for the push events itself) and
+   `useEndGame`. It shows the squads, the scores, the round and whose turn
+   it is.
 3. Placeholder ground drawn from the map's letters, so the art isn't holding
    anything up (PR 9).
 
@@ -1042,3 +1043,4 @@ Realm, its sibling in the same world.
 | 0.7 | Round-6 answers recorded (§11.6): nobody stops on low cover, cover sits in squares, a timed-out muster musters a ready-made squad, the plan's order is agreed, the first playable version ships with placeholder art (PR 9), and building waits until this doc has merged. |
 | 0.8 | PR 2 fills in what §13 left open: each character's HP, Fireball's damage, how ranges and "next to" are measured, and the smaller cases listed under §13.6. |
 | 0.9 | PR 3 fills in what §17.2 left open: a sealed squad stays off the battlefield until every player has mustered, a turn begins on the hand-off, and a request keeps only what was checked. |
+| 1.0 | PR 5 fills in how the board shows the muster: the viewer's own sealed squad is drawn hollow where it will stand, and nobody else's is drawn at all. |

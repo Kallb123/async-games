@@ -4,7 +4,7 @@ import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/te
 import { CHARACTERS, POINTS_BUDGET, REALM, type CharacterId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    ACTION_POINTS, act, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, musterRefusal, newFighter, reachOf,
+    ACTION_POINTS, act, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, musterRefusal, newFighter, reachOf,
     reactionsTo, readyMadeMuster, shotOdds, shotResult, standings, startTurn,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -392,6 +392,16 @@ describe("turns", () => {
         expect(centrePoints({ field, fighters: [holder, fighter(2, "b", "scout", at(field, 5, 2))] }, "a", 3)).toBe(0);
         expect(centrePoints({ field, fighters: [holder, fighter(2, "b", "scout", at(field, 5, 2), { hp: 0 })] }, "a", 3)).toBe(5);
         expect(endTurn({ field, fighters: [holder] }, "a", 3).events).toContainEqual({ kind: "scored", player: "a", points: 5, reason: "centre" });
+    });
+
+    it("name each player standing in the centre once, leaving out the fallen", () => {
+        const fighters = [
+            fighter(1, "a", "knight", at(field, 4, 1)),
+            fighter(2, "a", "archer", at(field, 5, 1)),
+            fighter(3, "b", "scout", at(field, 5, 2), { hp: 0 }),
+        ];
+        expect(centreHolders({ field, fighters })).toEqual(["a"]);
+        expect(centreHolders({ field, fighters: [...fighters, fighter(4, "b", "mage", at(field, 4, 2))] })).toEqual(["a", "b"]);
     });
 });
 
