@@ -6,6 +6,8 @@ import type { uuidString, GameEndReason, GameResultStatGroup, GameResultAnyChart
 // player type.
 import { playerByUserId } from "../apiModels/GameDataApi";
 import { isDuplicateKeyError } from "./duplicateKey";
+import { unlocksOf } from "./AchievementUnlockData";
+import type { IAchievementUnlock } from "./AchievementUnlockData";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
@@ -641,7 +643,13 @@ export interface IGameStats {
 export interface IPlayerStats {
     recent: IRecentMatch[];
     byGame: IGameStats[];
+    // Every achievement the player holds a row for (docs/achievements.md §6).
+    // Career achievements they already meet but hold no row for yet are
+    // derived on the client from `byGame` (unlockedIds), not stored here.
+    achievements: IAchievementUnlock[];
 }
+
+export type { IAchievementUnlock };
 
 /** The fields of a finished game that decide what it was worth to a player. */
 export interface IMatchResult {
@@ -719,11 +727,15 @@ const SOMEBODY_ELSE = 'somebody else';
 // is whoever is looking at the profile (equal to `userId` on your own
 // profile); each match reports whether the viewer also played in it.
 export async function getPlayerStats(userId: string, viewerId: string): Promise<IPlayerStats> {
-    const recentResults = await GameResultModel
-        .find({ playerIds: userId, ...RESULT_COUNTS_FILTER })
-        .sort({ endedAt: -1 })
-        .limit(10)
-        .exec();
+    const [recentResults, byGame, achievements] = await Promise.all([
+        GameResultModel
+            .find({ playerIds: userId, ...RESULT_COUNTS_FILTER })
+            .sort({ endedAt: -1 })
+            .limit(10)
+            .exec(),
+        getGameStatsByPlayer(userId),
+        achievementsOf(userId),
+    ]);
 
     const recent: IRecentMatch[] = recentResults.map(result => ({
         gameId: result.gameId,
@@ -733,7 +745,41 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
         sharedWithViewer: result.playerIds.includes(viewerId),
     }));
 
-    return { recent, byGame: await getGameStatsByPlayer(userId) };
+    return { recent, byGame, achievements };
+}
+
+// A player's stored unlocks for their profile, each marked with whether the
+// game that earned it has a results page to link to (docs/achievements.md
+// §6): a game still in play has none yet, and nor does one whose result went
+// with somebody's account deletion — `url` is on the row so the profile can
+// still say which game it was. One `$in` read over GameResult's unique gameId
+// index.
+//
+// Fails soft: the achievements are one section of a profile whose stats and
+// recent form are the point of it, and a read that fails here shouldn't take
+// those down with it. A failure is logged and answers none, and the next
+// profile read asks again.
+async function achievementsOf(userId: string): Promise<IAchievementUnlock[]> {
+    try {
+        const unlocks = await unlocksOf(userId);
+        const gameIds = [...new Set(unlocks.flatMap(unlock => unlock.gameId ?? []))];
+        if (gameIds.length === 0) return unlocks;
+        const withResults: { gameId: string }[] = await GameResultModel
+            .find({ gameId: { $in: gameIds } }, { _id: 0, gameId: 1 })
+            .lean()
+            .exec();
+        const hasResult = new Set(withResults.map(result => result.gameId));
+        // A game with no results page keeps its `url` ("in a game of Dice
+        // Cities") and loses its id: nothing on a profile needs the id of a game
+        // it can't link to, and a friend has no business holding the id of a
+        // game still in play that they aren't in.
+        return unlocks.map(({ gameId, ...unlock }) => gameId === undefined
+            ? unlock
+            : hasResult.has(gameId) ? { ...unlock, gameId, hasResult: true } : { ...unlock, hasResult: false });
+    } catch (error) {
+        console.error(`Couldn't read the achievements of ${userId}; the profile shows none this time`, error);
+        return [];
+    }
 }
 
 // One player's W/L/D per game, most-played first: the `byGame` half of

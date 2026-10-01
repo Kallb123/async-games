@@ -1,5 +1,6 @@
 'use client'
 
+import DisclosureSection from "@/components/ui/DisclosureSection";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
@@ -11,8 +12,7 @@ import { WHATS_NEW, WHATS_NEW_FEATURED } from "@/utils/ui/whatsNew";
  * and bug fixes.
  *
  * Collapsed by default: the notes are worth having but are not why anyone opens
- * the app, so they sit behind a heading you tap to unfold. A native `<details>`
- * does that without any state to hold.
+ * the app, so they sit behind a heading you tap to unfold (`DisclosureSection`).
  *
  * Each group reads newest first and in two tiers. The newest
  * `WHATS_NEW_FEATURED` get the full row — the game's art or the group's glyph,
@@ -26,12 +26,7 @@ import { WHATS_NEW, WHATS_NEW_FEATURED } from "@/utils/ui/whatsNew";
  */
 export default function WhatsNew() {
     return (
-        <details className="ag-disclosure">
-            <summary className="ag-section ag-section-head">
-                <h2 className="ag-block-title">What&rsquo;s new</h2>
-                <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span>
-            </summary>
-
+        <DisclosureSection title="What’s new">
             {WHATS_NEW.map(group => (
                 <ListSection key={group.label} label={group.label} isLoading={false}>
                     {group.items.map((item, index) => {
@@ -54,6 +49,6 @@ export default function WhatsNew() {
                     })}
                 </ListSection>
             ))}
-        </details>
+        </DisclosureSection>
     );
 }

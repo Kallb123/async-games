@@ -13,7 +13,11 @@ export const ALL_NOTIFICATION_CHANNELS = [
     'friendInvite',
     'gameInvite',
     'turnExpiringSoon',
-    'gameOver'
+    'gameOver',
+    // The mid-game push for an achievement marked `notify` (the command route's
+    // pushNotifyUnlocks, docs/achievements.md §7.4). The game-over push names what
+    // the ending unlocked on `gameOver`, not here.
+    'achievements'
 ] as const;
 
 export type NotificationChannel = typeof ALL_NOTIFICATION_CHANNELS[number];
@@ -35,6 +39,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
         gameInvite: true,
         turnExpiringSoon: true,
         gameOver: true,
+        achievements: true,
     }
 };
 
@@ -49,6 +54,7 @@ export const NOTIFICATION_CHANNELS: {
     { key: 'playerReaction', label: "Reactions", description: "When a player reacts to a turn" },
     { key: 'chat', label: "Chat messages", description: "When someone messages you in one of your games" },
     { key: 'gameOver', label: "Game results", description: "When one of your games finishes" },
+    { key: 'achievements', label: "Achievements", description: "When you unlock an achievement during a game" },
     { key: 'gameInvite', label: "Game invites", description: "When someone invites you to a game" },
     { key: 'friendInvite', label: "Friend requests", description: "When someone sends you a friend request" },
 ];
@@ -73,6 +79,7 @@ export function getNotificationPreferences(user: User): NotificationPreferences 
             gameInvite: channels.gameInvite ?? DEFAULT_PREFERENCES.channels.gameInvite,
             turnExpiringSoon: channels.turnExpiringSoon ?? DEFAULT_PREFERENCES.channels.turnExpiringSoon,
             gameOver: channels.gameOver ?? DEFAULT_PREFERENCES.channels.gameOver,
+            achievements: channels.achievements ?? DEFAULT_PREFERENCES.channels.achievements,
         }
     };
 }

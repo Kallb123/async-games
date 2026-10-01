@@ -1,6 +1,7 @@
 import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
+import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification, withUnlocked } from '@/utils/firebase/notificationContent';
+import type { PushNotification } from '@/utils/firebase/pushNotification';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
@@ -42,7 +43,40 @@ export interface FinishedGame {
      * announceGameOver), and `recordGameResult` is idempotent on gameId, so a
      * retried request still writes one record.
      */
-    announce: () => Promise<void>;
+    announce: (options?: AnnounceOptions) => Promise<void>;
+}
+
+/** How long announcing may take, for a caller racing a deadline of its own. */
+export interface AnnounceOptions {
+    /**
+     * When the caller will be stopped (epoch ms): the turn-timer cron's hard
+     * stop. Judging achievements is the one part of announcing that can wait —
+     * career ones catch up at the player's next game — so it is cut short, or
+     * skipped, to leave the pushes `PUSH_RESERVE_MS`. The table must still be
+     * told the game is over (docs/achievements.md §10).
+     */
+    finishBy?: number;
+}
+
+/** What announcing keeps back for the pushes when `finishBy` is close. */
+export const PUSH_RESERVE_MS = 3_000;
+
+/**
+ * The least time worth starting a judgment in. Below it the judge would be
+ * given up on at once and carry on in the background, until the platform
+ * stopped it part-way through a write — rows stored that nobody was told about.
+ */
+export const MIN_JUDGING_MS = 500;
+
+/**
+ * How long judging may take: the usual budget, or less, to leave the pushes
+ * their reserve before `finishBy`. Zero means don't judge at all, which is the
+ * answer for anything under `MIN_JUDGING_MS`.
+ */
+export function judgingBudget(finishBy: number | undefined, now: number): number {
+    if (finishBy === undefined) return GAME_END_BUDGET_MS;
+    const budget = Math.min(GAME_END_BUDGET_MS, finishBy - now - PUSH_RESERVE_MS);
+    return budget < MIN_JUDGING_MS ? 0 : budget;
 }
 
 /**
@@ -80,7 +114,7 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
         return { saved: false, announce: async () => {} };
     }
 
-    return { saved: true, announce: () => announceGameOver(gameData) };
+    return { saved: true, announce: (options = {}) => announceGameOver(gameData, options) };
 }
 
 /**
@@ -90,7 +124,7 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
  * time this runs, so the worst any failure may cost is a stats record, an
  * unlock or a notification — never the ending itself.
  */
-async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
+async function announceGameOver(gameData: IGameDataDocument, { finishBy }: AnnounceOptions): Promise<void> {
     let userList: User[];
     try {
         userList = await usersById(gameData.userIdList);
@@ -118,33 +152,48 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
         console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
     }
 
-    // Judged before the pushes, so that a push can name what the ending unlocked
-    // (a later change will; nothing reads the answer yet) and so that the
-    // toaster's refresh on a GameOver push finds the rows already written.
-    // withTimeout logs a judge that throws, so this needs no try of its own.
+    // Judged before the pushes, so that each push can name what the ending
+    // unlocked for its player, and so that the toaster's refresh on a GameOver
+    // push finds the rows already written. withTimeout logs a judge that
+    // throws, so this needs no try of its own.
     //
     // The budget is short because the turn-timer cron awaits this inline and
     // keeps only ten seconds of headroom for the last game it starts, which also
     // has to fit the Clerk lookup above, recordGameResult and the pushes. A
-    // judgment that lands late misses only the push: the results page and the
-    // toast still show what it stored (docs/achievements.md §4.3).
-    await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), GAME_END_BUDGET_MS, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
+    // judgment that lands late misses only the push's clause: the results page
+    // and the toast still show what it stored (docs/achievements.md §4.3).
+    //
+    // A caller racing its own deadline (the cron) may leave less than that: the
+    // pushes come first, and what isn't judged now catches up later.
+    const budget = judgingBudget(finishBy, Date.now());
+    let unlocked = NO_UNLOCKS;
+    if (budget > 0) {
+        unlocked = await withTimeout(() => judgeGameEnd(gameData, userList, { recorded }), budget, NO_UNLOCKS, `Judging achievements for ${gameData.gameId}`);
+    } else {
+        console.warn(`Not judging achievements for ${gameData.gameId}: too close to the run's deadline to leave the pushes time`);
+    }
 
-    // sendPushToUsers reports a failed send rather than throwing (see its own
-    // comment), so the fan-out below needs no try of its own.
     const push = {
         event: 'GameOver',
         gameId: gameData.gameId,
         link: gameNotificationLink(gameData.gameType.url, gameData.gameId),
     };
+    // Every player gets a push of their own, naming what the ending unlocked for
+    // them and nobody else, so one seat's "🏆 Unlocked…" never lands on a
+    // teammate's lock screen (§7.4). They go out together: sendPushToUsers
+    // already sends one message per device, the largest table that reaches here
+    // has six seats, and the users are already loaded. It reports a failed send
+    // rather than throwing (see its own comment), so this needs no try either.
+    const sendTo = (user: User, notification: PushNotification) => sendPushToUsers([user], push,
+        withUnlocked(notification, unlocked.filter(unlock => unlock.userId === user.id).map(unlock => unlock.achievement)),
+        { channel: 'gameOver' });
 
-    // A co-op table shares one ending, so everybody gets the same push. Split
-    // into a winner and some losers, they'd each be told the opposite of what
-    // happened to the others at a table that only has one result.
+    // A co-op table shares one ending, so everybody is told the same thing.
+    // Split into a winner and some losers, they'd each be told the opposite of
+    // what happened to the others at a table that only has one result.
     if (gameData.endReason === 'teamwin' || gameData.endReason === 'teamloss') {
-        await sendPushToUsers(userList, push,
-            buildTeamResultNotification(gameData, gameData.endReason === 'teamwin'),
-            { channel: 'gameOver' });
+        const result = buildTeamResultNotification(gameData, gameData.endReason === 'teamwin');
+        await Promise.all(userList.map(user => sendTo(user, result)));
         return;
     }
 
@@ -154,14 +203,10 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // the sentence a per-user resolver writes when two players at the same
     // game share a display name.
     const nameOf = userListToUserIdNameMap(userList);
+    const lost = buildGameLostNotification(gameData, winnerUser ? nameOf[winnerUser.id] : '');
 
-    if (winnerUser) {
-        await sendPushToUsers([winnerUser], push,
-            buildGameWonNotification(gameData, losers.map(u => nameOf[u.id])),
-            { channel: 'gameOver' });
-    }
-
-    await sendPushToUsers(losers, push,
-        buildGameLostNotification(gameData, winnerUser ? nameOf[winnerUser.id] : ''),
-        { channel: 'gameOver' });
+    await Promise.all([
+        winnerUser && sendTo(winnerUser, buildGameWonNotification(gameData, losers.map(u => nameOf[u.id]))),
+        ...losers.map(user => sendTo(user, lost)),
+    ]);
 }

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { getPlayerStats } from '@/utils/mongodb/GameResultData';
 
-export type { MatchOutcome, IRecentMatch, IGameStats } from '@/utils/mongodb/GameResultData';
+export type { MatchOutcome, IRecentMatch, IGameStats, IAchievementUnlock } from '@/utils/mongodb/GameResultData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   await dbConnect();
 
-  const { recent, byGame } = await getPlayerStats(userId, userId);
+  const { recent, byGame, achievements } = await getPlayerStats(userId, userId);
 
-  return NextResponse.json({ success: true, recent, byGame });
+  return NextResponse.json({ success: true, recent, byGame, achievements });
 }

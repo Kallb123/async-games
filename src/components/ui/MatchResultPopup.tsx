@@ -7,7 +7,7 @@ import GameResultStats from "@/components/ui/GameResultStats";
 import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useCloseRequest } from "@/utils/hooks/useCloseRequest";
-import { GAME_META } from "@/utils/ui/games";
+import { GAME_META, resultPath } from "@/utils/ui/games";
 import { pluralize } from "@/utils/ui/text";
 import { lengthUnit } from "@/utils/games/turnCount";
 import type { MatchOutcome } from "@/app/api/stats/route";
@@ -59,7 +59,7 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
                     )}
             </Modal.Body>
             <Modal.Footer>
-                <Link href={`/games/result/${gameId}`} className="ag-btn ag-btn--light">Full result</Link>
+                <Link href={resultPath(gameId)} className="ag-btn ag-btn--light">Full result</Link>
                 <button type="button" className="ag-btn ag-btn--primary" onClick={onClose}>Close</button>
             </Modal.Footer>
         </Modal>

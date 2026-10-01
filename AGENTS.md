@@ -116,12 +116,23 @@ out. A second copy is the signal to extract the first one.
   with — rather than another hand-built "↩ Undo". A game whose undoable move
   ends the turn holds it open for ten seconds first, and shows that hold with
   `UndoHold`: Pass now, Undo, the countdown and the hand-off it sends by itself.
+  A block of the page that folds away behind its heading is a
+  `DisclosureSection` (the home page's "What's new", the profile's unplayed
+  games) — never another hand-written `<details className="ag-disclosure">`.
+  An achievement's icon is drawn by `AchievementIcon` (its art, or its emoji
+  when it has none or the art fails), and a profile's achievements are
+  `AchievementsSection`, shared by both profile screens. An unlock is
+  celebrated by the one `AchievementToaster` in `Providers`: a screen that
+  already holds some of the viewer's unlocks hands them to
+  `useAchievementToaster().offer` rather than toasting them itself.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `gameThemes.ts` (the themes each game can be
   played in — see [`docs/game-themes.md`](./docs/game-themes.md)),
   `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`
-  draws), `mapLabels.ts` (the label placement `MapLabelLayer` draws).
+  draws), `mapLabels.ts` (the label placement `MapLabelLayer` draws),
+  `achievements.ts` (a profile's achievement groups, a result's unlock rows,
+  and what the toaster hasn't celebrated yet).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the
   "who's playing" invite picker used by every game-setup screen), and
   `useStoredValue` — the one place in the app that touches `localStorage`, so
@@ -150,6 +161,15 @@ Most also want a **guided tutorial**: a `tutorial.ts` beside it, exporting a
 It's the spotlight-and-card tour of the live board a player gets in place of
 the guide's auto-show on their first match — see
 [`docs/game-tutorials.md`](./docs/game-tutorials.md) for the full design.
+
+Most also want **achievements**: an `achievements.ts` beside `meta.ts`,
+exporting `achievements` typed `GameAchievement<YourResponseState>[]`, with one
+import and one line in `GAME_ACHIEVEMENTS` in `src/utils/games/achievements.ts`
+(a guard test fails if you forget). Three to six per game — a *played* and a
+*won* rung and a couple that reward a way of playing. Ids are permanent, a match
+check reads only what every viewer gets (its null view is pinned in
+`hiddenHands.test.ts` in the same commit), and the file must stay browser-safe.
+[`docs/achievements.md`](./docs/achievements.md) §11 is the full checklist.
 
 A game can also offer **themes** — alternative dressings picked on the setup
 screen, changing every name, every piece of copy and the art while changing no

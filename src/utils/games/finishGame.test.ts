@@ -29,7 +29,8 @@ import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import type { IGameData } from '@/utils/mongodb/GameData';
 import { GAME_END_BUDGET_MS, NO_UNLOCKS } from './awardAchievements';
-import { finishGame } from './finishGame';
+import { finishGame, judgingBudget, MIN_JUDGING_MS, PUSH_RESERVE_MS } from './finishGame';
+import { platform } from '@/utils/testing/achievementFixtures';
 
 /** The game as a route would hold it: a fresh document out of the store. */
 async function liveGame(): Promise<IGameDataDocument> {
@@ -78,10 +79,11 @@ describe('finishGame', () => {
         // The whole point of the team reasons: nobody won it on their own.
         expect(saved.winner).toBe('');
 
-        expect(sentPushes).toHaveLength(1);
-        expect(sentPushes[0].userIds).toEqual([ANN.id, BOB.id]);
-        expect(sentPushes[0].notification.title).toContain('Your team won');
-        expect(sentPushes[0].options?.channel).toBe('gameOver');
+        // One push each, all saying the same thing: each is its own so that one
+        // seat's unlocks never land on a teammate's lock screen.
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        expect(sentPushes.every(push => push.notification.title.includes('Your team won'))).toBe(true);
+        expect(sentPushes.every(push => push.options?.channel === 'gameOver')).toBe(true);
     });
 
     it('tells a co-op table it lost, rather than splitting it into a winner and losers', async () => {
@@ -89,9 +91,8 @@ describe('finishGame', () => {
         await finished.announce();
 
         expect(storedGame('game_1')!.endReason).toBe('teamloss');
-        expect(sentPushes).toHaveLength(1);
-        expect(sentPushes[0].userIds).toEqual([ANN.id, BOB.id]);
-        expect(sentPushes[0].notification.title).toContain('Your team lost');
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        expect(sentPushes.every(push => push.notification.title.includes('Your team lost'))).toBe(true);
     });
 
     it('records who went quiet when the timer abandons a game', async () => {
@@ -102,7 +103,7 @@ describe('finishGame', () => {
         expect(saved.endReason).toBe('abandoned');
         expect(saved.forfeitedBy).toBe(BOB.id);
         // No winner to congratulate, so the same "it's over" goes to everyone.
-        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id, BOB.id]]);
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
     });
 
     it('still tells the table when the result record cannot be written', async () => {
@@ -200,5 +201,57 @@ describe('finishGame judging achievements', () => {
         // that was only slow.
         expect(warn).toHaveBeenCalledWith(`Judging achievements for game_1 still running after ${GAME_END_BUDGET_MS}ms; not waiting for it`);
         warn.mockRestore();
+    });
+
+    it("names what the ending unlocked in each player's own push, and only theirs", async () => {
+        judgeGameEnd.mockResolvedValue([{ userId: ANN.id, achievement: platform('platform.first-win', record => record.won, 1) }]);
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+
+        await finished.announce();
+
+        const bodies = Object.fromEntries(sentPushes.map(push => [push.userIds[0], push.notification.body]));
+        expect(bodies[ANN.id]).toMatch(/🏆 Unlocked platform\.first-win$/);
+        expect(bodies[BOB.id]).not.toContain('Unlocked');
+    });
+
+    it("keeps one teammate's unlock off the other's push at a co-op table, which is told one result", async () => {
+        judgeGameEnd.mockResolvedValue([{ userId: ANN.id, achievement: platform('platform.first-win', record => record.won, 1) }]);
+        const finished = await finishGame(await liveGame(), { endReason: 'teamwin' });
+
+        await finished.announce();
+
+        const bodies = Object.fromEntries(sentPushes.map(push => [push.userIds[0], push.notification.body]));
+        expect(bodies[ANN.id]).toMatch(/🏆 Unlocked platform\.first-win$/);
+        expect(bodies[BOB.id]).not.toContain('Unlocked');
+        expect(sentPushes.every(push => push.notification.title.includes('Your team won'))).toBe(true);
+    });
+
+    it("judges only in the time a deadline leaves the pushes, and not at all when there is none to spare", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+
+        // The cron's last game, with its run about to be stopped.
+        await finished.announce({ finishBy: Date.now() + PUSH_RESERVE_MS });
+
+        expect(judgeGameEnd).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith("Not judging achievements for game_1: too close to the run's deadline to leave the pushes time");
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+        warn.mockRestore();
+    });
+});
+
+describe('judgingBudget', () => {
+    it('is the usual budget with no deadline, or with one far enough off', () => {
+        expect(judgingBudget(undefined, 0)).toBe(GAME_END_BUDGET_MS);
+        expect(judgingBudget(60_000, 0)).toBe(GAME_END_BUDGET_MS);
+    });
+
+    it('shrinks to what the deadline leaves once the pushes have their reserve', () => {
+        expect(judgingBudget(PUSH_RESERVE_MS + 1_000, 0)).toBe(1_000);
+    });
+
+    it('is nothing when what is left is too little to be worth starting a judge in', () => {
+        expect(judgingBudget(PUSH_RESERVE_MS + MIN_JUDGING_MS - 1, 0)).toBe(0);
+        expect(judgingBudget(PUSH_RESERVE_MS - 1_000, 0)).toBe(0);
     });
 });

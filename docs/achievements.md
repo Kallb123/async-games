@@ -1,12 +1,11 @@
 # Achievements — plan
 
-**Status: PRs 1 and 2 of §13 are built, and nothing shows an achievement
-yet.** The shapes, the empty registry, the `AchievementUnlock` collection, the
-two-turn "played" rule and both judging checkpoints (`judgeTurnEnd` and
-`judgeGameEnd`) are on `main`. They judge against an empty catalogue, so nothing
-is written yet; PRs 3 and 4 are still to come. §13 has the build order: four
-PRs, the first two changing nothing a player can see, the third turning the
-feature on.
+**Status: shipped for the platform, Dice Cities and Settlements & Cities; PR 4
+brings the rest.** PRs 1–3 of §13 are on `main`: the shapes, the registry, the
+`AchievementUnlock` collection, the two-turn "played" rule, both judging
+checkpoints, the reads, the toaster, the pushes, the profile and results-page
+sections, and the first nine achievements. What PR 3 settled differently from
+the text below is noted under §13's PR 3.
 The design has been through all five reviewers, and the product owner has
 settled its open questions; §15 records both.
 
@@ -1397,9 +1396,9 @@ read. That's the design working, not a gap in it. It also covers a surrender:
 | Judging at a turn end fails or stalls (Mongo in its 30 s server selection, say) | It runs in `after()`, after the response, beside the `YourTurn` push rather than behind it, in its own `try` under `withTimeout` (§4.2). The move is already saved and the next player is told regardless. A condition that still holds is caught at the next turn end. A stall is logged: `withTimeout` warns when its deadline wins, so a budget that has come to be too short gets noticed. |
 | `recordUnlocks` throws after some of its upserts landed (one row loses a race while another hits a real write error, or a write-concern error) | The rows that did land are stored, but the pass that wrote them never hears which, so they get no `notify` push and no game-over clause. The next pass sees them as already held, and the toaster still celebrates them from the recent-unlocks feed (§7.3). A batch where one row failed casting beside a lost race throws the same way, rather than name the wrong rows as new (§5.2). |
 | The `YourTurn` half is slow (a long game's replay, an FCM send with no deadline) | Judging doesn't wait for it, because the two halves run side by side. Queued behind it, judging could lose the function's time without ever starting, and nothing would log it. |
-| Judging at a turn end finishes after its budget | `withTimeout` stops waiting, and logs a warning, but the work runs on. The `notify` push is chained onto that work, so a late unlock still pushes, rather than leaving a row whose push is never sent. |
+| Judging at a turn end finishes after its budget | `withTimeout` stops waiting, and logs a warning, but the work runs on. The `notify` push is chained onto that work, and the route's `after()` waits `TURN_END_PUSH_GRACE_MS` (10 s) more for it before returning — `after()` ending is when the platform may stop the function — so a late unlock still pushes rather than leaving a row whose push is never sent. Only a judgment later than that loses its push; the toast still celebrates it. |
 | A seat Clerk can't resolve (a guest the stale-guest sweeper deleted while still seated) | It's counted as an unclaimed guest, so the table counts as an exhibition and nothing is judged (§4.2 step 1). Failing open would let an exhibition table earn. The sweeper gap itself is a separate bug (§15). |
-| Judging at game end fails or stalls | `withTimeout` answers with no unlocks after `GAME_END_BUDGET_MS` (3 s, set against the cron's 10 s of headroom), logs a warning, and the game-over pushes go out without the clause. Career achievements catch up at the player's next game. `turnEnd` achievements were already judged at every earlier turn end, so only what the final move alone earned, and `end` achievements, are lost. If the function is killed during judging (the cron's last game of a run), the game-over pushes are lost too, not only the clause, because judging runs before them (§4.3). The 3 s budget is what bounds that window. PR 3 should pass the cron's remaining time into `announce`, or skip judging near the deadline, before the catalogue makes judging take real time. With the empty catalogue in PR 2, judging returns at step 0, so the window is empty today. |
+| Judging at game end fails or stalls | `withTimeout` answers with no unlocks after `GAME_END_BUDGET_MS` (3 s, set against the cron's 10 s of headroom), logs a warning, and the game-over pushes go out without the clause. Career achievements catch up at the player's next game. `turnEnd` achievements were already judged at every earlier turn end, so only what the final move alone earned, and `end` achievements, are lost. If the function is killed during judging (the cron's last game of a run), the game-over pushes are lost too, not only the clause, because judging runs before them (§4.3). The 3 s budget is what bounds that window, and the cron narrows it further: it hands `announce` its hard stop (`finishBy`), and judging gets only what leaves the pushes `PUSH_RESERVE_MS` (3 s), and is skipped with a warning when that is under `MIN_JUDGING_MS`. |
 | A veteran's career read is slow | `maxTimeMS` (`CAREER_READ_MAX_MS`, 2.5 s) cuts it off on the server, so a read the judge has stopped waiting for doesn't keep running on Mongo. That seat's career catches up at their next game (§4.3). |
 | `recordGameResult` fails | Career judging is skipped for this game and catches up at the player's next game (§4.3). Match judging doesn't depend on it, so it still runs. |
 | A game with no `turnEnd` or `end` achievements of its own | Its game end is still judged for career achievements, the platform's included, because `judgeGameEnd` has its own "anything to judge?" (§4.3). |
@@ -1782,6 +1781,29 @@ still empty.
     - this doc's status line: *shipped for the platform, Dice Cities and
       Settlements & Cities; PR 4 brings the rest*.
 
+**As built, PR 3 differs from the list above in these ways**, each from a
+review:
+
+- `IAchievementUnlock` lives in `AchievementUnlockData.ts`, beside the reads
+  (`unlocksOf`, `unlocksInGame`), and is re-exported from `GameResultData.ts`
+  and `api/stats`. `unlockedHere` rides inside `gameData`, so the command
+  response and the GET reach `useGameData` by the same path.
+- On a profile, an unlock whose game has no results page keeps its `url` but
+  drops its `gameId`: a friend has no use for the id of a game still in play.
+- Every unlock read carries a server-side `maxTimeMS` and fails soft.
+- Dice Cities' second match achievement is *Treasury* 💰, "Hold 30 coins at the
+  end of a turn".
+- The toaster's memory is keyed `userId:gameId:achievementId` (a browser can be
+  shared), a batch toasts at most three and counts the rest, and a backfilled
+  unlock is never toasted. The results page mounts `FcmTokenComp`, so a
+  `GameOver` push landing there reaches the toaster.
+- The turn-timer cron hands `announce` its hard stop (§10), and a late
+  turn-end judgment keeps the function alive for its push (§10).
+- `resultPath` joined `gamePath` in `utils/ui/games.ts`, and every
+  `/games/result/<id>` goes through it.
+- The catalogue's import walker allows a game's `apiModels.ts`, which its rule
+  for `*Models.ts` had caught by name.
+
 ### PR 4 — Every other game
 
 One commit per game: its `achievements.ts`, one registry line, and its tests.
@@ -1873,7 +1895,7 @@ PR 3  edit   src/utils/api/gameResultResponse.ts
 PR 3  edit   src/app/api/game/[gameid]/route.ts, src/app/api/game/command/route.ts  (unlockedHere)
 PR 3  new    src/app/api/achievements/recent/route.ts (+ test)
 PR 3  new    src/components/ui/DisclosureSection.tsx        (out of WhatsNew)
-PR 3  edit   src/components/WhatsNew.tsx
+PR 3  edit   src/components/ui/WhatsNew.tsx
 PR 3  new    src/components/ui/AchievementIcon.tsx
 PR 3  new    src/components/ui/AchievementsSection.tsx
 PR 3  edit   src/components/ui/ListRow.tsx, src/app/ag-theme.css   (muted)

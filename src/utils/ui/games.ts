@@ -248,6 +248,11 @@ export function gamePath(gameUrl: string, gameId: string): string {
     return `/games/${gameUrl}/${gameId}`;
 }
 
+/** A finished game's results page. */
+export function resultPath(gameId: string): string {
+    return `/games/result/${gameId}`;
+}
+
 /**
  * Whether a path is one of the in-game screens — a board (`gamePath` above) or
  * the result screen that follows it. Both are `/games/<something>/<id>`, and

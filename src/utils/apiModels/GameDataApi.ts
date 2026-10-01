@@ -361,7 +361,19 @@ export interface IGameDataResponse {
     endReason?: GameEndReason,
     // Which shape of that ending it was — see IGameData.endDetail.
     endDetail?: string,
-    forfeitedBy?: string
+    forfeitedBy?: string,
+    // The achievements *this viewer* unlocked in this game, and nobody else's
+    // (docs/achievements.md §6): the board hands them to the toaster, which is
+    // how an unlock is celebrated promptly in the game, the mover's included.
+    // Attached by the game GET and the command route (utils/games/unlockedHere);
+    // absent from any other response built from this shape.
+    unlockedHere?: IUnlockedHere[]
+}
+
+/** One achievement the viewer unlocked in the game on screen: which, and when. */
+export interface IUnlockedHere {
+    id: string,
+    unlockedAt: string,
 }
 
 // A game in a player's history. Built from a GameResult rather than a live

@@ -892,30 +892,45 @@ export function storedAchievementUnlocks(): StoredAchievementUnlock[] {
     return achievementUnlocks.map(unlock => ({ ...unlock }));
 }
 
-// The one read judging makes (docs/achievements.md §4.2 step 3): what do these
-// players already hold of these achievements — find({ userId: { $in },
-// achievementId: { $in } }, { userId: 1, achievementId: 1 }).lean().exec(),
-// served by the unique { userId, achievementId } index in production. Interprets
-// that shape only and throws on any other, like the stores above, so a judge
-// that reads the collection some other way fails here instead of passing by
-// reading nothing. The projection is honoured, because the judge relies on it:
-// a row comes back with those two fields and no more.
+// Every read the collection gets, each served in production by the unique
+// { userId, achievementId } index's `userId` prefix (docs/achievements.md §5.1):
+// judging's "what do they hold" (userId and achievementId $in), the profile's
+// (a userId), the toaster's recent feed (a userId and unlockedAt $gte), and a
+// game's unlocks for the board and the results page (userId, or userId $in,
+// and a gameId). Interprets those shapes only and throws on any other, like the
+// stores above, so a read that no index would serve — a bare { gameId } — fails
+// here instead of passing by reading everything. The projection is honoured,
+// because callers rely on it: a row comes back with the fields it names and no
+// more.
 function findAchievementUnlocksFromStore(filter: Record<string, unknown>, projection?: Record<string, unknown>) {
-    const inOf = (field: string) => {
-        const condition = filter?.[field] as { $in?: unknown } | undefined;
-        const ids = condition?.$in;
-        return Array.isArray(ids) && ids.every(id => typeof id === 'string') && Object.keys(condition!).length === 1
-            ? ids as string[]
-            : undefined;
+    const refuse = () => {
+        throw new Error(`The test unlock store only finds by userId (and achievementId $in, gameId or unlockedAt $gte) with a projection, not ${JSON.stringify(filter)} ${JSON.stringify(projection)}`);
     };
-    const userIds = inOf('userId');
-    const achievementIds = inOf('achievementId');
-    if (!userIds || !achievementIds || Object.keys(filter).length !== 2 || JSON.stringify(projection) !== JSON.stringify({ userId: 1, achievementId: 1 })) {
-        throw new Error(`The test unlock store only finds by userId and achievementId $in, projected to those two, not ${JSON.stringify(filter)} ${JSON.stringify(projection)}`);
+    const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string');
+    const only = (condition: unknown, operator: string) =>
+        condition !== null && typeof condition === 'object' && Object.keys(condition).length === 1 && operator in condition
+            ? (condition as Record<string, unknown>)[operator]
+            : undefined;
+    const tests: ((unlock: StoredAchievementUnlock) => boolean)[] = [];
+    for (const [field, condition] of Object.entries(filter ?? {})) {
+        if (field === 'userId' || field === 'achievementId') {
+            const ids = typeof condition === 'string' && field === 'userId' ? [condition] : only(condition, '$in');
+            if (!strings(ids)) refuse();
+            tests.push(unlock => (ids as string[]).includes(unlock[field]));
+        } else if (field === 'gameId' && typeof condition === 'string') {
+            tests.push(unlock => unlock.gameId === condition);
+        } else if (field === 'unlockedAt' && typeof only(condition, '$gte') === 'string') {
+            const since = only(condition, '$gte') as string;
+            tests.push(unlock => unlock.unlockedAt >= since);
+        } else {
+            refuse();
+        }
     }
+    const fields = Object.entries(projection ?? {}).filter(([field, wanted]) => wanted === 1 && field !== '_id').map(([field]) => field);
+    if (!('userId' in (filter ?? {})) || fields.length === 0) refuse();
     const matches = achievementUnlocks
-        .filter(unlock => userIds.includes(unlock.userId) && achievementIds.includes(unlock.achievementId))
-        .map(({ userId, achievementId }) => ({ userId, achievementId }));
+        .filter(unlock => tests.every(test => test(unlock)))
+        .map(unlock => Object.fromEntries(fields.filter(field => field in unlock).map(field => [field, unlock[field as keyof StoredAchievementUnlock]])));
     return { lean: () => ({ exec: async () => matches }) };
 }
 

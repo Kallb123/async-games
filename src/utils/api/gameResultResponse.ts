@@ -1,5 +1,7 @@
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { IGameResultDataDocument, formatGameResultStats, formatGameResultCharts, formatGameResultBoard, hasGameResultStats } from '@/utils/mongodb/GameResultData';
+import { unlocksInGame } from '@/utils/mongodb/AchievementUnlockData';
+import type { IGameAchievementUnlock } from '@/utils/mongodb/AchievementUnlockData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
 import type { GameEndReason, GameResultStatGroup, GameResultAnyChart } from '@/utils/apiModels/GameDataApi';
 
@@ -32,6 +34,11 @@ export interface IGameResultResponse {
     // played in it, it was recorded with stats of its own, and its GameData —
     // which the result outlives — is still kept.
     canRegenerate: boolean;
+    // Every achievement anyone at the table unlocked in this game — mid-game or
+    // at the end, the game's own or the platform's — for every viewer the page
+    // lets in (docs/achievements.md §6, §15 row 4). A career milestone this
+    // game only backfilled was stored without it, so isn't here.
+    achievements: IGameAchievementUnlock[];
 }
 
 // One finished game's result as the result page and the recent-form popup
@@ -40,7 +47,10 @@ export interface IGameResultResponse {
 // already checked the viewer may see it.
 export async function gameResultResponse(result: IGameResultDataDocument, viewerId: string): Promise<IGameResultResponse> {
     const playerIds: string[] = result.playerIds;
-    const usernameById = await userIdListToUsernameMap(playerIds);
+    const [usernameById, achievements] = await Promise.all([
+        userIdListToUsernameMap(playerIds),
+        achievementsIn(result.gameId, playerIds),
+    ]);
     const stats = (result as unknown as { stats?: unknown }).stats;
     // A result recorded before its game kept stats has none to rewrite
     // (regenerateGameResultStats finds only one that has).
@@ -65,5 +75,17 @@ export async function gameResultResponse(result: IGameResultDataDocument, viewer
         charts: formatGameResultCharts(result.gameType, stats, usernameById),
         board: formatGameResultBoard(result.gameType, stats),
         canRegenerate,
+        achievements,
     };
+}
+
+// Fails soft, like the profile's read: the list is one section of a page whose
+// result is the point of it. A failed read is logged and lists nothing.
+async function achievementsIn(gameId: string, playerIds: string[]): Promise<IGameAchievementUnlock[]> {
+    try {
+        return await unlocksInGame(playerIds, gameId);
+    } catch (error) {
+        console.error(`Couldn't read the achievements unlocked in game ${gameId}; its result lists none this time`, error);
+        return [];
+    }
 }

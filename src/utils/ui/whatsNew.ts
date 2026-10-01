@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Achievements",
+                detail: "Unlock achievements as you play — First win, Explorer, Mine Baron in Dice Cities, Double Honours in Settlements & Cities and more. A toast tells you the moment you earn one, a finished game's results list every achievement anyone at the table unlocked, and your profile (and your friends') shows the lot, with how close you are to the rest.",
+            },
+            {
                 title: "Game results show each player's stats in their colour",
                 detail: "Every player's stats on a finished game's result carry a bar in their colour down the side, so you can match them to their line on the charts at a glance.",
             },
@@ -118,11 +122,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder armies have new battle lines",
                 detail: "Train archers and spearmen, build armies around five distinct stat lines, and fight through ordered volleys, attacker-first horsemen charges and spear interceptions.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Outbreak event cards work on a teammate's turn",
-                detail: "Play Airlift, Government Grant, One Quiet Night or Resilient Population while a teammate is taking their turn, so the whole crew can respond without waiting for the turn to come around. Forecast still stays on its holder's turn while they arrange the deck.",
-                game: "outbreak",
             },
         ],
     },

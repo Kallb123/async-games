@@ -176,6 +176,14 @@ then bump it and keep the old rule behind `commandVersion(this)` in `Execute`
   and art, picked by the host on the setup screen with `<ThemeSelect>`. See
   [`game-themes.md`](./game-themes.md) for the shape and the guard test that
   keeps a theme from quietly changing a rule.
+- `src/games/<Game>/achievements.ts` *(optional, and most games want one)* —
+  the game's own achievements, typed `GameAchievement<YourResponseState>[]`:
+  three to six, a *played* and a *won* rung plus a couple of match
+  achievements that reward a way of playing. Ids are permanent, a match check
+  reads only what every viewer gets (pin the game's null view in
+  `hiddenHands.test.ts` in the same commit), and the file must stay
+  browser-safe. See [`achievements.md`](./achievements.md) §11 — Dice Cities
+  and Settlements & Cities are the reference implementations.
 - `src/app/api/newgame/<game>/route.ts` — creates the `Invitation` document.
 
 ### 6. Wire the shared files
@@ -195,6 +203,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
 | `src/utils/ui/gameGuides.ts` | *(only if you added a `guide.ts`)* import it and add it to `GAME_GUIDES` — the popup can't record itself as seen without this, so it re-shows every visit |
 | `src/utils/ui/gameTutorials.ts` | *(only if you added a `tutorial.ts`)* import it and add it to `GAME_TUTORIALS` — `/api/gameguides` checks a "seen tutorial" write against this allowlist, so an unregistered tour can't record itself as seen either |
+| `src/utils/games/achievements.ts` | *(only if you added an `achievements.ts`)* import it and add it to `GAME_ACHIEVEMENTS` — without it the game's achievements are never judged or shown |
 | `src/utils/ui/gameThemes.ts` | *(only if you added a `themes.ts`)* import the list and add it to `GAME_THEMES` — without it the game plays in its default theme and silently offers no picker, so the other dressings are unreachable |
 
 ### 7. Turn recap & planning

@@ -1,7 +1,9 @@
 'use client'
 
-import { use } from "react";
+import { use, useEffect } from "react";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
+import { FcmTokenComp } from "@/components/FirebaseForeground";
+import AchievementIcon from "@/components/ui/AchievementIcon";
 import BackLink from "@/components/ui/BackLink";
 import ListRow from "@/components/ui/ListRow";
 import ListSection from "@/components/ui/ListSection";
@@ -13,8 +15,11 @@ import ResultTable from "@/components/ui/ResultTable";
 import ResultBoard from "@/components/games/ResultBoard";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useToast } from "@/components/ToastContext";
+import { useAchievementToaster } from "@/components/AchievementToaster";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { useJsonMutation } from "@/utils/hooks/useJsonMutation";
 import type { IGameResultResponse } from "@/utils/api/gameResultResponse";
+import { gameAchievementRows } from "@/utils/ui/achievements";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
@@ -72,6 +77,8 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                     {result ? gameResultStatRows(result.stats, result.players) : null}
                 </ListSection>
 
+                {result && <GameAchievements result={result} />}
+
                 {result?.charts.map(chart => (
                     <Section label={chart.title} key={chart.title}>
                         {chart.kind === 'bar'
@@ -84,7 +91,41 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 
                 {result?.canRegenerate && <RegenerateResults gameId={gameId} onRegenerated={replaceResult} />}
             </>)}
+            {/* Turns a push arriving here into the window event the toaster
+                refreshes on: the GameOver push, a few seconds after a player
+                lands here from the board, is what brings what the ending
+                unlocked if this page's own read got here first. */}
+            <FcmTokenComp />
         </main>
+    );
+}
+
+// Everything anyone at the table unlocked in this game, mid-game or at the end,
+// the game's own or the platform's: one row each, grouped by player in seat
+// order, the order the stats above use (docs/achievements.md §7.5). No section
+// at all when the game unlocked nothing.
+function GameAchievements({ result }: { result: IGameResultResponse }) {
+    const rows = gameAchievementRows(result.achievements ?? [], result.playerIds, result.players);
+    // The viewer's own, handed to the toaster: arriving at a just-finished game's
+    // results celebrates what the ending unlocked, before any push has landed.
+    const { user } = useIsAuthorised();
+    const { offer } = useAchievementToaster();
+    const viewerId = user?.id;
+    useEffect(() => {
+        if (!viewerId) return;
+        offer((result.achievements ?? []).filter(unlock => unlock.userId === viewerId).map(({ id, unlockedAt }) => ({ id, unlockedAt, gameId: result.gameId })));
+    }, [result, viewerId, offer]);
+    return (
+        <ListSection label="Achievements" isLoading={false}>
+            {rows.map(({ userId, player, achievement }) => (
+                <ListRow
+                    key={`${userId}:${achievement.id}`}
+                    icon={<AchievementIcon achievement={achievement} />}
+                    title={achievement.title}
+                    sub={`${player} · ${achievement.description}`}
+                />
+            ))}
+        </ListSection>
     );
 }
 

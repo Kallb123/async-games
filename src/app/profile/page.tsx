@@ -4,6 +4,7 @@ import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
 import Link from "next/link";
 import BackLink from "@/components/ui/BackLink";
+import AchievementsSection from "@/components/ui/AchievementsSection";
 import GameStatsList from "@/components/ui/GameStatsList";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
@@ -20,7 +21,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
 import { displayName, isGuest, personalName, profileHeading, publicHandle } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
-import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
+import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useClerk } from "@clerk/nextjs";
 import moment from 'moment';
@@ -49,7 +50,7 @@ export default function Profile() {
     const [showAdd, setShowAdd] = useState(false);
 
     const friendsData = useRefreshableData<IFriendsResponse>('/api/friends', FRIEND_EVENTS);
-    const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[] }>('/api/stats');
+    const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[]; achievements?: IAchievementUnlock[] }>('/api/stats');
     const reactionsData = useRefreshableData<{ reactions: IReceivedReaction[] }>('/api/reactions');
 
     const friends = friendsData.data?.friends ?? [];
@@ -203,6 +204,9 @@ export default function Profile() {
 
             {/* Per-game stats */}
             <GameStatsList label="Stats by game" stats={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
+
+            {/* Achievements, unlocked and not */}
+            <AchievementsSection unlocks={statsData.data?.achievements ?? []} byGame={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
 
             {/* Reactions received */}
             <ListSection
