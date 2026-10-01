@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { IRealmArenaGameDataResponse } from "@/games/RealmArena/apiModels";
+import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
 import RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
@@ -14,8 +14,10 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
-import { fighterName } from "@/games/RealmArena/ui";
+import { actionSquares, fighterName } from "@/games/RealmArena/ui";
 import type { IRealmArenaActOutcome } from "@/games/RealmArena/RealmArenaLogic";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -27,6 +29,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster } from "@/utils/apiModels/GameLogic";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -37,8 +41,10 @@ import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder 
  * Tapping a character selects it, brings the view to it and shows what it can
  * do. On their muster turn a player picks and places their squad here (PR 6),
  * and on a battle turn lines up each action on the board and sends it, sees
- * what it did as it comes back, and ends the turn (PR 7). Replay and recap
- * arrive with PR 8's adapter.
+ * what it did as it comes back, and ends the turn (PR 7). A player coming
+ * back to their turn is told what happened while they were away, and anyone
+ * can step back through the match one action at a time, the view following
+ * each action as it goes (PR 8).
  */
 export default function GameRealmArena({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -54,10 +60,23 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
-    const gs = gameData?.specificGameState;
-    const complete = gameData?.complete ?? false;
+    // Planning is out by design (§17.3 PR 8): every attack worth planning
+    // needs a roll, and the turn sheet already shows the odds of one before
+    // it's sent. So the review steps back through the match, and no further.
+    const nav = useTurnNavigation<IRealmArenaSpecificGameStateResponse>(gameId, {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? '',
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? '',
+        history: gameData?.gameState?.history ?? [],
+    });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
+
+    const gs = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const currentTurn = nav.displayedCurrentTurn;
     const myUserId = user?.id ?? '';
-    const isMyTurn = isPlayersTurn(true, user, gameData?.currentTurn) && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, currentTurn) && !complete;
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const seats = gameData?.gameState?.turnOrder ?? [];
@@ -65,16 +84,18 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
     const playerName = (userId?: string): string => userId === myUserId ? 'You' : nameForUserId(gameData, userId);
     const colourFor = (userId: string): string => playerColourForId(userId, userIdList);
-    const currentTurnName = nameForUserId(gameData, gameData?.currentTurn);
+    const currentTurnName = nameForUserId(gameData, currentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
-    const winnerName = nameForUserId(gameData, gameData?.winner);
-    const currentUserWon = complete && !!myUserId && myUserId === gameData?.winner;
+    const winnerName = nameForUserId(gameData, nav.displayedWinner);
+    const currentUserWon = complete && !!myUserId && myUserId === nav.displayedWinner;
     const mustering = gs?.phase === 'muster';
     const fighters = gs?.fighters ?? [];
     const selected = fighters.find(fighter => fighter.id === selectedId);
 
     const mySeat = seats.indexOf(myUserId);
-    const turnKey = `${gameData?.currentTurn ?? ''}:${gs?.phase ?? ''}`;
+    // The live turn, not the one a review shows, so stepping back through the
+    // match and returning leaves anything lined up as it was.
+    const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
     const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
@@ -109,6 +130,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         setSelectedId(current => current === id ? null : id);
     };
 
+    // Stepping through the match, the view goes to each action as it comes.
+    // A step that handed the turn on moved everyone's AP, not anyone in
+    // particular, so the view stays where it is.
+    const previous = nav.previousSnapshot;
+    const follow = previous && previous.currentTurn === currentTurn
+        ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
+        : null;
+
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
@@ -131,7 +160,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // wire but the viewer's own (§17.2), so the strip says only who has.
     const musterSub = (userId: string): string => {
         if (gs?.mustered.includes(userId)) return '✔ mustered';
-        return userId === gameData?.currentTurn ? 'mustering' : 'waiting';
+        return userId === currentTurn ? 'mustering' : 'waiting';
     };
     const scoreEntries: ScoreEntry[] = gs
         ? scoreboardSeatOrder(gameData, myUserId).map((userId): ScoreEntry => {
@@ -144,7 +173,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 sub,
                 score: gs.scores[userId] ?? 0,
                 isMe: userId === myUserId,
-                isActive: userId === gameData?.currentTurn && !complete,
+                isActive: userId === currentTurn && !complete,
             };
         })
         : [];
@@ -153,6 +182,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const centre = holders.length === 0 ? 'Empty' : holders.length > 1 ? 'Contested' : playerName(holders[0]);
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -162,13 +197,25 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         }] : []),
     ];
 
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="See the battlefield →"
+                onDismiss={recap.dismiss}
+                viewerId={user?.id}
+                onReact={recap.react}
+            />
+        );
+    }
+
     return (
         <GameShell
             title="Realm Arena"
             subtitle={subtitle}
             options={gs ? menuOptions : undefined}
-            busy={loadingGame}
-            log={{ entries: gameData?.gameState?.history ?? [], userIdList, oldestFirst: true, viewerId: myUserId, onReact: historyReact }}
+            busy={loadingGame || nav.loading}
+            log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--realmarena"
         >
@@ -220,6 +267,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,
                             }}
+                            follow={follow}
                         />
                     </div>
 
@@ -267,6 +315,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             disabled={pendingTarget !== null}
                         />
                     )}
+
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
                 </>
             )}
         </GameShell>

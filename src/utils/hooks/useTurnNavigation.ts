@@ -158,6 +158,10 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
         displayedWinner: isLive ? live.winner : activeSnapshot?.winner ?? "",
         displayedHistory: isLive ? live.history : activeSnapshot?.history ?? [],
         displayedCommand: activeSnapshot?.command ?? null,
+        // The point the viewed step was played from, so a board can show what
+        // that step changed — Realm Arena follows each action with its zoom.
+        // Undefined when live, and at the start of the game.
+        previousSnapshot: isLive ? undefined : snapshots[viewIndex - 1],
         // Position within the reconstructed timeline.
         viewIndex,
         currentIndex,

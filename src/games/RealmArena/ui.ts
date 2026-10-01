@@ -102,11 +102,30 @@ export function areaRect(field: Pick<Battlefield, "width">, squares: readonly Sq
  */
 const FOCUS_REACH = 3;
 
-/** The region `BoardZoom` brings into view for a selected character. */
-export function focusOn(field: Pick<Battlefield, "width">, square: Square): Rect {
-    const { x, y } = squareCentre(field, square);
-    const half = (FOCUS_REACH + 0.5) * CELL;
-    return { x: x - half, y: y - half, width: half * 2, height: half * 2 };
+/**
+ * The region `BoardZoom` brings into view for a selected character, or for
+ * every square a step of a review touched: the squares, and `FOCUS_REACH`
+ * either side of them.
+ */
+export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[]): Rect {
+    const { x, y, width, height } = areaRect(field, squares);
+    const margin = FOCUS_REACH * CELL;
+    return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 };
+}
+
+/**
+ * Where a step of the battle happened, for a review to follow (§17.3 PR 8):
+ * every character it changed — moved, hurt, spent AP, took a stance — where
+ * it stood before and where it stands now. Comparing the states either side
+ * of the step rather than reading the action is what lets a reaction be
+ * followed too: the watcher spent its banked AP.
+ */
+export function actionSquares(before: readonly Fighter[], after: readonly Fighter[]): Square[] {
+    return after.flatMap(fighter => {
+        const was = before.find(one => one.id === fighter.id);
+        if (!was || JSON.stringify(was) === JSON.stringify(fighter)) return [];
+        return was.square === fighter.square ? [fighter.square] : [was.square, fighter.square];
+    });
 }
 
 /** What a character is doing that the board marks on it, in words: the tooltip, and the selected character's card. */
