@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** Design agreed for the first playable version, v0.7. Split out of
+**Status:** Design agreed for the first playable version, v0.8. Split out of
 Defender of the Realm in its third round of design, when one concept became
 two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
 is the one to build first (§10). §11 records every answer. §13 is the battle
@@ -562,18 +562,48 @@ As proposed in v0.3 (defaults taken), with AP costs added:
 As proposed in v0.3 (defaults taken): a human kingdom, the Realm that both
 games are named for. It would also be Defender of the Realm's first faction.
 
-| Character | Role | Movement per AP | Attack | Ability (AP, cooldown) | Points |
-|---|---|---:|---|---|---:|
-| **Man-at-arms** | Cheap front line | 6 | Sword, melee, 4 | **Cleave:** strike two enemies next to them (2 AP, 3 turns) | 15 |
-| **Knight** | Slow and very tough | 4 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
-| **Archer** | Long range; the overwatch specialist | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
-| **Scout** | Fastest and fragile; the flanker | 8 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
-| **Mage** | Fragile; hits an area | 6 | Bolt, 70%, range 10, 3 | **Fireball:** hits every character in a 3×3 area, friend or foe, up to 12 squares away (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally next to them (2 AP, 2 turns). **Raise:** once per battle (3 AP) | 25 |
+| Character | Role | Movement per AP | HP | Attack | Ability (AP, cooldown) | Points |
+|---|---|---:|---:|---|---|---:|
+| **Man-at-arms** | Cheap front line | 6 | 8 | Sword, melee, 4 | **Cleave:** strike two enemies next to them (2 AP, 3 turns) | 15 |
+| **Knight** | Slow and very tough | 4 | 12 | Mace, melee, 4 | **Shield wall:** allies next to the Knight count as in half cover until its next turn (2 AP, 3 turns) | 25 |
+| **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
+| **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
+| **Mage** | Fragile; hits an area | 6 | 5 | Bolt, 70%, range 10, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally next to them (2 AP, 2 turns). **Raise:** once per battle (3 AP) | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
 four. You can take up to two of any one character.
+
+*Filled in by PR 2 (§17.3)*, where this section left a number or a case
+open. All are first guesses for playtesting, kept in `characters.ts` and
+`rules.ts`:
+
+- **HP and Fireball's damage**, as in the table above.
+- **Ranges are measured centre to centre, as the crow flies**, so a range
+  reaches out in a circle. Overwatch needs the mover in range as well as in
+  sight.
+- **"Next to" is touching, side or corner**, unless high cover fills both
+  corners between the two squares. It's what melee, guard, healing and raising
+  need.
+- **Flanking's +1 damage is for shots.** Melee always hits, with no cover to
+  lose, so it doesn't get it.
+- **A graze does half damage, rounded up**, so it always does something. A
+  chance to hit stays between 0% and 100%; a 0% shot can still graze.
+- **A shield wall moves with the Knight.** Whoever is next to it when a shot
+  comes in has at least half cover. It doesn't cover the Knight itself.
+- **Healing is for an ally that is hurt**, and never takes it past full HP.
+- **Raising** needs the fallen ally's square to be one a character can stand
+  on, with nobody standing there. The raised character acts from its owner's
+  next turn. Each Cleric raises once per battle.
+- **Downing your own character** (a fireball's friendly fire) scores nobody
+  anything.
+- **A cooldown of *n* turns** counts down at the start of each of its owner's
+  turns, so the ability is back *n* turns after it was used.
+- **Going on watch needs at least 2 AP**, enough for one reaction. A character
+  left with 1 AP at the end of a turn just loses it.
+- **The ready-made squad** (§17.2) is a Knight, two Men-at-arms, an Archer and
+  a Cleric at two players, spread along the middle of the deployment zone.
 
 ### 13.7 The first mission: Hold the Centre
 
@@ -988,3 +1018,4 @@ Realm, its sibling in the same world.
 | 0.5 | Round-4 answers recorded (§11.4): every character has its own AP, spent however the player likes (with a balance note on two attacks a turn), the AP costs, automatic overwatch or guard, speeds, ranges and battle length agreed, fog of war left for later (§6, §8, §13). Adds the first battlefield, a hand-made ruined fort, with its layout, how it plays, a fix so the centre starts scoring in round 3, and the three- and four-player version (§15). Round-5 questions (§16). |
 | 0.6 | Round-5 answers recorded (§11.5). Every square has a movement cost and low cover can be climbed over, so cover moves from the edges between squares into the squares themselves, with a terrain table (§13.1); each AP buys a character's movement allowance (§13.2); the fort's legend updated to match (§15.1). Adds the implementation plan: principles, the engine decisions, ten PRs for the first playable version, the milestone after it, and the riskiest part (§17). Round-6 questions (§18). |
 | 0.7 | Round-6 answers recorded (§11.6): nobody stops on low cover, cover sits in squares, a timed-out muster musters a ready-made squad, the plan's order is agreed, the first playable version ships with placeholder art (PR 9), and building waits until this doc has merged. |
+| 0.8 | PR 2 fills in what §13 left open: each character's HP, Fireball's damage, how ranges and "next to" are measured, and the smaller cases listed under §13.6. |
