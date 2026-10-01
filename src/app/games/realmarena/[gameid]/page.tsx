@@ -7,9 +7,15 @@ import type { IRealmArenaGameDataResponse } from "@/games/RealmArena/apiModels";
 import RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
+import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
+import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
+import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
+import { useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
-import { centreHolders, isStanding } from "@/games/RealmArena/rules";
+import { centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
+import { fighterName } from "@/games/RealmArena/ui";
+import type { IRealmArenaActOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -19,8 +25,9 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
+import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import { RealmArenaMuster } from "@/utils/apiModels/GameLogic";
+import { RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster } from "@/utils/apiModels/GameLogic";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
@@ -28,9 +35,10 @@ import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder 
  * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5): the
  * battlefield, the squads on it, the scores, the round and whose turn it is.
  * Tapping a character selects it, brings the view to it and shows what it can
- * do. On their muster turn a player picks and places their squad here (PR 6);
- * taking a turn (PR 7) acts on this same screen, and replay and recap arrive
- * with PR 8's adapter.
+ * do. On their muster turn a player picks and places their squad here (PR 6),
+ * and on a battle turn lines up each action on the board and sends it, sees
+ * what it did as it comes back, and ends the turn (PR 7). Replay and recap
+ * arrive with PR 8's adapter.
  */
 export default function GameRealmArena({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -66,7 +74,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const selected = fighters.find(fighter => fighter.id === selectedId);
 
     const mySeat = seats.indexOf(myUserId);
-    const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, `${gameData?.currentTurn ?? ''}:${gs?.phase ?? ''}`);
+    const turnKey = `${gameData?.currentTurn ?? ''}:${gs?.phase ?? ''}`;
+    const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     const muster = () => {
@@ -74,6 +83,30 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         const command = new RealmArenaMuster();
         command.picks = placement.picks;
         submitCommand(command, undefined, 'muster');
+    };
+
+    // A battle turn: a run of actions, one command each so every result is
+    // seen before the next is chosen, then the end of the turn (§17.2).
+    const battleTurn = !!gs && !mustering && isMyTurn;
+    const battle: BattleState = { field, fighters };
+    const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
+    const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
+    const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
+    const act = (action: Action) => {
+        const command = new RealmArenaAct();
+        command.action = action;
+        submitCommand(command, response => setLastEvents((response.outcome as IRealmArenaActOutcome).events ?? []), actTarget(action));
+    };
+    const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
+    const endTurn = () => {
+        const command = new RealmArenaEndTurn();
+        command.keepStill = keepStill;
+        submitCommand(command, undefined, 'endTurn');
+    };
+    // A tap on a character aims the action lined up, when it can; otherwise it selects.
+    const tapFighter = (id: number) => {
+        if (turn?.tapFighter(id)) return;
+        setSelectedId(current => current === id ? null : id);
     };
 
     let subtitle: React.ReactNode = 'Loading…';
@@ -176,8 +209,17 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             colourFor={colourFor}
                             nameFor={playerName}
                             selected={selected}
-                            onSelect={id => setSelectedId(current => current === id ? null : id)}
+                            onSelect={tapFighter}
                             placing={placement && { zone: draft.zone, selected: placement.selected, onTap: draft.tap }}
+                            aiming={turn && {
+                                reach: turn.reach,
+                                path: turn.path,
+                                area: turn.area,
+                                candidates: turn.candidates,
+                                aimed: turn.targets,
+                                flagged: turn.reactions.map(reaction => reaction.watcher.id),
+                                onSquare: turn.tapSquare,
+                            }}
                         />
                     </div>
 
@@ -198,7 +240,33 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         </div>
                     )}
 
-                    {selected && <RealmArenaFighterCard fighter={selected} ownerName={playerName(selected.owner)} />}
+                    {battleTurn && lastEvents.length > 0 && (
+                        <RealmArenaResults events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
+                    )}
+
+                    {battleTurn && !selected && (
+                        <div className="ag-section">
+                            <p className="ag-hint ag-hint--tight">Tap one of your squad on the board to act with it. Each has its own 4 AP.</p>
+                        </div>
+                    )}
+
+                    {selected && (
+                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} />}
+                        </RealmArenaFighterCard>
+                    )}
+
+                    {battleTurn && (
+                        <RealmArenaTurnEnd
+                            fighters={fighters}
+                            player={myUserId}
+                            keepStill={keepStill}
+                            onKeepStill={setKeepStill}
+                            onEndTurn={endTurn}
+                            pending={pendingTarget === 'endTurn'}
+                            disabled={pendingTarget !== null}
+                        />
+                    )}
                 </>
             )}
         </GameShell>

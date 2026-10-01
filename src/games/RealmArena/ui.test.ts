@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
-import { newFighter } from "./rules";
-import { CELL, areaRect, fighterStatus, focusOn, groundLayers, placeTap, squadCounts, squadOf, type Placement } from "./ui";
+import { at } from "@/utils/games/battlefield/testFixtures";
+import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
+import type { CharacterId } from "./characters";
+import {
+    CELL, abilityWait, areaRect, eventLines, fighterName, fighterStatus, focusOn, groundLayers, pathPoints, placeTap, reachLayers,
+    reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
+} from "./ui";
 
 /** Every square a path's rectangles cover, as "col,row". */
 function squaresDrawn(d: string): Set<string> {
@@ -99,5 +104,141 @@ describe("placeTap", () => {
 
     it("won't move a character out of the zone", () => {
         expect(placeTap({ ...placed, selected: 0 }, 9, zone)).toEqual({ ...placed, selected: 0 });
+    });
+});
+
+// ─── Taking a turn (§17.3 PR 7) ─────────────────────────────────────────────
+
+const OPEN = buildBattlefield({ name: "Open", rows: ["..........", "..........", "..........", "..........", ".........."], deployments: [], objectives: {} });
+
+/** A character ready to act, as at the start of its owner's turn. */
+function ready(id: number, owner: string, character: CharacterId, square: number, extra: Partial<Fighter> = {}): Fighter {
+    return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
+}
+
+const nameFor = (userId: string) => ({ a: "Alice", b: "Bob" })[userId] ?? userId;
+
+describe("runLayers", () => {
+    it("draws every square with a key, a path per key, and leaves the rest out", () => {
+        const field = { width: 3, height: 2 };
+        expect(runLayers(field, square => square === 4 ? undefined : square % 3 === 2 ? "edge" : "inside")).toEqual([
+            { key: "inside", d: "M0 0h20v10h-20zM0 10h10v10h-10z" },
+            { key: "edge", d: "M20 0h10v10h-10zM20 10h10v10h-10z" },
+        ]);
+    });
+});
+
+describe("squareAtPoint", () => {
+    it("finds the square under a point, and nothing off the map", () => {
+        expect(squareAtPoint(OPEN, 25, 15)).toBe(at(OPEN, 2, 1));
+        expect(squareAtPoint(OPEN, -1, 15)).toBeUndefined();
+        expect(squareAtPoint(OPEN, 25, 50)).toBeUndefined();
+    });
+});
+
+describe("pathPoints", () => {
+    it("runs through each square's centre", () => {
+        expect(pathPoints(OPEN, [at(OPEN, 0, 0), at(OPEN, 1, 1)])).toBe("5,5 15,15");
+    });
+});
+
+describe("reachLayers", () => {
+    it("shades every square in reach by the AP it costs to stop there, nearest first, and not where it stands", () => {
+        const knight = ready(0, "a", "knight", at(OPEN, 0, 2), { ap: 2 });
+        const layers = reachLayers(OPEN, knight, reachOf({ field: OPEN, fighters: [knight] }, knight), false);
+        expect(layers.map(layer => layer.key)).toEqual([1, 2]);
+        const first = squaresDrawn(layers[0].d);
+        // 4 movement points an AP: four squares straight along the row.
+        expect(first.has("4,2")).toBe(true);
+        expect(first.has("5,2")).toBe(false);
+        expect(first.has("0,2")).toBe(false);
+        expect(squaresDrawn(layers[1].d).has("8,2")).toBe(true);
+    });
+
+    it("prices a sneak at double", () => {
+        const scout = ready(0, "a", "scout", at(OPEN, 0, 2));
+        const layers = reachLayers(OPEN, scout, reachOf({ field: OPEN, fighters: [scout] }, scout, true), true);
+        expect(layers.map(layer => layer.key)).toEqual([2, 4]);
+    });
+});
+
+describe("fighterName and whoseName", () => {
+    const fighters = [ready(0, "a", "manAtArms", 0), ready(1, "a", "manAtArms", 1), ready(2, "b", "manAtArms", 2), ready(3, "b", "archer", 3)];
+
+    it("number a character only where its owner has two of it", () => {
+        expect(fighters.map(one => fighterName(fighters, one))).toEqual(["Man-at-arms 1", "Man-at-arms 2", "Man-at-arms", "Archer"]);
+    });
+
+    it("say whose a character is from where the viewer sits", () => {
+        expect(whoseName(fighters, 1, "a", nameFor)).toBe("your Man-at-arms 2");
+        expect(whoseName(fighters, 3, "a", nameFor)).toBe("Bob's Archer");
+        expect(whoseName(fighters, 9, "a", nameFor)).toBe("a character");
+    });
+});
+
+describe("targetsOf", () => {
+    it("lists who an attack could be aimed at, by the server's own check", () => {
+        const archer = ready(0, "a", "archer", at(OPEN, 0, 0));
+        const near = ready(1, "b", "knight", at(OPEN, 5, 0));
+        const ally = ready(2, "a", "knight", at(OPEN, 1, 0));
+        const down = ready(3, "b", "mage", at(OPEN, 6, 0), { hp: 0 });
+        expect(targetsOf({ field: OPEN, fighters: [archer, near, ally, down] }, "a", archer, "attack")).toEqual([1]);
+    });
+
+    it("lists the hurt allies a Cleric could heal", () => {
+        const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
+        const hurt = ready(1, "a", "knight", at(OPEN, 1, 0), { hp: 5 });
+        const fine = ready(2, "a", "archer", at(OPEN, 0, 1));
+        expect(targetsOf({ field: OPEN, fighters: [cleric, hurt, fine] }, "a", cleric, "heal")).toEqual([1]);
+    });
+});
+
+describe("reactionPreviews", () => {
+    it("flags each watcher a move sets off, with an overwatch shot's odds from where the mover is when it comes", () => {
+        const path = [at(OPEN, 9, 4), at(OPEN, 9, 3), at(OPEN, 9, 2), at(OPEN, 8, 2)];
+        const archer = ready(1, "b", "archer", at(OPEN, 0, 0), { ap: 0, banked: 4 });
+        const knight = ready(3, "b", "knight", at(OPEN, 7, 2), { ap: 0, banked: 2 });
+        const mover = ready(2, "a", "manAtArms", path[0]);
+        const previews = reactionPreviews({ field: OPEN, fighters: [archer, knight, mover] }, mover, path);
+        expect(previews.map(({ watcher, kind, odds, damage }) => ({ watcher: watcher.id, kind, chance: odds?.chance, damage }))).toEqual([
+            { watcher: 1, kind: "overwatch", chance: 65, damage: 4 },
+            { watcher: 3, kind: "guard", chance: undefined, damage: 4 },
+        ]);
+    });
+});
+
+describe("eventLines", () => {
+    const fighters = [ready(0, "a", "archer", 0), ready(1, "b", "knight", 1, { hp: 0 })];
+
+    it("tells a move once, however reactions broke it up, and each shot with its roll", () => {
+        const events: BattleEvent[] = [
+            { kind: "moved", fighter: 0, path: [0, 1], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 65, roll: 70, result: "graze", damage: 2, reaction: true },
+            { kind: "moved", fighter: 0, path: [1, 2], sneaking: false },
+            { kind: "shot", fighter: 0, target: 1, chance: 80, roll: 12, result: "hit", damage: 4, reaction: false },
+            { kind: "downed", fighter: 1, by: 0 },
+            { kind: "scored", player: "a", points: 5, reason: "knockout" },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+            { icon: "👣", title: "Your Archer moved" },
+            { icon: "🎯", title: "Graze for 2", sub: "Bob's Knight on overwatch at your Archer · 65% to hit", roll: 70 },
+            { icon: "🎯", title: "Hit for 4", sub: "Your Archer at Bob's Knight · 80% to hit", roll: 12 },
+            { icon: "✕", title: "Bob's Knight is down" },
+            { icon: "★", title: "You scored 5", sub: "The knock-out" },
+        ]);
+    });
+
+    it("calls a missed shot a miss", () => {
+        const [line] = eventLines([{ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 95, result: "miss", damage: 0, reaction: false }], fighters, "b", nameFor);
+        expect(line).toMatchObject({ title: "Miss", sub: "Alice's Archer at your Knight · 80% to hit" });
+    });
+});
+
+describe("abilityWait", () => {
+    it("says when an ability is back, or that a once-a-battle one is used", () => {
+        const cleric = ready(0, "a", "cleric", 0, { cooldowns: { heal: 2 }, spent: ["raise"] });
+        expect(abilityWait(cleric, "heal")).toBe("Back in 2 turns");
+        expect(abilityWait(cleric, "raise")).toBe("Used");
+        expect(abilityWait(ready(1, "a", "cleric", 0), "heal")).toBeUndefined();
     });
 });
