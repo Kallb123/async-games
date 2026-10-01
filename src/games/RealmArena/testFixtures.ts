@@ -11,7 +11,9 @@ import { REALM } from "./characters";
 import { battlefieldById } from "./maps";
 import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
-import { readyMadeMuster, type Action, type BattleState, type MusterPick } from "./rules";
+import { pathTo } from "@/utils/games/battlefield/pathfinding";
+import { distance } from "@/utils/games/battlefield/terrain";
+import { check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -61,3 +63,49 @@ export async function musterBoth(game: RealmArenaTestGame): Promise<void> {
 }
 
 export const battleOf = (game: RealmArenaTestGame): BattleState => battleOfState(game.specificGameState);
+
+/** The enemy nearest a fighter, or undefined when none is standing. */
+function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {
+    const { field, fighters } = battleOf(game);
+    return fighters
+        .filter(one => one.owner !== fighter.owner && isStanding(one))
+        .sort((x, y) => distance(field, fighter.square, x.square) - distance(field, fighter.square, y.square))[0];
+}
+
+/**
+ * One action for a fighter, by a simple script: attack whoever it can, and
+ * otherwise close on the nearest enemy as far as its AP take it.
+ */
+export function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Action | undefined {
+    const battle = battleOf(game);
+    for (const enemy of battle.fighters.filter(one => one.owner !== fighter.owner && isStanding(one))) {
+        const attack: Action = { kind: "attack", fighter: fighter.id, target: enemy.id };
+        if (!("refused" in check(battle, fighter.owner, attack))) return attack;
+    }
+    const target = nearestEnemy(game, fighter);
+    if (!target || fighter.ap < 1) return undefined;
+    const reach = reachOf(battle, fighter);
+    const gap = (square: number) => distance(battle.field, square, target.square);
+    let best: number | undefined;
+    for (let square = 0; square < reach.costs.length; square++) {
+        const cost = reach.costs[square];
+        if (cost === Infinity || moveAp(fighter.character, cost) > fighter.ap) continue;
+        if (best === undefined || gap(square) < gap(best) || (gap(square) === gap(best) && cost < reach.costs[best])) best = square;
+    }
+    if (best === undefined || gap(best) >= gap(fighter.square)) return undefined;
+    return { kind: "move", fighter: fighter.id, path: pathTo(reach, best)!.squares };
+}
+
+/** One battle turn by the script: every action it can find, then End turn. */
+export async function playScriptedTurn(game: RealmArenaTestGame): Promise<void> {
+    const player = game.currentTurn;
+    for (let step = 0; step < 40 && !game.complete; step++) {
+        const action = battleOf(game).fighters
+            .filter(one => one.owner === player && isStanding(one))
+            .map(one => scriptedAction(game, one))
+            .find(Boolean);
+        if (!action) break;
+        if (!(await play(game, actBy(player, action))).outcome.validMove) throw new Error(`${player}'s ${action.kind} was refused`);
+    }
+    if (!game.complete && !(await play(game, endTurnBy(player))).outcome.validMove) throw new Error(`${player}'s End turn was refused`);
+}

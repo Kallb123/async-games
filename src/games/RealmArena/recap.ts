@@ -1,0 +1,238 @@
+// Turn recap for Realm Arena — docs/games/realm-arena.md §17.3 PR 8.
+//
+// Every row is a line the match history already wrote, or says less than one:
+// an action's row is the narration `RealmArenaAct` wrote for it, read off the
+// replayed snapshot, so the log, the review and the recap tell a shot in the
+// same words. That narration names a player by a history token, which the
+// replay has already resolved, and it is the only way this adapter names
+// anyone but the actor: the response carries no names of its own.
+//
+// The muster stays sealed here as it does everywhere else (§17.2). A muster's
+// row says only that it happened. Nothing below reads the command's `picks`,
+// or the snapshot's `myMuster`, which holds the squad of whoever the feed is
+// built for: a row is written once and read by whoever it's shown to.
+import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/utils/games/recap";
+import type { ITurnSnapshot } from "@/utils/games/replay";
+import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
+import type { IHistoryEntry } from "@/utils/games/history";
+import { pluralize } from "@/utils/ui/text";
+import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
+import type { IRealmArenaActOutcome } from "./RealmArenaLogic";
+import { battlefieldById } from "./maps";
+import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
+
+type RAState = IRealmArenaSpecificGameStateResponse;
+
+const RA_MUSTER = "ra_muster";
+const RA_BATTLE = "ra_battle";
+const RA_KNOCKOUT = "ra_knockout";
+const RA_FIREBALL = "ra_fireball";
+const RA_HIT = "ra_hit";
+const RA_MISS = "ra_miss";
+const RA_RAISED = "ra_raised";
+const RA_HEALED = "ra_healed";
+const RA_MANOEUVRE = "ra_manoeuvre";
+const RA_END_TURN = "ra_endturn";
+const RA_CENTRE = "ra_centre";
+const RA_WON = "ra_won";
+
+/** A quiet run folded into one row names at most this many of its actions. */
+const MANOEUVRES_NAMED = 3;
+
+function state(snapshot: ITurnSnapshot): RAState {
+    return snapshot.specificGameState as RAState;
+}
+
+/** The lines this command added to the history, newest first. */
+function newLines(prev: ITurnSnapshot, next: ITurnSnapshot): IHistoryEntry[] {
+    return next.history.slice(0, Math.max(0, next.history.length - prev.history.length));
+}
+
+/**
+ * What an action is told as: the row type and glyph of the most telling thing
+ * it did — a knock-out over a fireball over a hit, and so on down to a move,
+ * a stance or going on watch, which are quiet. The glyphs are the ones the
+ * board shows the same events with (`eventLines`, ui.ts).
+ */
+function actionKind(events: readonly BattleEvent[]): { type: string; glyph: string } {
+    const has = (match: (event: BattleEvent) => boolean) => events.some(match);
+    if (has(event => event.kind === "downed")) return { type: RA_KNOCKOUT, glyph: "✕" };
+    if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: "🔥" };
+    if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
+    if (has(event => event.kind === "shot")) return { type: RA_MISS, glyph: "🎯" };
+    if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
+    if (has(event => event.kind === "healed")) return { type: RA_HEALED, glyph: "✚" };
+    return { type: RA_MANOEUVRE, glyph: "👣" };
+}
+
+/** The players whose characters an action hurt or knocked out — the actor's own included, when a reaction caught them. */
+function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): string[] {
+    const ids = events.flatMap(event => {
+        switch (event.kind) {
+            case "shot":
+            case "struck": return event.damage > 0 ? [event.target] : [];
+            case "fireball": return event.damage > 0 ? event.targets : [];
+            case "downed": return [event.fighter];
+            default: return [];
+        }
+    });
+    return [...new Set(ids.flatMap(id => fighters.find(fighter => fighter.id === id)?.owner ?? []))];
+}
+
+/** Turns one replayed Realm Arena command into its recap rows. */
+function toEvents(
+    prev: ITurnSnapshot,
+    next: ITurnSnapshot,
+    command: IGameCommand,
+    outcome: ICommandOutcome,
+): IGameEvent[] {
+    if (!outcome.validMove) return [];
+    const name = command.senderUsername;
+    const base = {
+        id: command.id,
+        commandId: command.id,
+        timestamp: command.timestamp,
+        actorId: command.senderId,
+        actorUsername: name,
+    };
+    const lines = newLines(prev, next);
+    const rows: IGameEvent[] = [];
+
+    switch (command.className) {
+        case "RealmArenaMuster": {
+            rows.push({ ...base, type: RA_MUSTER, glyph: "📜", title: `${name} mustered their squad` });
+            if (state(prev).phase === "muster" && state(next).phase === "battle") {
+                rows.push({ ...base, id: `${command.id}:battle`, type: RA_BATTLE, glyph: "⚔️", title: "The squads take the field, and the battle begins" });
+            }
+            break;
+        }
+        case "RealmArenaAct": {
+            const events = (outcome as Partial<IRealmArenaActOutcome>).events ?? [];
+            // The oldest of its lines: one that ended the battle has the
+            // winner's line above it, and that names an actor too.
+            const line = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text;
+            rows.push({
+                ...base,
+                ...actionKind(events),
+                title: line ?? `${name} ${command.myString()}`,
+                affectedIds: hurt(events, state(next).fighters),
+            });
+            break;
+        }
+        case "RealmArenaEndTurn": {
+            // Ending a turn is always a row, even a quiet one: it's the edge
+            // between one player's turn and the next, so the feed's window
+            // opens on it rather than reaching back into the turn before.
+            const before = state(prev).scores[command.senderId] ?? 0;
+            const points = (state(next).scores[command.senderId] ?? 0) - before;
+            const watching = state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
+            rows.push({
+                ...base,
+                type: points > 0 ? RA_CENTRE : RA_END_TURN,
+                glyph: points > 0 ? "★" : "⏳",
+                title: points > 0
+                    ? `${name} ended their turn holding the centre, for ${pluralize(points, "point")}`
+                    : `${name} ended their turn`,
+                detail: watching > 0 ? `${watching} on watch` : undefined,
+            });
+            break;
+        }
+        default:
+            return [];
+    }
+
+    // The battle's end is written by the game type after the command that
+    // ended it: the winner's line newest, the final scores beneath it.
+    if (next.complete && !prev.complete && lines.length >= 2) {
+        rows.push({ ...base, id: `${command.id}:won`, type: RA_WON, glyph: "🏆", title: lines[0].text, detail: lines[1].text });
+    }
+    return rows;
+}
+
+/**
+ * A run of quiet actions by one player, one row: "Bob moved their Knight, put
+ * their Archer on watch and 2 more". The rest of the turn stays a row each.
+ */
+function postProcess(events: IGameEvent[]): IGameEvent[] {
+    const folded: IGameEvent[] = [];
+    let run: IGameEvent[] = [];
+    const flush = () => {
+        if (run.length === 1) folded.push(run[0]);
+        if (run.length > 1) {
+            const prefix = `${run[0].actorUsername} `;
+            const clauses = run.map((event, index) => index > 0 && event.title.startsWith(prefix) ? event.title.slice(prefix.length) : event.title);
+            const named = clauses.slice(0, MANOEUVRES_NAMED);
+            const more = run.length - named.length;
+            folded.push({ ...run[0], title: more > 0 ? `${named.join(", ")} and ${more} more` : named.join(", ") });
+        }
+        run = [];
+    };
+    for (const event of events) {
+        if (event.type === RA_MANOEUVRE && (run.length === 0 || run[0].actorId === event.actorId)) {
+            run.push(event);
+            continue;
+        }
+        flush();
+        if (event.type === RA_MANOEUVRE) run.push(event);
+        else folded.push(event);
+    }
+    flush();
+    return folded;
+}
+
+function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
+    // Still mustering: the only news is that the other squad is sealed.
+    if (events.some(event => event.type === RA_MUSTER) && !events.some(event => event.type === RA_BATTLE)) {
+        return {
+            headline: "Your turn to muster 👋",
+            subline: "Your opponent has mustered. Neither squad is seen until both have.",
+        };
+    }
+
+    let tail = ".";
+    if (events.some(event => event.type === RA_WON)) {
+        tail = " — the battle is over.";
+    } else if (events.some(event => event.type === RA_KNOCKOUT)) {
+        tail = " — someone was knocked out.";
+    } else if (events.some(event => event.actorId !== forUserId && event.affectedIds?.includes(forUserId))) {
+        tail = " — your squad took hits.";
+    } else if (events.some(event => event.type === RA_CENTRE && event.actorId !== forUserId)) {
+        tail = " — they held the centre.";
+    } else if (events.some(event => event.type === RA_BATTLE)) {
+        tail = " — the battle has begun.";
+    }
+    return {
+        headline: "Your move 👋",
+        subline: `${pluralize(events.length, "thing")} happened while you were away${tail}`,
+    };
+}
+
+/** Where the battle stands for the viewer: "You're 5 points behind, with 4 of 5 standing, and the centre is contested." */
+function tip(liveState: unknown, forUserId: string): IRecapTip | null {
+    const gs = liveState as RAState | undefined;
+    if (!gs || gs.phase !== "battle") return null;
+    const squad = gs.fighters.filter(fighter => fighter.owner === forUserId);
+    if (squad.length === 0) return null;
+
+    const mine = gs.scores[forUserId] ?? 0;
+    const best = Math.max(0, ...Object.entries(gs.scores).filter(([userId]) => userId !== forUserId).map(([, score]) => score));
+    const gap = mine - best;
+    const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
+
+    const holders = centreHolders({ field: battlefieldById(gs.map), fighters: gs.fighters });
+    const centre = holders.length === 0 ? "the centre is empty"
+        : holders.length > 1 ? "the centre is contested"
+        : holders[0] === forUserId ? "the centre is yours" : "the enemy holds the centre";
+
+    return { glyph: "🏰", text: `${score}, with ${squad.filter(isStanding).length} of ${squad.length} standing, and ${centre}.` };
+}
+
+// Registered by the recap engine (src/utils/games/recap.ts), mirroring how
+// replay.ts wires up its per-game replay adapters.
+export const realmArenaRecapAdapter: IRecapAdapter = {
+    className: "RealmArenaGameType",
+    toEvents,
+    summarize,
+    tip,
+    postProcess,
+};

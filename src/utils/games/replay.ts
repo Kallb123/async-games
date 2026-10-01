@@ -22,6 +22,7 @@ import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStat
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
+import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel } from "@/games/RealmArena/RealmArenaModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -293,6 +294,27 @@ registerReplayAdapter({
     // RaceCarsShift here would accept
     // `{"className":"RaceCarsShift","gear":5,"recordedRoll":20}` and resolve it
     // against the live game's real state, letting a driver choose their own die.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "RealmArenaGameType",
+    // From scratch (docs/games/realm-arena.md §17.3 PR 8): nothing is shuffled,
+    // the seat order is the only randomness in setup and it is persisted as
+    // `turnOrder`, and every 1–100 roll a battle uses is recorded on the
+    // `RealmArenaAct` that used it.
+    buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(gameData.gameState.turnOrder),
+    // The sealed muster holds in a replay as it does live (§17.2): a snapshot
+    // taken before the last player has mustered carries the viewer's own squad
+    // and nobody else's, and a null viewer's carries none at all.
+    toResponseState: (specificGameState, _userIdNameMap, viewerId) =>
+        realmArenaStateToModel(specificGameState as never, viewerId),
+    // Out by design: every attack worth planning needs a roll, and a planned
+    // one would show a player a board they won't get. Nor is the hit chance
+    // it would teach them anything the turn sheet doesn't already show before
+    // they commit (§17.3 PR 7). And the timeline route leaves recorded rolls in
+    // a planned command, so adding RealmArenaAct here would let a player pick
+    // their own `recordedRolls` and resolve them against the real battle.
     plannableCommands: [],
 });
 
