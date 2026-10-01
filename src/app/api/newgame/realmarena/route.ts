@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
   const { userId, host, invitees, turnTimer } = setup;
 
   // Two players until free-for-all (§17.4 B2); the sender is always one of
-  // them. Read off `meta`, so the bounds widen in one place.
+  // them. Read off `meta`, as the lobby routes are; a guard test holds `meta`
+  // to the party sizes the map can deploy.
   const partySizeError = partySizeErrorMessage(meta, invitees.length + 1);
   if (partySizeError) {
     return NextResponse.json({}, { status: 400, statusText: partySizeError });
