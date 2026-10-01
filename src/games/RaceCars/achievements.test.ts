@@ -2,9 +2,8 @@
 // the game's own replay adapter, asked for no viewer (docs/achievements.md §9,
 // §12 test 5). One state that passes and one that doesn't, each.
 import { describe, expect, it } from "vitest";
-import type { CareerCriteria, FinishedSeat, GameRecord, MatchCriteria } from "@/utils/games/achievements";
 import type { ICommandOutcome } from "@/utils/apiModels/gameCommand";
-import { getReplayAdapter } from "@/utils/games/replay";
+import { criteriaOf, finishedSeat as finished, tableViewOf } from "@/utils/testing/gameAchievements";
 import { spacesInCorner } from "./board";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import type { IRaceCarsSpecificGameStateResponse } from "./apiModels";
@@ -13,21 +12,14 @@ import { makeGame, race } from "./testFixtures";
 import { MONACO } from "./tracks/monaco";
 import { achievements, DONINGTON_GRID_SLOT, LONG_BEACH_GRID_SLOT, RASCASSE_CORNER_ID } from "./achievements";
 
-const byId = (id: string) => achievements.find(achievement => achievement.id === id)!;
-const turnEndCheck = (id: string) =>
-    (byId(id).criteria as Extract<MatchCriteria<IRaceCarsSpecificGameStateResponse>, { at: "turnEnd" }>).check;
-const endCheck = (id: string) =>
-    (byId(id).criteria as Extract<MatchCriteria<IRaceCarsSpecificGameStateResponse>, { at: "end" }>).check;
-const progress = (id: string) => (byId(id).criteria as CareerCriteria<GameRecord>).progress;
+const { turnEndCheck, endCheck, progress } = criteriaOf(achievements);
 
 const NAMES = { a: "Alice", b: "Bob", c: "Cara", d: "Dev" };
 
 /** The table's view of this race. */
 function viewOf(state: IRaceCarsSpecificGameState): IRaceCarsSpecificGameStateResponse {
-    return getReplayAdapter("RaceCarsGameType")!.toResponseState(state, NAMES, null, []) as IRaceCarsSpecificGameStateResponse;
+    return tableViewOf("RaceCarsGameType", state, NAMES);
 }
-
-const finished = (userId: string, outcome: FinishedSeat["outcome"]): FinishedSeat => ({ userId, outcome, turns: 40 });
 
 describe("Race Cars' achievements", () => {
     it("Rookie Season counts races played, won or not", () => {
@@ -83,6 +75,7 @@ describe("Race Cars' achievements", () => {
         const check = turnEndCheck("racecars.rascassegate");
         const [rascasse] = spacesInCorner(MONACO, RASCASSE_CORNER_ID);
         const [piscine] = spacesInCorner(MONACO, "section16");
+        const spunAtRascasse = { row: rascasse.row, lane: rascasse.lane, gear: 0, skipNextTurn: true } as const;
         const monaco = (seat: Partial<IRaceCarsPlayerState>) =>
             viewOf(race({ a: seat, b: {} }, { trackId: MONACO.id }));
 
@@ -92,7 +85,7 @@ describe("Race Cars' achievements", () => {
         });
 
         it("is earned by a car spun into La Rascasse", () => {
-            const spun = monaco({ row: rascasse.row, lane: rascasse.lane, gear: 0, skipNextTurn: true });
+            const spun = monaco(spunAtRascasse);
 
             expect(check(spun, { userId: "a" })).toBe(true);
             expect(check(spun, { userId: "b" })).toBe(false);
@@ -107,7 +100,7 @@ describe("Race Cars' achievements", () => {
         });
 
         it("is only Monaco's", () => {
-            const ashcombe = viewOf(race({ a: { row: rascasse.row, lane: rascasse.lane, gear: 0, skipNextTurn: true }, b: {} }));
+            const ashcombe = viewOf(race({ a: spunAtRascasse, b: {} }));
 
             expect(check(ashcombe, { userId: "a" })).toBe(false);
         });
@@ -131,5 +124,13 @@ describe("Race Cars' achievements", () => {
         expect(check(bald, finished("a", "win"))).toBe(true);
         expect(check(bald, finished("b", "loss"))).toBe(false);
         expect(check(one, finished("a", "win"))).toBe(false);
+    });
+
+    it("answers no, rather than throwing, for a seat the view doesn't hold", () => {
+        const view = viewOf(race({ a: {}, b: {} }, { round: 2 }));
+        expect(turnEndCheck("racecars.donington-93")(view, { userId: "z" })).toBe(false);
+        expect(turnEndCheck("racecars.rascassegate")(view, { userId: "z" })).toBe(false);
+        expect(endCheck("racecars.long-beach-83")(view, finished("z", "win"))).toBe(false);
+        expect(endCheck("racecars.three-wheeler")(view, finished("z", "win"))).toBe(false);
     });
 });

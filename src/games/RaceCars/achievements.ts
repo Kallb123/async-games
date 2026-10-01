@@ -14,7 +14,7 @@
 // and the round order fixed at the start of every round.
 import type { GameAchievement } from "@/utils/games/achievements";
 import { cornerAt } from "./board";
-import type { IRaceCarsPlayerStateResponse, IRaceCarsSpecificGameStateResponse } from "./apiModels";
+import type { IRaceCarsSpecificGameStateResponse } from "./apiModels";
 import { MONACO } from "./tracks/monaco";
 
 /**
@@ -36,8 +36,9 @@ export const RASCASSE_CORNER_ID = "section18";
 /** The round after §6a's startup round: its order is the field as round one left it. */
 const ROUND_TWO = 2;
 
-function carOf(view: IRaceCarsSpecificGameStateResponse, userId: string): IRaceCarsPlayerStateResponse | undefined {
-    return view.playerStates[userId];
+/** The grid slot printed on this car, or 0 for a seat with no car. */
+function gridSlot(view: IRaceCarsSpecificGameStateResponse, userId: string): number {
+    return view.playerStates[userId]?.raceNumber ?? 0;
 }
 
 export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[] = [
@@ -77,7 +78,7 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
             check: (view, { userId }) =>
                 view.round === ROUND_TWO
                 && view.roundOrder[0] === userId
-                && (carOf(view, userId)?.raceNumber ?? 0) >= DONINGTON_GRID_SLOT,
+                && gridSlot(view, userId) >= DONINGTON_GRID_SLOT,
         },
     },
     {
@@ -94,7 +95,7 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
             kind: "match",
             at: "turnEnd",
             check: (view, { userId }) => {
-                const car = carOf(view, userId);
+                const car = view.playerStates[userId];
                 if (view.trackId !== MONACO.id || !car?.skipNextTurn) return false;
                 return cornerAt(MONACO, car.row, car.lane)?.id === RASCASSE_CORNER_ID;
             },
@@ -111,7 +112,7 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
             kind: "match",
             at: "end",
             check: (view, { userId, outcome }) =>
-                outcome === "win" && (carOf(view, userId)?.raceNumber ?? 0) >= LONG_BEACH_GRID_SLOT,
+                outcome === "win" && gridSlot(view, userId) >= LONG_BEACH_GRID_SLOT,
         },
     },
     {
@@ -125,7 +126,7 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
         criteria: {
             kind: "match",
             at: "end",
-            check: (view, { userId, outcome }) => outcome === "win" && carOf(view, userId)?.tyres === 0,
+            check: (view, { userId, outcome }) => outcome === "win" && view.playerStates[userId]?.tyres === 0,
         },
     },
 ];
