@@ -57,4 +57,22 @@ export const achievements: GameAchievement<IDiceCitiesGameStateResponse>[] = [
             check: (view, { userId }) => (playerByUserId(view, userId)?.money ?? 0) >= TREASURY_COINS,
         },
     },
+    {
+        // The Harbour is a public flag on every seat. Requiring a rival who has
+        // one keeps a game nobody built it in (or a base game) from counting.
+        id: "dicecities.what-dock",
+        title: "What Dock?",
+        icon: "⚓",
+        description: "Win a game on the Docks expansion where you're the only player without the Dock.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { userId, outcome }) => {
+                if (outcome !== "win" || !view.enabledDocks) return false;
+                const me = playerByUserId(view, userId);
+                const others = Object.values(view.playerStates).filter(p => p.userId !== userId);
+                return !!me && !me.harbourUnlocked && others.length > 0 && others.every(p => p.harbourUnlocked);
+            },
+        },
+    },
 ];

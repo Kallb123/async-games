@@ -31,8 +31,8 @@ export function criteriaOf<View>(achievements: GameAchievement<View>[]) {
 }
 
 /** The table's view of `state`: what the judge's `tableView` builds, with no viewer. */
-export function tableViewOf<View>(className: string, state: unknown, names: Record<string, string>): View {
-    return getReplayAdapter(className)!.toResponseState(state, names, null, []) as View;
+export function tableViewOf<View>(className: string, state: unknown, names: Record<string, string>, complete = false): View {
+    return getReplayAdapter(className)!.toResponseState(state, names, null, [], complete) as View;
 }
 
 /** A seat as the game-end checkpoint hands it to an `end` check. */

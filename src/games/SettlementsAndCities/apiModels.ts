@@ -47,6 +47,10 @@ export interface ISACPlayerStateResponse {
     // setup, robber steals, Year of Plenty, Monopoly) - never decremented by
     // spending. Powers the resources/turn chart on the result page.
     resourcesGathered: number;
+    // Whether wool has ever come into this hand, by any route. Sent for every
+    // seat but only once the game is complete (undefined while it is in play,
+    // for every viewer): when it flips would say when a hand first got wool.
+    hasHeldWool?: boolean;
     remainingRoads: number;
     remainingSettlements: number;
     remainingCities: number;

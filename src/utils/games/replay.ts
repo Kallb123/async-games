@@ -94,6 +94,10 @@ export interface IReplayAdapter {
         userIdNameMap: { [key: string]: string },
         viewerId: string | null,
         commandHistory: IGameCommand[],
+        // Whether the game this state is from has finished. Only a game with
+        // something that may be told once the game is over, and not before
+        // (Settlements & Cities' `hasHeldWool`), reads it. Most games ignore it.
+        complete?: boolean,
     ): unknown;
     // Which of this game's commands may be run as a *planned* (hypothetical)
     // move. Required, with no default, so a new game has to make the call that
@@ -193,8 +197,8 @@ registerReplayAdapter({
         buildInitialSettlementsAndCitiesState(gameData as ISettlementsAndCitiesGameData),
     // canUndo needs the anchor to still match the tail of commandHistory, not
     // just the stack's own owner — see gameStateToResponse's lastCommandId.
-    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory) =>
-        settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null),
+    toResponseState: (specificGameState, userIdNameMap, viewerId, commandHistory, complete) =>
+        settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap, viewerId, commandHistory.at(-1)?.id ?? null, complete),
     // Deck freeze is feasible here but unbuilt. Note for whoever builds it that
     // SACBuyDevCard is not the only command to leave out: SACMoveRobber samples
     // a real resource out of the victim's hand, and SACPlayMonopoly reads how
@@ -399,7 +403,7 @@ export async function buildTimeline(
     const snapshot = (command: IGameCommand | null, planned: boolean) => {
         snapshots.push({
             index: index++,
-            specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory),
+            specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory, state.complete),
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,

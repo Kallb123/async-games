@@ -2,13 +2,13 @@
 // the game's own replay adapter, asked for no viewer (docs/achievements.md §9,
 // §12 test 5). One state that passes and one that doesn't, each.
 import { describe, expect, it } from "vitest";
-import { criteriaOf, tableViewOf } from "@/utils/testing/gameAchievements";
+import { criteriaOf, finishedSeat as seat, tableViewOf } from "@/utils/testing/gameAchievements";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import { DiceCitiesCardIds } from "./cards";
 import { achievements, MINES_IN_THE_GAME, TREASURY_COINS } from "./achievements";
 
-const { turnEndCheck, progress } = criteriaOf(achievements);
+const { turnEndCheck, endCheck, progress } = criteriaOf(achievements);
 
 /** The table's view of a two-player game, after `arrange` has had its way with the state. */
 function viewOf(arrange: (state: ReturnType<typeof buildInitialDiceCitiesState>) => void): IDiceCitiesGameStateResponse {
@@ -48,5 +48,20 @@ describe("Dice Cities' achievements", () => {
         const view = viewOf(() => { });
         expect(turnEndCheck("dicecities.mine-baron")(view, { userId: "u9" })).toBe(false);
         expect(turnEndCheck("dicecities.treasury")(view, { userId: "u9" })).toBe(false);
+    });
+
+    it("What Dock? wants the win with every rival holding a Harbour and you without", () => {
+        const check = endCheck("dicecities.what-dock");
+        const docks = (mine: boolean, theirs: boolean, enabled = true) => viewOf(state => {
+            state.enabledDocks = enabled;
+            state.playerStates.get("u1")!.harbourUnlocked = mine;
+            state.playerStates.get("u2")!.harbourUnlocked = theirs;
+        });
+
+        expect(check(docks(false, true), seat("u1", "win"))).toBe(true);
+        expect(check(docks(false, true), seat("u1", "loss"))).toBe(false);
+        expect(check(docks(true, true), seat("u1", "win"))).toBe(false);
+        expect(check(docks(false, false), seat("u1", "win"))).toBe(false);
+        expect(check(docks(false, true, false), seat("u1", "win"))).toBe(false);
     });
 });
