@@ -34,7 +34,7 @@ export const achievements: GameAchievement<IDiceCitiesGameStateResponse>[] = [
         // player's cards leave the game rather than going back to the bank, so
         // "nobody else has any" can be true for a player holding three.
         id: "dicecities.mine-baron",
-        title: "Mine Baron",
+        title: "They call it a Mine!",
         icon: "⛏️",
         description: "Own all six Mines at the end of a turn.",
         // An opponent's Business Center swap can hand over the sixth while the
