@@ -1,0 +1,44 @@
+import { useResettingState } from "@/utils/hooks/useResettingState";
+import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
+import { REALM, squadPoints, type PlayerCount } from "./characters";
+import { musterRefusal, readyMadeMuster } from "./rules";
+import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from "./ui";
+
+/**
+ * A squad being mustered, before it's sent (docs/games/realm-arena.md §17.3
+ * PR 6): the characters picked, and then where each stands. Held on this
+ * device alone until the sealed `RealmArenaMuster` goes, and dropped when
+ * `turnKey` moves on.
+ *
+ * It starts from the faction's ready-made squad, the one a timed-out muster
+ * gets (§17.2), so a player happy with it musters in two taps. Placing starts
+ * from the same spread a ready-made squad stands in, so every pick already has
+ * a square, and the player only moves the ones they want elsewhere.
+ */
+export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, turnKey: string) {
+    const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
+    const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
+    const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);
+
+    const squad = squadOf(counts);
+    const zone = field.deployments[seat] ?? [];
+    // Only a seat with a zone can muster; anyone else has nothing to place.
+    const spread = zone.length > 0 ? readyMadeMuster(field, seat, squad) : [];
+    // The server's own rule, so nothing it would refuse is offered.
+    const refusal = musterRefusal(field, seat, placement?.picks ?? spread, budget);
+
+    return {
+        counts,
+        setCounts,
+        pointsLeft: budget - squadPoints(squad),
+        refusal,
+        /** The squad as placed so far, or null while it's still being picked. */
+        placement,
+        zone,
+        place: () => setPlacement({ picks: spread, selected: null }),
+        unplace: () => setPlacement(null),
+        tap: (square: Square) => placement && setPlacement(placeTap(placement, square, zone)),
+    };
+}
+
+export type MusterDraft = ReturnType<typeof useMusterDraft>;

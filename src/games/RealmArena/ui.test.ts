@@ -3,7 +3,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { newFighter } from "./rules";
-import { CELL, areaRect, fighterStatus, focusOn, groundLayers } from "./ui";
+import { CELL, areaRect, fighterStatus, focusOn, groundLayers, placeTap, squadCounts, squadOf, type Placement } from "./ui";
 
 /** Every square a path's rectangles cover, as "col,row". */
 function squaresDrawn(d: string): Set<string> {
@@ -58,5 +58,46 @@ describe("fighterStatus", () => {
 
     it("says only that a fallen character is down", () => {
         expect(fighterStatus({ ...knight, hp: 0, banked: 4 })).toEqual(["Down"]);
+    });
+});
+
+describe("squadCounts and squadOf", () => {
+    it("count a squad, and list it back in the muster's order", () => {
+        const counts = squadCounts(["cleric", "manAtArms", "knight", "manAtArms"]);
+        expect(counts).toEqual({ manAtArms: 2, knight: 1, archer: 0, scout: 0, mage: 0, cleric: 1 });
+        expect(squadOf(counts)).toEqual(["manAtArms", "manAtArms", "knight", "cleric"]);
+    });
+});
+
+describe("placeTap", () => {
+    const zone = [0, 1, 2, 3];
+    const placed: Placement = { picks: [{ character: "knight", square: 0 }, { character: "archer", square: 1 }], selected: null };
+
+    it("picks a character up, and puts it back down on a second tap", () => {
+        const holding = placeTap(placed, 1, zone);
+        expect(holding).toEqual({ ...placed, selected: 1 });
+        expect(placeTap(holding, 1, zone)).toEqual(placed);
+    });
+
+    it("does nothing for a tap on an empty square with nobody picked up", () => {
+        expect(placeTap(placed, 3, zone)).toEqual(placed);
+    });
+
+    it("moves the character picked up to an empty square of the zone", () => {
+        expect(placeTap({ ...placed, selected: 0 }, 3, zone)).toEqual({
+            picks: [{ character: "knight", square: 3 }, { character: "archer", square: 1 }],
+            selected: null,
+        });
+    });
+
+    it("swaps the character picked up with another", () => {
+        expect(placeTap({ ...placed, selected: 0 }, 1, zone)).toEqual({
+            picks: [{ character: "knight", square: 1 }, { character: "archer", square: 0 }],
+            selected: null,
+        });
+    });
+
+    it("won't move a character out of the zone", () => {
+        expect(placeTap({ ...placed, selected: 0 }, 9, zone)).toEqual({ ...placed, selected: 0 });
     });
 });

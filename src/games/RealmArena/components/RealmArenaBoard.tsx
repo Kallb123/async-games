@@ -38,6 +38,16 @@ interface RealmArenaBoardProps {
     selected: Fighter | undefined;
     /** Tapping a character selects it, and tapping it again lets it go. */
     onSelect: (fighterId: number) => void;
+    /** The viewer placing their squad (`sealed`) in their deployment zone, before the muster goes. */
+    placing?: Placing | null;
+}
+
+interface Placing {
+    zone: readonly Square[];
+    /** The index into `sealed` of the character picked up to move, if any. */
+    selected: number | null;
+    /** A tap on a square of the zone, whoever stands on it. */
+    onTap: (square: Square) => void;
 }
 
 interface FigureProps {
@@ -75,15 +85,20 @@ function Figure({ field, square, character, className = '', fill }: FigureProps)
  * ten squares across the column, and selecting a character brings the view to
  * it.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
     const viewBox = { width, height };
 
-    const focus: BoardZoomFocus | null = selected
-        ? { rect: focusOn(field, selected.square), key: `${selected.id}:${selected.square}` }
-        : null;
+    // A character picked up to place is brought close enough to tap a square beside it.
+    const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
+    const focus: BoardZoomFocus | null = pickedUp
+        ? { rect: focusOn(field, pickedUp.square), key: `pick:${pickedUp.square}` }
+        : selected
+            ? { rect: focusOn(field, selected.square), key: `${selected.id}:${selected.square}` }
+            : null;
+    const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
@@ -124,12 +139,31 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {centre && <rect className="ag-ra-centre" {...centre} />}
 
-                    {sealed?.map((pick, index) => (
-                        <g key={`sealed-${index}`} className="ag-ra-sealed">
-                            <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
-                            <Figure field={field} square={pick.square} character={pick.character} />
-                        </g>
-                    ))}
+                    {sealed?.map((pick, index) => {
+                        const { x, y } = squareCentre(field, pick.square);
+                        return (
+                            <g key={`sealed-${index}`} className="ag-ra-sealed">
+                                <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
+                                {placing?.selected === index && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
+                                <Figure field={field} square={pick.square} character={pick.character} />
+                            </g>
+                        );
+                    })}
+
+                    {/* Over the squad being placed, so a tap on a character
+                        and a tap on an empty square both land here. */}
+                    {placing?.zone.map(square => {
+                        const rect = areaRect(field, [square]);
+                        const target = placing.selected !== null && !occupied.has(square);
+                        return (
+                            <rect
+                                key={`place-${square}`}
+                                className={`ag-ra-place${target ? ' ag-ra-place--target' : ''}`}
+                                {...rect}
+                                onClick={() => placing.onTap(square)}
+                            />
+                        );
+                    })}
 
                     {drawOrder.map(fighter => {
                         const { x, y } = squareCentre(field, fighter.square);

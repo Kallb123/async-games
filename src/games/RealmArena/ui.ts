@@ -4,8 +4,8 @@
 
 import type { Rect } from "@/utils/ui/mapLabels";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import type { CharacterId } from "./characters";
-import type { Fighter } from "./rules";
+import { CHARACTERS, type CharacterId } from "./characters";
+import type { Fighter, MusterPick } from "./rules";
 
 /** Board units per square: the SVG's viewBox is the map's size times this. */
 export const CELL = 10;
@@ -100,4 +100,47 @@ export function fighterStatus(fighter: Fighter): string[] {
         ...(fighter.hunkered ? ["Hunkered down"] : []),
         ...(fighter.shieldWall ? ["Shield wall"] : []),
     ];
+}
+
+// ─── Mustering (§17.3 PR 6) ─────────────────────────────────────────────────
+
+/** The six characters in the order the muster lists them: §13.6's table's. */
+export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
+
+/** How many of each character a squad holds — what the muster's steppers read. */
+export type SquadCounts = Record<CharacterId, number>;
+
+export function squadCounts(squad: readonly CharacterId[]): SquadCounts {
+    const counts = Object.fromEntries(CHARACTER_IDS.map(id => [id, 0])) as SquadCounts;
+    for (const character of squad) counts[character]++;
+    return counts;
+}
+
+/** The squad a set of counts makes, in the muster's order. */
+export function squadOf(counts: SquadCounts): CharacterId[] {
+    return CHARACTER_IDS.flatMap(id => Array<CharacterId>(counts[id]).fill(id));
+}
+
+/** A squad being placed: where each pick stands, and the one picked up to move, if any. */
+export interface Placement {
+    picks: MusterPick[];
+    selected: number | null;
+}
+
+/**
+ * A tap on a square of the deployment zone while placing a squad. A tap on a
+ * character picks it up, and a second tap on it puts it back down. With one
+ * picked up, a tap on an empty square of the zone moves it there, and a tap on
+ * another character swaps the two.
+ */
+export function placeTap({ picks, selected }: Placement, square: Square, zone: readonly Square[]): Placement {
+    const there = picks.findIndex(pick => pick.square === square);
+    if (selected === null) return { picks, selected: there >= 0 ? there : null };
+    if (there === selected) return { picks, selected: null };
+    const from = picks[selected].square;
+    if (there >= 0) {
+        return { picks: picks.map((pick, i) => i === selected ? { ...pick, square } : i === there ? { ...pick, square: from } : pick), selected: null };
+    }
+    if (!zone.includes(square)) return { picks, selected };
+    return { picks: picks.map((pick, i) => i === selected ? { ...pick, square } : pick), selected: null };
 }
