@@ -1,6 +1,6 @@
 'use client'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FIT_WIDTH, focusZoom, pinchOffset, wheelZoomFactor, zoomLevels } from '@/utils/ui/boardZoom';
+import { clampOffset, easeInOut, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -37,23 +37,118 @@ interface BoardZoomProps {
 /** How much breathing room a focused region keeps from the edge of the pane. */
 const FOCUS_MARGIN_PX = 28;
 
-/** The content point a focus should centre, as a fraction of the whole board. */
-interface FocusTarget { cx: number; cy: number; smooth: boolean }
+/**
+ * The content point a focus should centre, as a fraction of the whole board,
+ * and — for a smooth one — the view it glides from, recorded before its zoom
+ * changed.
+ */
+interface FocusTarget { cx: number; cy: number; smooth: boolean; from?: ZoomView }
 
-function applyFocusTarget(pane: HTMLDivElement, target: FocusTarget) {
-    const behavior = target.smooth ? 'smooth' : 'auto';
-    const clampScroll = (value: number, content: number, view: number) => Math.min(Math.max(value, 0), Math.max(0, content - view));
-    const left = clampScroll(target.cx * pane.scrollWidth - pane.clientWidth / 2, pane.scrollWidth, pane.clientWidth);
-    const top = clampScroll(target.cy * pane.scrollHeight - pane.clientHeight / 2, pane.scrollHeight, pane.clientHeight);
-    pane.scrollTo({ left, top, behavior });
-    // The frame keeps its fitted height, so it can itself be taller than the
-    // screen (a long circuit fitted to a phone's width). Where the focus would
-    // still land off-screen once the pane has scrolled, the page moves too —
-    // but only then: a board already in view shouldn't drag the page about.
-    const pointY = pane.getBoundingClientRect().top + target.cy * pane.scrollHeight - top;
+/** How long an unprompted focus takes to glide the board over to what it's showing. */
+const GLIDE_MS = 380;
+
+/**
+ * A focus glide in flight. Like a pinch, it is drawn as a CSS transform over a
+ * board already laid out at the zoom it's heading for, with the pane unscrolled
+ * underneath; `settle` drops the transform and scrolls the pane to where the
+ * glide ends, so whatever interrupts it reads a board that is simply there. A
+ * glide that has finished settles to nothing.
+ */
+interface Glide { settle: () => void }
+
+/** Draw the board `offset` into the pane at `scale` times its laid-out size. */
+function drawAt(content: HTMLDivElement, offset: { x: number; y: number }, scale: number) {
+    content.style.transform = `translate(${offset.x}px, ${offset.y}px) scale(${scale})`;
+}
+
+/**
+ * Hand the board's position over to the transform. For as long as a pinch or a
+ * glide is drawing, the pane sits unscrolled and the transform alone places the
+ * board: left scrolled, a board scaled down under the scroll position would
+ * have the browser clamp it — and the board would lurch mid-gesture.
+ */
+function liftOff(pane: HTMLDivElement, content: HTMLDivElement, offset: { x: number; y: number }) {
+    pane.scrollLeft = 0;
+    pane.scrollTop = 0;
+    drawAt(content, offset, 1);
+}
+
+/** And hand it back: no transform, the pane scrolled to `scroll`. */
+function landAt(pane: HTMLDivElement, content: HTMLDivElement, scroll: { x: number; y: number }) {
+    content.style.transform = '';
+    pane.scrollLeft = scroll.x;
+    pane.scrollTop = scroll.y;
+}
+
+/** The board as it's drawn right now: mid-pinch, the pinch's latest frame; otherwise the zoom and scroll laid out. */
+function currentView(pane: HTMLDivElement, zoom: number, pinch: Pinch | null): ZoomView {
+    if (pinch) return pinchView(pinch);
+    return {
+        zoom,
+        scroll: { x: pane.scrollLeft, y: pane.scrollTop },
+        content: { x: pane.scrollWidth, y: pane.scrollHeight },
+    };
+}
+
+/**
+ * Where a focus leaves a board already laid out at the zoom it wants — and,
+ * since the frame keeps its fitted height and so can itself be taller than the
+ * screen (a long circuit fitted to a phone's width), the page is moved too
+ * where the focus would still land off-screen once the pane has scrolled. Only
+ * then: a board already in view shouldn't drag the page about.
+ */
+function focusView(pane: HTMLDivElement, target: FocusTarget, zoom: number): ZoomView {
+    const content = { x: pane.scrollWidth, y: pane.scrollHeight };
+    const scroll = {
+        x: -clampOffset(pane.clientWidth / 2 - target.cx * content.x, content.x, pane.clientWidth),
+        y: -clampOffset(pane.clientHeight / 2 - target.cy * content.y, content.y, pane.clientHeight),
+    };
+    const pointY = pane.getBoundingClientRect().top + target.cy * content.y - scroll.y;
     if (pointY < FOCUS_MARGIN_PX || pointY > window.innerHeight - FOCUS_MARGIN_PX) {
-        window.scrollTo({ top: Math.max(0, window.scrollY + pointY - window.innerHeight / 2), behavior });
+        window.scrollTo({ top: Math.max(0, window.scrollY + pointY - window.innerHeight / 2), behavior: target.smooth ? 'smooth' : 'auto' });
     }
+    return { zoom, scroll, content };
+}
+
+/**
+ * Glide the board from `from` — the view the player was looking at before the
+ * zoom changed — to `to`, zooming and panning together, so it moves from
+ * wherever it was rather than snapping to the new width at a scroll offset
+ * that meant something else at the old one and travelling on from there.
+ */
+function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to: ZoomView): Glide {
+    const paneSize = { x: pane.clientWidth, y: pane.clientHeight };
+    const draw = (t: number) => {
+        const frame = glideFrame(from, to, paneSize, t);
+        drawAt(content, frame.offset, frame.zoom / to.zoom);
+    };
+    liftOff(pane, content, { x: 0, y: 0 });
+    draw(0);
+    let frame = 0;
+    let done = false;
+    const settle = () => {
+        if (done) return;
+        done = true;
+        cancelAnimationFrame(frame);
+        landAt(pane, content, to.scroll);
+    };
+    const started = performance.now();
+    const step = (now: number) => {
+        const t = (now - started) / GLIDE_MS;
+        if (t >= 1) { settle(); return; }
+        draw(easeInOut(t));
+        frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return { settle };
+}
+
+/** Bring a focus into view on a board already laid out at its zoom: a glide when it's smooth, otherwise (the pill, or reduced motion) it simply lands. */
+function showFocus(pane: HTMLDivElement, content: HTMLDivElement, target: FocusTarget, zoom: number): Glide | null {
+    const to = focusView(pane, target, zoom);
+    if (target.smooth && target.from) return glide(pane, content, target.from, to);
+    landAt(pane, content, to.scroll);
+    return null;
 }
 
 /**
@@ -121,14 +216,21 @@ interface Pinch {
     offset: { x: number; y: number };
 }
 
+/** Where a pinch's latest frame has drawn the board. */
+function pinchView(pinch: Pinch): ZoomView {
+    const grown = pinch.drawn / pinch.zoom;
+    return {
+        zoom: pinch.drawn,
+        scroll: { x: -pinch.offset.x, y: -pinch.offset.y },
+        content: { x: pinch.content.x * grown, y: pinch.content.y * grown },
+    };
+}
+
 /** Re-take a pinch's baseline from the fingers now down, keeping the board where it's drawn. */
 function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
-    const grown = pinch.drawn / pinch.zoom;
+    Object.assign(pinch, pinchView(pinch));
     pinch.spread = spread(touches);
     pinch.start = midpoint(touches, pane);
-    pinch.scroll = { x: -pinch.offset.x, y: -pinch.offset.y };
-    pinch.content = { x: pinch.content.x * grown, y: pinch.content.y * grown };
-    pinch.zoom = pinch.drawn;
 }
 
 /**
@@ -154,9 +256,10 @@ function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
  *
  * A third way a board's view moves is `focus`: unprompted, the instant a
  * roll (or whatever the board calls "something just happened here") hands it
- * a region to show. That one is a smooth scroll rather than a jump — the
- * player didn't ask for it, so it reads as the board following the action
- * rather than teleporting the ground from under them — and it goes looking
+ * a region to show. That one is a glide rather than a jump — zooming and
+ * panning together, starting from wherever the board already is, since the
+ * player didn't ask for it and it should read as the board following the
+ * action rather than teleporting the ground from under them — and it goes looking
  * for its own zoom level rather than reusing whatever step the player was
  * last on, since the point is tap targets big enough for what just became
  * choosable.
@@ -176,6 +279,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     const scrollToRef = useRef<{ x: number; y: number } | null>(null);
     const pinchRef = useRef<Pinch | null>(null);
     const focusTargetRef = useRef<FocusTarget | null>(null);
+    const glideRef = useRef<Glide | null>(null);
 
     // Put the recorded point back under the finger (or back in the middle) once
     // the new width has laid out — before paint, so the board never flashes at
@@ -187,26 +291,28 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     // (`scrollToRef`, which likewise is only ever set with nothing else
     // pending). And a zoom that lands while fingers are still down — the pill,
     // or a focus arriving mid-gesture — ends that pinch here: the board it was
-    // transforming has just been laid out afresh underneath it.
+    // transforming has just been laid out afresh underneath it. (Everything
+    // that changes the zoom settles a glide in flight first, so none is left
+    // to settle here.)
     useLayoutEffect(() => {
         zoomRef.current = zoom;
         pinchRef.current = null;
         const pane = paneRef.current;
-        if (!pane) return;
+        const content = contentRef.current;
+        if (!pane || !content) return;
         const anchor = anchorRef.current;
         anchorRef.current = null;
         const scrollTo = scrollToRef.current;
         scrollToRef.current = null;
-        if (contentRef.current) contentRef.current.style.transform = '';
+        content.style.transform = '';
         const focusTarget = focusTargetRef.current;
         if (focusTarget) {
             focusTargetRef.current = null;
-            applyFocusTarget(pane, focusTarget);
+            glideRef.current = showFocus(pane, content, focusTarget, zoom);
             return;
         }
         if (scrollTo) {
-            pane.scrollLeft = scrollTo.x;
-            pane.scrollTop = scrollTo.y;
+            landAt(pane, content, scrollTo);
             return;
         }
         if (!anchor) return;
@@ -236,23 +342,32 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         return () => observer.disconnect();
     }, []);
 
+    // A glide still in flight as the board goes away has nothing left to draw on.
+    useEffect(() => () => glideRef.current?.settle(), []);
+
     // The auto-focus itself: pick the deepest zoom step the region still fits
-    // at, then scroll to it. When the board is already at that step, changing
-    // `zoom` to the same value is a no-op React won't re-render for, so the
-    // scroll happens right here instead of waiting on the layout effect above.
+    // at, then glide to it from the view the board is in right now — a pinch's
+    // latest frame included — so the zoom starts from wherever the player was
+    // looking. When the board is already at that step, changing `zoom` to the
+    // same value is a no-op React won't re-render for, so the glide starts
+    // right here instead of waiting on the layout effect above.
     useEffect(() => {
         const pane = paneRef.current;
-        if (!pane || !focus || !viewBox) return;
+        const content = contentRef.current;
+        if (!pane || !content || !focus || !viewBox) return;
+        glideRef.current?.settle();
         const level = focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
-        const target: FocusTarget = { ...focusCentre(focus.rect, viewBox), smooth: !prefersReducedMotion() };
+        const target: FocusTarget = {
+            ...focusCentre(focus.rect, viewBox),
+            smooth: !prefersReducedMotion(),
+            from: currentView(pane, zoom, pinchRef.current),
+        };
         if (level === zoom) {
             // Fingers still down would otherwise go on drawing over a pane
             // that has just scrolled out from under them.
-            if (pinchRef.current && contentRef.current) {
-                pinchRef.current = null;
-                contentRef.current.style.transform = '';
-            }
-            applyFocusTarget(pane, target);
+            pinchRef.current = null;
+            content.style.transform = '';
+            glideRef.current = showFocus(pane, content, target, zoom);
         } else {
             focusTargetRef.current = target;
             setZoom(level);
@@ -267,6 +382,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     const stepZoom = () => {
         const pane = paneRef.current;
         if (!pane) { setZoom(next); return; }
+        glideRef.current?.settle();
         // A live focus is what the player is looking at right now — the pill
         // should zoom in on that, not on wherever they last panned to. Instant
         // rather than the auto-focus's smooth scroll: this jump is the one the
@@ -286,6 +402,9 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         const clamp = (value: number) => Math.min(max, Math.max(FIT_WIDTH, value));
 
         const onTouchStart = (event: TouchEvent) => {
+            // A finger on the board ends a glide where it was heading, so a
+            // pan or a pinch starts from the board as it's laid out.
+            glideRef.current?.settle();
             if (event.touches.length !== 2 || pinchRef.current) return;
             const start = midpoint(event.touches, pane);
             const scroll = { x: pane.scrollLeft, y: pane.scrollTop };
@@ -300,13 +419,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
                 drawn: zoomRef.current,
                 offset: { x: -scroll.x, y: -scroll.y },
             };
-            // For the length of the pinch the pane sits unscrolled and the
-            // transform alone places the board. Left scrolled, a board scaled
-            // down under the scroll position would have the browser clamp it —
-            // and the board would lurch mid-gesture.
-            pane.scrollLeft = 0;
-            pane.scrollTop = 0;
-            content.style.transform = `translate(${-scroll.x}px, ${-scroll.y}px)`;
+            liftOff(pane, content, { x: -scroll.x, y: -scroll.y });
         };
 
         const onTouchMove = (event: TouchEvent) => {
@@ -327,7 +440,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
                 x: pinchOffset(pinch.scroll.x, pinch.start.x, finger.x, scale, pinch.content.x, pinch.pane.x),
                 y: pinchOffset(pinch.scroll.y, pinch.start.y, finger.y, scale, pinch.content.y, pinch.pane.y),
             };
-            content.style.transform = `translate(${pinch.offset.x}px, ${pinch.offset.y}px) scale(${pinch.drawn / pinch.laidOut})`;
+            drawAt(content, pinch.offset, pinch.drawn / pinch.laidOut);
         };
 
         // The fingers lifting is when the zoom actually changes: the board is
@@ -346,9 +459,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
             const scrollTo = { x: -pinch.offset.x, y: -pinch.offset.y };
             const nextZoom = pinch.drawn;
             if (nextZoom === zoomRef.current) {
-                content.style.transform = '';
-                pane.scrollLeft = scrollTo.x;
-                pane.scrollTop = scrollTo.y;
+                landAt(pane, content, scrollTo);
                 return;
             }
             scrollToRef.current = scrollTo;
@@ -359,6 +470,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         // browser's own keyboard zoom over the pane, and taking that one is the
         // lesser evil next to the board jumping a level per notch.
         const onWheel = (event: WheelEvent) => {
+            glideRef.current?.settle();
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
             if (pinchRef.current) return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIT_WIDTH, focusZoom, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -83,5 +83,47 @@ describe('pinchOffset', () => {
     it('never opens a gap past the board end', () => {
         // Zooming out to half of 1000 leaves 500 of board; it can sit no further left than -180.
         expect(pinchOffset(680, 300, 300, 0.5, 1000, 320)).toBe(-180);
+    });
+});
+
+describe('glideFrame', () => {
+    const pane = { x: 300, y: 450 };
+    // Fitted, scrolled nowhere; and at 640%, scrolled to the far corner.
+    const fitted = { zoom: 100, scroll: { x: 0, y: 0 }, content: { x: 300, y: 450 } };
+    const deep = { zoom: 640, scroll: { x: 1620, y: 2430 }, content: { x: 1920, y: 2880 } };
+
+    it('starts exactly where the board already is', () => {
+        expect(glideFrame(fitted, deep, pane, 0)).toEqual({ zoom: 100, offset: { x: 0, y: 0 } });
+        const from = { zoom: 240, scroll: { x: 200, y: 300 }, content: { x: 720, y: 1080 } };
+        const frame = glideFrame(from, deep, pane, 0);
+        expect(frame.zoom).toBe(240);
+        expect(frame.offset.x).toBeCloseTo(-200);
+        expect(frame.offset.y).toBeCloseTo(-300);
+    });
+
+    it('ends exactly where the focus wants it', () => {
+        const frame = glideFrame(fitted, deep, pane, 1);
+        expect(frame.zoom).toBeCloseTo(640);
+        expect(frame.offset.x).toBeCloseTo(-1620);
+        expect(frame.offset.y).toBeCloseTo(-2430);
+    });
+
+    it('grows the zoom by the same factor each step, never passing through fit on the way', () => {
+        const half = glideFrame(fitted, deep, pane, 0.5).zoom;
+        expect(half).toBeCloseTo(Math.sqrt(100 * 640));
+        const back = glideFrame(deep, { ...deep, zoom: 240, content: { x: 720, y: 1080 }, scroll: { x: 420, y: 630 } }, pane, 0.5).zoom;
+        expect(back).toBeGreaterThan(240);
+        expect(back).toBeLessThan(640);
+    });
+
+    it('never opens a gap at an edge of the pane', () => {
+        for (const t of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+            const { zoom, offset } = glideFrame(fitted, deep, pane, t);
+            const size = { x: 1920 * zoom / 640, y: 2880 * zoom / 640 };
+            expect(offset.x).toBeLessThanOrEqual(0);
+            expect(offset.y).toBeLessThanOrEqual(0);
+            expect(offset.x + size.x).toBeGreaterThanOrEqual(pane.x - 1e-9);
+            expect(offset.y + size.y).toBeGreaterThanOrEqual(pane.y - 1e-9);
+        }
     });
 });

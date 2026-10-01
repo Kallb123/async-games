@@ -60,6 +60,48 @@ export function focusZoom(levels: number[], rectWidth: number, viewBoxWidth: num
  * end, and `-offset` is the scroll position to commit once the pinch ends.
  */
 export function pinchOffset(scroll: number, startFinger: number, finger: number, scale: number, contentSize: number, paneSize: number): number {
-    const offset = finger - (scroll + startFinger) * scale;
-    return Math.min(0, Math.max(paneSize - contentSize * scale, offset));
+    return clampOffset(finger - (scroll + startFinger) * scale, contentSize * scale, paneSize);
+}
+
+/**
+ * The board's offset in the pane along one axis, held to what a scrolled pane
+ * could show: zero or negative, and never so far that a gap opens at the far
+ * end. `-clampOffset(-scroll, …)` is the same rule for a scroll position.
+ */
+export function clampOffset(offset: number, contentSize: number, paneSize: number): number {
+    return Math.min(0, Math.max(paneSize - contentSize, offset));
+}
+
+/** Ease in and out (cubic): a glide sets off and arrives gently rather than lurching. */
+export function easeInOut(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** A board as drawn in its pane: its zoom, how far the pane is scrolled into it, and its size at that zoom, in pixels. */
+export interface ZoomView {
+    zoom: number;
+    scroll: { x: number; y: number };
+    content: { x: number; y: number };
+}
+
+/**
+ * One frame of a focus gliding the board from the view it was in to the one it
+ * is heading for, `t` of the way there (eased by the caller). The zoom moves
+ * geometrically — each frame grows it by the same factor, so a step from fit to
+ * 640% doesn't spend half its time below 200% — and the point at the middle of
+ * the pane moves straight across the board. The result is the zoom drawn and
+ * the board's offset in the pane, through `clampOffset` so no gap opens at an
+ * edge; `t` = 0 is exactly `from` (nothing jumps as the glide
+ * begins) and `t` = 1 exactly `to`.
+ */
+export function glideFrame(from: ZoomView, to: ZoomView, pane: { x: number; y: number }, t: number): { zoom: number; offset: { x: number; y: number } } {
+    const zoom = from.zoom * Math.pow(to.zoom / from.zoom, t);
+    const axis = (key: 'x' | 'y') => {
+        const start = (from.scroll[key] + pane[key] / 2) / (from.content[key] || 1);
+        const end = (to.scroll[key] + pane[key] / 2) / (to.content[key] || 1);
+        const centre = start + (end - start) * t;
+        const size = to.content[key] * zoom / to.zoom;
+        return clampOffset(pane[key] / 2 - centre * size, size, pane[key]);
+    };
+    return { zoom, offset: { x: axis('x'), y: axis('y') } };
 }

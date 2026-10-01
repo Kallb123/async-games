@@ -127,6 +127,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Boards zoom onto the action from where you were looking",
+                detail: "When a board brings something into view by itself — your car and the spaces a roll lets it reach in Race Cars, or the fighter you select in Realm Arena — it used to snap to the new zoom first, often out at the corner of the map, and then slide across to the spot. It now zooms and pans in one smooth move, starting from exactly the part of the board you were already looking at.",
+            },
+            {
                 title: "Settlements & Cities results cover the whole game",
                 detail: "A game that was already under way when turns began pausing for Undo could finish with its victory points and resources charts stopping two rounds in, and no resources table at all. Those games now chart every round, and a player who dropped out keeps the lines and the column they left with instead of falling to nothing. The results page of a game you played in also has a Regenerate results link at the bottom, to work them out again from the game's moves while they're still kept.",
                 game: "settlementsandcities",
@@ -165,11 +169,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The party size line no longer spills past the edge of the setup screen",
                 detail: "On a game's setup screen, the \"Party size N · supports X–Y players\" line sat flush against the left and right edges of the phone instead of lining up with the seats and turn-timer rows above it. It now sits inside the same margin as the rest of the page.",
-            },
-            {
-                title: "A missed Settlements & Cities turn no longer breaks the board",
-                detail: "If nobody was around when your turn timer ran out, the game used to just skip straight to whoever was next without actually playing your turn for you — during setup that could scramble the placement order or leave the next player building a road onto your settlement, and on a main turn it skipped the whole table's roll, not just yours. A missed turn now plays itself out: a settlement and road go down somewhere legal during setup, the dice get rolled and the robber gets moved on a main turn, and anything left over is passed rather than lost.",
-                game: "settlementsandcities",
             },
         ],
     },
