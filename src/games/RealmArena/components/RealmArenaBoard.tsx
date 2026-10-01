@@ -57,13 +57,16 @@ interface FigureProps {
     character: CharacterId | null;
     className?: string;
     fill?: string;
+    /** Ringed as the one selected. */
+    selected?: boolean;
 }
 
 /** A character's disc with its mark on it, a little above its square's centre to leave room for the HP bar beneath. */
-function Figure({ field, square, character, className = '', fill }: FigureProps) {
+function Figure({ field, square, character, className = '', fill, selected = false }: FigureProps) {
     const { x, y } = squareCentre(field, square);
     return (
         <>
+            {selected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
             <circle className={`ag-ra-figure ${className}`} cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS} fill={fill} />
             <text className="ag-ra-mark" x={x} y={y - FIGURE_LIFT}>{character ? CHARACTER_MARK[character] : '✕'}</text>
         </>
@@ -93,11 +96,9 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
     // A character picked up to place is brought close enough to tap a square beside it.
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
-    const focus: BoardZoomFocus | null = pickedUp
-        ? { rect: focusOn(field, pickedUp.square), key: `pick:${pickedUp.square}` }
-        : selected
-            ? { rect: focusOn(field, selected.square), key: `${selected.id}:${selected.square}` }
-            : null;
+    const focusSquare = pickedUp?.square ?? selected?.square;
+    const focus: BoardZoomFocus | null = focusSquare === undefined ? null
+        : { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}` };
     const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];
@@ -139,16 +140,12 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {centre && <rect className="ag-ra-centre" {...centre} />}
 
-                    {sealed?.map((pick, index) => {
-                        const { x, y } = squareCentre(field, pick.square);
-                        return (
-                            <g key={`sealed-${index}`} className="ag-ra-sealed">
-                                <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
-                                {placing?.selected === index && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
-                                <Figure field={field} square={pick.square} character={pick.character} />
-                            </g>
-                        );
-                    })}
+                    {sealed?.map((pick, index) => (
+                        <g key={`sealed-${index}`} className="ag-ra-sealed">
+                            <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
+                            <Figure field={field} square={pick.square} character={pick.character} selected={placing?.selected === index} />
+                        </g>
+                    ))}
 
                     {/* Over the squad being placed, so a tap on a character
                         and a tap on an empty square both land here. */}
@@ -181,8 +178,8 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                 onClick={() => onSelect(fighter.id)}
                                 title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...status].join(' · ')}
                             >
-                                {isSelected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
                                 <Figure
+                                    selected={isSelected}
                                     field={field}
                                     square={fighter.square}
                                     character={standing ? fighter.character : null}
