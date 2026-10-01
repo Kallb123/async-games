@@ -6,7 +6,7 @@ import { criteriaOf, finishedSeat as seat, tableViewOf } from "@/utils/testing/g
 import type { ISACSpecificGameState, ISACVertex } from "./board";
 import type { ISACSpecificGameStateResponse } from "./apiModels";
 import { makeState, player } from "./testFixtures";
-import { achievements, CITIES_TO_PLAN } from "./achievements";
+import { achievements, CITIES_TO_PLAN, SETUP_ROADS } from "./achievements";
 
 const { turnEndCheck, endCheck, progress } = criteriaOf(achievements);
 
@@ -43,5 +43,16 @@ describe("Settlements & Cities' achievements", () => {
         expect(check(both, seat("u1", "win"))).toBe(true);
         expect(check(both, seat("u1", "loss"))).toBe(false);
         expect(check(one, seat("u1", "win"))).toBe(false);
+    });
+
+    it("Roads? Where we're going wants the win and no roads past the two from setup", () => {
+        const check = endCheck("settlementsandcities.no-roads");
+        const road = (owner: string, count: number) => Array.from({ length: count }, () => ({ hasRoad: true, owner }));
+        const none = viewOf({ edges: [...road("u1", SETUP_ROADS), ...road("u2", 6)] });
+        const built = viewOf({ edges: road("u1", SETUP_ROADS + 1) });
+
+        expect(check(none, seat("u1", "win"))).toBe(true);
+        expect(check(none, seat("u1", "loss"))).toBe(false);
+        expect(check(built, seat("u1", "win"))).toBe(false);
     });
 });

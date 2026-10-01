@@ -11,6 +11,13 @@ import type { ISACSpecificGameStateResponse } from "./apiModels";
 /** A player's whole supply of cities. */
 export const CITIES_TO_PLAN = 4;
 
+/** Every player lays two roads in setup, and the board is the only record of them. */
+export const SETUP_ROADS = 2;
+
+function roadsOf(view: ISACSpecificGameStateResponse, userId: string): number {
+    return view.edges.filter(edge => edge.hasRoad && edge.owner === userId).length;
+}
+
 function citiesOf(view: ISACSpecificGameStateResponse, userId: string): number {
     return view.vertices.filter(vertex => vertex.building === "city" && vertex.owner === userId).length;
 }
@@ -45,6 +52,19 @@ export const achievements: GameAchievement<ISACSpecificGameStateResponse>[] = [
             at: "end",
             check: (view, { userId, outcome }) =>
                 outcome === "win" && view.longestRoadOwner === userId && view.largestArmyOwner === userId,
+        },
+    },
+    {
+        // Setup gives every player two roads and roads never come off the board,
+        // so holding no more than those two means none were built afterwards.
+        id: "settlementsandcities.no-roads",
+        title: "Roads? Where we're going we don't need roads!",
+        icon: "🚀",
+        description: "Win a game without building any roads after setup.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { userId, outcome }) => outcome === "win" && roadsOf(view, userId) <= SETUP_ROADS,
         },
     },
 ];

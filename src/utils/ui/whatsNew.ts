@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "New achievements for Settlements & Cities and Dice Cities",
+                detail: "Win a Settlements & Cities game without building a road after setup, or a Dice Cities Docks game as the only player without the Dock.",
+            },
+            {
                 title: "Profile tabs",
                 detail: "Your profile is split into Results, Achievements and Friends tabs, so each is a tap away instead of a long scroll. Friends only appear on your own profile.",
             },
@@ -116,11 +120,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Settlements & Cities: trade with other players",
                 detail: "Post an offer — \"1 🪵 for 1 🐑, anyone?\" — and any other player can take it up on any turn, so a trade never waits for the dice to come round. The new Trade offers panel lists every open offer and tells you straight away whether you have what it asks for.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Kingdom Builder worlds have chat",
-                detail: "Talk strategy with everyone in your world from the world map, with the same messages, GIFs and notifications as your other games.",
-                game: "kingdombuilder",
             },
         ],
     },
