@@ -5241,7 +5241,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    beneath. The stroke is painted under the fill so the edge reads on any
    ground. */
 .ag-ra-figure {
-    stroke: #fff;
+    stroke: var(--ag-on-dark);
     stroke-width: 0.7;
     paint-order: stroke;
     filter: drop-shadow(0 0.4px 0.6px rgba(0, 0, 0, 0.5));
@@ -5251,14 +5251,14 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-figure--down { fill: var(--ag-ink-softer); opacity: 0.6; }
 .ag-ra-mark {
     font: 700 4px var(--ag-font);
-    fill: #fff;
+    fill: var(--ag-on-dark);
     text-anchor: middle;
     dominant-baseline: central;
     pointer-events: none;
 }
 .ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
-.ag-ra-selected { fill: none; stroke: #fff; stroke-width: 0.9; pointer-events: none; }
+.ag-ra-selected { fill: none; stroke: var(--ag-on-dark); stroke-width: 0.9; pointer-events: none; }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */
 .ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }

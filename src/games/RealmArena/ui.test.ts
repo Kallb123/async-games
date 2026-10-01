@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
-import { CELL, areaRect, groundLayers } from "./ui";
+import { squareAt } from "@/utils/games/battlefield/terrain";
+import { newFighter } from "./rules";
+import { CELL, areaRect, fighterStatus, focusOn, groundLayers } from "./ui";
 
 /** Every square a path's rectangles cover, as "col,row". */
 function squaresDrawn(d: string): Set<string> {
@@ -33,5 +35,28 @@ describe("groundLayers", () => {
 describe("areaRect", () => {
     it("bounds the centre of the Ruined Fort", () => {
         expect(areaRect(RUINED_FORT, RUINED_FORT.objectives.centre)).toEqual({ x: 15 * CELL, y: 21 * CELL, width: 6 * CELL, height: 6 * CELL });
+    });
+});
+
+describe("focusOn", () => {
+    it("frames seven squares across, centred on the character", () => {
+        expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!)).toEqual({ x: 7 * CELL, y: 17 * CELL, width: 7 * CELL, height: 7 * CELL });
+    });
+});
+
+describe("fighterStatus", () => {
+    const knight = newFighter(0, "alice", "knight", 0);
+
+    it("says nothing for a character doing nothing in particular", () => {
+        expect(fighterStatus(knight)).toEqual([]);
+    });
+
+    it("names the watch, hunkering down and the shield wall", () => {
+        expect(fighterStatus({ ...knight, banked: 4, hunkered: true, shieldWall: true }))
+            .toEqual(["On watch (4 AP banked)", "Hunkered down", "Shield wall"]);
+    });
+
+    it("says only that a fallen character is down", () => {
+        expect(fighterStatus({ ...knight, hp: 0, banked: 4 })).toEqual(["Down"]);
     });
 });

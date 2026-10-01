@@ -3,9 +3,8 @@ import React, { useId } from 'react';
 import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
-import type { Rect } from '@/utils/ui/mapLabels';
-import type { Battlefield, TerrainLetter } from '@/utils/games/battlefield/terrain';
-import { CHARACTERS } from '@/games/RealmArena/characters';
+import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, squareCentre } from '@/games/RealmArena/ui';
 
@@ -36,9 +35,29 @@ interface RealmArenaBoardProps {
     seats: readonly string[];
     colourFor: (userId: string) => string;
     nameFor: (userId: string) => string;
-    selectedId: number | null;
+    selected: Fighter | undefined;
     /** Tapping a character selects it, and tapping it again lets it go. */
-    onSelect?: (fighterId: number) => void;
+    onSelect: (fighterId: number) => void;
+}
+
+interface FigureProps {
+    field: Battlefield;
+    square: Square;
+    /** The character it stands as, or null for a fallen one, which is marked ✕. */
+    character: CharacterId | null;
+    className?: string;
+    fill?: string;
+}
+
+/** A character's disc with its mark on it, a little above its square's centre to leave room for the HP bar beneath. */
+function Figure({ field, square, character, className = '', fill }: FigureProps) {
+    const { x, y } = squareCentre(field, square);
+    return (
+        <>
+            <circle className={`ag-ra-figure ${className}`} cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS} fill={fill} />
+            <text className="ag-ra-mark" x={x} y={y - FIGURE_LIFT}>{character ? CHARACTER_MARK[character] : '✕'}</text>
+        </>
+    );
 }
 
 /**
@@ -56,13 +75,12 @@ interface RealmArenaBoardProps {
  * ten squares across the column, and selecting a character brings the view to
  * it.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selectedId, onSelect }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
     const viewBox = { width, height };
 
-    const selected = fighters.find(fighter => fighter.id === selectedId);
     const focus: BoardZoomFocus | null = selected
         ? { rect: focusOn(field, selected.square), key: `${selected.id}:${selected.square}` }
         : null;
@@ -72,10 +90,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
     // The fallen first, so anyone standing over a body is drawn on top of it.
     const drawOrder = [...fighters].sort((a, b) => Number(isStanding(a)) - Number(isStanding(b)));
-    const figureRects: Rect[] = [...fighters, ...(sealed ?? [])].map(({ square }) => {
-        const { x, y } = squareCentre(field, square);
-        return { x: x - CELL / 2, y: y - CELL / 2, width: CELL, height: CELL };
-    });
+    const figureRects = [...fighters, ...(sealed ?? [])].map(({ square }) => areaRect(field, [square]));
 
     return (
         <div className="ag-board-frame ag-realmarena-frame">
@@ -90,7 +105,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     </defs>
 
                     {groundLayers(field).map(layer => (
-                        <path key={layer.letter} className={`ag-ra-ground ${GROUND_CLASS[layer.letter]}`} d={layer.d} />
+                        <path key={layer.letter} className={GROUND_CLASS[layer.letter]} d={layer.d} />
                     ))}
                     <rect width={width} height={height} fill={`url(#${gridId})`} pointerEvents="none" />
 
@@ -109,40 +124,37 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {centre && <rect className="ag-ra-centre" {...centre} />}
 
-                    {sealed?.map((pick, index) => {
-                        const { x, y } = squareCentre(field, pick.square);
-                        return (
-                            <g key={`sealed-${index}`} className="ag-ra-sealed">
-                                <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
-                                <circle className="ag-ra-figure" cx={x} cy={y} r={FIGURE_RADIUS} />
-                                <text className="ag-ra-mark" x={x} y={y}>{CHARACTER_MARK[pick.character]}</text>
-                            </g>
-                        );
-                    })}
+                    {sealed?.map((pick, index) => (
+                        <g key={`sealed-${index}`} className="ag-ra-sealed">
+                            <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
+                            <Figure field={field} square={pick.square} character={pick.character} />
+                        </g>
+                    ))}
 
                     {drawOrder.map(fighter => {
                         const { x, y } = squareCentre(field, fighter.square);
                         const character = CHARACTERS[fighter.character];
                         const standing = isStanding(fighter);
                         const status = fighterStatus(fighter);
-                        const discY = y - FIGURE_LIFT;
+                        const isSelected = fighter.id === selected?.id;
                         return (
                             <ClickableMapNode
                                 key={fighter.id}
-                                x={x} y={discY} radius={FIGURE_RADIUS}
-                                isValid={!!onSelect}
-                                isSelected={fighter.id === selectedId}
+                                x={x} y={y - FIGURE_LIFT} radius={FIGURE_RADIUS}
+                                isValid
+                                isSelected={isSelected}
                                 showRing={false}
-                                onClick={onSelect ? () => onSelect(fighter.id) : undefined}
+                                onClick={() => onSelect(fighter.id)}
                                 title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...status].join(' · ')}
                             >
-                                {fighter.id === selectedId && <circle className="ag-ra-selected" cx={x} cy={discY} r={FIGURE_RADIUS + 1.2} />}
-                                <circle
-                                    className={`ag-ra-figure${standing ? '' : ' ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
-                                    cx={x} cy={discY} r={FIGURE_RADIUS}
+                                {isSelected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
+                                <Figure
+                                    field={field}
+                                    square={fighter.square}
+                                    character={standing ? fighter.character : null}
+                                    className={`${standing ? '' : 'ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
                                     fill={standing ? colourFor(fighter.owner) : undefined}
                                 />
-                                <text className="ag-ra-mark" x={x} y={discY}>{standing ? CHARACTER_MARK[fighter.character] : '✕'}</text>
                                 {standing && (
                                     <>
                                         <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
@@ -157,6 +169,9 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                         );
                     })}
 
+                    {/* The centre's name sits just clear of its dashed edge,
+                        small enough to keep off the squares beside it and
+                        still legible fitted to a phone. */}
                     {centre && (
                         <MapLabelLayer
                             labels={[{ key: CENTRE, x: centre.x + centre.width / 2, y: centre.y + centre.height / 2, text: 'Centre', radius: centre.height / 2 }]}

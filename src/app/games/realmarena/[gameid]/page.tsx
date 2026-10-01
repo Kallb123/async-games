@@ -53,6 +53,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const colourFor = (userId: string): string => playerColourForId(userId, userIdList);
     const currentTurnName = nameForUserId(gameData, gameData?.currentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
+    const winnerName = nameForUserId(gameData, gameData?.winner);
     const currentUserWon = complete && !!myUserId && myUserId === gameData?.winner;
     const mustering = gs?.phase === 'muster';
     const fighters = gs?.fighters ?? [];
@@ -63,7 +64,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
-            subtitle = currentUserWon ? '🏆 You won!' : `${nameForUserId(gameData, gameData?.winner)} won`;
+            subtitle = currentUserWon ? '🏆 You won!' : `${winnerName} won`;
         } else if (mustering) {
             subtitle = isMyTurn
                 ? <><span className="ag-hi">Your move</span> · muster your squad</>
@@ -78,12 +79,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
     // Until every squad has mustered, nothing about anyone's squad is on the
     // wire but the viewer's own (§17.2), so the strip says only who has.
+    const musterSub = (userId: string): string => {
+        if (gs?.mustered.includes(userId)) return '✔ mustered';
+        return userId === gameData?.currentTurn ? 'mustering' : 'waiting';
+    };
     const scoreEntries: ScoreEntry[] = gs
         ? scoreboardSeatOrder(gameData, myUserId).map((userId): ScoreEntry => {
             const squad = fighters.filter(fighter => fighter.owner === userId);
-            const sub = mustering
-                ? gs.mustered.includes(userId) ? '✔ mustered' : userId === gameData?.currentTurn ? 'mustering' : 'waiting'
-                : `${squad.filter(isStanding).length}/${squad.length} standing`;
+            const sub = mustering ? musterSub(userId) : `${squad.filter(isStanding).length}/${squad.length} standing`;
             return {
                 id: userId,
                 name: playerName(userId),
@@ -135,7 +138,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 <GameFinishBanner
                     message={abandoned
                         ? abandoned.message
-                        : currentUserWon ? 'You held the field! 🎉' : `${nameForUserId(gameData, gameData?.winner)} held the field.`}
+                        : currentUserWon ? 'You held the field! 🎉' : `${winnerName} held the field.`}
                     gameId={gameId}
                     gameUrl="realmarena"
                     usernameList={usernameList}
@@ -155,7 +158,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             seats={seats}
                             colourFor={colourFor}
                             nameFor={playerName}
-                            selectedId={selectedId}
+                            selected={selected}
                             onSelect={id => setSelectedId(current => current === id ? null : id)}
                         />
                     </div>

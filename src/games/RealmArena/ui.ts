@@ -1,4 +1,4 @@
-// Pure presentation helpers for Realm Arena's board screen (AGENTS.md —
+// Pure presentation helpers for Realm Arena's board screen (ARCHITECTURE.md —
 // per-game presentation helpers live in games/<Game>/ui.ts). Readings of the
 // state the response already ships, never a rule: those are rules.ts's.
 
