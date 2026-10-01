@@ -935,6 +935,21 @@ Reviewers: `caveman`.
 
 Reviewers: `caveman`, `croupier`.
 
+*Filled in by PR 6:*
+
+- **The muster starts from the ready-made squad**, placed the way a timed-out
+  muster's is (§17.2), so a player happy with it musters in two taps. The
+  steppers can go over the budget while a squad is rebalanced, but the squad
+  can't be placed until it's back within it.
+- **Placing is tap to pick up, tap to put down.** A tap on one of your squad
+  picks it up and brings the view to it. The next tap on an empty square of
+  your zone moves it there, and a tap on another of your squad swaps the two.
+- **A squad left as it starts is no secret.** The ready-made squad and where
+  it stands are public, and so is the turn timer, so an opponent can tell
+  what a timed-out muster brought, and guess at a squad mustered untouched.
+  That's accepted: the seal keeps a squad a player chose from being
+  counter-picked, and the default is a starting point, not a hiding place.
+
 **PR 7 — Taking a turn.**
 
 1. Selecting a character shades its reach for 1–4 AP. Tapping a square
@@ -1044,3 +1059,4 @@ Realm, its sibling in the same world.
 | 0.8 | PR 2 fills in what §13 left open: each character's HP, Fireball's damage, how ranges and "next to" are measured, and the smaller cases listed under §13.6. |
 | 0.9 | PR 3 fills in what §17.2 left open: a sealed squad stays off the battlefield until every player has mustered, a turn begins on the hand-off, and a request keeps only what was checked. |
 | 1.0 | PR 5 fills in how the board shows the muster: the viewer's own sealed squad is drawn hollow where it will stand, and nobody else's is drawn at all. |
+| 1.1 | PR 6 fills in the muster: it starts from the ready-made squad, a squad is placed by picking a character up and putting it down, and a squad left as it starts is no secret. |

@@ -6,6 +6,8 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { IRealmArenaGameDataResponse } from "@/games/RealmArena/apiModels";
 import RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
+import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
+import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { centreHolders, isStanding } from "@/games/RealmArena/rules";
 import GameShell from "@/components/ui/GameShell";
@@ -17,15 +19,18 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { RealmArenaMuster } from "@/utils/apiModels/GameLogic";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 /**
- * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5), read-only
- * for now: the battlefield, the squads on it, the scores, the round and whose
- * turn it is. Tapping a character selects it, brings the view to it and shows
- * what it can do. Mustering (PR 6) and taking a turn (PR 7) act on this same
- * screen; replay and recap arrive with PR 8's adapter.
+ * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5): the
+ * battlefield, the squads on it, the scores, the round and whose turn it is.
+ * Tapping a character selects it, brings the view to it and shows what it can
+ * do. On their muster turn a player picks and places their squad here (PR 6);
+ * taking a turn (PR 7) acts on this same screen, and replay and recap arrive
+ * with PR 8's adapter.
  */
 export default function GameRealmArena({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -39,6 +44,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
     const [selectedId, setSelectedId] = useState<number | null>(null);
+    const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     const gs = gameData?.specificGameState;
     const complete = gameData?.complete ?? false;
@@ -58,6 +64,17 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const mustering = gs?.phase === 'muster';
     const fighters = gs?.fighters ?? [];
     const selected = fighters.find(fighter => fighter.id === selectedId);
+
+    const mySeat = seats.indexOf(myUserId);
+    const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, `${gameData?.currentTurn ?? ''}:${gs?.phase ?? ''}`);
+    const musterTurn = mustering && isMyTurn && !gs?.myMuster;
+    const placement = musterTurn ? draft.placement : null;
+    const muster = () => {
+        if (!placement) return;
+        const command = new RealmArenaMuster();
+        command.picks = placement.picks;
+        submitCommand(command, undefined, 'muster');
+    };
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
@@ -154,14 +171,32 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <RealmArenaBoard
                             field={field}
                             fighters={fighters}
-                            sealed={gs.myMuster}
+                            sealed={placement?.picks ?? gs.myMuster}
                             seats={seats}
                             colourFor={colourFor}
                             nameFor={playerName}
                             selected={selected}
                             onSelect={id => setSelectedId(current => current === id ? null : id)}
+                            placing={placement && { zone: draft.zone, selected: placement.selected, onTap: draft.tap }}
                         />
                     </div>
+
+                    {musterTurn && (
+                        <RealmArenaMusterSheet draft={draft} budget={gs.budget} onMuster={muster} pending={pendingTarget === 'muster'} />
+                    )}
+
+                    {/* Nothing about anyone else's squad is on the wire until
+                        every squad has mustered (§17.2), so there is nothing
+                        to show here but who is mustering. */}
+                    {mustering && !isMyTurn && !complete && mySeat >= 0 && (
+                        <div className="ag-section">
+                            <div className="ag-empty">
+                                {gs.myMuster
+                                    ? `Your squad is sealed. ${currentTurnName} is mustering, and you'll see each other's squads when they're done.`
+                                    : `${currentTurnName} is mustering. You muster next, and neither squad is seen until both have.`}
+                            </div>
+                        </div>
+                    )}
 
                     {selected && <RealmArenaFighterCard fighter={selected} ownerName={playerName(selected.owner)} />}
                 </>

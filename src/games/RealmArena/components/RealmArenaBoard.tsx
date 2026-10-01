@@ -38,6 +38,16 @@ interface RealmArenaBoardProps {
     selected: Fighter | undefined;
     /** Tapping a character selects it, and tapping it again lets it go. */
     onSelect: (fighterId: number) => void;
+    /** The viewer placing their squad (`sealed`) in their deployment zone, before the muster goes. */
+    placing?: Placing | null;
+}
+
+interface Placing {
+    zone: readonly Square[];
+    /** The index into `sealed` of the character picked up to move, if any. */
+    selected: number | null;
+    /** A tap on a square of the zone, whoever stands on it. */
+    onTap: (square: Square) => void;
 }
 
 interface FigureProps {
@@ -47,13 +57,16 @@ interface FigureProps {
     character: CharacterId | null;
     className?: string;
     fill?: string;
+    /** Ringed as the one selected. */
+    selected?: boolean;
 }
 
 /** A character's disc with its mark on it, a little above its square's centre to leave room for the HP bar beneath. */
-function Figure({ field, square, character, className = '', fill }: FigureProps) {
+function Figure({ field, square, character, className = '', fill, selected = false }: FigureProps) {
     const { x, y } = squareCentre(field, square);
     return (
         <>
+            {selected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
             <circle className={`ag-ra-figure ${className}`} cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS} fill={fill} />
             <text className="ag-ra-mark" x={x} y={y - FIGURE_LIFT}>{character ? CHARACTER_MARK[character] : '✕'}</text>
         </>
@@ -75,15 +88,18 @@ function Figure({ field, square, character, className = '', fill }: FigureProps)
  * ten squares across the column, and selecting a character brings the view to
  * it.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
     const viewBox = { width, height };
 
-    const focus: BoardZoomFocus | null = selected
-        ? { rect: focusOn(field, selected.square), key: `${selected.id}:${selected.square}` }
-        : null;
+    // A character picked up to place is brought close enough to tap a square beside it.
+    const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
+    const focusSquare = pickedUp?.square ?? selected?.square;
+    const focus: BoardZoomFocus | null = focusSquare === undefined ? null
+        : { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}` };
+    const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
@@ -127,9 +143,24 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     {sealed?.map((pick, index) => (
                         <g key={`sealed-${index}`} className="ag-ra-sealed">
                             <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
-                            <Figure field={field} square={pick.square} character={pick.character} />
+                            <Figure field={field} square={pick.square} character={pick.character} selected={placing?.selected === index} />
                         </g>
                     ))}
+
+                    {/* Over the squad being placed, so a tap on a character
+                        and a tap on an empty square both land here. */}
+                    {placing?.zone.map(square => {
+                        const rect = areaRect(field, [square]);
+                        const target = placing.selected !== null && !occupied.has(square);
+                        return (
+                            <rect
+                                key={`place-${square}`}
+                                className={`ag-ra-place${target ? ' ag-ra-place--target' : ''}`}
+                                {...rect}
+                                onClick={() => placing.onTap(square)}
+                            />
+                        );
+                    })}
 
                     {drawOrder.map(fighter => {
                         const { x, y } = squareCentre(field, fighter.square);
@@ -147,8 +178,8 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                 onClick={() => onSelect(fighter.id)}
                                 title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...status].join(' · ')}
                             >
-                                {isSelected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
                                 <Figure
+                                    selected={isSelected}
                                     field={field}
                                     square={fighter.square}
                                     character={standing ? fighter.character : null}
