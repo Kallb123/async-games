@@ -1,7 +1,7 @@
 # Achievements — plan
 
-**Status: shipped for the platform, Dice Cities and Settlements & Cities; PR 4
-brings the rest.** PRs 1–3 of §13 are on `main`: the shapes, the registry, the
+**Status: shipped for the platform, Dice Cities, Settlements & Cities and Race
+Cars; PR 4 brings the rest.** PRs 1–3 of §13 are on `main`: the shapes, the registry, the
 `AchievementUnlock` collection, the two-turn "played" rule, both judging
 checkpoints, the reads, the toaster, the pushes, the profile and results-page
 sections, and the first nine achievements. What PR 3 settled differently from
@@ -1811,7 +1811,8 @@ Easiest first:
 
 1. **Snakes & Ladders.** Its null view is pinned as an exact key set.
 2. **Solitaire.** Career only, since it has no replay adapter, so no pin.
-3. **Race Cars.** Already pinned.
+3. **Race Cars.** Already pinned. Done: six, five of them real racing moments
+   (`src/games/RaceCars/achievements.ts` says which).
 4. **World Domination.** Already pinned.
 5. **Train Time.** Already pinned.
 6. **Smartthink.** Its null view is pinned with a code sentinel (424242) that no
