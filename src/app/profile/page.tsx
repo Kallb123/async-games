@@ -26,8 +26,8 @@ import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/sta
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useClerk } from "@clerk/nextjs";
 import moment from 'moment';
-import { usePathname, useRouter } from 'next/navigation';
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from "react";
 
 interface IFriendsResponse {
     friends: IFriendRequestResponse[];
@@ -35,7 +35,16 @@ interface IFriendsResponse {
     outgoingRequests: IFriendRequestResponse[];
 }
 
-export default function Profile() {
+// useSearchParams needs a Suspense boundary above it for the static build.
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={null}>
+            <Profile />
+        </Suspense>
+    );
+}
+
+function Profile() {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
@@ -49,7 +58,10 @@ export default function Profile() {
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
-    const [tab, setTab] = useState<"results" | "achievements" | "friends">("results");
+    // `?tab=friends` is how the dashboard's Friends button lands here.
+    const [tab, setTab] = useState<"results" | "achievements" | "friends">(
+        useSearchParams().get("tab") === "friends" ? "friends" : "results"
+    );
 
     const friendsData = useRefreshableData<IFriendsResponse>('/api/friends', FRIEND_EVENTS);
     const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[]; achievements?: IAchievementUnlock[] }>('/api/stats');
