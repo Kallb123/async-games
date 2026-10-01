@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACResources, ISACRollChange } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, cloneResources, cloneTradeOffers, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacGather, sacResourceCount } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, cloneResources, cloneTradeOffers, SAC_RESOURCES, TERRAIN_TO_RESOURCE, UNDO_STACK_DEPTH, UNDO_WINDOW_MS, cloneSACState, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge, robberVictimCandidates, sacGather, sacResourceCount, sacTradedIn } from "@/games/SettlementsAndCities/board";
 import { sacAmountsText, sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import { SAC_MAX_OFFERS_POSTED_PER_TURN, SAC_MAX_OPEN_OFFERS, sacCanCover, sacMainTurnPlayer, sacOfferEndsThisTurn, sacTradeSide, sacTradingOpen, sacValidTradeTerms } from "@/games/SettlementsAndCities/trading";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -1146,7 +1146,7 @@ export class SACMaritimeTrade implements IGameCommand {
 
         ps.resources[this.offerResource] -= ratio;
         ps.resources[this.wantResource]++;
-        if (this.wantResource === 'wool') ps.woolTraded = (ps.woolTraded ?? 0) + 1;
+        sacTradedIn(ps, { [this.wantResource]: 1 });
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
         return sacFinishTurn(sacData, this.senderId, this);
@@ -1267,8 +1267,8 @@ export class SACAcceptTrade implements IGameCommand {
             proposer.resources[resource] += offer.want[resource] - offer.give[resource];
             accepter.resources[resource] += offer.give[resource] - offer.want[resource];
         }
-        proposer.woolTraded = (proposer.woolTraded ?? 0) + offer.want.wool;
-        accepter.woolTraded = (accepter.woolTraded ?? 0) + offer.give.wool;
+        sacTradedIn(proposer, offer.want);
+        sacTradedIn(accepter, offer.give);
         this.settled = { proposerId: offer.proposerId, give: cloneResources(offer.give), want: cloneResources(offer.want) };
 
         const onTurnOf = sacData.currentTurn !== this.senderId ? sacData.currentTurn : undefined;

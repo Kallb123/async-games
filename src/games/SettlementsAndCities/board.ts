@@ -89,10 +89,12 @@ export interface ISACPlayerState {
     // resources-by-player table. Optional because a game started before it
     // existed has no such field until its first gather (see sacGather).
     resourcesGatheredByType?: ISACResources;
-    // Wool taken in by maritime or player trade, which sacGather doesn't count.
-    // Together with resourcesGatheredByType.wool it answers "has this player
-    // ever held wool?" for No Animals Were Harmed. Optional like the split above.
+    // Wool and grain taken in by maritime or player trade, which sacGather
+    // doesn't count. Together with resourcesGatheredByType they answer "has this
+    // player ever held wool / grain?" for No Animals Were Harmed and Gluten
+    // Free (see sacHasHeld). Optional like the split above.
     woolTraded?: number;
+    grainTraded?: number;
     robberUses: number;
 }
 
@@ -336,6 +338,7 @@ function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
         resourcesGathered: ps.resourcesGathered,
         resourcesGatheredByType: ps.resourcesGatheredByType ? cloneResources(ps.resourcesGatheredByType) : undefined,
         woolTraded: ps.woolTraded,
+        grainTraded: ps.grainTraded,
         robberUses: ps.robberUses,
     };
 }
@@ -351,6 +354,21 @@ export function sacGather(ps: ISACPlayerState, resource: SAC_Resource, amount: n
     // `?? 0`: Mongoose hands back the nested object with every count
     // undefined on a game saved before the field existed.
     ps.resourcesGatheredByType[resource] = (ps.resourcesGatheredByType[resource] ?? 0) + amount;
+}
+
+// Counts what a maritime or player trade brought into a hand, for the
+// resources an achievement asks "ever held?" about (see sacHasHeld). Every
+// other resource a trade moves needs no tally: the hand itself is enough.
+export function sacTradedIn(ps: ISACPlayerState, received: Partial<ISACResources>): void {
+    ps.woolTraded = (ps.woolTraded ?? 0) + (received.wool ?? 0);
+    ps.grainTraded = (ps.grainTraded ?? 0) + (received.grain ?? 0);
+}
+
+// Whether a resource has ever come into this hand, by any route — gathered
+// (sacGather) or traded for (sacTradedIn). Only tallied for wool and grain.
+export function sacHasHeld(ps: ISACPlayerState, resource: 'wool' | 'grain'): boolean {
+    const traded = resource === 'wool' ? ps.woolTraded : ps.grainTraded;
+    return (ps.resourcesGatheredByType?.[resource] ?? 0) + (traded ?? 0) > 0;
 }
 
 // Deep-clones a SAC game state into independent plain objects. The player map
@@ -697,6 +715,7 @@ export function createInitialPlayerState(): ISACPlayerState {
         resourcesGathered: 0,
         resourcesGatheredByType: { ...NO_RESOURCES },
         woolTraded: 0,
+        grainTraded: 0,
         robberUses: 0,
     };
 }

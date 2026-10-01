@@ -206,19 +206,26 @@ describe("Settlements & Cities' response", () => {
         expect(wire.playerStates.u2.resources).toBeUndefined();
     });
 
-    it("holds back whether a seat has ever had wool until the game is complete", () => {
+    it("holds back whether a seat has ever had wool or grain, and its VP cards, until the game is complete", () => {
         const gs = sacState();
         gs.playerStates.get("u2")!.woolTraded = 1;
+        gs.playerStates.get("u2")!.grainTraded = 1;
         const live = [null, "u1", "u2"].map(viewer => sacStateToResponse(gs, NAMES, viewer));
         const done = [null, "u1", "u2"].map(viewer => sacStateToResponse(gs, NAMES, viewer, null, true));
 
         // Not under the key at all, for any viewer, while the game is on.
         for (const response of live) {
-            expect(JSON.stringify(response)).not.toContain("hasHeldWool");
+            const wire = JSON.stringify(response);
+            expect(wire).not.toContain("hasHeldWool");
+            expect(wire).not.toContain("hasHeldGrain");
+            expect(wire).not.toContain("victoryPointCards");
         }
-        // Then the same answer for every viewer once it is over.
+        // Then the same answer for every viewer once it is over: Bob's two
+        // victory-point cards are revealed to the whole table.
         for (const response of done) {
             expect(response.playerStates.u2.hasHeldWool).toBe(true);
+            expect(response.playerStates.u2.hasHeldGrain).toBe(true);
+            expect(response.playerStates.u2.victoryPointCards).toBe(2);
         }
     });
 
@@ -501,7 +508,7 @@ describe("Dice Cities' response to a viewer with no seat", () => {
         "hasReRolled", "hasRolled", "playerStates", "theme",
     ];
     const DC_PLAYER_KEYS = [
-        "bonusDiningAndStore", "cards", "doubleUnlocked", "harbourUnlocked", "lastDiceSelection", "money",
+        "acquiredCards", "bonusDiningAndStore", "cards", "doubleUnlocked", "harbourUnlocked", "lastDiceSelection", "money",
         "oneReroll", "rerollDoubles", "totalCoinsEarned", "userId", "username",
     ];
 

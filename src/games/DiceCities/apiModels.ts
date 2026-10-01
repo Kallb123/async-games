@@ -52,7 +52,14 @@ export interface IDiceCitiesPlayerStateResponse {
     oneReroll: boolean,
     /** Docks: the fifth landmark. Never part of the win condition. */
     harbourUnlocked: boolean,
-    lastDiceSelection: 1 | 2
+    lastDiceSelection: 1 | 2,
+    /**
+     * Every card this player has bought or been swapped since the opening
+     * deal, once each, whether or not they still hold it. Public like the rest
+     * of the city - every purchase and swap is made in the open. Undefined for
+     * a game that started before it was tallied.
+     */
+    acquiredCards?: uuidString[]
 }
 
 export interface IDiceCitiesGameStateResponse {

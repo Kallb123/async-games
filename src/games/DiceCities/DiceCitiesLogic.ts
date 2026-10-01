@@ -254,14 +254,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         bankCard.amount--;
-        if (currentOwned) {
-            currentOwned.amount++;
-        } else {
-            currentPlayerState.cards.push({
-                amount: 1,
-                card: this.cardId
-            });
-        }
+        addCardToPlayerState(this.cardId, currentPlayerState);
 
         dcGameData.specificGameState.hasRolled = false;
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${logNames(dcGameData).cards[this.cardId].title}`));
@@ -961,6 +954,7 @@ function clonePlayerState(ps: IDiceCitiesPlayerState): IDiceCitiesPlayerState {
         oneReroll: ps.oneReroll,
         harbourUnlocked: ps.harbourUnlocked,
         lastDiceSelection: ps.lastDiceSelection,
+        acquiredCards: ps.acquiredCards ? [...ps.acquiredCards] : undefined,
     };
 }
 
@@ -1039,7 +1033,14 @@ function finishBusinessCentreSwap(
     };
 }
 
+// Every way a card comes into a city - a purchase or a Business Center swap -
+// goes through here, so it is also where the city's acquisitions are tallied.
 function addCardToPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {
+    // A game that predates the tally keeps no partial one: it would read as
+    // "never acquired" for every card bought before it began.
+    if (playerState.acquiredCards && !playerState.acquiredCards.includes(cardId)) {
+        playerState.acquiredCards.push(cardId);
+    }
     const cardOwned = playerState.cards.find(cc => cc.card === cardId);
     if (cardOwned) {
         cardOwned.amount++;
