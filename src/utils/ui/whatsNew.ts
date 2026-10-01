@@ -78,7 +78,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "New achievements for Settlements & Cities and Dice Cities",
-                detail: "Win a Settlements & Cities game without building a road after setup, or a Dice Cities Docks game as the only player without the Dock.",
+                detail: "Win a Settlements & Cities game without building a road after setup, or without gathering or trading for any wool, or a Dice Cities Docks game as the only player without the Dock.",
             },
             {
                 title: "Profile tabs",

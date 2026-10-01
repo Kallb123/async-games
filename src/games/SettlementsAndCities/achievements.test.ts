@@ -55,4 +55,20 @@ describe("Settlements & Cities' achievements", () => {
         expect(check(none, seat("u1", "loss"))).toBe(false);
         expect(check(built, seat("u1", "win"))).toBe(false);
     });
+
+    it("No Animals Were Harmed wants the win and a player who never held wool, however it came", () => {
+        const check = endCheck("settlementsandcities.no-animals-harmed");
+        const viewWith = (overrides: Parameters<typeof player>[0]): ISACSpecificGameStateResponse => {
+            const state = makeState({ playerStates: new Map([["u1", player(overrides)], ["u2", player()]]) });
+            return tableViewOf("SettlementsAndCitiesGameType", state, { u1: "Alice", u2: "Bob" });
+        };
+        const clean = viewWith({});
+        const gathered = viewWith({ resourcesGatheredByType: { lumber: 0, wool: 2, grain: 0, brick: 0, ore: 0 } });
+        const traded = viewWith({ woolTraded: 1 });
+
+        expect(check(clean, seat("u1", "win"))).toBe(true);
+        expect(check(clean, seat("u1", "loss"))).toBe(false);
+        expect(check(gathered, seat("u1", "win"))).toBe(false);
+        expect(check(traded, seat("u1", "win"))).toBe(false);
+    });
 });

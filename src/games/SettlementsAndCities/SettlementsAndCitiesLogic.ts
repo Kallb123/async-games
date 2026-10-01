@@ -1146,6 +1146,7 @@ export class SACMaritimeTrade implements IGameCommand {
 
         ps.resources[this.offerResource] -= ratio;
         ps.resources[this.wantResource]++;
+        if (this.wantResource === 'wool') ps.woolTraded = (ps.woolTraded ?? 0) + 1;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
         return sacFinishTurn(sacData, this.senderId, this);
@@ -1266,6 +1267,8 @@ export class SACAcceptTrade implements IGameCommand {
             proposer.resources[resource] += offer.want[resource] - offer.give[resource];
             accepter.resources[resource] += offer.give[resource] - offer.want[resource];
         }
+        proposer.woolTraded = (proposer.woolTraded ?? 0) + offer.want.wool;
+        accepter.woolTraded = (accepter.woolTraded ?? 0) + offer.give.wool;
         this.settled = { proposerId: offer.proposerId, give: cloneResources(offer.give), want: cloneResources(offer.want) };
 
         const onTurnOf = sacData.currentTurn !== this.senderId ? sacData.currentTurn : undefined;

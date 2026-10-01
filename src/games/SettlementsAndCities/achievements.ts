@@ -18,6 +18,10 @@ function roadsOf(view: ISACSpecificGameStateResponse, userId: string): number {
     return view.edges.filter(edge => edge.hasRoad && edge.owner === userId).length;
 }
 
+function hasHeldWool(view: ISACSpecificGameStateResponse, userId: string): boolean {
+    return view.playerStates[userId]?.hasHeldWool ?? true;
+}
+
 function citiesOf(view: ISACSpecificGameStateResponse, userId: string): number {
     return view.vertices.filter(vertex => vertex.building === "city" && vertex.owner === userId).length;
 }
@@ -65,6 +69,19 @@ export const achievements: GameAchievement<ISACSpecificGameStateResponse>[] = [
             kind: "match",
             at: "end",
             check: (view, { userId, outcome }) => outcome === "win" && roadsOf(view, userId) <= SETUP_ROADS,
+        },
+    },
+    {
+        // Gathering (production, setup, steals, Year of Plenty, Monopoly) and
+        // trading both count; the flag is public, so a mid-game check stays safe.
+        id: "settlementsandcities.no-animals-harmed",
+        title: "No Animals Were Harmed",
+        icon: "🐑",
+        description: "Win a game without gathering or trading for any wool.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { userId, outcome }) => outcome === "win" && !hasHeldWool(view, userId),
         },
     },
 ];

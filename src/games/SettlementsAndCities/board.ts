@@ -89,6 +89,10 @@ export interface ISACPlayerState {
     // resources-by-player table. Optional because a game started before it
     // existed has no such field until its first gather (see sacGather).
     resourcesGatheredByType?: ISACResources;
+    // Wool taken in by maritime or player trade, which sacGather doesn't count.
+    // Together with resourcesGatheredByType.wool it answers "has this player
+    // ever held wool?" for No Animals Were Harmed. Optional like the split above.
+    woolTraded?: number;
     robberUses: number;
 }
 
@@ -331,6 +335,7 @@ function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
         devCardsBought: ps.devCardsBought,
         resourcesGathered: ps.resourcesGathered,
         resourcesGatheredByType: ps.resourcesGatheredByType ? cloneResources(ps.resourcesGatheredByType) : undefined,
+        woolTraded: ps.woolTraded,
         robberUses: ps.robberUses,
     };
 }
@@ -691,6 +696,7 @@ export function createInitialPlayerState(): ISACPlayerState {
         devCardsBought: 0,
         resourcesGathered: 0,
         resourcesGatheredByType: { ...NO_RESOURCES },
+        woolTraded: 0,
         robberUses: 0,
     };
 }
