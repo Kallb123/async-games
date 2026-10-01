@@ -1,8 +1,9 @@
 import type { ISolitaireGameData, ISolitaireGameState, ISolitaireUndoSnapshot } from "@/games/Solitaire/SolitaireModels";
-import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
+import { markDirty } from "@/utils/games/markDirty";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { ICard, rankLabel, suitSymbol } from "@/utils/games/Cards";
 import { playerHistory } from "@/utils/games/history";
@@ -51,14 +52,6 @@ export class SolitaireGameType implements IGameType {
         }
         return false;
     }
-}
-
-// Mongoose doesn't deep-track mutations inside Schema.Types.Mixed fields (only
-// top-level reassignment), so every command must explicitly flag the whole
-// specificGameState subtree dirty before the route's gameData.save() - same
-// reason the command route itself calls markModified for commandHistory.
-function markDirty(gameData: IGameData) {
-    (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
 }
 
 // Deep-clones the board-relevant (undoable) fields for the undo stack.

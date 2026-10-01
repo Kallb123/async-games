@@ -35,7 +35,10 @@ export interface IRealmArenaSpecificGameState {
     map: RealmArenaMapId;
     /**
      * The players in seat order: `gameState.turnOrder`, copied in so the
-     * response can be built from this state alone, as a replay builds it.
+     * response can be built from this state alone. A replay adapter's
+     * `toResponseState` is handed the state but not the turn order
+     * (utils/games/replay.ts), and the response needs it for the budget, the
+     * battle length and who has mustered.
      */
     seats: string[];
     phase: RealmArenaPhase;

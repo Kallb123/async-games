@@ -293,13 +293,11 @@ registerTurnTimeoutAdapter({
         const seat = data.gameState.turnOrder.indexOf(userId);
         if (seat < 0) return null;
         if (gs.phase === "battle") return new RealmArenaEndTurn();
-        const squad = REALM.readyMade[data.gameState.turnOrder.length as PlayerCount];
-        if (!squad) return null;
         const muster = new RealmArenaMuster();
         try {
-            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, squad);
+            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, REALM.readyMade[data.gameState.turnOrder.length as PlayerCount]);
         } catch {
-            // Only a map with no room for the squad, which can't be played:
+            // Only a party or a map with no room for the squad, which can't be played:
             // declined, so the missed turn still counts towards abandoning it.
             return null;
         }

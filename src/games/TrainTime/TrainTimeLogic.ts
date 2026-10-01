@@ -28,10 +28,11 @@ import {
 } from "@/games/TrainTime/board";
 import { holdOpenFor, undoEntryFor } from "@/utils/games/undo";
 import { pluralize } from "@/utils/ui/text";
-import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
+import { markDirty } from "@/utils/games/markDirty";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { playerHistory } from "@/utils/games/history";
 import { activeTurnOrder, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
@@ -42,13 +43,6 @@ import { deleteFromMongoMap, mongoMap } from "@/utils/games/mongoMaps";
 // ═══════════════════════════════════════════════════════════════════════════
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
-
-// routeOwners / finalRoundPending are Schema.Types.Mixed, and Mongoose only
-// tracks top-level reassignment of those — same reason Solitaire flags its
-// board dirty after every command.
-function markDirty(gameData: IGameData) {
-    (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
-}
 
 // Through mongoMap, like the dropout adapter below: TrainTimeUndo assigns the
 // map back from a snapshot that was stored as Mixed, and nothing here should

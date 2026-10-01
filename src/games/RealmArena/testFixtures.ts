@@ -9,7 +9,7 @@ import { runCommand } from "@/utils/games/commandPipeline";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
 import { REALM } from "./characters";
 import { battlefieldById } from "./maps";
-import { RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
+import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
 import { readyMadeMuster, type Action, type BattleState, type MusterPick } from "./rules";
 
@@ -60,6 +60,4 @@ export async function musterBoth(game: RealmArenaTestGame): Promise<void> {
     }
 }
 
-export function battleOf(game: RealmArenaTestGame): BattleState {
-    return { field: battlefieldById(game.specificGameState.map), fighters: game.specificGameState.fighters };
-}
+export const battleOf = (game: RealmArenaTestGame): BattleState => battleOfState(game.specificGameState);

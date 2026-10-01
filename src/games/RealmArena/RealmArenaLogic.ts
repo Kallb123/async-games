@@ -1,7 +1,10 @@
-import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
+import { markDirty } from "@/utils/games/markDirty";
+import { recordedRolls } from "@/utils/games/recordedRolls";
+import { nextActivePlayer } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
@@ -22,7 +25,6 @@ import {
     type BattleState,
     type Fighter,
     type MusterPick,
-    type Roll,
 } from "@/games/RealmArena/rules";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
@@ -44,16 +46,8 @@ import { pluralize } from "@/utils/ui/text";
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
-// Mongoose doesn't track mutations inside Schema.Types.Mixed (the fighters,
-// the musters, the scores), only reassignment of the path — see
-// docs/new-game.md's Mixed-field gotcha. Every command, and the hand-off in
-// CheckEndTurn, ends here.
-function markDirty(gameData: IGameData): void {
-    (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
-}
-
 /** The battle as rules.ts reads it. */
-function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
+export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
     return { field: battlefieldById(gs.map), fighters: (gs.fighters ?? []).map(storedFighter) };
 }
 
@@ -151,8 +145,7 @@ export class RealmArenaGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IRealmArenaGameData;
-        const order = data.gameState.turnOrder;
-        const next = order[(order.indexOf(data.currentTurn) + 1) % order.length];
+        const next = nextActivePlayer(data, data.currentTurn);
         data.currentTurn = next;
         const gs = data.specificGameState;
         if (gs.phase === "battle") {
@@ -222,8 +215,8 @@ export class RealmArenaMuster implements IGameCommand {
 
         if (musters.length === order.length) {
             // Every squad joins the battlefield at once, ids in seat order.
-            gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, ...pick })))
-                .map(({ owner, character, square }, id) => newFighter(id, owner, character, square));
+            gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
@@ -303,22 +296,11 @@ export class RealmArenaAct implements IGameCommand {
         if ("refused" in check(battle, this.senderId, this.action)) return INVALID;
         const action = cleanAction(this.action);
 
-        const recorded = this.recordedRolls;
-        const rolls: number[] = [];
-        let next = 0;
-        const roll: Roll = () => {
-            if (recorded) {
-                if (next >= recorded.length) throw new Error("RealmArenaAct: ran out of recorded rolls");
-                rolls.push(recorded[next++]);
-            } else {
-                rolls.push(randomInt(ROLL_SIDES) + 1);
-            }
-            return rolls[rolls.length - 1];
-        };
+        const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
         const { fighters, events } = act(battle, this.senderId, action, roll);
 
         this.action = action;
-        this.recordedRolls = rolls;
+        this.recordedRolls = used;
         gs.fighters = fighters;
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, narrate(events, battle.fighters, this.senderId)));

@@ -1,4 +1,5 @@
 import type { IGameData } from "../mongodb/GameData";
+import { markDirty } from "./markDirty";
 import type { uuidString } from "../apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand } from "../apiModels/gameCommand";
 import { serializable } from "../apiModels/Serialisable";
@@ -150,7 +151,7 @@ export class PlayerDropped implements IGameCommand {
         adapter.dropPlayer(gameData, this.senderId);
         // Every adapter edits specificGameState in place, often deep inside a
         // Map; a replay's plain object has no markModified to call.
-        (gameData as { markModified?: (path: string) => void }).markModified?.('specificGameState');
+        markDirty(gameData);
         gameData.gameState.history.unshift(playerHistory(this.senderId,
             `missed ${MAX_CONSECUTIVE_MISSED_TURNS} turns in a row and has left the game — play carries on without them`));
 

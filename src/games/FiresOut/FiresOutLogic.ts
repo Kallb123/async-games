@@ -1,7 +1,9 @@
-import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
+import { markDirty } from "@/utils/games/markDirty";
+import { recordedRolls } from "@/utils/games/recordedRolls";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, perimeterNeighbours, spacePhrase, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
@@ -57,15 +59,6 @@ import { DiceRoll } from "@/utils/games/DiceRoll";
 // deterministic (§17.4).
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
-
-// Mongoose doesn't deep-track mutations inside Schema.Types.Mixed fields
-// (only top-level reassignment), so every command must explicitly flag the
-// whole specificGameState subtree dirty before the route's gameData.save() —
-// see docs/new-game.md's Mixed-field gotcha, and Solitaire/TrainTime's own
-// markDirty for the same reason.
-function markDirty(gameData: IGameData): void {
-    (gameData as unknown as Partial<IGameDataDocument>).markModified?.('specificGameState');
-}
 
 // ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
 //
@@ -526,15 +519,8 @@ function applyDeckGun(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
 // (gameCommand.ts) for why a live request can never supply `recorded…`
 // itself.
 function makeNextRoll(recorded: number[] | undefined): { nextRoll: NextRoll; used: number[] } {
-    const used: number[] = [];
-    let cursor = 0;
-    const nextRoll: NextRoll = sides => {
-        const roll = recorded && cursor < recorded.length ? recorded[cursor] : DiceRoll(sides);
-        cursor++;
-        used.push(roll);
-        return roll;
-    };
-    return { nextRoll, used };
+    const { roll, used } = recordedRolls(recorded, (sides: number) => DiceRoll(sides));
+    return { nextRoll: roll, used };
 }
 
 // §17.6 step 7: what an 'endTurn' command's Advance Fire did, alongside the
