@@ -121,9 +121,11 @@ export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[])
  * followed too: the watcher spent its banked AP.
  */
 export function actionSquares(before: readonly Fighter[], after: readonly Fighter[]): Square[] {
+    const changed = (was: Fighter, now: Fighter) => was.square !== now.square || was.hp !== now.hp || was.ap !== now.ap
+        || was.banked !== now.banked || was.hunkered !== now.hunkered || was.shieldWall !== now.shieldWall;
     return after.flatMap(fighter => {
         const was = before.find(one => one.id === fighter.id);
-        if (!was || JSON.stringify(was) === JSON.stringify(fighter)) return [];
+        if (!was || !changed(was, fighter)) return [];
         return was.square === fighter.square ? [fighter.square] : [was.square, fighter.square];
     });
 }
