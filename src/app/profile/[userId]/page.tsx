@@ -4,12 +4,13 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import AchievementsSection from "@/components/ui/AchievementsSection";
 import GameStatsList from "@/components/ui/GameStatsList";
 import BackLink from "@/components/ui/BackLink";
+import Tabs, { TabPanel } from "@/components/ui/Tabs";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IProfileUser } from "@/app/api/profile/[userId]/route";
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { profileHeading } from "@/utils/ui/players";
@@ -28,6 +29,7 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
     const { userId } = use(params);
     const { user } = useAuthGuard();
     const router = useRouter();
+    const [tab, setTab] = useState<"results" | "achievements">("results");
 
     const { data, isLoading, isRefreshing, status } = useRefreshableData<IProfileResponse>(`/api/profile/${userId}`);
 
@@ -67,14 +69,28 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
                         {/* Identity */}
                         <ProfileIdentity {...heading} imageUrl={profileUser?.imageUrl} />
 
-                        {/* Recent form */}
-                        <RecentFormSection matches={recentMatches} isLoading={isLoading} isRefreshing={isRefreshing} highlightShared />
+                        <Tabs
+                            label="Profile sections"
+                            value={tab}
+                            onChange={setTab}
+                            tabs={[
+                                { id: "results", label: "Results" },
+                                { id: "achievements", label: "Achievements" },
+                            ]}
+                        />
 
-                        {/* Match outcome history, by game */}
-                        <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+                        <TabPanel id="results" active={tab}>
+                            {/* Recent form */}
+                            <RecentFormSection matches={recentMatches} isLoading={isLoading} isRefreshing={isRefreshing} highlightShared />
 
-                        {/* Their achievements, read-only */}
-                        <AchievementsSection unlocks={data?.achievements ?? []} byGame={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+                            {/* Match outcome history, by game */}
+                            <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+                        </TabPanel>
+
+                        <TabPanel id="achievements" active={tab}>
+                            {/* Their achievements, read-only */}
+                            <AchievementsSection unlocks={data?.achievements ?? []} byGame={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+                        </TabPanel>
                         <FcmTokenComp />
                     </>
                 )}

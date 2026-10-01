@@ -31,7 +31,7 @@ interface AppRailProps {
 // destinations, so nothing is listed twice.
 const NAV = [
     { href: "/", label: "Home", glyph: "🏠" },
-    { href: "/profile", label: "Friends", glyph: "👥" },
+    { href: "/profile?tab=friends", label: "Friends", glyph: "👥" },
     { href: "/games/completed", label: "Finished", glyph: "🏁" },
 ];
 
@@ -104,7 +104,7 @@ export default function AppRail({ myTurn = [], theirTurn = [], worlds = [], busy
 
                 <nav className="ag-rail-nav" aria-label="Sections">
                     {NAV.map((item) => {
-                        const current = pathname === item.href;
+                        const current = pathname === item.href.split("?")[0];
                         return (
                             <Link
                                 key={item.href}

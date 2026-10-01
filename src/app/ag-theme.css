@@ -776,6 +776,36 @@ a.ag-list-row, a.ag-list-row-main {
     font-weight: 800;
 }
 
+/* Page tabs (profile) */
+.ag-tabs {
+    display: flex;
+    border-bottom: 1.5px solid var(--ag-line);
+}
+.ag-tab {
+    flex: 1;
+    background: none;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1.5px;
+    padding: 10px 6px;
+    font: 700 13px var(--ag-font);
+    color: var(--ag-ink-soft);
+    cursor: pointer;
+}
+.ag-tab--active {
+    color: var(--ag-ink);
+    border-bottom-color: var(--ag-terracotta);
+    font-weight: 800;
+}
+.ag-tab-badge {
+    margin-left: 6px;
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 1px 7px;
+    font: 800 11px var(--ag-font);
+}
+
 /* Person chip (avatar + name) used in setup */
 .ag-person-chip {
     display: inline-flex;

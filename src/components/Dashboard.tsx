@@ -77,7 +77,7 @@ export default function Dashboard() {
                             <div className="ag-cta-sub">Pick from the library</div>
                         </div>
                     </Link>
-                    <Link href="/profile" aria-label="Your profile" className="ag-cta" style={{ border: "2px solid var(--ag-dark)", color: "var(--ag-ink)" }}>
+                    <Link href="/profile?tab=friends" aria-label="Your friends" className="ag-cta" style={{ border: "2px solid var(--ag-dark)", color: "var(--ag-ink)" }}>
                         <div className="ag-cta-main">
                             <div className="ag-cta-title">Friends</div>
                             <div className="ag-cta-sub">Challenge someone</div>
