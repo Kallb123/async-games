@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, type CharacterId } from "./characters";
-import { RealmArenaGameDataModel } from "./RealmArenaModels";
+import { buildInitialRealmArenaState, RealmArenaGameDataModel } from "./RealmArenaModels";
+import { meta } from "./meta";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { RealmArenaAct, RealmArenaMuster, type IRealmArenaActOutcome } from "./RealmArenaLogic";
 import {
@@ -27,6 +28,18 @@ async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
 }
 
 const own = (game: RealmArenaTestGame, player: string) => game.specificGameState.fighters.filter(one => one.owner === player);
+
+describe("setting up a match", () => {
+    // The setup routes bound the party by `meta` alone, but the map is what
+    // can seat it: a party the map has no deployment zone for would be
+    // accepted, then fail to start every time its last player accepted.
+    it("starts a battle for every party size the setup routes accept", () => {
+        for (let size = meta.minPlayers; size <= meta.maxPlayers; size++) {
+            const seats = Array.from({ length: size }, (_, seat) => `player${seat}`);
+            expect(() => buildInitialRealmArenaState(seats), `${size} players`).not.toThrow();
+        }
+    });
+});
 
 describe("the muster (§17.2)", () => {
     it("goes in seat order, one turn each, and then the battle begins on seat 0's turn", async () => {
