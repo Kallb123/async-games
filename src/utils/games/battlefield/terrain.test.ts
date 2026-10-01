@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBattlefield, coordsOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { buildBattlefield, coordsOf, distance, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
 
 const map = (overrides: Partial<BattlefieldMap>): BattlefieldMap => ({
     name: "Test field",
@@ -74,5 +74,16 @@ describe("squareAt / coordsOf", () => {
         expect(squareAt(field, -1, 0)).toBeUndefined();
         expect(squareAt(field, 4, 0)).toBeUndefined();
         expect(squareAt(field, 0, 3)).toBeUndefined();
+    });
+});
+
+describe("distance", () => {
+    const field = buildBattlefield(map({ rows: ["....", "....", "...."] }));
+
+    it("measures centre to centre, as the crow flies", () => {
+        expect(distance(field, 0, 3)).toBe(3);
+        expect(distance(field, 0, 9)).toBe(Math.hypot(1, 2));
+        expect(distance(field, 9, 0)).toBe(distance(field, 0, 9));
+        expect(distance(field, 5, 5)).toBe(0);
     });
 });

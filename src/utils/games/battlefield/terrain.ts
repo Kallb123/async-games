@@ -135,3 +135,13 @@ export function isNeighbour(field: Pick<Battlefield, "width">, a: Square, b: Squ
     const one = coordsOf(field, a), other = coordsOf(field, b);
     return Math.max(Math.abs(one.col - other.col), Math.abs(one.row - other.row)) === 1;
 }
+
+/**
+ * How far apart two squares' centres are, in squares, as the crow flies — so
+ * a range of 10 reaches out in a circle, not a square. What a weapon's range
+ * and an ability's reach are measured in.
+ */
+export function distance(field: Pick<Battlefield, "width">, a: Square, b: Square): number {
+    const one = coordsOf(field, a), other = coordsOf(field, b);
+    return Math.hypot(one.col - other.col, one.row - other.row);
+}
