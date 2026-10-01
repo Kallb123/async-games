@@ -9,7 +9,7 @@ import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { POINTS_BUDGET, type PlayerCount } from "./characters";
 import { battlefieldById, DEFAULT_MAP, type RealmArenaMapId } from "./maps";
-import { battleRounds, type Fighter, type MusterPick } from "./rules";
+import { battleRounds, storedFighter, type Fighter, type MusterPick } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "./apiModels";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33,6 +33,11 @@ export interface IRealmArenaMuster {
 
 export interface IRealmArenaSpecificGameState {
     map: RealmArenaMapId;
+    /**
+     * The players in seat order: `gameState.turnOrder`, copied in so the
+     * response can be built from this state alone, as a replay builds it.
+     */
+    seats: string[];
     phase: RealmArenaPhase;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
@@ -45,7 +50,7 @@ export interface IRealmArenaSpecificGameState {
     fighters: Fighter[];
     /** The sealed squads, in seat order, while the muster lasts; emptied as the battle begins. */
     musters: IRealmArenaMuster[];
-    /** By userId, every player from 0 at the start — an empty object would be dropped on save. */
+    /** By userId, every player from 0 at the start — an empty object would be dropped when the document is first inserted. */
     scores: Record<string, number>;
 }
 
@@ -114,6 +119,7 @@ export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpe
     }
     return {
         map: DEFAULT_MAP,
+        seats: [...turnOrder],
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -142,6 +148,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
     {
         specificGameState: {
             map: String,
+            seats: [String],
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
@@ -170,7 +177,7 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, doc.gameState.turnOrder, viewerId),
+        specificGameState: gameStateToModel(doc.specificGameState, viewerId),
     };
 };
 
@@ -186,10 +193,10 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
  */
 export function gameStateToModel(
     gs: IRealmArenaSpecificGameState,
-    turnOrder: readonly string[],
     viewerId: string | null,
 ): IRealmArenaSpecificGameStateResponse {
-    const rounds = battleRounds(turnOrder.length);
+    const seats = [...gs.seats];
+    const rounds = battleRounds(seats.length);
     const musters = gs.musters ?? [];
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     return {
@@ -197,9 +204,9 @@ export function gameStateToModel(
         phase: gs.phase,
         round: gs.phase === "muster" ? 0 : Math.min(gs.roundsPlayed + 1, rounds),
         battleRounds: rounds,
-        budget: POINTS_BUDGET[turnOrder.length as PlayerCount],
-        fighters: structuredClone(gs.fighters ?? []),
-        mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : [...turnOrder],
+        budget: POINTS_BUDGET[seats.length as PlayerCount],
+        fighters: (gs.fighters ?? []).map(storedFighter),
+        mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(({ character, square }) => ({ character, square })) : null,
         scores: { ...gs.scores },
     };

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { publicGameState } from "@/utils/mongodb/GameData";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, type CharacterId } from "./characters";
-import { gameStateToModel } from "./RealmArenaModels";
+import { RealmArenaGameDataModel } from "./RealmArenaModels";
+import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { RealmArenaAct, RealmArenaMuster, type IRealmArenaActOutcome } from "./RealmArenaLogic";
 import {
     ACTION_POINTS, BATTLE_ROUNDS, centrePoints, check, isStanding, knockoutPoints, moveAp, reachOf,
@@ -14,15 +14,16 @@ import {
     type RealmArenaTestGame,
 } from "./testFixtures";
 
-const NAMES = { a: "Alice", b: "Bob" };
+vi.mock("@/utils/users/clerk", () => ({
+    userIdListToNamesAndMap: async (ids: string[]) => ({ usernameList: ids, userIdNameMap: Object.fromEntries(ids.map(id => [id, id])) }),
+}));
+
 const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
-/** What the command route would send `viewer`, minus the Clerk lookup: the public log and the game's own state. */
-function responseFor(game: RealmArenaTestGame, viewer: string | null) {
-    return {
-        gameState: publicGameState(game.gameState, NAMES),
-        specificGameState: gameStateToModel(game.specificGameState, game.gameState.turnOrder, viewer),
-    };
+/** What the server sends `viewer`: the game's own `CreateDataResponse`, on a document built from the game in memory. */
+async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
+    const { markModified: _, ...data } = game;
+    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
 }
 
 const own = (game: RealmArenaTestGame, player: string) => game.specificGameState.fighters.filter(one => one.owner === player);
@@ -78,20 +79,28 @@ describe("the muster (§17.2)", () => {
         const game = makeGame();
         // A squad nobody else musters, so any trace of it is unmistakable.
         const picks = readyMadePicks(game, 0).slice(0, 2).map((pick, i) => ({ ...pick, character: (["mage", "scout"] as const)[i] }));
-        await play(game, muster("a", picks));
+        const command = muster("a", picks);
+        const { outcome } = await play(game, command);
 
-        for (const viewer of ["b", null]) {
-            const wire = JSON.stringify(responseFor(game, viewer));
-            for (const id of CHARACTER_IDS) expect(wire, `${viewer} sees "${id}"`).not.toContain(`"${id}"`);
-            for (const { name } of Object.values(CHARACTERS)) expect(wire, `${viewer} sees ${name}`).not.toContain(name);
-            for (const { square } of picks) expect(wire, `${viewer} sees square ${square}`).not.toMatch(new RegExp(`\\b${square}\\b`));
-            expect(responseFor(game, viewer).specificGameState).toMatchObject({ fighters: [], myMuster: null, mustered: ["a"] });
+        // Everything the muster puts where someone else can read it: the
+        // response, the match review's line for it, its outcome and the
+        // newest history line (which a push notification quotes).
+        const traces = async (viewer: string | null) => [
+            JSON.stringify(await responseFor(game, viewer)), command.myString(), JSON.stringify(outcome), game.gameState.history[0].text,
+        ];
+        for (const viewer of ["b", null, "stranger"]) {
+            for (const trace of await traces(viewer)) {
+                for (const id of CHARACTER_IDS) expect(trace, `${viewer} sees "${id}"`).not.toContain(`"${id}"`);
+                for (const { name } of Object.values(CHARACTERS)) expect(trace, `${viewer} sees ${name}`).not.toContain(name);
+                for (const { square } of picks) expect(trace, `${viewer} sees square ${square}`).not.toMatch(new RegExp(`\\b${square}\\b`));
+            }
+            expect((await responseFor(game, viewer)).specificGameState).toMatchObject({ fighters: [], myMuster: null, mustered: ["a"] });
         }
         // Its owner still sees it.
-        expect(responseFor(game, "a").specificGameState.myMuster).toEqual(picks);
+        expect((await responseFor(game, "a")).specificGameState.myMuster).toEqual(picks);
 
         await play(game, muster("b", readyMadePicks(game, 1)));
-        const view = responseFor(game, "b").specificGameState;
+        const view = (await responseFor(game, "b")).specificGameState;
         expect(view.myMuster).toBeNull();
         expect(view.fighters.filter(one => one.owner === "a").map(one => one.character)).toEqual(["mage", "scout"]);
     });
@@ -174,7 +183,7 @@ describe("a battle turn", () => {
         // Nobody scored and both squads stand untouched, so the later seat wins (§5.1).
         expect(game.winner).toBe("b");
         expect(game.currentTurn).toBe("");
-        expect(responseFor(game, "a").specificGameState.round).toBe(BATTLE_ROUNDS[2]);
+        expect((await responseFor(game, "a")).specificGameState.round).toBe(BATTLE_ROUNDS[2]);
         expect(game.gameState.history[0].text).toBe("{{b}} wins the battle");
     });
 });
@@ -287,5 +296,17 @@ describe("a whole battle, played by two scripted squads", () => {
         }
         expect(replay.specificGameState).toEqual(game.specificGameState);
         expect(replay.winner).toBe(game.winner);
+    });
+});
+
+describe("a battle read back from storage", () => {
+    it("still plays when a fighter's empty cooldowns were minimised away", async () => {
+        const game = makeGame();
+        await musterBoth(game);
+        for (const fighter of game.specificGameState.fighters) delete (fighter as Partial<Fighter>).cooldowns;
+        const archer = own(game, "a").find(one => one.character === "archer")!;
+        expect((await play(game, actBy("a", { kind: "hunker", fighter: archer.id }))).outcome.validMove).toBe(true);
+        expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.fighters.every(one => typeof one.cooldowns === "object")).toBe(true);
     });
 });

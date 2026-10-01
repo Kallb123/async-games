@@ -16,6 +16,7 @@ import {
     ROLL_SIDES,
     standings,
     startTurn,
+    storedFighter,
     type Action,
     type BattleEvent,
     type BattleState,
@@ -53,7 +54,7 @@ function markDirty(gameData: IGameData): void {
 
 /** The battle as rules.ts reads it. */
 function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
-    return { field: battlefieldById(gs.map), fighters: gs.fighters };
+    return { field: battlefieldById(gs.map), fighters: (gs.fighters ?? []).map(storedFighter) };
 }
 
 /**

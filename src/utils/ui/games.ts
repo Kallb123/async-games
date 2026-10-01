@@ -102,6 +102,15 @@ export const GAME_META: Record<string, GameMeta> = {
 };
 
 /**
+ * The games a player can find and start. A game mid-build (`available:
+ * false`) has no working screens yet, so it's left out of every list and
+ * count a player reads, though its setup screen can still be reached by URL.
+ */
+export function availableGames(): GameMeta[] {
+    return Object.values(GAME_META).filter(game => game.available);
+}
+
+/**
  * Whether a game's board can move on the active player's own turn, because a
  * teammate may play out of turn — `GameMeta.hasOutOfTurnPlays`, looked up by
  * the `url` every game response's `gameType` carries.

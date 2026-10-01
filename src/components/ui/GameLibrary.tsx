@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory, GameMeta } from "@/utils/ui/games";
+import { GAME_META, availableGames, COMING_SOON, GAME_CATEGORIES, GameCategory, GameMeta } from "@/utils/ui/games";
 import GameThumb, { GAME_ART_SIZE } from "@/components/ui/GameThumb";
 import Section from "@/components/ui/Section";
 import { accentVar } from "@/utils/ui/colours";
@@ -35,11 +35,8 @@ interface GameLibraryProps {
 export default function GameLibrary({ hrefFor, featuredCta = "Start a game", label }: GameLibraryProps) {
     const [filter, setFilter] = useState<"All" | GameCategory>("All");
 
-    const otherGames = Object.values(GAME_META)
+    const otherGames = availableGames()
         .filter(g => g.url !== FEATURED.url)
-        // A game mid-build (meta.available: false) has no working command
-        // surface yet — starting one would create a game nobody can play.
-        .filter(g => g.available)
         .filter(g => filter === "All" || g.categories.includes(filter));
     const featuredVisible = filter === "All" || FEATURED.categories.includes(filter);
 

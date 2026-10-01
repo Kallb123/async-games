@@ -286,7 +286,7 @@ registerTurnTimeoutAdapter({
     // the seat's deployment zone (agreed in round 6). `readyMadeMuster` is
     // total for every map that can be played — its squad spends exactly the
     // budget and every square of a zone can be stood on — so the command it
-    // builds is never refused.
+    // builds is never refused. It throws only for a map that can't be played.
     buildTimeoutCommand(gameData, userId) {
         const data = gameData as IRealmArenaGameData;
         const gs = data.specificGameState;
@@ -296,7 +296,13 @@ registerTurnTimeoutAdapter({
         const squad = REALM.readyMade[data.gameState.turnOrder.length as PlayerCount];
         if (!squad) return null;
         const muster = new RealmArenaMuster();
-        muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, squad);
+        try {
+            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, squad);
+        } catch {
+            // Only a map with no room for the squad, which can't be played:
+            // declined, so the missed turn still counts towards abandoning it.
+            return null;
+        }
         return muster;
     },
 });

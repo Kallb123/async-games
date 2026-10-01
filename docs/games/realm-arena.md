@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** Design agreed for the first playable version, v0.8. Split out of
+**Status:** Design agreed for the first playable version, v0.9. Split out of
 Defender of the Realm in its third round of design, when one concept became
 two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
 is the one to build first (§10). §11 records every answer. §13 is the battle
@@ -816,6 +816,20 @@ be cheaply changed once games are being played.
   `Execute` ends by calling one `markModified` helper (`new-game.md`,
   "Gotchas").
 
+*Filled in by PR 3*, in `RealmArenaModels.ts` and `RealmArenaLogic.ts`:
+
+- **A sealed squad stays off the battlefield.** Each muster is kept on its
+  own until the last player's, and then every squad takes the field at once,
+  with fighter ids in seat order. So until then nothing in a response is
+  derived from anyone else's squad, not even a count or an id. A player sees
+  only their own, as `myMuster`.
+- **A turn begins on the hand-off.** `CheckEndTurn` passes the turn round the
+  seats and gives the next player's characters their fresh AP, so a played,
+  a timed-out and a replayed turn all begin the next one the same way.
+- **A request keeps only what was checked.** An `Act` stores the action as
+  `check` read it, a `Muster` each pick's character and square, and an
+  `EndTurn` only the player's own characters to keep still.
+
 ### 17.3 Milestone A: the first playable version
 
 **Goal:** two players can set up a match, muster sealed squads from the first
@@ -1027,3 +1041,4 @@ Realm, its sibling in the same world.
 | 0.6 | Round-5 answers recorded (§11.5). Every square has a movement cost and low cover can be climbed over, so cover moves from the edges between squares into the squares themselves, with a terrain table (§13.1); each AP buys a character's movement allowance (§13.2); the fort's legend updated to match (§15.1). Adds the implementation plan: principles, the engine decisions, ten PRs for the first playable version, the milestone after it, and the riskiest part (§17). Round-6 questions (§18). |
 | 0.7 | Round-6 answers recorded (§11.6): nobody stops on low cover, cover sits in squares, a timed-out muster musters a ready-made squad, the plan's order is agreed, the first playable version ships with placeholder art (PR 9), and building waits until this doc has merged. |
 | 0.8 | PR 2 fills in what §13 left open: each character's HP, Fireball's damage, how ranges and "next to" are measured, and the smaller cases listed under §13.6. |
+| 0.9 | PR 3 fills in what §17.2 left open: a sealed squad stays off the battlefield until every player has mustered, a turn begins on the hand-off, and a request keeps only what was checked. |
