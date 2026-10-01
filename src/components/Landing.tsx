@@ -7,7 +7,7 @@ import GameLibrary from "@/components/ui/GameLibrary";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import WhatsNew from "@/components/ui/WhatsNew";
-import { GAME_META } from "@/utils/ui/games";
+import { availableGames } from "@/utils/ui/games";
 
 // Anonymous visitors have no account to set a game up with, so every game in
 // the browser points at sign-up rather than at its setup screen.
@@ -37,7 +37,7 @@ const HOW_IT_WORKS = [
  * the signed-in library uses so they can see what they'd be signing up for.
  */
 export default function Landing() {
-    const gameCount = Object.keys(GAME_META).length;
+    const gameCount = availableGames().length;
 
     return (
         <main>

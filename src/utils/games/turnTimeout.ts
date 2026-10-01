@@ -16,6 +16,11 @@ import { forcedDiscard } from "@/games/BannedIslet/rules";
 import { RaceCarsEndTurn, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
+import { RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
+import { IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
+import { REALM, type PlayerCount } from "@/games/RealmArena/characters";
+import { battlefieldById } from "@/games/RealmArena/maps";
+import { readyMadeMuster } from "@/games/RealmArena/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { legalRoadEdges, randomSetupRoadEdge, randomSetupSettlementVertex, robberVictimCandidates } from "@/games/SettlementsAndCities/board";
@@ -266,6 +271,37 @@ registerTurnTimeoutAdapter({
         const slipstream = new RaceCarsSlipstream();
         slipstream.tow = plan.tow;
         return slipstream;
+    },
+});
+
+registerTurnTimeoutAdapter({
+    className: "RealmArenaGameType",
+    // docs/games/realm-arena.md §17.2: a timed-out turn ends the way the player
+    // would have ended it. In the battle that's End turn with nobody kept
+    // still, so every character with AP enough goes on watch, as a missed turn
+    // should (§4) — one command, whatever was or wasn't done before it.
+    //
+    // A timed-out muster can't simply pass: the battle can't start without
+    // the squad. So it musters the faction's ready-made squad, spread along
+    // the seat's deployment zone (agreed in round 6). `readyMadeMuster` is
+    // total for every map that can be played — its squad spends exactly the
+    // budget and every square of a zone can be stood on — so the command it
+    // builds is never refused. It throws only for a map that can't be played.
+    buildTimeoutCommand(gameData, userId) {
+        const data = gameData as IRealmArenaGameData;
+        const gs = data.specificGameState;
+        const seat = data.gameState.turnOrder.indexOf(userId);
+        if (seat < 0) return null;
+        if (gs.phase === "battle") return new RealmArenaEndTurn();
+        const muster = new RealmArenaMuster();
+        try {
+            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, REALM.readyMade[data.gameState.turnOrder.length as PlayerCount]);
+        } catch {
+            // Only a party or a map with no room for the squad, which can't be played:
+            // declined, so the missed turn still counts towards abandoning it.
+            return null;
+        }
+        return muster;
     },
 });
 

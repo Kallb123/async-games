@@ -83,6 +83,7 @@ import { meta as firesOutMeta } from "@/games/FiresOut/meta";
 import { meta as bannedIsletMeta } from "@/games/BannedIslet/meta";
 import { meta as raceCarsMeta } from "@/games/RaceCars/meta";
 import { meta as kingdomBuilderMeta } from "@/games/KingdomBuilder/meta";
+import { meta as realmArenaMeta } from "@/games/RealmArena/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -97,7 +98,17 @@ export const GAME_META: Record<string, GameMeta> = {
     bannedislet: bannedIsletMeta,
     racecars: raceCarsMeta,
     kingdombuilder: kingdomBuilderMeta,
+    realmarena: realmArenaMeta,
 };
+
+/**
+ * The games a player can find and start. A game mid-build (`available:
+ * false`) has no working screens yet, so it's left out of every list and
+ * count a player reads, though its setup screen can still be reached by URL.
+ */
+export function availableGames(): GameMeta[] {
+    return Object.values(GAME_META).filter(game => game.available);
+}
 
 /**
  * Whether a game's board can move on the active player's own turn, because a
@@ -196,6 +207,7 @@ const NAME_TO_URL: Record<string, string> = {
     "banned islet": "bannedislet",
     "race cars": "racecars",
     "kingdom builder": "kingdombuilder",
+    "realm arena": "realmarena",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

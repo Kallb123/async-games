@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIRST_COMMAND_VERSION, GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
+import { FIRST_COMMAND_VERSION, GAME_META, availableGames, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
 import { OG_IMAGE } from '@/utils/app';
 import { UNVERSIONED_COMMAND } from '@/utils/apiModels/gameCommand';
 
@@ -90,5 +90,13 @@ describe('command versions', () => {
         const oldest = meta.oldestReplayableCommandVersion ?? UNVERSIONED_COMMAND;
         expect(Number.isInteger(version) && version >= FIRST_COMMAND_VERSION).toBe(true);
         expect(Number.isInteger(oldest) && oldest >= UNVERSIONED_COMMAND && oldest <= version).toBe(true);
+    });
+});
+
+describe('availableGames', () => {
+    it('leaves out a game still being built, so nothing counts or lists it', () => {
+        expect(GAME_META.realmarena.available).toBe(false);
+        expect(availableGames()).not.toContain(GAME_META.realmarena);
+        expect(availableGames()).toEqual(Object.values(GAME_META).filter(game => game.available));
     });
 });

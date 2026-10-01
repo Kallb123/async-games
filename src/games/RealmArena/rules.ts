@@ -663,6 +663,15 @@ export function newFighter(id: number, owner: string, character: CharacterId, sq
 }
 
 /**
+ * A fighter read back from storage, in full. An empty `cooldowns` doesn't
+ * survive every way a document is copied — a Mongoose insert minimises it
+ * away — and every rule here reads it.
+ */
+export function storedFighter(fighter: Fighter): Fighter {
+    return { ...fighter, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])] };
+}
+
+/**
  * Where a ready-made squad stands (§17.2): spread evenly along the middle row
  * of the seat's deployment zone, or across the whole zone when the row is too
  * narrow. Every square of a zone can be stood on (`buildBattlefield` checks),

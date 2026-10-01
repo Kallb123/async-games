@@ -12,6 +12,7 @@ import { OutbreakGameDataModel, OutbreakInvitationModel } from '@/games/Outbreak
 import { FiresOutGameDataModel, FiresOutInvitationModel } from '@/games/FiresOut/FiresOutModels';
 import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/BannedIslet/BannedIsletModels';
 import { RaceCarsGameDataModel, RaceCarsInvitationModel } from '@/games/RaceCars/RaceCarsModels';
+import { RealmArenaGameDataModel, RealmArenaInvitationModel } from '@/games/RealmArena/RealmArenaModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
@@ -20,8 +21,8 @@ import { InvitationModel } from './InvitationData';
 // world — see src/games/KingdomBuilder/KingdomBuilderInvitation.ts.)
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in GAME_DATA_MODELS / INVITATION_MODELS.
-type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData' | 'RaceCarsGameData';
-type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation' | 'BannedIsletInvitation' | 'RaceCarsInvitation';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData' | 'RaceCarsGameData' | 'RealmArenaGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation' | 'BannedIsletInvitation' | 'RaceCarsInvitation' | 'RealmArenaInvitation';
 
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -81,6 +82,7 @@ const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument
   FiresOutGameData: FiresOutGameDataModel,
   BannedIsletGameData: BannedIsletGameDataModel,
   RaceCarsGameData: RaceCarsGameDataModel,
+  RealmArenaGameData: RealmArenaGameDataModel,
 };
 
 // The model that persists a game of `gameType` — one lookup in place of a
@@ -107,6 +109,7 @@ const INVITATION_MODELS: Record<InvitationDiscriminatorKey, Model<IInvitationDat
   FiresOutInvitation: FiresOutInvitationModel,
   BannedIsletInvitation: BannedIsletInvitationModel,
   RaceCarsInvitation: RaceCarsInvitationModel,
+  RealmArenaInvitation: RealmArenaInvitationModel,
 };
 
 // The model that persists an invitation of `gameType` — the invitation-side

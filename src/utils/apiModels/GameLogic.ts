@@ -26,4 +26,5 @@ export * from "@/games/FiresOut/FiresOutLogic";
 export * from "@/games/BannedIslet/BannedIsletLogic";
 export * from "@/games/RaceCars/RaceCarsLogic";
 export * from "@/games/KingdomBuilder/KingdomBuilderLogic";
+export * from "@/games/RealmArena/RealmArenaLogic";
 export * from "@/utils/games/playerDropout";
