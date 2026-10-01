@@ -23,6 +23,7 @@ import {
     calculateVisibleVP,
     calculateTotalVP,
     calculateLongestRoad,
+    sacHasHeld,
     BOARD_TOPOLOGY,
     ISACVertex,
     ISACEdge,
@@ -290,6 +291,7 @@ function makeSACStateSchemaDef() {
                 resourcesGathered: Number,
                 resourcesGatheredByType: resourcesSubSchema,
                 woolTraded: Number,
+                grainTraded: Number,
                 robberUses: Number,
             },
         },
@@ -403,7 +405,8 @@ export function gameStateToResponse(
     // `undoAnchorId` (also null unless something has been undone) matches it —
     // canUndo then falls back to `false` correctly rather than `true` by accident.
     lastCommandId: string | null = null,
-    // Whether the game has finished: what `hasHeldWool` waits for.
+    // Whether the game has finished: what `hasHeldWool`, `hasHeldGrain` and
+    // `victoryPointCards` wait for.
     complete: boolean = false,
 ): ISACSpecificGameStateResponse {
     const total = (cards: ISACResources | ISACDevCards) => Object.values(cards).reduce((sum, n) => sum + n, 0);
@@ -424,7 +427,11 @@ export function gameStateToResponse(
             resourcesGathered: ps.resourcesGathered,
             // Only once the game is over: while it runs, the moment this turns true
             // would tell the table a player had just come by their first wool.
-            hasHeldWool: complete ? (ps.resourcesGatheredByType?.wool ?? 0) + (ps.woolTraded ?? 0) > 0 : undefined,
+            hasHeldWool: complete ? sacHasHeld(ps, 'wool') : undefined,
+            hasHeldGrain: complete ? sacHasHeld(ps, 'grain') : undefined,
+            // Hidden until the game is over, when they are revealed to everyone
+            // (the result page's scores already count them).
+            victoryPointCards: complete ? ps.devCards.victoryPoint + ps.newDevCards.victoryPoint : undefined,
             remainingRoads: ps.remainingRoads,
             remainingSettlements: ps.remainingSettlements,
             remainingCities: ps.remainingCities,

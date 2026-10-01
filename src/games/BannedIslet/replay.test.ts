@@ -167,6 +167,14 @@ function playSpecialGame(): Promise<IBannedIsletGameData> {
     };
 
     gs.treasureDeck.push(...ps.hand);
+    // The deal can hand both Sandbags to the other seats (about one game in
+    // fifty), leaving none in the deck to stack. Fetch one back from that hand,
+    // swapped for a treasure card so every seat still holds what it was dealt.
+    if (!gs.treasureDeck.includes('sandbags')) {
+        const holder = [...gs.players.values()].find(p => p.hand.includes('sandbags'))!;
+        holder.hand.splice(holder.hand.indexOf('sandbags'), 1, ...take(isTreasureCard));
+        gs.treasureDeck.push('sandbags');
+    }
     ps.hand = [...take(card => card === 'sandbags')];
     while (ps.hand.length < HAND_LIMIT - 1) ps.hand.push(...take(isTreasureCard));
     // Two ordinary cards on top, so the draw of §7's Phase 2 really does add
