@@ -13,7 +13,7 @@ import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/Re
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
-import { centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
 import { fighterName } from "@/games/RealmArena/ui";
 import type { IRealmArenaActOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import GameShell from "@/components/ui/GameShell";
@@ -246,7 +246,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
                     {battleTurn && !selected && (
                         <div className="ag-section">
-                            <p className="ag-hint ag-hint--tight">Tap one of your squad on the board to act with it. Each has its own 4 AP.</p>
+                            <p className="ag-hint ag-hint--tight">Tap one of your squad on the board to act with it. Each has its own {ACTION_POINTS} AP.</p>
                         </div>
                     )}
 

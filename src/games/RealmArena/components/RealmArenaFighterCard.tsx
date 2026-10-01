@@ -3,15 +3,9 @@ import React from 'react';
 import ListRow from '@/components/ui/ListRow';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS, type Weapon } from '@/games/RealmArena/characters';
+import { ABILITIES, CHARACTERS } from '@/games/RealmArena/characters';
 import type { Fighter } from '@/games/RealmArena/rules';
-import { abilityWait, CHARACTER_MARK, fighterStatus } from '@/games/RealmArena/ui';
-
-export function weaponLine(weapon: Weapon): string {
-    return weapon.kind === 'melee'
-        ? `Melee · ${weapon.damage} damage`
-        : `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage`;
-}
+import { abilityWait, CHARACTER_MARK, fighterStatus, weaponLine } from '@/games/RealmArena/ui';
 
 interface RealmArenaFighterCardProps {
     fighter: Fighter;

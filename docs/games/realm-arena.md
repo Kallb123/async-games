@@ -963,6 +963,28 @@ Reviewers: `caveman`, `croupier`.
 
 Reviewers: `caveman`.
 
+*Filled in by PR 7:*
+
+- **A tap lines an action up, and a second tap sends it.** One tap on a
+  square in reach shows the path, its AP and every watcher it would set off,
+  with the odds of each overwatch shot. One tap on an enemy shows the chance
+  to hit, graze and damage. Tapping the same square or enemy again, or the
+  sheet's button, sends it. On a phone zoomed into a 36×48 board, one tap
+  that moved a character would make every slip of a finger a move.
+- **An enemy tapped while moving lines up an attack on it**, so the odds are
+  one tap away from any selected character. If it can't be attacked, the sheet
+  says why ("Out of range or out of sight"). A tap on one of your own squad
+  selects it instead, so you can switch characters mid-turn.
+- **Hunker down, going on watch and a shield wall go when they're tapped.**
+  They need nothing aimed, so there's nothing to line up first.
+- **The keep-still switches start on watch**, the way a timed-out turn leaves
+  every character (§17.2). Only a character with at least 2 AP left gets a
+  switch, since nobody else could go on watch.
+- **The result shown is the last action's**: every shot with the 1–100 roll
+  that decided it, and every strike, knock-out and score, in order. The whole
+  turn stays in the log. It lives on the device, so a reload loses it, as it
+  does anything lined up but not sent.
+
 **PR 8 — Watching the other player's turn: replay and recap.**
 
 1. The replay adapter (`replay.ts`), which rebuilds from scratch since nothing
@@ -1060,3 +1082,4 @@ Realm, its sibling in the same world.
 | 0.9 | PR 3 fills in what §17.2 left open: a sealed squad stays off the battlefield until every player has mustered, a turn begins on the hand-off, and a request keeps only what was checked. |
 | 1.0 | PR 5 fills in how the board shows the muster: the viewer's own sealed squad is drawn hollow where it will stand, and nobody else's is drawn at all. |
 | 1.1 | PR 6 fills in the muster: it starts from the ready-made squad, a squad is placed by picking a character up and putting it down, and a squad left as it starts is no secret. |
+| 1.2 | PR 7 fills in taking a turn: a tap lines an action up and a second tap sends it, an enemy tapped while moving lines up an attack on it, stances go when tapped, the keep-still switches start on watch, and the last action's result is shown with its rolls. |

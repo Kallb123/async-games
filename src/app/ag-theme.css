@@ -5286,7 +5286,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
-.ag-game--realmarena .ag-roll { margin-bottom: 8px; }
+.ag-ra-roll { margin-bottom: 8px; }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

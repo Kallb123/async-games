@@ -6,7 +6,7 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, type AbilityId, type CharacterId } from "./characters";
+import { CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
 import { check, fighterById, moveAp, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /** Board units per square: the SVG's viewBox is the map's size times this. */
@@ -119,6 +119,13 @@ export function fighterStatus(fighter: Fighter): string[] {
     ];
 }
 
+/** A weapon in one line: "80% · range 20 · 3 damage". */
+export function weaponLine(weapon: Weapon): string {
+    return weapon.kind === "melee"
+        ? `Melee · ${weapon.damage} damage`
+        : `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage`;
+}
+
 /** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */
 export function abilityWait(fighter: Fighter, id: AbilityId): string | undefined {
     if (fighter.spent.includes(id)) return "Used";
@@ -210,8 +217,11 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
     return fighter.owner === viewerId ? `your ${name}` : `${nameFor(fighter.owner)}'s ${name}`;
 }
 
+/** The actions aimed at one character. */
+export type TargetKind = "attack" | "aimedShot" | "heal" | "raise";
+
 /** The characters an action could be aimed at now, by the server's own `check`. */
-export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: "attack" | "aimedShot" | "heal" | "raise"): number[] {
+export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: TargetKind): number[] {
     return state.fighters
         .filter(one => !("refused" in check(state, player, { kind, fighter: fighter.id, target: one.id })))
         .map(one => one.id);

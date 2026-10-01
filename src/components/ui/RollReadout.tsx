@@ -8,7 +8,8 @@ import Dice from './Dice';
  * Shared because two games want the same card for the same beat: Dice Cities
  * shows it over the market once the payouts land (and again while the Harbour's
  * decision parks a roll, unpaid), and Settlements & Cities shows it under the
- * board as the turn's roll and who the terrain paid. Pass `rolling` while the
+ * board as the turn's roll and who the terrain paid. Realm Arena shows each
+ * shot's d100 with it, as the shot's result comes back. Pass `rolling` while the
  * throw is animating to tumble the faces in place.
  *
  * `sub` is optional: a roll with nothing to say about what it moved shows the

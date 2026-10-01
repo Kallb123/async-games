@@ -62,14 +62,6 @@ interface Aiming {
     onSquare: (square: Square) => void;
 }
 
-/** Each AP band of a character's reach, as it's shaded: nearer is lighter. */
-const REACH_CLASS: Readonly<Record<number, string>> = {
-    1: 'ag-ra-reach--1',
-    2: 'ag-ra-reach--2',
-    3: 'ag-ra-reach--3',
-    4: 'ag-ra-reach--4',
-};
-
 /** The ring drawn round a figure: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
 type Ring = 'selected' | 'candidate' | 'aimed' | 'flagged';
 
@@ -196,7 +188,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     {centre && <rect className="ag-ra-centre" {...centre} />}
 
                     {aiming?.reach?.map(layer => (
-                        <path key={layer.key} className={`ag-ra-reach ${REACH_CLASS[layer.key] ?? ''}`} d={layer.d} />
+                        <path key={layer.key} className={`ag-ra-reach ag-ra-reach--${layer.key}`} d={layer.d} />
                     ))}
                     {aiming?.area && <rect className="ag-ra-blast" {...areaRect(field, aiming.area)} />}
                     {aiming && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
