@@ -20,6 +20,7 @@ const RESPONSE_BUILDERS = [
     "games/Outbreak/OutbreakModels.ts",
     "games/FiresOut/FiresOutModels.ts",
     "games/RaceCars/RaceCarsModels.ts",
+    "games/RealmArena/RealmArenaModels.ts",
     "games/SettlementsAndCities/SettlementsAndCitiesModels.ts",
     "games/Smartthink/SmartthinkModels.ts",
     "games/SnakesAndLadders/SnakesAndLaddersModels.ts",

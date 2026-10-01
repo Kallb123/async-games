@@ -83,6 +83,7 @@ import { meta as firesOutMeta } from "@/games/FiresOut/meta";
 import { meta as bannedIsletMeta } from "@/games/BannedIslet/meta";
 import { meta as raceCarsMeta } from "@/games/RaceCars/meta";
 import { meta as kingdomBuilderMeta } from "@/games/KingdomBuilder/meta";
+import { meta as realmArenaMeta } from "@/games/RealmArena/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -97,6 +98,7 @@ export const GAME_META: Record<string, GameMeta> = {
     bannedislet: bannedIsletMeta,
     racecars: raceCarsMeta,
     kingdombuilder: kingdomBuilderMeta,
+    realmarena: realmArenaMeta,
 };
 
 /**
@@ -196,6 +198,7 @@ const NAME_TO_URL: Record<string, string> = {
     "banned islet": "bannedislet",
     "race cars": "racecars",
     "kingdom builder": "kingdombuilder",
+    "realm arena": "realmarena",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {
