@@ -5174,6 +5174,96 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-tile-preview-strip { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
 .ag-tile-preview-strip-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
+/* ==========================================================================
+   Realm Arena — a ruined fort in open country, over the oxblood accent from
+   meta.ts
+   ==========================================================================
+   Scoped to .ag-game--realmarena like Race Cars above: the shared chrome is
+   re-tinted, and only the battlefield below is this game's own. The ground is
+   flat colour drawn from the map's letters until PR 9's art lands
+   (docs/games/realm-arena.md §17.3), one token per kind of terrain. */
+.ag-game--realmarena {
+    --ra-night: oklch(0.27 0.04 25);
+    --ra-night-2: oklch(0.33 0.05 25);
+    --ra-oxblood: #8a2c2c;
+    --ra-oxblood-deep: #5f1c1c;
+    --ra-open: oklch(0.8 0.07 125);
+    --ra-rubble: oklch(0.68 0.04 75);
+    --ra-lowwall: oklch(0.62 0.04 60);
+    --ra-trees: oklch(0.47 0.1 145);
+    --ra-wall: oklch(0.42 0.02 55);
+    --ra-stair: oklch(0.72 0.04 70);
+    --ra-tower: oklch(0.86 0.05 80);
+    --ra-centre: oklch(0.8 0.15 85);
+}
+.ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
+.ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
+.ag-game--realmarena .ag-score-pill--me { background: color-mix(in oklch, var(--ra-oxblood) 9%, var(--ag-surface)); }
+.ag-game--realmarena .ag-score-pill--active { --ag-score-ring: 0 0 0 2px oklch(0.6 0.14 25); }
+.ag-game--realmarena .ag-stat-row { background: var(--ra-night-2); padding: 0 12px 10px; }
+.ag-game--realmarena .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+.ag-game--realmarena .ag-section .ag-stat-row { background: none; padding: 0 0 8px; }
+.ag-game--realmarena .ag-board-tag { background: var(--ra-oxblood); color: var(--ag-on-dark); }
+.ag-game--realmarena .ag-board-area { background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night)); }
+.ag-realmarena-frame {
+    background: var(--ra-open);
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.28), 0 4px 0 var(--ra-oxblood-deep);
+}
+
+/* ---- The battlefield ---- */
+.ag-ra-ground--open { fill: var(--ra-open); }
+.ag-ra-ground--rubble { fill: var(--ra-rubble); }
+.ag-ra-ground--lowwall { fill: var(--ra-lowwall); }
+.ag-ra-ground--trees { fill: var(--ra-trees); }
+.ag-ra-ground--wall { fill: var(--ra-wall); }
+.ag-ra-ground--stair { fill: var(--ra-stair); }
+.ag-ra-ground--tower { fill: var(--ra-tower); }
+/* The squares, faint enough to read past and there when a move is counted. */
+.ag-ra-grid { fill: none; stroke: rgba(0, 0, 0, 0.12); stroke-width: 0.3; }
+/* Where each squad musters, in its owner's colour (`--ra-seat`, set per zone). */
+.ag-ra-deployment {
+    fill: color-mix(in oklch, var(--ra-seat) 16%, transparent);
+    stroke: color-mix(in oklch, var(--ra-seat) 70%, transparent);
+    stroke-width: 0.6;
+    stroke-dasharray: 2 1.5;
+    pointer-events: none;
+}
+/* The keep's ruins: what Hold the Centre scores (§13.7). */
+.ag-ra-centre {
+    fill: color-mix(in oklch, var(--ra-centre) 18%, transparent);
+    stroke: var(--ra-centre);
+    stroke-width: 0.9;
+    stroke-dasharray: 3 1.5;
+    pointer-events: none;
+}
+
+/* A character: a disc in its owner's colour with its mark on it, and its HP
+   beneath. The stroke is painted under the fill so the edge reads on any
+   ground. */
+.ag-ra-figure {
+    stroke: #fff;
+    stroke-width: 0.7;
+    paint-order: stroke;
+    filter: drop-shadow(0 0.4px 0.6px rgba(0, 0, 0, 0.5));
+}
+/* Banked AP on overwatch or guard: a dashed edge, so a watcher is plain at a glance. */
+.ag-ra-figure--watch { stroke-dasharray: 1.2 0.8; stroke-width: 0.9; }
+.ag-ra-figure--down { fill: var(--ag-ink-softer); opacity: 0.6; }
+.ag-ra-mark {
+    font: 700 4px var(--ag-font);
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+}
+.ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
+.ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
+.ag-ra-selected { fill: none; stroke: #fff; stroke-width: 0.9; pointer-events: none; }
+/* The viewer's own squad while the muster is sealed: drawn where it stands,
+   but hollow, since it isn't on the battlefield until both have mustered. */
+.ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }
+.ag-ra-sealed .ag-ra-mark { fill: var(--ra-oxblood); }
+
 /* ============================================================= *
  *  Desktop expansion — design §16.
  *

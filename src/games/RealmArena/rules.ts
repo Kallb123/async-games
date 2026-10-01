@@ -561,12 +561,17 @@ export function startTurn(state: BattleState, player: string): Fighter[] {
     });
 }
 
+/** The players with someone standing in the centre: one of them holds it, two or more contest it (§13.7). */
+export function centreHolders(state: BattleState): string[] {
+    const centre = new Set(state.field.objectives[CENTRE] ?? []);
+    return [...new Set(state.fighters.filter(fighter => isStanding(fighter) && centre.has(fighter.square)).map(fighter => fighter.owner))];
+}
+
 /** What holding the centre scores a player at the end of their own turn: some of theirs in it, and no enemy (§13.7). */
 export function centrePoints(state: BattleState, player: string, round: number): number {
     if (round < CENTRE_SCORES_FROM_ROUND) return 0;
-    const centre = new Set(state.field.objectives[CENTRE] ?? []);
-    const inCentre = state.fighters.filter(fighter => isStanding(fighter) && centre.has(fighter.square));
-    return inCentre.some(fighter => fighter.owner === player) && inCentre.every(fighter => fighter.owner === player) ? CENTRE_POINTS : 0;
+    const holders = centreHolders(state);
+    return holders.length === 1 && holders[0] === player ? CENTRE_POINTS : 0;
 }
 
 /**
