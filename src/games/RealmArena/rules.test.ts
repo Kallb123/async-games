@@ -31,9 +31,9 @@ function run(state: BattleState, player: string, action: Action, rolls: number[]
 
 describe("hitting (§13.3)", () => {
     it("hits an 80% shot on 1–80, grazes on 81–90 and misses on 91–100", () => {
-        expect([1, 80].map(roll => shotResult(80, roll))).toEqual(["hit", "hit"]);
-        expect([81, 90].map(roll => shotResult(80, roll))).toEqual(["graze", "graze"]);
-        expect([91, 100].map(roll => shotResult(80, roll))).toEqual(["miss", "miss"]);
+        expect([1, 80].map(roll => shotResult({ chance: 80, grazeChance: 10 }, roll))).toEqual(["hit", "hit"]);
+        expect([81, 90].map(roll => shotResult({ chance: 80, grazeChance: 10 }, roll))).toEqual(["graze", "graze"]);
+        expect([91, 100].map(roll => shotResult({ chance: 80, grazeChance: 10 }, roll))).toEqual(["miss", "miss"]);
     });
 
     const field = fieldOf(["..........", "..........", "....,.....", "..........", ".........."]);
@@ -50,6 +50,16 @@ describe("hitting (§13.3)", () => {
         const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
         const target = fighter(2, "b", "knight", at(walled, 5, 2));
         expect(odds(target, fighter(1, "a", "archer", at(walled, 2, 5)), [], "attack", walled)).toMatchObject({ chance: 40, cover: "full" });
+    });
+
+    it("grazes only on a miss by 10 or less, counted before the chance stops at 0", () => {
+        const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
+        const target = fighter(2, "b", "knight", at(walled, 5, 2), { hunkered: true });
+        const archerOdds = odds(target, fighter(1, "a", "archer", at(walled, 2, 5)), [], "attack", walled);
+        const mageOdds = odds(target, fighter(1, "a", "mage", at(walled, 2, 5)), [], "attack", walled);
+        expect(archerOdds).toMatchObject({ chance: 0, grazeChance: 10 });
+        expect(mageOdds).toMatchObject({ chance: 0, grazeChance: 0 });
+        expect(shotResult(mageOdds!, 1)).toBe("miss");
     });
 
     it("doubles the cover of a hunkered target", () => {
@@ -262,6 +272,15 @@ describe("reactions (§13.4)", () => {
         expect(events.slice(-2)).toEqual([{ kind: "downed", fighter: 2, by: 3 }, { kind: "scored", player: "b", points: 6, reason: "knockout" }]);
     });
 
+    it("never come mid-climb, only as the mover lands where it could stop", () => {
+        const rubble = fieldOf(["..........", ".....,....", ".........."]);
+        const knight = fighter(1, "b", "knight", at(rubble, 6, 0), { banked: 4 });
+        const scout = fighter(2, "a", "scout", at(rubble, 3, 1), { hp: 1 });
+        const steps = [3, 4, 5, 6].map(col => at(rubble, col, 1));
+        expect(reactionsTo({ field: rubble, fighters: [knight, scout] }, scout, steps)).toEqual([{ watcher: 1, step: 3 }]);
+        expect(run({ field: rubble, fighters: [knight, scout] }, "a", { kind: "move", fighter: 2, path: steps }).byId(2)).toMatchObject({ hp: 0, square: steps[3] });
+    });
+
     it("aren't set off by a sneaking Scout", () => {
         const archer = fighter(1, "b", "archer", at(field, 0, 0), { banked: 4 });
         const scout = fighter(2, "a", "scout", path[0]);
@@ -350,7 +369,7 @@ describe("turns", () => {
         const after = startTurn({ field, fighters: before }, "a");
         expect(after[0]).toMatchObject({ ap: 4, banked: 0, hunkered: false, shieldWall: false, cooldowns: {} });
         expect(after[1].cooldowns).toEqual({ aimedShot: 1 });
-        expect(after[2]).toBe(before[2]);
+        expect(after[2]).toEqual(before[2]);
     });
 
     it("end with every character that has 2 AP left on watch, unless kept still", () => {
@@ -362,6 +381,7 @@ describe("turns", () => {
         const { fighters: after, events } = endTurn({ field, fighters }, "a", 1, [2]);
         expect(after.map(one => [one.ap, one.banked])).toEqual([[0, 3], [0, 0], [0, 0]]);
         expect(events).toEqual([{ kind: "watching", fighter: 1, banked: 3 }]);
+        expect(endTurn({ field, fighters }, "a", 1, { length: 1 }).fighters.map(one => one.banked)).toEqual([3, 4, 0]);
     });
 
     it("score the centre for a player alone in it, from round 3 (§13.7, §15.3)", () => {
@@ -407,6 +427,14 @@ describe("mustering", () => {
         }
     });
 
+    it("spreads a ready-made squad over the whole zone when one row is too narrow", () => {
+        const narrow = buildBattlefield({ name: "Narrow", rows: ["...", "...", "..."], deployments: [{ col: 0, row: 0, width: 2, height: 3 }], objectives: {} });
+        const squad = REALM.readyMade[2];
+        const picks = readyMadeMuster(narrow, 0, squad);
+        expect(musterRefusal(narrow, 0, picks, budget)).toBeUndefined();
+        expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
+    });
+
     it("refuses a squad that breaks the rules", () => {
         const pick = (character: string, i: number) => ({ character, square: zone[i] });
         expect(musterRefusal(RUINED_FORT, 0, [], budget)).toBe("Muster at least one character");
@@ -418,6 +446,7 @@ describe("mustering", () => {
         expect(musterRefusal(RUINED_FORT, 0, [{ character: "scout", square: zone[0] }, { character: "mage", square: zone[0] }], budget))
             .toBe("Each character needs its own square in your deployment zone");
         expect(musterRefusal(RUINED_FORT, 1, [pick("scout", 0)], budget)).toBe("Each character needs its own square in your deployment zone");
+        expect(musterRefusal(RUINED_FORT, 5, [pick("scout", 0)], budget)).toBe("Each character needs its own square in your deployment zone");
     });
 
     it("musters each character at full HP with nothing to spend until its owner's turn", () => {

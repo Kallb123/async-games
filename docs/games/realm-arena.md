@@ -589,7 +589,13 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
 - **Flanking's +1 damage is for shots.** Melee always hits, with no cover to
   lose, so it doesn't get it.
 - **A graze does half damage, rounded up**, so it always does something. A
-  chance to hit stays between 0% and 100%; a 0% shot can still graze.
+  chance to hit stays between 0% and 100%, but the graze band counts from the
+  chance before it stops at 0: a shot at −10% can't even graze.
+- **Nobody reacts to a character mid-climb.** Overwatch and guard come as the
+  mover lands on a square it could stop on, so anyone they down falls where
+  they could stand, and a Cleric can raise them.
+- **A fireball hits the whole 3×3**, walls or not, once its centre is in range
+  and in sight.
 - **A shield wall moves with the Knight.** Whoever is next to it when a shot
   comes in has at least half cover. It doesn't cover the Knight itself.
 - **Healing is for an ally that is hurt**, and never takes it past full HP.
@@ -604,6 +610,8 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
   left with 1 AP at the end of a turn just loses it.
 - **The ready-made squad** (§17.2) is a Knight, two Men-at-arms, an Archer and
   a Cleric at two players, spread along the middle of the deployment zone.
+  It spends the whole budget, which is fixed by the player count; a budget the
+  host picks would need the ready-made squad to fit it.
 
 ### 13.7 The first mission: Hold the Centre
 

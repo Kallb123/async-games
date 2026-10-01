@@ -209,20 +209,30 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
         + (highGround ? HIGH_GROUND_BONUS : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
-    const chance = Math.min(ROLL_SIDES, Math.max(0, raw));
+    const clamp = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
+    const chance = clamp(raw);
     const flanked = cover === "none";
     const damage = weapon.damage + (flanked ? FLANK_BONUS : 0);
-    return { chance, grazeChance: Math.min(GRAZE_BAND, ROLL_SIDES - chance), damage, grazeDamage: Math.ceil(damage / 2), cover, flanked };
+    // Grazes are the rolls that miss by `GRAZE_BAND` or less, counted from the
+    // raw chance: a shot at −10% can't so much as graze.
+    return { chance, grazeChance: clamp(raw + GRAZE_BAND) - chance, damage, grazeDamage: Math.ceil(damage / 2), cover, flanked };
 }
 
-/** A roll of 1–100 against a chance to hit: at or under it hits, up to `GRAZE_BAND` over grazes, and anything more misses. */
-export function shotResult(chance: number, roll: number): ShotResult {
-    return roll <= chance ? "hit" : roll <= chance + GRAZE_BAND ? "graze" : "miss";
+/** A roll of 1–100 against a shot's odds: at or under the chance to hit hits, the graze band above it grazes, and anything more misses. */
+export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "grazeChance">, roll: number): ShotResult {
+    return roll <= chance ? "hit" : roll <= chance + grazeChance ? "graze" : "miss";
 }
 
-/** Whether a watcher would react to an enemy stepping onto this square: overwatch at one it can see in range, guard at one next to it (§13.4). */
+/**
+ * Whether a watcher would react to an enemy stepping onto this square:
+ * overwatch at one it can see in range, guard at one next to it (§13.4).
+ * Nobody reacts to a character mid-climb, only as it lands on a square it
+ * could stop on — so a character a reaction downs always falls where it could
+ * stand, and a Cleric can raise it.
+ */
 function setsOff(state: BattleState, watcher: Fighter, square: Square): boolean {
     const weapon = CHARACTERS[watcher.character].weapon;
+    if (!state.field.terrain[square].standable) return false;
     return weapon.kind === "ranged"
         ? distance(state.field, watcher.square, square) <= weapon.range && canSee(state.field, watcher.square, square)
         : nextTo(state.field, watcher.square, square);
@@ -417,7 +427,7 @@ function resolver(state: BattleState, roll: Roll) {
         const odds = shotOdds(battle, by, target, kind);
         if (!odds) throw new Error(`${by.id} can't shoot ${target.id}`);
         const rolled = roll();
-        const result = shotResult(odds.chance, rolled);
+        const result = shotResult(odds, rolled);
         const damage = result === "hit" ? odds.damage : result === "graze" ? odds.grazeDamage : 0;
         events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch" });
         if (damage > 0) wound(by, target, damage);
@@ -542,7 +552,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
  * count down (§13.2, §13.4, §13.5).
  */
 export function startTurn(state: BattleState, player: string): Fighter[] {
-    return state.fighters.map(fighter => {
+    return structuredClone(state.fighters).map(fighter => {
         if (fighter.owner !== player || !isStanding(fighter)) return fighter;
         const cooldowns = Object.fromEntries(Object.entries(fighter.cooldowns)
             .map(([ability, turns]) => [ability, (turns ?? 0) - 1] as const)
@@ -563,13 +573,16 @@ export function centrePoints(state: BattleState, player: string, round: number):
  * A player ends their turn: every character with enough AP left goes on
  * overwatch or guard, except the ones told to keep still, and the rest of
  * the AP are lost (§6). Then the centre scores. A timed-out turn ends this
- * way too, with nobody kept still (§4).
+ * way too, with nobody kept still (§4). `keepStill` may be anything a client
+ * sent; ids that aren't the player's characters are ignored. `round` counts
+ * from 1.
  */
-export function endTurn(state: BattleState, player: string, round: number, keepStill: readonly number[] = []): Outcome {
+export function endTurn(state: BattleState, player: string, round: number, keepStill: unknown = []): Outcome {
+    const still = Array.isArray(keepStill) ? keepStill : [];
     const events: BattleEvent[] = [];
-    const fighters = state.fighters.map(fighter => {
+    const fighters = structuredClone(state.fighters).map(fighter => {
         if (fighter.owner !== player || !isStanding(fighter)) return fighter;
-        const watching = fighter.ap >= REACTION_COST && !keepStill.includes(fighter.id);
+        const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id);
         if (watching) events.push({ kind: "watching", fighter: fighter.id, banked: fighter.ap });
         return { ...fighter, ap: 0, banked: watching ? fighter.ap : fighter.banked };
     });
@@ -629,7 +642,7 @@ export interface MusterPick {
  */
 export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number): string | undefined {
     if (!Array.isArray(picks) || picks.length === 0) return "Muster at least one character";
-    const zone = new Set(field.deployments[seat] ?? []);
+    const zone = new Set(Array.isArray(field.deployments[seat]) ? field.deployments[seat] : []);
     const squares = new Set<Square>();
     const counts = new Map<CharacterId, number>();
     for (const pick of picks as Partial<MusterPick>[]) {
@@ -651,9 +664,11 @@ export function newFighter(id: number, owner: string, character: CharacterId, sq
 
 /**
  * Where a ready-made squad stands (§17.2): spread evenly along the middle row
- * of the seat's deployment zone. Every square of a zone can be stood on
- * (`buildBattlefield` checks), so the picks always pass `musterRefusal` as long
- * as the row is wide enough.
+ * of the seat's deployment zone, or across the whole zone when the row is too
+ * narrow. Every square of a zone can be stood on (`buildBattlefield` checks),
+ * so the picks always pass `musterRefusal` — a timed-out muster runs on the
+ * server and mustn't fail. It throws only for a zone with fewer squares than
+ * the squad, which is a map that can't be played.
  */
 export function readyMadeMuster(field: Battlefield, seat: number, squad: readonly CharacterId[]): MusterPick[] {
     const zone = (field.deployments[seat] ?? []).map(square => coordsOf(field, square));
@@ -661,9 +676,9 @@ export function readyMadeMuster(field: Battlefield, seat: number, squad: readonl
     const cols = zone.map(({ col }) => col), rows = zone.map(({ row }) => row);
     const left = Math.min(...cols), width = Math.max(...cols) - left + 1;
     const row = Math.floor((Math.min(...rows) + Math.max(...rows)) / 2);
-    if (squad.length > width) throw new Error(`${field.name}'s deployment zone ${seat} is too narrow for ${squad.length} characters`);
-    return squad.map((character, i) => ({
-        character,
-        square: row * field.width + left + Math.floor(((i + 0.5) * width) / squad.length),
-    }));
+    const spread = (count: number) => squad.map((_, i) => Math.floor(((i + 0.5) * count) / squad.length));
+    if (squad.length <= width) return spread(width).map((col, i) => ({ character: squad[i], square: row * field.width + left + col }));
+    const squares = field.deployments[seat];
+    if (squad.length > squares.length) throw new Error(`${field.name}'s deployment zone ${seat} is too small for ${squad.length} characters`);
+    return spread(squares.length).map((index, i) => ({ character: squad[i], square: squares[index] }));
 }
