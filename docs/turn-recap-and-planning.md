@@ -283,6 +283,7 @@ adapter; the default stays own-moves-only.
 | Outbreak | both decks + Intensify shuffle | **Yes** (hands and discards public by §2) | By design — see its GDD | Deck freeze (decoy rejected) |
 | Fires Out | d6/d8 + POI pool | Yes (pool composition known) | Yes — `endTurn` | Deck freeze **and** decoy |
 | Banned Islet | both decks + the Waters Rise! and empty-deck reshuffles | **Yes** (hands and both discards public by §2) | By design — `BannedIsletAction` alone never touches a deck; the other three can all end a turn and flood | Deck freeze (decoy rejected — a phantom hole is worse than no plan) |
+| Realm Arena | 1–100 rolls only — no deck | n/a | n/a | Out — a planned shot is one made-up roll, and the turn sheet already shows its odds before it's sent |
 
 Every row above except Snakes & Ladders currently declares
 `plannableCommands: []`, because none of them has a planning UI. The "Planning"
@@ -347,6 +348,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
 | Banned Islet | ✅ from snapshot | ✅ (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
 | Race Cars | ✅ from snapshot | ✅ (tip) | ✖ by design — the reach band, `docs/games/race-cars.md` §23.5 |
+| Realm Arena | ✅ from scratch | ✅ (tip, `postProcess`) | ✖ by design — every attack needs a roll, `docs/games/realm-arena.md` §17.3 PR 8 |
 
 Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
 their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,
