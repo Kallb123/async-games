@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Profile tabs",
+                detail: "Your profile is split into Results, Achievements and Friends tabs, so each is a tap away instead of a long scroll. Friends only appear on your own profile.",
+            },
+            {
                 title: "Achievements",
                 detail: "Unlock achievements as you play — First win, Explorer, Mine Baron in Dice Cities, Double Honours in Settlements & Cities, and Race Cars' nods to real racing moments like Donington '93 and Rascassegate. A toast tells you the moment you earn one, a finished game's results list every achievement anyone at the table unlocked, and your profile (and your friends') shows the lot, with how close you are to the rest.",
             },
@@ -116,11 +120,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Kingdom Builder worlds have chat",
                 detail: "Talk strategy with everyone in your world from the world map, with the same messages, GIFs and notifications as your other games.",
-                game: "kingdombuilder",
-            },
-            {
-                title: "Kingdom Builder armies have new battle lines",
-                detail: "Train archers and spearmen, build armies around five distinct stat lines, and fight through ordered volleys, attacker-first horsemen charges and spear interceptions.",
                 game: "kingdombuilder",
             },
         ],

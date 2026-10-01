@@ -9,6 +9,7 @@ import GameStatsList from "@/components/ui/GameStatsList";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
+import Tabs, { TabPanel } from "@/components/ui/Tabs";
 import ListSection from "@/components/ui/ListSection";
 import CollapsingSection from "@/components/ui/CollapsingSection";
 import NameForm from "@/components/NameForm";
@@ -48,6 +49,7 @@ export default function Profile() {
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
+    const [tab, setTab] = useState<"results" | "achievements" | "friends">("results");
 
     const friendsData = useRefreshableData<IFriendsResponse>('/api/friends', FRIEND_EVENTS);
     const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[]; achievements?: IAchievementUnlock[] }>('/api/stats');
@@ -181,32 +183,23 @@ export default function Profile() {
                 {editingName && <NameForm onSaved={() => setEditingName(false)} />}
             </CollapsingSection>
 
-            {/* Honest stats */}
-            <div className="ag-section">
-                <div className="ag-stat-row">
-                    <div className="ag-stat">
-                        <div className="ag-stat-num">{friends.length}</div>
-                        <div className="ag-stat-label">friends</div>
-                    </div>
-                    <div className="ag-stat">
-                        <div className="ag-stat-num" style={{ color: incomingRequests.length ? "var(--ag-terracotta)" : undefined }}>{incomingRequests.length}</div>
-                        <div className="ag-stat-label">requests</div>
-                    </div>
-                    <div className="ag-stat">
-                        <div className="ag-stat-num">{outgoingRequests.length}</div>
-                        <div className="ag-stat-label">pending</div>
-                    </div>
-                </div>
-            </div>
+            <Tabs
+                label="Profile sections"
+                value={tab}
+                onChange={setTab}
+                tabs={[
+                    { id: "results", label: "Results" },
+                    { id: "achievements", label: "Achievements" },
+                    { id: "friends", label: "Friends", badge: incomingRequests.length },
+                ]}
+            />
 
+            <TabPanel id="results" active={tab}>
             {/* Recent match history */}
             <RecentFormSection matches={recentMatches} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} viewAllHref="/games/completed" />
 
             {/* Per-game stats */}
             <GameStatsList label="Stats by game" stats={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
-
-            {/* Achievements, unlocked and not */}
-            <AchievementsSection unlocks={statsData.data?.achievements ?? []} byGame={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
 
             {/* Reactions received */}
             <ListSection
@@ -232,6 +225,31 @@ export default function Profile() {
                     </div>
                 ))}
             </ListSection>
+            </TabPanel>
+
+            <TabPanel id="achievements" active={tab}>
+            {/* Achievements, unlocked and not */}
+            <AchievementsSection unlocks={statsData.data?.achievements ?? []} byGame={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
+            </TabPanel>
+
+            <TabPanel id="friends" active={tab}>
+            {/* Honest stats */}
+            <div className="ag-section">
+                <div className="ag-stat-row">
+                    <div className="ag-stat">
+                        <div className="ag-stat-num">{friends.length}</div>
+                        <div className="ag-stat-label">friends</div>
+                    </div>
+                    <div className="ag-stat">
+                        <div className="ag-stat-num" style={{ color: incomingRequests.length ? "var(--ag-terracotta)" : undefined }}>{incomingRequests.length}</div>
+                        <div className="ag-stat-label">requests</div>
+                    </div>
+                    <div className="ag-stat">
+                        <div className="ag-stat-num">{outgoingRequests.length}</div>
+                        <div className="ag-stat-label">pending</div>
+                    </div>
+                </div>
+            </div>
 
             {/* Friends */}
             <ListSection
@@ -355,6 +373,7 @@ export default function Profile() {
                     </div>
                 ))}
             </ListSection>
+            </TabPanel>
 
             {/* Account */}
             <div className="ag-section" style={{ marginTop: 6 }}>
