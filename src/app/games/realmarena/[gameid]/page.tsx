@@ -132,9 +132,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
     // Stepping through the match, the view goes to each action as it comes.
     // A step that handed the turn on moved everyone's AP, not anyone in
-    // particular, so the view stays where it is.
+    // particular, so the view stays where it is. One that ended the battle
+    // hands it to nobody, and is followed: it's the blow that decided it.
     const previous = nav.previousSnapshot;
-    const follow = previous && previous.currentTurn === currentTurn
+    const follow = previous && (previous.currentTurn === currentTurn || currentTurn === '')
         ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
         : null;
 

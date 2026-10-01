@@ -130,7 +130,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
 
     it("says only that the squad was mustered in the opponent's recap", async () => {
         const game = await oneMustered();
-        const feed = await buildEventFeed(game, NAMES, "b");
+        const feed = await noRandomness(() => buildEventFeed(game, NAMES, "b"));
         expect(feed.hasRecap).toBe(true);
         expect(feed.events.map(event => event.title)).toEqual(["Alice mustered their squad"]);
         expect(feed.summary?.headline).toBe("Your turn to muster 👋");
@@ -148,7 +148,7 @@ describe("Realm Arena recap", () => {
         await playScriptedTurn(game);
         expect(game.currentTurn).toBe("a");
 
-        const feed = await buildEventFeed(game, NAMES, "a");
+        const feed = await noRandomness(() => buildEventFeed(game, NAMES, "a"));
         expect(feed.hasRecap).toBe(true);
         // Bob's turn and nothing of Alice's: her End turn closes the window.
         expect(feed.events.every(event => event.actorId === "b")).toBe(true);
@@ -159,11 +159,15 @@ describe("Realm Arena recap", () => {
 
     it("ends a whole battle's events on its winner", async () => {
         const game = await playScriptedBattle();
-        const events = await buildAllEvents(game, NAMES);
+        const events = await noRandomness(() => buildAllEvents(game, NAMES));
         expect(events.at(-1)?.type).toBe("ra_won");
         expect(events.at(-1)?.title).toBe(`${NAMES[game.winner]} wins the battle`);
         // Every row's title is resolved: no history token reaches a reader.
         expect(events.map(event => event.title).join("\n")).not.toContain("{{");
         expect(events.some(event => event.type === "ra_knockout")).toBe(true);
+        // Every command keeps a row, so a reaction to any line of the log
+        // finds the row it lands on (the reaction route's lookup).
+        const rowed = new Set(events.map(event => event.commandId));
+        expect(game.gameState.commandHistory.every(command => rowed.has((command as { id: string }).id))).toBe(true);
     });
 });

@@ -1009,11 +1009,11 @@ Reviewers: `croupier`, `gremlin`.
 - **A recap row is a line the log already wrote.** An action's row is the
   narration `RealmArenaAct` wrote for it, read off the replayed snapshot, so
   the log, the review and the recap tell a shot in the same words, and the
-  response needs no names of its own. A run of quiet actions by one player
-  (moves, stances, going on watch) folds into one row. Ending a turn is always
-  a row, even a quiet one: it's the edge between one turn and the next, so a
-  player's feed opens on their own End turn rather than reaching back into
-  the turn before it.
+  response needs no names of its own. Every command keeps a row, a quiet move
+  included, since a reaction to a line of the log lands on the row of the
+  command that wrote it. Ending a turn is always a row too: it's the edge
+  between one turn and the next, so a player's feed opens on their own End
+  turn rather than reaching back into the turn before it.
 - **A muster's row says only that it happened.** It never reads the
   command's picks or the snapshot's `myMuster`, which holds the squad of
   whoever the feed is built for: a row is written once and read by whoever
@@ -1023,7 +1023,8 @@ Reviewers: `croupier`, `gremlin`.
   review brings into view every character it changed, where they stood before
   and where they stand now, compared across the states either side of it. So
   a reaction is followed too: the watcher spent its banked AP. A step that
-  handed the turn on changed everyone's AP, so the view stays where it is.
+  handed the turn on changed everyone's AP, so the view stays where it is,
+  unless it ended the battle.
   That needs the snapshot before the one shown, which `useTurnNavigation` now
   exposes as `previousSnapshot`: with the replay adapter and the recap import,
   the third shared file this PR touches.

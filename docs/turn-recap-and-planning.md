@@ -348,7 +348,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
 | Banned Islet | ✅ from snapshot | ✅ (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
 | Race Cars | ✅ from snapshot | ✅ (tip) | ✖ by design — the reach band, `docs/games/race-cars.md` §23.5 |
-| Realm Arena | ✅ from scratch | ✅ (tip, `postProcess`) | ✖ by design — every attack needs a roll, `docs/games/realm-arena.md` §17.3 PR 8 |
+| Realm Arena | ✅ from scratch | ✅ (tip) | ✖ by design — every attack needs a roll, `docs/games/realm-arena.md` §17.3 PR 8 |
 
 Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
 their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,

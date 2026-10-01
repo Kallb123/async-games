@@ -7,6 +7,11 @@
 // replay has already resolved, and it is the only way this adapter names
 // anyone but the actor: the response carries no names of its own.
 //
+// Every command keeps a row of its own, a quiet move included: a reaction to a
+// line of the match history is resolved to the recap row of the command that
+// wrote it (the reaction route's `buildAllEvents` lookup), so folding a run
+// of moves into one row would leave the rest of the run unreactable.
+//
 // The muster stays sealed here as it does everywhere else (§17.2). A muster's
 // row says only that it happened. Nothing below reads the command's `picks`,
 // or the snapshot's `myMuster`, which holds the squad of whoever the feed is
@@ -35,9 +40,6 @@ const RA_MANOEUVRE = "ra_manoeuvre";
 const RA_END_TURN = "ra_endturn";
 const RA_CENTRE = "ra_centre";
 const RA_WON = "ra_won";
-
-/** A quiet run folded into one row names at most this many of its actions. */
-const MANOEUVRES_NAMED = 3;
 
 function state(snapshot: ITurnSnapshot): RAState {
     return snapshot.specificGameState as RAState;
@@ -149,37 +151,6 @@ function toEvents(
     return rows;
 }
 
-/**
- * A run of quiet actions by one player, one row: "Bob moved their Knight, put
- * their Archer on watch and 2 more". The rest of the turn stays a row each.
- */
-function postProcess(events: IGameEvent[]): IGameEvent[] {
-    const folded: IGameEvent[] = [];
-    let run: IGameEvent[] = [];
-    const flush = () => {
-        if (run.length === 1) folded.push(run[0]);
-        if (run.length > 1) {
-            const prefix = `${run[0].actorUsername} `;
-            const clauses = run.map((event, index) => index > 0 && event.title.startsWith(prefix) ? event.title.slice(prefix.length) : event.title);
-            const named = clauses.slice(0, MANOEUVRES_NAMED);
-            const more = run.length - named.length;
-            folded.push({ ...run[0], title: more > 0 ? `${named.join(", ")} and ${more} more` : named.join(", ") });
-        }
-        run = [];
-    };
-    for (const event of events) {
-        if (event.type === RA_MANOEUVRE && (run.length === 0 || run[0].actorId === event.actorId)) {
-            run.push(event);
-            continue;
-        }
-        flush();
-        if (event.type === RA_MANOEUVRE) run.push(event);
-        else folded.push(event);
-    }
-    flush();
-    return folded;
-}
-
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
     // Still mustering: the only news is that the other squad is sealed.
     if (events.some(event => event.type === RA_MUSTER) && !events.some(event => event.type === RA_BATTLE)) {
@@ -234,5 +205,4 @@ export const realmArenaRecapAdapter: IRecapAdapter = {
     toEvents,
     summarize,
     tip,
-    postProcess,
 };

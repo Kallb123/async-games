@@ -12,7 +12,7 @@ import { CENTRE, newFighter, type BattleEvent, type Fighter } from "./rules";
 // handed to the adapter directly, the DiceCities/RaceCars style;
 // replay.test.ts covers the same adapter against real, replayed battles.
 
-const { toEvents, summarize, tip, postProcess } = realmArenaRecapAdapter;
+const { toEvents, summarize, tip } = realmArenaRecapAdapter;
 
 function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): IRealmArenaSpecificGameStateResponse {
     return {
@@ -103,31 +103,6 @@ describe("Realm Arena recap rows", () => {
 
     it("has nothing to say about a refused command", () => {
         expect(toEvents(snap(state()), snap(state()), cmd("RealmArenaAct"), { validMove: false, turnOver: false })).toEqual([]);
-    });
-});
-
-describe("folding a quiet run", () => {
-    const row = (id: string, type: string, title: string, actorId = "b"): IGameEvent => ({
-        id, commandId: id, timestamp: "", actorId, actorUsername: actorId === "b" ? "Bob" : "Alice", type, title,
-    });
-
-    it("folds a player's moves and stances into one row, and keeps the rest", () => {
-        const folded = postProcess!([
-            row("1", "ra_manoeuvre", "Bob moved their Knight"),
-            row("2", "ra_manoeuvre", "Bob put their Archer on watch"),
-            row("3", "ra_hit", "Bob shot Alice's Mage: a hit for 3"),
-            row("4", "ra_manoeuvre", "Bob sneaked their Scout"),
-            row("5", "ra_manoeuvre", "Bob moved their Cleric"),
-            row("6", "ra_manoeuvre", "Bob hunkered their Knight down"),
-            row("7", "ra_manoeuvre", "Bob moved their Mage"),
-            row("8", "ra_manoeuvre", "Alice moved their Archer", "a"),
-        ]);
-        expect(folded.map(event => [event.id, event.title])).toEqual([
-            ["1", "Bob moved their Knight, put their Archer on watch"],
-            ["3", "Bob shot Alice's Mage: a hit for 3"],
-            ["4", "Bob sneaked their Scout, moved their Cleric, hunkered their Knight down and 1 more"],
-            ["8", "Alice moved their Archer"],
-        ]);
     });
 });
 
