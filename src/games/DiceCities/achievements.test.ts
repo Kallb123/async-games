@@ -2,23 +2,19 @@
 // the game's own replay adapter, asked for no viewer (docs/achievements.md §9,
 // §12 test 5). One state that passes and one that doesn't, each.
 import { describe, expect, it } from "vitest";
-import type { CareerCriteria, GameRecord, MatchCriteria } from "@/utils/games/achievements";
-import { getReplayAdapter } from "@/utils/games/replay";
+import { criteriaOf, tableViewOf } from "@/utils/testing/gameAchievements";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import { DiceCitiesCardIds } from "./cards";
 import { achievements, MINES_IN_THE_GAME, TREASURY_COINS } from "./achievements";
 
-const byId = (id: string) => achievements.find(achievement => achievement.id === id)!;
-const turnEndCheck = (id: string) =>
-    (byId(id).criteria as Extract<MatchCriteria<IDiceCitiesGameStateResponse>, { at: "turnEnd" }>).check;
-const progress = (id: string) => (byId(id).criteria as CareerCriteria<GameRecord>).progress;
+const { turnEndCheck, progress } = criteriaOf(achievements);
 
 /** The table's view of a two-player game, after `arrange` has had its way with the state. */
 function viewOf(arrange: (state: ReturnType<typeof buildInitialDiceCitiesState>) => void): IDiceCitiesGameStateResponse {
     const state = buildInitialDiceCitiesState(["u1", "u2"]);
     arrange(state);
-    return getReplayAdapter("DiceCitiesGameType")!.toResponseState(state, { u1: "Alice", u2: "Bob" }, null, []) as IDiceCitiesGameStateResponse;
+    return tableViewOf("DiceCitiesGameType", state, { u1: "Alice", u2: "Bob" });
 }
 
 describe("Dice Cities' achievements", () => {

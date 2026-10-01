@@ -78,7 +78,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Achievements",
-                detail: "Unlock achievements as you play — First win, Explorer, Mine Baron in Dice Cities, Double Honours in Settlements & Cities and more. A toast tells you the moment you earn one, a finished game's results list every achievement anyone at the table unlocked, and your profile (and your friends') shows the lot, with how close you are to the rest.",
+                detail: "Unlock achievements as you play — First win, Explorer, Mine Baron in Dice Cities, Double Honours in Settlements & Cities, and Race Cars' nods to real racing moments like Donington '93 and Rascassegate. A toast tells you the moment you earn one, a finished game's results list every achievement anyone at the table unlocked, and your profile (and your friends') shows the lot, with how close you are to the rest.",
             },
             {
                 title: "Game results show each player's stats in their colour",

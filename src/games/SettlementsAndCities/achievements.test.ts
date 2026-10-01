@@ -2,30 +2,22 @@
 // handed: the game's own replay adapter, asked for no viewer (docs/achievements.md
 // §9, §12 test 5). One state that passes and one that doesn't, each.
 import { describe, expect, it } from "vitest";
-import type { CareerCriteria, FinishedSeat, GameRecord, MatchCriteria } from "@/utils/games/achievements";
-import { getReplayAdapter } from "@/utils/games/replay";
+import { criteriaOf, finishedSeat as seat, tableViewOf } from "@/utils/testing/gameAchievements";
 import type { ISACSpecificGameState, ISACVertex } from "./board";
 import type { ISACSpecificGameStateResponse } from "./apiModels";
 import { makeState, player } from "./testFixtures";
 import { achievements, CITIES_TO_PLAN } from "./achievements";
 
-const byId = (id: string) => achievements.find(achievement => achievement.id === id)!;
-const turnEndCheck = (id: string) =>
-    (byId(id).criteria as Extract<MatchCriteria<ISACSpecificGameStateResponse>, { at: "turnEnd" }>).check;
-const endCheck = (id: string) =>
-    (byId(id).criteria as Extract<MatchCriteria<ISACSpecificGameStateResponse>, { at: "end" }>).check;
-const progress = (id: string) => (byId(id).criteria as CareerCriteria<GameRecord>).progress;
+const { turnEndCheck, endCheck, progress } = criteriaOf(achievements);
 
 /** The table's view of a two-player game in this state. */
 function viewOf(overrides: Partial<ISACSpecificGameState>): ISACSpecificGameStateResponse {
     const state = makeState({ playerStates: new Map([["u1", player()], ["u2", player()]]), ...overrides });
-    return getReplayAdapter("SettlementsAndCitiesGameType")!.toResponseState(state, { u1: "Alice", u2: "Bob" }, null, []) as ISACSpecificGameStateResponse;
+    return tableViewOf("SettlementsAndCitiesGameType", state, { u1: "Alice", u2: "Bob" });
 }
 
 const buildings = (owner: string, building: ISACVertex["building"], count: number): ISACVertex[] =>
     Array.from({ length: count }, () => ({ building, owner }));
-
-const seat = (userId: string, outcome: FinishedSeat["outcome"]): FinishedSeat => ({ userId, outcome, turns: 30 });
 
 describe("Settlements & Cities' achievements", () => {
     it("Settler counts games played, won or not", () => {
