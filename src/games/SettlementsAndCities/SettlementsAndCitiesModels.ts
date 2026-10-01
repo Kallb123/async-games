@@ -364,6 +364,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
             userIdNameMap,
             viewerId,
             doc.gameState.commandHistory.at(-1)?.id ?? null,
+            doc.complete,
         ),
         // Turn recap replays from the stored initial snapshot; only games created
         // after recap support carry it, so the UI gates its controls on this.
@@ -402,6 +403,8 @@ export function gameStateToResponse(
     // `undoAnchorId` (also null unless something has been undone) matches it —
     // canUndo then falls back to `false` correctly rather than `true` by accident.
     lastCommandId: string | null = null,
+    // Whether the game has finished: what `hasHeldWool` waits for.
+    complete: boolean = false,
 ): ISACSpecificGameStateResponse {
     const total = (cards: ISACResources | ISACDevCards) => Object.values(cards).reduce((sum, n) => sum + n, 0);
 
@@ -419,7 +422,9 @@ export function gameStateToResponse(
             devCardCount: total(ps.devCards) + total(ps.newDevCards),
             knightsPlayed: ps.knightsPlayed,
             resourcesGathered: ps.resourcesGathered,
-            hasHeldWool: (ps.resourcesGatheredByType?.wool ?? 0) + (ps.woolTraded ?? 0) > 0,
+            // Only once the game is over: while it runs, the moment this turns true
+            // would tell the table a player had just come by their first wool.
+            hasHeldWool: complete ? (ps.resourcesGatheredByType?.wool ?? 0) + (ps.woolTraded ?? 0) > 0 : undefined,
             remainingRoads: ps.remainingRoads,
             remainingSettlements: ps.remainingSettlements,
             remainingCities: ps.remainingCities,

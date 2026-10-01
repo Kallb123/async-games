@@ -206,6 +206,22 @@ describe("Settlements & Cities' response", () => {
         expect(wire.playerStates.u2.resources).toBeUndefined();
     });
 
+    it("holds back whether a seat has ever had wool until the game is complete", () => {
+        const gs = sacState();
+        gs.playerStates.get("u2")!.woolTraded = 1;
+        const live = [null, "u1", "u2"].map(viewer => sacStateToResponse(gs, NAMES, viewer));
+        const done = [null, "u1", "u2"].map(viewer => sacStateToResponse(gs, NAMES, viewer, null, true));
+
+        // Not under the key at all, for any viewer, while the game is on.
+        for (const response of live) {
+            expect(JSON.stringify(response)).not.toContain("hasHeldWool");
+        }
+        // Then the same answer for every viewer once it is over.
+        for (const response of done) {
+            expect(response.playerStates.u2.hasHeldWool).toBe(true);
+        }
+    });
+
     it("sends a roll's payout to every viewer alike, with a 7's discards as a count", () => {
         // A roll's production is derivable from the public board and its number
         // tokens, so the payout goes out whole to every player. What a 7 *took*

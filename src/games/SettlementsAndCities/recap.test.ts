@@ -17,7 +17,6 @@ function player(overrides: Partial<ISACPlayerStateResponse> & { userId: string; 
         devCardCount: 0,
         knightsPlayed: 0,
         resourcesGathered: 0,
-        hasHeldWool: false,
         remainingRoads: 15,
         remainingSettlements: 5,
         remainingCities: 4,

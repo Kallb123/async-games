@@ -135,6 +135,7 @@ export function tableView(gameData: IGameData): unknown {
         identityNameMap(gameData.userIdList),
         null, // load-bearing: see above. Never a viewer.
         gameData.gameState.commandHistory,
+        gameData.complete,
     );
     return deepFreeze(JSON.parse(JSON.stringify(view)));
 }

@@ -60,7 +60,7 @@ describe("Settlements & Cities' achievements", () => {
         const check = endCheck("settlementsandcities.no-animals-harmed");
         const viewWith = (overrides: Parameters<typeof player>[0]): ISACSpecificGameStateResponse => {
             const state = makeState({ playerStates: new Map([["u1", player(overrides)], ["u2", player()]]) });
-            return tableViewOf("SettlementsAndCitiesGameType", state, { u1: "Alice", u2: "Bob" });
+            return tableViewOf("SettlementsAndCitiesGameType", state, { u1: "Alice", u2: "Bob" }, true);
         };
         const clean = viewWith({});
         const gathered = viewWith({ resourcesGatheredByType: { lumber: 0, wool: 2, grain: 0, brick: 0, ore: 0 } });
@@ -68,6 +68,8 @@ describe("Settlements & Cities' achievements", () => {
 
         expect(check(clean, seat("u1", "win"))).toBe(true);
         expect(check(clean, seat("u1", "loss"))).toBe(false);
+        // A view from a game still in play never passes: the flag isn't sent.
+        expect(check(viewOf({}), seat("u1", "win"))).toBe(false);
         expect(check(gathered, seat("u1", "win"))).toBe(false);
         expect(check(traded, seat("u1", "win"))).toBe(false);
     });

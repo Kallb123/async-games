@@ -19,6 +19,7 @@ function roadsOf(view: ISACSpecificGameStateResponse, userId: string): number {
 }
 
 function hasHeldWool(view: ISACSpecificGameStateResponse, userId: string): boolean {
+    // An unsent flag reads as "held", so a view from mid-game never passes.
     return view.playerStates[userId]?.hasHeldWool ?? true;
 }
 
@@ -73,7 +74,7 @@ export const achievements: GameAchievement<ISACSpecificGameStateResponse>[] = [
     },
     {
         // Gathering (production, setup, steals, Year of Plenty, Monopoly) and
-        // trading both count; the flag is public, so a mid-game check stays safe.
+        // trading both count; the flag is only sent once the game is complete.
         id: "settlementsandcities.no-animals-harmed",
         title: "No Animals Were Harmed",
         icon: "🐑",
