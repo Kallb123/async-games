@@ -4,11 +4,11 @@
 import { describe, expect, it } from "vitest";
 import type { ICommandOutcome } from "@/utils/apiModels/gameCommand";
 import { criteriaOf, finishedSeat as finished, tableViewOf } from "@/utils/testing/gameAchievements";
-import { spacesInCorner } from "./board";
-import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
+import { cornerAt, spacesInCorner } from "./board";
+import { moveOptions, type IRaceCarsPlayerState, type IRaceCarsSpecificGameState } from "./rules";
 import type { IRaceCarsSpecificGameStateResponse } from "./apiModels";
 import { RaceCarsGameType } from "./RaceCarsLogic";
-import { makeGame, race } from "./testFixtures";
+import { makeGame, move, race, run, seat } from "./testFixtures";
 import { MONACO } from "./tracks/monaco";
 import { achievements, DONINGTON_GRID_SLOT, LONG_BEACH_GRID_SLOT, RASCASSE_CORNER_ID } from "./achievements";
 
@@ -82,6 +82,23 @@ describe("Race Cars' achievements", () => {
         it("names La Rascasse, and the corner is on the board", () => {
             expect(MONACO.corners.find(corner => corner.id === RASCASSE_CORNER_ID)?.name).toBe("La Rascasse");
             expect(rascasse).toBeDefined();
+        });
+
+        it("is earned by overshooting La Rascasse with no tyres to pay for it", async () => {
+            // A real spin through the move command, so "a spin at La Rascasse
+            // rests in La Rascasse" is the rules' answer rather than the fixture's.
+            // From the corner's first row, not its last: off the last, the road
+            // gives no way to stay in, and the stops are waived (§10).
+            const entry = spacesInCorner(MONACO, RASCASSE_CORNER_ID).reduce((first, space) => space.row < first.row ? space : first);
+            const state = race({ a: { row: entry.row, lane: entry.lane, gear: 5, roll: 15, tyres: 0, brakes: 0 }, b: {} }, { trackId: MONACO.id });
+            const [past] = moveOptions(state, "a", 15).spaces;
+            expect(cornerAt(MONACO, past.row, past.lane)?.id).not.toBe(RASCASSE_CORNER_ID);
+
+            const game = makeGame(state);
+            await run(game, move({ row: past.row, lane: past.lane, brake: 0 }));
+
+            expect(seat(game, "a").skipNextTurn).toBe(true);
+            expect(check(viewOf(game.specificGameState), { userId: "a" })).toBe(true);
         });
 
         it("is earned by a car spun into La Rascasse", () => {

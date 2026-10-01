@@ -64,7 +64,14 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
         //
         // Round two's order is fixed when round one ends, leader first (§15),
         // and stays put for the whole round — so every turn end in round two
-        // still says who led out of round one.
+        // still says who led out of round one, even when the wrap itself was a
+        // turn the cron played and nobody judged.
+        //
+        // One accepted edge: a driver dropped mid-round leaves the order then
+        // and there, so if round one's leader is dropped in round two, the car
+        // they led moves up to slot 0 and can earn it from fourth or further
+        // back. Tightening to `roundIndex === 0` would close that and lose the
+        // cron-played wrap instead; four cars and a dropout is the rarer case.
         id: "racecars.donington-93",
         title: "Donington '93",
         icon: "🌧️",
@@ -87,6 +94,12 @@ export const achievements: GameAchievement<IRaceCarsSpecificGameStateResponse>[]
         // deliberate, and he started from the back. A spun car is the one
         // parked in a corner in Race Cars: dumped on its last row, sitting out
         // its next turn (§13).
+        //
+        // That flag is the only evidence, and it is cleared when the spun car's
+        // slot comes round — in a two-car race, at the very next turn end. So
+        // if the spinner's own turn end was one the cron played (§4.2: no
+        // checkpoint sees it), the spin goes unrewarded. Accepted, as §4.2
+        // accepts it for every state that lasts only one turn.
         id: "racecars.rascassegate",
         title: "Rascassegate",
         icon: "🅿️",
