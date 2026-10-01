@@ -56,7 +56,7 @@ export interface Character {
     points: number;
 }
 
-export const CHARACTERS = {
+export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     manAtArms: {
         name: "Man-at-arms", role: "Cheap front line", movement: 6, hp: 8,
         weapon: { name: "Sword", kind: "melee", damage: 4 }, abilities: ["cleave"], points: 15,
@@ -81,7 +81,7 @@ export const CHARACTERS = {
         name: "Cleric", role: "Support", movement: 6, hp: 7,
         weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
     },
-} as const satisfies Record<CharacterId, Character>;
+};
 
 export type PlayerCount = 2 | 3 | 4;
 
@@ -102,7 +102,6 @@ export function squadPoints(squad: readonly CharacterId[]): number {
 
 export interface Faction {
     name: string;
-    characters: readonly CharacterId[];
     /** The squad a muster that runs out of time gets, by player count — spending the whole budget, within `MAX_OF_EACH` (§17.2). */
     readyMade: Readonly<Record<PlayerCount, readonly CharacterId[]>>;
 }
@@ -110,7 +109,6 @@ export interface Faction {
 /** The human kingdom both games are named for, and the first faction (§13.6). */
 export const REALM: Faction = {
     name: "The Realm",
-    characters: ["manAtArms", "knight", "archer", "scout", "mage", "cleric"],
     readyMade: {
         2: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
         3: ["knight", "manAtArms", "archer", "scout"],

@@ -287,7 +287,7 @@ const isSquare = (field: Battlefield, value: unknown): value is Square =>
 /** Why a character can't use an ability now, or undefined when it can. */
 function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
     const character = CHARACTERS[fighter.character];
-    if (!(character.abilities as readonly AbilityId[]).includes(ability)) return `A ${character.name} can't use ${ABILITIES[ability].name}`;
+    if (!character.abilities.includes(ability)) return `A ${character.name} can't use ${ABILITIES[ability].name}`;
     if (fighter.spent.includes(ability)) return `${ABILITIES[ability].name} has been used this battle`;
     if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability].name} isn't ready yet`;
     return undefined;
@@ -304,15 +304,12 @@ function pathRefusal(state: BattleState, mover: Fighter, path: unknown): string 
     return pathCost(state.field, path) ?? "That path can't be walked";
 }
 
-/** An enemy to attack, or why it isn't one. */
-function enemyRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined): string | undefined {
-    return target && isStanding(target) && target.owner !== actor.owner ? undefined : "Pick an enemy";
-}
+const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter =>
+    target !== undefined && isStanding(target) && target.owner !== actor.owner;
 
 /** Why an attack can't be made, or undefined when it can. */
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
-    const notEnemy = enemyRefusal(state, actor, target);
-    if (notEnemy || !target) return notEnemy;
+    if (!isEnemy(actor, target)) return "Pick an enemy";
     if (CHARACTERS[actor.character].weapon.kind === "melee") {
         return nextTo(state.field, actor.square, target.square) ? undefined : "Too far away to strike";
     }
@@ -364,10 +361,9 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         case "cleave":
             return ability("cleave", () => {
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
-                return targets
-                    .map(one => fighterById(state, one))
-                    .map(one => enemyRefusal(state, actor, one) ?? (one && nextTo(state.field, actor.square, one.square) ? undefined : "Both enemies must be next to them"))
-                    .find(Boolean);
+                const enemies = targets.map(one => fighterById(state, one));
+                if (!enemies.every((one): one is Fighter => isEnemy(actor, one))) return "Pick two enemies";
+                return enemies.every(one => nextTo(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them";
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);
@@ -402,7 +398,7 @@ function resolver(state: BattleState, roll: Roll) {
     const battle: BattleState = { field: state.field, fighters };
     const events: BattleEvent[] = [];
     const get = (id: number): Fighter => {
-        const fighter = fighters.find(one => one.id === id);
+        const fighter = fighterById(battle, id);
         if (!fighter) throw new Error(`No fighter ${id}`);
         return fighter;
     };

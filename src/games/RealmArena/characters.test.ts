@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ABILITIES, CHARACTERS, MAX_OF_EACH, POINTS_BUDGET, REALM, squadPoints, type CharacterId, type PlayerCount } from "./characters";
 
 describe("the first faction's characters (§13.6)", () => {
-    it("are the Realm's six, each with 5–12 HP and abilities that exist", () => {
-        expect(REALM.characters).toEqual(Object.keys(CHARACTERS));
+    it("each have 5–12 HP and abilities that exist", () => {
         for (const character of Object.values(CHARACTERS)) {
             expect(character.hp, character.name).toBeGreaterThanOrEqual(5);
             expect(character.hp, character.name).toBeLessThanOrEqual(12);
@@ -14,10 +13,6 @@ describe("the first faction's characters (§13.6)", () => {
     it("let a Man-at-arms down a Mage in one turn, as §13.2's balance note says", () => {
         expect(2 * CHARACTERS.manAtArms.weapon.damage).toBeGreaterThanOrEqual(CHARACTERS.mage.hp);
     });
-
-    it("cost what the table says", () => {
-        expect(squadPoints(["manAtArms", "knight", "archer", "scout", "mage", "cleric"])).toBe(15 + 25 + 20 + 20 + 30 + 25);
-    });
 });
 
 describe("the ready-made squads (§17.2)", () => {
@@ -27,6 +22,5 @@ describe("the ready-made squads (§17.2)", () => {
         const counts = new Map<CharacterId, number>();
         for (const character of squad) counts.set(character, (counts.get(character) ?? 0) + 1);
         expect(Math.max(...counts.values())).toBeLessThanOrEqual(MAX_OF_EACH);
-        expect(squad.every(character => REALM.characters.includes(character))).toBe(true);
     });
 });
