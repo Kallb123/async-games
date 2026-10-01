@@ -42,6 +42,8 @@ interface RealmArenaBoardProps {
     placing?: Placing | null;
     /** The viewer lining up the selected character's next action, on their battle turn. */
     aiming?: Aiming | null;
+    /** A review's step (§17.3 PR 8): the squares it touched, brought into view whenever `key` changes. */
+    follow?: { squares: readonly Square[]; key: string } | null;
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
@@ -116,8 +118,11 @@ function Figure({ field, square, character, className = '', fill, ring }: Figure
  * is, and every watcher a move would set off. A tap anywhere no character
  * stands goes to `aiming.onSquare`; a tap on a character still goes to
  * `onSelect`, and the screen decides whether that aims or selects.
+ *
+ * Stepping through a review (`follow`), the view goes to each step: every
+ * character it moved or touched, zoomed as deep as they all still fit.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, follow }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
@@ -126,8 +131,10 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     // A character picked up to place is brought close enough to tap a square beside it.
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
     const focusSquare = pickedUp?.square ?? selected?.square;
-    const focus: BoardZoomFocus | null = focusSquare === undefined ? null
-        : { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}` };
+    // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
+    let focus: BoardZoomFocus | null = null;
+    if (follow && follow.squares.length > 0) focus = { rect: focusOn(field, ...follow.squares), key: `follow:${follow.key}` };
+    else if (focusSquare !== undefined) focus = { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}` };
     const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];

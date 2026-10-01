@@ -1004,6 +1004,36 @@ Reviewers: `caveman`.
 
 Reviewers: `croupier`, `gremlin`.
 
+*Filled in by PR 8:*
+
+- **A recap row is a line the log already wrote.** An action's row is the
+  narration `RealmArenaAct` wrote for it, read off the replayed snapshot, so
+  the log, the review and the recap tell a shot in the same words, and the
+  response needs no names of its own. Every command keeps a row, a quiet move
+  included, since a reaction to a line of the log lands on the row of the
+  command that wrote it. Ending a turn is always a row too: it's the edge
+  between one turn and the next, so a player's feed opens on their own End
+  turn rather than reaching back into the turn before it.
+- **A muster's row says only that it happened.** It never reads the
+  command's picks or the snapshot's `myMuster`, which holds the squad of
+  whoever the feed is built for: a row is written once and read by whoever
+  it's shown to. The replayed snapshots keep the seal as the live response
+  does, since they're built by the same `gameStateToModel`.
+- **The review follows each action by what it changed.** Each step of the
+  review brings into view every character it changed, where they stood before
+  and where they stand now, compared across the states either side of it. So
+  a reaction is followed too: the watcher spent its banked AP. A step that
+  handed the turn on changed everyone's AP, so the view stays where it is,
+  unless it ended the battle.
+  That needs the snapshot before the one shown, which `useTurnNavigation` now
+  exposes as `previousSnapshot`: with the replay adapter and the recap import,
+  the third shared file this PR touches.
+- **Planning is out by design.** A planned shot would be one made-up roll,
+  and the turn sheet already shows its odds before it's sent.
+  `plannableCommands` stays empty, and that's the control: the timeline route
+  leaves recorded rolls in a planned command, so listing `RealmArenaAct`
+  would let a player choose their own.
+
 **PR 9 — Guide, tutorial and placeholder art.**
 
 1. `guide.ts` (Goal, Your turn, Action points, Cover and flanking, Overwatch
@@ -1083,3 +1113,4 @@ Realm, its sibling in the same world.
 | 1.0 | PR 5 fills in how the board shows the muster: the viewer's own sealed squad is drawn hollow where it will stand, and nobody else's is drawn at all. |
 | 1.1 | PR 6 fills in the muster: it starts from the ready-made squad, a squad is placed by picking a character up and putting it down, and a squad left as it starts is no secret. |
 | 1.2 | PR 7 fills in taking a turn: a tap lines an action up and a second tap sends it, an enemy tapped while moving lines up an attack on it, stances go when tapped, the keep-still switches start on watch, and the last action's result is shown with its rolls. |
+| 1.3 | PR 8 fills in replay and recap: a recap row is a line the log already wrote, a muster's row says only that it happened, the review follows each action by what it changed, and planning is out by design. |

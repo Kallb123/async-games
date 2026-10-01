@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, areaRect, eventLines, fighterName, fighterStatus, focusOn, groundLayers, pathPoints, placeTap, reachLayers,
+    CELL, abilityWait, actionSquares, areaRect, eventLines, fighterName, fighterStatus, focusOn, groundLayers, pathPoints, placeTap, reachLayers,
     reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -46,6 +46,26 @@ describe("areaRect", () => {
 describe("focusOn", () => {
     it("frames seven squares across, centred on the character", () => {
         expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!)).toEqual({ x: 7 * CELL, y: 17 * CELL, width: 7 * CELL, height: 7 * CELL });
+    });
+
+    it("frames every square it's given, with the same margin round them all", () => {
+        expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!, squareAt(RUINED_FORT, 14, 18)!))
+            .toEqual({ x: 7 * CELL, y: 15 * CELL, width: 11 * CELL, height: 9 * CELL });
+    });
+});
+
+describe("actionSquares", () => {
+    const from = squareAt(RUINED_FORT, 10, 20)!, to = squareAt(RUINED_FORT, 12, 20)!, far = squareAt(RUINED_FORT, 30, 40)!;
+    const before = [newFighter(0, "a", "knight", from), newFighter(1, "b", "archer", far), newFighter(2, "b", "mage", 0)];
+
+    it("is where everyone the step changed stood, before and after", () => {
+        const after = [{ ...before[0], square: to, ap: 2 }, { ...before[1], hp: before[1].hp - 3 }, before[2]];
+        expect(actionSquares(before, after)).toEqual([from, to, far]);
+    });
+
+    it("is nowhere for a step that changed nobody, or that put the squads on the field", () => {
+        expect(actionSquares(before, before.map(fighter => ({ ...fighter })))).toEqual([]);
+        expect(actionSquares([], before)).toEqual([]);
     });
 });
 

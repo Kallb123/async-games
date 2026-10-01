@@ -1,17 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { pathTo } from "@/utils/games/battlefield/pathfinding";
-import { distance } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, type CharacterId } from "./characters";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel } from "./RealmArenaModels";
 import { meta } from "./meta";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { RealmArenaAct, RealmArenaMuster, type IRealmArenaActOutcome } from "./RealmArenaLogic";
 import {
-    ACTION_POINTS, BATTLE_ROUNDS, centrePoints, check, isStanding, knockoutPoints, moveAp, reachOf,
+    ACTION_POINTS, BATTLE_ROUNDS, centrePoints, check, isStanding, knockoutPoints,
     type Action, type Fighter,
 } from "./rules";
 import {
-    actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterBoth, play, PLAYERS, readyMadePicks,
+    actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterBoth, play, PLAYERS, readyMadePicks, scriptedAction,
     type RealmArenaTestGame,
 } from "./testFixtures";
 
@@ -202,38 +200,6 @@ describe("a battle turn", () => {
 });
 
 // ─── A whole battle (§17.3 PR 3, step 6) ─────────────────────────────────────
-
-/** The enemy nearest a fighter, or undefined when none is standing. */
-function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {
-    const { field, fighters } = battleOf(game);
-    return fighters
-        .filter(one => one.owner !== fighter.owner && isStanding(one))
-        .sort((x, y) => distance(field, fighter.square, x.square) - distance(field, fighter.square, y.square))[0];
-}
-
-/**
- * One action for a fighter, by a simple script: attack whoever it can, and
- * otherwise close on the nearest enemy as far as its AP take it.
- */
-function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Action | undefined {
-    const battle = battleOf(game);
-    for (const enemy of battle.fighters.filter(one => one.owner !== fighter.owner && isStanding(one))) {
-        const attack: Action = { kind: "attack", fighter: fighter.id, target: enemy.id };
-        if (!("refused" in check(battle, fighter.owner, attack))) return attack;
-    }
-    const target = nearestEnemy(game, fighter);
-    if (!target || fighter.ap < 1) return undefined;
-    const reach = reachOf(battle, fighter);
-    const gap = (square: number) => distance(battle.field, square, target.square);
-    let best: number | undefined;
-    for (let square = 0; square < reach.costs.length; square++) {
-        const cost = reach.costs[square];
-        if (cost === Infinity || moveAp(fighter.character, cost) > fighter.ap) continue;
-        if (best === undefined || gap(square) < gap(best) || (gap(square) === gap(best) && cost < reach.costs[best])) best = square;
-    }
-    if (best === undefined || gap(best) >= gap(fighter.square)) return undefined;
-    return { kind: "move", fighter: fighter.id, path: pathTo(reach, best)!.squares };
-}
 
 describe("a whole battle, played by two scripted squads", () => {
     it("keeps AP, HP and scores consistent from the muster to the winner", { timeout: 30_000 }, async () => {
