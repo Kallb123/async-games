@@ -64,6 +64,7 @@ export function buildInitialDiceCitiesState(
             oneReroll: false,
             harbourUnlocked: false,
             lastDiceSelection: 1,
+            acquiredCards: [],
         });
     }
     return {
@@ -189,7 +190,14 @@ export interface IDiceCitiesPlayerState {
     // the expansion's sea cards. Deliberately absent from CheckGameOver - the
     // game is still won by building the original four.
     harbourUnlocked: boolean,
-    lastDiceSelection: 1 | 2
+    lastDiceSelection: 1 | 2,
+    // Every card that has come into this player's city after the opening deal,
+    // bought or swapped in by a Business Center, each named once - whether or
+    // not it is still there. What the "never owned" achievements (Small
+    // Business, Big Dice Energy, Dine & Dash) read, since a card can leave a
+    // city again. Absent on a game that started before it was tallied, which
+    // then can't earn them.
+    acquiredCards?: string[]
 }
 
 export interface IDiceCitiesGameState {
@@ -293,7 +301,10 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                 rerollDoubles: Boolean,
                 oneReroll: Boolean,
                 harbourUnlocked: Boolean,
-                lastDiceSelection: Number
+                lastDiceSelection: Number,
+                // No default: a game that predates the tally must read as
+                // "unknown", not as "never acquired anything".
+                acquiredCards: { type: [String], default: undefined }
             }
         },
         hasRolled: Boolean,
@@ -370,7 +381,10 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
             oneReroll: playerStateModel.oneReroll,
             // Games that started before the Docks shipped have no stored flag.
             harbourUnlocked: playerStateModel.harbourUnlocked === true,
-            lastDiceSelection: playerStateModel.lastDiceSelection
+            lastDiceSelection: playerStateModel.lastDiceSelection,
+            acquiredCards: playerStateModel.acquiredCards
+                ? playerStateModel.acquiredCards.map(card => card.toString() as uuidString)
+                : undefined,
         };
     }
     return {

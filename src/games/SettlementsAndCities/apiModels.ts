@@ -51,6 +51,12 @@ export interface ISACPlayerStateResponse {
     // seat but only once the game is complete (undefined while it is in play,
     // for every viewer): when it flips would say when a hand first got wool.
     hasHeldWool?: boolean;
+    // The same, for grain (Gluten Free).
+    hasHeldGrain?: boolean;
+    // Victory-point development cards held, revealed once the game is
+    // complete and undefined until then, for every viewer — the viewer's own
+    // included, since they already have playerDevCards.
+    victoryPointCards?: number;
     remainingRoads: number;
     remainingSettlements: number;
     remainingCities: number;

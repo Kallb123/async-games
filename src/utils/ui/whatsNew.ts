@@ -77,6 +77,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Eleven more achievements for Settlements & Cities and Dice Cities",
+                detail: "Win Settlements & Cities without a city, without grain, or away from every 6 and 8 — or Dice Cities on restaurants alone, or spending your very last coin on the final landmark. And try holding one of every card in the Dice Cities market.",
+            },
+            {
                 title: "New achievements for Settlements & Cities and Dice Cities",
                 detail: "Win a Settlements & Cities game without building a road after setup, or without gathering or trading for any wool, or a Dice Cities Docks game as the only player without the Dock.",
             },
@@ -114,11 +118,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Settlements & Cities: the points race, who rolled what, and who gathered what",
                 detail: "A finished game's results now chart every player's victory points round by round — hidden Victory Point cards revealed, and the dips when Longest Road or Largest Army changed hands — split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered, the most of each in bold.",
-                game: "settlementsandcities",
-            },
-            {
-                title: "Settlements & Cities: trade with other players",
-                detail: "Post an offer — \"1 🪵 for 1 🐑, anyone?\" — and any other player can take it up on any turn, so a trade never waits for the dice to come round. The new Trade offers panel lists every open offer and tells you straight away whether you have what it asks for.",
                 game: "settlementsandcities",
             },
         ],

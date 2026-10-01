@@ -18,7 +18,7 @@ import { LANDMARKS } from "./ui";
 import type { IDiceCitiesBusinessCenterOutcome, IDiceCitiesDiceRollOutcome, IDiceCitiesTvStationOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
-import { endTurnCommand, harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
+import { buyCommand, endTurnCommand, harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
 import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
@@ -514,6 +514,47 @@ describe("Dice Cities landmarks", () => {
 
         gameType.CheckEndTurn(game, { ...outcome, turnOver: true });
         expect(game.currentTurn).toBe("u2");
+    });
+});
+
+describe("Dice Cities: what a city has acquired", () => {
+    // Small Business, Big Dice Energy and Dine & Dash ask what a player ever
+    // owned, which a city's cards can't answer once a card has left it.
+    it("tallies a purchase and a Business Center swap, each card once, and keeps what was swapped away", async () => {
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([
+                ["u1", player({ money: 10, acquiredCards: [] })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.BAKERY), acquiredCards: [] })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        expect((await buyCommand(DiceCitiesCardIds.CAFE).Execute(game)).validMove).toBe(true);
+        gs.hasRolled = true;
+        expect((await buyCommand(DiceCitiesCardIds.CAFE).Execute(game)).validMove).toBe(true);
+        expect(gs.playerStates.get("u1")!.acquiredCards).toEqual([DiceCitiesCardIds.CAFE]);
+
+        gs.awaitingBCSelectionOwn = true;
+        gs.awaitingBCSelectionOpponent = true;
+        const own = sentBy(new DiceCitiesRequestBusinessCenterOwnSelection());
+        own.selectedCard = DiceCitiesCardIds.CAFE;
+        await own.Execute(game);
+        const theirs = sentBy(new DiceCitiesRequestBusinessCenterOpponentSelection());
+        theirs.selectedUser = "u2";
+        theirs.selectedCard = DiceCitiesCardIds.BAKERY;
+        await theirs.Execute(game);
+
+        expect(gs.playerStates.get("u1")!.acquiredCards).toEqual([DiceCitiesCardIds.CAFE, DiceCitiesCardIds.BAKERY]);
+        expect(gs.playerStates.get("u2")!.acquiredCards).toEqual([DiceCitiesCardIds.CAFE]);
+    });
+
+    it("starts no tally on a game that predates it", async () => {
+        const gs = makeState({ hasRolled: true, playerStates: new Map([["u1", player({ money: 10 })], ["u2", player()]]) });
+
+        await buyCommand(DiceCitiesCardIds.CAFE).Execute(makeGame(gs));
+
+        expect(gs.playerStates.get("u1")!.acquiredCards).toBeUndefined();
     });
 });
 

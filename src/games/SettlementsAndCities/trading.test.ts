@@ -223,6 +223,37 @@ describe("SACAcceptTrade", () => {
     });
 });
 
+describe("what a trade brings into a hand", () => {
+    // No Animals Were Harmed and Gluten Free ask whether a hand ever held wool
+    // or grain, and trading for it counts as holding it.
+    it("tallies the wool and grain each side of a player trade takes in", async () => {
+        const game = table({
+            playerStates: new Map([
+                ["u1", player({ resources: { wool: 2 } })],
+                ["u2", player({ resources: { grain: 2 } })],
+            ]),
+        });
+        const offer = offerOf({ grain: 2 }, { wool: 1 });
+        await run(game, offer);
+        await run(game, acceptOf(offer.id));
+
+        const u1 = game.specificGameState.playerStates.get("u1")!;
+        const u2 = game.specificGameState.playerStates.get("u2")!;
+        expect([u1.woolTraded, u1.grainTraded]).toEqual([0, 2]);
+        expect([u2.woolTraded, u2.grainTraded]).toEqual([1, 0]);
+    });
+
+    it("tallies the grain a maritime trade takes in", async () => {
+        const game = table({ playerStates: new Map([["u1", player({ resources: { wool: 4 } })], ["u2", player()]]) });
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "wool";
+        trade.wantResource = "grain";
+
+        expect((await run(game, trade)).outcome.validMove).toBe(true);
+        expect(game.specificGameState.playerStates.get("u1")!.grainTraded).toBe(1);
+    });
+});
+
 describe("SACWithdrawTrade", () => {
     it("takes down the proposer's own offer only", async () => {
         const game = table();
