@@ -5195,6 +5195,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-stair: oklch(0.72 0.04 70);
     --ra-tower: oklch(0.86 0.05 80);
     --ra-centre: oklch(0.8 0.15 85);
+    --ra-reach: oklch(0.45 0.13 250);
 }
 .ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
 .ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
@@ -5258,7 +5259,13 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 .ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
-.ag-ra-selected { fill: none; stroke: var(--ag-on-dark); stroke-width: 0.9; pointer-events: none; }
+/* The ring round a figure: the one selected, one a tap could aim at, one aimed
+   at, and a watcher the move lined up would set off. */
+.ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }
+.ag-ra-ring--selected { stroke: var(--ag-on-dark); }
+.ag-ra-ring--candidate { stroke: var(--ag-gold); }
+.ag-ra-ring--aimed { stroke: var(--ag-danger); stroke-width: 1.2; }
+.ag-ra-ring--flagged { stroke: var(--ag-danger); stroke-dasharray: 1.4 0.9; }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */
 .ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }
@@ -5267,6 +5274,19 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    lit as somewhere to go once a character is picked up. */
 .ag-ra-place { fill: transparent; cursor: pointer; }
 .ag-ra-place--target { fill: color-mix(in oklch, var(--ra-centre) 28%, transparent); stroke: var(--ra-centre); stroke-width: 0.4; }
+/* Taking a turn (§17.3 PR 7). The selected character's reach, shaded by the AP
+   it takes to stop on each square: the nearer, the lighter. */
+.ag-ra-reach { fill: var(--ra-reach); pointer-events: none; }
+.ag-ra-reach--1 { fill-opacity: 0.18; }
+.ag-ra-reach--2 { fill-opacity: 0.3; }
+.ag-ra-reach--3 { fill-opacity: 0.42; }
+.ag-ra-reach--4 { fill-opacity: 0.54; }
+/* Over the whole board, under the figures: a tap on any square no one stands on. */
+.ag-ra-tap { fill: transparent; cursor: pointer; }
+.ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
+.ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
+.ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
+.ag-ra-roll { margin-bottom: 8px; }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

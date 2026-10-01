@@ -6,7 +6,7 @@ import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, squareCentre } from '@/games/RealmArena/ui';
+import { areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
 
 /** Each terrain's fill, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
 const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
@@ -40,7 +40,30 @@ interface RealmArenaBoardProps {
     onSelect: (fighterId: number) => void;
     /** The viewer placing their squad (`sealed`) in their deployment zone, before the muster goes. */
     placing?: Placing | null;
+    /** The viewer lining up the selected character's next action, on their battle turn. */
+    aiming?: Aiming | null;
 }
+
+/** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
+interface Aiming {
+    /** The selected character's reach, one layer for each AP it costs to stop there. */
+    reach: readonly RunLayer<number>[] | null;
+    /** The path a lined-up move takes. */
+    path: readonly Square[] | null;
+    /** The 3×3 a lined-up fireball hits. */
+    area: readonly Square[] | null;
+    /** Who a tap could aim at. */
+    candidates: readonly number[];
+    /** Who is aimed at. */
+    aimed: readonly number[];
+    /** The watchers a lined-up move would set off. */
+    flagged: readonly number[];
+    /** A tap on a square of the board, anywhere no character stands. */
+    onSquare: (square: Square) => void;
+}
+
+/** The ring drawn round a figure: chosen, a candidate for a tap, aimed at, or a watcher a move would set off. */
+type Ring = 'selected' | 'candidate' | 'aimed' | 'flagged';
 
 interface Placing {
     zone: readonly Square[];
@@ -57,16 +80,15 @@ interface FigureProps {
     character: CharacterId | null;
     className?: string;
     fill?: string;
-    /** Ringed as the one selected. */
-    selected?: boolean;
+    ring?: Ring;
 }
 
 /** A character's disc with its mark on it, a little above its square's centre to leave room for the HP bar beneath. */
-function Figure({ field, square, character, className = '', fill, selected = false }: FigureProps) {
+function Figure({ field, square, character, className = '', fill, ring }: FigureProps) {
     const { x, y } = squareCentre(field, square);
     return (
         <>
-            {selected && <circle className="ag-ra-selected" cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
+            {ring && <circle className={`ag-ra-ring ag-ra-ring--${ring}`} cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS + 1.2} />}
             <circle className={`ag-ra-figure ${className}`} cx={x} cy={y - FIGURE_LIFT} r={FIGURE_RADIUS} fill={fill} />
             <text className="ag-ra-mark" x={x} y={y - FIGURE_LIFT}>{character ? CHARACTER_MARK[character] : '✕'}</text>
         </>
@@ -87,8 +109,15 @@ function Figure({ field, square, character, className = '', fill, selected = fal
  * battle, far too small to tap — so `BoardZoom`'s deepest step brings about
  * ten squares across the column, and selecting a character brings the view to
  * it.
+ *
+ * On the viewer's battle turn (`aiming`, §17.3 PR 7) it shades the selected
+ * character's reach by the AP each square costs, draws the path a lined-up
+ * move takes and the area a fireball hits, and rings who can be aimed at, who
+ * is, and every watcher a move would set off. A tap anywhere no character
+ * stands goes to `aiming.onSquare`; a tap on a character still goes to
+ * `onSelect`, and the screen decides whether that aims or selects.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
@@ -107,6 +136,24 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     // The fallen first, so anyone standing over a body is drawn on top of it.
     const drawOrder = [...fighters].sort((a, b) => Number(isStanding(a)) - Number(isStanding(b)));
     const figureRects = [...fighters, ...(sealed ?? [])].map(({ square }) => areaRect(field, [square]));
+    const ringOf = (fighter: Fighter): Ring | undefined => {
+        if (fighter.id === selected?.id) return 'selected';
+        if (aiming?.aimed.includes(fighter.id)) return 'aimed';
+        if (aiming?.flagged.includes(fighter.id)) return 'flagged';
+        if (aiming?.candidates.includes(fighter.id)) return 'candidate';
+        return undefined;
+    };
+    const pathEnd = aiming?.path ? squareCentre(field, aiming.path[aiming.path.length - 1]) : null;
+    // A tap's point on the board, mapped through the SVG's own transform so
+    // it lands on the right square at any zoom.
+    const tapSquare = (event: React.MouseEvent<SVGRectElement>) => {
+        const svg = event.currentTarget.ownerSVGElement;
+        const ctm = svg?.getScreenCTM();
+        if (!svg || !ctm || !aiming) return;
+        const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+        const square = squareAtPoint(field, point.x, point.y);
+        if (square !== undefined) aiming.onSquare(square);
+    };
 
     return (
         <div className="ag-board-frame ag-realmarena-frame">
@@ -140,10 +187,22 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {centre && <rect className="ag-ra-centre" {...centre} />}
 
+                    {aiming?.reach?.map(layer => (
+                        <path key={layer.key} className={`ag-ra-reach ag-ra-reach--${layer.key}`} d={layer.d} />
+                    ))}
+                    {aiming?.area && <rect className="ag-ra-blast" {...areaRect(field, aiming.area)} />}
+                    {aiming && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
+                    {aiming?.path && pathEnd && (
+                        <>
+                            <polyline className="ag-ra-path" points={pathPoints(field, aiming.path)} />
+                            <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={1.6} />
+                        </>
+                    )}
+
                     {sealed?.map((pick, index) => (
                         <g key={`sealed-${index}`} className="ag-ra-sealed">
                             <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
-                            <Figure field={field} square={pick.square} character={pick.character} selected={placing?.selected === index} />
+                            <Figure field={field} square={pick.square} character={pick.character} ring={placing?.selected === index ? 'selected' : undefined} />
                         </g>
                     ))}
 
@@ -179,7 +238,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                 title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...status].join(' · ')}
                             >
                                 <Figure
-                                    selected={isSelected}
+                                    ring={ringOf(fighter)}
                                     field={field}
                                     square={fighter.square}
                                     character={standing ? fighter.character : null}
