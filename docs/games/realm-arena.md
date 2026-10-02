@@ -6,7 +6,9 @@ two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
 is the one to build first (§10). §11 records every answer. §13 is the battle
 rules and the first characters, settled in rounds 3–6, and §15 is the first
 battlefield, a ruined fort. §17 is the implementation plan, agreed in round
-6. Building starts once this doc has merged (§11.6, answer 6).
+6. Building starts once this doc has merged (§11.6, answer 6). §20–§23 are
+Milestone C, agreed in round 7: status effects, items, destructible low cover
+and character mastery, built after launch and before the rest of Milestone B.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -91,6 +93,8 @@ What's decided so far:
 | The same fantasy world as Defender of the Realm | §11.1, answer 4 |
 | Built before Defender of the Realm | §11.1, answer 7 |
 | The name: Realm Arena | §11.1, answer 6 |
+| After launch: status effects, then items bought at muster, then destructible low cover, then character mastery (Milestone C, §17.4) | §11.7, answers 1–2 |
+| Progression is per character: playing a character widens what you can muster it with (§7, §23) | §11.7, answer 3 |
 
 ---
 
@@ -212,6 +216,13 @@ the budget.
 
 ## 7. Progression: unlocks
 
+*Changed in round 7:* progression is **character mastery** (§23). Unlocks are
+earned per character, by playing that character, and widen what you can
+muster it with. The principles below still hold: sidegrades, earned across all
+your matches, no permanent death, a starter set that plays well. What changed
+is that you earn them for a character, not for the game as a whole, and the
+first ones are new ways to equip a character rather than new characters.
+
 Round 1 pointed progression at **unlocks**: new characters, which give more
 flexibility, or new equipment for characters, each with a points cost (§11.1,
 answer 1). Round 2 agreed the shape below (§11.2, answers 3 and 5). The one
@@ -320,6 +331,12 @@ The build order, agreed in round 2 (§11.2, answer 6):
 3. **Then:** unlocks (§7), and fog of war if it's chosen (§8).
 4. **Then:** more factions.
 
+*Changed in round 7* (§11.7): after the first playable version is launched,
+depth comes before breadth. Status effects, items, destructible low cover and
+character mastery (Milestone C, §20–§23) come next, and character mastery
+replaces step 3's unlocks. Teams, fog of war, factions and a second mission
+follow, in that order.
+
 ---
 
 ## 11. Questions and answers
@@ -408,6 +425,19 @@ full cover block sight, and only area abilities hit allies.
 6. **Where does PR 1 start?** No PR yet. The design document should merge
    first.
 
+### 11.7 Round 7
+
+Asked after free-for-all (B2) shipped. The game was compared with XCOM and
+Final Fantasy Tactics, to find what's missing that matters most.
+
+1. **What comes after PRs 9 and 10?** Status effects, then items that cost a
+   few points at muster, then destructible low cover, then upgrades per
+   character per player (Milestone C, §17.4).
+2. **And the rest of Milestone B?** Not asked. Teams, fog of war, factions
+   and the second mission keep their order and wait until after Milestone C.
+3. **Progression?** Upgrades per character, per player: using a character
+   unlocks more flexibility with it (§23).
+
 ---
 
 ## 12. Questions (round 2)
@@ -446,7 +476,8 @@ proposed default, the rule says so. The numbers are first guesses for playtestin
     against an attacker when a cover square is next to it on the attacker's
     side. High cover there gives full cover; otherwise low cover gives half.
     With neither, the character is flanked (§13.3).
-  - Nothing destructible in the first playable version.
+  - Nothing destructible in the first playable version. Low cover can be
+    blasted away from Milestone C (§22). High cover never can.
 - **Deployment zones** sit at opposite ends for two players, and in the
   corners for three or four, about 40 squares apart. At the movement
   allowances in §13.2, squads meet within two turns. A character can even
@@ -1071,7 +1102,11 @@ Reviewers: `rulebook`, `caveman`.
 3. One line in the new-games group of `whatsNew.ts`.
 4. A full crew pass over the whole game.
 
-### 17.4 Milestone B: after the first playable version
+### 17.4 Milestones B and C: after the first playable version
+
+B1 and B2 are built. Round 7 put **Milestone C** (below) next, after PR 10.
+The rest of Milestone B (B3, B5–B7) follows C, in its own order. C4 replaces
+B4.
 
 In the order §10 set, and in less detail for now:
 
@@ -1104,14 +1139,21 @@ In the order §10 set, and in less detail for now:
     battle is still abandoned, as before (§17.2). A muster is one turn each,
     so nobody can miss three in a row before it's over.
 - **B3 — Teams of two**, in alternate seats, with a team score (§5.2).
-- **B4 — Unlocks** (§7). This is the first state in the app that belongs to a
-  player rather than a game, so it needs its own collection and routes
-  (`locksmith`, `gremlin`).
+- **B4 — Unlocks** (§7). *Replaced by C4, character mastery (§23).*
 - **B5 — Fog of war**, if it's chosen (§8). It's hidden state in every
   response and every replay (`croupier`).
 - **B6 — More factions.**
 - **B7 — A second mission and battlefield.** This was B1, until the three-
   and four-player battlefields went first.
+- **Milestone C — depth, in this order** (round 7, §11.7):
+  - **C1 — Status effects** (§20).
+  - **C2 — Items** bought at muster (§21).
+  - **C3 — Destructible low cover** (§22).
+  - **C4 — Character mastery** (§23).
+
+  Each step depends on the one before it. Items carry effects, blasting needs
+  something that blasts, and mastery's first options are built from all
+  three. Each has its own PRs, listed in its section.
 - **Later platform work:** the shared team turn (§5.2). Undo for an action
   that rolled nothing and hurt nobody — a move that set off no reactions among
   them — is built (`docs/undo.md` §16, "The eighth game").
@@ -1231,6 +1273,328 @@ keep. The Ruined Fort's test shares those checks (`maps/testFixtures.ts`).
 
 ---
 
+## 20. Status effects (C1)
+
+The first part of Milestone C. Today the only thing that happens to a
+character is losing HP, apart from two stances it takes itself. XCOM and Final
+Fantasy Tactics both get much of their depth from conditions: a stunned
+soldier, a burning one, a target marked for the rest of the squad. A few
+effects give every existing action more to weigh, and they're what items (§21)
+and mastery options (§23) are built from.
+
+### 20.1 The effects
+
+The numbers are first guesses for playtesting, like §13's.
+
+| Effect | What it does | Count | Comes from |
+|---|---|---:|---|
+| **Burning** | 1 damage at the start of each of its owner's next two turns | 2 | Fireball (everyone it hits), a fire flask (§21) |
+| **Stunned** | Its banked AP are lost as it's stunned, so it can't react until its owner's next turn, which it starts with 2 AP instead of 4 | 1 | A thunder flask (§21), Shield bash (§23) |
+| **Slowed** | Its movement allowance is halved, rounded up, for its owner's next turn | 2 | Crippling shot and Frost bolt (§23) |
+| **Marked** | +15% to hit it, for every attacker, reactions included, until its owner's turn after next | 2 | Hunter's mark (§23) |
+
+**The count works exactly as a cooldown's does** (§13.6), and shares its
+code. It goes down by one at the start of each of the affected character's
+own turns, and the effect is gone when it reaches 0. Burning and Stunned act
+at that moment, before counting down. So:
+
+- a count of 1 ends at the start of the owner's next turn, which is how
+  Stunned takes its AP and then lifts;
+- Slowed needs a count of 2 to last through the owner's next turn, rather
+  than lifting before the character has moved;
+- Marked is counted on the *target's* turns. Marked on your turn, it survives
+  the target's next turn start and so lasts through your next turn too.
+
+The two stances become effects too. Hunkered down and Shield wall already end
+at the start of their owner's next turn, so they move into the same field with
+a count of 1. That removes two booleans from the character rather than adding
+a third and fourth.
+
+### 20.2 Rules
+
+- **Effects don't stack.** Applying one a character already has resets it
+  to the longer of the two durations. Two fire flasks mean burning for longer,
+  not twice the damage.
+- **A shot applies its effect only on a hit**, not a graze or a miss.
+  Anything that doesn't roll (a strike, a fireball, a flask) always does.
+- **Heal also puts out burning and clears slowed and stunned.** That's the
+  answer to effects, and it gives the Cleric a reason to heal a character
+  that isn't badly hurt.
+- **A downed character loses every effect.** A raised one comes back clear.
+- **A knock-out by burning** scores for the owner of whoever set it alight.
+  So burning remembers who caused it. Burning that downs your own character
+  scores nobody anything, as a fireball's friendly fire doesn't (§13.6).
+- **Effects are public**, like everything else on the battlefield. Each
+  figure shows its effects as small marks, and the unit's box spells them
+  out.
+- **The hit chance shown includes Marked**, and the shaded reach includes
+  Slowed. Both come from `rules.ts`, as today, so the board and the server
+  agree.
+
+### 20.3 Engine
+
+- `Fighter` gains `effects: Partial<Record<EffectId, number>>` (the
+  counts), plus the id of whoever set it burning. `hunkered` and `shieldWall`
+  fold into it, and `startTurn` counts effects down with the cooldowns'
+  code. Nothing migrates the old booleans: the game isn't available yet, so
+  only playtest games have the old shape, and they can go.
+- `fighterStatus` (`ui.ts`), which already lists the stances on a unit's box,
+  lists the effects.
+- **`startTurn` returns an `Outcome`**, not just fighters, because burning
+  can now hurt, down and score at the start of a turn. The hand-off in
+  `CheckEndTurn` applies those events and writes them to the log. It rolls
+  nothing, so replay is unchanged.
+- **A squad can be wiped out at the start of its own turn.** The rotation
+  already steps past a squad with nobody standing (B2), but it has to check
+  again after the burning, not only before it. If that leaves one squad
+  standing, the battle ends there.
+- New events: `effect` (applied, refreshed or cleared) and `burned`. Recap
+  narrates them in the log's words, as every other event is (§17.3 PR 8).
+- Undo needs no change. An action that applies an effect either rolled or hurt
+  somebody, except a mark, which is stored in the snapshot like everything
+  else.
+
+### 20.4 PRs
+
+1. **Rules and engine:** effects in `characters.ts` and `rules.ts`, folding
+   in the two stances, Burning on Fireball, Heal clearing effects, and
+   `startTurn`'s outcome. Its one caller, the hand-off in `CheckEndTurn`,
+   changes in the same PR, applying the start-of-turn events and checking
+   for the end of the battle after them, so no PR leaves burning that downs
+   and scores without a log. Tests for each row of §20.1 and each rule in
+   §20.2. Reviewers: `caveman`, `gremlin` (a squad burned out at the start of
+   its turn).
+2. **Board:** the effect marks on figures and unit boxes, recap narration and
+   guide text. Reviewer: `caveman`.
+
+## 21. Items (C2)
+
+XCOM's grenades, medkits and smoke are its most-used tools. They're answers
+to cover, to attrition and to a squad dug in on overwatch, which §13.4 already
+flagged as the balance to watch. Here they're bought at muster from the same
+points budget, so an item always costs a body or an upgrade somewhere else.
+
+### 21.1 The rules
+
+- **One item per character**, chosen at muster, for a few points. One slot
+  keeps turns short and the muster screen small. More slots are a mastery
+  option (§23), not a default.
+- **Each item is used once.** It's gone after that, whether it did anything
+  or not.
+- **Throwing** needs the target square in range (6 squares) and in sight,
+  and doesn't roll, as a fireball doesn't. An area hits friend and foe.
+- **The budget is unchanged.** Items compete with characters for the same
+  points, at 5 points each, so a squad trades a fraction of a character for
+  two or three items. The ready-made squad carries none, and still spends
+  the whole budget.
+- **Carried items are public** once the battle starts, like everything else
+  on the battlefield. During the muster they're part of the sealed squad, so
+  `myMuster` carries them for their owner only (§17.2).
+
+### 21.2 The first four items
+
+| Item | Points | AP | What it does |
+|---|---:|---:|---|
+| **Fire flask** | 5 | 2 | Thrown at one square. 2 damage and Burning to whoever is there. Blasts the low cover on and next to that square, once low cover can be blasted (§22) |
+| **Thunder flask** | 5 | 2 | Thrown at a 3×3 area. Stuns everyone in it. No damage |
+| **Smoke pot** | 5 | 1 | Thrown at a 3×3 area. Until the thrower's next turn, a character standing in the smoke is −20% to hit, and overwatch can't fire at a mover entering it |
+| **Healing draught** | 5 | 1 | The carrier, or an ally next to it, gets 3 HP back and loses Burning, Slowed and Stunned. It never takes a character past full HP |
+
+The smoke pot lasts until the thrower's next turn, which is exactly how a
+shield wall works, so it's built the same way. The cloud lives on the
+thrower, as a `smoke` effect with a count of 1 and the square it was thrown
+at. `shotOdds` and `reactionsTo` project it onto the 3×3 around that square,
+as they project a shield wall onto the squares next to a Knight
+(`shielded`). The battle state stays `{ field, fighters }`, and nothing new
+needs persisting or expiring. The one thing given up: a thrower who is
+downed takes their smoke with them, as a downed Knight takes the shield wall.
+Smoke doesn't block sight, which keeps `lineOfSight.ts` the same pure
+function of the ground.
+
+### 21.3 Engine and muster
+
+- `MusterPick` gains an optional `item`, checked by `musterRefusal` against
+  the budget with the characters. `Fighter` gains `item: ItemId | null`.
+- Two new `Act` kinds, each shaped like the ability it resembles: a throw is
+  `{ kind: "throw", fighter, at }`, aimed at a square as Fireball is, and a
+  draught is `{ kind: "draught", fighter, target }`, aimed at an ally as
+  Heal is.
+- **Reused, not rebuilt:** `fireballArea` is the 3×3 for the thunder flask,
+  the smoke pot and the fire flask's blast, renamed `areaAround`. Heal, the
+  healing draught and Purify (§23) share one heal-and-clear resolver.
+- **The muster screen** picks an item while the squad is placed: tap one of
+  your squad to pick it up, as today (§17.3 PR 6), and its card offers the
+  four items as `BuildRow`s with their cost. The points left counts items
+  too.
+- **On the board**, an item is a `BuildRow` in the turn sheet like an
+  ability. Arming one shades its range through `rangeArea` (`ui.ts`): its
+  `"fireball"` kind becomes a general area kind that takes a range, for
+  Fireball and every throw, and the draught uses `"nextTo"`, as Heal does.
+
+### 21.4 PRs
+
+1. **Rules:** items as data, the item action, smoke in `shotOdds` and
+   `reactionsTo`, the muster check with items. Reviewer: `caveman`.
+2. **Muster and board:** the item picker, the turn sheet rows, the smoke
+   drawn on the board, recap narration, guide text. Reviewers: `caveman`,
+   `croupier` (an item in a sealed muster).
+
+## 22. Destructible low cover (C3)
+
+In XCOM, blowing cover away is the answer to an enemy dug in behind it.
+Without it, whoever holds the keep's fallen pillars has an edge the attacker
+can only flank round. Destructible low cover gives the attacker a second
+answer and makes Fireball and the fire flask a choice between hurting people
+and opening ground.
+
+### 22.1 The rules
+
+- **Only low cover can be destroyed:** rubble, low walls and pillars. Walls
+  and trees never can, so a map's shape, its sight lines and the fairness
+  its tests prove (§19) all stay as drawn.
+- **A blasted square becomes scorched ground**, which plays exactly as open
+  ground and is drawn differently, so it's clear something was there. It costs 1 to move into, can be stood on, and gives no
+  cover.
+- **What blasts it:** Fireball, every low cover square in its 3×3; a fire
+  flask, its square and the squares next to it; and Demolish (§23), one square
+  next to a Knight.
+- **Blasting needs no roll** and happens after the damage. So a character
+  in the blast loses its cover only for the next attack, not for the one that
+  blasted it.
+
+### 22.2 Engine
+
+- The battle state gains `blasted: Square[]`. The battlefield every rule
+  reads becomes `battlefieldWith(map, blasted)`: the map's terrain with each
+  blasted square swapped for a new `TERRAIN` entry, scorched ground
+  (`{ ...OPEN, name: "Scorched ground" }`). It stays a pure function of persisted
+  fields, so the client, the server and a replay all build the same ground.
+  `battlefield/` gets the one helper. Nothing else there changes, since paths,
+  sight and cover already read the terrain they're given.
+- New event: `blasted`, with its squares.
+- **The board needs no new layer.** It already draws one path per kind of
+  terrain (`groundLayers`), so scorched ground is one more `GROUND_CLASS`
+  entry and one colour token.
+- The map tests check the maps as drawn. Blasting only takes cover away, and
+  never walls, so nothing they prove can be undone.
+
+### 22.3 PRs
+
+One PR: the rule, the helper, the event, the scorched squares on the board,
+and a line in the guide. Reviewer: `caveman`.
+
+## 23. Character mastery (C4)
+
+*Agreed in round 7* (§11.7, answer 3): **playing a character unlocks more
+flexibility with that character.** This replaces the game-wide unlocks of §7.
+It's closest to Final Fantasy Tactics' jobs: you get more out of a Knight by
+fielding Knights. It keeps §7's principles: options, not power, so a newer
+player isn't outgunned, and no named characters with levels and wounds to
+keep.
+
+### 23.1 How it's earned
+
+- **A character's mastery is the number of your finished battles it fought
+  in.** Each character mustered in a battle that counts as played (the
+  achievements' rule: at least two turns) earns one, win or lose. Two of the
+  same character in one battle still earn one.
+- **Three ranks:** rank 1 after 2 battles, rank 2 after 5, rank 3 after 10.
+  Each rank unlocks one option for that character.
+- **It's per player and per character.** Six characters at rank 3 is 60
+  battles' worth, which is a long tail. Getting one character to rank 1 takes
+  two battles.
+
+### 23.2 What an option is
+
+- **An option swaps one part of a character's kit for another**: its weapon,
+  or one ability. It's picked per figure at muster, like an item, and costs
+  the same points as the kit it replaces. A character with no option picked
+  is the starter character of §13.6.
+- **An option is a sidegrade.** It trades something for something else and
+  never adds HP, accuracy or AP outright. Where it adds something, it gives
+  something up.
+- **The options picked are public once the battle starts**, like items.
+  During the muster they're sealed with the rest of the squad.
+
+The rank-1 options, built from effects, items and blasting:
+
+| Character | Option | Replaces | What it does |
+|---|---|---|---|
+| Man-at-arms | **Shield bash** | Cleave | Strike one enemy next to them for 2, and stun it (2 AP, 3 turns) |
+| Knight | **Demolish** | Shield wall | Blast one low cover square next to them, and strike anyone standing beside it for 2 (2 AP, 2 turns) |
+| Archer | **Crippling shot** | Aimed shot | A shot at normal accuracy that slows on a hit (3 AP, 2 turns) |
+| Scout | **Hunter's mark** | Sneak | Mark an enemy it can see within 12 squares (1 AP, 2 turns) |
+| Mage | **Frost bolt** | Bolt | Damage 2 instead of 3, and slows on a hit |
+| Cleric | **Purify** | Raise | Clear every effect from allies within 1 square, and give each 2 HP (2 AP, 3 turns) |
+
+The rank-2 and rank-3 options are left to design once C1–C3 have been
+played. Two that already fit: a **second item slot** (the item is still paid
+for), and a **second weapon option** per character.
+
+### 23.3 Engine
+
+- **Mastery is read from game results, not a new collection.** Every
+  finished game writes a `GameResult`, which the achievements and the profile
+  count from (`docs/achievements.md` §2). Realm Arena's has no stats of its
+  own yet, so C4 adds them: a stats schema, its discriminator in
+  `GameResultData.ts`, and the writer that records each player's mustered
+  characters. A player's mastery is then an aggregation over their results.
+  Nothing writes mastery, so nothing can get it out of step with the games
+  behind it.
+- **A battle snapshots each player's unlocked options when it's created**,
+  into the game state. That's all the `Muster` check reads, so ranks
+  themselves aren't stored. The command stays a pure function of the game, a
+  replay checks it the same way years later, and a rank reached mid-battle
+  changes nothing. This changes a decision of §17.1: the starting state is no
+  longer a function of the seat order alone. `buildInitialRealmArenaState`
+  takes the snapshot as a second input, and the replay adapter
+  (`src/utils/games/replay.ts`) passes it back from the persisted field.
+- **Ranks and unlocked options are public**, like the rest of a profile.
+  Profile sections are shared with a friend's read-only profile, so hiding
+  them in a battle's response would protect nothing. Only the options picked
+  for a squad are sealed, with the rest of the muster.
+- **The client never claims an option.** It sends the pick. The server
+  refuses an option its sender hasn't unlocked, and the setup route never
+  reads ranks from the request.
+- **The muster screen** shows each character's rank and the options it has
+  unlocked, beside the item picker. The profile gets a Realm Arena section
+  with each character's mastery and the battles to its next rank.
+
+### 23.4 PRs
+
+1. **Mastery from results:** Realm Arena's result stats schema, its
+   discriminator and writer, the aggregation, the snapshot at creation, and
+   the replay adapter reading it back. Reviewers: `gremlin` (the
+   aggregation's cost on a long record, and a creation that can't read it),
+   `rulebook` (the result-stats wiring).
+2. **Options:** the rank-1 options as data and rules, the muster check
+   against the snapshot. Reviewers: `caveman`, `locksmith` (an option
+   claimed but not unlocked).
+3. **Screens:** options at muster, the profile section, guide text and the
+   "What's new" line. Reviewers: `caveman`, `rulebook`.
+
+## 24. Questions (round 7)
+
+Open, and worth settling before each part is built:
+
+1. **Effects (§20):** are four the right first four? Poison and a positive
+   effect (blessed: +10% to hit) are the obvious next ones.
+2. **Items (§21):** is one slot and 5 points right? At 100 points, three
+   items cost 15, as much as a Man-at-arms.
+3. **Smoke (§21.2):** is −20% and no overwatch into it enough, or should it
+   block sight? Blocking sight means sight depends on the battle, not just the
+   map, which every replay and every preview then has to carry.
+4. **Blasting (§22):** should a fireball blast cover at all, or only the
+   flask and Demolish? With Burning, a fireball already does 5 over two turns,
+   enough to down a Mage, so one that also strips cover may be too strong at
+   30 points.
+5. **Mastery (§23):** is earning one per battle fought, win or lose, right,
+   or should a win, a knock-out, or surviving the battle count for more?
+6. **Mastery (§23):** do rank-1 options belong in the tutorial and guide from
+   the start, or only once a player has unlocked one?
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -1259,3 +1623,4 @@ Realm, its sibling in the same world.
 | 1.5 | Each enemy in the selected character's reach wears its chance to hit above its figure on the board, previewed from the end of a lined-up move like the list. |
 | 1.6 | Battlefields for three and four players (§19): one map per player count, since three seats can't be made identical on squares. The Four-Gate Fort for four, unchanged by a quarter turn; the Ring Fort for three, mirrored, with its third seat held level by measured walks. The milestone plan puts them first, as B1 (§17.4). |
 | 1.7 | B2 fills in free-for-all: the party's size picks the map (§19.1), a round ends with the last seat still playing, a dropped player's squad leaves the battlefield while their score stands, and nobody is dropped from a duel or during the muster. |
+| 1.8 | Round 7 (§11.7): after launch, Milestone C comes before the rest of Milestone B: status effects (§20), items bought at muster (§21), destructible low cover (§22) and character mastery (§23), which replaces game-wide unlocks (§7, B4). Round-7 questions (§24). |
