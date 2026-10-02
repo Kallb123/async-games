@@ -396,11 +396,14 @@ describe("Banned Islet replay", () => {
         const gs = game.specificGameState;
         const gameType = new BannedIsletGameType();
         // Both specials moved into the second seat's hand rather than
-        // conjured, and something for the Sandbags to dry.
+        // conjured, and something for the Sandbags to dry. Setup can deal a
+        // special straight into an opening hand, so a copy is taken from
+        // another hand when the deck has none left.
         const bob = gs.players.get("u2")!;
         for (const special of ['sandbags', 'helicopterLift'] as const) {
-            const index = gs.treasureDeck.indexOf(special);
-            if (index >= 0) bob.hand.push(...gs.treasureDeck.splice(index, 1));
+            if (bob.hand.includes(special)) continue;
+            const holder = [gs.treasureDeck, ...[...gs.players.values()].map(ps => ps.hand)].find(cards => cards.includes(special))!;
+            bob.hand.push(...holder.splice(holder.indexOf(special), 1));
         }
         const wet = gs.positions.findIndex(p => p.state === 'dry');
         gs.positions[wet].state = 'flooded';
