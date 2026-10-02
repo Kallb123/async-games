@@ -122,21 +122,22 @@ function toEvents(
             break;
         }
         case "RealmArenaEndTurn": {
-            // Ending a turn is always a row, even a quiet one: it's the edge
-            // between one player's turn and the next, so the feed's window
-            // opens on it rather than reaching back into the turn before.
+            // Always a row, since it closes the turn's window; only the centre
+            // scoring makes it news, so a bare one is `quiet`.
             const before = state(prev).scores[command.senderId] ?? 0;
             const points = (state(next).scores[command.senderId] ?? 0) - before;
-            const watching = state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
-            rows.push({
-                ...base,
-                type: points > 0 ? RA_CENTRE : RA_END_TURN,
-                glyph: points > 0 ? "★" : "⏳",
-                title: points > 0
-                    ? `${name} ended their turn holding the centre, for ${pluralize(points, "point")}`
-                    : `${name} ended their turn`,
-                detail: watching > 0 ? `${watching} on watch` : undefined,
-            });
+            if (points > 0) {
+                const watching = state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
+                rows.push({
+                    ...base,
+                    type: RA_CENTRE,
+                    glyph: "★",
+                    title: `${name} ended their turn holding the centre, for ${pluralize(points, "point")}`,
+                    detail: watching > 0 ? `${watching} on watch` : undefined,
+                });
+            } else {
+                rows.push({ ...base, type: RA_END_TURN, glyph: "⏳", title: `${name} ended their turn`, quiet: true });
+            }
             break;
         }
         default:

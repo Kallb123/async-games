@@ -30,6 +30,11 @@ export interface IGameEvent {
     title: string; // "Priya rolled 3, climbed a ladder"
     detail?: string; // "51 → 55 → up to 68"
     affectedIds?: string[]; // players this event touched — drives "…from you"
+    // A row that isn't news: a bare "ended their turn". It still marks where
+    // its actor's turn ended, so the feed's window opens on it, and it still
+    // answers a reaction to its match-history line (buildAllEvents) — but the
+    // feed drops it, so it's never in a recap or the turn notification.
+    quiet?: boolean;
 }
 
 export interface IRecapSummary {
@@ -189,7 +194,7 @@ export async function buildEventFeed(
             lastOwn = i;
         }
     });
-    const events = allEvents.slice(lastOwn + 1);
+    const events = allEvents.slice(lastOwn + 1).filter(event => !event.quiet);
 
     if (events.length === 0) {
         return empty;
