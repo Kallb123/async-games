@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, actionSquares, apPips, areaRect, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachLayers,
+    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachLayers,
     reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -230,6 +230,45 @@ describe("targetsOf", () => {
         const hurt = ready(1, "a", "knight", at(OPEN, 1, 0), { hp: 5 });
         const fine = ready(2, "a", "archer", at(OPEN, 0, 1));
         expect(targetsOf({ field: OPEN, fighters: [cleric, hurt, fine] }, "a", cleric, "heal")).toEqual([1]);
+    });
+});
+
+describe("attackOptions", () => {
+    // A low wall in column 4 gives whoever crouches behind it half cover from the west.
+    const WALLED = buildBattlefield({ name: "Walled", rows: ["....o.....", "..........", "..........", "..........", ".........."], deployments: [], objectives: {} });
+    const options = (...args: Parameters<typeof attackOptions>) =>
+        attackOptions(...args).map(({ target, chance }) => ({ target: target.id, chance }));
+
+    it("lists every standing enemy a shot could reach, likeliest first, whatever AP is left", () => {
+        const archer = ready(0, "a", "archer", at(WALLED, 0, 0), { ap: 0 });
+        const covered = ready(1, "b", "knight", at(WALLED, 5, 0));
+        const open = ready(2, "b", "mage", at(WALLED, 9, 4));
+        const ally = ready(3, "a", "knight", at(WALLED, 1, 1));
+        const down = ready(4, "b", "scout", at(WALLED, 6, 3), { hp: 0 });
+        expect(options({ field: WALLED, fighters: [archer, covered, open, ally, down] }, archer)).toEqual([
+            { target: 2, chance: 80 },
+            { target: 1, chance: 60 },
+        ]);
+    });
+
+    it("reads from the square a lined-up move would end on", () => {
+        const archer = ready(0, "a", "archer", at(WALLED, 0, 0));
+        const covered = ready(1, "b", "knight", at(WALLED, 5, 0));
+        expect(options({ field: WALLED, fighters: [archer, covered] }, archer, at(WALLED, 9, 0))).toEqual([{ target: 1, chance: 80 }]);
+    });
+
+    it("gives a strike 100%, and only at an enemy next to it", () => {
+        const knight = ready(0, "a", "knight", at(WALLED, 0, 2));
+        const near = ready(1, "b", "archer", at(WALLED, 1, 2));
+        const far = ready(2, "b", "archer", at(WALLED, 3, 2));
+        const battle = { field: WALLED, fighters: [knight, near, far] };
+        expect(options(battle, knight)).toEqual([{ target: 1, chance: 100 }]);
+        expect(options(battle, knight, at(WALLED, 2, 3))).toEqual([{ target: 1, chance: 100 }, { target: 2, chance: 100 }]);
+    });
+
+    it("finds nothing for a character that's down", () => {
+        const archer = ready(0, "a", "archer", at(WALLED, 0, 0), { hp: 0 });
+        expect(options({ field: WALLED, fighters: [archer, ready(1, "b", "knight", at(WALLED, 2, 0))] }, archer)).toEqual([]);
     });
 });
 

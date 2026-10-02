@@ -45,6 +45,22 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
     }
 }
 
+/** Where a character would stand once the move lined up is made, and the AP it would have left there. */
+export interface AfterMove {
+    square: Square;
+    ap: number;
+}
+
+/**
+ * Where a character would stand, and with what AP, once a lined-up move is
+ * made — or where it stands now, with what it has, when no move is lined up
+ * or `check` refuses the one that is: a refused move goes nowhere.
+ */
+export function afterMove(fighter: Fighter, path: readonly Square[] | undefined, verdict: Check | null): AfterMove {
+    if (!path || !verdict || "refused" in verdict) return { square: fighter.square, ap: fighter.ap };
+    return { square: path[path.length - 1], ap: fighter.ap - verdict.ap };
+}
+
 /** What a tap is read against: the battle, who is acting, what's lined up, and where it can reach. */
 export interface TapContext {
     battle: BattleState;
@@ -171,6 +187,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         candidates,
         reach: shading,
         path: path ?? null,
+        /** Where the character would stand, and with what AP, once a lined-up move is made. */
+        after: afterMove(fighter, path, verdict),
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
         area: aim === "fireball" && draft.square !== null ? fireballArea(field, draft.square) : null,
         action,

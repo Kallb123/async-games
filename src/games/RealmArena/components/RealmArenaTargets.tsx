@@ -1,0 +1,52 @@
+'use client'
+import React from 'react';
+import { ATTACK_AP, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { attackOptions, whoseName } from '@/games/RealmArena/ui';
+import type { TurnDraft } from '@/games/RealmArena/useTurnDraft';
+import { capitalise, pluralize } from '@/utils/ui/text';
+import RealmArenaCrosshair from './RealmArenaCrosshair';
+
+/**
+ * How many targets the list names, likeliest first: it floats over the board,
+ * and any more would cover the squares a phone player is trying to read.
+ */
+const SHOWN = 3;
+
+interface RealmArenaTargetsProps {
+    battle: BattleState;
+    /** The viewer's own selected character. */
+    fighter: Fighter;
+    /** What it has lined up, on the viewer's turn: a move moves where the list reads from. */
+    turn: TurnDraft | null;
+    viewerId: string;
+    nameFor: (userId: string) => string;
+}
+
+/**
+ * The selected character's targets, floating over the foot of the board: the
+ * likeliest `SHOWN` its main weapon could hit, each with its chance to. While
+ * a move is lined up it reads from the end of the move, so a player sees what
+ * a square would put in reach before they go there — and whether they'd have
+ * the AP left to attack from it.
+ */
+export default function RealmArenaTargets({ battle, fighter, turn, viewerId, nameFor }: RealmArenaTargetsProps) {
+    const after = turn?.after ?? { square: fighter.square, ap: undefined };
+    const options = attackOptions(battle, fighter, after.square);
+    const where = after.square === fighter.square ? 'in reach' : 'from there';
+    const short = options.length > 0 && after.ap !== undefined && after.ap < ATTACK_AP ? ' · no AP to attack' : '';
+    return (
+        <div className="ag-board-tag ag-ra-targets">
+            <div className="ag-ra-targets-head">
+                <RealmArenaCrosshair />
+                {options.length === 0 ? `No targets ${where}` : `${pluralize(options.length, 'target')} ${where}${short}`}
+            </div>
+            {options.slice(0, SHOWN).map(({ target, chance }) => (
+                <div key={target.id} className="ag-ra-targets-row">
+                    <RealmArenaCrosshair />
+                    <span className="ag-ra-targets-name">{capitalise(whoseName(battle.fighters, target.id, viewerId, nameFor))}</span>
+                    <b>{chance}%</b>
+                </div>
+            ))}
+        </div>
+    );
+}

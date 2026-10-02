@@ -5335,9 +5335,33 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-unit-foot { display: flex; align-items: center; justify-content: space-between; min-height: 14px; font: 700 12px var(--ag-font); color: var(--ag-ink-soft); }
 .ag-ra-unit-foot--done { color: var(--ag-green); }
 .ag-ra-unit-foot b { font-weight: 800; color: var(--ag-ink); }
+.ag-ra-unit-ap { display: inline-flex; align-items: center; gap: 5px; }
 .ag-ra-unit-pips { display: inline-flex; gap: 3px; }
 .ag-ra-unit-pip { width: 11px; height: 11px; border-radius: 99px; border: 1.5px solid var(--ag-gold); }
 .ag-ra-unit-pip--on { background: var(--ag-gold); }
+/* The crosshair marking a count of targets in reach: a unit's box, and the board's list. */
+/* Scoped under the frame too, to win over `.ag-board-frame svg`, which sizes the board itself. */
+.ag-ra-crosshair, .ag-board-frame .ag-ra-crosshair { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.ag-ra-unit-targets { flex: none; display: inline-flex; align-items: center; gap: 3px; font: 800 12.5px var(--ag-font); color: var(--ra-oxblood); }
+.ag-ra-unit-targets--none { color: var(--ag-ink-softer); }
+/* The selected character's likeliest targets, floating over the foot of the
+   board: the dark pill (.ag-board-tag) grown into a little card. Taps go
+   through it to the board beneath. */
+.ag-game--realmarena .ag-ra-targets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: calc(100% - 24px);
+    padding: 7px 11px;
+    border-radius: 12px;
+    background: color-mix(in oklch, var(--ra-night) 90%, transparent);
+    pointer-events: none;
+}
+.ag-ra-targets-head { display: flex; align-items: center; gap: 5px; color: var(--ra-centre); }
+.ag-ra-targets-row { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.ag-board-frame .ag-ra-targets-row .ag-ra-crosshair { width: 10px; height: 10px; opacity: 0.7; }
+.ag-ra-targets-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ag-ra-targets-row b { font-weight: 800; color: var(--ag-gold); }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.
