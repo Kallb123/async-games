@@ -4,8 +4,8 @@ export const meta: GameMeta = {
     url: "realmarena",
     name: "Realm Arena",
     categories: ["Strategy"],
-    // Two on the Ruined Fort, or a free-for-all of three or four on the
-    // Four-Gate Fort (docs/games/realm-arena.md §17.4 B2).
+    // Two on the Ruined Fort, or a free-for-all of three on the Ring Fort or
+    // four on the Four-Gate Fort (docs/games/realm-arena.md §17.4 B2, §19).
     players: "2–4 players",
     minPlayers: 2,
     maxPlayers: 4,

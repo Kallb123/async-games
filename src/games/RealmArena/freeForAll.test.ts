@@ -9,7 +9,7 @@ import {
 } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.4 B2: free-for-all for three and four players
-// on the 48×48 Four-Gate Fort, the budgets and battle lengths for each party
+// on the battlefield for the party's size (§19.1), the budgets and battle lengths for each party
 // size, and a dropout adapter, so a player who stops turning up has their
 // squad leave while their score stands.
 
@@ -29,9 +29,9 @@ async function drop(game: RealmArenaTestGame, player: string) {
 }
 
 describe("setting up a free-for-all", () => {
-    it.each([[THREE, 3], [FOUR, 4]] as const)("fights %j on the Four-Gate Fort, with the budget and battle length for its size", async (seats, count) => {
+    it.each([[THREE, 3, "ringFort"], [FOUR, 4, "fourGateFort"]] as const)("fights %j on its own map, with the budget and battle length for its size", async (seats, count, map) => {
         const game = makeGame([...seats]);
-        expect(game.specificGameState.map).toBe("fourGateFort");
+        expect(game.specificGameState.map).toBe(map);
         const view = gameStateToModel(game.specificGameState, "a", null);
         expect(view).toMatchObject({ budget: POINTS_BUDGET[count], battleRounds: BATTLE_ROUNDS[count] });
 
@@ -54,7 +54,7 @@ describe("setting up a free-for-all", () => {
         expect((await play(game, muster("a", picks.slice(0, 2)))).outcome.validMove).toBe(true);
     });
 
-    it("musters a timed-out seat's ready-made squad in its own corner", async () => {
+    it("musters a timed-out seat's ready-made squad in its own zone", async () => {
         const game = makeGame([...THREE]);
         for (const player of THREE) expect(await resolveStalledTurn(game, player, player)).toBe("advanced");
         expect(game.specificGameState.phase).toBe("battle");
