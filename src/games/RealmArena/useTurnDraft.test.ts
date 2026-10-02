@@ -4,7 +4,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ACTION_POINTS, newFighter, reachOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./ui";
-import { MOVE, tapFighter, tapSquare, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, MOVE, tapFighter, tapSquare, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -88,5 +88,21 @@ describe("tapFighter", () => {
     it("centres a fireball on whoever is tapped", () => {
         const fireball: Draft = { aim: "fireball", square: null, targets: [] };
         expect(tapFighter(context(fireball), far.id)).toEqual({ ...fireball, square: far.square });
+    });
+});
+
+describe("afterMove", () => {
+    const path = [at(field, 4, 2), at(field, 4, 1), at(field, 4, 0)];
+
+    it("stands where it is with what it has, until a move is lined up", () => {
+        expect(afterMove(manAtArms, undefined, null)).toEqual({ square: manAtArms.square, ap: ACTION_POINTS });
+    });
+
+    it("stands at the end of a move check allows, with what the move leaves", () => {
+        expect(afterMove(manAtArms, path, { ap: 1 })).toEqual({ square: at(field, 4, 0), ap: ACTION_POINTS - 1 });
+    });
+
+    it("goes nowhere on a move check refuses", () => {
+        expect(afterMove(manAtArms, path, { refused: "Not enough AP" })).toEqual({ square: manAtArms.square, ap: ACTION_POINTS });
     });
 });

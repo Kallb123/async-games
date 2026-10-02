@@ -56,6 +56,8 @@ interface RealmArenaBoardProps {
     acting?: string | null;
     /** A review's step (§17.3 PR 8): the squares it touched, brought into view whenever `key` changes. */
     follow?: { squares: readonly Square[]; key: string } | null;
+    /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
+    overlay?: React.ReactNode;
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
@@ -143,7 +145,7 @@ function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, overlay }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
@@ -303,6 +305,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     )}
                 </svg>
             </BoardZoom>
+            {overlay}
         </div>
     );
 }

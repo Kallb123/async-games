@@ -2,16 +2,19 @@
 import React from 'react';
 import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, isStanding, type Fighter } from '@/games/RealmArena/rules';
-import { apPips, canAct, CHARACTER_MARK, fighterName, fighterStatus, hpFraction } from '@/games/RealmArena/ui';
+import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import RealmArenaCrosshair from './RealmArenaCrosshair';
+import { apPips, attackOptions, canAct, CHARACTER_MARK, fighterName, fighterStatus, hpFraction } from '@/games/RealmArena/ui';
 
 interface RealmArenaUnitsProps {
-    /** Everyone on the battlefield: the viewer's own are picked out of it. */
-    fighters: readonly Fighter[];
+    /** The battlefield and everyone on it: the viewer's own are picked out of it. */
+    battle: BattleState;
     player: string;
     colourFor: (userId: string) => string;
     /** It's the viewer's battle turn, so their AP is live and worth counting. */
     acting: boolean;
+    /** Counts what each unit has in reach: not once the battle is over. */
+    showReach: boolean;
     selectedId: number | null;
     /** Selects a unit, which also brings the board's view to it. */
     onSelect: (fighterId: number) => void;
@@ -20,11 +23,13 @@ interface RealmArenaUnitsProps {
 /**
  * The viewer's squad under the board (docs/games/realm-arena.md §17.3): a box
  * per character with its HP and, on their turn, the AP it has left of its
- * `ACTION_POINTS` — the same pips the board draws beside the figure. Tapping a
- * box selects the character and brings the view to it, and "Next ready" steps
- * to the next one with AP left to spend.
+ * `ACTION_POINTS` — the same pips the board draws beside the figure — and a
+ * crosshair counting the enemies its main weapon could hit from where it
+ * stands. Tapping a box selects the character and brings the view to it, and
+ * "Next ready" steps to the next one with AP left to spend.
  */
-export default function RealmArenaUnits({ fighters, player, colourFor, acting, selectedId, onSelect }: RealmArenaUnitsProps) {
+export default function RealmArenaUnits({ battle, player, colourFor, acting, showReach, selectedId, onSelect }: RealmArenaUnitsProps) {
+    const { fighters } = battle;
     const squad = fighters.filter(fighter => fighter.owner === player);
     if (squad.length === 0) return null;
     const ready = acting ? squad.filter(canAct) : [];
@@ -61,7 +66,10 @@ export default function RealmArenaUnits({ fighters, player, colourFor, acting, s
                             <span className="ag-ra-unit-hp">
                                 <span style={{ width: `${hpFraction(fighter) * 100}%` }} />
                             </span>
-                            <UnitFooter fighter={fighter} acting={acting} done={done} />
+                            <span className={`ag-ra-unit-foot${done ? ' ag-ra-unit-foot--done' : ''}`}>
+                                <UnitStatus fighter={fighter} acting={acting} done={done} />
+                                {standing && showReach && <TargetCount count={attackOptions(battle, fighter).length} />}
+                            </span>
                         </button>
                     );
                 })}
@@ -70,19 +78,29 @@ export default function RealmArenaUnits({ fighters, player, colourFor, acting, s
     );
 }
 
-/** A unit's last line: down, done, its AP pips on the viewer's turn, or what it's doing off it. */
-function UnitFooter({ fighter, acting, done }: { fighter: Fighter; acting: boolean; done: boolean }) {
-    if (!isStanding(fighter)) return <span className="ag-ra-unit-foot">✕ Down</span>;
-    if (done) return <span className="ag-ra-unit-foot ag-ra-unit-foot--done">✓ Done</span>;
-    if (!acting) return <span className="ag-ra-unit-foot">{fighterStatus(fighter)[0] ?? 'Waiting'}</span>;
+/** The start of a unit's last line: down, done, its AP pips on the viewer's turn, or what it's doing off it. */
+function UnitStatus({ fighter, acting, done }: { fighter: Fighter; acting: boolean; done: boolean }) {
+    if (!isStanding(fighter)) return <span>✕ Down</span>;
+    if (done) return <span>✓ Done</span>;
+    if (!acting) return <span>{fighterStatus(fighter)[0] ?? 'Waiting'}</span>;
     return (
-        <span className="ag-ra-unit-foot" aria-label={`${fighter.ap} of ${ACTION_POINTS} AP left`}>
+        <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${ACTION_POINTS} AP left`}>
             <span className="ag-ra-unit-pips" aria-hidden="true">
                 {apPips(fighter).map((on, i) => (
                     <span key={i} className={`ag-ra-unit-pip${on ? ' ag-ra-unit-pip--on' : ''}`} />
                 ))}
             </span>
             <b aria-hidden="true">{fighter.ap}</b>
+        </span>
+    );
+}
+
+/** How many enemies a unit's main weapon could hit from where it stands. */
+function TargetCount({ count }: { count: number }) {
+    return (
+        <span className={`ag-ra-unit-targets${count === 0 ? ' ag-ra-unit-targets--none' : ''}`} aria-label={`${count} in reach`} title={`${count} in reach`}>
+            <RealmArenaCrosshair />
+            <span aria-hidden="true">{count}</span>
         </span>
     );
 }

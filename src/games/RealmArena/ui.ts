@@ -263,6 +263,33 @@ export function targetsOf(state: BattleState, player: string, fighter: Fighter, 
         .map(one => one.id);
 }
 
+/** The battle as it would stand with one character moved to another square: what a previewed move is read against. */
+export function standingAt(state: BattleState, fighter: Fighter, square: Square): { battle: BattleState; moved: Fighter } {
+    const moved = { ...fighter, square };
+    return { battle: { field: state.field, fighters: state.fighters.map(one => one.id === fighter.id ? moved : one) }, moved };
+}
+
+/** One enemy a character's weapon could hit, and its chance to: a strike always hits. */
+export interface AttackOption {
+    target: Fighter;
+    /** Percent to hit, 0–100. */
+    chance: number;
+}
+
+/**
+ * Every enemy a character's main weapon could hit from a square — where it
+ * stands, or where a previewed move would take it — likeliest first. Who is
+ * in reach is the server's own `check`, read as if it had the AP to attack:
+ * what's in reach is a matter of where it stands, not what it has left.
+ */
+export function attackOptions(state: BattleState, fighter: Fighter, square: Square = fighter.square): AttackOption[] {
+    const { battle, moved } = standingAt(state, { ...fighter, ap: ACTION_POINTS }, square);
+    return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
+        const target = fighterById(battle, id);
+        return target ? [{ target, chance: shotOdds(battle, moved, target)?.chance ?? 100 }] : [];
+    }).sort((a, b) => b.chance - a.chance);
+}
+
 /** One reaction a move would set off, and what it would do to the mover (§13.4). */
 export interface ReactionPreview {
     watcher: Fighter;
@@ -285,8 +312,7 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
         if (!watcher) return [];
         const weapon = CHARACTERS[watcher.character].weapon;
         if (weapon.kind === "melee") return [{ watcher, kind: "guard", damage: weapon.damage }];
-        const moved = { ...mover, square: path[step] };
-        const there: BattleState = { field: state.field, fighters: state.fighters.map(one => one.id === mover.id ? moved : one) };
+        const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
         return [{ watcher, kind: "overwatch", odds, damage: odds?.damage ?? weapon.damage }];
     });

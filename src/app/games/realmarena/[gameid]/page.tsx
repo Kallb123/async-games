@@ -8,6 +8,7 @@ import RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
+import RealmArenaTargets from "@/games/RealmArena/components/RealmArenaTargets";
 import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
 import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
 import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
@@ -280,15 +281,19 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             refocus={refocus}
                             acting={!mustering && !complete ? currentTurn : null}
                             follow={follow}
+                            overlay={selected && selected.owner === myUserId && isStanding(selected) && !mustering && !complete && (
+                                <RealmArenaTargets battle={battle} fighter={selected} turn={turn} viewerId={myUserId} nameFor={playerName} />
+                            )}
                         />
                     </div>
 
                     {!mustering && (
                         <RealmArenaUnits
-                            fighters={fighters}
+                            battle={battle}
                             player={myUserId}
                             colourFor={colourFor}
                             acting={battleTurn}
+                            showReach={!complete}
                             selectedId={selected?.id ?? null}
                             onSelect={selectUnit}
                         />
