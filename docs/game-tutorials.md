@@ -1,6 +1,6 @@
 # Interactive game tutorials
 
-**Status: built, live on Dice Cities, Settlements & Cities and Race Cars.**
+**Status: built, live on Dice Cities, Settlements & Cities and Race Cars, and written for Realm Arena ahead of its launch.**
 PRs 1 and 2 of §12 are in: `GameShell` owns the game guide, and the tutorial
 machinery (`gameTutorials.ts`, `useTutorialRun`, `GameTutorialOverlay`)
 exists, wired up for Dice Cities. Settlements & Cities' tour has already

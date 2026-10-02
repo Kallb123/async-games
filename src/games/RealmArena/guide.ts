@@ -1,0 +1,40 @@
+import type { GameGuide } from "@/utils/ui/gameGuides";
+import { CHARACTERS, MAX_OF_EACH } from "./characters";
+import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST } from "./rules";
+
+// The how-to-play primer shown from the game-options menu, and the reference
+// text behind the guided tour (tutorial.ts), which takes the guide's place on
+// a player's first match (see useGameIntro). Five sections, as
+// docs/games/realm-arena.md §17.3 PR 9 lists them: the goal and the muster, a
+// turn, what AP buy, cover and flanking, and overwatch and guard.
+//
+// Map-agnostic: the battlefield is picked by the number of players, so no
+// section names a gate or a tower of one fort. The tunable numbers — costs,
+// penalties, scores, speeds — come from the rules themselves, so a rebalance
+// can't leave the guide behind.
+
+export const guide: GameGuide = {
+    title: "How to play Realm Arena",
+    sections: [
+        {
+            heading: "Goal",
+            body: `Score the most points by the last battle round. End your own turn with your squad holding the centre — someone of yours in the marked square in the middle, and no enemy — for ${CENTRE_POINTS} points, from round ${CENTRE_SCORES_FROM_ROUND}. Knocking an enemy out scores what they cost to muster ÷ ${KNOCKOUT_DIVISOR}. First you muster: spend your points on a squad, up to ${MAX_OF_EACH} of each character, and place it in your deployment zone. Nobody sees anyone's squad until every player has mustered.`,
+        },
+        {
+            heading: "Your turn",
+            body: `Every character of yours has ${ACTION_POINTS} action points (AP) to spend, in any order, and you can switch between them whenever you like. Tap one to select it: the board shades where it can get to for 1, 2, 3 or 4 AP. Tap a square or an enemy once to see what would happen — the path, the odds, who would react — and again to do it. Each result comes back before you choose the next. Undo takes back a move that rolled nothing and hurt nobody. When you're done, tap End turn.`,
+        },
+        {
+            heading: "Action points",
+            body: `Moving costs 1 AP for each stretch of the character's movement — a Knight goes ${CHARACTERS.knight.movement} squares on open ground, a Scout ${CHARACTERS.scout.movement}, everyone else ${CHARACTERS.manAtArms.movement} — and rubble, low walls and climbs cost more of it. An attack is ${ATTACK_AP} AP, so a character can move and attack, attack twice, or move, attack and move again. Hunkering down costs ${HUNKER_AP} AP and ends that character's turn, doubling its cover until your next. Each character also has its own abilities, shown when it's selected, with their cost and how long until they're ready again.`,
+        },
+        {
+            heading: "Cover and flanking",
+            body: `A shot has a chance to hit, shown before you take it, which starts from the weapon's own accuracy. Cover comes from the square next to the target on your side: something half a height or more above the target is half cover, −${COVER_PENALTY.half}%; a full height or more, or trees, is full cover, −${COVER_PENALTY.full}%. With nothing there, the target is flanked: no cover at all, and the shot does ${FLANK_BONUS} more damage. Shooting down from half a height or more above is +${HIGH_GROUND_BONUS}%. A miss by ${GRAZE_BAND} or less still grazes for half damage. A strike with a blade or a mace needs you right next to the target and always hits.`,
+        },
+        {
+            heading: "Overwatch and guard",
+            body: `When your turn ends, anyone with ${REACTION_COST} AP or more left goes on watch: overwatch for a bow or a bolt, guard for a blade. During the next player's turn they react to an enemy that moves where they can see — overwatch shoots, at −${OVERWATCH_PENALTY}%, and guard strikes anyone who steps next to them. Each reaction spends ${REACTION_COST} of the AP they kept, and a character reacts once to each move. Turn a character's switch off at End turn to keep them still instead. A Scout can sneak past without setting anyone off.`,
+        },
+    ],
+};

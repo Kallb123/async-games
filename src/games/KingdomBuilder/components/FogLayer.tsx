@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from "react";
+import { useSvgId } from "@/utils/hooks/useSvgId";
 
 import type { KingdomBuilderSight } from "../sight";
 import { tileIndexCentre, type TerrainField } from "../worldgen/terrainField";
@@ -21,8 +21,7 @@ interface FogLayerProps {
  * which are public wherever they stand — only armies hide in the fog.
  */
 export default function FogLayer({ field, width, height, sight }: FogLayerProps) {
-    // useId's own characters aren't all safe inside url(#…).
-    const maskId = `fog-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    const maskId = useSvgId("fog");
     return (
         <g aria-hidden="true" className={styles.fog}>
             <mask id={maskId}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, isoBlock, isoBounds, isoCentre, isoPoint, isoRuns, isoSquareAt, isoView, type IsoGrid } from './isometric';
+import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, isoBlock, isoBounds, isoCentre, isoColumnOutline, isoPoint, isoRuns, isoSquareAt, isoView, type IsoGrid } from './isometric';
 
 /** A 3×2 grid, flat but for the middle square of the top row, a step up. */
 const GRID: IsoGrid = { width: 3, height: 2, heights: [0, 1, 0, 0, 0, 0] };
@@ -95,5 +95,21 @@ describe('isoSquareAt', () => {
     it('is undefined off the map', () => {
         expect(isoSquareAt(VIEW, 0, 0)).toBeUndefined();
         expect(isoSquareAt(VIEW, VIEW.size.width, VIEW.size.height)).toBeUndefined();
+    });
+});
+
+describe('isoColumnOutline', () => {
+    it('outlines a square from its top down its two front faces, in its own frame', () => {
+        // The same corners isoPoint gives the square, less where its back corner lands.
+        const corner = isoPoint(VIEW, 1, 0, 0);
+        const expected = [[1, 1, 3], [1, 0, 3], [2, 0, 3], [2, 0, 1], [2, 1, 1], [1, 1, 1]]
+            .map(([col, row, height]) => isoPoint(VIEW, col, row, height))
+            .map(({ x, y }) => `${x - corner.x},${y - corner.y}`)
+            .join(' ');
+        expect(isoColumnOutline(1, 3)).toBe(expected);
+    });
+
+    it('is only the top, a diamond, when it has no height', () => {
+        expect(new Set(isoColumnOutline(2, 2).split(' ')).size).toBe(4);
     });
 });
