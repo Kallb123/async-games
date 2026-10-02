@@ -41,7 +41,7 @@ export interface Terrain {
     cover: Cover;
     /** Whether it blocks sight whatever the heights, as trees do. Everything else blocks it by standing a full height above both ends (`lineOfSight.ts`). */
     blocksSight: boolean;
-    /** A stair: a step onto or off it is never a climb, however far it rises (`pathfinding.ts`). */
+    /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
 }
 

@@ -3,7 +3,7 @@
 // when it climbs up or down half a height or more, and 1.5 times all that on a
 // diagonal. A step of a quarter is an ordinary one; anything past the mover's
 // climb (`DEFAULT_CLIMB`, three quarters) can't be taken at all, except onto
-// or off a stair. A diagonal step never cuts past the corner of anything that
+// or off a stair, by as much as the stair itself rises. A diagonal step never cuts past the corner of anything that
 // can't be entered, or that stands a full height above both its ends. One
 // search gives both the tap-to-move shading (what it costs to stop on every
 // square in reach) and the path a tap then takes.
@@ -58,7 +58,8 @@ function enterable(field: Battlefield, square: Square | undefined): square is Sq
 /**
  * What one step between neighbouring squares costs, in movement points, or
  * undefined when it can't be taken: onto something that can't be entered, up
- * or down further than `climb` (a stair at either end aside), or diagonally
+ * or down further than `climb` (a stair at either end, by as much as the
+ * stair rises, aside), or diagonally
  * past the corner of something that can't be entered or stands a full height
  * above both ends.
  */
@@ -67,7 +68,9 @@ export function stepCost(field: Battlefield, from: Square, to: Square, climb = D
     if (start === undefined || !enterable(field, to) || !isNeighbour(field, from, to)) return undefined;
     const end = field.tiles[to];
     const span = Math.abs(end.elevation - start.elevation);
-    const climbs = !start.terrain.stairs && !end.terrain.stairs;
+    // A stair climbs its own height and no more: beside a cliff, the rest is a climb like any other.
+    const stair = [start, end].find(tile => tile.terrain.stairs);
+    const climbs = !stair || span > stair.terrain.height;
     if (climbs && span > climb) return undefined;
     const cost = end.terrain.moveCost + (climbs && span >= HALF_HEIGHT ? CLIMB_COST : 0);
     const a = coordsOf(field, from), b = coordsOf(field, to);

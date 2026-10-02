@@ -171,12 +171,19 @@ describe("climbing", () => {
         expect(step(0, 5, 4)).toBeUndefined();
     });
 
-    it("never climbs onto or off a stair, however far it rises", () => {
-        // Open ground, a stair three quarters up, and ground two full heights up past it.
-        const tower = hillOf(["...s."], ["00008"]);
+    it("never climbs onto or off a stair, by as much as the stair rises", () => {
+        // Open ground, a stair three quarters up, and ground a height and a half up past it: a tower top.
+        const tower = hillOf(["...s."], ["00006"]);
         expect(stepCost(tower, 2, 3)).toBe(2);
         expect(stepCost(tower, 3, 4)).toBe(1);
         expect(findPath(tower, 0, 4)?.squares).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("climbs as anywhere else past what a stair rises: a stair beside a cliff doesn't scale it", () => {
+        // The stair's top is three quarters up; the cliff beside it is three full heights.
+        const cliff = hillOf(["s."], ["0c"]);
+        expect(stepCost(cliff, 0, 1)).toBeUndefined();
+        expect(stepCost(cliff, 1, 0)).toBeUndefined();
     });
 
     it("can't cut a diagonal past a corner a full height above both ends", () => {

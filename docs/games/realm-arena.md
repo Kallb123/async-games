@@ -1665,7 +1665,8 @@ drawn.
 - **Climbing.** A step up or down of a quarter is an ordinary step. Half or
   three quarters is a climb, which costs 1 more movement point
   (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
-  a stair, which is never a climb. A **Scout** climbs a full height, and no
+  a stair, which is never a climb by as much as the stair itself rises — so
+  a stair beside a cliff doesn't scale it. A **Scout** climbs a full height, and no
   more. A diagonal step can't cut past a corner that can't be entered, or
   that stands a full height above both its ends.
   - Crossing one square of low cover costs what it did: 2 to climb on, and 2
@@ -1715,6 +1716,15 @@ drawn.
    drawing those walls taller than the tower?
 3. **A map generator**: what kinds of map, and does a generated battle store
    its map rather than an id?
+4. **A tower with one stair** (the Ruined Fort's, the Four-Gate Fort's) can
+   be shut by an enemy standing on the stair: whoever is on the tower top
+   can't come down until it moves. Is that a tactic, or should every tower
+   have two ways down?
+5. **Old battles.** Maps are stored by id, so these rules reach every stored
+   battle, and a replay of a playtest battle from before them can go wrong
+   (a step onto a tower top from the ground is now refused). Realm Arena has
+   no command version yet; it wants one before PR 10 turns the game on, so a
+   later rule change can tell old moves from new.
 
 ---
 
