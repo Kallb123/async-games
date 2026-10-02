@@ -990,9 +990,10 @@ Reviewers: `caveman`.
   crosshair with the number of enemies that character's weapon could hit from
   where it stands. Selecting one of your own floats a list over the foot of the
   board: the three it's likeliest to hit, each with its chance (a strike is
-  100%). With a move lined up, the list reads from the end of the move, so you
-  see what a square puts in reach before going there, and it says when the
-  move would leave too little AP to attack. Reach ignores AP left, since
+  100%), and each enemy in reach wears its own chance in a small pill above its
+  figure. With a move lined up, the list and the pills read from the end of
+  the move, so you see what a square puts in reach before going there, and the
+  list says when the move would leave too little AP to attack. Reach ignores AP left, since
   where a character stands decides what it can hit; a refused move previews
   nothing.
 
@@ -1127,3 +1128,4 @@ Realm, its sibling in the same world.
 | 1.2 | PR 7 fills in taking a turn: a tap lines an action up and a second tap sends it, an enemy tapped while moving lines up an attack on it, stances go when tapped, the keep-still switches start on watch, and the last action's result is shown with its rolls. |
 | 1.3 | PR 8 fills in replay and recap: a recap row is a line the log already wrote, a muster's row says only that it happened, the review follows each action by what it changed, and planning is out by design. |
 | 1.4 | Targets in reach: a count on each unit's box, and the selected character's three likeliest targets floated over the board, read from the end of a lined-up move. |
+| 1.5 | Each enemy in the selected character's reach wears its chance to hit above its figure on the board, previewed from the end of a lined-up move like the list. |

@@ -4,7 +4,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ACTION_POINTS, newFighter, reachOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./ui";
-import { afterMove, MOVE, tapFighter, tapSquare, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, MOVE, reachAfter, tapFighter, tapSquare, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -104,5 +104,21 @@ describe("afterMove", () => {
 
     it("goes nowhere on a move check refuses", () => {
         expect(afterMove(manAtArms, path, { refused: "Not enough AP" })).toEqual({ square: manAtArms.square, ap: ACTION_POINTS });
+    });
+});
+
+describe("reachAfter", () => {
+    const targets = (reach: ReturnType<typeof reachAfter>) => reach.options.map(({ target, chance }) => ({ target: target.id, chance }));
+
+    it("reads from where the character stands with no move lined up, or off its turn", () => {
+        const reach = reachAfter(battle, manAtArms, undefined);
+        expect(targets(reach)).toEqual([{ target: 2, chance: 100 }, { target: 3, chance: 100 }]);
+        expect(reach).toMatchObject({ previewing: false, ap: undefined });
+    });
+
+    it("reads from the end of a lined-up move, with the AP it leaves", () => {
+        const reach = reachAfter(battle, manAtArms, { square: at(field, 8, 4), ap: 1 });
+        expect(targets(reach)).toEqual([{ target: 4, chance: 100 }]);
+        expect(reach).toMatchObject({ previewing: true, ap: 1 });
     });
 });

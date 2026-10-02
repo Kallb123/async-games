@@ -5266,6 +5266,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-ring--candidate { stroke: var(--ag-gold); }
 .ag-ra-ring--aimed { stroke: var(--ag-danger); stroke-width: 1.2; }
 .ag-ra-ring--flagged { stroke: var(--ag-danger); stroke-dasharray: 1.4 0.9; }
+/* The selected character's chance to hit an enemy, a badge across the top of the enemy's figure. */
+.ag-ra-odds { pointer-events: none; }
+.ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
+.ag-ra-odds text { font: 800 2.5px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */
 .ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }

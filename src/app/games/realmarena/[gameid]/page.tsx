@@ -13,7 +13,7 @@ import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
 import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
 import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
-import { useTurnDraft } from "@/games/RealmArena/useTurnDraft";
+import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
 import { actionSquares, fighterName } from "@/games/RealmArena/ui";
@@ -139,6 +139,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (turn?.tapFighter(id)) return;
         setSelectedId(current => current === id ? null : id);
     };
+
+    // What the viewer's own selected character could hit, from the end of a
+    // lined-up move while there is one: listed over the board's foot, and
+    // each enemy's odds worn on its figure. Live only: a review shows what
+    // happened, not what could.
+    const reach = nav.isLive && selected && selected.owner === myUserId && isStanding(selected) && !mustering && !complete
+        ? reachAfter(battle, selected, turn?.after)
+        : null;
 
     // Stepping through the match, the view goes to each action as it comes.
     // A step that handed the turn on moved everyone's AP, not anyone in
@@ -281,9 +289,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             refocus={refocus}
                             acting={!mustering && !complete ? currentTurn : null}
                             follow={follow}
-                            overlay={selected && selected.owner === myUserId && isStanding(selected) && !mustering && !complete && (
-                                <RealmArenaTargets battle={battle} fighter={selected} turn={turn} viewerId={myUserId} nameFor={playerName} />
-                            )}
+                            odds={reach?.options}
+                            overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                         />
                     </div>
 

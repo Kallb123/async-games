@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { check, fighterById, fireballArea, isStanding, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
-import { reachLayers, reactionPreviews, targetsOf, type TargetKind } from "./ui";
+import { attackOptions, reachLayers, reactionPreviews, targetsOf, type AttackOption, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim = "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise";
@@ -59,6 +59,24 @@ export interface AfterMove {
 export function afterMove(fighter: Fighter, path: readonly Square[] | undefined, verdict: Check | null): AfterMove {
     if (!path || !verdict || "refused" in verdict) return { square: fighter.square, ap: fighter.ap };
     return { square: path[path.length - 1], ap: fighter.ap - verdict.ap };
+}
+
+/** What a selected character could hit, and from where: the board's list of targets and the odds over each enemy. */
+export interface ReachAfter {
+    options: AttackOption[];
+    /** Read from the end of a lined-up move rather than where it stands. */
+    previewing: boolean;
+    /** The AP it would have left to attack with, on its owner's turn. */
+    ap?: number;
+}
+
+/**
+ * Every enemy a character could hit once the move lined up for it is made —
+ * or from where it stands, with no move lined up, or off its owner's turn.
+ */
+export function reachAfter(battle: BattleState, fighter: Fighter, after: AfterMove | undefined): ReachAfter {
+    const square = after?.square ?? fighter.square;
+    return { options: attackOptions(battle, fighter, square), previewing: square !== fighter.square, ap: after?.ap };
 }
 
 /** What a tap is read against: the battle, who is acting, what's lined up, and where it can reach. */
