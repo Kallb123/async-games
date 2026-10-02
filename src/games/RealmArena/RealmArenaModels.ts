@@ -8,7 +8,7 @@ import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { POINTS_BUDGET, type PlayerCount } from "./characters";
-import { battlefieldById, DEFAULT_MAP, type RealmArenaMapId } from "./maps";
+import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
 import { battleRounds, storedFighter, type Fighter, type MusterPick } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "./apiModels";
 
@@ -93,9 +93,10 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const specificGameState = buildInitialRealmArenaState(turnOrder);
 
     const field = battlefieldById(specificGameState.map);
+    const zones = DEPLOYMENT_NAMES[specificGameState.map];
     history.push({ text: `Setup: Hold the Centre on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
-    history.push({ text: `Setup: ${userToken(turnOrder[0])} deploys along the north edge and ${userToken(turnOrder[1])} along the south` });
-    history.push({ text: `Setup: each player musters ${POINTS_BUDGET[turnOrder.length as PlayerCount]} points' worth of characters, sealed until both have` });
+    history.push({ text: `Setup: ${turnOrder.map((userId, seat) => `${userToken(userId)} deploys ${zones[seat]}`).join(", ")}` });
+    history.push({ text: `Setup: each player musters ${POINTS_BUDGET[turnOrder.length as PlayerCount]} points' worth of characters, sealed until every player has` });
 
     const gameData: IRealmArenaGameData = {
         gameId: uuidv4() as uuidString,
@@ -124,18 +125,19 @@ export var RealmArenaInvitationModel =
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
 /**
- * The battle before anyone has mustered: the map, no squads, nobody scored.
- * A pure function of the seat order, so replay rebuilds it rather than
- * persisting a snapshot (§17.1). Throws for a party the map has no deployment
- * zone for — two players only, until the 48×48 fort (§17.4 B2).
+ * The battle before anyone has mustered: the map for the party's size, no
+ * squads, nobody scored. A pure function of the seat order, so replay rebuilds
+ * it rather than persisting a snapshot (§17.1). Throws for a party the map has
+ * no deployment zone for.
  */
 export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpecificGameState {
-    const field = battlefieldById(DEFAULT_MAP);
+    const map = mapForPlayers(turnOrder.length);
+    const field = battlefieldById(map);
     if (turnOrder.length < 2 || turnOrder.length > field.deployments.length) {
         throw new Error(`Realm Arena: the ${field.name} seats 2–${field.deployments.length} players, not ${turnOrder.length}`);
     }
     return {
-        map: DEFAULT_MAP,
+        map,
         seats: [...turnOrder],
         phase: "muster",
         roundsPlayed: 0,

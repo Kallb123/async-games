@@ -5,7 +5,7 @@ import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { endTurnBy, makeGame, muster, musterBoth, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
+import { endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.3 PR 8: the review and the recap are read off
 // the same recorded command log, so this replays whole real battles with the
@@ -31,7 +31,7 @@ async function noRandomness<T>(replay: () => Promise<T>): Promise<T> {
 /** A battle fought from the muster to its winner by the scripted squads. */
 async function playScriptedBattle(): Promise<RealmArenaTestGame> {
     const game = makeGame();
-    await musterBoth(game);
+    await musterAll(game);
     for (let turn = 0; !game.complete; turn++) {
         if (turn > 100) throw new Error("the battle outlasted its turn limit");
         await playScriptedTurn(game);
@@ -68,7 +68,7 @@ describe("Realm Arena replay", () => {
 
     it("titles each step of the review in the player's words", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         await playScriptedTurn(game);
         const timeline = await buildTimeline(game, NAMES, [], undefined, "b");
         const summaries = timeline.snapshots.slice(1).map(snapshot => `${snapshot.command?.senderUsername} · ${snapshot.command?.summary}`);
@@ -143,7 +143,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
 describe("Realm Arena recap", () => {
     it("tells the player who moves next what the other did, and opens on their last turn", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         await playScriptedTurn(game);
         await playScriptedTurn(game);
         expect(game.currentTurn).toBe("a");
@@ -160,7 +160,7 @@ describe("Realm Arena recap", () => {
 
     it("opens the window on a turn ended with nothing done, and tells nobody it was", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         await playScriptedTurn(game);
         await playScriptedTurn(game);
         // Alice passes, then Bob does too: nothing happened.

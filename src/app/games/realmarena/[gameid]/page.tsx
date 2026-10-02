@@ -181,10 +181,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (gs?.mustered.includes(userId)) return '✔ mustered';
         return userId === currentTurn ? 'mustering' : 'waiting';
     };
+    const dropped = gameData?.gameState?.droppedPlayers ?? [];
     const scoreEntries: ScoreEntry[] = gs
         ? scoreboardSeatOrder(gameData, myUserId).map((userId): ScoreEntry => {
             const squad = fighters.filter(fighter => fighter.owner === userId);
-            const sub = mustering ? musterSub(userId) : `${squad.filter(isStanding).length}/${squad.length} standing`;
+            // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
+            const sub = mustering ? musterSub(userId)
+                : dropped.includes(userId) ? 'left the battle'
+                : `${squad.filter(isStanding).length}/${squad.length} standing`;
             return {
                 id: userId,
                 name: playerName(userId),
@@ -318,8 +322,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <div className="ag-section">
                             <div className="ag-empty">
                                 {gs.myMuster
-                                    ? `Your squad is sealed. ${currentTurnName} is mustering, and you'll see each other's squads when they're done.`
-                                    : `${currentTurnName} is mustering. You muster next, and neither squad is seen until both have.`}
+                                    ? `Your squad is sealed. ${currentTurnName} is mustering, and you'll see every squad once everyone has.`
+                                    : `${currentTurnName} is mustering. Your turn to muster is coming, and no squad is seen until every player has.`}
                             </div>
                         </div>
                     )}

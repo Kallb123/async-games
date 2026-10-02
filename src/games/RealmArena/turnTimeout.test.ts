@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { REALM } from "./characters";
 import { ACTION_POINTS } from "./rules";
-import { makeGame, musterBoth, play, readyMadePicks, muster } from "./testFixtures";
+import { makeGame, musterAll, play, readyMadePicks, muster } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.2: a timed-out turn ends the way the player
 // would have ended it — run through the same pipeline the cron runs it
@@ -29,7 +29,7 @@ describe("a timed-out turn", () => {
 
     it("ends a battle turn with every character on watch", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         expect(await resolveStalledTurn(game, "a", "a")).toBe("advanced");
         const squad = game.specificGameState.fighters.filter(one => one.owner === "a");
         expect(squad.every(one => one.ap === 0 && one.banked === ACTION_POINTS)).toBe(true);
