@@ -1,22 +1,24 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
+import { CHARACTERS, MAX_OF_EACH } from "./characters";
 import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
-// a player's first match (see useGameIntro). Five sections, as §17.3 PR 9
-// lists them (docs/games/realm-arena.md §13): the goal and the muster, a turn,
-// what AP buy, cover and flanking, and overwatch and guard.
+// a player's first match (see useGameIntro). Five sections, as
+// docs/games/realm-arena.md §17.3 PR 9 lists them: the goal and the muster, a
+// turn, what AP buy, cover and flanking, and overwatch and guard.
 //
 // Map-agnostic: the battlefield is picked by the number of players, so no
-// section names a gate or a tower of one fort. The numbers come from the
-// rules themselves, so a rebalance can't leave the guide behind.
+// section names a gate or a tower of one fort. The tunable numbers — costs,
+// penalties, scores, speeds — come from the rules themselves, so a rebalance
+// can't leave the guide behind.
 
 export const guide: GameGuide = {
     title: "How to play Realm Arena",
     sections: [
         {
             heading: "Goal",
-            body: `Score the most points by the last battle round. End your own turn with your squad holding the centre — someone of yours in the marked square in the middle, and no enemy — for ${CENTRE_POINTS} points, from round ${CENTRE_SCORES_FROM_ROUND}. Knocking an enemy out scores what they cost to muster ÷ ${KNOCKOUT_DIVISOR}. First you muster: spend your points on a squad, up to two of each character, and place it in your deployment zone. Nobody sees anyone's squad until every player has mustered.`,
+            body: `Score the most points by the last battle round. End your own turn with your squad holding the centre — someone of yours in the marked square in the middle, and no enemy — for ${CENTRE_POINTS} points, from round ${CENTRE_SCORES_FROM_ROUND}. Knocking an enemy out scores what they cost to muster ÷ ${KNOCKOUT_DIVISOR}. First you muster: spend your points on a squad, up to ${MAX_OF_EACH} of each character, and place it in your deployment zone. Nobody sees anyone's squad until every player has mustered.`,
         },
         {
             heading: "Your turn",
@@ -24,7 +26,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Action points",
-            body: `Moving costs 1 AP for each stretch of the character's movement — a Knight goes 4 squares on open ground, a Scout 8, everyone else 6 — and rubble, low walls and climbs cost more of it. An attack is ${ATTACK_AP} AP, so a character can move and attack, attack twice, or move, attack and move again. Hunkering down costs ${HUNKER_AP} AP and ends that character's turn, doubling its cover until your next. Each character also has its own abilities, shown when it's selected, with their cost and how long until they're ready again.`,
+            body: `Moving costs 1 AP for each stretch of the character's movement — a Knight goes ${CHARACTERS.knight.movement} squares on open ground, a Scout ${CHARACTERS.scout.movement}, everyone else ${CHARACTERS.manAtArms.movement} — and rubble, low walls and climbs cost more of it. An attack is ${ATTACK_AP} AP, so a character can move and attack, attack twice, or move, attack and move again. Hunkering down costs ${HUNKER_AP} AP and ends that character's turn, doubling its cover until your next. Each character also has its own abilities, shown when it's selected, with their cost and how long until they're ready again.`,
         },
         {
             heading: "Cover and flanking",

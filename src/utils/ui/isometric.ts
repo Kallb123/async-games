@@ -79,12 +79,21 @@ export function isoView(grid: IsoGrid, { base, headroom, minAspect = 0 }: IsoVie
     };
 }
 
+/** The projection itself: a point of the grid at a height, from the grid's back corner on the ground. */
+function project(col: number, row: number, height: number): Point {
+    return { x: (col - row) * ISO_HALF_WIDTH, y: (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP };
+}
+
 /** A point of the grid — a corner, or anywhere between — at a height in steps. */
 export function isoPoint(view: IsoView, col: number, row: number, height: number): Point {
-    return {
-        x: view.origin.x + (col - row) * ISO_HALF_WIDTH,
-        y: view.origin.y + (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP,
-    };
+    const { x, y } = project(col, row, height);
+    return { x: view.origin.x + x, y: view.origin.y + y };
+}
+
+/** A square's back corner at a height in steps: where the square's own frame (`isoColumnOutline`) is placed. */
+export function isoCorner(view: IsoView, square: number, height: number): Point {
+    const { col, row } = colRow(view, square);
+    return isoPoint(view, col, row, height);
 }
 
 function colRow(view: IsoGrid, square: number): { col: number; row: number } {
@@ -222,11 +231,7 @@ export function isoBlock(view: IsoView, square: number): IsoBlock {
  * one outline serves every square, each drawn translated to its own corner.
  */
 export function isoColumnOutline(low: number, high: number): string {
-    const at = (col: number, row: number, height: number) => ({
-        x: (col - row) * ISO_HALF_WIDTH,
-        y: (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP,
-    });
-    return points(at(0, 1, high), at(0, 0, high), at(1, 0, high), at(1, 0, low), at(1, 1, low), at(0, 1, low));
+    return points(project(0, 1, high), project(0, 0, high), project(1, 0, high), project(1, 0, low), project(1, 1, low), project(0, 1, low));
 }
 
 /** The ground the whole map stands on: its top, and its two front faces down to `base` steps below it. */

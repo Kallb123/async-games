@@ -1554,10 +1554,12 @@ and opening ground.
   `battlefield/` gets the one helper. Nothing else there changes, since paths,
   sight and cover already read the terrain they're given.
 - New event: `blasted`, with its squares.
-- **The board needs no new layer.** It already draws the flat ground as one
-  path per kind of terrain (`isoRuns`), so scorched ground is one more
-  `GROUND_CLASS` entry and one colour token, and a terrain of height 0
-  (§25), so it stands level with the ground around it.
+- **The board needs no new layer.** It draws each terrain from its entry in
+  `TERRAIN_ART` (`src/games/RealmArena/art.ts`, PR 9), which has to cover
+  every `TERRAIN` letter, so scorched ground is one more art entry, and a
+  terrain of height 0 (§25), so it stands level with the ground around it.
+  Open ground's grass is one pattern under the whole map, so scorched ground
+  is drawn over it, square by square.
 - The map tests check the maps as drawn. Blasting only takes cover away, and
   never walls, so nothing they prove can be undone.
 

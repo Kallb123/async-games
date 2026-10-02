@@ -7,7 +7,7 @@ import type { TerrainLetter } from '@/utils/games/battlefield/terrain';
 /** The grass pattern's tile: six diagonals each way, the period `grassOf` repeats on. */
 const GRASS_TILE = { width: 6 * ISO_HALF_WIDTH, height: 6 * ISO_HALF_HEIGHT };
 
-const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.indexOf(sprite)}`;
+const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.get(sprite)}`;
 const clipId = (id: string, low: number, high: number) => `${id}-clip-${low}-${high}`;
 
 /**
@@ -29,7 +29,7 @@ export function RealmArenaTerrainDefs({ id, origin }: { id: string; origin: Poin
     }
     return (
         <defs>
-            {SPRITES.map(sprite => {
+            {[...SPRITES.keys()].map(sprite => {
                 const sheet = ART_SHEETS[sprite.sheet];
                 return (
                     <symbol key={spriteId(id, sprite)} id={spriteId(id, sprite)} viewBox={`${sprite.x} ${sprite.y} ${sprite.width} ${sprite.height}`}>
@@ -39,9 +39,10 @@ export function RealmArenaTerrainDefs({ id, origin }: { id: string; origin: Poin
             })}
             <pattern id={`${id}-grass`} patternUnits="userSpaceOnUse" x={origin.x} y={origin.y} width={GRASS_TILE.width} height={GRASS_TILE.height}>
                 {grass.map(({ col, row }) => {
-                    const box = spriteBox(grassOf(col, row), { sprites: [], at: 0 });
+                    const grassHere = grassOf(col, row);
+                    const box = spriteBox(grassHere);
                     const x = (col - row) * ISO_HALF_WIDTH, y = (col + row) * ISO_HALF_HEIGHT;
-                    return <use key={`${col}:${row}`} href={`#${spriteId(id, grassOf(col, row))}`} x={x + box.x} y={y + box.y} width={box.width} height={box.height} />;
+                    return <use key={`${col}:${row}`} href={`#${spriteId(id, grassHere)}`} x={x + box.x} y={y + box.y} width={box.width} height={box.height} />;
                 })}
             </pattern>
             {CLIPS.map(([low, high]) => (
@@ -70,7 +71,7 @@ export function RealmArenaTerrainArt({ id, letter, square, corner }: { id: strin
     const layers = TERRAIN_ART[letter];
     if (layers.length === 0) return null;
     return (
-        <g className="ag-ra-art" transform={`translate(${corner.x} ${corner.y})`}>
+        <g transform={`translate(${corner.x} ${corner.y})`}>
             {layers.map((layer, index) => <Layer key={index} id={id} layer={layer} square={square} />)}
         </g>
     );

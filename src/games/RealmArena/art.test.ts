@@ -20,7 +20,7 @@ describe("the art sheets", () => {
     });
 
     it("hold every sprite whole", () => {
-        for (const sprite of SPRITES) {
+        for (const sprite of SPRITES.keys()) {
             const sheet = ART_SHEETS[sprite.sheet];
             expect(sprite.x + sprite.width).toBeLessThanOrEqual(sheet.width);
             expect(sprite.y + sprite.height).toBeLessThanOrEqual(sheet.height);
@@ -54,7 +54,7 @@ describe("TERRAIN_ART", () => {
 describe("spriteBox", () => {
     it("stands a cell's footprint on its square: the diamond's front corner on the square's", () => {
         // A square's front corner is a diamond's height below its back corner.
-        const box = spriteBox(GRASS[0], { sprites: GRASS, at: 0 });
+        const box = spriteBox(GRASS[0]);
         expect(box).toEqual({ x: -10, y: -10, width: 20, height: 20 });
     });
 

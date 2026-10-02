@@ -1,12 +1,13 @@
 'use client'
-import React, { useId, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
-import { coordsOf, type Battlefield, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
-import { isoArea, isoBlock, isoBounds, isoCentre, isoDepth, isoGridLines, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoView, type Point } from '@/utils/ui/isometric';
+import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs } from '@/games/RealmArena/components/RealmArenaTerrain';
 import type { Rect } from '@/utils/ui/mapLabels';
+import { useSvgId } from '@/utils/hooks/useSvgId';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { apPips, areaRect, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
@@ -193,19 +194,19 @@ interface RaisedBlock {
     /** The square's back corner on its ground, where its art stands. */
     corner: Point;
     /** The ground it stands on, where a map raises that off the slab: drawn as a block of its own under the art. */
-    ground: IsoBlock | null;
+    plinth: IsoBlock | null;
 }
 
 /** A raised square: the ground under it, the art standing on that, and whatever its top is shaded with. */
 function RaisedSquare({ id, block, shades }: { id: string; block: RaisedBlock; shades: readonly Shade[] }) {
-    const { ground } = block;
+    const { plinth } = block;
     return (
         <g className="ag-ra-block">
-            {ground && (
+            {plinth && (
                 <g className="ag-ra-ground--open">
-                    {ground.left.map((slice, index) => <polygon key={`l${index}`} className="ag-ra-side ag-ra-side--left" points={slice} />)}
-                    {ground.right.map((slice, index) => <polygon key={`r${index}`} className="ag-ra-side ag-ra-side--right" points={slice} />)}
-                    <polygon className="ag-ra-top" points={ground.top} />
+                    {plinth.left.map((slice, index) => <polygon key={`l${index}`} className="ag-ra-side ag-ra-side--left" points={slice} />)}
+                    {plinth.right.map((slice, index) => <polygon key={`r${index}`} className="ag-ra-side ag-ra-side--right" points={slice} />)}
+                    <polygon className="ag-ra-top" points={plinth.top} />
                 </g>
             )}
             <RealmArenaTerrainArt id={id} letter={block.letter} square={block.square} corner={block.corner} />
@@ -329,30 +330,28 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
         );
         // The ground each square's terrain stands on, laid out on the same
         // board: where it's raised, it's a block of its own under the art.
-        const groundView: IsoView = { ...view, heights: field.tiles.map(tile => tile.elevation - tile.terrain.height) };
+        const plinths: IsoView = { ...view, heights: field.tiles.map(tile => tile.elevation - tile.terrain.height) };
         return {
             view,
             slab: isoSlab(view),
             lines: isoGridLines(view),
             blocks: view.heights.flatMap((height, square): RaisedBlock[] => {
                 if (height === 0) return [];
-                const { col, row } = coordsOf(field, square);
-                const ground = groundView.heights[square];
+                const base = plinths.heights[square];
                 return [{
                     square,
                     depth: isoDepth(view, square),
                     letter: terrainLetter(field, square),
                     top: isoBlock(view, square).top,
-                    corner: isoPoint(view, col, row, ground),
-                    ground: ground > 0 ? isoBlock(groundView, square) : null,
+                    corner: isoCorner(view, square, base),
+                    plinth: base > 0 ? isoBlock(plinths, square) : null,
                 }];
             }),
         };
     }, [field]);
     const { view } = ground;
     const { width, height } = view.size;
-    // useId's own characters aren't all safe inside url(#…).
-    const artId = `ra-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const artId = useSvgId('ra');
 
     // A character selected in battle brings most of where it could move into
     // view, rather than just the squares round it — zoomed exactly to that,
