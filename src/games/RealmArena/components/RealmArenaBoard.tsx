@@ -1,12 +1,12 @@
 'use client'
-import React, { useId } from 'react';
+import React, { useId, useMemo } from 'react';
 import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
-import { CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, CELL, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
+import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
+import { apPips, areaRect, CELL, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, reachFocus, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
 
 /** Each terrain's fill, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
 const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
@@ -154,7 +154,7 @@ function Odds({ field, square, chance }: { field: Battlefield; square: Square; c
  * At a phone's width a square is about ten pixels — fine for reading the
  * battle, far too small to tap — so `BoardZoom`'s deepest step brings about
  * ten squares across the column, and selecting a character brings the view to
- * it.
+ * most of where it could move — as deep as that still fits (`reachFocus`).
  *
  * On the viewer's battle turn (`aiming`, §17.3 PR 7) it shades the selected
  * character's reach by the AP each square costs, draws the path a lined-up
@@ -174,13 +174,22 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     const height = field.height * CELL;
     const viewBox = { width, height };
 
+    // A character selected in battle brings most of where it could move into
+    // view, rather than just the squares round it — zoomed exactly to that,
+    // since a full turn's reach is too wide for any step but the fit. A search
+    // over the whole map, so only redone when the selection or the board moves.
+    const reachRect = useMemo(
+        () => selected && isStanding(selected) ? reachFocus({ field, fighters }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
+        [field, fighters, selected, acting],
+    );
+
     // A character picked up to place is brought close enough to tap a square beside it.
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
-    const focusSquare = pickedUp?.square ?? selected?.square;
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
     if (follow && follow.squares.length > 0) focus = { rect: focusOn(field, ...follow.squares), key: `follow:${follow.key}` };
-    else if (focusSquare !== undefined) focus = { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}:${refocus}` };
+    else if (pickedUp) focus = { rect: focusOn(field, pickedUp.square), key: `pick:${pickedUp.square}:${refocus}` };
+    else if (selected) focus = { rect: reachRect ?? focusOn(field, selected.square), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
     const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];

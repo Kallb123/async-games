@@ -461,9 +461,11 @@ its time zoomed in:
 - `BoardZoom` steps from the whole map down to a close zoom (its `maxWidth`),
   deep enough that about ten squares fill the width and each one is
   comfortable to tap. Pinch and ctrl-wheel zoom as usual.
-- Selecting a character brings the view to it. A replay of other players'
-  turns follows the action. Both use `BoardZoom`'s `focus`, the way Race Cars
-  follows a car.
+- Selecting a character brings the view to most of where it could move —
+  about two thirds of its reach each way, zoomed exactly to fit that rather
+  than to a step, since a full turn's reach runs most of the map's width. A
+  replay of other players' turns follows the action. Both use `BoardZoom`'s
+  `focus`, the way Race Cars follows a car.
 - The ground is better drawn as one image than as a shape per square, because
   a 48×48 board has 2,304 of them. Kingdom Builder's tile sheet is a
   precedent.
