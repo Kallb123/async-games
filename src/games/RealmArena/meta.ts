@@ -4,10 +4,11 @@ export const meta: GameMeta = {
     url: "realmarena",
     name: "Realm Arena",
     categories: ["Strategy"],
-    // Two until free-for-all and the 48×48 fort (docs/games/realm-arena.md §17.4 B2).
-    players: "2 players",
+    // Two on the Ruined Fort, or a free-for-all of three on the Ring Fort or
+    // four on the Four-Gate Fort (docs/games/realm-arena.md §17.4 B2, §19).
+    players: "2–4 players",
     minPlayers: 2,
-    maxPlayers: 2,
+    maxPlayers: 4,
     tagline: "Muster a squad in secret, then fight for the centre one action at a time.",
     accent: "#8a2c2c",
     glyph: "⚔️",

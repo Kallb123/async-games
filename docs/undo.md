@@ -1475,10 +1475,10 @@ action's kind but what the action set off.
 - **No hold (§5)**, no `currentTurn` to restore: a turn only ever ends on the
   player's own End turn, or on the turn timer's, which plays the same
   `RealmArenaEndTurn`. `CheckEndTurn` empties the stack on every hand-off, so
-  both are covered; Realm Arena has no dropout adapter, and a drop is a command
-  of its own that moves the anchor. Depth `ACTION_POINTS` (four): one
-  character's whole turn of one-AP moves. A turn spread over the squad can hold
-  more than that, which only costs reach.
+  both are covered. The dropout adapter (free-for-all, B2) empties it too,
+  because a snapshot taken before a player left would put their squad back.
+  Depth `ACTION_POINTS` (four): one character's whole turn of one-AP moves. A
+  turn spread over the squad can hold more than that, which only costs reach.
 - **The cloner.** `cloneRealmArenaState` lives in `RealmArenaLogic.ts`, the
   only file that needs it — replay rebuilds the opening state from the seat
   order, as Dice Cities' did (§16).

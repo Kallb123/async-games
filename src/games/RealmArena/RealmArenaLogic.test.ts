@@ -9,7 +9,7 @@ import {
     type Action, type Fighter,
 } from "./rules";
 import {
-    actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterBoth, play, PLAYERS, readyMadePicks, scriptedAction,
+    actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks, scriptedAction,
     type RealmArenaTestGame,
 } from "./testFixtures";
 
@@ -122,7 +122,7 @@ describe("a battle turn", () => {
         const game = makeGame();
         expect((await play(game, actBy("a", { kind: "hunker", fighter: 0 }))).outcome.validMove).toBe(false);
         expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(false);
-        await musterBoth(game);
+        await musterAll(game);
         expect((await play(game, actBy("b", { kind: "hunker", fighter: 5 }))).outcome.validMove).toBe(false);
         expect((await play(game, actBy("a", { kind: "hunker", fighter: 5 }))).outcome.validMove).toBe(false);
         expect((await play(game, actBy("a", "hunker" as never))).outcome.validMove).toBe(false);
@@ -131,7 +131,7 @@ describe("a battle turn", () => {
 
     it("records the rolls a shot used, and a replay uses them rather than rolling again", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         // Put b's Knight in the a Archer's sights, in the open.
         const gs = game.specificGameState;
         const archer = own(game, "a").find(one => one.character === "archer")!;
@@ -161,7 +161,7 @@ describe("a battle turn", () => {
 
     it("keeps nothing of an action but what was checked", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         const command = actBy("a", { kind: "hunker", fighter: 0, path: [1, 2, 3], junk: "x".repeat(100) } as unknown as Action);
         await play(game, command);
         expect(command.action).toEqual({ kind: "hunker", fighter: 0 });
@@ -169,7 +169,7 @@ describe("a battle turn", () => {
 
     it("puts everyone with AP enough on watch at the end of the turn, except those kept still", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         const [first, second] = own(game, "a");
         await play(game, endTurnBy("a", [second.id, 99, 5]));
         const byId = (id: number) => game.specificGameState.fighters.find(one => one.id === id)!;
@@ -184,7 +184,7 @@ describe("a battle turn", () => {
 
     it("ends the battle after the last round, and names a winner", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         for (let turn = 0; turn < BATTLE_ROUNDS[2] * 2; turn++) {
             expect(game.complete).toBe(false);
             const { outcome } = await play(game, endTurnBy(game.currentTurn));
@@ -204,7 +204,7 @@ describe("a battle turn", () => {
 describe("a whole battle, played by two scripted squads", () => {
     it("keeps AP, HP and scores consistent from the muster to the winner", { timeout: 30_000 }, async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         const expected: Record<string, number> = { a: 0, b: 0 };
         let shots = 0;
 
@@ -281,7 +281,7 @@ describe("a whole battle, played by two scripted squads", () => {
 describe("a battle read back from storage", () => {
     it("still plays when a fighter's empty cooldowns were minimised away", async () => {
         const game = makeGame();
-        await musterBoth(game);
+        await musterAll(game);
         for (const fighter of game.specificGameState.fighters) delete (fighter as Partial<Fighter>).cooldowns;
         const archer = own(game, "a").find(one => one.character === "archer")!;
         expect((await play(game, actBy("a", { kind: "hunker", fighter: archer.id }))).outcome.validMove).toBe(true);

@@ -816,9 +816,9 @@ be cheaply changed once games are being played.
   as a missed turn should (§4). A timed-out muster musters a ready-made
   squad in the deployment zone, so the battle can still start (agreed in
   round 6). Each faction's ready-made squad is part of its data (PR 2).
-- **No dropout adapter at two players.** A two-player duel ends when one
-  player stops turning up, which is what the platform already does without
-  one. The adapter comes with free-for-all (B2).
+- **No drop at two players.** A two-player duel ends when one player stops
+  turning up, which is what the platform already does. The dropout adapter
+  came with free-for-all (B2), and its `minPlayers` of two keeps it that way.
 - **The squads live in plain arrays** (`Schema.Types.Mixed`), so every
   `Execute` ends by calling one `markModified` helper (`new-game.md`,
   "Gotchas").
@@ -1083,6 +1083,26 @@ In the order §10 set, and in less detail for now:
   - budgets and turn limits by player count (§13.6, §13.8);
   - a dropout adapter, so a player who stops turning up has their squad
     leave while their score stands (§4).
+
+  *Filled in by B2:*
+
+  - **The party's size picks the map** (§19.1): the Ruined Fort for two,
+    the Ring Fort for three and the Four-Gate Fort for four. The host picks
+    nothing more than before, and the setup log names where each seat
+    deploys.
+  - **A round ends with the last seat still playing.** The rotation steps
+    past a seat that has been dropped or whose squad has nobody standing
+    (§5.1), so "the last seat's End turn" became "an End turn that hands the
+    turn back round the table". At two players nothing changes.
+  - **A dropped player's squad leaves the battlefield.** Its characters are
+    taken off rather than downed, so nobody scores a knock-out for them,
+    nobody can raise them, and none is left on watch. Their score stands in
+    the final line, but the winner is the best-placed player still there,
+    and a drop that leaves one squad standing ends the battle. Every undo
+    snapshot goes with them, since restoring one would put the squad back.
+  - **Nobody is dropped from a duel, or during the muster.** A two-player
+    battle is still abandoned, as before (§17.2). A muster is one turn each,
+    so nobody can miss three in a row before it's over.
 - **B3 — Teams of two**, in alternate seats, with a team score (§5.2).
 - **B4 — Unlocks** (§7). This is the first state in the app that belongs to a
   player rather than a game, so it needs its own collection and routes
@@ -1143,9 +1163,9 @@ So the three-player map is fair by measurement instead of by shape: mirrored
 left to right, so two of its seats are exact twins, and the third held level
 with them by numbers its test checks (§19.2).
 
-The ids sit beside the Ruined Fort's in `REALM_ARENA_MAPS`. Nothing chooses
-them yet: free-for-all (B2) will pick the map from the player count, so the
-host never has to.
+The ids sit beside the Ruined Fort's in `REALM_ARENA_MAPS`. Free-for-all (B2)
+picks the map from the player count (`mapForPlayers`), so the host never has
+to.
 
 ### 19.2 The two maps
 
@@ -1238,3 +1258,4 @@ Realm, its sibling in the same world.
 | 1.4 | Targets in reach: a count on each unit's box, and the selected character's three likeliest targets floated over the board, read from the end of a lined-up move. |
 | 1.5 | Each enemy in the selected character's reach wears its chance to hit above its figure on the board, previewed from the end of a lined-up move like the list. |
 | 1.6 | Battlefields for three and four players (§19): one map per player count, since three seats can't be made identical on squares. The Four-Gate Fort for four, unchanged by a quarter turn; the Ring Fort for three, mirrored, with its third seat held level by measured walks. The milestone plan puts them first, as B1 (§17.4). |
+| 1.7 | B2 fills in free-for-all: the party's size picks the map (§19.1), a round ends with the last seat still playing, a dropped player's squad leaves the battlefield while their score stands, and nobody is dropped from a duel or during the muster. |

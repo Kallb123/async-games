@@ -4,7 +4,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
-import { nextActivePlayer } from "@/utils/games/playerDropout";
+import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
@@ -18,6 +18,7 @@ import {
     musterRefusal,
     newFighter,
     ROLL_SIDES,
+    squadsStanding,
     standings,
     startTurn,
     storedFighter,
@@ -60,6 +61,21 @@ export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
 function onTurn(data: IRealmArenaGameData, userId: string, phase: IRealmArenaSpecificGameState["phase"]): boolean {
     return !data.complete && data.specificGameState.phase === phase && data.currentTurn === userId
         && data.gameState.turnOrder.includes(userId);
+}
+
+/**
+ * Whose turn follows `userId`'s (§5.1): the next seat round the table, stepping
+ * over anyone dropped and, once the battle has begun, any squad with nobody
+ * left standing — a wiped-out squad takes no more turns, and its score stands.
+ * `userId` itself may be either. `userId` back when nobody else can play,
+ * which only a battle that is already over can come to.
+ */
+export function nextSeat(data: IRealmArenaGameData, userId: string): string {
+    const gs = data.specificGameState;
+    const standing = new Set(gs.phase === "battle" ? squadsStanding(battleOf(gs), data.gameState.turnOrder) : data.gameState.turnOrder);
+    let next = nextActivePlayer(data, userId);
+    while (next !== userId && !standing.has(next)) next = nextActivePlayer(data, next);
+    return next;
 }
 
 /** Adds what a run of events scored to the scores (§13.7). */
@@ -215,7 +231,8 @@ export class RealmArenaGameType implements IGameType {
 
     /**
      * The rotation (§17.2): the turn passes round the seats, through the muster
-     * and on into the battle without a break. A player's battle turn begins
+     * and on into the battle without a break, stepping over a seat dropped or
+     * wiped out (`nextSeat`). A player's battle turn begins
      * here, with fresh AP and the stances and banks of their last turn gone —
      * `startTurn`, run on the hand-off so a timed-out turn and a replay begin
      * the next one exactly as a played turn does.
@@ -223,7 +240,7 @@ export class RealmArenaGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IRealmArenaGameData;
-        const next = nextActivePlayer(data, data.currentTurn);
+        const next = nextSeat(data, data.currentTurn);
         data.currentTurn = next;
         const gs = data.specificGameState;
         // Nothing on the stack can be restored past a hand-off (docs/undo.md).
@@ -235,7 +252,8 @@ export class RealmArenaGameType implements IGameType {
     /**
      * The end of the battle (§5.1): the turn limit played out (§13.8), or at
      * most one squad left standing. The winner is whoever the tie-break chain
-     * puts first, so there always is one.
+     * puts first, so there always is one — passing over anyone dropped, whose
+     * score stands in the final line but who wasn't there at the end.
      */
     CheckGameOver(gameData: IGameData): boolean {
         const data = gameData as IRealmArenaGameData;
@@ -246,13 +264,14 @@ export class RealmArenaGameType implements IGameType {
         if (!isBattleOver(battle, order, gs.roundsPlayed)) return false;
 
         const ranked = standings(battle, order, gs.scores);
+        const winner = ranked.find(userId => !isDropped(data, userId)) ?? ranked[0];
         data.complete = true;
-        data.winner = ranked[0];
+        data.winner = winner;
         data.currentTurn = '';
         data.gameState.history.unshift({
             text: `The battle is over: ${ranked.map(userId => `${userToken(userId)} ${pluralize(gs.scores[userId] ?? 0, "point")}`).join(", ")}`,
         });
-        data.gameState.history.unshift(playerHistory(ranked[0], "wins the battle"));
+        data.gameState.history.unshift(playerHistory(winner, "wins the battle"));
         return true;
     }
 }
@@ -475,9 +494,40 @@ export class RealmArenaEndTurn implements IGameCommand {
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, ["ended their turn", ...events.map(event => clause(event, battle.fighters, this.senderId))].join("; ")));
 
-        // The last seat's turn ends the round (§13.8).
-        if (order.indexOf(this.senderId) === order.length - 1) gs.roundsPlayed += 1;
+        // The round ends with the last seat still playing (§13.8): the turn
+        // passing back round the table, past any seat dropped or wiped out.
+        // Nothing in End turn can down anyone, so it's the seat CheckEndTurn
+        // hands the turn to next.
+        const wrapsRound = order.indexOf(nextSeat(data, this.senderId)) <= order.indexOf(this.senderId);
+        if (wrapsRound) gs.roundsPlayed += 1;
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
 }
+
+// Free-for-all (docs/games/realm-arena.md §17.4 B2): a player who stops
+// turning up has their squad leave the battlefield, and their score stands
+// (§4). Their characters are taken off rather than downed, so nobody scores a
+// knock-out for them and nobody can raise them, and none of them is left on
+// watch; the rotation steps past the seat (`nextSeat`). A duel isn't carried
+// on: two seats is `minPlayers`, so dropping one of them abandons the game, as
+// it always has.
+//
+// The undo stack goes too: its snapshots are whole states from before the
+// drop, and restoring one would put the squad back.
+//
+// Only in the battle. A muster is one turn each, so nobody can miss three in
+// a row before it's over, and a seat missing from the muster's seat order
+// would leave it waiting on them.
+registerPlayerDropoutAdapter({
+    className: "RealmArenaGameType",
+    minPlayers: 2,
+    canDrop(gameData) {
+        return (gameData as IRealmArenaGameData).specificGameState.phase === "battle";
+    },
+    dropPlayer(gameData, userId) {
+        const gs = (gameData as IRealmArenaGameData).specificGameState;
+        gs.fighters = (gs.fighters ?? []).map(storedFighter).filter(fighter => fighter.owner !== userId);
+        clearUndo(gs);
+    },
+});

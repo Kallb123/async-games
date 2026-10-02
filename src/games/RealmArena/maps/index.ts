@@ -17,8 +17,20 @@ export const REALM_ARENA_MAPS = {
 
 export type RealmArenaMapId = keyof typeof REALM_ARENA_MAPS;
 
-/** The two-player map, and the one every battle is fought on until free-for-all chooses by player count (§17.4 B2). */
+/** The two-player map, and the one an unknown id falls back to. */
 export const DEFAULT_MAP: RealmArenaMapId = "ruinedFort";
+
+/** Where each seat deploys on each map, in seat order, as the setup log names it. */
+export const DEPLOYMENT_NAMES: Readonly<Record<RealmArenaMapId, readonly string[]>> = {
+    ruinedFort: ["along the north edge", "along the south edge"],
+    ringFort: ["in the north-west corner", "in the north-east corner", "in the middle of the south edge"],
+    fourGateFort: ["in the north-west corner", "in the north-east corner", "in the south-east corner", "in the south-west corner"],
+};
+
+/** The map a party of this size fights on (§19.1): the Ruined Fort for two, the Ring Fort for three, the Four-Gate Fort for four. */
+export function mapForPlayers(playerCount: number): RealmArenaMapId {
+    return playerCount <= 2 ? "ruinedFort" : playerCount === 3 ? "ringFort" : "fourGateFort";
+}
 
 /** The battlefield a stored id names; the default for an id no release knows, so a battle can always be read. */
 export function battlefieldById(id: string): Battlefield {

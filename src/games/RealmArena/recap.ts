@@ -157,7 +157,7 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
     if (events.some(event => event.type === RA_MUSTER) && !events.some(event => event.type === RA_BATTLE)) {
         return {
             headline: "Your turn to muster 👋",
-            subline: "Your opponent has mustered. Neither squad is seen until both have.",
+            subline: "The squads before yours are sealed. None is seen until every player has mustered.",
         };
     }
 

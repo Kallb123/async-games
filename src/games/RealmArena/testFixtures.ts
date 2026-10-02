@@ -7,7 +7,7 @@
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
-import { REALM } from "./characters";
+import { REALM, type PlayerCount } from "./characters";
 import { battlefieldById } from "./maps";
 import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
@@ -51,11 +51,12 @@ export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(Realm
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
 export function readyMadePicks(game: RealmArenaTestGame, seat: number): MusterPick[] {
-    return readyMadeMuster(battlefieldById(game.specificGameState.map), seat, REALM.readyMade[2]);
+    const squad = REALM.readyMade[game.gameState.turnOrder.length as PlayerCount];
+    return readyMadeMuster(battlefieldById(game.specificGameState.map), seat, squad);
 }
 
-/** Both players muster their ready-made squads, so the battle begins with seat 0's turn. */
-export async function musterBoth(game: RealmArenaTestGame): Promise<void> {
+/** Every player musters their ready-made squad, so the battle begins with seat 0's turn. */
+export async function musterAll(game: RealmArenaTestGame): Promise<void> {
     for (const [seat, player] of game.gameState.turnOrder.entries()) {
         const { outcome } = await play(game, muster(player, readyMadePicks(game, seat)));
         if (!outcome.validMove) throw new Error(`${player}'s muster was refused`);

@@ -267,7 +267,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {sealed?.map((pick, index) => (
                         <g key={`sealed-${index}`} className="ag-ra-sealed">
-                            <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until both have mustered`}</title>
+                            <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until every player has mustered`}</title>
                             <Figure field={field} square={pick.square} character={pick.character} ring={placing?.selected === index ? 'selected' : undefined} />
                         </g>
                     ))}

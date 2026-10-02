@@ -15,7 +15,8 @@ import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
 
 // docs/games/realm-arena.md §17.3 PR 4: reachable by URL only until the game
-// is turned on (§17.1). Two players, so the only choices are who and how fast.
+// is turned on (§17.1). The party's size picks the map (§17.4 B2), so the only
+// choices are who and how fast.
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
