@@ -3,7 +3,7 @@ import { canDropPlayer, PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS, POINTS_BUDGET, REALM } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
-import { ACTION_POINTS, BATTLE_ROUNDS, isStanding } from "./rules";
+import { ACTION_POINTS, BATTLE_ROUNDS, isStanding, type MusterPick } from "./rules";
 import {
     cmd, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
 } from "./testFixtures";
@@ -221,5 +221,28 @@ describe("a whole free-for-all, played by four scripted squads", () => {
         }
         expect(FOUR).toContain(game.winner);
         expect(game.specificGameState.fighters.some(one => !isStanding(one))).toBe(true);
+    });
+});
+
+describe("the sealed muster with three or four seats (§17.2)", () => {
+    it.each([[THREE], [FOUR]])("sends each of %j only their own squad until the last has mustered", async seats => {
+        const game = makeGame([...seats]);
+        // Every seat but the last musters a squad of its own, on a square nobody else uses.
+        const picksBy = new Map<string, MusterPick[]>();
+        for (const [seat, player] of seats.slice(0, -1).entries()) {
+            const picks = readyMadePicks(game, seat).slice(0, 1);
+            picksBy.set(player, picks);
+            await play(game, muster(player, picks));
+        }
+        for (const viewer of [...seats, null]) {
+            const view = gameStateToModel(game.specificGameState, viewer, null);
+            const wire = JSON.stringify(view);
+            expect(view.fighters).toEqual([]);
+            expect(view.myMuster).toEqual(viewer && picksBy.has(viewer) ? picksBy.get(viewer) : null);
+            for (const [owner, picks] of picksBy) {
+                if (owner === viewer) continue;
+                for (const { square } of picks) expect(wire, `${viewer} sees ${owner}'s square`).not.toMatch(new RegExp(`\\b${square}\\b`));
+            }
+        }
     });
 });

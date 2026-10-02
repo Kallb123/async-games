@@ -4,7 +4,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
-import { isDropped, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
+import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
@@ -71,15 +71,11 @@ function onTurn(data: IRealmArenaGameData, userId: string, phase: IRealmArenaSpe
  * which only a battle that is already over can come to.
  */
 export function nextSeat(data: IRealmArenaGameData, userId: string): string {
-    const order = data.gameState.turnOrder;
     const gs = data.specificGameState;
-    const standing = gs.phase === "battle" ? new Set(squadsStanding(battleOf(gs), order)) : new Set(order);
-    const start = order.indexOf(userId);
-    for (let step = 1; step <= order.length; step++) {
-        const candidate = order[(start + step) % order.length];
-        if (!isDropped(data, candidate) && standing.has(candidate)) return candidate;
-    }
-    return userId;
+    const standing = new Set(gs.phase === "battle" ? squadsStanding(battleOf(gs), data.gameState.turnOrder) : data.gameState.turnOrder);
+    let next = nextActivePlayer(data, userId);
+    while (next !== userId && !standing.has(next)) next = nextActivePlayer(data, next);
+    return next;
 }
 
 /** Adds what a run of events scored to the scores (§13.7). */
@@ -502,7 +498,8 @@ export class RealmArenaEndTurn implements IGameCommand {
         // passing back round the table, past any seat dropped or wiped out.
         // Nothing in End turn can down anyone, so it's the seat CheckEndTurn
         // hands the turn to next.
-        if (order.indexOf(nextSeat(data, this.senderId)) <= order.indexOf(this.senderId)) gs.roundsPlayed += 1;
+        const wrapsRound = order.indexOf(nextSeat(data, this.senderId)) <= order.indexOf(this.senderId);
+        if (wrapsRound) gs.roundsPlayed += 1;
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
