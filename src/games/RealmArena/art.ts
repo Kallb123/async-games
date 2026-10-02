@@ -15,12 +15,19 @@
 
 import { FULL_HEIGHT, TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP } from "@/utils/ui/isometric";
+import { EFFECT_IDS, type EffectId } from "./characters";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
     outdoors: { href: "/art/realmarena/outdoors.png", width: 640, height: 1024 },
     /** Brick walls, battlements and rubble. */
     walls: { href: "/art/realmarena/walls.png", width: 512, height: 1024 },
+    /**
+     * The status effects' marks (§20.2), one `EFFECT_PX` badge a cell in a
+     * row, in `EFFECT_IDS` order. Rendered from its SVG master,
+     * `art-masters/realmarena/effects.svg`, by `npm run ra-effects`.
+     */
+    effects: { href: "/art/realmarena/effects.png", width: 576, height: 96 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -109,9 +116,17 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
 
 const LAYERS = Object.values(TERRAIN_ART).flat();
 
+/** The width and height of an effect's mark on its sheet. */
+const EFFECT_PX = 96;
+
+/** The mark a figure wears for each effect on it (§20.2), and its box beside the effect's name. */
+export const EFFECT_ART = Object.fromEntries(
+    EFFECT_IDS.map((effect, index): [EffectId, Sprite] => [effect, { sheet: "effects", x: index * EFFECT_PX, y: 0, width: EFFECT_PX, height: EFFECT_PX }]),
+) as Readonly<Record<EffectId, Sprite>>;
+
 /** Every sprite the board draws, once each, by the number it defines it under up front. */
 export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
-    [...new Set([...GRASS, ...LAYERS.flatMap(layer => layer.sprites)])].map((sprite, index) => [sprite, index]),
+    [...new Set([...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART)])].map((sprite, index) => [sprite, index]),
 );
 
 /** The spans a clipped layer is cut to, as [low, high] quarters above the ground, once each. */

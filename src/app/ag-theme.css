@@ -5320,6 +5320,15 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    one unspent, hollow for each spent. The units strip below draws the same. */
 .ag-ra-ap { fill: rgba(0, 0, 0, 0.35); stroke: var(--ag-on-dark); stroke-width: 0.25; pointer-events: none; }
 .ag-ra-ap--on { fill: var(--ag-gold); }
+/* Status effects (§20.2): a figure's marks down its left on the board, and
+   the same marks spelled out with their names in a unit's box and the
+   selected character's card. Each is a sprite of one sheet (`EFFECT_ART`). */
+.ag-ra-effect-mark { pointer-events: none; filter: drop-shadow(0 0.3px 0.4px rgba(0, 0, 0, 0.5)); }
+.ag-ra-effect-icon { flex: none; display: block; width: 14px; height: 14px; }
+.ag-ra-effect-icon--boxed { width: 24px; height: 24px; }
+/* A run of quiet `.ag-tag`s, each led by its mark. */
+.ag-ra-effects { display: flex; flex-wrap: wrap; gap: 4px; }
+.ag-ra-effects .ag-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 0; padding-left: 3px; }
 /* "Your units" under the board: a box per character, tapped to select it. */
 .ag-ra-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .ag-ra-unit {

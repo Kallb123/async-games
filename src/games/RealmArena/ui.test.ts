@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
+    abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
     reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -61,6 +61,23 @@ describe("fighterStatus", () => {
 
     it("says only that a fallen character is down", () => {
         expect(fighterStatus({ ...knight, hp: 0, banked: 4 })).toEqual(["Down"]);
+    });
+
+    it("names the effects after the watch, in the order the marks are drawn", () => {
+        expect(fighterStatus({ ...knight, banked: 2, effects: { marked: 2, burning: 1 } })).toEqual(["On watch (2 AP banked)", "Burning", "Marked"]);
+    });
+});
+
+describe("effectsOn", () => {
+    const knight = newFighter(0, "alice", "knight", 0);
+
+    it("lists what the board marks a figure with, in EFFECT_IDS order, leaving out a count run down", () => {
+        expect(effectsOn({ ...knight, effects: { shieldWall: 1, slowed: 0, burning: 2 } })).toEqual(["burning", "shieldWall"]);
+        expect(effectsOn(knight)).toEqual([]);
+    });
+
+    it("marks nothing on a character that's down", () => {
+        expect(effectsOn({ ...knight, hp: 0, effects: { burning: 2 } })).toEqual([]);
     });
 });
 
@@ -312,6 +329,19 @@ describe("eventLines", () => {
             { icon: "🎯", title: "Hit for 4", sub: "Your Archer at Bob's Knight · 80% to hit", roll: 12 },
             { icon: "✕", title: "Bob's Knight is down" },
             { icon: "★", title: "You scored 5", sub: "The knock-out" },
+        ]);
+    });
+
+    it("leads an effect put on, cleared or burning with the effect's mark", () => {
+        const events: BattleEvent[] = [
+            { kind: "effect", fighter: 0, effect: "burning", change: "applied" },
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+            { effect: "burning", title: "Your Archer is burning" },
+            { effect: "burning", title: "Your Archer burned for 1" },
+            { effect: "burning", title: "Your Archer is no longer burning" },
         ]);
     });
 

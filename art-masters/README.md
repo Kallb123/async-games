@@ -35,3 +35,11 @@ badge kit's own generator (`badges/map-badges-2d.js`). After changing anything
 in it, run `npm run kb-atlas` (not `optimise-art`) and commit the
 `public/art/kingdombuilder/v2/` files and `src/games/KingdomBuilder/terrainAtlas.json`
 it writes.
+
+## Realm Arena's effect marks
+
+`realmarena/effects.svg` is drawn as code rather than exported, so its master
+is the SVG itself: the served `public/art/realmarena/effects.png` is rendered
+from it, never saved by hand. After changing it, run `npm run ra-effects` and
+commit the PNG it writes. The sheet is a few KB, so `optimise-art` leaves it
+alone.

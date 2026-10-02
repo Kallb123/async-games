@@ -6,7 +6,7 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, type AbilityId, type CharacterId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, type AbilityId, type CharacterId, type EffectId, type Weapon } from "./characters";
 import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /**
@@ -111,16 +111,27 @@ function sameCounts(a: Fighter["effects"], b: Fighter["effects"]): boolean {
 }
 
 /**
- * What a character is doing, and what's been done to it, that the board marks
- * on it, in words: the tooltip, and the selected character's card. Its stances
- * and effects in `EFFECT_IDS` order (§20.2).
+ * The effects on a character, in `EFFECT_IDS` order: what the board marks its
+ * figure with and its box spells out (§20.2). None on one that's down, which
+ * loses every effect.
+ */
+export function effectsOn(fighter: Fighter): EffectId[] {
+    return isStanding(fighter) ? EFFECT_IDS.filter(effect => hasEffect(fighter, effect)) : [];
+}
+
+/** A character on watch, in words — "On watch (4 AP banked)" — or undefined when it isn't. */
+export function watchStatus(fighter: Fighter): string | undefined {
+    return isStanding(fighter) && fighter.banked > 0 ? `On watch (${fighter.banked} AP banked)` : undefined;
+}
+
+/**
+ * What a character is doing, and what's been done to it, in words: the
+ * figure's tooltip, which can't show the marks. The watch, then its effects.
  */
 export function fighterStatus(fighter: Fighter): string[] {
-    if (fighter.hp <= 0) return ["Down"];
-    return [
-        ...(fighter.banked > 0 ? [`On watch (${fighter.banked} AP banked)`] : []),
-        ...EFFECT_IDS.filter(effect => hasEffect(fighter, effect)).map(effect => EFFECTS[effect].name),
-    ];
+    if (!isStanding(fighter)) return ["Down"];
+    const watch = watchStatus(fighter);
+    return [...(watch ? [watch] : []), ...effectsOn(fighter).map(effect => EFFECTS[effect].name)];
 }
 
 /** A character with AP left to spend on its owner's turn: what the units strip counts as ready. */
@@ -311,14 +322,17 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
     });
 }
 
-/** One line of what an action did, as the board shows it coming back: a shot carries the roll it was decided by. */
-export interface EventLine {
-    icon: string;
+/**
+ * One line of what an action did, as the board shows it coming back, led by a
+ * glyph or by the mark of the effect it's about. A shot carries the roll it
+ * was decided by.
+ */
+export type EventLine = {
     title: string;
     sub?: string;
     /** The 1–100 roll a shot was decided by. */
     roll?: number;
-}
+} & ({ icon: string; effect?: never } | { effect: EffectId; icon?: never });
 
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
@@ -350,15 +364,15 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":
-                return [{ icon: "⛨", title: `${Name(event.fighter)} hunkered down` }];
+                return [{ effect: "hunkered", title: `${Name(event.fighter)} hunkered down` }];
             case "shieldWall":
-                return [{ icon: "🛡️", title: `${Name(event.fighter)} raised a shield wall` }];
+                return [{ effect: "shieldWall", title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
             case "effect":
-                return [{ icon: event.effect === "burning" ? "🔥" : "✦", title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
+                return [{ effect: event.effect, title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
             case "burned":
-                return [{ icon: "🔥", title: `${Name(event.fighter)} burned for ${event.damage}` }];
+                return [{ effect: "burning", title: `${Name(event.fighter)} burned for ${event.damage}` }];
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: event.reason === "centre" ? "Holding the centre" : "The knock-out" }];
         }

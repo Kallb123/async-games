@@ -38,8 +38,16 @@ const RA_RAISED = "ra_raised";
 const RA_HEALED = "ra_healed";
 const RA_MANOEUVRE = "ra_manoeuvre";
 const RA_END_TURN = "ra_endturn";
+const RA_BURNING = "ra_burning";
 const RA_CENTRE = "ra_centre";
 const RA_WON = "ra_won";
+
+/**
+ * The lines the battle's end writes, after the command that ended it and so
+ * newest in the history: the winner's, and the final scores under it
+ * (`CheckGameOver`).
+ */
+const BATTLE_END_LINES = 2;
 
 function state(snapshot: ITurnSnapshot): RAState {
     return snapshot.specificGameState as RAState;
@@ -67,13 +75,17 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     return { type: RA_MANOEUVRE, glyph: "👣" };
 }
 
-/** The players whose characters an action hurt or knocked out — the actor's own included, when a reaction caught them. */
+/**
+ * The players whose characters an action hurt or knocked out — the actor's own
+ * included, when a reaction caught them — or burning did as a turn began.
+ */
 function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): string[] {
     const ids = events.flatMap(event => {
         switch (event.kind) {
             case "shot":
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball": return event.damage > 0 ? event.targets : [];
+            case "burned": return [event.fighter];
             case "downed": return [event.fighter];
             default: return [];
         }
@@ -140,6 +152,24 @@ function toEvents(
             } else {
                 rows.push({ ...base, type: RA_END_TURN, glyph: "⏳", title: `${name} ended their turn`, quiet: true });
             }
+            // What burning did as the next turn began, told in the line the
+            // hand-off wrote for it (§20.3) — more than one where it burned a
+            // squad out and passed on. Those are the lines nobody acted, under
+            // the battle's end if the burning ended it. Never quiet: it hurt
+            // somebody, and it may have knocked them out.
+            const ended = next.complete && !prev.complete;
+            const burning = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
+            if (burning.length > 0) {
+                const knockout = events.some(event => event.kind === "downed");
+                rows.push({
+                    ...base,
+                    id: `${command.id}:burning`,
+                    type: knockout ? RA_KNOCKOUT : RA_BURNING,
+                    glyph: knockout ? "✕" : "🔥",
+                    title: burning.map(entry => entry.text).join("; "),
+                    affectedIds: hurt(events, state(next).fighters),
+                });
+            }
             break;
         }
         default:
@@ -148,7 +178,7 @@ function toEvents(
 
     // The battle's end is written by the game type after the command that
     // ended it: the winner's line newest, the final scores beneath it.
-    if (next.complete && !prev.complete && lines.length >= 2) {
+    if (next.complete && !prev.complete && lines.length >= BATTLE_END_LINES) {
         rows.push({ ...base, id: `${command.id}:won`, type: RA_WON, glyph: "🏆", title: lines[0].text, detail: lines[1].text });
     }
     return rows;

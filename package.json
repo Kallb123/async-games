@@ -17,6 +17,7 @@
     "version:bump": "node scripts/bump-version.mjs",
     "kb-atlas": "node scripts/kingdombuilder-atlas.mjs",
     "optimise-art": "node scripts/optimise-art.mjs",
+    "ra-effects": "node scripts/realmarena-effects.mjs",
     "performance:budget": "node scripts/check-performance-budget.mjs"
   },
   "dependencies": {

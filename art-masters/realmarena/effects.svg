@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Realm Arena's status effect marks (docs/games/realm-arena.md §20): one 96px
+  badge a cell, left to right in `EFFECT_IDS` order — burning, stunned, slowed,
+  marked, hunkered down, shield wall. Each is a coin with a dark rim, so it
+  reads on grass, stone or a figure's own colour at a few pixels across, and
+  one bold glyph in white.
+
+  `npm run ra-effects` renders this to public/art/realmarena/effects.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="576" height="96" viewBox="0 0 576 96">
+  <defs>
+    <radialGradient id="sheen" cx="0.38" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.38"/>
+      <stop offset="0.55" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.22"/>
+    </radialGradient>
+    <g id="rim">
+      <circle cx="48" cy="48" r="42" fill="url(#sheen)" stroke="#24150f" stroke-width="7"/>
+    </g>
+  </defs>
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- Burning: a flame. -->
+    <g>
+      <circle cx="48" cy="48" r="42" fill="#d4471f"/>
+      <use href="#rim"/>
+      <path d="M48 15 C57 30 72 37 68 58 C66 71 57 79 48 79 C37 79 28 71 28 58 C28 47 35 42 37 33 C42 41 44 44 46 47 C46 36 43 26 48 15 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+      <path d="M48 50 C54 57 59 62 57 69 C55 74 52 76 48 76 C43 76 39 72 39 67 C39 61 44 58 48 50 Z" fill="#f6b21c"/>
+    </g>
+
+    <!-- Stunned: a lightning bolt. -->
+    <g transform="translate(96 0)">
+      <circle cx="48" cy="48" r="42" fill="#d99a14"/>
+      <use href="#rim"/>
+      <path d="M55 13 L28 53 L45 53 L38 83 L68 41 L51 41 L60 13 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+    </g>
+
+    <!-- Slowed: an hourglass, its sand run low. -->
+    <g transform="translate(192 0)">
+      <circle cx="48" cy="48" r="42" fill="#2f78c2"/>
+      <use href="#rim"/>
+      <path d="M30 19 H66 V26 C66 38 55 43 53 48 C55 53 66 58 66 70 V77 H30 V70 C30 58 41 53 43 48 C41 43 30 38 30 26 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+      <path d="M37 72 C38 64 45 61 48 58 C51 61 58 64 59 72 Z" fill="#2f78c2"/>
+      <path d="M41 30 H55 C54 35 50 38 48 40 C46 38 42 35 41 30 Z" fill="#2f78c2"/>
+    </g>
+
+    <!-- Marked: a target's crosshair. -->
+    <g transform="translate(288 0)">
+      <circle cx="48" cy="48" r="42" fill="#b02634"/>
+      <use href="#rim"/>
+      <g fill="none" stroke="#24150f" stroke-width="13">
+        <circle cx="48" cy="48" r="18"/>
+        <path d="M48 16 V29 M48 67 V80 M16 48 H29 M67 48 H80"/>
+      </g>
+      <g fill="none" stroke="#fff" stroke-width="6">
+        <circle cx="48" cy="48" r="18"/>
+        <path d="M48 16 V29 M48 67 V80 M16 48 H29 M67 48 H80"/>
+      </g>
+      <circle cx="48" cy="48" r="5" fill="#fff" stroke="#24150f" stroke-width="3"/>
+    </g>
+
+    <!-- Hunkered down: chevrons pressing down onto the ground. -->
+    <g transform="translate(384 0)">
+      <circle cx="48" cy="48" r="42" fill="#72662f"/>
+      <use href="#rim"/>
+      <g fill="none" stroke="#24150f" stroke-width="15">
+        <path d="M29 24 L48 39 L67 24 M29 42 L48 57 L67 42 M26 72 H70"/>
+      </g>
+      <g fill="none" stroke="#fff" stroke-width="8">
+        <path d="M29 24 L48 39 L67 24 M29 42 L48 57 L67 42 M26 72 H70"/>
+      </g>
+    </g>
+
+    <!-- Shield wall: a heater shield. -->
+    <g transform="translate(480 0)">
+      <circle cx="48" cy="48" r="42" fill="#53677e"/>
+      <use href="#rim"/>
+      <path d="M48 16 L72 25 V45 C72 62 62 73 48 80 C34 73 24 62 24 45 V25 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+      <path d="M48 23 V73 M31 43 H65" fill="none" stroke="#53677e" stroke-width="6"/>
+    </g>
+  </g>
+</svg>

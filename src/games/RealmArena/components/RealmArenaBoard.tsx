@@ -6,11 +6,12 @@ import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs } from '@/games/RealmArena/components/RealmArenaTerrain';
+import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -35,6 +36,14 @@ const HP_BAR_HEIGHT = 1.5;
 const AP_PIP_RADIUS = 0.75;
 const AP_PIP_STEP = 1.9;
 const AP_PIP_OFFSET = 5.6;
+/**
+ * The effect marks (§20.2): a column of badges down the figure's left, where
+ * the AP pips never are, clear of the disc and inside its square's width.
+ * Three stand within the disc's height.
+ */
+const EFFECT_MARK_SIZE = 3;
+const EFFECT_MARK_STEP = 3.1;
+const EFFECT_MARK_OFFSET = 6.2;
 /** A target's chance to hit: a pill wide enough for "100%", worn above its figure's disc. */
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
@@ -221,6 +230,8 @@ function RaisedSquare({ id, block, shades }: { id: string; block: RaisedBlock; s
 }
 
 interface FighterNodeProps {
+    /** The board's id, which its art is defined under. */
+    artId: string;
     view: IsoView;
     fighter: Fighter;
     ring: Ring | undefined;
@@ -232,8 +243,8 @@ interface FighterNodeProps {
     onSelect: (fighterId: number) => void;
 }
 
-/** A character on the battlefield, standing or fallen: its figure, HP bar and AP, and the tap that selects it. */
-function FighterNode({ view, fighter, ring, selected, acting, colourFor, nameFor, onSelect }: FighterNodeProps) {
+/** A character on the battlefield, standing or fallen: its figure, HP bar, effects and AP, and the tap that selects it. */
+function FighterNode({ artId, view, fighter, ring, selected, acting, colourFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
     const standing = isStanding(fighter);
@@ -264,6 +275,7 @@ function FighterNode({ view, fighter, ring, selected, acting, colourFor, nameFor
                     />
                 </>
             )}
+            <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
     );
@@ -310,6 +322,11 @@ interface DepthItem {
  * over the whole map as one pattern, and on every raised square the sprites
  * its terrain is drawn with — battlements, rubble, a tree — standing on it at
  * the heights the rules play.
+ *
+ * Every standing figure wears its status effects (§20) as a column of marks
+ * down its left, drawn from their own sheet (`EFFECT_ART`), whoever's
+ * turn it is: effects are public (§20.2). Its AP pips, on its owner's turn,
+ * run down its right.
  *
  * It's painted back to front. First the ground: the slab the map stands on,
  * the grass over it, the lines between the squares, and everything shaded on
@@ -464,6 +481,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             node: (
                 <FighterNode
                     key={fighter.id}
+                    artId={artId}
                     view={view}
                     fighter={fighter}
                     ring={ringOf(fighter)}
