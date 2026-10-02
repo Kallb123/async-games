@@ -74,6 +74,8 @@ interface RealmArenaBoardProps {
 interface Aiming {
     /** The selected character's reach, one layer for each AP it costs to stop there. */
     reach: readonly RunLayer<number>[] | null;
+    /** Every square an armed weapon or ability could land on from where the character stands, as one path. */
+    range: string | null;
     /** The path a lined-up move takes. */
     path: readonly Square[] | null;
     /** The 3×3 a lined-up fireball hits. */
@@ -158,12 +160,13 @@ function Odds({ field, square, chance }: { field: Battlefield; square: Square; c
  *
  * On the viewer's battle turn (`aiming`, §17.3 PR 7) it shades the selected
  * character's reach by the AP each square costs, draws the path a lined-up
- * move takes and the area a fireball hits, and rings who can be aimed at, who
- * is, and every watcher a move would set off. With one of the viewer's own
- * selected, each enemy it could hit wears its chance to (`odds`), read from
- * the end of a lined-up move. A tap anywhere no character
- * stands goes to `aiming.onSquare`; a tap on a character still goes to
- * `onSelect`, and the screen decides whether that aims or selects.
+ * move takes, the range of a weapon or ability armed to aim — every square it
+ * could land on, whether or not anyone stands there — and the area a fireball
+ * hits, and rings who can be aimed at, who is, and every watcher a move would
+ * set off. With one of the viewer's own selected, each enemy it could hit
+ * wears its chance to (`odds`), read from the end of a lined-up move. A tap
+ * anywhere no character stands goes to `aiming.onSquare`; a tap on a character
+ * still goes to `onSelect`, and the screen decides whether that aims or selects.
  *
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
@@ -252,6 +255,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     {aiming?.reach?.map(layer => (
                         <path key={layer.key} className={`ag-ra-reach ag-ra-reach--${layer.key}`} d={layer.d} />
                     ))}
+                    {aiming?.range && <path className="ag-ra-range" d={aiming.range} />}
                     {aiming?.area && <rect className="ag-ra-blast" {...areaRect(field, aiming.area)} />}
                     {aiming && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
                     {aiming?.path && pathEnd && (

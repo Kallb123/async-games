@@ -279,6 +279,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             placing={placement && { zone: draft.zone, selected: placement.selected, onTap: draft.tap }}
                             aiming={turn && {
                                 reach: turn.reach,
+                                range: turn.range,
                                 path: turn.path,
                                 area: turn.area,
                                 candidates: turn.candidates,
