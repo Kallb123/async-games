@@ -3,12 +3,13 @@ import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { coordsOf, squareAt, type Square } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT as FORT, RUINED_FORT_MAP } from "./ruinedFort";
+import { sealedOff, standable as standableOn, walksFrom } from "./testFixtures";
 
 /** The same square with the map turned upside down. */
 const turned = (square: Square): Square => FORT.terrain.length - 1 - square;
 
 const centre = FORT.objectives.centre;
-const standable = FORT.terrain.flatMap((terrain, square) => terrain.standable ? [square] : []);
+const standable = standableOn(FORT);
 
 describe("the Ruined Fort", () => {
     it("is 36 squares wide and 48 long (§13.1)", () => {
@@ -29,19 +30,11 @@ describe("the Ruined Fort", () => {
         expect([Math.min(...cols) + Math.max(...cols) + 1, Math.min(...rows) + Math.max(...rows) + 1]).toEqual([FORT.width, FORT.height]);
     });
 
-    it("lets every deployment square reach the centre", () => {
+    it("lets every deployment square reach the centre, and nowhere to stand is sealed off", () => {
         for (const [seat, zone] of FORT.deployments.entries()) {
-            for (const square of zone) {
-                const { costs } = reachFrom(FORT, square);
-                expect(centre.some(c => costs[c] < Infinity), `seat ${seat}, square ${square}`).toBe(true);
-            }
+            expect(walksFrom(FORT, zone, centre).every(Number.isFinite), `seat ${seat}`).toBe(true);
         }
-    });
-
-    it("has nowhere to stand that's sealed off from the rest of the map", () => {
-        const { costs } = reachFrom(FORT, FORT.deployments[0][0]);
-        const sealed = standable.filter(square => costs[square] === Infinity).map(square => coordsOf(FORT, square));
-        expect(sealed).toEqual([]);
+        expect(sealedOff(FORT)).toEqual([]);
     });
 
     it("gives each side a tower that looks down into the keep", () => {

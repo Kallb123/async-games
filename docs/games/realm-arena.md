@@ -731,6 +731,9 @@ The 48×48 version for three or four players (§13.1) comes with free-for-all
 square fort with a gate facing each corner's deployment zone, and a tower
 between each pair of gates.
 
+*Built in B1* as the Four-Gate Fort, for four players only. Three players
+get a round fort of their own (§19).
+
 ---
 
 ## 16. Questions (round 5)
@@ -1072,9 +1075,11 @@ Reviewers: `rulebook`, `caveman`.
 
 In the order §10 set, and in less detail for now:
 
-- **B1 — A second mission and battlefield.**
+- **B1 — Battlefields for three and four players** (§19): the Four-Gate
+  Fort for four and the Ring Fort for three, as map files and their tests,
+  with nothing choosing them yet.
 - **B2 — Free-for-all for three and four players:**
-  - the 48×48 fort (§15.4);
+  - choosing the battlefield from the player count (§19.1);
   - budgets and turn limits by player count (§13.6, §13.8);
   - a dropout adapter, so a player who stops turning up has their squad
     leave while their score stands (§4).
@@ -1085,6 +1090,8 @@ In the order §10 set, and in less detail for now:
 - **B5 — Fog of war**, if it's chosen (§8). It's hidden state in every
   response and every replay (`croupier`).
 - **B6 — More factions.**
+- **B7 — A second mission and battlefield.** This was B1, until the three-
+  and four-player battlefields went first.
 - **Later platform work:** the shared team turn (§5.2). Undo for an action
   that rolled nothing and hurt nobody — a move that set off no reactions among
   them — is built (`docs/undo.md` §16, "The eighth game").
@@ -1102,6 +1109,105 @@ art.
 ## 18. Questions (round 6)
 
 Answered in §11.6.
+
+---
+
+## 19. Battlefields for three and four players
+
+The first step of free-for-all (§17.4 B1). §15.4 sketched one 48×48 fort with
+a gate facing each corner, for three or four players. Drawing it showed it
+works for four and not for three, so there are two maps.
+
+### 19.1 One map or two?
+
+*Decided:* **one map per player count.** A map's fairness rests on where the
+squads start, and a square grid can only be fair to a number of seats it can
+turn into each other.
+
+- **Four seats on squares are exact.** A quarter turn is one of a square
+  grid's own moves: every path, line of sight and cover square turns with it.
+  Four corners round a fort that's unchanged by a quarter turn are four
+  identical positions, as two ends of a map that's unchanged upside down are
+  (§15.2).
+- **Three seats in four corners aren't.** Leave one corner empty and the
+  seat between the other two has a rival on each side, about 40 squares away,
+  while the two either side of it each have one rival that close, one across
+  the diagonal (about 57) and an empty quarter of the map to slip round. In
+  free-for-all the seat in the middle is the one squeezed.
+- **Three seats can't be exact on squares at all.** A third of a turn isn't
+  one of a square grid's moves, and cost is the reason: a diagonal step costs
+  1.5, so a walk at a slant costs up to 12% more than the same distance
+  straight. Seats a third of a turn apart walk at different slants.
+
+So the three-player map is fair by measurement instead of by shape: mirrored
+left to right, so two of its seats are exact twins, and the third held level
+with them by numbers its test checks (§19.2).
+
+The ids sit beside the Ruined Fort's in `REALM_ARENA_MAPS`. Nothing chooses
+them yet: free-for-all (B2) will pick the map from the player count, so the
+host never has to.
+
+### 19.2 The two maps
+
+Both are 48×48 (§13.1), Hold the Centre on a 6×6 keep (§13.7), with the
+fort's terrain (§15.1). Each seat's deployment zone is 8×8, and the seats go
+clockwise round the map, so the next player in the turn order is the one on
+your left.
+
+**The Four-Gate Fort** (`maps/fourGateFort.ts`), for four players, is §15.4
+as sketched:
+
+- Each player musters in a corner. The fort's corners have fallen, so each is
+  a gate facing a corner, straight at the keep.
+- A tower stands in the middle of each wall, between two gates, climbed from
+  inside and looking down into the keep. Every player has a tower either side
+  of their gate.
+- Each wall has a rubble breach clockwise of its tower, so every player has a
+  slower, covered way in beside their gate, and round the outside to a
+  neighbour's.
+- It's unchanged by a quarter turn, which the test checks, so all four
+  corners are the same. The quickest walk from a zone to the keep is 21
+  squares, and to a neighbour's zone 33.
+
+**The Ring Fort** (`maps/ringFort.ts`), for three players:
+
+- Two players muster in the top corners and one in the middle of the bottom
+  edge, the points of a triangle round the keep.
+- The curtain wall is round, because a circle looks the same from every
+  side, as a square doesn't. It has a gate facing each player, a tower between
+  each pair of gates, and a rubble breach either side of each tower. Each
+  player has their gate, the breaches beside it and a tower on each flank.
+- It's unchanged mirrored left to right, so the two top seats are twins.
+- The bottom seat walks straight up to the keep while the top two walk in at
+  a slant, which costs more (§19.1). So the keep sits three rows above the
+  middle of the map, to make their walks the same. Its test holds the three
+  seats level:
+
+  | Checked | Top seats | Bottom seat | Allowed |
+  |---|---:|---:|---:|
+  | Quickest walk to the keep | 17 | 17 | equal |
+  | Average walk from the zone to the keep | 22.3 | 20.6 | within 2 |
+  | Quickest walk to another seat's zone | 33 (to each other), 34.5 (to the bottom) | 34.5 | within 2 |
+
+  The averages differ because a square zone facing the keep at a slant has a
+  far corner, and one facing it straight doesn't. It's less than a third of an
+  AP, for a character placed in the zone's far corner.
+
+Both maps have a test that every deployment square can reach the keep, that
+nothing standable is sealed off, and that every tower looks down into the
+keep. The Ruined Fort's test shares those checks (`maps/testFixtures.ts`).
+
+### 19.3 Open questions
+
+- **Teams on the Four-Gate Fort.** Teams take alternate seats (§5.2), which
+  puts teammates in opposite corners, each with an enemy on either side.
+  That's even, but means a team can't hold a side of the map together.
+  Adjacent corners would need the team-turn order and the corners to be
+  chosen together (B3).
+- **Where the bottom seat goes on the Ring Fort.** Seat order is rolled
+  (§17.3 PR 3), so nobody chooses it. The playtest should watch whether the
+  bottom seat, with nothing behind its flanks, plays differently enough to
+  matter.
 
 ---
 
@@ -1131,3 +1237,4 @@ Realm, its sibling in the same world.
 | 1.3 | PR 8 fills in replay and recap: a recap row is a line the log already wrote, a muster's row says only that it happened, the review follows each action by what it changed, and planning is out by design. |
 | 1.4 | Targets in reach: a count on each unit's box, and the selected character's three likeliest targets floated over the board, read from the end of a lined-up move. |
 | 1.5 | Each enemy in the selected character's reach wears its chance to hit above its figure on the board, previewed from the end of a lined-up move like the list. |
+| 1.6 | Battlefields for three and four players (§19): one map per player count, since three seats can't be made identical on squares. The Four-Gate Fort for four, unchanged by a quarter turn; the Ring Fort for three, mirrored, with its third seat held level by measured walks. The milestone plan puts them first, as B1 (§17.4). |
