@@ -145,7 +145,7 @@ export function fighterById(state: BattleState, id: unknown): Fighter | undefine
     return state.fighters.find(fighter => fighter.id === id);
 }
 
-/** Whether two characters touch, and nothing stands between them at the corner they share. Melee, guard, healing and raising all need it. */
+/** Whether two characters touch, and nothing stands between them at the corner they share. Healing, raising and the shield wall need it; melee needs `inMeleeReach` too. */
 export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
     return isNeighbour(field, a, b) && canSee(field, a, b);
 }
@@ -246,7 +246,7 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
 
 /**
  * Whether a watcher would react to an enemy stepping onto this square:
- * overwatch at one it can see in range, guard at one next to it (§13.4).
+ * overwatch at one it can see in range, guard at one in melee reach (§13.4, §25.2).
  * Nobody reacts to a character mid-climb, only as it lands on a square it
  * could stop on — so a character a reaction downs always falls where it could
  * stand, and a Cleric can raise it.
@@ -391,7 +391,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
                 const enemies = targets.map(one => fighterById(state, one));
                 if (!enemies.every((one): one is Fighter => isEnemy(actor, one))) return "Pick two enemies";
-                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, at their height";
+                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);

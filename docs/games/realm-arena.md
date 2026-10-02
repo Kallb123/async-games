@@ -597,7 +597,8 @@ As proposed in v0.3 (defaults taken):
 - **Damage is fixed per weapon.** A sword always does 4, so the only luck is
   hit, graze or miss. Flanking adds +1 damage, instead of XCOM's critical
   hits. Characters have about 5–12 HP.
-- **Melee** needs to be next to the target, and always hits, with no roll.
+- **Melee** needs to be next to the target, within a quarter of its height
+  (§25.2), and always hits, with no roll.
 
 ### 13.4 Reactions: overwatch and guard
 
@@ -607,7 +608,8 @@ As proposed in v0.3 (defaults taken):
   reactions, and 2 or 3 buy one. A character that only moved once still has a
   shot saved up.
 - **Overwatch:** a shot at −15% at an enemy that moves where it can see.
-  **Guard:** a strike at an enemy that steps next to it.
+  **Guard:** a strike at an enemy that steps into its melee reach: next to
+  it, within a quarter of its height (§25.2).
 - **A character reacts at most once to each move an enemy makes.** An enemy
   that moves four times can draw two reactions from one watcher, but a single
   step can't soak up a whole bank.
@@ -763,7 +765,8 @@ along the bottom.
 | `.` | Open ground |
 | `,` | Rubble: low cover (half cover; 3 movement to climb over) |
 | `T` | Trees and fallen stone: high cover (full cover; can't be entered) |
-| `#` | The fort's curtain wall: it blocks movement and sight, and gives full cover to anyone beside it |
+| `#` | The fort's curtain wall between the towers: it blocks movement and sight, and gives full cover to anyone beside it |
+| `P` | The parapet round a tower top: half a height above the tower, so half cover to whoever is up there (§25.2) |
 | `^` | A corner tower: high ground (+10% to hit), climbed by a stair from inside the walls |
 | `G` | The broken gate: a gap 6 squares wide |
 | `=` | A breach: a 3-square gap choked with rubble, which is low cover. The climb over it is what makes it slower than the gate |
@@ -1657,7 +1660,8 @@ drawn.
   `FULL_HEIGHT` is 4. Every height is a whole number of quarters.
 - **A square's top is its ground plus its terrain.** The map gives the
   ground (§25.3); each terrain stands its own height above it (§13.1's
-  table): a wall a full height, rubble a half, a tower top one and a half.
+  table): a wall a full height, rubble a half, a tower top one and a half,
+  and the parapet round it two.
   So a wall on a hill is a full height above the hill.
 
 ### 25.2 Rules
@@ -1736,7 +1740,8 @@ drawn.
    have two ways down?
 3. **Old battles.** Maps are stored by id, so these rules reach every stored
    battle, and a replay of a playtest battle from before them can go wrong
-   (a step onto a tower top from the ground is now refused). Realm Arena has
+   (a step onto a tower top from the ground is now refused, a strike across
+   a height is too, and walls touching the towers are now parapets). Realm Arena has
    no command version yet; it wants one before PR 10 turns the game on, so a
    later rule change can tell old moves from new.
 

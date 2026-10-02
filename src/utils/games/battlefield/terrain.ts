@@ -45,8 +45,11 @@ export interface Terrain {
     stairs?: true;
 }
 
-/** How far a tower top stands above its ground: half a height above the curtain wall it's built into. */
+/** A tower top's height: half a height above the curtain wall it's built into. */
 const TOWER_HEIGHT = FULL_HEIGHT + HALF_HEIGHT;
+/** A parapet's: half a height above the tower top it rings, so it gives half cover up there. */
+const PARAPET_HEIGHT = TOWER_HEIGHT + HALF_HEIGHT;
+const WALL: Terrain = { name: "Wall", moveCost: Infinity, standable: false, height: FULL_HEIGHT, cover: "none", blocksSight: false };
 
 const OPEN: Terrain = { name: "Open ground", moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false };
 const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: false, cover: "none", blocksSight: false };
@@ -65,8 +68,8 @@ export const TERRAIN = {
     ",": { name: "Rubble", ...LOW_COVER, height: 2 },
     "o": { name: "Low wall", ...LOW_COVER, height: 3 },
     "T": { name: "Trees", moveCost: Infinity, standable: false, height: 6, cover: "full", blocksSight: true },
-    "#": { name: "Wall", moveCost: Infinity, standable: false, height: FULL_HEIGHT, cover: "none", blocksSight: false },
-    "P": { name: "Parapet", moveCost: Infinity, standable: false, height: TOWER_HEIGHT + HALF_HEIGHT, cover: "none", blocksSight: false },
+    "#": WALL,
+    "P": { ...WALL, name: "Parapet", height: PARAPET_HEIGHT },
     "s": { ...OPEN, name: "Tower stair", moveCost: 2, height: 3, stairs: true },
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
 } as const satisfies Record<string, Terrain>;

@@ -275,11 +275,11 @@ describe("melee across a height (§25.2)", () => {
         expect(strike("20")).toEqual({ refused: "Too far above or below to strike" });
     });
 
-    it("cleaves only enemies at its height", () => {
+    it("cleaves only enemies within a quarter of its height", () => {
         const field = buildBattlefield({ name: "Step", rows: ["..."], elevation: ["002"], deployments: [], objectives: {} });
         const man = fighter(1, "a", "manAtArms", 1, { ap: ACTION_POINTS });
         const state = { field, fighters: [man, fighter(2, "b", "archer", 0), fighter(3, "b", "archer", 2)] };
-        expect(check(state, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "Both enemies must be next to them, at their height" });
+        expect(check(state, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "Both enemies must be next to them, within a quarter of their height" });
     });
 });
 

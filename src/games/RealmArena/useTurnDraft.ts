@@ -28,7 +28,7 @@ const TARGETED: Partial<Record<Aim, TargetKind>> = {
     aimedShot: "aimedShot",
     heal: "heal",
     raise: "raise",
-    // Cleave strikes where an attack could: next to the Man-at-arms.
+    // Cleave strikes where an attack could: within the Man-at-arms's melee reach.
     cleave: "attack",
 };
 
