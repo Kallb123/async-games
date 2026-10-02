@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
-import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { coordsOf, squareAt, type Square } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT as FORT, RUINED_FORT_MAP } from "./ruinedFort";
-import { sealedOff, standable as standableOn, walksFrom } from "./testFixtures";
+import { sealedOff, sorted, strandedSeats, towersOverCentre } from "./testFixtures";
 
 /** The same square with the map turned upside down. */
 const turned = (square: Square): Square => FORT.terrain.length - 1 - square;
 
 const centre = FORT.objectives.centre;
-const standable = standableOn(FORT);
 
 describe("the Ruined Fort", () => {
     it("is 36 squares wide and 48 long (§13.1)", () => {
@@ -19,8 +17,8 @@ describe("the Ruined Fort", () => {
     it("is unchanged turned upside down, so neither side has the better approach (§15.2)", () => {
         const upsideDown = RUINED_FORT_MAP.rows.map(row => [...row].reverse().join("")).reverse();
         expect(upsideDown).toEqual(RUINED_FORT_MAP.rows);
-        expect(FORT.deployments[1].map(turned).sort((a, b) => a - b)).toEqual(FORT.deployments[0]);
-        expect(centre.map(turned).sort((a, b) => a - b)).toEqual(centre);
+        expect(sorted(FORT.deployments[1].map(turned))).toEqual(FORT.deployments[0]);
+        expect(sorted(centre.map(turned))).toEqual(centre);
     });
 
     it("has a 6×6 centre in the middle of the map (§13.7)", () => {
@@ -31,17 +29,14 @@ describe("the Ruined Fort", () => {
     });
 
     it("lets every deployment square reach the centre, and nowhere to stand is sealed off", () => {
-        for (const [seat, zone] of FORT.deployments.entries()) {
-            expect(walksFrom(FORT, zone, centre).every(Number.isFinite), `seat ${seat}`).toBe(true);
-        }
+        expect(strandedSeats(FORT)).toEqual([]);
         expect(sealedOff(FORT)).toEqual([]);
     });
 
     it("gives each side a tower that looks down into the keep", () => {
-        const towerTops = standable.filter(square => FORT.terrain[square].highGround);
-        const ownTowers = (seat: number) => towerTops.filter(square => (coordsOf(FORT, square).row < FORT.height / 2) === (seat === 0));
+        const towers = towersOverCentre(FORT);
         for (const seat of [0, 1]) {
-            expect(ownTowers(seat).some(top => centre.some(square => FORT.terrain[square].standable && canSee(FORT, top, square))), `seat ${seat}`).toBe(true);
+            expect(towers.some(top => (coordsOf(FORT, top).row < FORT.height / 2) === (seat === 0)), `seat ${seat}`).toBe(true);
         }
     });
 

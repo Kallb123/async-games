@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { coordsOf, type Square } from "@/utils/games/battlefield/terrain";
 import { FOUR_GATE_FORT as FORT, FOUR_GATE_FORT_MAP } from "./fourGateFort";
-import { CENTRE, sealedOff, towersOverCentre, walksFrom, walkToCentre } from "./testFixtures";
+import { sealedOff, sorted, strandedSeats, towersOverCentre, walkToCentre } from "./testFixtures";
 
 /** The same square with the map given a quarter turn clockwise. */
 const quarterTurn = (square: Square): Square => {
     const { col, row } = coordsOf(FORT, square);
     return col * FORT.width + (FORT.width - 1 - row);
 };
-const sorted = (squares: readonly Square[]) => [...squares].sort((a, b) => a - b);
 
 describe("the Four-Gate Fort", () => {
     it("is 48 squares square, with a zone for each of four players (§13.1)", () => {
@@ -22,20 +21,18 @@ describe("the Four-Gate Fort", () => {
         for (const [seat, zone] of FORT.deployments.entries()) {
             expect(sorted(zone.map(quarterTurn)), `seat ${seat}`).toEqual(sorted(FORT.deployments[(seat + 1) % 4]));
         }
-        expect(sorted(FORT.objectives[CENTRE].map(quarterTurn))).toEqual(sorted(FORT.objectives[CENTRE]));
+        expect(sorted(FORT.objectives.centre.map(quarterTurn))).toEqual(sorted(FORT.objectives.centre));
     });
 
     it("has a 6×6 centre in the middle of the map (§13.7)", () => {
-        const centre = FORT.objectives[CENTRE].map(square => coordsOf(FORT, square));
+        const centre = FORT.objectives.centre.map(square => coordsOf(FORT, square));
         expect(centre).toHaveLength(36);
         expect(Math.min(...centre.map(({ col }) => col)) + Math.max(...centre.map(({ col }) => col)) + 1).toBe(FORT.width);
         expect(Math.min(...centre.map(({ row }) => row)) + Math.max(...centre.map(({ row }) => row)) + 1).toBe(FORT.height);
     });
 
     it("lets every deployment square reach the centre, and nowhere to stand is sealed off", () => {
-        for (const seat of FORT.deployments.keys()) {
-            expect(walksFrom(FORT, FORT.deployments[seat], FORT.objectives[CENTRE]).every(Number.isFinite), `seat ${seat}`).toBe(true);
-        }
+        expect(strandedSeats(FORT)).toEqual([]);
         expect(sealedOff(FORT)).toEqual([]);
     });
 

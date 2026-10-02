@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { coordsOf, type Square } from "@/utils/games/battlefield/terrain";
 import { RING_FORT as FORT, RING_FORT_MAP } from "./ringFort";
-import { CENTRE, sealedOff, towersOverCentre, walksFrom, walkToCentre } from "./testFixtures";
+import { sealedOff, sorted, strandedSeats, towersOverCentre, walksFrom, walkToCentre } from "./testFixtures";
 
 /** The same square with the map mirrored left to right. */
 const mirrored = (square: Square): Square => {
     const { col, row } = coordsOf(FORT, square);
     return row * FORT.width + (FORT.width - 1 - col);
 };
-const sorted = (squares: readonly Square[]) => [...squares].sort((a, b) => a - b);
-const seats = [0, 1, 2];
+const seats = [...FORT.deployments.keys()];
 const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
 
 describe("the Ring Fort", () => {
@@ -22,17 +21,15 @@ describe("the Ring Fort", () => {
         expect(RING_FORT_MAP.rows.map(row => [...row].reverse().join(""))).toEqual(RING_FORT_MAP.rows);
         expect(sorted(FORT.deployments[0].map(mirrored))).toEqual(sorted(FORT.deployments[1]));
         expect(sorted(FORT.deployments[2].map(mirrored))).toEqual(sorted(FORT.deployments[2]));
-        expect(sorted(FORT.objectives[CENTRE].map(mirrored))).toEqual(sorted(FORT.objectives[CENTRE]));
+        expect(sorted(FORT.objectives.centre.map(mirrored))).toEqual(sorted(FORT.objectives.centre));
     });
 
     it("has a 6×6 centre (§13.7)", () => {
-        expect(FORT.objectives[CENTRE]).toHaveLength(36);
+        expect(FORT.objectives.centre).toHaveLength(36);
     });
 
     it("lets every deployment square reach the centre, and nowhere to stand is sealed off", () => {
-        for (const seat of seats) {
-            expect(walksFrom(FORT, FORT.deployments[seat], FORT.objectives[CENTRE]).every(Number.isFinite), `seat ${seat}`).toBe(true);
-        }
+        expect(strandedSeats(FORT)).toEqual([]);
         expect(sealedOff(FORT)).toEqual([]);
     });
 
