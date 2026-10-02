@@ -7,7 +7,7 @@ import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
-import { ACTION_POINTS, check, fighterById, isStanding, moveAp, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
+import { ACTION_POINTS, check, fighterById, isStanding, moveAp, reachOf, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /** Board units per square: the SVG's viewBox is the map's size times this. */
 export const CELL = 10;
@@ -96,9 +96,10 @@ export function areaRect(field: Pick<Battlefield, "width">, squares: readonly Sq
 }
 
 /**
- * How many squares either side of a selected character the view keeps in
- * frame: seven across, which `BoardZoom` brings to its deepest step, where a
- * square is comfortable to tap (§13.1).
+ * How many squares either side of a character the view keeps in frame at the
+ * least: seven across, which `BoardZoom` brings to its deepest step, where a
+ * square is comfortable to tap (§13.1) — what a character picked up to place
+ * is framed by, and one selected in battle with nowhere left to move.
  */
 const FOCUS_REACH = 3;
 
@@ -111,6 +112,36 @@ export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[])
     const { x, y, width, height } = areaRect(field, squares);
     const margin = FOCUS_REACH * CELL;
     return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 };
+}
+
+/**
+ * How much of a selected character's reach the view keeps in frame, measured
+ * out from where it stands in each direction. At full AP a reach runs most of
+ * the board's width, so all of it would be the fitted board again; two thirds
+ * of it each way still shows the bulk of where it could go — the squares near
+ * enough to plan around — at a zoom a square can be tapped at.
+ */
+const REACH_SHOWN = 2 / 3;
+
+/**
+ * The region `BoardZoom` brings into view for a selected character: most of
+ * where it could move this turn (`REACH_SHOWN`), with `ap` to spend — what it
+ * has left on its owner's turn, a full turn's otherwise. Never less than
+ * `focusOn` frames round it, so a character with nowhere to go is still
+ * brought close.
+ */
+export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Rect {
+    const near = focusOn(state.field, fighter.square);
+    const { costs } = reachOf(state, { ...fighter, ap });
+    const squares = Array.from(costs.keys()).filter(square => costs[square] !== Infinity);
+    if (squares.length === 0) return near;
+    const reach = areaRect(state.field, squares);
+    const { x, y } = squareCentre(state.field, fighter.square);
+    const left = Math.min(near.x, x - (x - reach.x) * REACH_SHOWN);
+    const top = Math.min(near.y, y - (y - reach.y) * REACH_SHOWN);
+    const right = Math.max(near.x + near.width, x + (reach.x + reach.width - x) * REACH_SHOWN);
+    const bottom = Math.max(near.y + near.height, y + (reach.y + reach.height - y) * REACH_SHOWN);
+    return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /**

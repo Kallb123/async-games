@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachLayers,
+    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachFocus, reachLayers,
     reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -179,6 +179,32 @@ describe("squareAtPoint", () => {
 describe("pathPoints", () => {
     it("runs through each square's centre", () => {
         expect(pathPoints(OPEN, [at(OPEN, 0, 0), at(OPEN, 1, 1)])).toBe("5,5 15,15");
+    });
+});
+
+describe("reachFocus", () => {
+    const LONG = buildBattlefield({ name: "Long", rows: [".".repeat(30), ".".repeat(30), ".".repeat(30)], deployments: [], objectives: {} });
+
+    it("frames two thirds of the reach each way from where the character stands", () => {
+        // 4 movement points an AP, so 2 AP reach eight squares either way along the row: cols 7–23.
+        const knight = ready(0, "a", "knight", at(LONG, 15, 1));
+        const rect = reachFocus({ field: LONG, fighters: [knight] }, knight, 2);
+        const centre = 15.5 * CELL, side = 8.5 * CELL;
+        expect(rect.x).toBeCloseTo(centre - side * 2 / 3);
+        expect(rect.width).toBeCloseTo(side * 4 / 3);
+    });
+
+    it("never frames less than the squares round the character", () => {
+        const knight = ready(0, "a", "knight", at(LONG, 15, 1));
+        const state = { field: LONG, fighters: [knight] };
+        expect(reachFocus(state, knight, 0)).toEqual(focusOn(LONG, knight.square));
+        // The row's three squares of height are less than focusOn's seven, so that's what it keeps.
+        expect(reachFocus(state, knight, 2)).toMatchObject({ y: focusOn(LONG, knight.square).y, height: focusOn(LONG, knight.square).height });
+    });
+
+    it("reads the AP it's given rather than what the character has left", () => {
+        const spent = ready(0, "a", "knight", at(LONG, 15, 1), { ap: 0 });
+        expect(reachFocus({ field: LONG, fighters: [spent] }, spent, ACTION_POINTS).width).toBeGreaterThan(focusOn(LONG, spent.square).width);
     });
 });
 

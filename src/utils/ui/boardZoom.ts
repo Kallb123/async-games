@@ -43,9 +43,32 @@ export function wheelZoomFactor(deltaY: number, deltaMode: number): number {
  */
 export function focusZoom(levels: number[], rectWidth: number, viewBoxWidth: number, paneWidth: number, marginPx: number): number {
     if (!(rectWidth > 0) || !(viewBoxWidth > 0) || !(paneWidth > 0)) return FIT_WIDTH;
-    const ceiling = ((100 * viewBoxWidth) / rectWidth) * (1 - (2 * marginPx) / paneWidth);
+    const ceiling = fillZoom(rectWidth, viewBoxWidth, paneWidth, marginPx);
     const fitting = levels.filter(level => level <= ceiling);
     return fitting.length > 0 ? Math.max(...fitting) : FIT_WIDTH;
+}
+
+/**
+ * The zoom at which a `rect`-sized region (plus `marginPx` of breathing room
+ * on every side) exactly fills the pane, across or down, whichever runs out
+ * first — between fit and `max`, rather than snapped to one of the pill's
+ * steps as `focusZoom` is. For a region a step would show too little or too
+ * much of: a character's reach, which at full AP runs most of a board's width
+ * and so would fall right back to the fit. Down is measured against the
+ * pane's own height, which is the board's fitted height at every zoom.
+ */
+export function exactZoom(rect: Size, viewBox: Size, pane: Size, marginPx: number, max: number): number {
+    if (!(rect.width > 0) || !(rect.height > 0) || !(pane.width > 0) || !(pane.height > 0)) return FIT_WIDTH;
+    const across = fillZoom(rect.width, viewBox.width, pane.width, marginPx);
+    const down = fillZoom(rect.height, viewBox.height, pane.height, marginPx);
+    return Math.min(max, Math.max(FIT_WIDTH, Math.min(across, down)));
+}
+
+interface Size { width: number; height: number }
+
+/** The zoom at which `rect` of the child's `view` units, plus `marginPx` either side, just fills `pane` pixels along one axis. */
+function fillZoom(rect: number, view: number, pane: number, marginPx: number): number {
+    return ((100 * view) / rect) * (1 - (2 * marginPx) / pane);
 }
 
 /**

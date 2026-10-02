@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -125,5 +125,26 @@ describe('glideFrame', () => {
             expect(offset.x + size.x).toBeGreaterThanOrEqual(pane.x - 1e-9);
             expect(offset.y + size.y).toBeGreaterThanOrEqual(pane.y - 1e-9);
         }
+    });
+});
+
+describe('exactZoom', () => {
+    const viewBox = { width: 360, height: 480 };
+    const pane = { width: 343, height: 457 };
+
+    it('zooms to exactly the width that fits the region, between the steps', () => {
+        const zoom = exactZoom({ width: 240, height: 100 }, viewBox, pane, 28, 360);
+        expect(zoom).toBeCloseTo(150 * (1 - 56 / 343));
+    });
+
+    it('is held by the height when that runs out first', () => {
+        const zoom = exactZoom({ width: 60, height: 300 }, viewBox, pane, 28, 360);
+        expect(zoom).toBeCloseTo(160 * (1 - 56 / 457));
+    });
+
+    it('never goes below fit or past the deepest step', () => {
+        expect(exactZoom({ width: 400, height: 100 }, viewBox, pane, 28, 360)).toBe(FIT_WIDTH);
+        expect(exactZoom({ width: 10, height: 10 }, viewBox, pane, 28, 360)).toBe(360);
+        expect(exactZoom({ width: 0, height: 10 }, viewBox, pane, 28, 360)).toBe(FIT_WIDTH);
     });
 });

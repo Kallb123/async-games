@@ -1,6 +1,6 @@
 'use client'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clampOffset, easeInOut, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import { clampOffset, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -14,6 +14,12 @@ import type { Rect } from '@/utils/ui/mapLabels';
 export interface BoardZoomFocus {
     rect: Rect;
     key: string;
+    /**
+     * Zoom to exactly the width that fits `rect`, anywhere between fit and
+     * the deepest step, rather than to the deepest step it fits at. For a
+     * region the steps would frame badly either way (`exactZoom`).
+     */
+    exact?: boolean;
 }
 
 interface BoardZoomProps {
@@ -346,17 +352,20 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
     useEffect(() => () => glideRef.current?.settle(), []);
 
     // The auto-focus itself: pick the deepest zoom step the region still fits
-    // at, then glide to it from the view the board is in right now — a pinch's
-    // latest frame included — so the zoom starts from wherever the player was
-    // looking. When the board is already at that step, changing `zoom` to the
-    // same value is a no-op React won't re-render for, so the glide starts
-    // right here instead of waiting on the layout effect above.
+    // at (or, for an `exact` focus, the zoom that just fits it), then glide
+    // to it from the view the board is in right now — a pinch's latest frame
+    // included — so the zoom starts from wherever the player was looking.
+    // When the board is already at that zoom, changing `zoom` to the same
+    // value is a no-op React won't re-render for, so the glide starts right
+    // here instead of waiting on the layout effect above.
     useEffect(() => {
         const pane = paneRef.current;
         const content = contentRef.current;
         if (!pane || !content || !focus || !viewBox) return;
         glideRef.current?.settle();
-        const level = focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
+        const level = focus.exact
+            ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max)
+            : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
         const target: FocusTarget = {
             ...focusCentre(focus.rect, viewBox),
             smooth: !prefersReducedMotion(),
