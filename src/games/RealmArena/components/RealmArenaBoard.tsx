@@ -6,7 +6,7 @@ import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
+import { apPips, areaRect, CELL, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
 
 /** Each terrain's fill, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
 const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
@@ -32,6 +32,14 @@ const HP_BAR_HEIGHT = 1.3;
 const AP_PIP_RADIUS = 0.6;
 const AP_PIP_STEP = 1.55;
 const AP_PIP_OFFSET = 4.35;
+/**
+ * A target's chance to hit: a pill wide enough for "100%", worn as a badge
+ * across the top of its figure and kept inside its own square, so it never
+ * covers a neighbour's HP bar or runs off the top of the board.
+ */
+const ODDS_WIDTH = 8.4;
+const ODDS_HEIGHT = 3.2;
+const ODDS_RISE = CELL / 2 - ODDS_HEIGHT / 2;
 
 interface RealmArenaBoardProps {
     field: Battlefield;
@@ -56,6 +64,8 @@ interface RealmArenaBoardProps {
     acting?: string | null;
     /** A review's step (§17.3 PR 8): the squares it touched, brought into view whenever `key` changes. */
     follow?: { squares: readonly Square[]; key: string } | null;
+    /** The selected character's chance to hit each enemy in reach, floated above each one. */
+    odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
     overlay?: React.ReactNode;
 }
@@ -120,6 +130,17 @@ function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
     ));
 }
 
+/** A target's chance to hit, as a badge across the top of its figure. */
+function Odds({ field, square, chance }: { field: Battlefield; square: Square; chance: number }) {
+    const { x, y } = squareCentre(field, square);
+    return (
+        <g className="ag-ra-odds">
+            <rect x={x - ODDS_WIDTH / 2} y={y - ODDS_RISE - ODDS_HEIGHT / 2} width={ODDS_WIDTH} height={ODDS_HEIGHT} rx={ODDS_HEIGHT / 2} />
+            <text x={x} y={y - ODDS_RISE}>{chance}%</text>
+        </g>
+    );
+}
+
 /**
  * The battlefield (docs/games/realm-arena.md §13.1, §17.3 PR 5): the ground as
  * one layer, and an SVG layer over it for the deployment zones, the centre and
@@ -138,14 +159,16 @@ function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
  * On the viewer's battle turn (`aiming`, §17.3 PR 7) it shades the selected
  * character's reach by the AP each square costs, draws the path a lined-up
  * move takes and the area a fireball hits, and rings who can be aimed at, who
- * is, and every watcher a move would set off. A tap anywhere no character
+ * is, and every watcher a move would set off. With one of the viewer's own
+ * selected, each enemy it could hit wears its chance to (`odds`), read from
+ * the end of a lined-up move. A tap anywhere no character
  * stands goes to `aiming.onSquare`; a tap on a character still goes to
  * `onSelect`, and the screen decides whether that aims or selects.
  *
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, overlay }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
@@ -289,6 +312,9 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                             </ClickableMapNode>
                         );
                     })}
+
+                    {/* Over every figure, so a neighbour never hides one. */}
+                    {odds?.map(({ target, chance }) => <Odds key={target.id} field={field} square={target.square} chance={chance} />)}
 
                     {/* The centre's name sits just clear of its dashed edge,
                         small enough to keep off the squares beside it and
