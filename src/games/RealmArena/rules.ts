@@ -148,6 +148,17 @@ export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
     return isNeighbour(field, a, b) && canSee(field, a, b);
 }
 
+/** Whether one square is within `range` squares of another and can be seen from it: a ranged weapon's reach, and a fireball's (§13.3). */
+export function inRange(field: Battlefield, from: Square, to: Square, range: number): boolean {
+    return distance(field, from, to) <= range && canSee(field, from, to);
+}
+
+/** Whether a character's weapon could hit someone on a square from where it stands: next to it for a melee weapon, in range and in sight for a ranged one. */
+export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
+    const weapon = CHARACTERS[fighter.character].weapon;
+    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : nextTo(state.field, fighter.square, square);
+}
+
 /** What a move by one character may cross and stop on: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
 export function moveRules(state: BattleState, mover: Fighter): Required<MoveRules> {
     const blocked = new Set<Square>(), occupied = new Set<Square>();
@@ -199,7 +210,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const { field } = state;
     const weapon = CHARACTERS[attacker.character].weapon;
     if (weapon.kind !== "ranged") return undefined;
-    if (distance(field, attacker.square, target.square) > weapon.range || !canSee(field, attacker.square, target.square)) return undefined;
+    if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
@@ -231,11 +242,7 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
  * stand, and a Cleric can raise it.
  */
 function setsOff(state: BattleState, watcher: Fighter, square: Square): boolean {
-    const weapon = CHARACTERS[watcher.character].weapon;
-    if (!state.field.terrain[square].standable) return false;
-    return weapon.kind === "ranged"
-        ? distance(state.field, watcher.square, square) <= weapon.range && canSee(state.field, watcher.square, square)
-        : nextTo(state.field, watcher.square, square);
+    return state.field.terrain[square].standable && weaponReaches(state, watcher, square);
 }
 
 export interface Reaction {
@@ -321,7 +328,7 @@ const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
     if (!isEnemy(actor, target)) return "Pick an enemy";
     if (CHARACTERS[actor.character].weapon.kind === "melee") {
-        return nextTo(state.field, actor.square, target.square) ? undefined : "Too far away to strike";
+        return weaponReaches(state, actor, target.square) ? undefined : "Too far away to strike";
     }
     return shotOdds(state, actor, target, kind) ? undefined : "Out of range or out of sight";
 }
@@ -379,7 +386,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
             return ability("shieldWall", () => undefined);
         case "fireball":
             return ability("fireball", () =>
-                isSquare(state.field, at) && distance(state.field, actor.square, at) <= ABILITIES.fireball.range && canSee(state.field, actor.square, at)
+                isSquare(state.field, at) && inRange(state.field, actor.square, at, ABILITIES.fireball.range)
                     ? undefined : "Out of range or out of sight");
         case "heal":
             return ability("heal", () => {

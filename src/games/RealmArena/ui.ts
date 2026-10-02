@@ -6,8 +6,8 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
-import { ACTION_POINTS, check, fighterById, isStanding, moveAp, reachOf, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
+import { ABILITIES, CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
+import { ACTION_POINTS, check, fighterById, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /** Board units per square: the SVG's viewBox is the map's size times this. */
 export const CELL = 10;
@@ -259,6 +259,28 @@ export function reachLayers(field: Battlefield, fighter: Fighter, reach: Reach, 
     return runLayers(field, square => square === reach.from || reach.costs[square] === Infinity
         ? undefined : moveAp(fighter.character, reach.costs[square], sneaking))
         .sort((a, b) => a.key - b.key);
+}
+
+/** What decides where an aimed action can land: the character's weapon, a fireball's range, or the squares next to it (a heal, a raise). */
+export type RangeKind = "weapon" | "fireball" | "nextTo";
+
+/**
+ * An aimed action's range from where a character stands, as one path: every
+ * square it could be lined up on, were someone there to aim at. A weapon, a
+ * heal or a raise is aimed at a character, so only a square one could stand on
+ * counts; a fireball can land on any square it can see in range. Where the
+ * character stands isn't drawn. Read from the rules `check` itself asks, so
+ * the shading and what the server allows can't drift apart.
+ */
+export function rangeArea(state: BattleState, fighter: Fighter, kind: RangeKind): string | null {
+    const { field } = state;
+    const reaches = (square: Square): boolean => {
+        if (square === fighter.square) return false;
+        if (kind === "fireball") return inRange(field, fighter.square, square, ABILITIES.fireball.range);
+        if (!field.terrain[square].standable) return false;
+        return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
+    };
+    return runLayers(field, square => reaches(square) || undefined)[0]?.d ?? null;
 }
 
 /** A path as an SVG polyline's points, through each square's centre. */

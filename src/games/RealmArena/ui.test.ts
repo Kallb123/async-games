@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachFocus, reachLayers,
+    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, rangeArea, reachFocus, reachLayers,
     reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -225,6 +225,37 @@ describe("reachLayers", () => {
         const scout = ready(0, "a", "scout", at(OPEN, 0, 2));
         const layers = reachLayers(OPEN, scout, reachOf({ field: OPEN, fighters: [scout] }, scout, true), true);
         expect(layers.map(layer => layer.key)).toEqual([2, 4]);
+    });
+});
+
+describe("rangeArea", () => {
+    const drawn = (d: string | null) => d === null ? new Set<string>() : squaresDrawn(d);
+
+    it("draws a melee weapon's range as the squares next to it, not its own", () => {
+        const knight = ready(0, "a", "knight", at(OPEN, 5, 2));
+        const range = drawn(rangeArea({ field: OPEN, fighters: [knight] }, knight, "weapon"));
+        expect([...range].sort()).toEqual(["4,1", "4,2", "4,3", "5,1", "5,3", "6,1", "6,2", "6,3"]);
+    });
+
+    it("draws a ranged weapon's range only as far as it can see, and only where someone could stand", () => {
+        const field = buildBattlefield({ name: "Wall", rows: ["....#....."], deployments: [], objectives: {} });
+        const archer = ready(0, "a", "archer", at(field, 0, 0));
+        expect([...drawn(rangeArea({ field, fighters: [archer] }, archer, "weapon"))].sort()).toEqual(["1,0", "2,0", "3,0"]);
+    });
+
+    it("draws a fireball out to its own range, whatever the weapon's", () => {
+        const field = buildBattlefield({ name: "Row", rows: [".".repeat(14)], deployments: [], objectives: {} });
+        const mage = ready(0, "a", "mage", at(field, 0, 0));
+        const state = { field, fighters: [mage] };
+        // The Bolt reaches 10 squares, a fireball 12.
+        expect(drawn(rangeArea(state, mage, "weapon")).has("11,0")).toBe(false);
+        expect(drawn(rangeArea(state, mage, "fireball")).has("12,0")).toBe(true);
+        expect(drawn(rangeArea(state, mage, "fireball")).has("13,0")).toBe(false);
+    });
+
+    it("draws a heal's range as the squares next to it", () => {
+        const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
+        expect([...drawn(rangeArea({ field: OPEN, fighters: [cleric] }, cleric, "nextTo"))].sort()).toEqual(["0,1", "1,0", "1,1"]);
     });
 });
 
