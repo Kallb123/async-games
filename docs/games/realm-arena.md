@@ -726,10 +726,14 @@ position (§16, question 3).
 
 ### 15.4 Three and four players
 
-The 48×48 version for three or four players (§13.1) comes with free-for-all
-(§10, build order step 2), so it can wait. The same idea carries over: a
-square fort with a gate facing each corner's deployment zone, and a tower
-between each pair of gates.
+The 48×48 version for three or four players (§13.1) came with free-for-all
+(§17.4 B2), as the **Four-Gate Fort**. The same idea carries over: a square
+fort with a gate facing each corner's deployment zone, and a tower between
+each pair of gates. Each gate is an open corner of the curtain wall, four
+squares along each side, with rubble just inside; each tower is a 2×2 top
+climbed by one stair from the courtyard, and looks down into the keep. Trees
+and rubble break up the ground between the corners. A quarter turn leaves the
+map unchanged, so no corner has the better approach.
 
 ---
 
@@ -813,9 +817,9 @@ be cheaply changed once games are being played.
   as a missed turn should (§4). A timed-out muster musters a ready-made
   squad in the deployment zone, so the battle can still start (agreed in
   round 6). Each faction's ready-made squad is part of its data (PR 2).
-- **No dropout adapter at two players.** A two-player duel ends when one
-  player stops turning up, which is what the platform already does without
-  one. The adapter comes with free-for-all (B2).
+- **No drop at two players.** A two-player duel ends when one player stops
+  turning up, which is what the platform already does. The dropout adapter
+  came with free-for-all (B2), and its `minPlayers` of two keeps it that way.
 - **The squads live in plain arrays** (`Schema.Types.Mixed`), so every
   `Execute` ends by calling one `markModified` helper (`new-game.md`,
   "Gotchas").
@@ -1078,6 +1082,29 @@ In the order §10 set, and in less detail for now:
   - budgets and turn limits by player count (§13.6, §13.8);
   - a dropout adapter, so a player who stops turning up has their squad
     leave while their score stands (§4).
+
+  *Filled in by B2:*
+
+  - **The party's size picks the map.** Two players fight on the Ruined Fort,
+    three or four on the Four-Gate Fort (`maps/fourGateFort.ts`): 48 squares a
+    side, a corner deployment zone 6×6 for each seat, clockwise from the
+    north-west, and a square curtain wall with a gate at each of its corners
+    and a tower midway along each side. A quarter turn leaves it unchanged.
+    Three players muster in the first three corners, so the fourth stands
+    empty. The host picks nothing more than before.
+  - **A round ends with the last seat still playing.** The rotation steps
+    past a seat that has been dropped or whose squad has nobody standing
+    (§5.1), so "the last seat's End turn" became "an End turn that hands the
+    turn back round the table". At two players nothing changes.
+  - **A dropped player's squad leaves the battlefield.** Its characters are
+    taken off rather than downed, so nobody scores a knock-out for them,
+    nobody can raise them, and none is left on watch. Their score stands in
+    the final line, but the winner is the best-placed player still there,
+    and a drop that leaves one squad standing ends the battle. Every undo
+    snapshot goes with them, since restoring one would put the squad back.
+  - **Nobody is dropped from a duel, or during the muster.** A two-player
+    battle is still abandoned, as before (§17.2). A muster is one turn each,
+    so nobody can miss three in a row before it's over.
 - **B3 — Teams of two**, in alternate seats, with a team score (§5.2).
 - **B4 — Unlocks** (§7). This is the first state in the app that belongs to a
   player rather than a game, so it needs its own collection and routes
@@ -1131,3 +1158,4 @@ Realm, its sibling in the same world.
 | 1.3 | PR 8 fills in replay and recap: a recap row is a line the log already wrote, a muster's row says only that it happened, the review follows each action by what it changed, and planning is out by design. |
 | 1.4 | Targets in reach: a count on each unit's box, and the selected character's three likeliest targets floated over the board, read from the end of a lined-up move. |
 | 1.5 | Each enemy in the selected character's reach wears its chance to hit above its figure on the board, previewed from the end of a lined-up move like the list. |
+| 1.6 | B2 fills in free-for-all: the party's size picks the map, with the 48×48 Four-Gate Fort for three or four, a round ends with the last seat still playing, a dropped player's squad leaves the battlefield while their score stands, and nobody is dropped from a duel or during the muster. |
