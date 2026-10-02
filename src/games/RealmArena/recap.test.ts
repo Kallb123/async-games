@@ -99,7 +99,8 @@ describe("Realm Arena recap rows", () => {
         const rows = toEvents(snap(state({ fighters })), snap(state({ fighters: watching, scores: { a: 5, b: 0 } })), cmd("RealmArenaEndTurn"), valid());
         expect(rows).toEqual([expect.objectContaining({ type: "ra_centre", title: "Alice ended their turn holding the centre, for 5 points", detail: "1 on watch" })]);
         const quiet = toEvents(snap(state({ fighters })), snap(state({ fighters })), cmd("RealmArenaEndTurn"), valid());
-        expect(quiet).toEqual([expect.objectContaining({ type: "ra_endturn", title: "Alice ended their turn", detail: undefined })]);
+        // A bare end of turn isn't news: quiet, so the feed leaves it out.
+        expect(quiet).toEqual([expect.objectContaining({ type: "ra_endturn", title: "Alice ended their turn", quiet: true })]);
     });
 
     it("has nothing to say about a refused command", () => {
@@ -120,7 +121,7 @@ describe("the summary and the tip", () => {
     it("leads with the biggest news", () => {
         expect(summarize([event("ra_hit", "b", ["a"]), event("ra_knockout")], "a").subline).toBe("2 things happened while you were away — someone was knocked out.");
         expect(summarize([event("ra_hit", "b", ["a"])], "a").subline).toBe("1 thing happened while you were away — your squad took hits.");
-        expect(summarize([event("ra_endturn")], "a").subline).toBe("1 thing happened while you were away.");
+        expect(summarize([event("ra_manoeuvre")], "a").subline).toBe("1 thing happened while you were away.");
     });
 
     it("says where the battle stands, from the viewer's side", () => {

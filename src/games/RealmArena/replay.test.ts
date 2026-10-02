@@ -5,7 +5,7 @@ import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { makeGame, muster, musterBoth, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
+import { endTurnBy, makeGame, muster, musterBoth, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.3 PR 8: the review and the recap are read off
 // the same recorded command log, so this replays whole real battles with the
@@ -152,9 +152,26 @@ describe("Realm Arena recap", () => {
         expect(feed.hasRecap).toBe(true);
         // Bob's turn and nothing of Alice's: her End turn closes the window.
         expect(feed.events.every(event => event.actorId === "b")).toBe(true);
-        expect(feed.events.at(-1)?.title).toMatch(/^Bob ended their turn/);
+        // Ending a turn is no news on its own: only the centre makes it a row.
+        expect(feed.events.map(event => event.title)).not.toContain("Bob ended their turn");
         expect(feed.summary?.headline).toBe("Your move 👋");
         expect(feed.tip?.text).toMatch(/standing/);
+    });
+
+    it("opens the window on a turn ended with nothing done, and tells nobody it was", async () => {
+        const game = makeGame();
+        await musterBoth(game);
+        await playScriptedTurn(game);
+        await playScriptedTurn(game);
+        // Alice passes, then Bob does too: nothing happened.
+        expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
+        expect((await play(game, endTurnBy("b"))).outcome.validMove).toBe(true);
+        expect(game.currentTurn).toBe("a");
+
+        const feed = await noRandomness(() => buildEventFeed(game, NAMES, "a"));
+        // Not Bob's turn before Alice's pass, and not his bare end of turn.
+        expect(feed.events).toEqual([]);
+        expect(feed.hasRecap).toBe(false);
     });
 
     it("ends a whole battle's events on its winner", async () => {
