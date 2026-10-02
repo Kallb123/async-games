@@ -244,7 +244,7 @@ describe("a whole battle, played by two scripted squads", () => {
                         if (by.owner !== fallen.owner) expected[by.owner] += knockoutPoints(fallen.character);
                     }
                 }
-                expect(command.recordedRolls).toHaveLength((outcome as IRealmArenaActOutcome).events.filter(event => event.kind === "shot").length);
+                expect(command.recordedRolls ?? []).toHaveLength((outcome as IRealmArenaActOutcome).events.filter(event => event.kind === "shot").length);
                 if (game.complete) break;
                 checkConsistent();
             }

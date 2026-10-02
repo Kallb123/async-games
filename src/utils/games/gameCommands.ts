@@ -149,11 +149,13 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "RaceCarsUndo",
         "RaceCarsEndTurn",
     ],
-    // docs/games/realm-arena.md §17.2: three commands — the sealed muster, one
-    // action by one character, and the end of a turn.
+    // docs/games/realm-arena.md §17.2: four commands — the sealed muster, one
+    // action by one character, taking back one that rolled nothing and hurt
+    // nobody (docs/undo.md), and the end of a turn.
     RealmArenaGameType: [
         "RealmArenaMuster",
         "RealmArenaAct",
+        "RealmArenaUndo",
         "RealmArenaEndTurn",
     ],
 };

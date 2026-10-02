@@ -32,7 +32,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster } from "@/utils/apiModels/GameLogic";
+import { RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster, RealmArenaUndo } from "@/utils/apiModels/GameLogic";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
@@ -131,6 +131,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         command.keepStill = keepStill;
         submitCommand(command, undefined, 'endTurn');
     };
+    // What the undone action did is no longer what happened, so its results go too.
+    const undo = () => submitCommand(new RealmArenaUndo(), () => setLastEvents([]), 'undo');
     // A tap on a character aims the action lined up, when it can; otherwise it selects.
     const tapFighter = (id: number) => {
         if (turn?.tapFighter(id)) return;
@@ -332,6 +334,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             keepStill={keepStill}
                             onKeepStill={setKeepStill}
                             onEndTurn={endTurn}
+                            canUndo={gs.canUndo}
+                            onUndo={undo}
+                            undoPending={pendingTarget === 'undo'}
                             pending={pendingTarget === 'endTurn'}
                             disabled={pendingTarget !== null}
                         />

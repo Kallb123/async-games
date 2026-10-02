@@ -307,8 +307,10 @@ registerReplayAdapter({
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad
     // and nobody else's, and a null viewer's carries none at all.
-    toResponseState: (specificGameState, _userIdNameMap, viewerId) =>
-        realmArenaStateToModel(specificGameState as never, viewerId),
+    // canUndo needs the anchor to still match the tail of commandHistory, not
+    // just the stack's own owner — see gameStateToModel's lastCommandId.
+    toResponseState: (specificGameState, _userIdNameMap, viewerId, commandHistory) =>
+        realmArenaStateToModel(specificGameState as never, viewerId, commandHistory.at(-1)?.id ?? null),
     // Out by design: every attack worth planning needs a roll, and a planned
     // one would show a player a board they won't get. Nor is the hit chance
     // it would teach them anything the turn sheet doesn't already show before

@@ -4,6 +4,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import OptionSection from '@/components/ui/OptionSection';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import Section from '@/components/ui/Section';
+import UndoButton from '@/components/ui/UndoButton';
 import { CHARACTERS } from '@/games/RealmArena/characters';
 import { isStanding, REACTION_COST, type Fighter } from '@/games/RealmArena/rules';
 import { CHARACTER_MARK, fighterName } from '@/games/RealmArena/ui';
@@ -15,6 +16,11 @@ interface RealmArenaTurnEndProps {
     keepStill: readonly number[];
     onKeepStill: (keepStill: number[]) => void;
     onEndTurn: () => void;
+    /** The player's last action can still be taken back (docs/undo.md). */
+    canUndo: boolean;
+    onUndo: () => void;
+    /** The undo is in flight. */
+    undoPending: boolean;
     /** The end of the turn is in flight. */
     pending: boolean;
     /** Something else is in flight. */
@@ -24,12 +30,14 @@ interface RealmArenaTurnEndProps {
 /**
  * The end of a battle turn (docs/games/realm-arena.md §17.3 PR 7): a switch for
  * each character with AP enough to go on watch — on, as a timed-out turn would
- * leave it (§17.2), or off to keep it still — and End turn.
+ * leave it (§17.2), or off to keep it still — and End turn, with Undo beside it
+ * while the last action can still be taken back.
  */
-export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepStill, onEndTurn, pending, disabled }: RealmArenaTurnEndProps) {
+export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepStill, onEndTurn, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
     const watchers = fighters.filter(fighter => fighter.owner === player && isStanding(fighter) && fighter.ap >= REACTION_COST);
     const endTurn = (
         <div className="ag-action-grid">
+            {canUndo && <UndoButton pending={undoPending} disabled={disabled} onClick={onUndo} />}
             <ActionButton className="ag-btn ag-btn--primary" pending={pending} pendingLabel="Ending turn…" disabled={disabled} onClick={onEndTurn}>
                 End turn
             </ActionButton>
