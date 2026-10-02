@@ -22,6 +22,19 @@ export interface BoardZoomFocus {
     exact?: boolean;
 }
 
+/**
+ * The board redrawn under the player — turned a quarter, say — so the part of
+ * it they were looking at has moved. Whenever `key` changes, `at` is handed
+ * the point (in the child SVG's viewBox units) that was in the middle of the
+ * pane and gives where that same thing is now, and the pane is scrolled to
+ * put it back in the middle, at the zoom it was already at. A board drawn
+ * the same size either way is the only kind this suits.
+ */
+export interface BoardZoomPivot {
+    key: string;
+    at: (point: { x: number; y: number }) => { x: number; y: number };
+}
+
 interface BoardZoomProps {
     /** Percentage of the column the board is stretched to at the first zoom step, e.g. 260. */
     zoomWidth: number;
@@ -36,6 +49,8 @@ interface BoardZoomProps {
     viewBox?: { width: number; height: number };
     /** A region to smooth-scroll (and zoom) to reveal whenever `focus.key` changes. */
     focus?: BoardZoomFocus | null;
+    /** Keeps the player's place when the board is redrawn under them. Needs `viewBox`. */
+    pivot?: BoardZoomPivot | null;
     /** The board <svg>. */
     children: React.ReactNode;
 }
@@ -269,8 +284,12 @@ function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
  * for its own zoom level rather than reusing whatever step the player was
  * last on, since the point is tap targets big enough for what just became
  * choosable.
+ *
+ * And a board can be redrawn under the player without anything happening on
+ * it — Realm Arena's battlefield turned a quarter — which hands this a
+ * `pivot`, so whatever was in the middle of the frame is still there after.
  */
-export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, children }: BoardZoomProps) {
+export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
@@ -386,6 +405,23 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, childre
         // fresh every render whether or not the key changed.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [focus?.key]);
+
+    // A pivot lands at once, before paint, rather than gliding: the board has
+    // already moved under the player, and this only puts their place back.
+    useLayoutEffect(() => {
+        const pane = paneRef.current;
+        const content = contentRef.current;
+        if (!pane || !content || !pivot || !viewBox) return;
+        glideRef.current?.settle();
+        pinchRef.current = null;
+        content.style.transform = '';
+        const middle = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
+        const to = pivot.at({ x: middle.cx * viewBox.width, y: middle.cy * viewBox.height });
+        pane.scrollLeft = to.x / viewBox.width * pane.scrollWidth - middle.vx;
+        pane.scrollTop = to.y / viewBox.height * pane.scrollHeight - middle.vy;
+        // Only `pivot.key` should retrigger this, as with `focus.key` above.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pivot?.key]);
 
     const next = levels.find(level => level > zoom + 1) ?? FIT_WIDTH;
     const stepZoom = () => {

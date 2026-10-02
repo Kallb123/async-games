@@ -1,10 +1,10 @@
 'use client'
-import React, { useMemo } from 'react';
-import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
+import React, { useMemo, useState } from 'react';
+import BoardZoom, { type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
-import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoView, type Point } from '@/utils/ui/isometric';
+import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs } from '@/games/RealmArena/components/RealmArenaTerrain';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
@@ -43,6 +43,8 @@ const ODDS_RISE = FIGURE_RISE + FIGURE_RADIUS + ODDS_HEIGHT / 2 + 0.6;
 const FOOT_PROBE = FIGURE_RADIUS * 0.6;
 /** Room over the back of the map for a figure standing there, and the odds above it. */
 const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + 1;
+/** How the battlefield is laid out on the board, at whichever turn it's viewed from. */
+const VIEW = { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT };
 
 interface RealmArenaBoardProps {
     field: Battlefield;
@@ -267,6 +269,26 @@ function FighterNode({ view, fighter, ring, selected, acting, colourFor, nameFor
     );
 }
 
+/** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
+interface Turned {
+    rotation: IsoRotation;
+    from: IsoRotation;
+    /** How many times it's been turned, so each turn is its own pivot. */
+    turns: number;
+}
+
+/**
+ * Where the thing under a point of the board as it was drawn is drawn now:
+ * the square under it, if any — so a tower top stays in view as the tower
+ * comes round — or else the ground.
+ */
+function turnedPoint(from: IsoView, to: IsoView, { x, y }: Point): Point {
+    const square = isoSquareAt(from, x, y);
+    if (square !== undefined) return isoCentre(to, square);
+    const { col, row } = isoGroundAt(from, x, y);
+    return isoPoint(to, col, row, 0);
+}
+
 /** One thing the board draws in depth order, back to front: a raised square, or a figure standing on one. */
 interface DepthItem {
     depth: number;
@@ -320,13 +342,24 @@ interface DepthItem {
  *
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
+ *
+ * The view turns a quarter either way from the buttons in the frame's corner,
+ * so a player can see round the far side of a tower or a wall: the same
+ * isometric board, the grid turned before it's drawn (`IsoRotation`), so
+ * nothing outside the drawing knows. The turn is the viewer's own — it lives
+ * here and nowhere else — and whatever was in the middle of the frame is still
+ * there after it (`BoardZoom`'s `pivot`).
  */
 export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay }: RealmArenaBoardProps) {
-    // The ground doesn't change during a match, so it's laid out once a battlefield.
+    const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
+    const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
+    const { rotation } = turned;
+
+    // The ground doesn't change during a match, so it's laid out once a battlefield, and again each turn of the view.
     const ground = useMemo(() => {
         const view = isoView(
             { width: field.width, height: field.height, heights: field.tiles.map(tile => tile.elevation) },
-            { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT },
+            { ...VIEW, rotation },
         );
         // The ground each square's terrain stands on, laid out on the same
         // board: where it's raised, it's a block of its own under the art.
@@ -348,8 +381,13 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                 }];
             }),
         };
-    }, [field]);
+    }, [field, rotation]);
     const { view } = ground;
+    // Only the turn's own pivot needs the view it turned from, and only once.
+    const pivot: BoardZoomPivot | null = turned.turns === 0 ? null : {
+        key: String(turned.turns),
+        at: point => turnedPoint(isoView(view, { ...VIEW, rotation: turned.from }), view, point),
+    };
     const { width, height } = view.size;
     const artId = useSvgId('ra');
 
@@ -458,7 +496,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             {/* 84 squares corner to corner fitted to a phone is under ten
                 pixels a square, so the deep step is what makes one
                 tappable: about seven squares across (§13.1). */}
-            <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus}>
+            <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} pivot={pivot}>
                 <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`}>
                     <g className="ag-ra-ground--earth">
                         <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
@@ -540,6 +578,13 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     )}
                 </svg>
             </BoardZoom>
+            {/* Turning the view: beside BoardZoom rather than in it, since
+                turning is this board's own, in the top corner opposite the
+                zoom pill. */}
+            <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
+                <button type="button" onClick={() => turn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
+                <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
+            </div>
             {overlay}
         </div>
     );

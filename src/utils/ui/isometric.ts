@@ -11,7 +11,14 @@
 // showing wherever the square in front of it is lower, as a stack of one-step
 // slices.
 //
-// Everything is in board units: the SVG's viewBox is `IsoView.size`.
+// The view can be turned a quarter at a time (`IsoRotation`), so a player can
+// look at the far side of a tower. It stays the same projection: the grid is
+// turned before it's drawn, so a square keeps its index, its column and its
+// row — everything outside this file goes on talking about the grid as it is —
+// and only where the square lands, and which of its faces show, changes.
+//
+// Everything is in board units: the SVG's viewBox is `IsoView.size`, which is
+// the same at every turn.
 
 import type { Rect } from "./mapLabels";
 
@@ -40,6 +47,12 @@ export interface IsoGrid {
     heights: readonly number[];
 }
 
+/**
+ * How many quarter turns clockwise the map is drawn turned through: at 1 the
+ * back corner — column 0, row 0 — has come round to the right.
+ */
+export type IsoRotation = 0 | 1 | 2 | 3;
+
 export interface IsoViewOptions {
     /** How deep the ground's slab is drawn under the map's front edges, in steps. */
     base: number;
@@ -52,20 +65,24 @@ export interface IsoViewOptions {
      * frame tall enough to pan around once zoomed.
      */
     minAspect?: number;
+    rotation?: IsoRotation;
 }
 
 export interface IsoView extends IsoGrid {
     /** The tallest square, in steps. */
     top: number;
-    /** Where the back corner of the map — column 0, row 0, on the ground — falls. */
+    rotation: IsoRotation;
+    /** Where the back corner of the map as it's drawn — after the turn — falls, on the ground. */
     origin: Point;
     /** The board's size: its SVG's viewBox. */
     size: { width: number; height: number };
     base: number;
 }
 
-export function isoView(grid: IsoGrid, { base, headroom, minAspect = 0 }: IsoViewOptions): IsoView {
+export function isoView(grid: IsoGrid, { base, headroom, minAspect = 0, rotation = 0 }: IsoViewOptions): IsoView {
     const top = Math.max(0, ...grid.heights);
+    // A turn swaps the map's two sides round, but the diamond they make is
+    // as wide and as tall either way: the board's size never changes.
     const width = (grid.width + grid.height) * ISO_HALF_WIDTH;
     const drawn = top * ISO_STEP + headroom + (grid.width + grid.height) * ISO_HALF_HEIGHT + base * ISO_STEP;
     const height = Math.max(drawn, width * minAspect);
@@ -74,41 +91,115 @@ export function isoView(grid: IsoGrid, { base, headroom, minAspect = 0 }: IsoVie
         ...grid,
         top,
         base,
-        origin: { x: grid.height * ISO_HALF_WIDTH, y: pad + headroom + top * ISO_STEP },
+        rotation,
+        origin: { x: turnedSize(grid, rotation).height * ISO_HALF_WIDTH, y: pad + headroom + top * ISO_STEP },
         size: { width, height },
     };
 }
 
-/** The projection itself: a point of the grid at a height, from the grid's back corner on the ground. */
+/** The grid as it's drawn: its sides swapped round by an odd number of quarter turns. */
+function turnedSize({ width, height }: { width: number; height: number }, rotation: IsoRotation): { width: number; height: number } {
+    return rotation % 2 === 0 ? { width, height } : { width: height, height: width };
+}
+
+/** A point of a `width`×`height` grid — a corner, or anywhere between — turned `rotation` quarters clockwise. */
+function turn(width: number, height: number, rotation: IsoRotation, col: number, row: number): { col: number; row: number } {
+    switch (rotation) {
+        case 0: return { col, row };
+        case 1: return { col: height - row, row: col };
+        case 2: return { col: width - col, row: height - row };
+        case 3: return { col: row, row: width - col };
+    }
+}
+
+/** A point of the grid, turned to where it's drawn. */
+function turned(view: IsoView, col: number, row: number): { col: number; row: number } {
+    return turn(view.width, view.height, view.rotation, col, row);
+}
+
+/** And back: a point of the grid as it's drawn, to the grid itself. */
+function unturned(view: IsoView, col: number, row: number): { col: number; row: number } {
+    const drawn = turnedSize(view, view.rotation);
+    return turn(drawn.width, drawn.height, ((4 - view.rotation) % 4) as IsoRotation, col, row);
+}
+
+/** The projection itself: a point of the grid as it's drawn, at a height, from its back corner on the ground. */
 function project(col: number, row: number, height: number): Point {
     return { x: (col - row) * ISO_HALF_WIDTH, y: (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP };
 }
 
-/** A point of the grid — a corner, or anywhere between — at a height in steps. */
-export function isoPoint(view: IsoView, col: number, row: number, height: number): Point {
+/** A point of the grid as it's drawn — already turned — at a height, on the board. */
+function drawnPoint(view: IsoView, col: number, row: number, height: number): Point {
     const { x, y } = project(col, row, height);
     return { x: view.origin.x + x, y: view.origin.y + y };
 }
 
-/** A square's back corner at a height in steps: where the square's own frame (`isoColumnOutline`) is placed. */
+/** A point of the grid — a corner, or anywhere between — at a height in steps. */
+export function isoPoint(view: IsoView, col: number, row: number, height: number): Point {
+    const { col: c, row: r } = turned(view, col, row);
+    return drawnPoint(view, c, r, height);
+}
+
+/** The point of the grid as it's drawn on the ground under a point of the board. */
+function drawnGroundAt(view: IsoView, x: number, y: number): { col: number; row: number } {
+    const u = (x - view.origin.x) / ISO_HALF_WIDTH;
+    const v = (y - view.origin.y) / ISO_HALF_HEIGHT;
+    return { col: (u + v) / 2, row: (v - u) / 2 };
+}
+
+/**
+ * The point of the grid on the ground under a point of the board: what
+ * `isoPoint` gives at no height, undone. Off the map, it's off the grid.
+ */
+export function isoGroundAt(view: IsoView, x: number, y: number): { col: number; row: number } {
+    const { col, row } = drawnGroundAt(view, x, y);
+    return unturned(view, col, row);
+}
+
+/**
+ * A square's back corner as it's drawn, at a height in steps: where the
+ * square's own frame (`isoColumnOutline`) is placed. Which of the square's
+ * corners that is depends on the turn.
+ */
 export function isoCorner(view: IsoView, square: number, height: number): Point {
-    const { col, row } = colRow(view, square);
-    return isoPoint(view, col, row, height);
+    const { col, row } = drawnCell(view, square);
+    return drawnPoint(view, col, row, height);
 }
 
-function colRow(view: IsoGrid, square: number): { col: number; row: number } {
-    return { col: square % view.width, row: Math.floor(square / view.width) };
+/** A square's middle, in the grid. */
+function middleOf(view: IsoGrid, square: number): { col: number; row: number } {
+    return { col: square % view.width + 0.5, row: Math.floor(square / view.width) + 0.5 };
 }
 
-/** How high a square stands, or the ground off the edge of the map. */
-function heightAt(view: IsoGrid, col: number, row: number): number {
-    return col < 0 || row < 0 || col >= view.width || row >= view.height ? 0 : view.heights[row * view.width + col];
+/**
+ * Where a square is drawn: its column and row in the grid as it's turned.
+ * A cell is turned by its middle, which lands on the middle of the cell it's
+ * drawn in, and so back.
+ */
+function drawnCell(view: IsoView, square: number): { col: number; row: number } {
+    const { col, row } = middleOf(view, square);
+    const middle = turned(view, col, row);
+    return { col: middle.col - 0.5, row: middle.row - 0.5 };
+}
+
+/** The square drawn at a cell of the turned grid, or undefined off the edge of the map. */
+function squareAtDrawnCell(view: IsoView, col: number, row: number): number | undefined {
+    const drawn = turnedSize(view, view.rotation);
+    if (col < 0 || row < 0 || col >= drawn.width || row >= drawn.height) return undefined;
+    const middle = unturned(view, col + 0.5, row + 0.5);
+    return Math.round(middle.row - 0.5) * view.width + Math.round(middle.col - 0.5);
+}
+
+/** How high the square drawn at a cell of the turned grid stands, or the ground off the edge of the map. */
+function heightAt(view: IsoView, col: number, row: number): number {
+    const square = squareAtDrawnCell(view, col, row);
+    return square === undefined ? 0 : view.heights[square];
 }
 
 /** The middle of a square's top: where whatever stands on it stands. */
 export function isoCentre(view: IsoView, square: number): Point {
-    const { col, row } = colRow(view, square);
-    return isoPoint(view, col + 0.5, row + 0.5, view.heights[square]);
+    const { col, row } = middleOf(view, square);
+    return isoPoint(view, col, row, view.heights[square]);
 }
 
 /**
@@ -116,8 +207,8 @@ export function isoCentre(view: IsoView, square: number): Point {
  * by one with a higher depth, so anything standing on a square is drawn
  * between its depth and the next.
  */
-export function isoDepth(view: IsoGrid, square: number): number {
-    const { col, row } = colRow(view, square);
+export function isoDepth(view: IsoView, square: number): number {
+    const { col, row } = drawnCell(view, square);
     return col + row;
 }
 
@@ -204,20 +295,19 @@ export interface IsoBlock {
  * show.
  */
 export function isoBlock(view: IsoView, square: number): IsoBlock {
-    const { col, row } = colRow(view, square);
+    // Worked out in the grid as it's drawn: which faces are the front ones depends on the turn.
+    const { col, row } = drawnCell(view, square);
     const h = view.heights[square];
+    const at = (col: number, row: number, height: number) => drawnPoint(view, col, row, height);
     const face = (a: [number, number], b: [number, number], low: number) => {
         const slices: string[] = [];
         for (let level = low; level < h; level++) {
-            slices.push(points(
-                isoPoint(view, a[0], a[1], level + 1), isoPoint(view, b[0], b[1], level + 1),
-                isoPoint(view, b[0], b[1], level), isoPoint(view, a[0], a[1], level),
-            ));
+            slices.push(points(at(a[0], a[1], level + 1), at(b[0], b[1], level + 1), at(b[0], b[1], level), at(a[0], a[1], level)));
         }
         return slices;
     };
     return {
-        top: points(isoPoint(view, col, row, h), isoPoint(view, col + 1, row, h), isoPoint(view, col + 1, row + 1, h), isoPoint(view, col, row + 1, h)),
+        top: points(at(col, row, h), at(col + 1, row, h), at(col + 1, row + 1, h), at(col, row + 1, h)),
         left: face([col, row + 1], [col + 1, row + 1], heightAt(view, col, row + 1)),
         right: face([col + 1, row + 1], [col + 1, row], heightAt(view, col + 1, row)),
     };
@@ -236,11 +326,14 @@ export function isoColumnOutline(low: number, high: number): string {
 
 /** The ground the whole map stands on: its top, and its two front faces down to `base` steps below it. */
 export function isoSlab(view: IsoView): { top: string; left: string; right: string } {
-    const { width: w, height: h, base } = view;
+    // The front edges of the map as it's drawn.
+    const { width: w, height: h } = turnedSize(view, view.rotation);
+    const at = (col: number, row: number, height: number) => drawnPoint(view, col, row, height);
+    const { base } = view;
     return {
-        top: isoArea(view, { x: 0, y: 0, width: w, height: h }),
-        left: points(isoPoint(view, 0, h, 0), isoPoint(view, w, h, 0), isoPoint(view, w, h, -base), isoPoint(view, 0, h, -base)),
-        right: points(isoPoint(view, w, h, 0), isoPoint(view, w, 0, 0), isoPoint(view, w, 0, -base), isoPoint(view, w, h, -base)),
+        top: isoArea(view, { x: 0, y: 0, width: view.width, height: view.height }),
+        left: points(at(0, h, 0), at(w, h, 0), at(w, h, -base), at(0, h, -base)),
+        right: points(at(w, h, 0), at(w, 0, 0), at(w, 0, -base), at(w, h, -base)),
     };
 }
 
@@ -265,14 +358,13 @@ export function isoGridLines(view: IsoView): string {
  * intersect, rather than any polygon.
  */
 export function isoSquareAt(view: IsoView, x: number, y: number): number | undefined {
-    const u = (x - view.origin.x) / ISO_HALF_WIDTH;
-    const v = (y - view.origin.y) / ISO_HALF_HEIGHT;
-    const col0 = (u + v) / 2, row0 = (v - u) / 2;
+    // In the grid as it's drawn, where lifting a point moves it straight up the screen.
+    const { col: col0, row: row0 } = drawnGroundAt(view, x, y);
     const perStep = ISO_STEP / (2 * ISO_HALF_HEIGHT);
     let found: number | undefined;
     let foundDepth = -Infinity;
     for (let square = 0; square < view.heights.length; square++) {
-        const { col, row } = colRow(view, square);
+        const { col, row } = drawnCell(view, square);
         if (col + row <= foundDepth) continue;
         // The least lift that brings the point into the square, if any lift
         // up to its height does: a square owns its back edges, not its front.

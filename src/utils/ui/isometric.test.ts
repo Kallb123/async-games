@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, isoBlock, isoBounds, isoCentre, isoColumnOutline, isoPoint, isoRuns, isoSquareAt, isoView, type IsoGrid } from './isometric';
+import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, isoBlock, isoBounds, isoCentre, isoColumnOutline, isoCorner, isoDepth, isoGroundAt, isoPoint, isoRuns, isoSlab, isoSquareAt, isoView, type IsoGrid, type IsoRotation } from './isometric';
 
 /** A 3×2 grid, flat but for the middle square of the top row, a step up. */
 const GRID: IsoGrid = { width: 3, height: 2, heights: [0, 1, 0, 0, 0, 0] };
@@ -111,5 +111,72 @@ describe('isoColumnOutline', () => {
 
     it('is only the top, a diamond, when it has no height', () => {
         expect(new Set(isoColumnOutline(2, 2).split(' ')).size).toBe(4);
+    });
+});
+
+describe('a turned view', () => {
+    const ROTATIONS: IsoRotation[] = [0, 1, 2, 3];
+    const turned = (rotation: IsoRotation, grid: IsoGrid = GRID) => isoView(grid, { base: 1, headroom: 4, rotation });
+
+    it('is the same size at every turn', () => {
+        for (const rotation of ROTATIONS) expect(turned(rotation).size).toEqual(VIEW.size);
+    });
+
+    it('brings the back corner round clockwise, a corner a quarter turn', () => {
+        // It's the map's top corner unturned, then its right, its bottom and its left.
+        expect(isoPoint(turned(0), 0, 0, 0)).toEqual(isoPoint(VIEW, 0, 0, 0));
+        expect(isoPoint(turned(1), 0, 0, 0).x).toBe(VIEW.size.width);
+        expect(isoPoint(turned(2), 0, 0, 0)).toEqual(isoPoint(VIEW, 3, 2, 0));
+        expect(isoPoint(turned(3), 0, 0, 0).x).toBe(0);
+    });
+
+    it('draws the map half turned as the unturned one stood on its head', () => {
+        const half = turned(2);
+        const middle = isoPoint(VIEW, 1.5, 1, 0);
+        for (let square = 0; square < GRID.heights.length; square++) {
+            if (GRID.heights[square] !== 0) continue;
+            const { x, y } = isoCentre(VIEW, square);
+            expect(isoCentre(half, square)).toEqual({ x: 2 * middle.x - x, y: 2 * middle.y - y });
+        }
+    });
+
+    it('turns the drawing order round with it', () => {
+        expect(isoDepth(VIEW, 0)).toBeLessThan(isoDepth(VIEW, 5));
+        expect(isoDepth(turned(2), 0)).toBeGreaterThan(isoDepth(turned(2), 5));
+    });
+
+    it('finds every square under its own top, and the ground back under every point, at every turn', () => {
+        for (const rotation of ROTATIONS) {
+            const view = turned(rotation);
+            for (let square = 0; square < GRID.heights.length; square++) {
+                const { x, y } = isoCentre(view, square);
+                expect(isoSquareAt(view, x, y)).toBe(square);
+            }
+            const point = isoPoint(view, 2.25, 0.75, 0);
+            const ground = isoGroundAt(view, point.x, point.y);
+            expect(ground.col).toBeCloseTo(2.25);
+            expect(ground.row).toBeCloseTo(0.75);
+        }
+    });
+
+    it('shows the faces that have come round to the front, down to whatever is in front of them now', () => {
+        // Unturned, the tall square faces the shorter one; half turned, the shorter one stands in front of it.
+        const steps = { width: 2, height: 1, heights: [3, 1] };
+        expect(isoBlock(turned(0, steps), 0).right).toHaveLength(2);
+        expect(isoBlock(turned(2, steps), 0).right).toHaveLength(3);
+        expect(isoBlock(turned(2, steps), 0).left).toHaveLength(3);
+        expect(isoBlock(turned(2, steps), 1).right).toEqual([]);
+    });
+
+    it('puts a square\'s frame on whichever of its corners is drawn at the back', () => {
+        // Half turned, square 0's far corner — column 1, row 1 — is the one at the back.
+        expect(isoCorner(turned(2), 0, 0)).toEqual(isoPoint(turned(2), 1, 1, 0));
+    });
+
+    it('stands the slab under the front edges of the map as it\'s drawn', () => {
+        const slab = isoSlab(turned(1));
+        const foot = (points: string) => Math.max(...points.split(' ').map(point => Number(point.split(',')[1])));
+        expect(foot(slab.left)).toBe(VIEW.size.height);
+        expect(foot(slab.right)).toBe(VIEW.size.height);
     });
 });

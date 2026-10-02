@@ -5300,6 +5300,18 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-range { fill: var(--ra-range); fill-opacity: 0.3; pointer-events: none; }
 /* Over the whole board, under the figures: a tap on any square no one stands on. */
 .ag-ra-tap { fill: transparent; cursor: pointer; }
+/* Turning the view a quarter either way: the board's dark pill in the top
+   corner the zoom pill leaves free, split into two buttons. */
+.ag-ra-turn { top: 12px; bottom: auto; display: flex; padding: 0; overflow: hidden; }
+.ag-ra-turn button {
+    border: none;
+    background: none;
+    color: inherit;
+    padding: 3px 11px;
+    font: 800 15px/1 var(--ag-font);
+    cursor: pointer;
+}
+.ag-ra-turn button + button { border-left: 1px solid color-mix(in oklch, var(--ag-on-dark) 25%, transparent); }
 .ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }

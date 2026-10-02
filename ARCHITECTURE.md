@@ -1188,12 +1188,15 @@ description or theme colour is exactly what those two files exist to prevent.
     It also takes an optional `focus` — a region in the child's viewBox units
     plus a key that changes whenever it should reapply — and smooth-scrolls and
     zooms to it unprompted, which is how Race Cars brings a driver's car and
-    their landing options into view the instant a roll lands.
+    their landing options into view the instant a roll lands. A `pivot` — a key
+    plus where the thing in the middle of the frame is now — puts the view back
+    on it at once, without gliding, for a board redrawn under the player:
+    Realm Arena's battlefield turned a quarter.
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`, `mapEdges.ts` and
     `mapLabels.ts` (the two bits of board geometry the map kit above draws),
     and `isometric.ts` (a square grid drawn isometrically, each square at its
-    own height — Realm Arena's battlefield).
+    own height, and turned a quarter at a time — Realm Arena's battlefield).
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
     picker; `useTurnNavigation`; `useNow`/`useNowToTheMinute`, the shared clock).
 - **Fetching and keeping it fresh.** One hook does this for the whole app:
