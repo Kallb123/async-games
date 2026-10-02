@@ -7,7 +7,7 @@
 // line comes out the same from either end and whether A sees B is always
 // whether B sees A.
 
-import { coordsOf, FULL_HEIGHT, type Battlefield, type Square } from "./terrain";
+import { coordsOf, towersOver, type Battlefield, type Square } from "./terrain";
 
 /** The squares a line between two squares' centres passes through, ends left out. */
 export interface SightLine {
@@ -56,8 +56,7 @@ export function sightLine(field: Battlefield, from: Square, to: Square): SightLi
  * a single tree doesn't hide what's past its corner.
  */
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
-    const eyes = Math.max(field.tiles[from].elevation, field.tiles[to].elevation);
-    const blocks = (square: Square) => field.tiles[square].terrain.blocksSight || field.tiles[square].elevation >= eyes + FULL_HEIGHT;
+    const blocks = (square: Square) => field.tiles[square].terrain.blocksSight || towersOver(field, square, from, to);
     const { crossed, grazed } = sightLine(field, from, to);
     return !crossed.some(blocks) && !grazed.some(([one, other]) => blocks(one) && blocks(other));
 }

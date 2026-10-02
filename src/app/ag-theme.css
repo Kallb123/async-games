@@ -5268,8 +5268,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 /* A standing character hidden behind something in front of it, drawn again
    over it, faint, in its owner's colour, and tappable like the figure. */
-.ag-ra-ghost { opacity: 0.55; cursor: pointer; }
-.ag-ra-ghost circle { fill: color-mix(in oklch, var(--ra-seat) 45%, transparent); stroke: var(--ra-seat); stroke-width: 0.6; }
+.ag-ra-ghost { opacity: 0.5; }
 /* Banked AP on overwatch or guard: a dashed edge, so a watcher is plain at a glance. */
 .ag-ra-figure--watch { stroke-dasharray: 1.2 0.8; stroke-width: 0.9; }
 .ag-ra-figure--down { fill: var(--ag-ink-softer); opacity: 0.6; }

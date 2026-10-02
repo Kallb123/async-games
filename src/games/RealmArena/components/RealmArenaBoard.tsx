@@ -48,6 +48,8 @@ const AP_PIP_OFFSET = 5.6;
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
 const ODDS_RISE = FIGURE_RISE + FIGURE_RADIUS + ODDS_HEIGHT / 2 + 0.6;
+/** How far below its disc's middle a figure is looked for, to tell whether something in front hides it: most of the way to the disc's foot. */
+const FOOT_PROBE = FIGURE_RADIUS * 0.6;
 /** Room over the back of the map for a figure standing there, and the odds above it. */
 const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + 1;
 
@@ -128,7 +130,7 @@ function discCentre(view: IsoView, square: Square): Point {
 function hidden(view: IsoView, square: Square): boolean {
     const { x, y } = discCentre(view, square);
     const depth = isoDepth(view, square);
-    return [y, y + FIGURE_RADIUS * 0.6].some(at => {
+    return [y, y + FOOT_PROBE].some(at => {
         const front = isoSquareAt(view, x, at);
         return front !== undefined && isoDepth(view, front) > depth;
     });
@@ -148,15 +150,17 @@ interface FigureProps {
     className?: string;
     fill?: string;
     ring?: Ring;
+    /** Drawn over whatever hides it, rather than standing on its square: no shadow. */
+    ghost?: boolean;
 }
 
 /** A character's disc with its mark on it, stood upright over its shadow on its square. */
-function Figure({ view, square, character, className = '', fill, ring }: FigureProps) {
+function Figure({ view, square, character, className = '', fill, ring, ghost = false }: FigureProps) {
     const feet = isoCentre(view, square);
     const { x, y } = discCentre(view, square);
     return (
         <>
-            <ellipse className="ag-ra-shadow" cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH / 2} ry={ISO_HALF_HEIGHT / 2} />
+            {!ghost && <ellipse className="ag-ra-shadow" cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH / 2} ry={ISO_HALF_HEIGHT / 2} />}
             {ring && <circle className={`ag-ra-ring ag-ra-ring--${ring}`} cx={x} cy={y} r={FIGURE_RADIUS + 1.2} />}
             <circle className={`ag-ra-figure ${className}`} cx={x} cy={y} r={FIGURE_RADIUS} fill={fill} />
             <text className="ag-ra-mark" x={x} y={y}>{character ? CHARACTER_MARK[character] : '✕'}</text>
@@ -261,9 +265,10 @@ interface DepthItem {
 
 /**
  * The battlefield (docs/games/realm-arena.md §13.1, §17.3 PR 5), drawn
- * isometrically: each square a diamond, raised by its terrain's height
- * (`squareHeights`) so the walls, the trees and the towers stand up off the
- * ground and a character on a tower top stands up there with it. The
+ * isometrically: each square a diamond, raised to its tile's elevation, so
+ * the walls, the trees and the towers stand up off the ground at the heights
+ * the rules play (§25) and a character on a tower top stands up there with
+ * it. The
  * geometry is `src/utils/ui/isometric.ts`'s; this decides what goes on it.
  *
  * It's painted back to front. First the ground: the slab the map stands on,
@@ -419,6 +424,8 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     };
     const path = aiming?.path?.map(square => isoCentre(view, square));
     const pathEnd = path?.[path.length - 1];
+    // Who something in front hides: a scan of the board per figure, so only redone when someone moves.
+    const ghosts = useMemo(() => fighters.filter(fighter => isStanding(fighter) && hidden(view, fighter.square)), [view, fighters]);
     const figureRects = [...fighters, ...(sealed ?? [])].map(({ square }) => figureRect(view, square));
 
     return (
@@ -469,18 +476,21 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     {/* A standing character something in front hides, drawn
                         again faintly over it, so it's still there to see and
                         to tap. */}
-                    {fighters.filter(fighter => isStanding(fighter) && hidden(view, fighter.square)).map(fighter => {
+                    {ghosts.map(fighter => {
                         const { x, y } = discCentre(view, fighter.square);
                         return (
-                            <g
+                            <ClickableMapNode
                                 key={`ghost-${fighter.id}`}
-                                className="ag-ra-ghost"
-                                style={{ '--ra-seat': colourFor(fighter.owner) } as React.CSSProperties}
+                                x={x} y={y} radius={FIGURE_RADIUS}
+                                isValid
+                                showRing={false}
                                 onClick={() => onSelect(fighter.id)}
+                                title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
                             >
-                                <circle cx={x} cy={y} r={FIGURE_RADIUS} />
-                                <text className="ag-ra-mark" x={x} y={y}>{CHARACTER_MARK[fighter.character]}</text>
-                            </g>
+                                <g className="ag-ra-ghost">
+                                    <Figure view={view} square={fighter.square} character={fighter.character} fill={colourFor(fighter.owner)} ghost />
+                                </g>
+                            </ClickableMapNode>
                         );
                     })}
 

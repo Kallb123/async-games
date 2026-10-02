@@ -28,7 +28,7 @@
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, isCharacterId, MAX_OF_EACH, squadPoints, type Ability, type AbilityId, type CharacterId, type PlayerCount } from "./characters";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ export const REACTION_COST = 2;
 export const OVERWATCH_PENALTY = 15;
 export const HIGH_GROUND_BONUS = 10;
 /** How far above its target, in quarters, an attacker has to stand to have the high ground: half a height (§25.2). */
-export const HIGH_GROUND_RISE = 2;
+export const HIGH_GROUND_RISE = HALF_HEIGHT;
 /** What a target's cover takes off a shot's chance to hit. Hunkering down doubles it (§13.2, §13.3). */
 export const COVER_PENALTY: Readonly<Record<Cover, number>> = { none: 0, half: 20, full: 40 };
 /** A shot that misses by this much or less grazes, for half damage (§13.3). */

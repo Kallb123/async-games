@@ -46,7 +46,7 @@ describe("hitting (§13.3)", () => {
         expect(odds(fighter(2, "b", "knight", at(field, 5, 3)))).toMatchObject({ chance: 80, cover: "none", flanked: true, damage: 4, grazeDamage: 2 });
     });
 
-    it("takes 40 off for full cover, from high cover whose corner the shot passes", () => {
+    it("takes 40 off for full cover, from a wall whose corner the shot passes", () => {
         const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
         const target = fighter(2, "b", "knight", at(walled, 5, 2));
         expect(odds(target, fighter(1, "a", "archer", at(walled, 2, 5)), [], "attack", walled)).toMatchObject({ chance: 40, cover: "full" });

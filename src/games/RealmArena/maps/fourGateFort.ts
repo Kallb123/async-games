@@ -12,8 +12,9 @@
 // from inside the walls, and looks down into the keep.
 //
 // Letters are `TERRAIN`'s (src/utils/games/battlefield/terrain.ts): `.` open
-// ground, `,` rubble and `o` low walls (low cover), `T` trees and `#` wall
-// (high cover), `s` a tower stair and `^` a tower top.
+// ground, `,` rubble and `o` low walls (half and three quarters of a height:
+// half cover), `T` trees and `#` wall (full cover), `s` a tower stair and `^`
+// a tower top, each at its own height (§25). The map is flat ground.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
 

@@ -8,8 +8,8 @@
 // tiles can replace the flat colours later without the geometry moving.
 // Column runs down and to the right, row down and to the left, and a square
 // raised by `h` steps is drawn `h * ISO_STEP` higher, with its front faces
-// showing wherever the square in front of it is lower — each face a stack of
-// one-step slices, so tile art can come as slices too.
+// showing wherever the square in front of it is lower, as a stack of one-step
+// slices.
 //
 // Everything is in board units: the SVG's viewBox is `IsoView.size`.
 
@@ -36,7 +36,7 @@ export interface Point {
 export interface IsoGrid {
     width: number;
     height: number;
-    /** Each square's height in steps, by index (`row * width + col`). The ground is 0, and nothing is below it. */
+    /** Each square's height in whole steps, by index (`row * width + col`). The ground is 0, and nothing is below it. */
     heights: readonly number[];
 }
 
@@ -187,14 +187,6 @@ export interface IsoBlock {
     right: string[];
 }
 
-/** The heights a face's slices run between, bottom to top: each whole step from `low` up to `high`. */
-function sliceLevels(low: number, high: number): number[] {
-    const levels = [low];
-    for (let level = Math.floor(low) + 1; level < high; level++) levels.push(level);
-    if (high > low) levels.push(high);
-    return levels;
-}
-
 /**
  * A square drawn as a block: its top at its own height, and each of its two
  * front faces down to the square in front of it, where that one is lower, as
@@ -206,11 +198,14 @@ export function isoBlock(view: IsoView, square: number): IsoBlock {
     const { col, row } = colRow(view, square);
     const h = view.heights[square];
     const face = (a: [number, number], b: [number, number], low: number) => {
-        const levels = sliceLevels(Math.min(h, low), h);
-        return levels.slice(1).map((top, i) => points(
-            isoPoint(view, a[0], a[1], top), isoPoint(view, b[0], b[1], top),
-            isoPoint(view, b[0], b[1], levels[i]), isoPoint(view, a[0], a[1], levels[i]),
-        ));
+        const slices: string[] = [];
+        for (let level = low; level < h; level++) {
+            slices.push(points(
+                isoPoint(view, a[0], a[1], level + 1), isoPoint(view, b[0], b[1], level + 1),
+                isoPoint(view, b[0], b[1], level), isoPoint(view, a[0], a[1], level),
+            ));
+        }
+        return slices;
     };
     return {
         top: points(isoPoint(view, col, row, h), isoPoint(view, col + 1, row, h), isoPoint(view, col + 1, row + 1, h), isoPoint(view, col, row + 1, h)),

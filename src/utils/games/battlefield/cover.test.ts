@@ -23,7 +23,7 @@ describe("coverAgainst", () => {
         ".......",
     );
 
-    it("is full behind high cover and half behind low cover, on the attacker's side", () => {
+    it("is full behind a wall and half behind rubble, on the attacker's side", () => {
         const target = at(walled, 3, 3);
         expect(coverAgainst(walled, target, at(walled, 3, 0))).toBe("full");
         expect(coverAgainst(walled, target, at(walled, 0, 3))).toBe("half");

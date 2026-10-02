@@ -16,6 +16,8 @@ export type Cover = "none" | "half" | "full";
 
 /** A full height — a character's own — in quarters: the unit every height on a battlefield is counted in. */
 export const FULL_HEIGHT = 4;
+/** Half a height: the least that's a climb, gives cover, or is the high ground. */
+export const HALF_HEIGHT = FULL_HEIGHT / 2;
 
 export interface Terrain {
     name: string;
@@ -73,7 +75,12 @@ export interface Tile {
 
 /** The cover a square gives a character next to it by rising above it: none for a quarter, half for a half or three quarters, full for a full height. */
 export function coverOfRise(rise: number): Cover {
-    return rise >= FULL_HEIGHT ? "full" : rise >= 2 ? "half" : "none";
+    return rise >= FULL_HEIGHT ? "full" : rise >= HALF_HEIGHT ? "half" : "none";
+}
+
+/** Whether a square stands a full height above both of two others: a wall between them, to see past or cut a corner by. */
+export function towersOver(field: Battlefield, square: Square, a: Square, b: Square): boolean {
+    return field.tiles[square].elevation >= Math.max(field.tiles[a].elevation, field.tiles[b].elevation) + FULL_HEIGHT;
 }
 
 /** How much higher one square's top is than another's, in quarters; below it, negative. */

@@ -11,7 +11,7 @@
 // Every cost is a whole number of half-points (terrain.ts), so the search is a
 // bucket queue over half-points — exact, with no floating-point ties to break.
 
-import { coordsOf, FULL_HEIGHT, isNeighbour, squareAt, type Battlefield, type Square } from "./terrain";
+import { coordsOf, FULL_HEIGHT, HALF_HEIGHT, isNeighbour, squareAt, towersOver, type Battlefield, type Square } from "./terrain";
 
 /** A diagonal step costs this many times the square it lands on. */
 export const DIAGONAL_STEP = 1.5;
@@ -66,14 +66,13 @@ export function stepCost(field: Battlefield, from: Square, to: Square, climb = D
     const start = field.tiles[from];
     if (start === undefined || !enterable(field, to) || !isNeighbour(field, from, to)) return undefined;
     const end = field.tiles[to];
-    const drop = Math.abs(end.elevation - start.elevation);
-    const stair = start.terrain.stairs || end.terrain.stairs;
-    if (drop > climb && !stair) return undefined;
-    const cost = end.terrain.moveCost + (drop >= 2 && !stair ? CLIMB_COST : 0);
+    const span = Math.abs(end.elevation - start.elevation);
+    const climbs = !start.terrain.stairs && !end.terrain.stairs;
+    if (climbs && span > climb) return undefined;
+    const cost = end.terrain.moveCost + (climbs && span >= HALF_HEIGHT ? CLIMB_COST : 0);
     const a = coordsOf(field, from), b = coordsOf(field, to);
     if (a.col === b.col || a.row === b.row) return cost;
-    const top = Math.max(start.elevation, end.elevation);
-    const walls = (corner: Square | undefined) => !enterable(field, corner) || field.tiles[corner].elevation >= top + FULL_HEIGHT;
+    const walls = (corner: Square | undefined) => !enterable(field, corner) || towersOver(field, corner, from, to);
     return walls(squareAt(field, b.col, a.row)) || walls(squareAt(field, a.col, b.row)) ? undefined : cost * DIAGONAL_STEP;
 }
 
