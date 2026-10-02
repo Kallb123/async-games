@@ -776,10 +776,12 @@ after it, in the order §10 set.
 These are the decisions the PRs rest on. They're taken now because they can't
 be cheaply changed once games are being played.
 
-- **Three commands:**
+- **Four commands:**
   - `RealmArenaMuster`: the squad, and where each character stands.
   - `RealmArenaAct`: one action by one character. That's a move, a sneak, an
     attack, an aimed shot, an ability, hunkering down, or going on watch.
+  - `RealmArenaUndo`: takes back the sender's last `Act`, when it rolled
+    nothing and hurt nobody (added later — `docs/undo.md` §16).
   - `RealmArenaEndTurn`: which characters keep still rather than go on watch.
 
   That's one general-purpose `Act` rather than a class per action, as
@@ -793,8 +795,8 @@ be cheaply changed once games are being played.
   each reaction in turn (nearest watcher first), and stops the mover if
   they're downed on the way. No out-of-turn commands are needed.
 - **Rolls are recorded in order.** A move can set off any number of reactions,
-  so each `Act` stores the rolls it used as a list (`recordedRolls`). Rolls
-  are 1–100, drawn with `randomInt`.
+  so each `Act` stores the rolls it used as a list (`recordedRolls`), left off
+  when it used none. Rolls are 1–100, drawn with `randomInt`.
 - **The rules take rolls as inputs.** `rules.ts` never draws a random number.
   A command draws, records, and hands the rolls to pure functions. So the
   client can show the same hit chance the server will use, and tests can hand
@@ -1071,8 +1073,9 @@ In the order §10 set, and in less detail for now:
 - **B5 — Fog of war**, if it's chosen (§8). It's hidden state in every
   response and every replay (`croupier`).
 - **B6 — More factions.**
-- **Later platform work:** the shared team turn (§5.2), and undo for a move
-  that set off no reactions (`docs/undo.md`).
+- **Later platform work:** the shared team turn (§5.2). Undo for an action
+  that rolled nothing and hurt nobody — a move that set off no reactions among
+  them — is built (`docs/undo.md` §16, "The eighth game").
 
 ### 17.5 The riskiest part
 

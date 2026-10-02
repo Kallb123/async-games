@@ -12,8 +12,8 @@ Settlements & Cities command, is out of scope here and gains nothing until
 someone opts it in a line at a time (§14, §16). Six more games have since
 opted in by hand: Race Cars (§16, "The second game"), Banned Islet (§16,
 "The third game"), Outbreak (§16, "The fourth game"), Train Time (§16,
-"The fifth game"), Dice Cities (§16, "The sixth game") and Fires Out (§16,
-"The seventh game").
+"The fifth game"), Dice Cities (§16, "The sixth game"), Fires Out (§16,
+"The seventh game") and Realm Arena (§16, "The eighth game").
 
 So everything below now describes code rather than a plan, and the design
 reasoning — §4's rejected options, §5's rejected server-side holds — is kept
@@ -1437,3 +1437,58 @@ command rather than between commands: every move in Fires Out is one
   landmark.
 - **The button.** `UndoButton`, beside End turn in one `.ag-action-grid` row —
   End turn is always on the sheet here, so it never needs a row of its own.
+
+### The eighth game: Realm Arena
+
+Fires Out's shape again — a run of actions, then an End turn nobody can take
+back — and the line between undoable and not runs through one command,
+`RealmArenaAct`, as Fires Out's does. What decides it here is not only the
+action's kind but what the action set off.
+
+- **What is undoable.** A move, a sneak, hunkering down, going on watch, a
+  shield wall, a heal and a raise — `UNDOABLE_KINDS` (`RealmArenaLogic.ts`) —
+  and only when the action rolled nothing and every event it produced is in
+  `PEACEFUL_EVENTS`: something moved, healed, rose, braced or went on watch,
+  and nobody was struck, shot, downed or scored off. `RealmArenaAct` declares
+  `readonly undoable = true`; the source scan in
+  `src/games/RealmArena/undo.test.ts` holds the list to that one command, and
+  the guard beside it holds every action that pushed to no `recorded…` field.
+- **What is not.** No attack, ever: an attack, an aimed shot, a cleave or a
+  fireball. A shot rolls, and a strike or a fireball deals damage both sides
+  have watched land. Nor a move that sets off a watcher: an overwatch shot
+  rolls, and a guard's strike — which rolls nothing — is still an attack on the
+  mover, so a move into a watcher's sight stays made while the same move along
+  an unwatched path can be taken back. That is decided off the events, not the
+  kind, so it is Fires Out's `revealedAnyPoi` shape: whatever the command turned
+  up decides. And anything that isn't peaceful **empties the stack**, not just
+  moves the anchor: a move after an attack would otherwise push on top of the
+  snapshots from before it, and undoing that move would put the anchor back in
+  reach of a board from before the attack — a second go at its roll. None of
+  it can end the game — only a knock-out or the last round's
+  End turn does — so there is no winning-move exception to make. And the muster
+  is out: it seals a squad and hands the turn on at once, so taking it back
+  would need §5's hold for a choice nobody has asked to revisit.
+- **`recordedRolls` is absent when nothing rolled.** It used to be written as
+  `[]` on every action, which `consumedRandomness` reads as a roll by its key
+  alone; a peaceful action now leaves it off. A replay of an older log still
+  reads an empty array as "no rolls", so nothing recorded changes meaning.
+- **No hold (§5)**, no `currentTurn` to restore: a turn only ever ends on the
+  player's own End turn, or on the turn timer's, which plays the same
+  `RealmArenaEndTurn`. `CheckEndTurn` empties the stack on every hand-off, so
+  both are covered; Realm Arena has no dropout adapter, and a drop is a command
+  of its own that moves the anchor. Depth `ACTION_POINTS` (four): one
+  character's whole turn of one-AP moves. A turn spread over the squad can hold
+  more than that, which only costs reach.
+- **The cloner.** `cloneRealmArenaState` lives in `RealmArenaLogic.ts`, the
+  only file that needs it — replay rebuilds the opening state from the seat
+  order, as Dice Cities' did (§16).
+- **Hidden information.** The snapshot is only ever taken in the battle, when
+  the sealed musters are already empty and every squad is on the field. It is
+  never sent anyway: `gameStateToModel` builds its return field by field and
+  gains `canUndo` alone — the same expression as the other games.
+- **Recap.** The shared recap engine drops an undo together with the command
+  it reversed, so an action taken back leaves no row.
+- **The button.** `UndoButton`, beside End turn in `RealmArenaTurnEnd`'s
+  `.ag-action-grid` row — End turn is always on the sheet during a battle turn,
+  as in Fires Out. Taking an action back also clears the results card that
+  showed what it did.

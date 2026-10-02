@@ -55,6 +55,20 @@ export interface IRealmArenaSpecificGameState {
     musters: IRealmArenaMuster[];
     /** By userId, every player from 0 at the start — an empty object would be dropped when the document is first inserted. */
     scores: Record<string, number>;
+    /**
+     * Snapshots of the whole state, newest last, pushed by a `RealmArenaAct`
+     * that rolled nothing and hurt nobody (docs/undo.md). `by` is whose action
+     * it was. Never sent. Capped at UNDO_STACK_DEPTH, and emptied on every
+     * hand-off. Absent on a game that predates it.
+     */
+    undoStack: { by: string, state: IRealmArenaSpecificGameState }[];
+    /**
+     * The id of the last command that pushed or popped a snapshot.
+     * RealmArenaUndo refuses unless it is the tail of commandHistory, which is
+     * how anything else played — an attack above all — puts every snapshot
+     * behind it out of reach (docs/undo.md §4).
+     */
+    undoAnchorId: string | null;
 }
 
 // ─── Invitation ─────────────────────────────────────────────────────────────
@@ -128,6 +142,8 @@ export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpe
         fighters: [],
         musters: [],
         scores: Object.fromEntries(turnOrder.map(userId => [userId, 0])),
+        undoStack: [],
+        undoAnchorId: null,
     };
 }
 
@@ -157,6 +173,9 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             fighters: Schema.Types.Mixed,
             musters: Schema.Types.Mixed,
             scores: Schema.Types.Mixed,
+            // ─── Undo (docs/undo.md) ───
+            undoStack: Schema.Types.Mixed,
+            undoAnchorId: { type: String, default: null },
         },
     },
     { discriminatorKey: 'kind' },
@@ -180,7 +199,7 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, viewerId),
+        specificGameState: gameStateToModel(doc.specificGameState, viewerId, doc.gameState.commandHistory.at(-1)?.id ?? null),
     };
 };
 
@@ -192,11 +211,17 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
  * a null viewer (a replay) as much as for an opponent (§17.2).
  *
  * Built field by field rather than spread, so a field added to the state later
- * reaches the wire only when someone writes it in here.
+ * reaches the wire only when someone writes it in here — the undo stack, a
+ * copy of the whole state, never does.
+ *
+ * `lastCommandId` (commandHistory's real tail) is what makes `canUndo` the
+ * same test RealmArenaUndo runs on itself: the stack's owner alone would still
+ * say yes after an attack that pushed nothing (docs/undo.md §7).
  */
 export function gameStateToModel(
     gs: IRealmArenaSpecificGameState,
     viewerId: string | null,
+    lastCommandId: string | null,
 ): IRealmArenaSpecificGameStateResponse {
     const seats = [...gs.seats];
     const rounds = battleRounds(seats.length);
@@ -212,6 +237,9 @@ export function gameStateToModel(
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(({ character, square }) => ({ character, square })) : null,
         scores: { ...gs.scores },
+        // Absent (`?? []`) on a game that predates the stack; false for every
+        // viewer but the actor, and for a viewerless replay.
+        canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
 }
 

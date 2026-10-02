@@ -10,6 +10,7 @@ import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/
 import { CHARACTERS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import {
+    ACTION_POINTS,
     act,
     check,
     endTurn,
@@ -68,6 +69,83 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
         if (event.kind === "scored") scores[event.player] = (scores[event.player] ?? 0) + event.points;
     }
     gs.scores = scores;
+}
+
+// ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
+//
+// The eighth game to take a move back, and shaped like Fires Out's: a turn is
+// a run of `RealmArenaAct`s and only End turn hands it on, and the player
+// sends it. So there is no ten-second hold (§5) — Undo is simply there until
+// the player does something that isn't undoable.
+//
+// Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
+// heal and a raise — the actions that roll nothing and hurt nobody. Never an
+// attack of any kind (an attack, an aimed shot, a cleave, a fireball): a shot
+// rolls, and a strike or a fireball deals damage the other side has seen land.
+// Nor a move that sets anyone off: an overwatch shot rolls, and a guard's
+// strike is an attack on the mover, so a move a watcher reacted to stays
+// made. That is decided off what the action did rather than off its kind —
+// `peaceful` — so a move along a path nobody watches can be taken back, and the
+// same move into a watcher's sight can't.
+//
+// Anything that isn't peaceful empties the stack rather than only moving the
+// anchor: otherwise a peaceful action after it would push on top of the older
+// snapshots, and undoing that one would put the anchor back in reach of a
+// state from before the attack. The stack is emptied on every hand-off in
+// CheckEndTurn too, which the turn timer's End turn goes through, so no
+// snapshot outlives its turn.
+
+/** The kinds that can ever be taken back: no attack is among them. */
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise"]);
+
+/** What an undoable action may have done: everything but an attack landing, a knock-out or the points for one. */
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching"]);
+
+/**
+ * How many snapshots the stack keeps: a character's whole turn of one-AP
+ * moves. A turn spread over the squad can hold more undoable actions than
+ * that, which only costs reach — the anchor decides what can be restored.
+ */
+export const UNDO_STACK_DEPTH = ACTION_POINTS;
+
+/** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. */
+function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonly number[]): boolean {
+    return UNDOABLE_KINDS.has(action.kind) && rolls.length === 0 && events.every(event => PEACEFUL_EVENTS.has(event.kind));
+}
+
+/**
+ * The whole state, as plain objects the undo stack can keep and hand back.
+ * Never nests a stack: a snapshot's own `undoStack` is empty, and restoring
+ * one leaves the live stack where it is anyway.
+ */
+export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmArenaSpecificGameState {
+    return {
+        map: gs.map,
+        seats: [...gs.seats],
+        phase: gs.phase,
+        roundsPlayed: gs.roundsPlayed,
+        fighters: (gs.fighters ?? []).map(storedFighter),
+        musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(({ character, square }) => ({ character, square })) })),
+        scores: { ...gs.scores },
+        undoStack: [],
+        undoAnchorId: null,
+    };
+}
+
+/**
+ * Pushes a snapshot taken before `command`'s first mutation and moves the
+ * anchor onto `command`. Capped at UNDO_STACK_DEPTH — dropping the oldest only
+ * ever costs reach, never correctness.
+ */
+function commitUndo(gs: IRealmArenaSpecificGameState, command: IGameCommand, before: IRealmArenaSpecificGameState): void {
+    gs.undoStack = [...(gs.undoStack ?? []), { by: command.senderId, state: before }].slice(-UNDO_STACK_DEPTH);
+    gs.undoAnchorId = command.id;
+}
+
+/** Forgets every snapshot: after anything that isn't peaceful, and on every hand-off. */
+function clearUndo(gs: IRealmArenaSpecificGameState): void {
+    gs.undoStack = [];
+    gs.undoAnchorId = null;
 }
 
 // ─── Narration ──────────────────────────────────────────────────────────────
@@ -148,10 +226,10 @@ export class RealmArenaGameType implements IGameType {
         const next = nextActivePlayer(data, data.currentTurn);
         data.currentTurn = next;
         const gs = data.specificGameState;
-        if (gs.phase === "battle") {
-            gs.fighters = startTurn(battleOf(gs), next);
-            markDirty(gameData);
-        }
+        // Nothing on the stack can be restored past a hand-off (docs/undo.md).
+        clearUndo(gs);
+        if (gs.phase === "battle") gs.fighters = startTurn(battleOf(gs), next);
+        markDirty(gameData);
     }
 
     /**
@@ -278,10 +356,14 @@ export class RealmArenaAct implements IGameCommand {
      * Every 1–100 roll the action used, in the order it used them — its own
      * shot, and each overwatch it set off (§17.2). Written by the first
      * `Execute`, read back by a replay; the command route strips it from a
-     * request, so a client can never choose its own.
+     * request, so a client can never choose its own. Absent on an action that
+     * rolled nothing, so the undo guard (docs/undo.md §6) sees it didn't.
      */
     recordedRolls?: number[];
     readonly className = "RealmArenaAct";
+    // Only when it rolled nothing and hurt nobody — enforced in Execute
+    // (`peaceful`, above).
+    readonly undoable = true;
 
     myString() {
         return (typeof this.action?.kind === "string" && Object.hasOwn(ACTION_PHRASES, this.action.kind)
@@ -295,17 +377,64 @@ export class RealmArenaAct implements IGameCommand {
         const battle = battleOf(gs);
         if ("refused" in check(battle, this.senderId, this.action)) return INVALID;
         const action = cleanAction(this.action);
+        // Before the first mutation, pushed only if the action proves peaceful.
+        const before = UNDOABLE_KINDS.has(action.kind) ? cloneRealmArenaState(gs) : null;
 
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
         const { fighters, events } = act(battle, this.senderId, action, roll);
 
         this.action = action;
-        this.recordedRolls = used;
+        // Not even an empty list when nothing rolled: the undo guard reads any
+        // `recorded…` key as randomness consumed (docs/undo.md §6).
+        if (used.length > 0) this.recordedRolls = used;
+        else delete this.recordedRolls;
         gs.fighters = fighters;
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, narrate(events, battle.fighters, this.senderId)));
+        if (before && peaceful(action, events, used)) commitUndo(gs, this, before);
+        else clearUndo(gs);
         markDirty(gameData);
         return { validMove: true, turnOver: false, events } as IRealmArenaActOutcome;
+    }
+}
+
+/**
+ * Takes the sender's last action back (docs/undo.md): only one `RealmArenaAct`
+ * pushed a snapshot for, and only while it is still the last command played.
+ */
+@serializable
+export class RealmArenaUndo implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
+    readonly className = "RealmArenaUndo";
+
+    myString() { return "took back their last move"; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IRealmArenaGameData;
+        const gs = data.specificGameState;
+        if (!onTurn(data, this.senderId, "battle")) return INVALID;
+
+        // A snapshot is only good for the command directly behind it: refused
+        // once anything else has run since it was pushed (docs/undo.md §4).
+        const lastCommand = data.gameState.commandHistory.at(-1);
+        if (!lastCommand || gs.undoAnchorId !== lastCommand.id) return INVALID;
+        const entry = (gs.undoStack ?? []).at(-1);
+        if (!entry || entry.by !== this.senderId) return INVALID;
+
+        const undoStack = gs.undoStack.slice(0, -1);
+        const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
+        Object.assign(gs, restored);
+        gs.undoStack = undoStack;
+        gs.undoAnchorId = this.id;
+
+        // No `currentTurn` to put back: nothing undoable here ever ends a turn.
+        data.gameState.history.unshift(playerHistory(this.senderId, this.myString()));
+        markDirty(gameData);
+        return { validMove: true, turnOver: false };
     }
 }
 

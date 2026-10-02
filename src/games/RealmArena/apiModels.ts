@@ -31,6 +31,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     myMuster: MusterPick[] | null;
     /** Every player's score, by userId (§13.7). */
     scores: Record<string, number>;
+    /** True when the viewer has an action of their own they can still take back (docs/undo.md). The undo stack itself is never sent. */
+    canUndo: boolean;
 }
 
 export interface IRealmArenaGameDataResponse extends IGameDataResponse {

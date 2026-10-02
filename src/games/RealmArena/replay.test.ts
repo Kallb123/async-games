@@ -53,7 +53,7 @@ describe("Realm Arena replay", () => {
             // One snapshot before anyone has mustered, then one per command.
             expect(timeline.snapshots).toHaveLength(history.length + 1);
             const last = timeline.snapshots[timeline.currentIndex];
-            expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, viewer));
+            expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, viewer, game.gameState.commandHistory.at(-1)?.id ?? null));
             expect(last.complete).toBe(true);
             expect(last.winner).toBe(game.winner);
         }
@@ -86,7 +86,7 @@ describe("Realm Arena replay", () => {
         expect(game.gameState.commandHistory).toHaveLength(3);
 
         const timeline = await noRandomness(() => buildTimeline(game, NAMES));
-        expect(timeline.snapshots.at(-1)?.specificGameState).toEqual(gameStateToModel(game.specificGameState, null));
+        expect(timeline.snapshots.at(-1)?.specificGameState).toEqual(gameStateToModel(game.specificGameState, null, null));
     });
 });
 

@@ -25,6 +25,7 @@ function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): I
         mustered: ["a", "b"],
         myMuster: null,
         scores: { a: 0, b: 0 },
+        canUndo: false,
         ...overrides,
     };
 }
