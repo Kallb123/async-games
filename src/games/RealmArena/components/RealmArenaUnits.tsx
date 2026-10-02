@@ -4,7 +4,8 @@ import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
-import { apPips, attackOptions, canAct, CHARACTER_MARK, fighterName, fighterStatus, hpFraction } from '@/games/RealmArena/ui';
+import { RealmArenaEffectList } from './RealmArenaEffects';
+import { apPips, attackOptions, canAct, CHARACTER_MARK, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
 
 interface RealmArenaUnitsProps {
     /** The battlefield and everyone on it: the viewer's own are picked out of it. */
@@ -25,7 +26,7 @@ interface RealmArenaUnitsProps {
  * per character with its HP and, on their turn, the AP it has left of its
  * `ACTION_POINTS` — the same pips the board draws beside the figure — and a
  * crosshair counting the enemies its main weapon could hit from where it
- * stands. Tapping a box selects the character and brings the view to it, and
+ * stands, and its status effects spelled out under its HP (§20.2). Tapping a box selects the character and brings the view to it, and
  * "Next ready" steps to the next one with AP left to spend.
  */
 export default function RealmArenaUnits({ battle, player, colourFor, acting, showReach, selectedId, onSelect }: RealmArenaUnitsProps) {
@@ -66,6 +67,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             <span className="ag-ra-unit-hp">
                                 <span style={{ width: `${hpFraction(fighter) * 100}%` }} />
                             </span>
+                            <RealmArenaEffectList effects={effectsOn(fighter)} />
                             <span className={`ag-ra-unit-foot${done ? ' ag-ra-unit-foot--done' : ''}`}>
                                 <UnitStatus fighter={fighter} acting={acting} done={done} />
                                 {standing && showReach && <TargetCount count={attackOptions(battle, fighter).length} />}
@@ -78,11 +80,11 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
     );
 }
 
-/** The start of a unit's last line: down, done, its AP pips on the viewer's turn, or what it's doing off it. */
+/** The start of a unit's last line: down, done, its AP pips on the viewer's turn, or whether it's on watch off it. */
 function UnitStatus({ fighter, acting, done }: { fighter: Fighter; acting: boolean; done: boolean }) {
     if (!isStanding(fighter)) return <span>✕ Down</span>;
     if (done) return <span>✓ Done</span>;
-    if (!acting) return <span>{fighterStatus(fighter)[0] ?? 'Waiting'}</span>;
+    if (!acting) return <span>{watchStatus(fighter) ?? 'Waiting'}</span>;
     return (
         <span className="ag-ra-unit-ap" aria-label={`${fighter.ap} of ${ACTION_POINTS} AP left`}>
             <span className="ag-ra-unit-pips" aria-hidden="true">

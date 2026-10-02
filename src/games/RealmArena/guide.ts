@@ -1,12 +1,13 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
-import { CHARACTERS, MAX_OF_EACH } from "./characters";
+import { CHARACTERS, EFFECTS, MAX_OF_EACH } from "./characters";
 import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
 // a player's first match (see useGameIntro). Five sections, as
 // docs/games/realm-arena.md §17.3 PR 9 lists them: the goal and the muster, a
-// turn, what AP buy, cover and flanking, and overwatch and guard.
+// turn, what AP buy (and the effects they leave, §20), cover and flanking, and
+// overwatch and guard.
 //
 // Map-agnostic: the battlefield is picked by the number of players, so no
 // section names a gate or a tower of one fort. The tunable numbers — costs,
@@ -26,7 +27,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Action points",
-            body: `Moving costs 1 AP for each stretch of the character's movement — a Knight goes ${CHARACTERS.knight.movement} squares on open ground, a Scout ${CHARACTERS.scout.movement}, everyone else ${CHARACTERS.manAtArms.movement} — and rubble, low walls and climbs cost more of it. An attack is ${ATTACK_AP} AP, so a character can move and attack, attack twice, or move, attack and move again. Hunkering down costs ${HUNKER_AP} AP and ends that character's turn, doubling its cover until your next. Each character also has its own abilities, shown when it's selected, with their cost and how long until they're ready again.`,
+            body: `Moving costs 1 AP for each stretch of the character's movement — a Knight goes ${CHARACTERS.knight.movement} squares on open ground, a Scout ${CHARACTERS.scout.movement}, everyone else ${CHARACTERS.manAtArms.movement} — and rubble, low walls and climbs cost more of it. An attack is ${ATTACK_AP} AP, so a character can move and attack, attack twice, or move, attack and move again. Hunkering down costs ${HUNKER_AP} AP and ends that character's turn, doubling its cover until your next. Each character also has its own abilities, shown when it's selected, with their cost and how long until they're ready again. A fireball sets everyone it hits burning: ${EFFECTS.burning.damage} damage at the start of each of their next ${EFFECTS.burning.count} turns, and a knock-out by it scores for whoever threw it. A Cleric's heal puts it out. Anything affecting a character — burning, hunkered down, a shield wall — shows as a mark beside its figure, and its box spells it out.`,
         },
         {
             heading: "Cover and flanking",

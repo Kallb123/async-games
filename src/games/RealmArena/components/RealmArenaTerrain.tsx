@@ -7,12 +7,31 @@ import type { TerrainLetter } from '@/utils/games/battlefield/terrain';
 /** The grass pattern's tile: six diagonals each way, the period `grassOf` repeats on. */
 const GRASS_TILE = { width: 6 * ISO_HALF_WIDTH, height: 6 * ISO_HALF_HEIGHT };
 
-const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.get(sprite)}`;
+/** The id a sprite is defined under on a board — a terrain's, or an effect's mark — for a `<use>` to draw it by. */
+export const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.get(sprite)}`;
+
+/** A sprite's cell, as the viewBox that crops its sheet to it. */
+const spriteViewBox = (sprite: Sprite) => `${sprite.x} ${sprite.y} ${sprite.width} ${sprite.height}`;
+
+/** A sprite's whole sheet, for a viewBox of `spriteViewBox` to crop. */
+function SheetImage({ sprite }: { sprite: Sprite }) {
+    const sheet = ART_SHEETS[sprite.sheet];
+    return <image href={sheet.href} width={sheet.width} height={sheet.height} />;
+}
+
+/** One sprite on its own, outside a board: an effect's mark in a unit's box. Sized by its class. */
+export function SpriteImage({ sprite, className }: { sprite: Sprite; className?: string }) {
+    return (
+        <svg className={className} viewBox={spriteViewBox(sprite)} aria-hidden="true">
+            <SheetImage sprite={sprite} />
+        </svg>
+    );
+}
 const clipId = (id: string, low: number, high: number) => `${id}-clip-${low}-${high}`;
 
 /**
- * Everything the terrain art refers to, defined once a board: each sprite as
- * a symbol cropping its sheet, the grass as a pattern laid from the map's back
+ * Everything the terrain art refers to, defined once a board: each sprite —
+ * the effects' marks among them — as a symbol cropping its sheet, the grass as a pattern laid from the map's back
  * corner, and the outlines a cut-down layer is clipped to. `id` keeps the
  * board's ids its own.
  */
@@ -29,14 +48,11 @@ export function RealmArenaTerrainDefs({ id, origin }: { id: string; origin: Poin
     }
     return (
         <defs>
-            {[...SPRITES.keys()].map(sprite => {
-                const sheet = ART_SHEETS[sprite.sheet];
-                return (
-                    <symbol key={spriteId(id, sprite)} id={spriteId(id, sprite)} viewBox={`${sprite.x} ${sprite.y} ${sprite.width} ${sprite.height}`}>
-                        <image href={sheet.href} width={sheet.width} height={sheet.height} />
-                    </symbol>
-                );
-            })}
+            {[...SPRITES.keys()].map(sprite => (
+                <symbol key={spriteId(id, sprite)} id={spriteId(id, sprite)} viewBox={spriteViewBox(sprite)}>
+                    <SheetImage sprite={sprite} />
+                </symbol>
+            ))}
             <pattern id={`${id}-grass`} patternUnits="userSpaceOnUse" x={origin.x} y={origin.y} width={GRASS_TILE.width} height={GRASS_TILE.height}>
                 {grass.map(({ col, row }) => {
                     const grassHere = grassOf(col, row);

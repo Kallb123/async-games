@@ -1490,6 +1490,32 @@ a third and fourth.
   hit" waits for the first one (Crippling shot, §23). `afflicted` is the one
   way an effect is put on, and items and mastery options build on it.
 
+*Filled in by PR 2*, in `art.ts`, `ui.ts`, `recap.ts`, `guide.ts` and the
+board's components:
+
+- **Every effect has a drawn mark**, the stances included: a coin with one
+  bold glyph (a flame, a bolt, an hourglass, a crosshair, chevrons pressing
+  down, a shield). They're one sheet, `public/art/realmarena/effects.png`,
+  rendered from its SVG master in `art-masters/realmarena/effects.svg` by
+  `npm run ra-effects`, and cut by `EFFECT_ART` like any other sprite.
+- **A figure wears its marks in a column down its left**, opposite the AP
+  pips, whoever's turn it is, and none once it's down. The tooltip names them,
+  since it can't show them.
+- **The unit's box and the selected character's card spell them out**, each
+  mark with its name, so an enemy's effects can be read too (it has no box).
+  The box's own last line says only whether it's on watch off its turn.
+- **What an action did leads each effect line with its mark**: put on, put on
+  again, cleared, burning, and the two stances.
+- **The recap tells what burning did as a turn began** in a row of its own
+  under the End turn, titled with the line the hand-off wrote — every such
+  line, oldest first, when it burned a squad out and passed on. It's a
+  knock-out row when the burning downed someone, so the summary leads with it,
+  and it names whose squad it hurt.
+- **The guide covers burning** in its section on action points: what a
+  fireball leaves, what a knock-out by it scores, that a heal puts it out, and
+  where a character's effects are shown. Stunned, Slowed and Marked wait for
+  the items and options that cause them (§21, §23).
+
 ## 21. Items (C2)
 
 XCOM's grenades, medkits and smoke are its most-used tools. They're answers
@@ -1858,3 +1884,4 @@ Realm, its sibling in the same world.
 | 1.12 | PR 9 fills in the guide, the tour and the art: the battlefield is drawn from two isometric tile sheets at the rules' heights, open ground as one pattern of grass, and the tour follows whichever phase the match opens in. |
 | 1.13 | The view turns a quarter either way, so a player can see round a tower (§13.1). |
 | 1.14 | C1 PR 1 fills in status effects' rules and engine (§20.4): the End turn begins the next turn, so burning can end the battle; heal is for an ally hurt or affected; a stunned character can't go on watch. |
+| 1.15 | C1 PR 2 fills in the board for status effects (§20.4): a drawn mark for each effect on figures, unit boxes and the selected character's card, the recap's row for burning as a turn begins, and the guide's text on burning. |

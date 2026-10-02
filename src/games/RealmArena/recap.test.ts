@@ -108,6 +108,51 @@ describe("Realm Arena recap rows", () => {
         expect(quiet).toEqual([expect.objectContaining({ type: "ra_endturn", title: "Alice ended their turn", quiet: true })]);
     });
 
+    it("tells what burning did as the next turn began, in the line the hand-off wrote", () => {
+        const burn: BattleEvent[] = [{ kind: "burned", fighter: 1, damage: 1 }];
+        const lines = [line("Bob's Knight burned for 1"), line("Alice ended their turn", "a")];
+        const rows = toEvents(snap(state({ fighters })), snap(state({ fighters }), lines), cmd("RealmArenaEndTurn"), valid(burn));
+        expect(rows.map(row => [row.type, row.title, row.quiet])).toEqual([
+            ["ra_endturn", "Alice ended their turn", true],
+            ["ra_burning", "Bob's Knight burned for 1", undefined],
+        ]);
+        expect(rows[1].affectedIds).toEqual(["b"]);
+        expect(new Set(rows.map(row => row.id)).size).toBe(2);
+    });
+
+    it("tells a knock-out by burning that ends the battle, under the End turn and over the battle's end", () => {
+        const burn: BattleEvent[] = [
+            { kind: "burned", fighter: 1, damage: 1 },
+            { kind: "downed", fighter: 1, by: 0 },
+            { kind: "scored", player: "a", points: 6, reason: "knockout" },
+        ];
+        const lines = [
+            line("Alice wins the battle", "a"),
+            line("The battle is over: Alice 6 points, Bob 0 points"),
+            line("Bob's Knight burned for 1; Bob's Knight is down; Alice scored 6 for the knock-out"),
+            line("Alice ended their turn", "a"),
+        ];
+        const rows = toEvents(snap(state({ fighters })), snap(state({ fighters }), lines, true), cmd("RealmArenaEndTurn"), valid(burn));
+        expect(rows.map(row => [row.type, row.title])).toEqual([
+            ["ra_endturn", "Alice ended their turn"],
+            ["ra_knockout", "Bob's Knight burned for 1; Bob's Knight is down; Alice scored 6 for the knock-out"],
+            ["ra_won", "Alice wins the battle"],
+        ]);
+        expect(summarize(rows, "b").subline).toMatch(/the battle is over/);
+    });
+
+    it("tells every line of burning when it passed on past a squad burned out, oldest first", () => {
+        const burn: BattleEvent[] = [
+            { kind: "burned", fighter: 1, damage: 1 },
+            { kind: "downed", fighter: 1, by: 0 },
+            { kind: "burned", fighter: 0, damage: 1 },
+        ];
+        const lines = [line("Alice's Archer burned for 1"), line("Bob's Knight burned for 1; Bob's Knight is down"), line("Carol ended their turn", "c")];
+        const rows = toEvents(snap(state({ fighters })), snap(state({ fighters }), lines), cmd("RealmArenaEndTurn", { senderId: "c", senderUsername: "Carol" }), valid(burn));
+        expect(rows[1]).toMatchObject({ type: "ra_knockout", title: "Bob's Knight burned for 1; Bob's Knight is down; Alice's Archer burned for 1" });
+        expect(rows[1].affectedIds).toEqual(["b", "a"]);
+    });
+
     it("has nothing to say about a refused command", () => {
         expect(toEvents(snap(state()), snap(state()), cmd("RealmArenaAct"), { validMove: false, turnOver: false })).toEqual([]);
     });
