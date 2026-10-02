@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { coverAgainst } from "@/utils/games/battlefield/cover";
+import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, type Square } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT as FORT, RUINED_FORT_MAP } from "./ruinedFort";
@@ -51,5 +53,13 @@ describe("the Ruined Fort", () => {
         expect(breaches.every(square => FORT.tiles[square].terrain.name === "Rubble")).toBe(true);
         const { costs } = reachFrom(FORT, FORT.deployments[0][0], Infinity, { blocked: new Set([...gates, ...breaches]) });
         expect(courtyard.filter(square => costs[square] < Infinity)).toEqual([]);
+    });
+
+    it("covers whoever is on a tower top by half from its parapet, and leaves them in sight (§25.2)", () => {
+        // The north-west tower's top, shot at from the open ground west of the fort.
+        const top = squareAt(FORT, 7, 13)!, outside = squareAt(FORT, 3, 13)!;
+        expect(FORT.tiles[squareAt(FORT, 6, 13)!].terrain.name).toBe("Parapet");
+        expect(canSee(FORT, outside, top)).toBe(true);
+        expect(coverAgainst(FORT, top, outside)).toBe("half");
     });
 });

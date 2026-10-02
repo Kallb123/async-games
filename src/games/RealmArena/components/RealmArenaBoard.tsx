@@ -17,6 +17,7 @@ const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
     'o': 'ag-ra-ground--lowwall',
     'T': 'ag-ra-ground--trees',
     '#': 'ag-ra-ground--wall',
+    'P': 'ag-ra-ground--parapet',
     's': 'ag-ra-ground--stair',
     '^': 'ag-ra-ground--tower',
 };

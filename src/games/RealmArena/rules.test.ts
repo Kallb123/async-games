@@ -260,6 +260,29 @@ describe("act", () => {
     });
 });
 
+describe("melee across a height (§25.2)", () => {
+    const step = (ground: string) => buildBattlefield({ name: "Step", rows: [".."], elevation: [ground], deployments: [], objectives: {} });
+    const strike = (ground: string) => {
+        const field = step(ground);
+        const knight = fighter(1, "a", "knight", 0, { ap: ACTION_POINTS });
+        return check({ field, fighters: [knight, fighter(2, "b", "archer", 1)] }, "a", { kind: "attack", fighter: 1, target: 2 });
+    };
+
+    it("strikes an enemy beside it a quarter above or below, and not half a height", () => {
+        expect(strike("01")).not.toHaveProperty("refused");
+        expect(strike("10")).not.toHaveProperty("refused");
+        expect(strike("02")).toEqual({ refused: "Too far above or below to strike" });
+        expect(strike("20")).toEqual({ refused: "Too far above or below to strike" });
+    });
+
+    it("cleaves only enemies at its height", () => {
+        const field = buildBattlefield({ name: "Step", rows: ["..."], elevation: ["002"], deployments: [], objectives: {} });
+        const man = fighter(1, "a", "manAtArms", 1, { ap: ACTION_POINTS });
+        const state = { field, fighters: [man, fighter(2, "b", "archer", 0), fighter(3, "b", "archer", 2)] };
+        expect(check(state, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "Both enemies must be next to them, at their height" });
+    });
+});
+
 describe("reactions (§13.4)", () => {
     const field = fieldOf();
     const path = [at(field, 9, 4), at(field, 9, 3), at(field, 9, 2), at(field, 8, 2)];
@@ -292,6 +315,16 @@ describe("reactions (§13.4)", () => {
         expect(reactionsTo({ field, fighters: [knight, scout] }, scout, steps)).toEqual([{ watcher: 1, step: 2 }]);
         const { byId } = run({ field, fighters: [knight, scout] }, "a", { kind: "move", fighter: 2, path: steps });
         expect(byId(2)).toMatchObject({ hp: 2, square: steps[3] });
+    });
+
+    it("strike from guard only at an enemy within a quarter of its height (§25.2)", () => {
+        const ledge = buildBattlefield({ name: "Ledge", rows: [".........."], elevation: ["0000220000"], deployments: [], objectives: {} });
+        const knight = fighter(1, "b", "knight", 3, { banked: 4 });
+        const scout = fighter(2, "a", "scout", 6);
+        // Along the ledge, half a height above the Knight, past it, and back down to the ground beyond it.
+        expect(reactionsTo({ field: ledge, fighters: [knight, scout] }, scout, [6, 5, 4])).toEqual([]);
+        const low = buildBattlefield({ name: "Ledge", rows: [".........."], elevation: ["0000110000"], deployments: [], objectives: {} });
+        expect(reactionsTo({ field: low, fighters: [knight, scout] }, scout, [6, 5, 4])).toEqual([{ watcher: 1, step: 2 }]);
     });
 
     it("stop the mover where one downs it, and score the knock-out", () => {

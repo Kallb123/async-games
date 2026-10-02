@@ -5193,6 +5193,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-lowwall: oklch(0.62 0.04 60);
     --ra-trees: oklch(0.47 0.1 145);
     --ra-wall: oklch(0.42 0.02 55);
+    --ra-parapet: oklch(0.5 0.025 60);
     --ra-stair: oklch(0.72 0.04 70);
     --ra-tower: oklch(0.86 0.05 80);
     --ra-earth: oklch(0.56 0.08 60);
@@ -5228,6 +5229,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-ground--lowwall { --ra-ground: var(--ra-lowwall); }
 .ag-ra-ground--trees { --ra-ground: var(--ra-trees); }
 .ag-ra-ground--wall { --ra-ground: var(--ra-wall); }
+.ag-ra-ground--parapet { --ra-ground: var(--ra-parapet); }
 .ag-ra-ground--stair { --ra-ground: var(--ra-stair); }
 .ag-ra-ground--tower { --ra-ground: var(--ra-tower); }
 .ag-ra-ground--earth { --ra-ground: var(--ra-earth); }

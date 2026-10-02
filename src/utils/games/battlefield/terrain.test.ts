@@ -30,6 +30,9 @@ describe("TERRAIN", () => {
         expect(TERRAIN["T"]).toMatchObject({ moveCost: Infinity, cover: "full", blocksSight: true });
         expect(TERRAIN["s"]).toMatchObject({ moveCost: 2, standable: true, stairs: true });
         expect(TERRAIN["^"].height).toBeGreaterThan(TERRAIN["#"].height);
+        // A parapet gives whoever is on the tower top half cover, by standing half a height above it.
+        expect(TERRAIN["P"]).toMatchObject({ moveCost: Infinity, standable: false });
+        expect(coverOfRise(TERRAIN["P"].height - TERRAIN["^"].height)).toBe("half");
     });
 });
 

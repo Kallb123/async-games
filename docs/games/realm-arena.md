@@ -457,6 +457,15 @@ heights (§25).
    block it whatever their height.
 5. **High ground?** Half a height above the target.
 
+### 11.9 Round 9
+
+Two of round 8's open questions (§25.5), answered.
+
+1. **Melee across a height?** Only within a quarter of each other's height.
+2. **Parapets?** A tower top gets half cover from the parapet round it. A
+   tower whose parapet is ruined, or missing on a side, gives no cover from
+   that side, and that's fine.
+
 ---
 
 ## 12. Questions (round 2)
@@ -488,6 +497,7 @@ proposed default, the rule says so. The numbers are first guesses for playtestin
   | Open ground | 0 | 1 | None | Clear |
   | Low cover: rubble (½), low walls (¾) | 2–3 | 1, plus a climb on and a climb off. You can't stop on it | Half, by its height | Clear |
   | Wall | 4 | Can't be entered | Full, by its height | Blocked between characters on the ground (§25) |
+  | Parapet: the wall round a tower top | 8 | Can't be entered | Half to whoever is on the tower top, by its height | Blocked between characters on the ground |
   | Trees | 6 | Can't be entered | Full, whatever the heights | Always blocked |
   | Tower stair | 3 | 2, and never a climb | By height | By height |
   | Tower top | 6 | 1 | By height; it's high ground over anyone half a height below | By height |
@@ -1673,6 +1683,15 @@ drawn.
     to climb off onto open ground, against 3 and 1 before.
 - **High ground** is half a height or more above the target: +10% to hit
   (§13.3). It's no longer only the tower top.
+- **Melee** — a strike, Cleave, and a guard reaction — needs the two
+  characters within a quarter of each other's height (round 9), so nobody on
+  the ground strikes someone on a tower top beside them. Healing, raising
+  and the shield wall still only need them next to each other.
+- **Parapets.** The wall round a tower top is a parapet, standing half a
+  height above the top, so whoever is up there has half cover from that
+  side by its height alone (round 9). A side where the parapet is missing,
+  or fallen to an ordinary wall, gives none: the Ring Fort's towers are open
+  on the side facing the courtyard.
 - **Standing** is still the terrain's to say (§11.6, answer 1): low cover is
   climbed over, never stood on, whatever its height.
 
@@ -1696,9 +1715,9 @@ drawn.
 ### 25.4 What changed on the three forts
 
 - **Tower tops see over the curtain wall**, which now blocks sight only
-  between characters on the ground. A tower top next to the wall gets no
-  cover from it, since the wall is lower than the tower: the tower is the
-  high ground, and an exposed one.
+  between characters on the ground. Every wall touching a tower top is now a
+  parapet, half a height above it, so whoever is up there has half cover
+  from every side but the stair's — and, on the Ring Fort, the courtyard's.
 - **A tower is only climbed by its stair.** The old rules let a character
   step onto a tower top from any open square beside it; a tower top
   one and a half heights up can't be. The Ring Fort's flank towers each had
@@ -1709,18 +1728,13 @@ drawn.
 
 ### 25.5 Open questions
 
-1. **Melee across a height.** A character on the ground can still strike
-   one on a tower top beside it. Should melee, guard, healing and raising
-   need the two to be within some height of each other?
-2. **A parapet.** Should a tower top get cover from its own walls, by
-   drawing those walls taller than the tower?
-3. **A map generator**: what kinds of map, and does a generated battle store
+1. **A map generator**: what kinds of map, and does a generated battle store
    its map rather than an id?
-4. **A tower with one stair** (the Ruined Fort's, the Four-Gate Fort's) can
+2. **A tower with one stair** (the Ruined Fort's, the Four-Gate Fort's) can
    be shut by an enemy standing on the stair: whoever is on the tower top
    can't come down until it moves. Is that a tactic, or should every tower
    have two ways down?
-5. **Old battles.** Maps are stored by id, so these rules reach every stored
+3. **Old battles.** Maps are stored by id, so these rules reach every stored
    battle, and a replay of a playtest battle from before them can go wrong
    (a step onto a tower top from the ground is now refused). Realm Arena has
    no command version yet; it wants one before PR 10 turns the game on, so a
@@ -1759,3 +1773,4 @@ Realm, its sibling in the same world.
 | 1.8 | Round 7 (§11.7): after launch, Milestone C comes before the rest of Milestone B: status effects (§20), items bought at muster (§21), destructible low cover (§22) and character mastery (§23), which replaces game-wide unlocks (§7, B4). Round-7 questions (§24). |
 | 1.9 | The board is drawn isometrically, each square raised by its terrain's height (§13.1). |
 | 1.10 | Round 8 (§11.8): elevation (§25). Heights in quarters; cover, sight, climbing and high ground read from them; a tile per square and an optional elevation layer on the map; the Ring Fort's dead flank-tower stairs moved beside their towers. |
+| 1.11 | Round 9 (§11.9): melee needs the two within a quarter of each other's height, and the wall round a tower top is a parapet giving half cover (§25.2). |

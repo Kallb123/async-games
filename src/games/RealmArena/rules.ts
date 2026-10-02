@@ -150,15 +150,23 @@ export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
     return isNeighbour(field, a, b) && canSee(field, a, b);
 }
 
+/** How far apart in height, in quarters, two characters can be and still fight hand to hand (§25.2). */
+export const MELEE_RISE = 1;
+
+/** Whether a melee weapon reaches from one square to another: next to it, and no more than a quarter above or below it. */
+export function inMeleeReach(field: Battlefield, a: Square, b: Square): boolean {
+    return nextTo(field, a, b) && Math.abs(riseOf(field, a, b)) <= MELEE_RISE;
+}
+
 /** Whether one square is within `range` squares of another and can be seen from it: a ranged weapon's reach, and a fireball's (§13.3). */
 export function inRange(field: Battlefield, from: Square, to: Square, range: number): boolean {
     return distance(field, from, to) <= range && canSee(field, from, to);
 }
 
-/** Whether a character's weapon could hit someone on a square from where it stands: next to it for a melee weapon, in range and in sight for a ranged one. */
+/** Whether a character's weapon could hit someone on a square from where it stands: in melee reach for a melee weapon, in range and in sight for a ranged one. */
 export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
     const weapon = CHARACTERS[fighter.character].weapon;
-    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : nextTo(state.field, fighter.square, square);
+    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square);
 }
 
 /** What a move by one character may cross and stop on, and how far it can climb: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
@@ -330,7 +338,8 @@ const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
     if (!isEnemy(actor, target)) return "Pick an enemy";
     if (CHARACTERS[actor.character].weapon.kind === "melee") {
-        return weaponReaches(state, actor, target.square) ? undefined : "Too far away to strike";
+        if (weaponReaches(state, actor, target.square)) return undefined;
+        return nextTo(state.field, actor.square, target.square) ? "Too far above or below to strike" : "Too far away to strike";
     }
     return shotOdds(state, actor, target, kind) ? undefined : "Out of range or out of sight";
 }
@@ -382,7 +391,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
                 const enemies = targets.map(one => fighterById(state, one));
                 if (!enemies.every((one): one is Fighter => isEnemy(actor, one))) return "Pick two enemies";
-                return enemies.every(one => nextTo(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them";
+                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, at their height";
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);
