@@ -279,12 +279,15 @@ interface Turned {
 
 /**
  * Where the thing under a point of the board as it was drawn is drawn now:
- * the square under it, if any — so a tower top stays in view as the tower
- * comes round — or else the ground.
+ * the square under it, if any, at the point's same offset from its middle —
+ * so a tower top stays in view as the tower comes round — or else the ground.
  */
 function turnedPoint(from: IsoView, to: IsoView, { x, y }: Point): Point {
     const square = isoSquareAt(from, x, y);
-    if (square !== undefined) return isoCentre(to, square);
+    if (square !== undefined) {
+        const was = isoCentre(from, square), now = isoCentre(to, square);
+        return { x: now.x + x - was.x, y: now.y + y - was.y };
+    }
     const { col, row } = isoGroundAt(from, x, y);
     return isoPoint(to, col, row, 0);
 }

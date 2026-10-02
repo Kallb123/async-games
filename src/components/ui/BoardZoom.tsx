@@ -413,12 +413,17 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
         const content = contentRef.current;
         if (!pane || !content || !pivot || !viewBox) return;
         glideRef.current?.settle();
+        // Read as it's drawn: mid-pinch, the pane sits unscrolled under the transform.
+        const view = currentView(pane, zoomRef.current, pinchRef.current);
         pinchRef.current = null;
         content.style.transform = '';
-        const middle = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
-        const to = pivot.at({ x: middle.cx * viewBox.width, y: middle.cy * viewBox.height });
-        pane.scrollLeft = to.x / viewBox.width * pane.scrollWidth - middle.vx;
-        pane.scrollTop = to.y / viewBox.height * pane.scrollHeight - middle.vy;
+        const middle = { x: pane.clientWidth / 2, y: pane.clientHeight / 2 };
+        const to = pivot.at({
+            x: (view.scroll.x + middle.x) / view.content.x * viewBox.width,
+            y: (view.scroll.y + middle.y) / view.content.y * viewBox.height,
+        });
+        pane.scrollLeft = to.x / viewBox.width * pane.scrollWidth - middle.x;
+        pane.scrollTop = to.y / viewBox.height * pane.scrollHeight - middle.y;
         // Only `pivot.key` should retrigger this, as with `focus.key` above.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pivot?.key]);
