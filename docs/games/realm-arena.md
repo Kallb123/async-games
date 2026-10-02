@@ -1456,7 +1456,9 @@ a third and fourth.
    §20.2. Reviewers: `caveman`, `gremlin` (a squad burned out at the start of
    its turn).
 2. **Board:** the effect marks on figures and unit boxes, recap narration and
-   guide text. Reviewer: `caveman`.
+   guide text. Reviewer: `caveman`. The recap's End turn row is quiet today
+   even when burning knocks someone out as the next turn begins; it should
+   tell that knock-out, from the events End turn's outcome carries.
 
 *Filled in by PR 1*, in `characters.ts`, `rules.ts` and `RealmArenaLogic.ts`:
 

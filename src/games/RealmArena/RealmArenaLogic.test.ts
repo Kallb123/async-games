@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { PlayerDropped } from "@/utils/games/playerDropout";
+import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS, type CharacterId } from "./characters";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel } from "./RealmArenaModels";
 import { meta } from "./meta";
@@ -352,5 +354,33 @@ describe("a turn that begins burning (§20.3)", () => {
         Object.assign(knight, { effects: { burning: 2 }, burnedBy: own(game, "b")[0].id });
         expect((await play(game, endTurnBy("b"))).gameOver).toBe(true);
         expect(own(game, "a")[0]).toMatchObject({ hp: knight.hp, effects: { burning: 2 } });
+    });
+});
+
+describe("a turn that begins burning, off the beaten path (§20.3)", () => {
+    const burnOut = (game: RealmArenaTestGame, player: string, burner: string) => {
+        const [last, ...rest] = own(game, player);
+        for (const fighter of rest) Object.assign(fighter, { hp: 0 });
+        Object.assign(last, { hp: 1, effects: { burning: 1 }, burnedBy: own(game, burner)[0].id });
+    };
+
+    it("passes a dropped seat as well as a squad burned out", async () => {
+        const game = makeGame(["a", "b", "c", "d"]);
+        await musterAll(game);
+        await play(game, endTurnBy("a"));
+        expect((await play(game, cmd(PlayerDropped, "c", { resumesWith: game.currentTurn }))).outcome.validMove).toBe(true);
+        burnOut(game, "d", "b");
+        await play(game, endTurnBy("b"));
+        expect(game.currentTurn).toBe("a");
+        expect(game.specificGameState.roundsPlayed).toBe(1);
+        expect(game.complete).toBe(false);
+    });
+
+    it("finishes the battle from a timed-out End turn that burns the last squad out", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        burnOut(game, "b", "a");
+        expect(await resolveStalledTurn(game, "a", "a")).toBe("gameOver");
+        expect(game).toMatchObject({ complete: true, winner: "a" });
     });
 });
