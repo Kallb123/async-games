@@ -55,7 +55,7 @@ describe("fighterStatus", () => {
     });
 
     it("names the watch, hunkering down and the shield wall", () => {
-        expect(fighterStatus({ ...knight, banked: 4, hunkered: true, shieldWall: true }))
+        expect(fighterStatus({ ...knight, banked: 4, effects: { hunkered: 1, shieldWall: 1 } }))
             .toEqual(["On watch (4 AP banked)", "Hunkered down", "Shield wall"]);
     });
 

@@ -917,6 +917,8 @@ be cheaply changed once games are being played.
 - **A turn begins on the hand-off.** `CheckEndTurn` passes the turn round the
   seats and gives the next player's characters their fresh AP, so a played,
   a timed-out and a replayed turn all begin the next one the same way.
+  *Moved by C1 PR 1 (§20.4):* the End turn that hands the turn on now begins
+  the next one, so burning there can end the battle.
 - **A request keeps only what was checked.** An `Act` stores the action as
   `check` read it, a `Muster` each pick's character and square, and an
   `EndTurn` only the player's own characters to keep still.
@@ -1456,6 +1458,36 @@ a third and fourth.
 2. **Board:** the effect marks on figures and unit boxes, recap narration and
    guide text. Reviewer: `caveman`.
 
+*Filled in by PR 1*, in `characters.ts`, `rules.ts` and `RealmArenaLogic.ts`:
+
+- **The End turn begins the next turn, not `CheckEndTurn`.** The command
+  pipeline asks `CheckGameOver` before `CheckEndTurn`, and only a game over
+  found there finishes the match (results, notifications). So a squad burned
+  out in `CheckEndTurn` would leave a battle over that nobody finished.
+  `RealmArenaEndTurn` now hands off: it passes the turn on, ends the round if
+  it goes back round the table, begins the next seat's turn, and passes on
+  again past a squad burned out, stopping where the battle is over.
+  `CheckEndTurn` only moves `currentTurn` to that same seat. The muster's
+  last command begins the first battle turn the same way.
+- **Nothing burns once the turn limit is played out.** The last round's last
+  End turn ends the battle before anyone's turn begins.
+- **The burning gets a line of its own in the log**, after the End turn's,
+  naming everyone by owner: "Bob's Knight burned for 1". End turn's outcome
+  carries every event, including these, so the recap reads the centre's
+  points from them rather than from the score, which a knock-out by burning
+  adds to as well.
+- **A heal is for an ally that is hurt or has something to clear.** One that's
+  only burning, slowed or stunned can be healed for nothing but the clearing.
+- **A stunned character can't go on watch**, by choice or at the end of a
+  turn, since it can't react until its owner's next turn.
+- **Burning remembers the last character to set it**, and scores nobody if
+  that character's squad has left the battle (a dropped player's).
+- **An effect running out is silent.** `effect` events say an effect was put
+  on, put on again, or cleared by a heal; a stance keeps its own event.
+- **No shot carries an effect yet**, so "a shot applies its effect only on a
+  hit" waits for the first one (Crippling shot, §23). `afflicted` is the one
+  way an effect is put on, and items and mastery options build on it.
+
 ## 21. Items (C2)
 
 XCOM's grenades, medkits and smoke are its most-used tools. They're answers
@@ -1823,3 +1855,4 @@ Realm, its sibling in the same world.
 | 1.11 | Round 9 (§11.9): melee needs the two within a quarter of each other's height, and the wall round a tower top is a parapet giving half cover (§25.2). |
 | 1.12 | PR 9 fills in the guide, the tour and the art: the battlefield is drawn from two isometric tile sheets at the rules' heights, open ground as one pattern of grass, and the tour follows whichever phase the match opens in. |
 | 1.13 | The view turns a quarter either way, so a player can see round a tower (§13.1). |
+| 1.14 | C1 PR 1 fills in status effects' rules and engine (§20.4): the End turn begins the next turn, so burning can end the battle; heal is for an ally hurt or affected; a stunned character can't go on watch. |

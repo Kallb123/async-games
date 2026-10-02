@@ -96,8 +96,13 @@ describe("Realm Arena recap rows", () => {
 
     it("ends a turn with what the centre scored and who went on watch", () => {
         const watching = [{ ...fighters[0], banked: 2 }, fighters[1]];
-        const rows = toEvents(snap(state({ fighters })), snap(state({ fighters: watching, scores: { a: 5, b: 0 } })), cmd("RealmArenaEndTurn"), valid());
+        const centre: BattleEvent = { kind: "scored", player: "a", points: 5, reason: "centre" };
+        const rows = toEvents(snap(state({ fighters })), snap(state({ fighters: watching, scores: { a: 5, b: 0 } })), cmd("RealmArenaEndTurn"), valid([centre]));
         expect(rows).toEqual([expect.objectContaining({ type: "ra_centre", title: "Alice ended their turn holding the centre, for 5 points", detail: "1 on watch" })]);
+        // A knock-out by burning as the next turn begins scores too, and isn't the centre (§20.2).
+        const burned: BattleEvent = { kind: "scored", player: "a", points: 6, reason: "knockout" };
+        const burnedOut = toEvents(snap(state({ fighters })), snap(state({ fighters, scores: { a: 6, b: 0 } })), cmd("RealmArenaEndTurn"), valid([burned]));
+        expect(burnedOut).toEqual([expect.objectContaining({ type: "ra_endturn" })]);
         const quiet = toEvents(snap(state({ fighters })), snap(state({ fighters })), cmd("RealmArenaEndTurn"), valid());
         // A bare end of turn isn't news: quiet, so the feed leaves it out.
         expect(quiet).toEqual([expect.objectContaining({ type: "ra_endturn", title: "Alice ended their turn", quiet: true })]);

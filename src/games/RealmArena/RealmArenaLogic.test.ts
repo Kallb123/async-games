@@ -3,7 +3,7 @@ import { CHARACTERS, type CharacterId } from "./characters";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel } from "./RealmArenaModels";
 import { meta } from "./meta";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
-import { RealmArenaAct, RealmArenaMuster, type IRealmArenaActOutcome } from "./RealmArenaLogic";
+import { RealmArenaAct, RealmArenaMuster, type IRealmArenaOutcome } from "./RealmArenaLogic";
 import {
     ACTION_POINTS, BATTLE_ROUNDS, centrePoints, check, isStanding, knockoutPoints,
     type Action, type Fighter,
@@ -144,7 +144,7 @@ describe("a battle turn", () => {
         const { outcome } = await play(game, command);
         expect(outcome.validMove).toBe(true);
         expect(command.recordedRolls).toHaveLength(1);
-        const [shot] = (outcome as IRealmArenaActOutcome).events;
+        const [shot] = (outcome as IRealmArenaOutcome).events;
         expect(shot).toMatchObject({ kind: "shot", roll: command.recordedRolls![0] });
 
         const replayed = makeGame();
@@ -236,7 +236,7 @@ describe("a whole battle, played by two scripted squads", () => {
                 expect(outcome.validMove, JSON.stringify(action)).toBe(true);
                 // Scored independently of the engine's own "scored" events:
                 // every knock-out of an enemy is worth its points cost ÷ 5.
-                for (const event of (outcome as IRealmArenaActOutcome).events) {
+                for (const event of (outcome as IRealmArenaOutcome).events) {
                     if (event.kind === "shot") shots++;
                     if (event.kind === "downed") {
                         const fallen = game.specificGameState.fighters.find(one => one.id === event.fighter)!;
@@ -244,7 +244,7 @@ describe("a whole battle, played by two scripted squads", () => {
                         if (by.owner !== fallen.owner) expected[by.owner] += knockoutPoints(fallen.character);
                     }
                 }
-                expect(command.recordedRolls ?? []).toHaveLength((outcome as IRealmArenaActOutcome).events.filter(event => event.kind === "shot").length);
+                expect(command.recordedRolls ?? []).toHaveLength((outcome as IRealmArenaOutcome).events.filter(event => event.kind === "shot").length);
                 if (game.complete) break;
                 checkConsistent();
             }
@@ -287,5 +287,70 @@ describe("a battle read back from storage", () => {
         expect((await play(game, actBy("a", { kind: "hunker", fighter: archer.id }))).outcome.validMove).toBe(true);
         expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
         expect(game.specificGameState.fighters.every(one => typeof one.cooldowns === "object")).toBe(true);
+    });
+});
+
+describe("a turn that begins burning (§20.3)", () => {
+    /** Leaves `player` one character, burning at 1 HP, set alight by `burner`'s first character. */
+    function lastOneBurning(game: RealmArenaTestGame, player: string, burner: string) {
+        const [last, ...rest] = own(game, player);
+        for (const fighter of rest) Object.assign(fighter, { hp: 0 });
+        Object.assign(last, { hp: 1, effects: { burning: 2 }, burnedBy: own(game, burner)[0].id });
+        return last;
+    }
+
+    it("burns as the hand-off begins it, writing the burn to the log", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        const [knight] = own(game, "b");
+        Object.assign(knight, { effects: { burning: 2 }, burnedBy: own(game, "a")[0].id });
+        const { outcome } = await play(game, endTurnBy("a"));
+        expect(game.currentTurn).toBe("b");
+        expect(own(game, "b")[0]).toMatchObject({ hp: CHARACTERS[knight.character].hp - 1, ap: ACTION_POINTS, effects: { burning: 1 } });
+        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "burned", fighter: knight.id, damage: 1 });
+        expect(game.gameState.history[0].text).toBe(`{{b}}'s ${CHARACTERS[knight.character].name} burned for 1`);
+    });
+
+    it("ends the battle when it burns out the last of a squad, scoring for whoever set it alight", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        const last = lastOneBurning(game, "b", "a");
+        const { gameOver } = await play(game, endTurnBy("a"));
+        expect(gameOver).toBe(true);
+        expect(game).toMatchObject({ complete: true, winner: "a", currentTurn: "" });
+        expect(game.specificGameState.scores.a).toBe(knockoutPoints(last.character));
+        expect(game.gameState.history.map(entry => entry.text)).toContain(`{{b}}'s ${CHARACTERS[last.character].name} burned for 1; {{b}}'s ${CHARACTERS[last.character].name} is down; {{a}} scored ${knockoutPoints(last.character)} for the knock-out`);
+    });
+
+    it("passes the turn on past a squad burned out as its turn begins, within the round", async () => {
+        const game = makeGame(["a", "b", "c"]);
+        await musterAll(game);
+        lastOneBurning(game, "b", "a");
+        const { gameOver } = await play(game, endTurnBy("a"));
+        expect(gameOver).toBe(false);
+        expect(game.currentTurn).toBe("c");
+        expect(own(game, "c").every(one => one.ap === ACTION_POINTS)).toBe(true);
+        expect(game.specificGameState.roundsPlayed).toBe(0);
+    });
+
+    it("ends the round when the last seat is burned out as its turn begins", async () => {
+        const game = makeGame(["a", "b", "c"]);
+        await musterAll(game);
+        await play(game, endTurnBy("a"));
+        lastOneBurning(game, "c", "a");
+        await play(game, endTurnBy("b"));
+        expect(game.currentTurn).toBe("a");
+        expect(game.specificGameState.roundsPlayed).toBe(1);
+    });
+
+    it("doesn't burn once the turn limit is played out", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        await play(game, endTurnBy("a"));
+        game.specificGameState.roundsPlayed = BATTLE_ROUNDS[2] - 1;
+        const [knight] = own(game, "a");
+        Object.assign(knight, { effects: { burning: 2 }, burnedBy: own(game, "b")[0].id });
+        expect((await play(game, endTurnBy("b"))).gameOver).toBe(true);
+        expect(own(game, "a")[0]).toMatchObject({ hp: knight.hp, effects: { burning: 2 } });
     });
 });

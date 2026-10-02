@@ -4,7 +4,7 @@ import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/te
 import { CHARACTERS, POINTS_BUDGET, REALM, type CharacterId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    ACTION_POINTS, act, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, musterRefusal, newFighter, reachOf,
+    ACTION_POINTS, act, afflicted, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterRefusal, newFighter, reachOf,
     reactionsTo, readyMadeMuster, shotOdds, shotResult, standings, startTurn,
     type Action, type BattleState, type Fighter,
 } from "./rules";
@@ -54,7 +54,7 @@ describe("hitting (§13.3)", () => {
 
     it("grazes only on a miss by 10 or less, counted before the chance stops at 0", () => {
         const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
-        const target = fighter(2, "b", "knight", at(walled, 5, 2), { hunkered: true });
+        const target = fighter(2, "b", "knight", at(walled, 5, 2), { effects: { hunkered: 1 } });
         const archerOdds = odds(target, fighter(1, "a", "archer", at(walled, 2, 5)), [], "attack", walled);
         const mageOdds = odds(target, fighter(1, "a", "mage", at(walled, 2, 5)), [], "attack", walled);
         expect(archerOdds).toMatchObject({ chance: 0, grazeChance: 10 });
@@ -63,7 +63,7 @@ describe("hitting (§13.3)", () => {
     });
 
     it("doubles the cover of a hunkered target", () => {
-        expect(odds(fighter(2, "b", "knight", at(field, 5, 2), { hunkered: true }))?.chance).toBe(40);
+        expect(odds(fighter(2, "b", "knight", at(field, 5, 2), { effects: { hunkered: 1 } }))?.chance).toBe(40);
     });
 
     it("adds 10 from high ground, 20 for an aimed shot, and takes 15 off overwatch", () => {
@@ -93,7 +93,7 @@ describe("hitting (§13.3)", () => {
 
     it("gives an ally beside a Knight's shield wall half cover, even when flanked", () => {
         const target = fighter(2, "b", "mage", at(field, 5, 3));
-        const knight = fighter(3, "b", "knight", at(field, 6, 3), { shieldWall: true });
+        const knight = fighter(3, "b", "knight", at(field, 6, 3), { effects: { shieldWall: 1 } });
         expect(odds(target, archer, [knight])).toMatchObject({ chance: 60, cover: "half", flanked: false });
         expect(odds(target, archer, [{ ...knight, owner: "a" }])).toMatchObject({ chance: 80 });
     });
@@ -110,15 +110,15 @@ describe("hitting (§13.3)", () => {
 
 describe("the AP a move costs (§13.2)", () => {
     it("rounds the movement points up to whole AP, each buying the character's allowance", () => {
-        expect(moveAp("knight", 4)).toBe(1);
-        expect(moveAp("knight", 4.5)).toBe(2);
-        expect(moveAp("manAtArms", 12)).toBe(2);
-        expect(moveAp("scout", 8)).toBe(1);
+        expect(moveAp(newFighter(0, "a", "knight", 0), 4)).toBe(1);
+        expect(moveAp(newFighter(0, "a", "knight", 0), 4.5)).toBe(2);
+        expect(moveAp(newFighter(0, "a", "manAtArms", 0), 12)).toBe(2);
+        expect(moveAp(newFighter(0, "a", "scout", 0), 8)).toBe(1);
     });
 
     it("costs a sneak 2 AP an allowance", () => {
-        expect(moveAp("scout", 8, true)).toBe(2);
-        expect(moveAp("scout", 9, true)).toBe(4);
+        expect(moveAp(newFighter(0, "a", "scout", 0), 8, true)).toBe(2);
+        expect(moveAp(newFighter(0, "a", "scout", 0), 9, true)).toBe(4);
     });
 
     it("shades as far as the AP left will go", () => {
@@ -249,7 +249,7 @@ describe("act", () => {
     it("hunkers down for 1 AP, ending the character's turn", () => {
         const field = fieldOf();
         const { byId } = run({ field, fighters: [fighter(1, "a", "knight", 0)] }, "a", { kind: "hunker", fighter: 1 });
-        expect(byId(1)).toMatchObject({ ap: 0, hunkered: true });
+        expect(byId(1)).toMatchObject({ ap: 0, effects: { hunkered: 1 } });
     });
 
     it("banks all the AP left on watch", () => {
@@ -368,7 +368,7 @@ describe("abilities (§13.5, §13.6)", () => {
     });
 
     it("aimed shot adds 20 to hit, for 3 AP", () => {
-        const fighters = [fighter(1, "a", "archer", at(field, 0, 0)), fighter(2, "b", "knight", at(field, 5, 0), { hunkered: true })];
+        const fighters = [fighter(1, "a", "archer", at(field, 0, 0)), fighter(2, "b", "knight", at(field, 5, 0), { effects: { hunkered: 1 } })];
         const { byId, events } = run({ field, fighters }, "a", { kind: "aimedShot", fighter: 1, target: 2 }, [100]);
         expect(events[0]).toMatchObject({ chance: 100, result: "hit" });
         expect(byId(1)).toMatchObject({ ap: 1, cooldowns: { aimedShot: 2 } });
@@ -387,7 +387,11 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(events).toEqual([
             { kind: "fireball", fighter: 1, at: at(field, 5, 2), targets: [2, 3, 4], damage: 3 },
             { kind: "downed", fighter: 4, by: 1 },
+            { kind: "effect", fighter: 2, effect: "burning", change: "applied" },
+            { kind: "effect", fighter: 3, effect: "burning", change: "applied" },
         ]);
+        expect(byId(2)).toMatchObject({ effects: { burning: 2 }, burnedBy: 1 });
+        expect(byId(4).effects).toEqual({});
     });
 
     it("fireball can't be aimed more than 12 squares away", () => {
@@ -427,12 +431,13 @@ describe("turns", () => {
 
     it("start with fresh AP, losing what was banked, dropping stances and counting cooldowns down", () => {
         const before = [
-            fighter(1, "a", "knight", 0, { ap: 0, banked: 2, hunkered: true, shieldWall: true, cooldowns: { shieldWall: 1 } }),
+            fighter(1, "a", "knight", 0, { ap: 0, banked: 2, effects: { hunkered: 1, shieldWall: 1 }, cooldowns: { shieldWall: 1 } }),
             fighter(2, "a", "archer", 1, { ap: 0, cooldowns: { aimedShot: 2 } }),
             fighter(3, "b", "archer", 2, { ap: 0, banked: 4 }),
         ];
-        const after = startTurn({ field, fighters: before }, "a");
-        expect(after[0]).toMatchObject({ ap: 4, banked: 0, hunkered: false, shieldWall: false, cooldowns: {} });
+        const { fighters: after, events } = startTurn({ field, fighters: before }, "a");
+        expect(after[0]).toMatchObject({ ap: 4, banked: 0, effects: {}, cooldowns: {} });
+        expect(events).toEqual([]);
         expect(after[1].cooldowns).toEqual({ aimedShot: 1 });
         expect(after[2]).toEqual(before[2]);
     });
@@ -527,7 +532,168 @@ describe("mustering", () => {
     it("musters each character at full HP with nothing to spend until its owner's turn", () => {
         expect(newFighter(7, "a", "cleric", 3)).toEqual({
             id: 7, owner: "a", character: "cleric", square: 3, hp: CHARACTERS.cleric.hp,
-            ap: 0, banked: 0, hunkered: false, shieldWall: false, cooldowns: {}, spent: [],
+            ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [],
         });
+    });
+});
+
+describe("status effects (§20)", () => {
+    const field = fieldOf();
+    /** `fighter` after one start of its owner's turn, and what happened. */
+    const turnStart = (fighters: Fighter[], player = "a") => {
+        const outcome = startTurn({ field, fighters }, player);
+        return { ...outcome, byId: (id: number) => outcome.fighters.find(one => one.id === id)! };
+    };
+
+    describe("burning", () => {
+        const mage = fighter(9, "b", "mage", at(field, 9, 4));
+
+        it("does 1 damage at the start of each of its owner's next two turns, then goes out", () => {
+            const knight = fighter(1, "a", "knight", 0, { ap: 0, effects: { burning: 2 }, burnedBy: 9 });
+            const first = turnStart([knight, mage]);
+            expect(first.byId(1)).toMatchObject({ hp: 11, ap: ACTION_POINTS, effects: { burning: 1 }, burnedBy: 9 });
+            expect(first.events).toEqual([{ kind: "burned", fighter: 1, damage: 1 }]);
+            const second = turnStart(first.fighters);
+            expect(second.byId(1)).toMatchObject({ hp: 10, effects: {} });
+            expect(second.byId(1)).not.toHaveProperty("burnedBy");
+            const third = turnStart(second.fighters);
+            expect(third.byId(1).hp).toBe(10);
+            expect(third.events).toEqual([]);
+        });
+
+        it("burns only on its owner's turn", () => {
+            const knight = fighter(1, "a", "knight", 0, { effects: { burning: 2 }, burnedBy: 9 });
+            expect(turnStart([knight, mage], "b").byId(1)).toEqual(knight);
+        });
+
+        it("scores a knock-out for the owner of whoever set it alight", () => {
+            const scout = fighter(1, "a", "scout", 0, { hp: 1, effects: { burning: 1, slowed: 2 }, burnedBy: 9 });
+            const { byId, events } = turnStart([scout, mage]);
+            expect(byId(1)).toMatchObject({ hp: 0, ap: 0, effects: {} });
+            expect(events).toEqual([
+                { kind: "burned", fighter: 1, damage: 1 },
+                { kind: "downed", fighter: 1, by: 9 },
+                { kind: "scored", player: "b", points: 4, reason: "knockout" },
+            ]);
+        });
+
+        it("scores nobody when a player's own fire downs their character, or the one who set it has left", () => {
+            const scout = fighter(1, "a", "scout", 0, { hp: 1, effects: { burning: 1 }, burnedBy: 2 });
+            const ownMage = fighter(2, "a", "mage", 1);
+            expect(turnStart([scout, ownMage]).events.map(event => event.kind)).toEqual(["burned", "downed"]);
+            expect(turnStart([scout]).events.map(event => event.kind)).toEqual(["burned", "downed"]);
+        });
+
+        it("is set by a fireball on everyone it doesn't down, and burns longer rather than harder when set again", () => {
+            const fighters = [fighter(1, "a", "mage", at(field, 0, 2)), fighter(2, "b", "knight", at(field, 5, 2), { effects: { burning: 1 }, burnedBy: 7 })];
+            const { byId, events } = run({ field, fighters }, "a", { kind: "fireball", fighter: 1, at: at(field, 5, 2) });
+            expect(byId(2)).toMatchObject({ hp: 9, effects: { burning: 2 }, burnedBy: 1 });
+            expect(events).toContainEqual({ kind: "effect", fighter: 2, effect: "burning", change: "refreshed" });
+        });
+    });
+
+    describe("stunned", () => {
+        it("loses whatever was banked as it's stunned", () => {
+            const archer = fighter(1, "a", "archer", 0, { ap: 0, banked: 4 });
+            expect(afflicted(archer, "stunned", 9)).toEqual({
+                fighter: { ...archer, banked: 0, effects: { stunned: 1 } },
+                event: { kind: "effect", fighter: 1, effect: "stunned", change: "applied" },
+            });
+        });
+
+        it("starts its owner's next turn with 2 AP, then lifts", () => {
+            const { byId } = turnStart([fighter(1, "a", "archer", 0, { ap: 0, effects: { stunned: 1 } })]);
+            expect(byId(1)).toMatchObject({ ap: 2, effects: {} });
+            expect(turnStart([byId(1)]).byId(1).ap).toBe(ACTION_POINTS);
+        });
+
+        it("can't go on watch, at the end of a turn or by choice", () => {
+            const archer = fighter(1, "a", "archer", 0, { effects: { stunned: 1 } });
+            expect(check({ field, fighters: [archer] }, "a", { kind: "watch", fighter: 1 })).toEqual({ refused: "A stunned character can't go on watch" });
+            expect(endTurn({ field, fighters: [archer] }, "a", 1).fighters[0]).toMatchObject({ ap: 0, banked: 0 });
+        });
+    });
+
+    describe("slowed", () => {
+        it("halves the movement allowance, rounded up", () => {
+            const slowed = (character: CharacterId) => movementOf(fighter(1, "a", character, 0, { effects: { slowed: 2 } }));
+            expect([slowed("knight"), slowed("manAtArms"), slowed("scout")]).toEqual([2, 3, 4]);
+            expect(moveAp(fighter(1, "a", "manAtArms", 0, { effects: { slowed: 1 } }), 6)).toBe(2);
+        });
+
+        it("shades only as far as the halved allowance goes", () => {
+            const wide = fieldOf(["................................"]);
+            const scout = fighter(1, "a", "scout", 0, { effects: { slowed: 1 } });
+            const reach = reachOf({ field: wide, fighters: [scout] }, scout);
+            expect(reach.costs[16]).toBe(16);
+            expect(reach.costs[17]).toBe(Infinity);
+        });
+
+        it("lasts through its owner's next turn, and lifts at the start of the one after", () => {
+            const first = turnStart([fighter(1, "a", "scout", 0, { effects: { slowed: 2 } })]);
+            expect(movementOf(first.byId(1))).toBe(4);
+            expect(movementOf(turnStart(first.fighters).byId(1))).toBe(8);
+        });
+    });
+
+    describe("marked", () => {
+        const archer = fighter(1, "a", "archer", at(field, 0, 0));
+
+        it("adds 15 to hit it, for every attacker, reactions included", () => {
+            const target = fighter(2, "b", "knight", at(field, 5, 0), { effects: { marked: 2 } });
+            const state = { field, fighters: [archer, target] };
+            expect(shotOdds(state, archer, target)?.chance).toBe(95);
+            expect(shotOdds(state, archer, target, "overwatch")?.chance).toBe(80);
+        });
+
+        it("is counted on the target's turns, so it survives its next turn start", () => {
+            const first = turnStart([fighter(2, "b", "knight", at(field, 5, 0), { effects: { marked: 2 } })], "b");
+            expect(first.byId(2).effects).toEqual({ marked: 1 });
+            expect(turnStart(first.fighters, "b").byId(2).effects).toEqual({});
+        });
+    });
+
+    describe("healing (§20.2)", () => {
+        const cleric = fighter(1, "a", "cleric", at(field, 0, 0));
+
+        it("puts out burning and clears slowed and stunned, but not a mark or a stance", () => {
+            const knight = fighter(2, "a", "knight", at(field, 1, 0), { hp: 9, effects: { burning: 2, slowed: 2, stunned: 1, marked: 2, shieldWall: 1 }, burnedBy: 9 });
+            const { byId, events } = run({ field, fighters: [cleric, knight] }, "a", { kind: "heal", fighter: 1, target: 2 });
+            expect(byId(2)).toMatchObject({ hp: 12, effects: { marked: 2, shieldWall: 1 } });
+            expect(byId(2)).not.toHaveProperty("burnedBy");
+            expect(events).toEqual([
+                { kind: "healed", fighter: 1, target: 2, hp: 3 },
+                { kind: "effect", fighter: 2, effect: "burning", change: "cleared" },
+                { kind: "effect", fighter: 2, effect: "stunned", change: "cleared" },
+                { kind: "effect", fighter: 2, effect: "slowed", change: "cleared" },
+            ]);
+        });
+
+        it("is for an ally that is hurt or has something to clear", () => {
+            const slowed = fighter(2, "a", "knight", at(field, 1, 0), { effects: { slowed: 1 } });
+            expect(check({ field, fighters: [cleric, slowed] }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ ap: 2 });
+            const marked = { ...slowed, effects: { marked: 1 } };
+            expect(check({ field, fighters: [cleric, marked] }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ refused: "Already at full health" });
+        });
+    });
+
+    it("leave a downed character, which a raise brings back clear", () => {
+        const fighters = [fighter(1, "a", "manAtArms", at(field, 0, 0)), fighter(2, "b", "scout", at(field, 1, 0), { hp: 4, effects: { marked: 2, burning: 1 }, burnedBy: 1 })];
+        const { byId } = run({ field, fighters }, "a", { kind: "attack", fighter: 1, target: 2 });
+        expect(byId(2)).toMatchObject({ hp: 0, effects: {} });
+        expect(byId(2)).not.toHaveProperty("burnedBy");
+        const cleric = fighter(3, "b", "cleric", at(field, 2, 0));
+        expect(run({ field, fighters: [byId(1), byId(2), cleric] }, "b", { kind: "raise", fighter: 3, target: 2 }).byId(2).effects).toEqual({});
+    });
+
+    it("can't be put on a character that's down", () => {
+        expect(afflicted(fighter(1, "a", "knight", 0, { hp: 0 }), "marked", 9)).toBeUndefined();
+    });
+
+    it("hold the stances too, which end at the start of their owner's next turn", () => {
+        const knight = fighter(1, "a", "knight", 0);
+        const hunkered = run({ field, fighters: [knight] }, "a", { kind: "hunker", fighter: 1 }).byId(1);
+        expect(hunkered.effects).toEqual({ hunkered: 1 });
+        expect(turnStart([hunkered]).byId(1).effects).toEqual({});
     });
 });

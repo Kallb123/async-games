@@ -39,7 +39,7 @@ function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move" | "sne
         const cost = reach.costs[square];
         if (cost > 0 && cost !== Infinity && (best === undefined || cost < reach.costs[best])) best = square;
     }
-    if (best === undefined || moveAp(fighter.character, reach.costs[best], kind === "sneak") > fighter.ap) {
+    if (best === undefined || moveAp(fighter, reach.costs[best], kind === "sneak") > fighter.ap) {
         throw new Error(`${fighter.character} has nowhere to go`);
     }
     return { kind, fighter: fighter.id, path: pathTo(reach, best)!.squares };
@@ -110,7 +110,7 @@ describe("Realm Arena — undoing an action", () => {
         await play(game, undoBy("a"));
         expect(byId(game, third.id).banked).toBe(0);
         await play(game, undoBy("a"));
-        expect(byId(game, second.id).hunkered).toBe(false);
+        expect(byId(game, second.id).effects).toEqual({});
         await play(game, undoBy("a"));
         expect(game.specificGameState.fighters).toEqual(start);
         expect((await play(game, undoBy("a"))).outcome.validMove).toBe(false);
