@@ -85,7 +85,10 @@ out. A second copy is the signal to extract the first one.
   instant a roll hands a driver their car and the spaces it may finish on. It
   zooms to the deepest step the region fits at, or — with `exact` — to the zoom
   that just fits it, as Realm Arena does for most of a selected unit's reach,
-  which no step frames well. (The track editor is the one exception, and says why
+  which no step frames well. A board redrawn under the player without anything
+  happening on it — Realm Arena's battlefield turned a quarter — passes a
+  `pivot` instead, which keeps whatever was in the middle of the frame there
+  at the zoom it was at. (The track editor is the one exception, and says why
   in its own file: it owns every pointer press on its canvas.)
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands
@@ -138,7 +141,7 @@ out. A second copy is the signal to extract the first one.
   different heights — Realm Arena's board draws its battlefield through it:
   the per-height runs, the raised blocks' faces, the outline tile art standing
   on a square is cut to, the back-to-front order and which square a tap lands
-  on),
+  on, all of it turned a quarter at a time when the player turns the view),
   `achievements.ts` (a profile's achievement groups, a result's unlock rows,
   and what the toaster hasn't celebrated yet).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the

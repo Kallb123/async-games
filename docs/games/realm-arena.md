@@ -543,6 +543,13 @@ its time zoomed in:
   there to tap. A tap goes to the front-most square drawn under it. Fitted to
   a phone the diamond is an overview, padded to a frame tall enough to pan
   in, and the deepest zoom brings about seven squares across.
+- **The view turns a quarter either way**, from a pair of buttons in the
+  frame's top corner, so a player can see round the far side of a tower or a
+  wall and pick out a character standing behind it. It's the same isometric
+  board with the grid turned before it's drawn: squares keep their numbers, so
+  nothing but the drawing knows. The turn is the viewer's own, on this screen
+  only — nobody else's board turns with it — and whatever was in the middle of
+  the frame stays there through it.
 
 ### 13.2 A turn: action points
 
@@ -1815,3 +1822,4 @@ Realm, its sibling in the same world.
 | 1.10 | Round 8 (§11.8): elevation (§25). Heights in quarters; cover, sight, climbing and high ground read from them; a tile per square and an optional elevation layer on the map; the Ring Fort's dead flank-tower stairs moved beside their towers. |
 | 1.11 | Round 9 (§11.9): melee needs the two within a quarter of each other's height, and the wall round a tower top is a parapet giving half cover (§25.2). |
 | 1.12 | PR 9 fills in the guide, the tour and the art: the battlefield is drawn from two isometric tile sheets at the rules' heights, open ground as one pattern of grass, and the tour follows whichever phase the match opens in. |
+| 1.13 | The view turns a quarter either way, so a player can see round a tower (§13.1). |
