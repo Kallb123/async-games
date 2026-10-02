@@ -31,7 +31,7 @@ export default function RealmArenaTargets({ reach: { options, previewing, ap }, 
     const where = previewing ? 'from there' : 'in reach';
     const short = options.length > 0 && ap !== undefined && ap < ATTACK_AP ? ' · no AP to attack' : '';
     return (
-        <div className="ag-board-tag ag-ra-targets">
+        <div className="ag-board-tag ag-ra-targets" data-tour="ra-targets">
             <div className="ag-ra-targets-head">
                 <RealmArenaCrosshair />
                 {options.length === 0 ? `No targets ${where}` : `${pluralize(options.length, 'target')} ${where}${short}`}

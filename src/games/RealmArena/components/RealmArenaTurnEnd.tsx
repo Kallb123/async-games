@@ -36,7 +36,7 @@ interface RealmArenaTurnEndProps {
 export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepStill, onEndTurn, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
     const watchers = fighters.filter(fighter => fighter.owner === player && isStanding(fighter) && fighter.ap >= REACTION_COST);
     const endTurn = (
-        <div className="ag-action-grid">
+        <div className="ag-action-grid" data-tour="ra-turn-end">
             {canUndo && <UndoButton pending={undoPending} disabled={disabled} onClick={onUndo} />}
             <ActionButton className="ag-btn ag-btn--primary" pending={pending} pendingLabel="Ending turn…" disabled={disabled} onClick={onEndTurn}>
                 End turn

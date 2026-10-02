@@ -1144,6 +1144,39 @@ Reviewers: `croupier`, `gremlin`.
 
 Reviewers: `rulebook`, `caveman`.
 
+*Filled in by PR 9:*
+
+- **The tile art came first.** Two isometric sheets — an outdoor one (grass,
+  rock, trees) and one of brick walls and rubble — landed before this PR,
+  so the placeholder colours went straight to art. Both are served whole
+  from `public/art/realmarena`, with their masters in
+  `art-masters/realmarena`, and `src/games/RealmArena/art.ts` says which
+  cell draws each terrain. Every cell stands its square's diamond along its
+  foot, the same 2:1 diamond the board draws, so a sprite lands on its square
+  by scale alone.
+- **Open ground is one pattern of grass**, not a sprite per square: 18 kinds
+  of grass on a tile six diagonals each way, laid over the whole slab, which
+  is the one image §13.1 asked the flat ground to be.
+- **Everything else stands on its square at the rules' heights.** Rubble is a
+  heap of brick, a low wall a broken one, a wall a full height with
+  battlements, trees a pine a little under the sheet's size so a crown stays
+  close to the height that hides a character. A tower, a stair and a
+  parapet's foot are a tall brick column cut down to their height along the
+  square's edges (`isoColumnOutline`), floored with grass-grown rock where
+  someone stands on them, and a parapet's battlements stand a full height
+  under its top, so they rise from the tower's floor as the curtain wall's do
+  from the ground. The heights are read from `TERRAIN`, so the art can't
+  disagree with the rules about how tall anything is. Ground a map raises
+  (§25.3) is still drawn in flat colour under its art; no map raises any yet.
+- **The figures stay discs with each character's mark**, as PR 5 drew them:
+  they're what the art has no sheet for yet.
+- **The tour opens on whichever phase the match is in.** A first match
+  usually opens on the muster, so the tour covers it — the squad picked
+  below and placed on the board, sealed until everyone has mustered — and
+  the battle steps (your units, the reach, the targets in reach, End turn)
+  only show on a battle turn. The guide carries all of it, and both read
+  their numbers from `rules.ts`.
+
 **PR 10 — Turn it on.**
 
 1. `available: true` in `meta.ts`.
@@ -1779,3 +1812,4 @@ Realm, its sibling in the same world.
 | 1.9 | The board is drawn isometrically, each square raised by its terrain's height (§13.1). |
 | 1.10 | Round 8 (§11.8): elevation (§25). Heights in quarters; cover, sight, climbing and high ground read from them; a tile per square and an optional elevation layer on the map; the Ring Fort's dead flank-tower stairs moved beside their towers. |
 | 1.11 | Round 9 (§11.9): melee needs the two within a quarter of each other's height, and the wall round a tower top is a parapet giving half cover (§25.2). |
+| 1.12 | PR 9 fills in the guide, the tour and the art: the battlefield is drawn from two isometric tile sheets at the rules' heights, open ground as one pattern of grass, and the tour follows whichever phase the match opens in. |

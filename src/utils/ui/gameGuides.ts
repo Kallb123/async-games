@@ -26,6 +26,7 @@ import { guide as trainTimeGuide } from "@/games/TrainTime/guide";
 import { guide as firesOutGuide } from "@/games/FiresOut/guide";
 import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 import { guide as raceCarsGuide } from "@/games/RaceCars/guide";
+import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 
 // Keyed by the same url slug as GAME_META. Not every game has a guide yet —
 // /api/gameguides validates a "seen" write against this allowlist, and
@@ -39,4 +40,5 @@ export const GAME_GUIDES: Record<string, GameGuide> = {
     firesout: firesOutGuide,
     bannedislet: bannedIsletGuide,
     racecars: raceCarsGuide,
+    realmarena: realmArenaGuide,
 };

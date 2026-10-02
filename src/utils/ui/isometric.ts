@@ -214,6 +214,21 @@ export function isoBlock(view: IsoView, square: number): IsoBlock {
     };
 }
 
+/**
+ * A square's column from `low` to `high` steps, as an SVG `points` list in the
+ * square's own frame: its back corner, on the ground, at 0,0. It's the top at
+ * `high` and the two front faces down to `low` — everything a block of that
+ * height shows — so it's what tile art standing on a square is cut to, and
+ * one outline serves every square, each drawn translated to its own corner.
+ */
+export function isoColumnOutline(low: number, high: number): string {
+    const at = (col: number, row: number, height: number) => ({
+        x: (col - row) * ISO_HALF_WIDTH,
+        y: (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP,
+    });
+    return points(at(0, 1, high), at(0, 0, high), at(1, 0, high), at(1, 0, low), at(1, 1, low), at(0, 1, low));
+}
+
 /** The ground the whole map stands on: its top, and its two front faces down to `base` steps below it. */
 export function isoSlab(view: IsoView): { top: string; left: string; right: string } {
     const { width: w, height: h, base } = view;

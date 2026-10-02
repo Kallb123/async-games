@@ -12,6 +12,7 @@
 
 import { tutorial as diceCitiesTutorial } from "@/games/DiceCities/tutorial";
 import { tutorial as raceCarsTutorial } from "@/games/RaceCars/tutorial";
+import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { tutorial as settlementsAndCitiesTutorial } from "@/games/SettlementsAndCities/tutorial";
 
 /**
@@ -68,6 +69,7 @@ export interface GameTutorial<S extends string = string> {
 export const GAME_TUTORIALS: Record<string, GameTutorial> = {
     dicecities: diceCitiesTutorial,
     racecars: raceCarsTutorial,
+    realmarena: realmArenaTutorial,
     settlementsandcities: settlementsAndCitiesTutorial,
 };
 

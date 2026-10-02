@@ -12,6 +12,8 @@ import RealmArenaTargets from "@/games/RealmArena/components/RealmArenaTargets";
 import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
 import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
 import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
+import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
+import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
@@ -27,6 +29,7 @@ import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
+import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
@@ -34,6 +37,7 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { RealmArenaAct, RealmArenaEndTurn, RealmArenaMuster, RealmArenaUndo } from "@/utils/apiModels/GameLogic";
+import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
@@ -79,6 +83,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         history: gameData?.gameState?.history ?? [],
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
+    // The first-match welcome: the guided tour, with the guide behind it in ⋮.
+    const gameIntro = useGameIntro('realmarena');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -201,6 +207,16 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         })
         : [];
 
+    // The tour's signals (src/games/RealmArena/tutorial.ts says what each one
+    // means), frozen on whichever hold when it opens.
+    const tutorial = tutorialRun(realmArenaTutorial, {
+        mustering: musterTurn,
+        sealed: mustering && !musterTurn,
+        battle: !!gs && !mustering,
+        myTurn: battleTurn,
+        selected: !!actor,
+    }, { active: nav.isLive && !complete });
+
     const holders = centreHolders({ field, fighters });
     const centre = holders.length === 0 ? 'Empty' : holders.length > 1 ? 'Contested' : playerName(holders[0]);
 
@@ -241,13 +257,16 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--realmarena"
+            guide={realmArenaGuide}
+            tutorial={tutorial}
+            intro={gameIntro}
         >
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {gs && (
-                <div className="ag-stat-row">
+                <div className="ag-stat-row" data-tour="ra-stats">
                     <Stat value={mustering ? 'Muster' : `${gs.round}/${gs.battleRounds}`} label={mustering ? 'Phase' : 'Round'} />
                     <Stat value={centre} label="Centre" />
                     <Stat value={gs.budget} label="Points each" />

@@ -5179,23 +5179,15 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    meta.ts
    ==========================================================================
    Scoped to .ag-game--realmarena like Race Cars above: the shared chrome is
-   re-tinted, and only the battlefield below is this game's own. The ground is
-   flat colour drawn from the map's letters until PR 9's art lands
-   (docs/games/realm-arena.md §17.3), one token per kind of terrain, standing
-   up isometrically off a slab of earth. */
+   re-tinted, and only the battlefield below is this game's own. The terrain
+   is tile art (src/games/RealmArena/art.ts) standing isometrically on a slab
+   of earth; the flat colours below are the ground under it. */
 .ag-game--realmarena {
     --ra-night: oklch(0.27 0.04 25);
     --ra-night-2: oklch(0.33 0.05 25);
     --ra-oxblood: #8a2c2c;
     --ra-oxblood-deep: #5f1c1c;
     --ra-open: oklch(0.8 0.07 125);
-    --ra-rubble: oklch(0.68 0.04 75);
-    --ra-lowwall: oklch(0.62 0.04 60);
-    --ra-trees: oklch(0.47 0.1 145);
-    --ra-wall: oklch(0.42 0.02 55);
-    --ra-parapet: oklch(0.5 0.025 60);
-    --ra-stair: oklch(0.72 0.04 70);
-    --ra-tower: oklch(0.86 0.05 80);
     --ra-earth: oklch(0.56 0.08 60);
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
@@ -5218,20 +5210,15 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 
 /* ---- The battlefield ---- */
-/* Each terrain sets its colour as `--ra-ground`, and a square is drawn from
-   it: its top in the colour, and the faces a raised square shows toward the
-   viewer shaded down from it, the right darker than the left, as if lit from
-   the back left. Terrain is only ever looked at: a tap goes through a raised
+/* Terrain is drawn from its tile art (src/games/RealmArena/art.ts). What's
+   left in flat colour is the ground under it — the slab the map stands on,
+   which the grass is laid over, and any ground raised off it — each setting
+   its colour as `--ra-ground`: its top in the colour, and the faces it shows
+   toward the viewer shaded down from it, the right darker than the left, as
+   the art is lit. Terrain is only ever looked at: a tap goes through a raised
    square to the board's tap layer underneath, which works out the square (the
    flat ground is painted under that layer already). */
 .ag-ra-ground--open { --ra-ground: var(--ra-open); }
-.ag-ra-ground--rubble { --ra-ground: var(--ra-rubble); }
-.ag-ra-ground--lowwall { --ra-ground: var(--ra-lowwall); }
-.ag-ra-ground--trees { --ra-ground: var(--ra-trees); }
-.ag-ra-ground--wall { --ra-ground: var(--ra-wall); }
-.ag-ra-ground--parapet { --ra-ground: var(--ra-parapet); }
-.ag-ra-ground--stair { --ra-ground: var(--ra-stair); }
-.ag-ra-ground--tower { --ra-ground: var(--ra-tower); }
 .ag-ra-ground--earth { --ra-ground: var(--ra-earth); }
 .ag-ra-top { fill: var(--ra-ground); }
 .ag-ra-side { stroke: rgba(0, 0, 0, 0.18); stroke-width: 0.25; stroke-linejoin: round; }

@@ -1,26 +1,15 @@
 'use client'
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
-import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { coordsOf, type Battlefield, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoDepth, isoGridLines, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoView, type Point } from '@/utils/ui/isometric';
+import { RealmArenaTerrainArt, RealmArenaTerrainDefs } from '@/games/RealmArena/components/RealmArenaTerrain';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { apPips, areaRect, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
-
-/** Each terrain's colour, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
-const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
-    '.': 'ag-ra-ground--open',
-    ',': 'ag-ra-ground--rubble',
-    'o': 'ag-ra-ground--lowwall',
-    'T': 'ag-ra-ground--trees',
-    '#': 'ag-ra-ground--wall',
-    'P': 'ag-ra-ground--parapet',
-    's': 'ag-ra-ground--stair',
-    '^': 'ag-ra-ground--tower',
-};
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -194,13 +183,32 @@ function flatRuns<K>(view: IsoView, keyOf: (square: Square) => K | undefined) {
     return isoRuns(view, square => view.heights[square] === 0 ? keyOf(square) : undefined);
 }
 
-/** A raised square's block, and whatever its top is shaded with. */
-function RaisedSquare({ block, shades }: { block: IsoBlock & { square: Square; letter: TerrainLetter }; shades: readonly Shade[] }) {
+/** A raised square, as the board lays it out once a battlefield. */
+interface RaisedBlock {
+    square: Square;
+    depth: number;
+    letter: TerrainLetter;
+    /** Its top, at its full height: what it's shaded on. */
+    top: string;
+    /** The square's back corner on its ground, where its art stands. */
+    corner: Point;
+    /** The ground it stands on, where a map raises that off the slab: drawn as a block of its own under the art. */
+    ground: IsoBlock | null;
+}
+
+/** A raised square: the ground under it, the art standing on that, and whatever its top is shaded with. */
+function RaisedSquare({ id, block, shades }: { id: string; block: RaisedBlock; shades: readonly Shade[] }) {
+    const { ground } = block;
     return (
-        <g className={`ag-ra-block ${GROUND_CLASS[block.letter]}`}>
-            {block.left.map((slice, index) => <polygon key={`l${index}`} className="ag-ra-side ag-ra-side--left" points={slice} />)}
-            {block.right.map((slice, index) => <polygon key={`r${index}`} className="ag-ra-side ag-ra-side--right" points={slice} />)}
-            <polygon className="ag-ra-top" points={block.top} />
+        <g className="ag-ra-block">
+            {ground && (
+                <g className="ag-ra-ground--open">
+                    {ground.left.map((slice, index) => <polygon key={`l${index}`} className="ag-ra-side ag-ra-side--left" points={slice} />)}
+                    {ground.right.map((slice, index) => <polygon key={`r${index}`} className="ag-ra-side ag-ra-side--right" points={slice} />)}
+                    <polygon className="ag-ra-top" points={ground.top} />
+                </g>
+            )}
+            <RealmArenaTerrainArt id={id} letter={block.letter} square={block.square} corner={block.corner} />
             {shades.map((shade, index) => {
                 const className = shade(block.square);
                 return className && <polygon key={index} className={className} points={block.top} />;
@@ -272,18 +280,21 @@ interface DepthItem {
  * it. The
  * geometry is `src/utils/ui/isometric.ts`'s; this decides what goes on it.
  *
+ * The terrain is tile art (`art.ts`, drawn by `RealmArenaTerrain`): grass laid
+ * over the whole map as one pattern, and on every raised square the sprites
+ * its terrain is drawn with — battlements, rubble, a tree — standing on it at
+ * the heights the rules play.
+ *
  * It's painted back to front. First the ground: the slab the map stands on,
- * the flat squares as one path per kind of terrain (`isoRuns`), the lines
- * between them, and everything shaded on the ground — deployment zones, the
- * centre, the reach, a range, a blast — also merged into a path per kind.
+ * the grass over it, the lines between the squares, and everything shaded on
+ * the ground — deployment zones, the centre, the reach, a range, a blast —
+ * merged into a path per kind.
  * Nothing on the ground can hide anything, so all of that goes first, and a
  * board of 1,728 squares is a few dozen elements before anything stands up.
  * Then every raised square and every figure, in depth order (`isoDepth`), so
  * a wall hides whoever is behind it and anyone in front of it stands over
  * it; a raised square's own shading is drawn on its top as it goes. Last, what
- * is never hidden: a lined-up path, the odds, and the centre's name. PR 9's
- * art can replace the flat colours square by square without touching any of
- * that order.
+ * is never hidden: a lined-up path, the odds, and the centre's name.
  *
  * At a phone's width a square is under ten pixels across — fine for reading
  * the battle, far too small to tap — so `BoardZoom`'s deepest step brings
@@ -316,18 +327,32 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             { width: field.width, height: field.height, heights: field.tiles.map(tile => tile.elevation) },
             { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT },
         );
+        // The ground each square's terrain stands on, laid out on the same
+        // board: where it's raised, it's a block of its own under the art.
+        const groundView: IsoView = { ...view, heights: field.tiles.map(tile => tile.elevation - tile.terrain.height) };
         return {
             view,
             slab: isoSlab(view),
-            flat: flatRuns(view, square => terrainLetter(field, square)),
             lines: isoGridLines(view),
-            blocks: view.heights.flatMap((height, square) => height > 0
-                ? [{ square, depth: isoDepth(view, square), letter: terrainLetter(field, square), ...isoBlock(view, square) }]
-                : []),
+            blocks: view.heights.flatMap((height, square): RaisedBlock[] => {
+                if (height === 0) return [];
+                const { col, row } = coordsOf(field, square);
+                const ground = groundView.heights[square];
+                return [{
+                    square,
+                    depth: isoDepth(view, square),
+                    letter: terrainLetter(field, square),
+                    top: isoBlock(view, square).top,
+                    corner: isoPoint(view, col, row, ground),
+                    ground: ground > 0 ? isoBlock(groundView, square) : null,
+                }];
+            }),
         };
     }, [field]);
     const { view } = ground;
     const { width, height } = view.size;
+    // useId's own characters aren't all safe inside url(#…).
+    const artId = `ra-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
     // A character selected in battle brings most of where it could move into
     // view, rather than just the squares round it — zoomed exactly to that,
@@ -375,7 +400,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
     const items: DepthItem[] = ground.blocks.map(block => ({
         depth: block.depth,
-        node: <RaisedSquare key={`block-${block.square}`} block={block} shades={shades} />,
+        node: <RaisedSquare key={`block-${block.square}`} id={artId} block={block} shades={shades} />,
     }));
 
     sealed?.forEach((pick, index) => items.push({
@@ -440,10 +465,9 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                         <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
                         <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
                     </g>
+                    <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
                     <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
-                    {ground.flat.map(run => (
-                        <path key={run.key} className={`ag-ra-top ${GROUND_CLASS[run.key]}`} d={run.d} />
-                    ))}
+                    <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
                     <path className="ag-ra-grid" d={ground.lines} />
 
                     {field.deployments.map((squares, seat) => {

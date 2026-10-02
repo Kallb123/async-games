@@ -43,7 +43,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                 <button type="button" className="ag-section-action" onClick={() => onSelect(next.id)}>Next ready ›</button>
             )}
         >
-            <div className="ag-ra-units">
+            <div className="ag-ra-units" data-tour="ra-units">
                 {squad.map(fighter => {
                     const character = CHARACTERS[fighter.character];
                     const standing = isStanding(fighter);
