@@ -22,7 +22,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import type { IRealmArenaActOutcome } from "./RealmArenaLogic";
+import type { IRealmArenaOutcome } from "./RealmArenaLogic";
 import { battlefieldById } from "./maps";
 import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
 
@@ -109,7 +109,7 @@ function toEvents(
             break;
         }
         case "RealmArenaAct": {
-            const events = (outcome as Partial<IRealmArenaActOutcome>).events ?? [];
+            const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
             // The oldest of its lines: one that ended the battle has the
             // winner's line above it, and that names an actor too.
             const line = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text;
@@ -123,9 +123,11 @@ function toEvents(
         }
         case "RealmArenaEndTurn": {
             // Always a row, since it closes the turn's window; only the centre
-            // scoring makes it news, so a bare one is `quiet`.
-            const before = state(prev).scores[command.senderId] ?? 0;
-            const points = (state(next).scores[command.senderId] ?? 0) - before;
+            // scoring makes it news, so a bare one is `quiet`. Read off the
+            // events rather than the score, which a knock-out by burning as
+            // the next turn begins can add to as well (§20.2).
+            const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
+            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" ? event.points : 0), 0);
             if (points > 0) {
                 const watching = state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
                 rows.push({

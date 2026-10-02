@@ -19,7 +19,7 @@ import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
 import { actionSquares, fighterName } from "@/games/RealmArena/ui";
-import type { IRealmArenaActOutcome } from "@/games/RealmArena/RealmArenaLogic";
+import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import GameShell from "@/components/ui/GameShell";
@@ -130,7 +130,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
-        submitCommand(command, response => setLastEvents((response.outcome as IRealmArenaActOutcome).events ?? []), actTarget(action));
+        submitCommand(command, response => setLastEvents((response.outcome as IRealmArenaOutcome).events ?? []), actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
     const endTurn = () => {

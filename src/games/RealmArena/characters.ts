@@ -13,6 +13,44 @@ export type CharacterId = "manAtArms" | "knight" | "archer" | "scout" | "mage" |
 
 export type AbilityId = "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise";
 
+/**
+ * Something that happens to a character for a few of its owner's turns
+ * (§20.1): the four conditions, and the two stances a character takes itself.
+ */
+export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "hunkered" | "shieldWall";
+
+export interface Effect {
+    name: string;
+    /** How it reads on a character: "Bob's Knight is burning". */
+    state: string;
+    /**
+     * The count it's applied with. It works as a cooldown does: down by one at
+     * the start of each of the affected character's own turns, gone at 0
+     * (§20.1).
+     */
+    count: number;
+    /** Damage at the start of each of its owner's turns while it lasts (Burning). */
+    damage?: number;
+    /** The AP its owner's next turn starts with, instead of the usual (Stunned). */
+    ap?: number;
+    /** Added to every shot at it, reactions included (Marked). */
+    hitBonus?: number;
+    /** Whether a Cleric's Heal clears it (§20.2). */
+    healed?: true;
+}
+
+export const EFFECTS = {
+    burning: { name: "Burning", state: "burning", count: 2, damage: 1, healed: true },
+    stunned: { name: "Stunned", state: "stunned", count: 1, ap: 2, healed: true },
+    slowed: { name: "Slowed", state: "slowed", count: 2, healed: true },
+    marked: { name: "Marked", state: "marked", count: 2, hitBonus: 15 },
+    hunkered: { name: "Hunkered down", state: "hunkered down", count: 1 },
+    shieldWall: { name: "Shield wall", state: "holding a shield wall", count: 1 },
+} as const satisfies Record<EffectId, Effect>;
+
+/** Every effect, in the order a character's are listed. */
+export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
+
 /** A melee weapon needs its target next to it and always hits; a ranged one rolls (§13.3). */
 export type Weapon =
     | { name: string; kind: "melee"; damage: number }
@@ -34,6 +72,8 @@ export interface Ability {
     damage?: number;
     /** HP it restores (Heal). */
     hp?: number;
+    /** What it leaves on everyone it hits (Fireball's burning). */
+    effect?: EffectId;
     description: string;
 }
 
@@ -42,8 +82,8 @@ export const ABILITIES = {
     shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to the Knight count as in half cover until its next turn" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
-    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, description: "Hits every character in a 3×3 area, friend or foe" },
-    heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them" },
+    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", description: "Hits every character in a 3×3 area, friend or foe, and sets them burning" },
+    heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them, and clear burning, slowed and stunned" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
 } as const satisfies Record<AbilityId, Ability>;
 

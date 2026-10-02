@@ -6,7 +6,7 @@ import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, type AbilityId } from '@/games/RealmArena/characters';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, fighterById, isStanding, shotOdds, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, fighterById, hasEffect, isStanding, shotOdds, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, CHARACTER_MARK, targetsOf, weaponLine, whoseName, type TargetKind } from '@/games/RealmArena/ui';
 import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
@@ -217,7 +217,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${target.hunkered ? ', hunkered down' : ''}`)}
+            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}`)}
         </>
     );
 }

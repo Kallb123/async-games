@@ -6,8 +6,8 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
-import { ACTION_POINTS, check, fighterById, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, type AbilityId, type CharacterId, type Weapon } from "./characters";
+import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -98,7 +98,7 @@ export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Re
  */
 export function actionSquares(before: readonly Fighter[], after: readonly Fighter[]): Square[] {
     const changed = (was: Fighter, now: Fighter) => was.square !== now.square || was.hp !== now.hp || was.ap !== now.ap
-        || was.banked !== now.banked || was.hunkered !== now.hunkered || was.shieldWall !== now.shieldWall;
+        || was.banked !== now.banked || !sameCounts(was.effects, now.effects);
     return after.flatMap(fighter => {
         const was = before.find(one => one.id === fighter.id);
         if (!was || !changed(was, fighter)) return [];
@@ -106,13 +106,20 @@ export function actionSquares(before: readonly Fighter[], after: readonly Fighte
     });
 }
 
-/** What a character is doing that the board marks on it, in words: the tooltip, and the selected character's card. */
+function sameCounts(a: Fighter["effects"], b: Fighter["effects"]): boolean {
+    return EFFECT_IDS.every(id => a[id] === b[id]);
+}
+
+/**
+ * What a character is doing, and what's been done to it, that the board marks
+ * on it, in words: the tooltip, and the selected character's card. Its stances
+ * and effects in `EFFECT_IDS` order (§20.2).
+ */
 export function fighterStatus(fighter: Fighter): string[] {
     if (fighter.hp <= 0) return ["Down"];
     return [
         ...(fighter.banked > 0 ? [`On watch (${fighter.banked} AP banked)`] : []),
-        ...(fighter.hunkered ? ["Hunkered down"] : []),
-        ...(fighter.shieldWall ? ["Shield wall"] : []),
+        ...EFFECT_IDS.filter(effect => hasEffect(fighter, effect)).map(effect => EFFECTS[effect].name),
     ];
 }
 
@@ -197,7 +204,7 @@ export function placeTap({ picks, selected }: Placement, square: Square, zone: r
 export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean): ReadonlyMap<Square, number> {
     const shading = new Map<Square, number>();
     reach.costs.forEach((cost, square) => {
-        if (square !== reach.from && cost !== Infinity) shading.set(square, moveAp(fighter.character, cost, sneaking));
+        if (square !== reach.from && cost !== Infinity) shading.set(square, moveAp(fighter, cost, sneaking));
     });
     return shading;
 }
@@ -339,7 +346,7 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "downed":
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
             case "healed":
-                return [{ icon: "✚", title: `${Name(event.target)} healed for ${event.hp}` }];
+                return [{ icon: "✚", title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}` }];
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":
@@ -348,6 +355,10 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ icon: "🛡️", title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
+            case "effect":
+                return [{ icon: event.effect === "burning" ? "🔥" : "✦", title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
+            case "burned":
+                return [{ icon: "🔥", title: `${Name(event.fighter)} burned for ${event.damage}` }];
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: event.reason === "centre" ? "Holding the centre" : "The knock-out" }];
         }

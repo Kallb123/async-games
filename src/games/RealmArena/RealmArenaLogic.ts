@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { CHARACTERS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
+import { CHARACTERS, EFFECTS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import {
     ACTION_POINTS,
@@ -114,8 +114,12 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
 /** The kinds that can ever be taken back: no attack is among them. */
 const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise"]);
 
-/** What an undoable action may have done: everything but an attack landing, a knock-out or the points for one. */
-const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching"]);
+/**
+ * What an undoable action may have done: everything but an attack landing, a
+ * knock-out or the points for one. A heal clearing an effect is an `effect`
+ * event, and so would a mark be (§20.3).
+ */
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect"]);
 
 /**
  * How many snapshots the stack keeps: a character's whole turn of one-AP
@@ -198,11 +202,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
         case "fireball":
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
-        case "healed": return `healed ${name(event.target)} with ${name(event.fighter)} for ${event.hp}`;
+        case "healed": return `healed ${name(event.target)} with ${name(event.fighter)}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
         case "watching": return `put ${name(event.fighter)} on watch`;
+        case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
+        case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
             const who = event.player === actor ? "scored" : `${userToken(event.player)} scored`;
             return `${who} ${event.points} for ${event.reason === "centre" ? "holding the centre" : "the knock-out"}`;
@@ -232,20 +238,17 @@ export class RealmArenaGameType implements IGameType {
     /**
      * The rotation (§17.2): the turn passes round the seats, through the muster
      * and on into the battle without a break, stepping over a seat dropped or
-     * wiped out (`nextSeat`). A player's battle turn begins
-     * here, with fresh AP and the stances and banks of their last turn gone —
-     * `startTurn`, run on the hand-off so a timed-out turn and a replay begin
-     * the next one exactly as a played turn does.
+     * wiped out (`nextSeat`). The next battle turn has already begun by now:
+     * the command that ended the last one began it (`handOff`), since its
+     * burning can end the battle, and only a command's own changes are seen
+     * by `CheckGameOver`, which runs before this.
      */
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IRealmArenaGameData;
-        const next = nextSeat(data, data.currentTurn);
-        data.currentTurn = next;
-        const gs = data.specificGameState;
+        data.currentTurn = nextSeat(data, data.currentTurn);
         // Nothing on the stack can be restored past a hand-off (docs/undo.md).
-        clearUndo(gs);
-        if (gs.phase === "battle") gs.fighters = startTurn(battleOf(gs), next);
+        clearUndo(data.specificGameState);
         markDirty(gameData);
     }
 
@@ -317,14 +320,21 @@ export class RealmArenaMuster implements IGameCommand {
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
+            // The first seat's turn begins. Nobody has an effect yet, so
+            // nothing happens but fresh AP.
+            gs.fighters = startTurn(battleOf(gs), order[0]).fighters;
         }
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
 }
 
-/** What an action did, in order, for the board to show coming back (§17.3 PR 7). Recomputed on a replay, so never persisted. */
-export interface IRealmArenaActOutcome extends ICommandOutcome {
+/**
+ * What an action or an End turn did, in order: for the board to show coming
+ * back (§17.3 PR 7), and the recap to tell. Recomputed on a replay, so never
+ * persisted.
+ */
+export interface IRealmArenaOutcome extends ICommandOutcome {
     events: BattleEvent[];
 }
 
@@ -413,7 +423,7 @@ export class RealmArenaAct implements IGameCommand {
         if (before && peaceful(action, events, used)) commitUndo(gs, this, before);
         else clearUndo(gs);
         markDirty(gameData);
-        return { validMove: true, turnOver: false, events } as IRealmArenaActOutcome;
+        return { validMove: true, turnOver: false, events } as IRealmArenaOutcome;
     }
 }
 
@@ -488,20 +498,48 @@ export class RealmArenaEndTurn implements IGameCommand {
             .filter(fighter => fighter.owner === this.senderId && still.includes(fighter.id))
             .map(fighter => fighter.id);
 
-        const order = data.gameState.turnOrder;
         const { fighters, events } = endTurn(battle, this.senderId, gs.roundsPlayed + 1, this.keepStill);
         gs.fighters = fighters;
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, ["ended their turn", ...events.map(event => clause(event, battle.fighters, this.senderId))].join("; ")));
 
-        // The round ends with the last seat still playing (§13.8): the turn
-        // passing back round the table, past any seat dropped or wiped out.
-        // Nothing in End turn can down anyone, so it's the seat CheckEndTurn
-        // hands the turn to next.
-        const wrapsRound = order.indexOf(nextSeat(data, this.senderId)) <= order.indexOf(this.senderId);
-        if (wrapsRound) gs.roundsPlayed += 1;
+        const started = handOff(data, this.senderId);
         markDirty(gameData);
-        return { validMove: true, turnOver: true };
+        return { validMove: true, turnOver: true, events: [...events, ...started] } as IRealmArenaOutcome;
+    }
+}
+
+/**
+ * The hand-off after `from` ends their turn: the turn passes to the next seat
+ * still playing, which ends the round if it passes back round the table
+ * (§13.8), and that seat's turn begins (`startTurn`) — unless the battle is
+ * over by then. What burning does as a turn begins is written to the log in
+ * a line of its own (§20.3).
+ *
+ * Burning can wipe out a squad at the start of its own turn. Then the turn
+ * passes on again, as it would have past that seat in the first place (B2),
+ * and stops where that leaves the battle over. CheckEndTurn hands the turn to
+ * the same seat this stops at: `nextSeat` steps past a squad wiped out.
+ *
+ * Returns everything that happened as turns began.
+ */
+function handOff(data: IRealmArenaGameData, from: string): BattleEvent[] {
+    const gs = data.specificGameState;
+    const order = data.gameState.turnOrder;
+    const happened: BattleEvent[] = [];
+    for (let seat = from; ;) {
+        const next = nextSeat(data, seat);
+        if (order.indexOf(next) <= order.indexOf(seat)) gs.roundsPlayed += 1;
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return happened;
+
+        const battle = battleOf(gs);
+        const { fighters, events } = startTurn(battle, next);
+        gs.fighters = fighters;
+        addScores(gs, events);
+        if (events.length > 0) data.gameState.history.unshift({ text: narrate(events, battle.fighters, "") });
+        happened.push(...events);
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return happened;
+        seat = next;
     }
 }
 

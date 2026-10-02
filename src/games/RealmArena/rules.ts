@@ -1,7 +1,8 @@
-// Realm Arena's rules (docs/games/realm-arena.md §13, §17.2): what an action
-// costs and whether it can be taken, hit chances, grazes and damage, who
-// reacts to a move and in what order, abilities, knock-outs and raising,
-// scoring, and the end of the battle with its tie-break chain.
+// Realm Arena's rules (docs/games/realm-arena.md §13, §17.2, §20): what an
+// action costs and whether it can be taken, hit chances, grazes and damage,
+// who reacts to a move and in what order, abilities, status effects,
+// knock-outs and raising, scoring, and the end of the battle with its
+// tie-break chain.
 //
 // Pure and isomorphic, with no server-only imports (docs/new-game.md,
 // "Isomorphic rules modules"): PR 3's commands act through it, and the board
@@ -29,7 +30,7 @@ import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, isCharacterId, MAX_OF_EACH, squadPoints, type Ability, type AbilityId, type CharacterId, type PlayerCount } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, MAX_OF_EACH, squadPoints, type Ability, type AbilityId, type CharacterId, type EffectId, type PlayerCount } from "./characters";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
@@ -82,10 +83,13 @@ export interface Fighter {
     ap: number;
     /** AP banked on overwatch or guard, spent 2 a reaction until its owner's next turn (§13.4). */
     banked: number;
-    /** Hunkered down, doubling its cover against shots until its owner's next turn. */
-    hunkered: boolean;
-    /** A Knight holding a shield wall until its owner's next turn. */
-    shieldWall: boolean;
+    /**
+     * The effects on it and their counts, the stances it holds among them:
+     * each counted down as a cooldown is, and absent once spent (§20.1).
+     */
+    effects: Partial<Record<EffectId, number>>;
+    /** The character that set it burning, whose owner a knock-out by the burning scores for (§20.2). Only while it burns. */
+    burnedBy?: number;
     /** Turns until each ability on cooldown can be used again; absent means ready. */
     cooldowns: Partial<Record<AbilityId, number>>;
     /** Once-per-battle abilities it has used. */
@@ -118,6 +122,10 @@ export type BattleEvent =
     | { kind: "raised"; fighter: number; target: number; hp: number }
     | { kind: "hunkered" | "shieldWall"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
+    /** An effect put on a character, put on again (the longer count stands), or cleared by a heal. Not the stances, which have their own events, nor an effect running out. */
+    | { kind: "effect"; fighter: number; effect: EffectId; change: "applied" | "refreshed" | "cleared" }
+    /** Burning doing its damage at the start of its owner's turn. */
+    | { kind: "burned"; fighter: number; damage: number }
     | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" };
 
 export interface Outcome {
@@ -140,6 +148,14 @@ export function fixedRolls(rolls: readonly number[]): Roll {
 // ─── Reading the battle ─────────────────────────────────────────────────────
 
 export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
+
+export const hasEffect = (fighter: Fighter, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
+
+/** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
+export function movementOf(fighter: Fighter): number {
+    const { movement } = CHARACTERS[fighter.character];
+    return hasEffect(fighter, "slowed") ? Math.ceil(movement / 2) : movement;
+}
 
 export function fighterById(state: BattleState, id: unknown): Fighter | undefined {
     return state.fighters.find(fighter => fighter.id === id);
@@ -180,8 +196,8 @@ export function moveRules(state: BattleState, mover: Fighter): Required<MoveRule
 }
 
 /** The AP a move of this many movement points costs: whole AP, each buying the character's allowance; a sneak pays double (§13.2). */
-export function moveAp(character: CharacterId, cost: number, sneaking = false): number {
-    return Math.ceil(cost / CHARACTERS[character].movement) * (sneaking ? ABILITIES.sneak.ap : 1);
+export function moveAp(fighter: Fighter, cost: number, sneaking = false): number {
+    return Math.ceil(cost / movementOf(fighter)) * (sneaking ? ABILITIES.sneak.ap : 1);
 }
 
 /**
@@ -190,7 +206,7 @@ export function moveAp(character: CharacterId, cost: number, sneaking = false): 
  */
 export function reachOf(state: BattleState, fighter: Fighter, sneaking = false): Reach {
     const allowances = sneaking ? Math.floor(fighter.ap / ABILITIES.sneak.ap) : fighter.ap;
-    return reachFrom(state.field, fighter.square, allowances * CHARACTERS[fighter.character].movement, moveRules(state, fighter));
+    return reachFrom(state.field, fighter.square, allowances * movementOf(fighter), moveRules(state, fighter));
 }
 
 export interface ShotOdds {
@@ -207,7 +223,7 @@ export interface ShotOdds {
 
 /** Whether a standing ally holds a shield wall next to this character (§13.6). */
 function shielded(state: BattleState, target: Fighter): boolean {
-    return state.fighters.some(knight => knight.shieldWall && isStanding(knight) && knight.id !== target.id
+    return state.fighters.some(knight => hasEffect(knight, "shieldWall") && isStanding(knight) && knight.id !== target.id
         && knight.owner === target.owner && nextTo(state.field, knight.square, target.square));
 }
 
@@ -226,8 +242,9 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
     const highGround = riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE;
     const raw = weapon.accuracy
-        - COVER_PENALTY[cover] * (target.hunkered ? 2 : 1)
+        - COVER_PENALTY[cover] * (hasEffect(target, "hunkered") ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
+        + (hasEffect(target, "marked") ? EFFECTS.marked.hitBonus : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
     const clamp = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));
@@ -373,7 +390,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
                 if (reason) return refused(reason);
             }
             const cost = pathRefusal(state, actor, path);
-            return typeof cost === "string" ? refused(cost) : afford(moveAp(actor.character, cost, kind === "sneak"));
+            return typeof cost === "string" ? refused(cost) : afford(moveAp(actor, cost, kind === "sneak"));
         }
         case "attack": {
             const reason = attackRefusal(state, actor, target, "attack");
@@ -384,7 +401,9 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         case "hunker":
             return afford(HUNKER_AP);
         case "watch":
-            // All it has left, and enough for at least one reaction.
+            // All it has left, and enough for at least one reaction — which a
+            // stunned character can't make until its owner's next turn (§20.1).
+            if (hasEffect(actor, "stunned")) return refused("A stunned character can't go on watch");
             return actor.ap >= REACTION_COST ? { ap: actor.ap } : refused(`Going on watch needs at least ${REACTION_COST} AP`);
         case "cleave":
             return ability("cleave", () => {
@@ -403,7 +422,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
             return ability("heal", () => {
                 if (!target || target.id === actor.id || target.owner !== actor.owner || !isStanding(target)) return "Pick an ally to heal";
                 if (!nextTo(state.field, actor.square, target.square)) return "Too far away to heal";
-                return target.hp < CHARACTERS[target.character].hp ? undefined : "Already at full health";
+                return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
             });
         case "raise":
             return ability("raise", () => {
@@ -420,6 +439,30 @@ export function check(state: BattleState, player: string, action: unknown): Chec
 
 // ─── Taking an action ───────────────────────────────────────────────────────
 
+/** The effects something else puts on a character, rather than stances it takes up itself. */
+export type Affliction = Exclude<EffectId, "hunkered" | "shieldWall">;
+
+/**
+ * A character with an effect put on it by the character `by`, or put on
+ * again: effects don't stack, so the longer count stands (§20.2). Burning
+ * remembers who set it last; stunning loses whatever was banked, so it can't
+ * react until its owner's next turn. Undefined for a character that's down,
+ * which keeps no effects.
+ */
+export function afflicted(target: Fighter, effect: Affliction, by: number): { fighter: Fighter; event: BattleEvent } | undefined {
+    if (!isStanding(target)) return undefined;
+    const was = target.effects[effect] ?? 0;
+    const fighter: Fighter = { ...target, effects: { ...target.effects, [effect]: Math.max(was, EFFECTS[effect].count) } };
+    if (effect === "burning") fighter.burnedBy = by;
+    if (effect === "stunned") fighter.banked = 0;
+    return { fighter, event: { kind: "effect", fighter: target.id, effect, change: was > 0 ? "refreshed" : "applied" } };
+}
+
+/** The effects on a character that a heal clears (§20.2). */
+function healedEffects(fighter: Fighter): EffectId[] {
+    return EFFECT_IDS.filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
+}
+
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
     const fighters = structuredClone(state.fighters) as Fighter[];
@@ -431,14 +474,25 @@ function resolver(state: BattleState, roll: Roll) {
         return fighter;
     };
 
-    /** Takes HP off a character; at 0 it's down, and an enemy who downed it scores (§13.5, §13.7). */
-    const wound = (by: Fighter, target: Fighter, damage: number) => {
+    /**
+     * Takes HP off a character; at 0 it's down, losing every effect, and an
+     * enemy who downed it scores (§13.5, §13.7, §20.2).
+     */
+    const wound = (by: Pick<Fighter, "id" | "owner">, target: Fighter, damage: number) => {
         target.hp = Math.max(0, target.hp - damage);
         if (isStanding(target)) return;
-        Object.assign(target, { ap: 0, banked: 0, hunkered: false, shieldWall: false });
+        Object.assign(target, { ap: 0, banked: 0, effects: {} });
+        delete target.burnedBy;
         events.push({ kind: "downed", fighter: target.id, by: by.id });
         // Downing your own character — a fireball's, say — scores nobody anything.
         if (by.owner !== target.owner) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
+    };
+
+    const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
+        const result = afflicted(target, effect, by.id);
+        if (!result) return;
+        Object.assign(target, result.fighter);
+        events.push(result.event);
     };
 
     const shoot = (by: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch") => {
@@ -458,7 +512,7 @@ function resolver(state: BattleState, roll: Roll) {
         wound(by, target, damage);
     };
 
-    return { fighters, battle, events, get, shoot, strike, wound };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict };
 }
 
 /**
@@ -519,7 +573,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "hunker":
             // A stance held until its owner's next turn, so it ends this one (§13.2).
             actor.ap = 0;
-            actor.hunkered = true;
+            actor.effects.hunkered = EFFECTS.hunkered.count;
             events.push({ kind: "hunkered", fighter: actor.id });
             break;
         case "watch":
@@ -530,17 +584,19 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             for (const id of action.targets) run.strike(actor, get(id));
             break;
         case "shieldWall":
-            actor.shieldWall = true;
+            actor.effects.shieldWall = EFFECTS.shieldWall.count;
             events.push({ kind: "shieldWall", fighter: actor.id });
             break;
         case "fireball": {
             // Every character in the area, friend or foe — the Mage too, if it's
-            // that close — and no roll (§13.6).
+            // that close — and no roll (§13.6). Whoever it doesn't down is left
+            // burning: it doesn't roll, so it always does (§20.2).
             const area = new Set(fireballArea(state.field, action.at));
             const hit = run.fighters.filter(one => isStanding(one) && area.has(one.square));
-            const { damage } = ABILITIES.fireball;
+            const { damage, effect } = ABILITIES.fireball;
             events.push({ kind: "fireball", fighter: actor.id, at: action.at, targets: hit.map(one => one.id), damage });
             for (const target of hit) run.wound(actor, target, damage);
+            for (const target of hit) run.afflict(actor, target, effect);
             break;
         }
         case "heal": {
@@ -548,6 +604,12 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const hp = Math.min(ABILITIES.heal.hp, CHARACTERS[target.character].hp - target.hp);
             target.hp += hp;
             events.push({ kind: "healed", fighter: actor.id, target: target.id, hp });
+            // The answer to effects: it puts out burning, and clears slowed and stunned (§20.2).
+            for (const effect of healedEffects(target)) {
+                delete target.effects[effect];
+                events.push({ kind: "effect", fighter: target.id, effect, change: "cleared" });
+            }
+            delete target.burnedBy;
             break;
         }
         case "raise": {
@@ -564,19 +626,43 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
 
 // ─── Turns ──────────────────────────────────────────────────────────────────
 
+/** Every count one lower, and any that reach 0 gone: a cooldown's, and an effect's (§13.5, §20.1). */
+function countDown<Id extends string>(counts: Partial<Record<Id, number>>): Partial<Record<Id, number>> {
+    return Object.fromEntries(Object.entries<number | undefined>(counts)
+        .map(([id, turns]) => [id, (turns ?? 0) - 1] as const)
+        .filter(([, turns]) => turns > 0)) as Partial<Record<Id, number>>;
+}
+
 /**
- * A player's turn begins: their characters get fresh AP, anything banked and
- * not used is lost, stances held since their last turn drop, and cooldowns
- * count down (§13.2, §13.4, §13.5).
+ * A player's turn begins: their characters get fresh AP (only 2 for one
+ * stunned), anything banked and not used is lost, and anything burning takes
+ * its damage. Then cooldowns and effects count down, so a stance held since
+ * their last turn drops and a stun lifts (§13.2, §13.4, §13.5, §20.1).
+ *
+ * Burning can down a character here, and a knock-out by it scores for the
+ * owner of whoever set it alight (§20.2), so this returns what happened as
+ * an action does. It rolls nothing.
  */
-export function startTurn(state: BattleState, player: string): Fighter[] {
-    return structuredClone(state.fighters).map(fighter => {
-        if (fighter.owner !== player || !isStanding(fighter)) return fighter;
-        const cooldowns = Object.fromEntries(Object.entries(fighter.cooldowns)
-            .map(([ability, turns]) => [ability, (turns ?? 0) - 1] as const)
-            .filter(([, turns]) => turns > 0));
-        return { ...fighter, ap: ACTION_POINTS, banked: 0, hunkered: false, shieldWall: false, cooldowns };
-    });
+export function startTurn(state: BattleState, player: string): Outcome {
+    const run = resolver(state, fixedRolls([]));
+    for (const fighter of run.fighters) {
+        if (fighter.owner !== player || !isStanding(fighter)) continue;
+        fighter.ap = hasEffect(fighter, "stunned") ? EFFECTS.stunned.ap : ACTION_POINTS;
+        fighter.banked = 0;
+        if (hasEffect(fighter, "burning")) {
+            const { damage } = EFFECTS.burning;
+            // A burner whose squad has left the battle (a dropped player's)
+            // scores nobody, as a fire a player set on their own doesn't.
+            const burner = run.fighters.find(one => one.id === fighter.burnedBy) ?? { id: fighter.burnedBy ?? fighter.id, owner: fighter.owner };
+            run.events.push({ kind: "burned", fighter: fighter.id, damage });
+            run.wound(burner, fighter, damage);
+        }
+        if (!isStanding(fighter)) continue;
+        fighter.cooldowns = countDown(fighter.cooldowns);
+        fighter.effects = countDown(fighter.effects);
+        if (!hasEffect(fighter, "burning")) delete fighter.burnedBy;
+    }
+    return { fighters: run.fighters, events: run.events };
 }
 
 /** The players with someone standing in the centre: one of them holds it, two or more contest it (§13.7). */
@@ -605,7 +691,7 @@ export function endTurn(state: BattleState, player: string, round: number, keepS
     const events: BattleEvent[] = [];
     const fighters = structuredClone(state.fighters).map(fighter => {
         if (fighter.owner !== player || !isStanding(fighter)) return fighter;
-        const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id);
+        const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id) && !hasEffect(fighter, "stunned");
         if (watching) events.push({ kind: "watching", fighter: fighter.id, banked: fighter.ap });
         return { ...fighter, ap: 0, banked: watching ? fighter.ap : fighter.banked };
     });
@@ -682,16 +768,16 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
 
 /** A character as it first stands on the battlefield, at full HP with nothing spent. */
 export function newFighter(id: number, owner: string, character: CharacterId, square: Square): Fighter {
-    return { id, owner, character, square, hp: CHARACTERS[character].hp, ap: 0, banked: 0, hunkered: false, shieldWall: false, cooldowns: {}, spent: [] };
+    return { id, owner, character, square, hp: CHARACTERS[character].hp, ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [] };
 }
 
 /**
- * A fighter read back from storage, in full. An empty `cooldowns` doesn't
- * survive every way a document is copied — a Mongoose insert minimises it
- * away — and every rule here reads it.
+ * A fighter read back from storage, in full. An empty `cooldowns` or
+ * `effects` doesn't survive every way a document is copied — a Mongoose
+ * insert minimises it away — and every rule here reads both.
  */
 export function storedFighter(fighter: Fighter): Fighter {
-    return { ...fighter, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])] };
+    return { ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])] };
 }
 
 /**

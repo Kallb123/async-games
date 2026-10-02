@@ -90,7 +90,7 @@ export function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Acti
     let best: number | undefined;
     for (let square = 0; square < reach.costs.length; square++) {
         const cost = reach.costs[square];
-        if (cost === Infinity || moveAp(fighter.character, cost) > fighter.ap) continue;
+        if (cost === Infinity || moveAp(fighter, cost) > fighter.ap) continue;
         if (best === undefined || gap(square) < gap(best) || (gap(square) === gap(best) && cost < reach.costs[best])) best = square;
     }
     if (best === undefined || gap(best) >= gap(fighter.square)) return undefined;
