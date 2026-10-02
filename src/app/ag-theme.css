@@ -5287,6 +5287,57 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
 .ag-ra-roll { margin-bottom: 8px; }
+/* A character's AP left on its owner's turn, beside its figure: lit for each
+   one unspent, hollow for each spent. The units strip below draws the same. */
+.ag-ra-ap { fill: rgba(0, 0, 0, 0.35); stroke: var(--ag-on-dark); stroke-width: 0.25; pointer-events: none; }
+.ag-ra-ap--on { fill: var(--ag-gold); }
+/* "Your units" under the board: a box per character, tapped to select it. */
+.ag-ra-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.ag-ra-unit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px;
+    border: 1.5px solid var(--ag-line);
+    border-radius: 14px;
+    background: var(--ag-surface);
+    color: var(--ag-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.ag-ra-unit--selected {
+    border-color: var(--ag-gold);
+    background: color-mix(in oklch, var(--ag-gold) 18%, var(--ag-surface));
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ag-gold) 30%, transparent);
+}
+.ag-ra-unit--done { opacity: 0.6; }
+.ag-ra-unit-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ag-ra-unit-disc {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 99px;
+    border: 2px solid var(--ag-surface-2);
+    background: var(--ag-ink-softer);
+    color: var(--ag-on-dark);
+    font-size: 14px;
+}
+.ag-ra-unit-name { display: flex; flex-direction: column; min-width: 0; }
+.ag-ra-unit-name b { font: 800 13.5px/1.15 var(--ag-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-ra-unit-name span { font: 600 11.5px/1.2 var(--ag-font); color: var(--ag-ink-soft); }
+.ag-ra-unit-hp { height: 6px; border-radius: 99px; background: var(--ag-surface-2); overflow: hidden; }
+.ag-ra-unit-hp span { display: block; height: 100%; background: var(--ag-green); }
+.ag-ra-unit-foot { display: flex; align-items: center; justify-content: space-between; min-height: 14px; font: 700 12px var(--ag-font); color: var(--ag-ink-soft); }
+.ag-ra-unit-foot--done { color: var(--ag-green); }
+.ag-ra-unit-foot b { font-weight: 800; color: var(--ag-ink); }
+.ag-ra-unit-pips { display: inline-flex; gap: 3px; }
+.ag-ra-unit-pip { width: 11px; height: 11px; border-radius: 99px; border: 1.5px solid var(--ag-gold); }
+.ag-ra-unit-pip--on { background: var(--ag-gold); }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

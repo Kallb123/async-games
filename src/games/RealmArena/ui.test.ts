@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, actionSquares, areaRect, eventLines, fighterName, fighterStatus, focusOn, groundLayers, pathPoints, placeTap, reachLayers,
+    CELL, abilityWait, actionSquares, apPips, areaRect, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, reachLayers,
     reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
 } from "./ui";
 
@@ -83,6 +83,26 @@ describe("fighterStatus", () => {
 
     it("says only that a fallen character is down", () => {
         expect(fighterStatus({ ...knight, hp: 0, banked: 4 })).toEqual(["Down"]);
+    });
+});
+
+describe("canAct, apPips and hpFraction", () => {
+    const knight = { ...newFighter(0, "alice", "knight", 0), ap: 3 };
+
+    it("counts a standing character with AP left as ready, and not one spent or down", () => {
+        expect(canAct(knight)).toBe(true);
+        expect(canAct({ ...knight, ap: 0 })).toBe(false);
+        expect(canAct({ ...knight, hp: 0 })).toBe(false);
+    });
+
+    it("lights a pip for each AP left, out of the full allowance", () => {
+        expect(apPips(knight)).toEqual([true, true, true, false]);
+        expect(apPips({ ...knight, ap: 0 })).toHaveLength(ACTION_POINTS);
+    });
+
+    it("reads the HP bar against the character's own maximum", () => {
+        expect(hpFraction(knight)).toBe(1);
+        expect(hpFraction({ ...knight, hp: 0 })).toBe(0);
     });
 });
 

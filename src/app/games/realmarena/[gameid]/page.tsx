@@ -10,6 +10,7 @@ import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMuste
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
 import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
 import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
+import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
@@ -58,6 +59,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
     const [selectedId, setSelectedId] = useState<number | null>(null);
+    // A tap on a unit's box brings the view to it, even when it's already selected.
+    const [refocus, setRefocus] = useState(0);
+    const selectUnit = (id: number) => {
+        setSelectedId(id);
+        setRefocus(n => n + 1);
+    };
     const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     // Planning is out by design (§17.3 PR 8): every attack worth planning
@@ -268,9 +275,22 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,
                             }}
+                            refocus={refocus}
+                            acting={!mustering && !complete ? currentTurn : null}
                             follow={follow}
                         />
                     </div>
+
+                    {!mustering && (
+                        <RealmArenaUnits
+                            fighters={fighters}
+                            player={myUserId}
+                            colourFor={colourFor}
+                            acting={battleTurn}
+                            selectedId={selected?.id ?? null}
+                            onSelect={selectUnit}
+                        />
+                    )}
 
                     {musterTurn && (
                         <RealmArenaMusterSheet draft={draft} budget={gs.budget} onMuster={muster} pending={pendingTarget === 'muster'} />
@@ -295,7 +315,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
                     {battleTurn && !selected && (
                         <div className="ag-section">
-                            <p className="ag-hint ag-hint--tight">Tap one of your squad on the board to act with it. Each has its own {ACTION_POINTS} AP.</p>
+                            <p className="ag-hint ag-hint--tight">Tap one of your units above, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>
                         </div>
                     )}
 

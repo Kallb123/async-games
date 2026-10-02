@@ -7,7 +7,7 @@ import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
-import { check, fighterById, moveAp, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
+import { ACTION_POINTS, check, fighterById, isStanding, moveAp, reactionsTo, shotOdds, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /** Board units per square: the SVG's viewBox is the map's size times this. */
 export const CELL = 10;
@@ -138,6 +138,21 @@ export function fighterStatus(fighter: Fighter): string[] {
         ...(fighter.hunkered ? ["Hunkered down"] : []),
         ...(fighter.shieldWall ? ["Shield wall"] : []),
     ];
+}
+
+/** A character with AP left to spend on its owner's turn: what the units strip counts as ready. */
+export function canAct(fighter: Fighter): boolean {
+    return isStanding(fighter) && fighter.ap > 0;
+}
+
+/** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
+export function apPips(fighter: Fighter): boolean[] {
+    return Array.from({ length: ACTION_POINTS }, (_, i) => i < fighter.ap);
+}
+
+/** How full a character's HP bar is, 0–1. */
+export function hpFraction(fighter: Fighter): number {
+    return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
 }
 
 /** A weapon in one line: "80% · range 20 · 3 damage". */
