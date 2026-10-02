@@ -484,20 +484,20 @@ proposed default, the rule says so. The numbers are first guesses for playtestin
   reach the centre (§13.7) on its first turn, which is why the centre starts
   scoring later (§15.3).
 
-**A big board on a small screen.** At phone width, 36 columns works out at
-about 10 pixels a square. That's fine for seeing the whole battle, and far too
+**A big board on a small screen.** At phone width, the isometric map — 84
+squares corner to corner — works out at under 10 pixels a square. That's fine for seeing the whole battle, and far too
 small to tap. So the whole map is the overview, and the board spends most of
 its time zoomed in:
 
 - `BoardZoom` steps from the whole map down to a close zoom (its `maxWidth`),
-  deep enough that about ten squares fill the width and each one is
+  deep enough that about seven squares fill the width and each one is
   comfortable to tap. Pinch and ctrl-wheel zoom as usual.
 - Selecting a character brings the view to most of where it could move —
   about two thirds of its reach each way, zoomed exactly to fit that rather
   than to a step, since a full turn's reach runs most of the map's width. A
   replay of other players' turns follows the action. Both use `BoardZoom`'s
   `focus`, the way Race Cars follows a car.
-- The ground is better drawn as one image than as a shape per square, because
+- The flat ground is better drawn as one image than as a shape per square, because
   a 48×48 board has 2,304 of them. Kingdom Builder's tile sheet is a
   precedent.
 - **The board is drawn isometrically** (`src/utils/ui/isometric.ts`): each
@@ -1442,7 +1442,7 @@ function of the ground.
   four items as `BuildRow`s with their cost. The points left counts items
   too.
 - **On the board**, an item is a `BuildRow` in the turn sheet like an
-  ability. Arming one shades its range through `rangeArea` (`ui.ts`): its
+  ability. Arming one shades its range through `rangeSquares` (`ui.ts`): its
   `"fireball"` kind becomes a general area kind that takes a range, for
   Fireball and every throw, and the draught uses `"nextTo"`, as Heal does.
 
@@ -1487,9 +1487,9 @@ and opening ground.
   `battlefield/` gets the one helper. Nothing else there changes, since paths,
   sight and cover already read the terrain they're given.
 - New event: `blasted`, with its squares.
-- **The board needs no new layer.** It already draws one path per kind of
-  terrain (`groundLayers`), so scorched ground is one more `GROUND_CLASS`
-  entry and one colour token.
+- **The board needs no new layer.** It already draws the flat ground as one
+  path per kind of terrain (`isoRuns`), so scorched ground is one more
+  `GROUND_CLASS` entry, one colour token and a `TERRAIN_HEIGHT` of 0.
 - The map tests check the maps as drawn. Blasting only takes cover away, and
   never walls, so nothing they prove can be undone.
 
