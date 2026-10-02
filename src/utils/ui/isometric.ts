@@ -106,7 +106,12 @@ export function isoDepth(view: IsoGrid, square: number): number {
     return col + row;
 }
 
-const points = (...corners: Point[]) => corners.map(({ x, y }) => `${x},${y}`).join(" ");
+/** Points as an SVG `points` list: a polygon's corners, or a polyline's stops. */
+export function isoPoints(corners: readonly Point[]): string {
+    return corners.map(({ x, y }) => `${x},${y}`).join(" ");
+}
+
+const points = (...corners: Point[]) => isoPoints(corners);
 
 /** The polygon a rectangle of the grid makes at one height, as an SVG `points` list. */
 export function isoArea(view: IsoView, { x: col, y: row, width, height }: Rect, at = 0): string {
@@ -237,7 +242,7 @@ export function isoSquareAt(view: IsoView, x: number, y: number): number | undef
     let found: number | undefined;
     let foundDepth = -Infinity;
     for (let square = 0; square < view.heights.length; square++) {
-        const col = square % view.width, row = Math.floor(square / view.width);
+        const { col, row } = colRow(view, square);
         if (col + row <= foundDepth) continue;
         // The least lift that brings the point into the square, if any lift
         // up to its height does: a square owns its back edges, not its front.

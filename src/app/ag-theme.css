@@ -5220,8 +5220,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* Each terrain sets its colour as `--ra-ground`, and a square is drawn from
    it: its top in the colour, and the faces a raised square shows toward the
    viewer shaded down from it, the right darker than the left, as if lit from
-   the back left. Terrain is only ever looked at: a tap goes through it to the
-   board's tap layer underneath, which works out the square. */
+   the back left. Terrain is only ever looked at: a tap goes through a raised
+   square to the board's tap layer underneath, which works out the square (the
+   flat ground is painted under that layer already). */
 .ag-ra-ground--open { --ra-ground: var(--ra-open); }
 .ag-ra-ground--rubble { --ra-ground: var(--ra-rubble); }
 .ag-ra-ground--lowwall { --ra-ground: var(--ra-lowwall); }
@@ -5230,14 +5231,14 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-ground--stair { --ra-ground: var(--ra-stair); }
 .ag-ra-ground--tower { --ra-ground: var(--ra-tower); }
 .ag-ra-ground--earth { --ra-ground: var(--ra-earth); }
-.ag-ra-top { fill: var(--ra-ground); pointer-events: none; }
-.ag-ra-side { stroke: rgba(0, 0, 0, 0.18); stroke-width: 0.25; stroke-linejoin: round; pointer-events: none; }
+.ag-ra-top { fill: var(--ra-ground); }
+.ag-ra-side { stroke: rgba(0, 0, 0, 0.18); stroke-width: 0.25; stroke-linejoin: round; }
 .ag-ra-side--left { fill: color-mix(in oklch, var(--ra-ground) 78%, black); }
 .ag-ra-side--right { fill: color-mix(in oklch, var(--ra-ground) 62%, black); }
 .ag-ra-block { pointer-events: none; }
 .ag-ra-block .ag-ra-top { stroke: rgba(0, 0, 0, 0.16); stroke-width: 0.25; stroke-linejoin: round; }
 /* The squares, faint enough to read past and there when a move is counted. */
-.ag-ra-grid { fill: none; stroke: rgba(0, 0, 0, 0.12); stroke-width: 0.3; pointer-events: none; }
+.ag-ra-grid { fill: none; stroke: rgba(0, 0, 0, 0.12); stroke-width: 0.3; }
 /* Where each squad musters, in its owner's colour (`--ra-seat`, set per zone). */
 .ag-ra-deployment {
     fill: color-mix(in oklch, var(--ra-seat) 16%, transparent);

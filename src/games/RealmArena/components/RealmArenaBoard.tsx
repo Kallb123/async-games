@@ -4,7 +4,7 @@ import BoardZoom, { type BoardZoomFocus } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
-import { isoArea, isoBlock, isoBounds, isoCentre, isoDepth, isoGridLines, isoPoint, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView } from '@/utils/ui/isometric';
+import { isoArea, isoBlock, isoBounds, isoCentre, isoDepth, isoGridLines, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoView, type Point } from '@/utils/ui/isometric';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
@@ -115,7 +115,7 @@ interface Placing {
 type Shade = (square: Square) => string | undefined;
 
 /** Where a figure's disc is centred: `FIGURE_RISE` over the middle of its square's top. */
-function discCentre(view: IsoView, square: Square): { x: number; y: number } {
+function discCentre(view: IsoView, square: Square): Point {
     const { x, y } = isoCentre(view, square);
     return { x, y: y - FIGURE_RISE };
 }
@@ -167,6 +167,75 @@ function Odds({ view, square, chance }: { view: IsoView; square: Square; chance:
             <rect x={x - ODDS_WIDTH / 2} y={y - ODDS_RISE - ODDS_HEIGHT / 2} width={ODDS_WIDTH} height={ODDS_HEIGHT} rx={ODDS_HEIGHT / 2} />
             <text x={x} y={y - ODDS_RISE}>{chance}%</text>
         </g>
+    );
+}
+
+/** Runs of the flat squares that share a key: everything raised is drawn square by square instead, in depth order. */
+function flatRuns<K>(view: IsoView, keyOf: (square: Square) => K | undefined) {
+    return isoRuns(view, square => view.heights[square] === 0 ? keyOf(square) : undefined);
+}
+
+/** A raised square's block, and whatever its top is shaded with. */
+function RaisedSquare({ block, shades }: { block: IsoBlock & { square: Square; letter: TerrainLetter }; shades: readonly Shade[] }) {
+    return (
+        <g className={`ag-ra-block ${GROUND_CLASS[block.letter]}`}>
+            {block.left && <polygon className="ag-ra-side ag-ra-side--left" points={block.left} />}
+            {block.right && <polygon className="ag-ra-side ag-ra-side--right" points={block.right} />}
+            <polygon className="ag-ra-top" points={block.top} />
+            {shades.map((shade, index) => {
+                const className = shade(block.square);
+                return className && <polygon key={index} className={className} points={block.top} />;
+            })}
+        </g>
+    );
+}
+
+interface FighterNodeProps {
+    view: IsoView;
+    fighter: Fighter;
+    ring: Ring | undefined;
+    selected: boolean;
+    /** It's its owner's turn in battle, so it shows the AP it has left. */
+    acting: boolean;
+    colourFor: (userId: string) => string;
+    nameFor: (userId: string) => string;
+    onSelect: (fighterId: number) => void;
+}
+
+/** A character on the battlefield, standing or fallen: its figure, HP bar and AP, and the tap that selects it. */
+function FighterNode({ view, fighter, ring, selected, acting, colourFor, nameFor, onSelect }: FighterNodeProps) {
+    const { x, y } = discCentre(view, fighter.square);
+    const character = CHARACTERS[fighter.character];
+    const standing = isStanding(fighter);
+    return (
+        <ClickableMapNode
+            x={x} y={y} radius={FIGURE_RADIUS}
+            isValid
+            isSelected={selected}
+            showRing={false}
+            onClick={() => onSelect(fighter.id)}
+            title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...fighterStatus(fighter)].join(' · ')}
+        >
+            <Figure
+                ring={ring}
+                view={view}
+                square={fighter.square}
+                character={standing ? fighter.character : null}
+                className={`${standing ? '' : 'ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
+                fill={standing ? colourFor(fighter.owner) : undefined}
+            />
+            {standing && (
+                <>
+                    <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
+                    <rect
+                        className="ag-ra-hp-fill"
+                        x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2}
+                        width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT}
+                    />
+                </>
+            )}
+            {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
+        </ClickableMapNode>
     );
 }
 
@@ -230,7 +299,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
         return {
             view,
             slab: isoSlab(view),
-            flat: isoRuns(view, square => view.heights[square] === 0 ? terrainLetter(field, square) : undefined),
+            flat: flatRuns(view, square => terrainLetter(field, square)),
             lines: isoGridLines(view),
             blocks: view.heights.flatMap((height, square) => height > 0
                 ? [{ square, depth: isoDepth(view, square), letter: terrainLetter(field, square), ...isoBlock(view, square) }]
@@ -274,7 +343,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
         sealed?.forEach(pick => free.delete(pick.square));
         shades.push(square => free.has(square) ? 'ag-ra-place' : undefined);
     }
-    const flatShades = shades.flatMap(shade => isoRuns(view, square => view.heights[square] === 0 ? shade(square) : undefined));
+    const flatShades = shades.flatMap(shade => flatRuns(view, shade));
 
     const ringOf = (fighter: Fighter): Ring | undefined => {
         if (fighter.id === selected?.id) return 'selected';
@@ -286,17 +355,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
     const items: DepthItem[] = ground.blocks.map(block => ({
         depth: block.depth,
-        node: (
-            <g key={`block-${block.square}`} className={`ag-ra-block ${GROUND_CLASS[block.letter]}`}>
-                {block.left && <polygon className="ag-ra-side ag-ra-side--left" points={block.left} />}
-                {block.right && <polygon className="ag-ra-side ag-ra-side--right" points={block.right} />}
-                <polygon className="ag-ra-top" points={block.top} />
-                {shades.map((shade, index) => {
-                    const className = shade(block.square);
-                    return className && <polygon key={index} className={className} points={block.top} />;
-                })}
-            </g>
-        ),
+        node: <RaisedSquare key={`block-${block.square}`} block={block} shades={shades} />,
     }));
 
     sealed?.forEach((pick, index) => items.push({
@@ -314,43 +373,21 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     }));
 
     for (const fighter of fighters) {
-        const { x, y } = discCentre(view, fighter.square);
-        const character = CHARACTERS[fighter.character];
-        const standing = isStanding(fighter);
-        const status = fighterStatus(fighter);
         items.push({
             // Anyone standing over a body is drawn on top of it.
-            depth: isoDepth(view, fighter.square) + (standing ? 0.6 : 0.5),
+            depth: isoDepth(view, fighter.square) + (isStanding(fighter) ? 0.6 : 0.5),
             node: (
-                <ClickableMapNode
+                <FighterNode
                     key={fighter.id}
-                    x={x} y={y} radius={FIGURE_RADIUS}
-                    isValid
-                    isSelected={fighter.id === selected?.id}
-                    showRing={false}
-                    onClick={() => onSelect(fighter.id)}
-                    title={[`${character.name} · ${nameFor(fighter.owner)}`, `${fighter.hp}/${character.hp} HP`, ...status].join(' · ')}
-                >
-                    <Figure
-                        ring={ringOf(fighter)}
-                        view={view}
-                        square={fighter.square}
-                        character={standing ? fighter.character : null}
-                        className={`${standing ? '' : 'ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
-                        fill={standing ? colourFor(fighter.owner) : undefined}
-                    />
-                    {standing && (
-                        <>
-                            <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-                            <rect
-                                className="ag-ra-hp-fill"
-                                x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2}
-                                width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT}
-                            />
-                        </>
-                    )}
-                    {standing && fighter.owner === acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
-                </ClickableMapNode>
+                    view={view}
+                    fighter={fighter}
+                    ring={ringOf(fighter)}
+                    selected={fighter.id === selected?.id}
+                    acting={fighter.owner === acting}
+                    colourFor={colourFor}
+                    nameFor={nameFor}
+                    onSelect={onSelect}
+                />
             ),
         });
     }
@@ -410,7 +447,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
 
                     {path && pathEnd && (
                         <>
-                            <polyline className="ag-ra-path" points={path.map(({ x, y }) => `${x},${y}`).join(' ')} />
+                            <polyline className="ag-ra-path" points={isoPoints(path)} />
                             <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
                         </>
                     )}

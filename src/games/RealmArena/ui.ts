@@ -91,11 +91,10 @@ const REACH_SHOWN = 2 / 3;
 
 /**
  * The region `BoardZoom` brings into view for a selected character, in
- * squares: most of
- * where it could move this turn (`REACH_SHOWN`), with `ap` to spend — what it
- * has left on its owner's turn, a full turn's otherwise. Never less than
- * `focusOn` frames round it, so a character with nowhere to go is still
- * brought close.
+ * squares: most of where it could move this turn (`REACH_SHOWN`), with `ap`
+ * to spend — what it has left on its owner's turn, a full turn's otherwise.
+ * Never less than `focusOn` frames round it, so a character with nowhere to
+ * go is still brought close.
  */
 export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Rect {
     const near = focusOn(state.field, fighter.square);
