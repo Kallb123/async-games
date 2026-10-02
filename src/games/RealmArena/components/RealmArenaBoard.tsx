@@ -6,7 +6,7 @@ import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
+import { apPips, areaRect, CELL, CHARACTER_MARK, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, squareAtPoint, squareCentre, type RunLayer } from '@/games/RealmArena/ui';
 
 /** Each terrain's fill, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
 const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
@@ -24,6 +24,14 @@ const FIGURE_RADIUS = 3.6;
 const FIGURE_LIFT = 0.8;
 const HP_BAR_WIDTH = 7;
 const HP_BAR_HEIGHT = 1.3;
+/**
+ * The AP pips: a column of dots down the figure's right. The offset clears the
+ * disc (`FIGURE_RADIUS`) and keeps the dots inside the figure's 10-unit square;
+ * the step fits four of them beside the disc.
+ */
+const AP_PIP_RADIUS = 0.6;
+const AP_PIP_STEP = 1.55;
+const AP_PIP_OFFSET = 4.35;
 
 interface RealmArenaBoardProps {
     field: Battlefield;
@@ -42,6 +50,10 @@ interface RealmArenaBoardProps {
     placing?: Placing | null;
     /** The viewer lining up the selected character's next action, on their battle turn. */
     aiming?: Aiming | null;
+    /** Bumped to bring the view back to the selected character though it hasn't changed: a tap on its box under the board. */
+    refocus?: number;
+    /** The player whose turn it is in battle: their characters show the AP they have left. */
+    acting?: string | null;
     /** A review's step (§17.3 PR 8): the squares it touched, brought into view whenever `key` changes. */
     follow?: { squares: readonly Square[]; key: string } | null;
 }
@@ -97,6 +109,15 @@ function Figure({ field, square, character, className = '', fill, ring }: Figure
     );
 }
 
+/** A character's AP left this turn as a column of pips centred on `y` — the same pips the units strip shows. */
+function ApPips({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
+    const pips = apPips(fighter);
+    const top = y - (AP_PIP_STEP * (pips.length - 1)) / 2;
+    return pips.map((on, i) => (
+        <circle key={i} className={`ag-ra-ap${on ? ' ag-ra-ap--on' : ''}`} cx={x} cy={top + i * AP_PIP_STEP} r={AP_PIP_RADIUS} />
+    ));
+}
+
 /**
  * The battlefield (docs/games/realm-arena.md §13.1, §17.3 PR 5): the ground as
  * one layer, and an SVG layer over it for the deployment zones, the centre and
@@ -122,7 +143,7 @@ function Figure({ field, square, character, className = '', fill, ring }: Figure
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, follow }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow }: RealmArenaBoardProps) {
     const gridId = useId();
     const width = field.width * CELL;
     const height = field.height * CELL;
@@ -134,7 +155,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
     if (follow && follow.squares.length > 0) focus = { rect: focusOn(field, ...follow.squares), key: `follow:${follow.key}` };
-    else if (focusSquare !== undefined) focus = { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}` };
+    else if (focusSquare !== undefined) focus = { rect: focusOn(field, focusSquare), key: `${pickedUp ? 'pick' : selected?.id}:${focusSquare}:${refocus}` };
     const occupied = new Set(sealed?.map(pick => pick.square));
 
     const centreSquares = field.objectives[CENTRE] ?? [];
@@ -258,10 +279,11 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                         <rect
                                             className="ag-ra-hp-fill"
                                             x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2}
-                                            width={HP_BAR_WIDTH * Math.min(1, fighter.hp / character.hp)} height={HP_BAR_HEIGHT}
+                                            width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT}
                                         />
                                     </>
                                 )}
+                                {standing && fighter.owner === acting && <ApPips x={x + AP_PIP_OFFSET} y={y - FIGURE_LIFT} fighter={fighter} />}
                             </ClickableMapNode>
                         );
                     })}
