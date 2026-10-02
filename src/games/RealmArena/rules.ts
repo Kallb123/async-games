@@ -27,8 +27,8 @@
 
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
-import { pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, isNeighbour, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
+import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
+import { coordsOf, distance, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, isCharacterId, MAX_OF_EACH, squadPoints, type Ability, type AbilityId, type CharacterId, type PlayerCount } from "./characters";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
@@ -41,6 +41,8 @@ export const HUNKER_AP = 1;
 export const REACTION_COST = 2;
 export const OVERWATCH_PENALTY = 15;
 export const HIGH_GROUND_BONUS = 10;
+/** How far above its target, in quarters, an attacker has to stand to have the high ground: half a height (§25.2). */
+export const HIGH_GROUND_RISE = 2;
 /** What a target's cover takes off a shot's chance to hit. Hunkering down doubles it (§13.2, §13.3). */
 export const COVER_PENALTY: Readonly<Record<Cover, number>> = { none: 0, half: 20, full: 40 };
 /** A shot that misses by this much or less grazes, for half damage (§13.3). */
@@ -159,14 +161,14 @@ export function weaponReaches(state: BattleState, fighter: Fighter, square: Squa
     return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : nextTo(state.field, fighter.square, square);
 }
 
-/** What a move by one character may cross and stop on: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
+/** What a move by one character may cross and stop on, and how far it can climb: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
 export function moveRules(state: BattleState, mover: Fighter): Required<MoveRules> {
     const blocked = new Set<Square>(), occupied = new Set<Square>();
     for (const other of state.fighters) {
         if (other.id === mover.id || !isStanding(other)) continue;
         (other.owner === mover.owner ? occupied : blocked).add(other.square);
     }
-    return { blocked, occupied };
+    return { blocked, occupied, climb: CHARACTERS[mover.character].climb ?? DEFAULT_CLIMB };
 }
 
 /** The AP a move of this many movement points costs: whole AP, each buying the character's allowance; a sneak pays double (§13.2). */
@@ -214,7 +216,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
-    const highGround = field.terrain[attacker.square].highGround && !field.terrain[target.square].highGround;
+    const highGround = riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE;
     const raw = weapon.accuracy
         - COVER_PENALTY[cover] * (target.hunkered ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
@@ -242,7 +244,7 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
  * stand, and a Cleric can raise it.
  */
 function setsOff(state: BattleState, watcher: Fighter, square: Square): boolean {
-    return state.field.terrain[square].standable && weaponReaches(state, watcher, square);
+    return state.field.tiles[square].terrain.standable && weaponReaches(state, watcher, square);
 }
 
 export interface Reaction {
@@ -299,7 +301,7 @@ export function knockoutPoints(character: CharacterId): number {
 // ─── Checking an action ─────────────────────────────────────────────────────
 
 const isSquare = (field: Battlefield, value: unknown): value is Square =>
-    Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.terrain.length;
+    Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.tiles.length;
 
 /** Why a character can't use an ability now, or undefined when it can. */
 function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
@@ -314,11 +316,11 @@ function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefine
 function pathRefusal(state: BattleState, mover: Fighter, path: unknown): string | number {
     if (!Array.isArray(path) || path.length < 2 || !path.every(square => isSquare(state.field, square))) return "That isn't a path";
     if (path[0] !== mover.square) return "A path starts where the character stands";
-    const { blocked, occupied } = moveRules(state, mover);
+    const { blocked, occupied, climb } = moveRules(state, mover);
     if (path.some(square => blocked.has(square))) return "An enemy is in the way";
     const end = path[path.length - 1];
-    if (!state.field.terrain[end].standable || occupied.has(end)) return "Nobody can stop there";
-    return pathCost(state.field, path) ?? "That path can't be walked";
+    if (!state.field.tiles[end].terrain.standable || occupied.has(end)) return "Nobody can stop there";
+    return pathCost(state.field, path, climb) ?? "That path can't be walked";
 }
 
 const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter =>
@@ -398,7 +400,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
             return ability("raise", () => {
                 if (!target || target.owner !== actor.owner || isStanding(target)) return "Pick a downed ally";
                 if (!nextTo(state.field, actor.square, target.square)) return "Too far away to raise";
-                const clear = state.field.terrain[target.square].standable
+                const clear = state.field.tiles[target.square].terrain.standable
                     && !state.fighters.some(other => isStanding(other) && other.square === target.square);
                 return clear ? undefined : "There's no room to stand there";
             });

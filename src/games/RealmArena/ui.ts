@@ -29,29 +29,7 @@ const LETTER_OF = new Map<Terrain, TerrainLetter>(
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
 export function terrainLetter(field: Battlefield, square: Square): TerrainLetter {
-    return LETTER_OF.get(field.terrain[square]) ?? ".";
-}
-
-/**
- * How high each terrain stands on the isometric board, in storeys
- * (`ISO_STOREY`). Only how it's drawn: what plays as high ground is the
- * terrain's own `highGround`, which only the tower top has, so the tower
- * stands proud of the curtain wall it's built into and its stair climbs
- * halfway. Low cover is drawn low enough to see a character past.
- */
-export const TERRAIN_HEIGHT: Readonly<Record<TerrainLetter, number>> = {
-    ".": 0,
-    ",": 0.3,
-    "o": 0.6,
-    "T": 1.6,
-    "#": 2,
-    "s": 1.25,
-    "^": 2.5,
-};
-
-/** Every square's height on the board, by `Square`, read from its terrain. */
-export function squareHeights(field: Battlefield): number[] {
-    return field.terrain.map((_, square) => TERRAIN_HEIGHT[terrainLetter(field, square)]);
+    return LETTER_OF.get(field.tiles[square].terrain) ?? ".";
 }
 
 /** The rectangle a set of squares covers, in squares — a deployment zone, or the centre. */
@@ -240,10 +218,10 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
         if (kind === "fireball") return inRange(field, fighter.square, square, ABILITIES.fireball.range);
-        if (!field.terrain[square].standable) return false;
+        if (!field.tiles[square].terrain.standable) return false;
         return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
     };
-    return new Set(field.terrain.flatMap((_, square) => reaches(square) ? [square] : []));
+    return new Set(field.tiles.flatMap((_, square) => reaches(square) ? [square] : []));
 }
 
 /** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */

@@ -438,6 +438,25 @@ Final Fantasy Tactics, to find what's missing that matters most.
 3. **Progression?** Upgrades per character, per player: using a character
    unlocks more flexibility with it (§23).
 
+### 11.8 Round 8
+
+Asked once the board was drawn isometrically, about giving the ground real
+heights (§25).
+
+1. **What's the smallest step of height?** A quarter of a full height. A
+   quarter gives no cover, a half or three quarters gives half cover, and a
+   full height gives full cover.
+2. **Climbing?** A step up or down of a quarter is an ordinary step, half or
+   three quarters is a climb that costs extra, and a full height can't be
+   climbed except by a stair. A Scout can climb a full height, and no more.
+3. **Standing on a raised block?** The terrain still decides whether a
+   square can be stood on, so low cover stays climb-over-only. The map's
+   data should carry more than terrain and height later, so it's built to
+   take more facts about a square.
+4. **Sight?** Anything a full height above both characters blocks it. Trees
+   block it whatever their height.
+5. **High ground?** Half a height above the target.
+
 ---
 
 ## 12. Questions (round 2)
@@ -460,15 +479,18 @@ proposed default, the rule says so. The numbers are first guesses for playtestin
   of letters to draw by hand.
 - **Size:** 36×48 squares for two players, 48×48 for three or four (round 3).
   That's smaller than XCOM's smallest maps (48×72), because this is a phone.
-- **What's on it**, and what each square costs to move into (round 5):
+- **What's on it**, and what each square costs to move into (round 5,
+  heights from round 8, §25). A height is in quarters of a full height,
+  above the ground the terrain stands on:
 
-  | Terrain | Movement cost | Cover for a character next to it | Sight |
-  |---|---:|---|---|
-  | Open ground | 1 | None | Clear |
-  | Low cover: rubble, low walls, fallen pillars, barrels | 3 to climb over. You can't stop on it | Half | Clear |
-  | High cover: walls, trees, fallen stone | Can't be entered | Full | Blocked |
-  | Tower stair | 2 | None | Clear |
-  | Tower top | 1 | None, but it's high ground: +10% to hit from above | Clear |
+  | Terrain | Height | Movement cost | Cover for a character next to it | Sight |
+  |---|---:|---:|---|---|
+  | Open ground | 0 | 1 | None | Clear |
+  | Low cover: rubble (½), low walls (¾) | 2–3 | 1, plus a climb on and a climb off. You can't stop on it | Half, by its height | Clear |
+  | Wall | 4 | Can't be entered | Full, by its height | Blocked between characters on the ground (§25) |
+  | Trees | 6 | Can't be entered | Full, whatever the heights | Always blocked |
+  | Tower stair | 3 | 2, and never a climb | By height | By height |
+  | Tower top | 6 | 1 | By height; it's high ground over anyone half a height below | By height |
 
   - **A diagonal step** costs 1.5 times the square's cost (round 5). Nobody can
     cut diagonally past the corner of high cover.
@@ -501,17 +523,16 @@ its time zoomed in:
   a 48×48 board has 2,304 of them. Kingdom Builder's tile sheet is a
   precedent.
 - **The board is drawn isometrically** (`src/utils/ui/isometric.ts`): each
-  square a 2:1 diamond, the shape every isometric tile sheet uses, raised by
-  its terrain's height in storeys — open ground 0, rubble and low walls a
-  little, trees 1.6, walls 2, the stair 1.25 and the tower top 2.5, proud of
-  the wall it's built into (`TERRAIN_HEIGHT` in `ui.ts`). The heights are only
-  how it's drawn: high ground is still the terrain's `highGround`, so a map
-  that wants a hill to play as one changes the terrain table, not the board.
-  The flat ground and anything shaded on it are a path per kind; what stands
-  up — raised squares and figures — is painted back to front, so a wall hides
-  whoever is behind it. A tap goes to the front-most square drawn under it.
-  Fitted to a phone the diamond is an overview, padded to a frame tall enough
-  to pan in, and the deepest zoom brings about seven squares across.
+  square a 2:1 diamond, the shape every isometric tile sheet uses, standing
+  at its own height (§25) — the height the rules play, not a picture of it.
+  A full height is a cube, and every face is drawn as a stack of quarter
+  slices, so tile art can come in slices. The flat ground and anything
+  shaded on it are a path per kind; what stands up — raised squares and
+  figures — is painted back to front, so a wall hides whoever is behind it,
+  and a character something hides is drawn again faintly over it, still
+  there to tap. A tap goes to the front-most square drawn under it. Fitted to
+  a phone the diamond is an overview, padded to a frame tall enough to pan
+  in, and the deepest zoom brings about seven squares across.
 
 ### 13.2 A turn: action points
 
@@ -1489,7 +1510,8 @@ and opening ground.
 - New event: `blasted`, with its squares.
 - **The board needs no new layer.** It already draws the flat ground as one
   path per kind of terrain (`isoRuns`), so scorched ground is one more
-  `GROUND_CLASS` entry, one colour token and a `TERRAIN_HEIGHT` of 0.
+  `GROUND_CLASS` entry and one colour token, and a terrain of height 0
+  (§25), so it stands level with the ground around it.
 - The map tests check the maps as drawn. Blasting only takes cover away, and
   never walls, so nothing they prove can be undone.
 
@@ -1610,6 +1632,92 @@ Open, and worth settling before each part is built:
 
 ---
 
+## 25. Elevation
+
+Round 8 (§11.8) gives the ground real heights. A map is no longer only
+which terrain each square holds, but how high each square stands, and the
+height is what cover, sight, climbing and high ground are read from. That
+is what makes maps other than a fort on a plain possible: a hill, a ridge, a
+sunken road, a keep on a mound — and, later, maps generated rather than
+drawn.
+
+### 25.1 Heights
+
+- **A height is counted in quarters of a full height**, a character's own:
+  `FULL_HEIGHT` is 4. Every height is a whole number of quarters.
+- **A square's top is its ground plus its terrain.** The map gives the
+  ground (§25.3); each terrain stands its own height above it (§13.1's
+  table): a wall a full height, rubble a half, a tower top one and a half.
+  So a wall on a hill is a full height above the hill.
+
+### 25.2 Rules
+
+- **Cover comes from the rise**: how far the square beside a character, on
+  the attacker's side (§13.1), rises above the character's own square. A
+  quarter gives none, a half or three quarters half, a full height or more
+  full. Trees give full cover whatever the heights. The rise is measured
+  from the character, not the attacker, so a wall still covers whoever is
+  behind it against an archer on a tower who can see over it.
+- **Sight** is blocked by anything a full height above both characters:
+  a wall between two characters on the ground, but not between a tower top
+  and the ground beyond the wall. Trees block it whatever the heights. Low
+  cover and characters never do.
+- **Climbing.** A step up or down of a quarter is an ordinary step. Half or
+  three quarters is a climb, which costs 1 more movement point
+  (`CLIMB_COST`). A full height or more can't be climbed, except onto or off
+  a stair, which is never a climb. A **Scout** climbs a full height, and no
+  more. A diagonal step can't cut past a corner that can't be entered, or
+  that stands a full height above both its ends.
+  - Crossing one square of low cover costs what it did: 2 to climb on, and 2
+    to climb off onto open ground, against 3 and 1 before.
+- **High ground** is half a height or more above the target: +10% to hit
+  (§13.3). It's no longer only the tower top.
+- **Standing** is still the terrain's to say (§11.6, answer 1): low cover is
+  climbed over, never stood on, whatever its height.
+
+### 25.3 The map's data
+
+- **A battlefield in memory is a tile per square** (`Tile` in
+  `src/utils/games/battlefield/terrain.ts`): its terrain and its elevation
+  — the top, in quarters — so a new fact about a square is a new field on
+  `Tile` rather than another parallel array.
+- **A map as written down is a set of layers**, each a string per row with
+  a character per square: `rows` for the terrain, as before, and an optional
+  `elevation` for the ground under it, one base-36 digit (`0`–`9`, then
+  `a`–`z`) of quarters a square. Left out, the map is flat. A new fact about
+  squares is a new optional layer.
+- **Not an object per square.** A 48×48 map is 2,304 squares; as JSON
+  objects it can't be read, drawn or reviewed by hand, while a layer can be
+  — and a layer is already plain data, so a map generator can produce one
+  and a battle could store one, the day a map is generated rather than
+  shipped as code (today a battle stores the map's id, §17.2).
+
+### 25.4 What changed on the three forts
+
+- **Tower tops see over the curtain wall**, which now blocks sight only
+  between characters on the ground. A tower top next to the wall gets no
+  cover from it, since the wall is lower than the tower: the tower is the
+  high ground, and an exposed one.
+- **A tower is only climbed by its stair.** The old rules let a character
+  step onto a tower top from any open square beside it; a tower top
+  one and a half heights up can't be. The Ring Fort's flank towers each had
+  a second stair drawn that only touched the tower diagonally, past a wall
+  corner, and so could never be used; it moves one square up, beside the
+  tower, so each flank tower has a stair on both sides as drawn. Its
+  fairness tests hold as before.
+
+### 25.5 Open questions
+
+1. **Melee across a height.** A character on the ground can still strike
+   one on a tower top beside it. Should melee, guard, healing and raising
+   need the two to be within some height of each other?
+2. **A parapet.** Should a tower top get cover from its own walls, by
+   drawing those walls taller than the tower?
+3. **A map generator**: what kinds of map, and does a generated battle store
+   its map rather than an id?
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -1640,3 +1748,4 @@ Realm, its sibling in the same world.
 | 1.7 | B2 fills in free-for-all: the party's size picks the map (§19.1), a round ends with the last seat still playing, a dropped player's squad leaves the battlefield while their score stands, and nobody is dropped from a duel or during the muster. |
 | 1.8 | Round 7 (§11.7): after launch, Milestone C comes before the rest of Milestone B: status effects (§20), items bought at muster (§21), destructible low cover (§22) and character mastery (§23), which replaces game-wide unlocks (§7, B4). Round-7 questions (§24). |
 | 1.9 | The board is drawn isometrically, each square raised by its terrain's height (§13.1). |
+| 1.10 | Round 8 (§11.8): elevation (§25). Heights in quarters; cover, sight, climbing and high ground read from them; a tile per square and an optional elevation layer on the map; the Ring Fort's dead flank-tower stairs moved beside their towers. |

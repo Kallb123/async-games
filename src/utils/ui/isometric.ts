@@ -7,8 +7,9 @@
 // A square is the 2:1 diamond every isometric tile sheet draws, so a sheet's
 // tiles can replace the flat colours later without the geometry moving.
 // Column runs down and to the right, row down and to the left, and a square
-// raised by `h` storeys is drawn `h * ISO_STOREY` higher, with its front
-// faces showing wherever the square in front of it is lower.
+// raised by `h` steps is drawn `h * ISO_STEP` higher, with its front faces
+// showing wherever the square in front of it is lower — each face a stack of
+// one-step slices, so tile art can come as slices too.
 //
 // Everything is in board units: the SVG's viewBox is `IsoView.size`.
 
@@ -18,8 +19,13 @@ import type { Rect } from "./mapLabels";
 export const ISO_HALF_WIDTH = 10;
 /** Half a square's height on the board: half its width, for the 2:1 diamond. */
 export const ISO_HALF_HEIGHT = 5;
-/** How far one storey of height lifts a square, in board units. */
-export const ISO_STOREY = 5;
+/**
+ * How far one step of height lifts a square, in board units. Realm Arena
+ * counts heights in quarters of a full height (`FULL_HEIGHT`), so four steps
+ * make a storey half as tall as a square is wide: a full-height block is the
+ * cube an isometric tile sheet draws.
+ */
+export const ISO_STEP = 2.5;
 
 export interface Point {
     x: number;
@@ -30,12 +36,12 @@ export interface Point {
 export interface IsoGrid {
     width: number;
     height: number;
-    /** Each square's height in storeys, by index (`row * width + col`). The ground is 0, and nothing is below it. */
+    /** Each square's height in steps, by index (`row * width + col`). The ground is 0, and nothing is below it. */
     heights: readonly number[];
 }
 
 export interface IsoViewOptions {
-    /** How deep the ground's slab is drawn under the map's front edges, in storeys. */
+    /** How deep the ground's slab is drawn under the map's front edges, in steps. */
     base: number;
     /** Room kept above the highest square, in board units, for whatever stands on it. */
     headroom: number;
@@ -49,7 +55,7 @@ export interface IsoViewOptions {
 }
 
 export interface IsoView extends IsoGrid {
-    /** The tallest square, in storeys. */
+    /** The tallest square, in steps. */
     top: number;
     /** Where the back corner of the map — column 0, row 0, on the ground — falls. */
     origin: Point;
@@ -61,23 +67,23 @@ export interface IsoView extends IsoGrid {
 export function isoView(grid: IsoGrid, { base, headroom, minAspect = 0 }: IsoViewOptions): IsoView {
     const top = Math.max(0, ...grid.heights);
     const width = (grid.width + grid.height) * ISO_HALF_WIDTH;
-    const drawn = top * ISO_STOREY + headroom + (grid.width + grid.height) * ISO_HALF_HEIGHT + base * ISO_STOREY;
+    const drawn = top * ISO_STEP + headroom + (grid.width + grid.height) * ISO_HALF_HEIGHT + base * ISO_STEP;
     const height = Math.max(drawn, width * minAspect);
     const pad = (height - drawn) / 2;
     return {
         ...grid,
         top,
         base,
-        origin: { x: grid.height * ISO_HALF_WIDTH, y: pad + headroom + top * ISO_STOREY },
+        origin: { x: grid.height * ISO_HALF_WIDTH, y: pad + headroom + top * ISO_STEP },
         size: { width, height },
     };
 }
 
-/** A point of the grid — a corner, or anywhere between — at a height in storeys. */
+/** A point of the grid — a corner, or anywhere between — at a height in steps. */
 export function isoPoint(view: IsoView, col: number, row: number, height: number): Point {
     return {
         x: view.origin.x + (col - row) * ISO_HALF_WIDTH,
-        y: view.origin.y + (col + row) * ISO_HALF_HEIGHT - height * ISO_STOREY,
+        y: view.origin.y + (col + row) * ISO_HALF_HEIGHT - height * ISO_STEP,
     };
 }
 
@@ -172,39 +178,48 @@ export function isoRuns<K>(view: IsoView, keyOf: (square: number) => K | undefin
     return [...runs].map(([key, path]) => ({ key, d: path.join("") }));
 }
 
-/** A raised square as SVG `points` lists: its top, and each front face that shows. */
+/** A raised square as SVG `points` lists: its top, and the slices of each front face that shows. */
 export interface IsoBlock {
     top: string;
-    /** The face toward the next row, where the square there is lower. */
-    left: string | null;
-    /** The face toward the next column, where the square there is lower. */
-    right: string | null;
+    /** The face toward the next row, a slice per step from the bottom up; empty where the square there is as high. */
+    left: string[];
+    /** The face toward the next column, likewise. */
+    right: string[];
+}
+
+/** The heights a face's slices run between, bottom to top: each whole step from `low` up to `high`. */
+function sliceLevels(low: number, high: number): number[] {
+    const levels = [low];
+    for (let level = Math.floor(low) + 1; level < high; level++) levels.push(level);
+    if (high > low) levels.push(high);
+    return levels;
 }
 
 /**
  * A square drawn as a block: its top at its own height, and each of its two
- * front faces down to the square in front of it, where that one is lower.
- * Faces down to the ground at the map's front edges, where the slab
- * (`isoSlab`) carries on below. The back faces never show.
+ * front faces down to the square in front of it, where that one is lower, as
+ * a stack of one-step slices. Faces run down to the ground at the map's front
+ * edges, where the slab (`isoSlab`) carries on below. The back faces never
+ * show.
  */
 export function isoBlock(view: IsoView, square: number): IsoBlock {
     const { col, row } = colRow(view, square);
     const h = view.heights[square];
-    const below = (c: number, r: number) => Math.min(h, heightAt(view, c, r));
-    const front = isoPoint(view, col + 1, row + 1, h);
-    const leftLow = below(col, row + 1), rightLow = below(col + 1, row);
+    const face = (a: [number, number], b: [number, number], low: number) => {
+        const levels = sliceLevels(Math.min(h, low), h);
+        return levels.slice(1).map((top, i) => points(
+            isoPoint(view, a[0], a[1], top), isoPoint(view, b[0], b[1], top),
+            isoPoint(view, b[0], b[1], levels[i]), isoPoint(view, a[0], a[1], levels[i]),
+        ));
+    };
     return {
-        top: points(isoPoint(view, col, row, h), isoPoint(view, col + 1, row, h), front, isoPoint(view, col, row + 1, h)),
-        left: leftLow < h
-            ? points(isoPoint(view, col, row + 1, h), front, isoPoint(view, col + 1, row + 1, leftLow), isoPoint(view, col, row + 1, leftLow))
-            : null,
-        right: rightLow < h
-            ? points(front, isoPoint(view, col + 1, row, h), isoPoint(view, col + 1, row, rightLow), isoPoint(view, col + 1, row + 1, rightLow))
-            : null,
+        top: points(isoPoint(view, col, row, h), isoPoint(view, col + 1, row, h), isoPoint(view, col + 1, row + 1, h), isoPoint(view, col, row + 1, h)),
+        left: face([col, row + 1], [col + 1, row + 1], heightAt(view, col, row + 1)),
+        right: face([col + 1, row + 1], [col + 1, row], heightAt(view, col + 1, row)),
     };
 }
 
-/** The ground the whole map stands on: its top, and its two front faces down to `base`. */
+/** The ground the whole map stands on: its top, and its two front faces down to `base` steps below it. */
 export function isoSlab(view: IsoView): { top: string; left: string; right: string } {
     const { width: w, height: h, base } = view;
     return {
@@ -229,7 +244,7 @@ export function isoGridLines(view: IsoView): string {
  * point, since that's the one a player sees and meant to tap.
  *
  * A point on a block at height `t` is the point on the ground lifted by `t`
- * storeys, and lifting moves it the same distance along both the grid's axes.
+ * steps, and lifting moves it the same distance along both the grid's axes.
  * So the point lies on a square's block exactly when some lift between none
  * and the square's height lands it inside the square — two intervals to
  * intersect, rather than any polygon.
@@ -238,7 +253,7 @@ export function isoSquareAt(view: IsoView, x: number, y: number): number | undef
     const u = (x - view.origin.x) / ISO_HALF_WIDTH;
     const v = (y - view.origin.y) / ISO_HALF_HEIGHT;
     const col0 = (u + v) / 2, row0 = (v - u) / 2;
-    const perStorey = ISO_STOREY / (2 * ISO_HALF_HEIGHT);
+    const perStep = ISO_STEP / (2 * ISO_HALF_HEIGHT);
     let found: number | undefined;
     let foundDepth = -Infinity;
     for (let square = 0; square < view.heights.length; square++) {
@@ -247,7 +262,7 @@ export function isoSquareAt(view: IsoView, x: number, y: number): number | undef
         // The least lift that brings the point into the square, if any lift
         // up to its height does: a square owns its back edges, not its front.
         const lift = Math.max(0, col - col0, row - row0);
-        if (lift <= view.heights[square] * perStorey && lift < col + 1 - col0 && lift < row + 1 - row0) {
+        if (lift <= view.heights[square] * perStep && lift < col + 1 - col0 && lift < row + 1 - row0) {
             found = square;
             foundDepth = col + row;
         }

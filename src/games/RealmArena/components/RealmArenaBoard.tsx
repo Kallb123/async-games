@@ -8,7 +8,7 @@ import { isoArea, isoBlock, isoBounds, isoCentre, isoDepth, isoGridLines, isoPoi
 import type { Rect } from '@/utils/ui/mapLabels';
 import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, hpFraction, reachFocus, squareHeights, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, CHARACTER_MARK, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** Each terrain's colour, by the letter the map draws it with — the `--ra-*` tokens in ag-theme.css. */
 const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
@@ -21,8 +21,8 @@ const GROUND_CLASS: Readonly<Record<TerrainLetter, string>> = {
     '^': 'ag-ra-ground--tower',
 };
 
-/** How deep the ground is drawn under the map's front edges, in storeys. */
-const SLAB_DEPTH = 0.8;
+/** How deep the ground is drawn under the map's front edges, in quarters. */
+const SLAB_DEPTH = 3;
 /**
  * The least the board's height may be as a fraction of its width: an
  * isometric map is twice as wide as it's tall, which fitted to a phone would
@@ -120,6 +120,20 @@ function discCentre(view: IsoView, square: Square): Point {
     return { x, y: y - FIGURE_RISE };
 }
 
+/**
+ * Whether something in front of a figure covers its disc: the front-most
+ * square drawn under the disc's middle or its foot is nearer the viewer than
+ * the square the figure stands on.
+ */
+function hidden(view: IsoView, square: Square): boolean {
+    const { x, y } = discCentre(view, square);
+    const depth = isoDepth(view, square);
+    return [y, y + FIGURE_RADIUS * 0.6].some(at => {
+        const front = isoSquareAt(view, x, at);
+        return front !== undefined && isoDepth(view, front) > depth;
+    });
+}
+
 /** What a figure covers, from the top of its disc to its feet: what the centre's name keeps off. */
 function figureRect(view: IsoView, square: Square): Rect {
     const { x, y } = discCentre(view, square);
@@ -179,8 +193,8 @@ function flatRuns<K>(view: IsoView, keyOf: (square: Square) => K | undefined) {
 function RaisedSquare({ block, shades }: { block: IsoBlock & { square: Square; letter: TerrainLetter }; shades: readonly Shade[] }) {
     return (
         <g className={`ag-ra-block ${GROUND_CLASS[block.letter]}`}>
-            {block.left && <polygon className="ag-ra-side ag-ra-side--left" points={block.left} />}
-            {block.right && <polygon className="ag-ra-side ag-ra-side--right" points={block.right} />}
+            {block.left.map((slice, index) => <polygon key={`l${index}`} className="ag-ra-side ag-ra-side--left" points={slice} />)}
+            {block.right.map((slice, index) => <polygon key={`r${index}`} className="ag-ra-side ag-ra-side--right" points={slice} />)}
             <polygon className="ag-ra-top" points={block.top} />
             {shades.map((shade, index) => {
                 const className = shade(block.square);
@@ -293,7 +307,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     // The ground doesn't change during a match, so it's laid out once a battlefield.
     const ground = useMemo(() => {
         const view = isoView(
-            { width: field.width, height: field.height, heights: squareHeights(field) },
+            { width: field.width, height: field.height, heights: field.tiles.map(tile => tile.elevation) },
             { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT },
         );
         return {
@@ -451,6 +465,24 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                             <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
                         </>
                     )}
+
+                    {/* A standing character something in front hides, drawn
+                        again faintly over it, so it's still there to see and
+                        to tap. */}
+                    {fighters.filter(fighter => isStanding(fighter) && hidden(view, fighter.square)).map(fighter => {
+                        const { x, y } = discCentre(view, fighter.square);
+                        return (
+                            <g
+                                key={`ghost-${fighter.id}`}
+                                className="ag-ra-ghost"
+                                style={{ '--ra-seat': colourFor(fighter.owner) } as React.CSSProperties}
+                                onClick={() => onSelect(fighter.id)}
+                            >
+                                <circle cx={x} cy={y} r={FIGURE_RADIUS} />
+                                <text className="ag-ra-mark" x={x} y={y}>{CHARACTER_MARK[fighter.character]}</text>
+                            </g>
+                        );
+                    })}
 
                     {/* Over every figure, so a neighbour never hides one. */}
                     {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}

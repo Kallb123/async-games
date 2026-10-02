@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STOREY, isoBlock, isoBounds, isoCentre, isoPoint, isoRuns, isoSquareAt, isoView, type IsoGrid } from './isometric';
+import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, isoBlock, isoBounds, isoCentre, isoPoint, isoRuns, isoSquareAt, isoView, type IsoGrid } from './isometric';
 
-/** A 3×2 grid, flat but for the middle square of the top row, a storey up. */
+/** A 3×2 grid, flat but for the middle square of the top row, a step up. */
 const GRID: IsoGrid = { width: 3, height: 2, heights: [0, 1, 0, 0, 0, 0] };
 const VIEW = isoView(GRID, { base: 1, headroom: 4 });
 
@@ -9,7 +9,7 @@ describe('isoView', () => {
     it('fits the whole diamond, the slab under it, and the headroom over the tallest square', () => {
         expect(VIEW.size).toEqual({
             width: 5 * ISO_HALF_WIDTH,
-            height: 4 + ISO_STOREY + 5 * ISO_HALF_HEIGHT + ISO_STOREY,
+            height: 4 + ISO_STEP + 5 * ISO_HALF_HEIGHT + ISO_STEP,
         });
         // The map's left corner, the back corner raised to the tallest square plus headroom, and the front corner on the slab's foot.
         expect(isoPoint(VIEW, 0, 2, 0).x).toBe(0);
@@ -29,22 +29,32 @@ describe('isoCentre', () => {
     it('stands on the middle of the square, raised by its height', () => {
         const ground = isoCentre(VIEW, 4);
         expect(ground).toEqual(isoPoint(VIEW, 1.5, 1.5, 0));
-        expect(isoCentre(VIEW, 1).y).toBe(isoPoint(VIEW, 1.5, 0.5, 0).y - ISO_STOREY);
+        expect(isoCentre(VIEW, 1).y).toBe(isoPoint(VIEW, 1.5, 0.5, 0).y - ISO_STEP);
     });
 });
 
 describe('isoBlock', () => {
     it('shows a raised square\'s front faces down to the lower squares in front of it', () => {
         const block = isoBlock(VIEW, 1);
-        expect(block.left).not.toBeNull();
-        expect(block.right).not.toBeNull();
+        expect(block.left).toHaveLength(1);
+        expect(block.right).toHaveLength(1);
+    });
+
+    it('stacks a face in one slice per step, down to the square in front', () => {
+        const steps = isoView({ width: 2, height: 1, heights: [3, 1] }, { base: 0, headroom: 0 });
+        // Down three steps to the ground off the map's front edge, and two to the square beside it.
+        expect(isoBlock(steps, 0).left).toHaveLength(3);
+        expect(isoBlock(steps, 0).right).toHaveLength(2);
+        expect(isoBlock(steps, 0).right[0]).toBe([
+            isoPoint(steps, 1, 1, 2), isoPoint(steps, 1, 0, 2), isoPoint(steps, 1, 0, 1), isoPoint(steps, 1, 1, 1),
+        ].map(({ x, y }) => `${x},${y}`).join(' '));
     });
 
     it('draws no face toward a square as high as it', () => {
         const ledge = isoView({ width: 2, height: 1, heights: [1, 1] }, { base: 0, headroom: 0 });
-        expect(isoBlock(ledge, 0).right).toBeNull();
+        expect(isoBlock(ledge, 0).right).toEqual([]);
         // The next row is off the map: the ground, so the face shows.
-        expect(isoBlock(ledge, 0).left).not.toBeNull();
+        expect(isoBlock(ledge, 0).left).toHaveLength(1);
     });
 });
 
@@ -64,7 +74,7 @@ describe('isoRuns', () => {
 describe('isoBounds', () => {
     it('covers a rectangle of the grid from the ground to the tallest top', () => {
         const all = isoBounds(VIEW, { x: 0, y: 0, width: 3, height: 2 });
-        expect(all).toEqual({ x: 0, y: isoPoint(VIEW, 0, 0, VIEW.top).y, width: VIEW.size.width, height: 5 * ISO_HALF_HEIGHT + ISO_STOREY });
+        expect(all).toEqual({ x: 0, y: isoPoint(VIEW, 0, 0, VIEW.top).y, width: VIEW.size.width, height: 5 * ISO_HALF_HEIGHT + ISO_STEP });
     });
 });
 

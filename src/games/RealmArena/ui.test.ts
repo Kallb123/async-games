@@ -7,28 +7,13 @@ import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } fr
 import type { CharacterId } from "./characters";
 import {
     abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
-    reactionPreviews, squadCounts, squadOf, squareHeights, TERRAIN_HEIGHT, targetsOf, terrainLetter, whoseName, type Placement,
+    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, type Placement,
 } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
     return [...squares].map(square => `${square % field.width},${Math.floor(square / field.width)}`).sort();
 }
-
-describe("squareHeights", () => {
-    it("raises each square by its terrain, the tower top highest and open ground flat", () => {
-        const field = buildBattlefield({ name: "Test", rows: ["..,s^#"], deployments: [], objectives: {} });
-        expect(squareHeights(field)).toEqual([0, 0, TERRAIN_HEIGHT[","], TERRAIN_HEIGHT.s, TERRAIN_HEIGHT["^"], TERRAIN_HEIGHT["#"]]);
-        expect(terrainLetter(field, 4)).toBe("^");
-    });
-
-    it("climbs to the tower top: the stair halfway, and the top above the wall round it", () => {
-        expect(TERRAIN_HEIGHT["."]).toBe(0);
-        expect(TERRAIN_HEIGHT.s).toBeGreaterThan(0);
-        expect(TERRAIN_HEIGHT.s).toBeLessThan(TERRAIN_HEIGHT["^"]);
-        expect(TERRAIN_HEIGHT["^"]).toBeGreaterThan(TERRAIN_HEIGHT["#"]);
-    });
-});
 
 describe("areaRect", () => {
     it("bounds the centre of the Ruined Fort", () => {
