@@ -4,10 +4,10 @@
 
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
-import { coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, TERRAIN, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 
 export const standable = (field: Battlefield): Square[] =>
-    field.terrain.flatMap((terrain, square) => terrain.standable ? [square] : []);
+    field.tiles.flatMap(({ terrain }, square) => terrain.standable ? [square] : []);
 
 export const sorted = (squares: readonly Square[]): Square[] => [...squares].sort((a, b) => a - b);
 
@@ -38,6 +38,6 @@ export function walkToCentre(field: Battlefield, seat: number): { quickest: numb
 
 /** The tower tops from which some standable square of the centre is in sight. */
 export function towersOverCentre(field: Battlefield): Square[] {
-    const centre = field.objectives.centre.filter(square => field.terrain[square].standable);
-    return standable(field).filter(top => field.terrain[top].highGround && centre.some(square => canSee(field, top, square)));
+    const centre = field.objectives.centre.filter(square => field.tiles[square].terrain.standable);
+    return standable(field).filter(top => field.tiles[top].terrain === TERRAIN["^"] && centre.some(square => canSee(field, top, square)));
 }

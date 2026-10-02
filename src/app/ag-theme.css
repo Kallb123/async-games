@@ -5181,7 +5181,8 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    Scoped to .ag-game--realmarena like Race Cars above: the shared chrome is
    re-tinted, and only the battlefield below is this game's own. The ground is
    flat colour drawn from the map's letters until PR 9's art lands
-   (docs/games/realm-arena.md §17.3), one token per kind of terrain. */
+   (docs/games/realm-arena.md §17.3), one token per kind of terrain, standing
+   up isometrically off a slab of earth. */
 .ag-game--realmarena {
     --ra-night: oklch(0.27 0.04 25);
     --ra-night-2: oklch(0.33 0.05 25);
@@ -5192,8 +5193,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-lowwall: oklch(0.62 0.04 60);
     --ra-trees: oklch(0.47 0.1 145);
     --ra-wall: oklch(0.42 0.02 55);
+    --ra-parapet: oklch(0.5 0.025 60);
     --ra-stair: oklch(0.72 0.04 70);
     --ra-tower: oklch(0.86 0.05 80);
+    --ra-earth: oklch(0.56 0.08 60);
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
     --ra-range: oklch(0.6 0.19 35);
@@ -5207,19 +5210,35 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-game--realmarena .ag-section .ag-stat-row { background: none; padding: 0 0 8px; }
 .ag-game--realmarena .ag-board-tag { background: var(--ra-oxblood); color: var(--ag-on-dark); }
 .ag-game--realmarena .ag-board-area { background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night)); }
+/* The battlefield floats on the night: an isometric map is a diamond, and
+   what's round it is the frame, not more ground. */
 .ag-realmarena-frame {
-    background: var(--ra-open);
+    background: var(--ra-night);
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.28), 0 4px 0 var(--ra-oxblood-deep);
 }
 
 /* ---- The battlefield ---- */
-.ag-ra-ground--open { fill: var(--ra-open); }
-.ag-ra-ground--rubble { fill: var(--ra-rubble); }
-.ag-ra-ground--lowwall { fill: var(--ra-lowwall); }
-.ag-ra-ground--trees { fill: var(--ra-trees); }
-.ag-ra-ground--wall { fill: var(--ra-wall); }
-.ag-ra-ground--stair { fill: var(--ra-stair); }
-.ag-ra-ground--tower { fill: var(--ra-tower); }
+/* Each terrain sets its colour as `--ra-ground`, and a square is drawn from
+   it: its top in the colour, and the faces a raised square shows toward the
+   viewer shaded down from it, the right darker than the left, as if lit from
+   the back left. Terrain is only ever looked at: a tap goes through a raised
+   square to the board's tap layer underneath, which works out the square (the
+   flat ground is painted under that layer already). */
+.ag-ra-ground--open { --ra-ground: var(--ra-open); }
+.ag-ra-ground--rubble { --ra-ground: var(--ra-rubble); }
+.ag-ra-ground--lowwall { --ra-ground: var(--ra-lowwall); }
+.ag-ra-ground--trees { --ra-ground: var(--ra-trees); }
+.ag-ra-ground--wall { --ra-ground: var(--ra-wall); }
+.ag-ra-ground--parapet { --ra-ground: var(--ra-parapet); }
+.ag-ra-ground--stair { --ra-ground: var(--ra-stair); }
+.ag-ra-ground--tower { --ra-ground: var(--ra-tower); }
+.ag-ra-ground--earth { --ra-ground: var(--ra-earth); }
+.ag-ra-top { fill: var(--ra-ground); }
+.ag-ra-side { stroke: rgba(0, 0, 0, 0.18); stroke-width: 0.25; stroke-linejoin: round; }
+.ag-ra-side--left { fill: color-mix(in oklch, var(--ra-ground) 78%, black); }
+.ag-ra-side--right { fill: color-mix(in oklch, var(--ra-ground) 62%, black); }
+.ag-ra-block { pointer-events: none; }
+.ag-ra-block .ag-ra-top { stroke: rgba(0, 0, 0, 0.16); stroke-width: 0.25; stroke-linejoin: round; }
 /* The squares, faint enough to read past and there when a move is counted. */
 .ag-ra-grid { fill: none; stroke: rgba(0, 0, 0, 0.12); stroke-width: 0.3; }
 /* Where each squad musters, in its owner's colour (`--ra-seat`, set per zone). */
@@ -5239,20 +5258,24 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     pointer-events: none;
 }
 
-/* A character: a disc in its owner's colour with its mark on it, and its HP
-   beneath. The stroke is painted under the fill so the edge reads on any
-   ground. */
+/* A character: a disc in its owner's colour with its mark on it, stood upright
+   over its shadow, and its HP beneath. The stroke is painted under the fill so
+   the edge reads on any ground. */
+.ag-ra-shadow { fill: rgba(0, 0, 0, 0.3); pointer-events: none; }
 .ag-ra-figure {
     stroke: var(--ag-on-dark);
     stroke-width: 0.7;
     paint-order: stroke;
     filter: drop-shadow(0 0.4px 0.6px rgba(0, 0, 0, 0.5));
 }
+/* A standing character hidden behind something in front of it, drawn again
+   over it, faint, in its owner's colour, and tappable like the figure. */
+.ag-ra-ghost { opacity: 0.5; }
 /* Banked AP on overwatch or guard: a dashed edge, so a watcher is plain at a glance. */
 .ag-ra-figure--watch { stroke-dasharray: 1.2 0.8; stroke-width: 0.9; }
 .ag-ra-figure--down { fill: var(--ag-ink-softer); opacity: 0.6; }
 .ag-ra-mark {
-    font: 700 4px var(--ag-font);
+    font: 700 5px var(--ag-font);
     fill: var(--ag-on-dark);
     text-anchor: middle;
     dominant-baseline: central;
@@ -5270,15 +5293,15 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* The selected character's chance to hit an enemy, a badge across the top of the enemy's figure. */
 .ag-ra-odds { pointer-events: none; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
-.ag-ra-odds text { font: 800 2.5px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
+.ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */
 .ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }
 .ag-ra-sealed .ag-ra-mark { fill: var(--ra-oxblood); }
-/* A square of the viewer's zone while they place their squad: a tap target,
-   lit as somewhere to go once a character is picked up. */
-.ag-ra-place { fill: transparent; cursor: pointer; }
-.ag-ra-place--target { fill: color-mix(in oklch, var(--ra-centre) 28%, transparent); stroke: var(--ra-centre); stroke-width: 0.4; }
+.ag-ra-sealed--placing { cursor: pointer; }
+/* A square of the viewer's zone while they place their squad, lit as
+   somewhere to go once a character is picked up. */
+.ag-ra-place { fill: color-mix(in oklch, var(--ra-centre) 28%, transparent); stroke: var(--ra-centre); stroke-width: 0.4; pointer-events: none; }
 /* Taking a turn (§17.3 PR 7). The selected character's reach, shaded by the AP
    it takes to stop on each square: the nearer, the lighter. */
 .ag-ra-reach { fill: var(--ra-reach); pointer-events: none; }
@@ -5290,7 +5313,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-range { fill: var(--ra-range); fill-opacity: 0.3; pointer-events: none; }
 /* Over the whole board, under the figures: a tap on any square no one stands on. */
 .ag-ra-tap { fill: transparent; cursor: pointer; }
-.ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
+.ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
 .ag-ra-roll { margin-bottom: 8px; }

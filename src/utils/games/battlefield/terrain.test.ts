@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBattlefield, coordsOf, distance, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { buildBattlefield, coordsOf, coverOfRise, distance, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
 
 const map = (overrides: Partial<BattlefieldMap>): BattlefieldMap => ({
     name: "Test field",
@@ -16,12 +16,29 @@ describe("TERRAIN", () => {
         }
     });
 
+    it("gives every terrain a whole number of quarters of height", () => {
+        for (const terrain of Object.values(TERRAIN)) expect(Number.isInteger(terrain.height) && terrain.height >= 0, terrain.name).toBe(true);
+    });
+
     it("plays the table in §13.1", () => {
-        expect(TERRAIN["."]).toMatchObject({ moveCost: 1, standable: true, cover: "none", blocksSight: false });
-        expect(TERRAIN[","]).toMatchObject({ moveCost: 3, standable: false, cover: "half", blocksSight: false });
-        expect(TERRAIN["#"]).toMatchObject({ moveCost: Infinity, standable: false, cover: "full", blocksSight: true });
-        expect(TERRAIN["s"]).toMatchObject({ moveCost: 2, standable: true, cover: "none", highGround: false });
-        expect(TERRAIN["^"]).toMatchObject({ moveCost: 1, standable: true, cover: "none", highGround: true });
+        expect(TERRAIN["."]).toMatchObject({ moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false });
+        // Low cover's half cover, and a wall's full, come from their height alone.
+        expect(TERRAIN[","]).toMatchObject({ standable: false, height: 2, cover: "none", blocksSight: false });
+        expect(TERRAIN["o"]).toMatchObject({ standable: false, height: 3, cover: "none", blocksSight: false });
+        expect(TERRAIN["#"]).toMatchObject({ moveCost: Infinity, standable: false, height: FULL_HEIGHT, blocksSight: false });
+        // Trees hide whatever their height.
+        expect(TERRAIN["T"]).toMatchObject({ moveCost: Infinity, cover: "full", blocksSight: true });
+        expect(TERRAIN["s"]).toMatchObject({ moveCost: 2, standable: true, stairs: true });
+        expect(TERRAIN["^"].height).toBeGreaterThan(TERRAIN["#"].height);
+        // A parapet gives whoever is on the tower top half cover, by standing half a height above it.
+        expect(TERRAIN["P"]).toMatchObject({ moveCost: Infinity, standable: false });
+        expect(coverOfRise(TERRAIN["P"].height - TERRAIN["^"].height)).toBe("half");
+    });
+});
+
+describe("coverOfRise", () => {
+    it("gives nothing for a quarter, half cover for a half or three quarters, and full cover for a full height", () => {
+        expect([0, 1, 2, 3, 4, 7, -2].map(coverOfRise)).toEqual(["none", "none", "half", "half", "full", "full", "none"]);
     });
 });
 
@@ -29,7 +46,15 @@ describe("buildBattlefield", () => {
     it("reads the rows into one terrain per square, row by row", () => {
         const field = buildBattlefield(map({ rows: ["..#", ",.T"] }));
         expect(field).toMatchObject({ width: 3, height: 2 });
-        expect(field.terrain.map(t => t.name)).toEqual(["Open ground", "Open ground", "Wall", "Rubble", "Open ground", "Trees"]);
+        expect(field.tiles.map(tile => tile.terrain.name)).toEqual(["Open ground", "Open ground", "Wall", "Rubble", "Open ground", "Trees"]);
+    });
+
+    it("stands each square's terrain on its ground, flat where the map has no elevation", () => {
+        expect(buildBattlefield(map({ rows: ["..#"] })).tiles.map(tile => tile.elevation)).toEqual([0, 0, FULL_HEIGHT]);
+        const hill = buildBattlefield(map({ rows: ["..#", ",.."], elevation: ["01a", "220"] }));
+        // Base 36: "a" is ten quarters of ground, and the wall stands a full height on it.
+        expect(hill.tiles.map(tile => tile.elevation)).toEqual([0, 1, 10 + FULL_HEIGHT, 2 + TERRAIN[","].height, 2, 0]);
+        expect(riseOf(hill, 3, 4)).toBe(TERRAIN[","].height);
     });
 
     it("turns deployment zones and objectives into their squares", () => {
@@ -45,6 +70,9 @@ describe("buildBattlefield", () => {
         expect(() => buildBattlefield(map({ rows: [] }))).toThrow(/at least one square/);
         expect(() => buildBattlefield(map({ rows: ["...", ".."] }))).toThrow(/row 1 is 2 squares wide/);
         expect(() => buildBattlefield(map({ rows: ["..?"] }))).toThrow(/unknown terrain "\?" at column 2, row 0/);
+        expect(() => buildBattlefield(map({ elevation: ["000", "000"] }))).toThrow(/elevation has 2 rows, not 3/);
+        expect(() => buildBattlefield(map({ elevation: ["000", "00", "000"] }))).toThrow(/elevation row 1 is 2 squares wide/);
+        expect(() => buildBattlefield(map({ elevation: ["000", "0A0", "000"] }))).toThrow(/unknown ground level "A" at column 1, row 1/);
         expect(() => buildBattlefield(map({ rows: ["..", ".."], objectives: { centre: { col: 1, row: 1, width: 2, height: 1 } } })))
             .toThrow(/objective "centre" doesn't fit/);
         expect(() => buildBattlefield(map({ deployments: [{ col: 0, row: 1, width: 3, height: 1 }] })))
@@ -64,7 +92,7 @@ describe("squareAt / coordsOf", () => {
     const field = buildBattlefield(map({ rows: ["....", "....", "...."] }));
 
     it("round-trips every square", () => {
-        for (let square = 0; square < field.terrain.length; square++) {
+        for (let square = 0; square < field.tiles.length; square++) {
             const { col, row } = coordsOf(field, square);
             expect(squareAt(field, col, row)).toBe(square);
         }

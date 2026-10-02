@@ -13,8 +13,10 @@
 // walls.
 //
 // Letters are `TERRAIN`'s (src/utils/games/battlefield/terrain.ts): `.` open
-// ground, `,` rubble and `o` low walls (low cover), `T` trees and `#` wall
-// (high cover), `s` a tower stair and `^` a tower top.
+// ground, `,` rubble and `o` low walls (half and three quarters of a height:
+// half cover), `T` trees and `#` wall (full cover), `s` a tower stair, `^` a
+// tower top and `P` the parapet round it (half cover for whoever is on the
+// tower), each at its own height (§25). The map is flat ground.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
 
@@ -33,10 +35,10 @@ export const RUINED_FORT_MAP: BattlefieldMap = {
         ".TT.................................",
         "TTT......,,,............,,,.........",
         "T...................................",
-        "......####................####......",
-        "......#^^######......######^^#......",
-        "......#^^s................s^^#......",
-        "....T.###..................###.T....",
+        "......PPPP................PPPP......",
+        "......P^^P#####......#####P^^P......",
+        "......P^^s................s^^P......",
+        "....T.PPP..................PPP.T....",
         "...TT..#....oo..............#..TT...",
         "...TTT.#....................#.TTT...",
         ".......,..............o.....#.......",
@@ -53,10 +55,10 @@ export const RUINED_FORT_MAP: BattlefieldMap = {
         ".......#.....o..............,.......",
         "...TTT.#....................#.TTT...",
         "...TT..#..............oo....#..TT...",
-        "....T.###..................###.T....",
-        "......#^^s................s^^#......",
-        "......#^^######......######^^#......",
-        "......####................####......",
+        "....T.PPP..................PPP.T....",
+        "......P^^s................s^^P......",
+        "......P^^P#####......#####P^^P......",
+        "......PPPP................PPPP......",
         "...................................T",
         ".........,,,............,,,......TTT",
         ".................................TT.",

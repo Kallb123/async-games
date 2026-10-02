@@ -7,6 +7,8 @@
 // Pure data, with no server-only imports, so the muster screen and the board
 // read the same table the commands do.
 
+import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
+
 export type CharacterId = "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric";
 
 export type AbilityId = "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise";
@@ -50,6 +52,8 @@ export interface Character {
     role: string;
     /** Movement points each AP spent on moving buys (§13.2). */
     movement: number;
+    /** How far one step can climb up or down, in quarters, where it climbs better than `DEFAULT_CLIMB` (§25.2). */
+    climb?: number;
     hp: number;
     weapon: Weapon;
     abilities: readonly AbilityId[];
@@ -70,7 +74,7 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
         weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20 }, abilities: ["aimedShot"], points: 20,
     },
     scout: {
-        name: "Scout", role: "Fastest and fragile; the flanker", movement: 8, hp: 6,
+        name: "Scout", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, hp: 6,
         weapon: { name: "Knives", kind: "melee", damage: 3 }, abilities: ["sneak"], points: 20,
     },
     mage: {

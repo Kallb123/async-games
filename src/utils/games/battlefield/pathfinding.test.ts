@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { findPath, pathCost, pathTo, reachFrom, stepCost } from "./pathfinding";
-import { at, fieldOf } from "./testFixtures";
+import { CLIMB_COST, findPath, pathCost, pathTo, reachFrom, stepCost } from "./pathfinding";
+import { at, fieldOf, hillOf } from "./testFixtures";
 
 describe("stepCost", () => {
     const field = fieldOf(
@@ -12,8 +12,9 @@ describe("stepCost", () => {
     it("costs the square stepped onto, and 1.5 times that on a diagonal", () => {
         expect(stepCost(field, at(field, 0, 0), at(field, 0, 1))).toBe(1);
         expect(stepCost(field, at(field, 0, 0), at(field, 1, 0))).toBe(2);
-        expect(stepCost(field, at(field, 0, 0), at(field, 1, 1))).toBe(4.5);
-        expect(stepCost(field, at(field, 1, 1), at(field, 0, 2))).toBe(1.5);
+        // Rubble is half a height: climbing onto it and off again each cost a climb.
+        expect(stepCost(field, at(field, 0, 0), at(field, 1, 1))).toBe((1 + CLIMB_COST) * 1.5);
+        expect(stepCost(field, at(field, 1, 1), at(field, 0, 2))).toBe((1 + CLIMB_COST) * 1.5);
     });
 
     it("can't step onto high cover, or anywhere that isn't next door", () => {
@@ -29,7 +30,7 @@ describe("stepCost", () => {
     });
 
     it("can't step on or off the map", () => {
-        const last = field.terrain.length - 1;
+        const last = field.tiles.length - 1;
         expect(stepCost(field, last, last + field.width)).toBeUndefined();
         expect(stepCost(field, last + field.width, last)).toBeUndefined();
         expect(stepCost(field, 0, -1)).toBeUndefined();
@@ -148,6 +149,51 @@ describe("findPath", () => {
     });
 });
 
+describe("climbing", () => {
+    /** A step from open ground up (or down) onto open ground this many quarters higher. */
+    const step = (from: number, to: number, climb?: number) => stepCost(hillOf([".."], [`${from}${to}`]), 0, 1, climb);
+
+    it("takes a quarter in its stride, climbs a half or three quarters, and can't climb a full height", () => {
+        expect(step(0, 1)).toBe(1);
+        expect(step(0, 2)).toBe(1 + CLIMB_COST);
+        expect(step(0, 3)).toBe(1 + CLIMB_COST);
+        expect(step(0, 4)).toBeUndefined();
+    });
+
+    it("climbs down as it climbs up", () => {
+        expect(step(1, 0)).toBe(1);
+        expect(step(3, 0)).toBe(1 + CLIMB_COST);
+        expect(step(4, 0)).toBeUndefined();
+    });
+
+    it("lets a mover that climbs better up a full height, and no more", () => {
+        expect(step(0, 4, 4)).toBe(1 + CLIMB_COST);
+        expect(step(0, 5, 4)).toBeUndefined();
+    });
+
+    it("never climbs onto or off a stair, by as much as the stair rises", () => {
+        // Open ground, a stair three quarters up, and ground a height and a half up past it: a tower top.
+        const tower = hillOf(["...s."], ["00006"]);
+        expect(stepCost(tower, 2, 3)).toBe(2);
+        expect(stepCost(tower, 3, 4)).toBe(1);
+        expect(findPath(tower, 0, 4)?.squares).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("climbs as anywhere else past what a stair rises: a stair beside a cliff doesn't scale it", () => {
+        // The stair's top is three quarters up; the cliff beside it is three full heights.
+        const cliff = hillOf(["s."], ["0c"]);
+        expect(stepCost(cliff, 0, 1)).toBeUndefined();
+        expect(stepCost(cliff, 1, 0)).toBeUndefined();
+    });
+
+    it("can't cut a diagonal past a corner a full height above both ends", () => {
+        const corner = hillOf(["..", ".."], ["04", "00"]);
+        expect(stepCost(corner, at(corner, 0, 0), at(corner, 1, 1))).toBeUndefined();
+        const low = hillOf(["..", ".."], ["03", "00"]);
+        expect(stepCost(low, at(low, 0, 0), at(low, 1, 1))).toBe(1.5);
+    });
+});
+
 describe("pathCost", () => {
     const field = fieldOf(
         "..,",
@@ -155,7 +201,7 @@ describe("pathCost", () => {
     );
 
     it("adds up every step, and a lone square costs nothing", () => {
-        expect(pathCost(field, [at(field, 0, 1), at(field, 0, 0), at(field, 1, 0), at(field, 2, 0)])).toBe(5);
+        expect(pathCost(field, [at(field, 0, 1), at(field, 0, 0), at(field, 1, 0), at(field, 2, 0)])).toBe(3 + CLIMB_COST);
         expect(pathCost(field, [at(field, 0, 0)])).toBe(0);
     });
 

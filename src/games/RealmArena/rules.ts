@@ -27,8 +27,8 @@
 
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
-import { pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, isNeighbour, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
+import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
+import { coordsOf, distance, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, isCharacterId, MAX_OF_EACH, squadPoints, type Ability, type AbilityId, type CharacterId, type PlayerCount } from "./characters";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
@@ -41,6 +41,8 @@ export const HUNKER_AP = 1;
 export const REACTION_COST = 2;
 export const OVERWATCH_PENALTY = 15;
 export const HIGH_GROUND_BONUS = 10;
+/** How far above its target, in quarters, an attacker has to stand to have the high ground: half a height (§25.2). */
+export const HIGH_GROUND_RISE = HALF_HEIGHT;
 /** What a target's cover takes off a shot's chance to hit. Hunkering down doubles it (§13.2, §13.3). */
 export const COVER_PENALTY: Readonly<Record<Cover, number>> = { none: 0, half: 20, full: 40 };
 /** A shot that misses by this much or less grazes, for half damage (§13.3). */
@@ -143,9 +145,17 @@ export function fighterById(state: BattleState, id: unknown): Fighter | undefine
     return state.fighters.find(fighter => fighter.id === id);
 }
 
-/** Whether two characters touch, and nothing stands between them at the corner they share. Melee, guard, healing and raising all need it. */
+/** Whether two characters touch, and nothing stands between them at the corner they share. Healing, raising and the shield wall need it; melee needs `inMeleeReach` too. */
 export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
     return isNeighbour(field, a, b) && canSee(field, a, b);
+}
+
+/** How far apart in height, in quarters, two characters can be and still fight hand to hand (§25.2). */
+export const MELEE_RISE = 1;
+
+/** Whether a melee weapon reaches from one square to another: next to it, and no more than a quarter above or below it. */
+export function inMeleeReach(field: Battlefield, a: Square, b: Square): boolean {
+    return nextTo(field, a, b) && Math.abs(riseOf(field, a, b)) <= MELEE_RISE;
 }
 
 /** Whether one square is within `range` squares of another and can be seen from it: a ranged weapon's reach, and a fireball's (§13.3). */
@@ -153,20 +163,20 @@ export function inRange(field: Battlefield, from: Square, to: Square, range: num
     return distance(field, from, to) <= range && canSee(field, from, to);
 }
 
-/** Whether a character's weapon could hit someone on a square from where it stands: next to it for a melee weapon, in range and in sight for a ranged one. */
+/** Whether a character's weapon could hit someone on a square from where it stands: in melee reach for a melee weapon, in range and in sight for a ranged one. */
 export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
     const weapon = CHARACTERS[fighter.character].weapon;
-    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : nextTo(state.field, fighter.square, square);
+    return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square);
 }
 
-/** What a move by one character may cross and stop on: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
+/** What a move by one character may cross and stop on, and how far it can climb: enemies block, allies may be crossed but not stopped on. The fallen do neither. */
 export function moveRules(state: BattleState, mover: Fighter): Required<MoveRules> {
     const blocked = new Set<Square>(), occupied = new Set<Square>();
     for (const other of state.fighters) {
         if (other.id === mover.id || !isStanding(other)) continue;
         (other.owner === mover.owner ? occupied : blocked).add(other.square);
     }
-    return { blocked, occupied };
+    return { blocked, occupied, climb: CHARACTERS[mover.character].climb ?? DEFAULT_CLIMB };
 }
 
 /** The AP a move of this many movement points costs: whole AP, each buying the character's allowance; a sneak pays double (§13.2). */
@@ -214,7 +224,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
 
     const sideCover = coverAgainst(field, target.square, attacker.square);
     const cover = sideCover === "none" && shielded(state, target) ? "half" : sideCover;
-    const highGround = field.terrain[attacker.square].highGround && !field.terrain[target.square].highGround;
+    const highGround = riseOf(field, attacker.square, target.square) >= HIGH_GROUND_RISE;
     const raw = weapon.accuracy
         - COVER_PENALTY[cover] * (target.hunkered ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
@@ -236,13 +246,13 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
 
 /**
  * Whether a watcher would react to an enemy stepping onto this square:
- * overwatch at one it can see in range, guard at one next to it (§13.4).
+ * overwatch at one it can see in range, guard at one in melee reach (§13.4, §25.2).
  * Nobody reacts to a character mid-climb, only as it lands on a square it
  * could stop on — so a character a reaction downs always falls where it could
  * stand, and a Cleric can raise it.
  */
 function setsOff(state: BattleState, watcher: Fighter, square: Square): boolean {
-    return state.field.terrain[square].standable && weaponReaches(state, watcher, square);
+    return state.field.tiles[square].terrain.standable && weaponReaches(state, watcher, square);
 }
 
 export interface Reaction {
@@ -299,7 +309,7 @@ export function knockoutPoints(character: CharacterId): number {
 // ─── Checking an action ─────────────────────────────────────────────────────
 
 const isSquare = (field: Battlefield, value: unknown): value is Square =>
-    Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.terrain.length;
+    Number.isInteger(value) && (value as number) >= 0 && (value as number) < field.tiles.length;
 
 /** Why a character can't use an ability now, or undefined when it can. */
 function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
@@ -314,11 +324,11 @@ function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefine
 function pathRefusal(state: BattleState, mover: Fighter, path: unknown): string | number {
     if (!Array.isArray(path) || path.length < 2 || !path.every(square => isSquare(state.field, square))) return "That isn't a path";
     if (path[0] !== mover.square) return "A path starts where the character stands";
-    const { blocked, occupied } = moveRules(state, mover);
+    const { blocked, occupied, climb } = moveRules(state, mover);
     if (path.some(square => blocked.has(square))) return "An enemy is in the way";
     const end = path[path.length - 1];
-    if (!state.field.terrain[end].standable || occupied.has(end)) return "Nobody can stop there";
-    return pathCost(state.field, path) ?? "That path can't be walked";
+    if (!state.field.tiles[end].terrain.standable || occupied.has(end)) return "Nobody can stop there";
+    return pathCost(state.field, path, climb) ?? "That path can't be walked";
 }
 
 const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter =>
@@ -328,7 +338,8 @@ const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
     if (!isEnemy(actor, target)) return "Pick an enemy";
     if (CHARACTERS[actor.character].weapon.kind === "melee") {
-        return weaponReaches(state, actor, target.square) ? undefined : "Too far away to strike";
+        if (weaponReaches(state, actor, target.square)) return undefined;
+        return nextTo(state.field, actor.square, target.square) ? "Too far above or below to strike" : "Too far away to strike";
     }
     return shotOdds(state, actor, target, kind) ? undefined : "Out of range or out of sight";
 }
@@ -380,7 +391,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
                 const enemies = targets.map(one => fighterById(state, one));
                 if (!enemies.every((one): one is Fighter => isEnemy(actor, one))) return "Pick two enemies";
-                return enemies.every(one => nextTo(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them";
+                return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);
@@ -398,7 +409,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
             return ability("raise", () => {
                 if (!target || target.owner !== actor.owner || isStanding(target)) return "Pick a downed ally";
                 if (!nextTo(state.field, actor.square, target.square)) return "Too far away to raise";
-                const clear = state.field.terrain[target.square].standable
+                const clear = state.field.tiles[target.square].terrain.standable
                     && !state.fighters.some(other => isStanding(other) && other.square === target.square);
                 return clear ? undefined : "There's no room to stand there";
             });

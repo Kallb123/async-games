@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canSee, sightLine } from "./lineOfSight";
-import { at, fieldOf } from "./testFixtures";
+import { at, fieldOf, hillOf } from "./testFixtures";
 
 describe("sightLine", () => {
     const field = fieldOf(
@@ -73,5 +73,29 @@ describe("canSee", () => {
             "###",
         );
         expect(canSee(field, at(field, 1, 1), at(field, 1, 1))).toBe(true);
+    });
+
+    it("is blocked by anything a full height above both ends, and not by less", () => {
+        const sight = (wall: string, near: string, far: string) => {
+            const field = hillOf(["....."], [`${near}0${wall}0${far}`]);
+            return canSee(field, at(field, 0, 0), at(field, 4, 0));
+        };
+        expect(sight("4", "0", "0")).toBe(false);
+        expect(sight("3", "0", "0")).toBe(true);
+        // From half a height up, a wall a full height off the ground is looked over.
+        expect(sight("4", "2", "0")).toBe(true);
+        expect(sight("4", "0", "2")).toBe(true);
+        expect(sight("6", "2", "0")).toBe(false);
+    });
+
+    it("is blocked by trees whatever the heights", () => {
+        const field = hillOf(["..T.."], ["80008"]);
+        expect(canSee(field, at(field, 0, 0), at(field, 4, 0))).toBe(false);
+    });
+
+    it("looks over a wall from a tower top", () => {
+        const fort = fieldOf("^.#..");
+        expect(canSee(fort, at(fort, 0, 0), at(fort, 4, 0))).toBe(true);
+        expect(canSee(fort, at(fort, 1, 0), at(fort, 4, 0))).toBe(false);
     });
 });

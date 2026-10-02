@@ -17,8 +17,10 @@
 // side of it, and a tower on each flank looking down into the keep.
 //
 // Letters are `TERRAIN`'s (src/utils/games/battlefield/terrain.ts): `.` open
-// ground, `,` rubble and `o` low walls (low cover), `T` trees and `#` wall
-// (high cover), `s` a tower stair and `^` a tower top.
+// ground, `,` rubble and `o` low walls (half and three quarters of a height:
+// half cover), `T` trees and `#` wall (full cover), `s` a tower stair, `^` a
+// tower top and `P` the parapet round it (half cover for whoever is on the
+// tower), each at its own height (§25). The map is flat ground.
 
 import { buildBattlefield, type BattlefieldMap } from "@/utils/games/battlefield/terrain";
 
@@ -32,8 +34,8 @@ export const RING_FORT_MAP: BattlefieldMap = {
         "..............T.T..............T.T..............",
         "........,,............TTTT............,,........",
         "................................................",
-        "...................,..####..,...................",
-        ".....................##^^##.....................",
+        "...................,..PPPP..,...................",
+        ".....................#P^^P#.....................",
         "..................,###s^^s###,..................",
         ".................,,#........#,,.................",
         "...............##,............,##...............",
@@ -50,10 +52,10 @@ export const RING_FORT_MAP: BattlefieldMap = {
         "..TT.......##.oo.....o....o.....oo.##.......TT..",
         "...T.......##......................##.......T...",
         "............#......................#............",
-        "............#s....................s#............",
-        "............#^^..................^^#............",
-        ".,..........#^^....oo......oo....^^#..........,.",
-        ".,..........###s................s###..........,.",
+        "............Ps....................sP............",
+        "............P^^..................^^P............",
+        ".,..........P^^s...oo......oo...s^^P..........,.",
+        ".,..........PPP..................PPP..........,.",
         "..............###..............###..............",
         "....TT.........##,............,##.........TT....",
         ".....T...........,,#........#,,...........T.....",

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { coverAgainst } from "@/utils/games/battlefield/cover";
+import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, squareAt, type Square } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT as FORT, RUINED_FORT_MAP } from "./ruinedFort";
 import { sealedOff, sorted, strandedSeats, towersOverCentre } from "./testFixtures";
 
 /** The same square with the map turned upside down. */
-const turned = (square: Square): Square => FORT.terrain.length - 1 - square;
+const turned = (square: Square): Square => FORT.tiles.length - 1 - square;
 
 const centre = FORT.objectives.centre;
 
@@ -47,9 +49,17 @@ describe("the Ruined Fort", () => {
         const breaches = [...squares([7], range(18, 20)), ...squares([28], range(27, 29))];
         const courtyard = squares(range(8, 27), range(14, 33));
 
-        expect(gates.every(square => FORT.terrain[square].name === "Open ground")).toBe(true);
-        expect(breaches.every(square => FORT.terrain[square].name === "Rubble")).toBe(true);
+        expect(gates.every(square => FORT.tiles[square].terrain.name === "Open ground")).toBe(true);
+        expect(breaches.every(square => FORT.tiles[square].terrain.name === "Rubble")).toBe(true);
         const { costs } = reachFrom(FORT, FORT.deployments[0][0], Infinity, { blocked: new Set([...gates, ...breaches]) });
         expect(courtyard.filter(square => costs[square] < Infinity)).toEqual([]);
+    });
+
+    it("covers whoever is on a tower top by half from its parapet, and leaves them in sight (§25.2)", () => {
+        // The north-west tower's top, shot at from the open ground west of the fort.
+        const top = squareAt(FORT, 7, 13)!, outside = squareAt(FORT, 3, 13)!;
+        expect(FORT.tiles[squareAt(FORT, 6, 13)!].terrain.name).toBe("Parapet");
+        expect(canSee(FORT, outside, top)).toBe(true);
+        expect(coverAgainst(FORT, top, outside)).toBe("half");
     });
 });

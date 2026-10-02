@@ -6,51 +6,29 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import type { CharacterId } from "./characters";
 import {
-    CELL, abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, groundLayers, hpFraction, pathPoints, placeTap, rangeArea, reachFocus, reachLayers,
-    reactionPreviews, runLayers, squadCounts, squadOf, squareAtPoint, targetsOf, whoseName, type Placement,
+    abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
+    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, type Placement,
 } from "./ui";
 
-/** Every square a path's rectangles cover, as "col,row". */
-function squaresDrawn(d: string): Set<string> {
-    const covered = new Set<string>();
-    for (const [, x, y, w] of d.matchAll(/M(\d+) (\d+)h(\d+)v/g)) {
-        for (let col = Number(x) / CELL; col < (Number(x) + Number(w)) / CELL; col++) covered.add(`${col},${Number(y) / CELL}`);
-    }
-    return covered;
+/** Squares as "col,row", sorted, to read a test's expectations by. */
+function named(field: { width: number }, squares: Iterable<number>): string[] {
+    return [...squares].map(square => `${square % field.width},${Math.floor(square / field.width)}`).sort();
 }
-
-describe("groundLayers", () => {
-    it("draws one path per kind of terrain, merging a row's run of one kind into one rectangle", () => {
-        const field = buildBattlefield({ name: "Test", rows: ["..,,#", "....."], deployments: [], objectives: {} });
-        expect(groundLayers(field)).toEqual([
-            { letter: ".", d: "M0 0h20v10h-20zM0 10h50v10h-50z" },
-            { letter: ",", d: "M20 0h20v10h-20z" },
-            { letter: "#", d: "M40 0h10v10h-10z" },
-        ]);
-    });
-
-    it("covers every square of the Ruined Fort exactly once, in its own terrain's layer", () => {
-        const layers = groundLayers(RUINED_FORT);
-        const drawn = layers.map(layer => squaresDrawn(layer.d));
-        expect(drawn.reduce((total, squares) => total + squares.size, 0)).toBe(RUINED_FORT.width * RUINED_FORT.height);
-        expect(new Set(drawn.flatMap(squares => [...squares])).size).toBe(RUINED_FORT.width * RUINED_FORT.height);
-    });
-});
 
 describe("areaRect", () => {
     it("bounds the centre of the Ruined Fort", () => {
-        expect(areaRect(RUINED_FORT, RUINED_FORT.objectives.centre)).toEqual({ x: 15 * CELL, y: 21 * CELL, width: 6 * CELL, height: 6 * CELL });
+        expect(areaRect(RUINED_FORT, RUINED_FORT.objectives.centre)).toEqual({ x: 15, y: 21, width: 6, height: 6 });
     });
 });
 
 describe("focusOn", () => {
     it("frames seven squares across, centred on the character", () => {
-        expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!)).toEqual({ x: 7 * CELL, y: 17 * CELL, width: 7 * CELL, height: 7 * CELL });
+        expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!)).toEqual({ x: 7, y: 17, width: 7, height: 7 });
     });
 
     it("frames every square it's given, with the same margin round them all", () => {
         expect(focusOn(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!, squareAt(RUINED_FORT, 14, 18)!))
-            .toEqual({ x: 7 * CELL, y: 15 * CELL, width: 11 * CELL, height: 9 * CELL });
+            .toEqual({ x: 7, y: 15, width: 11, height: 9 });
     });
 });
 
@@ -158,30 +136,6 @@ function ready(id: number, owner: string, character: CharacterId, square: number
 
 const nameFor = (userId: string) => ({ a: "Alice", b: "Bob" })[userId] ?? userId;
 
-describe("runLayers", () => {
-    it("draws every square with a key, a path per key, and leaves the rest out", () => {
-        const field = { width: 3, height: 2 };
-        expect(runLayers(field, square => square === 4 ? undefined : square % 3 === 2 ? "edge" : "inside")).toEqual([
-            { key: "inside", d: "M0 0h20v10h-20zM0 10h10v10h-10z" },
-            { key: "edge", d: "M20 0h10v10h-10zM20 10h10v10h-10z" },
-        ]);
-    });
-});
-
-describe("squareAtPoint", () => {
-    it("finds the square under a point, and nothing off the map", () => {
-        expect(squareAtPoint(OPEN, 25, 15)).toBe(at(OPEN, 2, 1));
-        expect(squareAtPoint(OPEN, -1, 15)).toBeUndefined();
-        expect(squareAtPoint(OPEN, 25, 50)).toBeUndefined();
-    });
-});
-
-describe("pathPoints", () => {
-    it("runs through each square's centre", () => {
-        expect(pathPoints(OPEN, [at(OPEN, 0, 0), at(OPEN, 1, 1)])).toBe("5,5 15,15");
-    });
-});
-
 describe("reachFocus", () => {
     const LONG = buildBattlefield({ name: "Long", rows: [".".repeat(30), ".".repeat(30), ".".repeat(30)], deployments: [], objectives: {} });
 
@@ -189,7 +143,7 @@ describe("reachFocus", () => {
         // 4 movement points an AP, so 2 AP reach eight squares either way along the row: cols 7–23.
         const knight = ready(0, "a", "knight", at(LONG, 15, 1));
         const rect = reachFocus({ field: LONG, fighters: [knight] }, knight, 2);
-        const centre = 15.5 * CELL, side = 8.5 * CELL;
+        const centre = 15.5, side = 8.5;
         expect(rect.x).toBeCloseTo(centre - side * 2 / 3);
         expect(rect.width).toBeCloseTo(side * 4 / 3);
     });
@@ -208,39 +162,36 @@ describe("reachFocus", () => {
     });
 });
 
-describe("reachLayers", () => {
-    it("shades every square in reach by the AP it costs to stop there, nearest first, and not where it stands", () => {
+describe("reachShading", () => {
+    it("shades every square in reach by the AP it costs to stop there, and not where it stands", () => {
         const knight = ready(0, "a", "knight", at(OPEN, 0, 2), { ap: 2 });
-        const layers = reachLayers(OPEN, knight, reachOf({ field: OPEN, fighters: [knight] }, knight), false);
-        expect(layers.map(layer => layer.key)).toEqual([1, 2]);
-        const first = squaresDrawn(layers[0].d);
+        const shading = reachShading(knight, reachOf({ field: OPEN, fighters: [knight] }, knight), false);
+        expect(new Set(shading.values())).toEqual(new Set([1, 2]));
         // 4 movement points an AP: four squares straight along the row.
-        expect(first.has("4,2")).toBe(true);
-        expect(first.has("5,2")).toBe(false);
-        expect(first.has("0,2")).toBe(false);
-        expect(squaresDrawn(layers[1].d).has("8,2")).toBe(true);
+        expect(shading.get(at(OPEN, 4, 2))).toBe(1);
+        expect(shading.get(at(OPEN, 5, 2))).toBe(2);
+        expect(shading.has(at(OPEN, 0, 2))).toBe(false);
+        expect(shading.get(at(OPEN, 8, 2))).toBe(2);
     });
 
     it("prices a sneak at double", () => {
         const scout = ready(0, "a", "scout", at(OPEN, 0, 2));
-        const layers = reachLayers(OPEN, scout, reachOf({ field: OPEN, fighters: [scout] }, scout, true), true);
-        expect(layers.map(layer => layer.key)).toEqual([2, 4]);
+        const shading = reachShading(scout, reachOf({ field: OPEN, fighters: [scout] }, scout, true), true);
+        expect(new Set(shading.values())).toEqual(new Set([2, 4]));
     });
 });
 
-describe("rangeArea", () => {
-    const drawn = (d: string | null) => d === null ? new Set<string>() : squaresDrawn(d);
-
+describe("rangeSquares", () => {
     it("draws a melee weapon's range as the squares next to it, not its own", () => {
         const knight = ready(0, "a", "knight", at(OPEN, 5, 2));
-        const range = drawn(rangeArea({ field: OPEN, fighters: [knight] }, knight, "weapon"));
-        expect([...range].sort()).toEqual(["4,1", "4,2", "4,3", "5,1", "5,3", "6,1", "6,2", "6,3"]);
+        const range = rangeSquares({ field: OPEN, fighters: [knight] }, knight, "weapon");
+        expect(named(OPEN, range)).toEqual(["4,1", "4,2", "4,3", "5,1", "5,3", "6,1", "6,2", "6,3"]);
     });
 
     it("draws a ranged weapon's range only as far as it can see, and only where someone could stand", () => {
         const field = buildBattlefield({ name: "Wall", rows: ["....#....."], deployments: [], objectives: {} });
         const archer = ready(0, "a", "archer", at(field, 0, 0));
-        expect([...drawn(rangeArea({ field, fighters: [archer] }, archer, "weapon"))].sort()).toEqual(["1,0", "2,0", "3,0"]);
+        expect(named(field, rangeSquares({ field, fighters: [archer] }, archer, "weapon"))).toEqual(["1,0", "2,0", "3,0"]);
     });
 
     it("draws a fireball out to its own range, whatever the weapon's", () => {
@@ -248,14 +199,14 @@ describe("rangeArea", () => {
         const mage = ready(0, "a", "mage", at(field, 0, 0));
         const state = { field, fighters: [mage] };
         // The Bolt reaches 10 squares, a fireball 12.
-        expect(drawn(rangeArea(state, mage, "weapon")).has("11,0")).toBe(false);
-        expect(drawn(rangeArea(state, mage, "fireball")).has("12,0")).toBe(true);
-        expect(drawn(rangeArea(state, mage, "fireball")).has("13,0")).toBe(false);
+        expect(rangeSquares(state, mage, "weapon").has(at(field, 11, 0))).toBe(false);
+        expect(rangeSquares(state, mage, "fireball").has(at(field, 12, 0))).toBe(true);
+        expect(rangeSquares(state, mage, "fireball").has(at(field, 13, 0))).toBe(false);
     });
 
     it("draws a heal's range as the squares next to it", () => {
         const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
-        expect([...drawn(rangeArea({ field: OPEN, fighters: [cleric] }, cleric, "nextTo"))].sort()).toEqual(["0,1", "1,0", "1,1"]);
+        expect(named(OPEN, rangeSquares({ field: OPEN, fighters: [cleric] }, cleric, "nextTo"))).toEqual(["0,1", "1,0", "1,1"]);
     });
 });
 

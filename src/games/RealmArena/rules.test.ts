@@ -46,7 +46,7 @@ describe("hitting (§13.3)", () => {
         expect(odds(fighter(2, "b", "knight", at(field, 5, 3)))).toMatchObject({ chance: 80, cover: "none", flanked: true, damage: 4, grazeDamage: 2 });
     });
 
-    it("takes 40 off for full cover, from high cover whose corner the shot passes", () => {
+    it("takes 40 off for full cover, from a wall whose corner the shot passes", () => {
         const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
         const target = fighter(2, "b", "knight", at(walled, 5, 2));
         expect(odds(target, fighter(1, "a", "archer", at(walled, 2, 5)), [], "attack", walled)).toMatchObject({ chance: 40, cover: "full" });
@@ -72,6 +72,18 @@ describe("hitting (§13.3)", () => {
         expect(odds(target, archer, [], "attack", tower)?.chance).toBe(70);
         expect(odds(fighter(2, "b", "knight", at(field, 5, 2)), archer, [], "aimedShot")?.chance).toBe(80);
         expect(odds(fighter(2, "b", "knight", at(field, 5, 2)), archer, [], "overwatch")?.chance).toBe(45);
+    });
+
+    it("gives the high ground to an attacker half a height above its target, and not a quarter", () => {
+        const hill = (ground: string) => buildBattlefield({ name: "Hill", rows: [".".repeat(10)], elevation: [ground], deployments: [], objectives: {} });
+        const from = (ground: string) => {
+            const field = hill(ground);
+            return odds(fighter(2, "b", "knight", 5), fighter(1, "a", "archer", 0), [], "attack", field)?.chance;
+        };
+        expect(from("2000000000")).toBe(90);
+        expect(from("1000000000")).toBe(80);
+        // A target as high as the attacker is no lower for it.
+        expect(from("2222222222")).toBe(80);
     });
 
     it("never goes past certain, and then never grazes", () => {
@@ -116,6 +128,26 @@ describe("the AP a move costs (§13.2)", () => {
         expect(reach.costs[at(field, 24, 0)]).toBe(24);
         expect(reach.costs[at(field, 25, 0)]).toBe(Infinity);
         expect(reachOf({ field, fighters: [scout] }, scout, true).costs[at(field, 9, 0)]).toBe(Infinity);
+    });
+
+    it("lets a Scout climb a full height that nobody else can, and no higher (§25.2)", () => {
+        const ledge = (ground: string) => buildBattlefield({ name: "Ledge", rows: ["...."], elevation: [ground], deployments: [], objectives: {} });
+        const top = (ground: string, character: "scout" | "knight") => {
+            const field = ledge(ground);
+            const mover = fighter(1, "a", character, 0);
+            return reachOf({ field, fighters: [mover] }, mover).costs[3];
+        };
+        expect(top("0004", "scout")).toBeLessThan(Infinity);
+        expect(top("0004", "knight")).toBe(Infinity);
+        expect(top("0005", "scout")).toBe(Infinity);
+    });
+
+    it("refuses a path climbing further than the character can", () => {
+        const field = buildBattlefield({ name: "Ledge", rows: ["...."], elevation: ["0004"], deployments: [], objectives: {} });
+        const knight = fighter(1, "a", "knight", 2, { ap: ACTION_POINTS });
+        const scout = fighter(2, "a", "scout", 2, { ap: ACTION_POINTS });
+        expect(check({ field, fighters: [knight] }, "a", { kind: "move", fighter: 1, path: [2, 3] })).toMatchObject({ refused: "That path can't be walked" });
+        expect(check({ field, fighters: [scout] }, "a", { kind: "move", fighter: 2, path: [2, 3] })).not.toHaveProperty("refused");
     });
 });
 
@@ -228,6 +260,29 @@ describe("act", () => {
     });
 });
 
+describe("melee across a height (§25.2)", () => {
+    const step = (ground: string) => buildBattlefield({ name: "Step", rows: [".."], elevation: [ground], deployments: [], objectives: {} });
+    const strike = (ground: string) => {
+        const field = step(ground);
+        const knight = fighter(1, "a", "knight", 0, { ap: ACTION_POINTS });
+        return check({ field, fighters: [knight, fighter(2, "b", "archer", 1)] }, "a", { kind: "attack", fighter: 1, target: 2 });
+    };
+
+    it("strikes an enemy beside it a quarter above or below, and not half a height", () => {
+        expect(strike("01")).not.toHaveProperty("refused");
+        expect(strike("10")).not.toHaveProperty("refused");
+        expect(strike("02")).toEqual({ refused: "Too far above or below to strike" });
+        expect(strike("20")).toEqual({ refused: "Too far above or below to strike" });
+    });
+
+    it("cleaves only enemies within a quarter of its height", () => {
+        const field = buildBattlefield({ name: "Step", rows: ["..."], elevation: ["002"], deployments: [], objectives: {} });
+        const man = fighter(1, "a", "manAtArms", 1, { ap: ACTION_POINTS });
+        const state = { field, fighters: [man, fighter(2, "b", "archer", 0), fighter(3, "b", "archer", 2)] };
+        expect(check(state, "a", { kind: "cleave", fighter: 1, targets: [2, 3] })).toEqual({ refused: "Both enemies must be next to them, within a quarter of their height" });
+    });
+});
+
 describe("reactions (§13.4)", () => {
     const field = fieldOf();
     const path = [at(field, 9, 4), at(field, 9, 3), at(field, 9, 2), at(field, 8, 2)];
@@ -260,6 +315,16 @@ describe("reactions (§13.4)", () => {
         expect(reactionsTo({ field, fighters: [knight, scout] }, scout, steps)).toEqual([{ watcher: 1, step: 2 }]);
         const { byId } = run({ field, fighters: [knight, scout] }, "a", { kind: "move", fighter: 2, path: steps });
         expect(byId(2)).toMatchObject({ hp: 2, square: steps[3] });
+    });
+
+    it("strike from guard only at an enemy within a quarter of its height (§25.2)", () => {
+        const ledge = buildBattlefield({ name: "Ledge", rows: [".........."], elevation: ["0000220000"], deployments: [], objectives: {} });
+        const knight = fighter(1, "b", "knight", 3, { banked: 4 });
+        const scout = fighter(2, "a", "scout", 6);
+        // Along the ledge, half a height above the Knight, past it, and back down to the ground beyond it.
+        expect(reactionsTo({ field: ledge, fighters: [knight, scout] }, scout, [6, 5, 4])).toEqual([]);
+        const low = buildBattlefield({ name: "Ledge", rows: [".........."], elevation: ["0000110000"], deployments: [], objectives: {} });
+        expect(reactionsTo({ field: low, fighters: [knight, scout] }, scout, [6, 5, 4])).toEqual([{ watcher: 1, step: 2 }]);
     });
 
     it("stop the mover where one downs it, and score the knock-out", () => {
