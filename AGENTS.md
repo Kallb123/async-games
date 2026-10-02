@@ -134,6 +134,10 @@ out. A second copy is the signal to extract the first one.
   `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`
   draws), `mapLabels.ts` (the label placement `MapLabelLayer` draws),
+  `isometric.ts` (the 2:1 projection of a square grid whose squares stand at
+  different heights — Realm Arena's board draws its battlefield through it:
+  the per-height runs, the raised blocks' faces, the back-to-front order and
+  which square a tap lands on),
   `achievements.ts` (a profile's achievement groups, a result's unlock rows,
   and what the toaster hasn't celebrated yet).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the

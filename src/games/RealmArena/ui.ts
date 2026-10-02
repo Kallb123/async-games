@@ -5,12 +5,9 @@
 import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, squareAt, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, type AbilityId, type CharacterId, type Weapon } from "./characters";
 import { ACTION_POINTS, check, fighterById, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
-
-/** Board units per square: the SVG's viewBox is the map's size times this. */
-export const CELL = 10;
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -30,69 +27,39 @@ const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
 );
 
-/** One SVG path drawing every square that shares a key: a row's run of them one rectangle. */
-export interface RunLayer<K> {
-    key: K;
-    d: string;
+/** The letter a square's terrain is drawn with on the map: what the board styles it by. */
+export function terrainLetter(field: Battlefield, square: Square): TerrainLetter {
+    return LETTER_OF.get(field.terrain[square]) ?? ".";
 }
 
 /**
- * The squares of a board grouped by `keyOf`, one path per key rather than a
- * shape per square, since the 36×48 fort is 1,728 of them and a 48×48 one
- * would be 2,304 (§13.1). Neighbouring squares with one key along a row merge
- * into a single rectangle, which keeps the path short and leaves no hairline
- * seam between them. A square whose key is undefined isn't drawn. Keys come
- * in the order they're first met; a caller wanting another sorts them.
+ * How high each terrain stands on the isometric board, in storeys
+ * (`ISO_STOREY`). Only how it's drawn: what plays as high ground is the
+ * terrain's own `highGround`, which only the tower top has, so the tower
+ * stands proud of the curtain wall it's built into and its stair climbs
+ * halfway. Low cover is drawn low enough to see a character past.
  */
-export function runLayers<K>(field: Pick<Battlefield, "width" | "height">, keyOf: (square: Square) => K | undefined): RunLayer<K>[] {
-    const runs = new Map<K, string[]>();
-    for (let row = 0; row < field.height; row++) {
-        let col = 0;
-        while (col < field.width) {
-            const key = keyOf(row * field.width + col);
-            let end = col + 1;
-            while (end < field.width && keyOf(row * field.width + end) === key) end++;
-            if (key !== undefined) {
-                const path = runs.get(key) ?? [];
-                path.push(`M${col * CELL} ${row * CELL}h${(end - col) * CELL}v${CELL}h${-(end - col) * CELL}z`);
-                runs.set(key, path);
-            }
-            col = end;
-        }
-    }
-    return [...runs].map(([key, path]) => ({ key, d: path.join("") }));
+export const TERRAIN_HEIGHT: Readonly<Record<TerrainLetter, number>> = {
+    ".": 0,
+    ",": 0.3,
+    "o": 0.6,
+    "T": 1.6,
+    "#": 2,
+    "s": 1.25,
+    "^": 2.5,
+};
+
+/** Every square's height on the board, by `Square`, read from its terrain. */
+export function squareHeights(field: Battlefield): number[] {
+    return field.terrain.map((_, square) => TERRAIN_HEIGHT[terrainLetter(field, square)]);
 }
 
-/** One kind of ground, as one SVG path. */
-export interface GroundLayer {
-    letter: TerrainLetter;
-    d: string;
-}
-
-/**
- * The ground drawn from the map's letters (§17.3 PR 5's placeholder), one
- * path per kind of terrain, in the order `TERRAIN` lists its letters, so open
- * ground is painted first.
- */
-export function groundLayers(field: Battlefield): GroundLayer[] {
-    const order = Object.keys(TERRAIN) as TerrainLetter[];
-    return runLayers(field, square => LETTER_OF.get(field.terrain[square]))
-        .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
-        .map(({ key, d }) => ({ letter: key, d }));
-}
-
-/** A square's centre, in board units. */
-export function squareCentre(field: Pick<Battlefield, "width">, square: Square): { x: number; y: number } {
-    const { col, row } = coordsOf(field, square);
-    return { x: (col + 0.5) * CELL, y: (row + 0.5) * CELL };
-}
-
-/** The rectangle a set of squares covers, in board units — a deployment zone, or the centre. */
+/** The rectangle a set of squares covers, in squares — a deployment zone, or the centre. */
 export function areaRect(field: Pick<Battlefield, "width">, squares: readonly Square[]): Rect {
     const coords = squares.map(square => coordsOf(field, square));
     const cols = coords.map(c => c.col), rows = coords.map(c => c.row);
     const col = Math.min(...cols), row = Math.min(...rows);
-    return { x: col * CELL, y: row * CELL, width: (Math.max(...cols) - col + 1) * CELL, height: (Math.max(...rows) - row + 1) * CELL };
+    return { x: col, y: row, width: Math.max(...cols) - col + 1, height: Math.max(...rows) - row + 1 };
 }
 
 /**
@@ -105,13 +72,12 @@ const FOCUS_REACH = 3;
 
 /**
  * The region `BoardZoom` brings into view for a selected character, or for
- * every square a step of a review touched: the squares, and `FOCUS_REACH`
- * either side of them.
+ * every square a step of a review touched, in squares: the squares, and
+ * `FOCUS_REACH` either side of them.
  */
 export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[]): Rect {
     const { x, y, width, height } = areaRect(field, squares);
-    const margin = FOCUS_REACH * CELL;
-    return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 };
+    return { x: x - FOCUS_REACH, y: y - FOCUS_REACH, width: width + FOCUS_REACH * 2, height: height + FOCUS_REACH * 2 };
 }
 
 /**
@@ -124,7 +90,8 @@ export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[])
 const REACH_SHOWN = 2 / 3;
 
 /**
- * The region `BoardZoom` brings into view for a selected character: most of
+ * The region `BoardZoom` brings into view for a selected character, in
+ * squares: most of
  * where it could move this turn (`REACH_SHOWN`), with `ap` to spend — what it
  * has left on its owner's turn, a full turn's otherwise. Never less than
  * `focusOn` frames round it, so a character with nowhere to go is still
@@ -136,7 +103,8 @@ export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Re
     const squares = Array.from(costs.keys()).filter(square => costs[square] !== Infinity);
     if (squares.length === 0) return near;
     const reach = areaRect(state.field, squares);
-    const { x, y } = squareCentre(state.field, fighter.square);
+    const { col, row } = coordsOf(state.field, fighter.square);
+    const x = col + 0.5, y = row + 0.5;
     const left = Math.min(near.x, x - (x - reach.x) * REACH_SHOWN);
     const top = Math.min(near.y, y - (y - reach.y) * REACH_SHOWN);
     const right = Math.max(near.x + near.width, x + (reach.x + reach.width - x) * REACH_SHOWN);
@@ -245,34 +213,30 @@ export function placeTap({ picks, selected }: Placement, square: Square, zone: r
 
 // ─── Taking a turn (§17.3 PR 7) ─────────────────────────────────────────────
 
-/** The square under a point on the board, in board units, or undefined off the map. */
-export function squareAtPoint(field: Pick<Battlefield, "width" | "height">, x: number, y: number): Square | undefined {
-    return squareAt(field, Math.floor(x / CELL), Math.floor(y / CELL));
-}
-
 /**
  * The tap-to-move shading (§13.2): every square a character could stop on,
- * one layer for each AP it would cost to get there, nearest first. Where it
- * stands isn't shaded.
+ * and the AP it would cost to get there. Where it stands isn't shaded.
  */
-export function reachLayers(field: Battlefield, fighter: Fighter, reach: Reach, sneaking: boolean): RunLayer<number>[] {
-    return runLayers(field, square => square === reach.from || reach.costs[square] === Infinity
-        ? undefined : moveAp(fighter.character, reach.costs[square], sneaking))
-        .sort((a, b) => a.key - b.key);
+export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean): ReadonlyMap<Square, number> {
+    const shading = new Map<Square, number>();
+    reach.costs.forEach((cost, square) => {
+        if (square !== reach.from && cost !== Infinity) shading.set(square, moveAp(fighter.character, cost, sneaking));
+    });
+    return shading;
 }
 
 /** What decides where an aimed action can land: the character's weapon, a fireball's range, or the squares next to it (a heal, a raise). */
 export type RangeKind = "weapon" | "fireball" | "nextTo";
 
 /**
- * An aimed action's range from where a character stands, as one path: every
- * square it could be lined up on, were someone there to aim at. A weapon, a
+ * An aimed action's range from where a character stands: every square it
+ * could be lined up on, were someone there to aim at. A weapon, a
  * heal or a raise is aimed at a character, so only a square one could stand on
  * counts; a fireball can land on any square it can see in range. Where the
  * character stands isn't drawn. Read from the rules `check` itself asks, so
  * the shading and what the server allows can't drift apart.
  */
-export function rangeArea(state: BattleState, fighter: Fighter, kind: RangeKind): string | null {
+export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKind): ReadonlySet<Square> {
     const { field } = state;
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
@@ -280,15 +244,7 @@ export function rangeArea(state: BattleState, fighter: Fighter, kind: RangeKind)
         if (!field.terrain[square].standable) return false;
         return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
     };
-    return runLayers(field, square => reaches(square) || undefined)[0]?.d ?? null;
-}
-
-/** A path as an SVG polyline's points, through each square's centre. */
-export function pathPoints(field: Pick<Battlefield, "width">, path: readonly Square[]): string {
-    return path.map(square => {
-        const { x, y } = squareCentre(field, square);
-        return `${x},${y}`;
-    }).join(" ");
+    return new Set(field.terrain.flatMap((_, square) => reaches(square) ? [square] : []));
 }
 
 /** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */

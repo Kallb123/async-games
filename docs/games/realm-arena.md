@@ -500,6 +500,18 @@ its time zoomed in:
 - The ground is better drawn as one image than as a shape per square, because
   a 48×48 board has 2,304 of them. Kingdom Builder's tile sheet is a
   precedent.
+- **The board is drawn isometrically** (`src/utils/ui/isometric.ts`): each
+  square a 2:1 diamond, the shape every isometric tile sheet uses, raised by
+  its terrain's height in storeys — open ground 0, rubble and low walls a
+  little, trees 1.6, walls 2, the stair 1.25 and the tower top 2.5, proud of
+  the wall it's built into (`TERRAIN_HEIGHT` in `ui.ts`). The heights are only
+  how it's drawn: high ground is still the terrain's `highGround`, so a map
+  that wants a hill to play as one changes the terrain table, not the board.
+  The flat ground and anything shaded on it are a path per kind; what stands
+  up — raised squares and figures — is painted back to front, so a wall hides
+  whoever is behind it. A tap goes to the front-most square drawn under it.
+  Fitted to a phone the diamond is an overview, padded to a frame tall enough
+  to pan in, and the deepest zoom brings about seven squares across.
 
 ### 13.2 A turn: action points
 
@@ -1089,7 +1101,10 @@ Reviewers: `croupier`, `gremlin`.
 2. `tutorial.ts`, in `GAME_TUTORIALS`: a tour of the live board covering your
    squad, the reach shading, an enemy's hit chance, the centre, and End turn.
 3. Placeholder art (round 6): the ground drawn in flat colours from the map's
-   letters (PR 5), and a simple marked figure for each of the six characters.
+   letters (PR 5), standing up isometrically at each terrain's height
+   (§13.1), and a simple marked figure for each of the six characters. A tile
+   sheet's isometric tiles can replace the flat colours square by square,
+   since the board already draws the same 2:1 diamonds.
    Real art can land later, whenever it's ready, exported to `art-masters/`
    and served through `npm run optimise-art`, without touching the rules.
 
@@ -1624,3 +1639,4 @@ Realm, its sibling in the same world.
 | 1.6 | Battlefields for three and four players (§19): one map per player count, since three seats can't be made identical on squares. The Four-Gate Fort for four, unchanged by a quarter turn; the Ring Fort for three, mirrored, with its third seat held level by measured walks. The milestone plan puts them first, as B1 (§17.4). |
 | 1.7 | B2 fills in free-for-all: the party's size picks the map (§19.1), a round ends with the last seat still playing, a dropped player's squad leaves the battlefield while their score stands, and nobody is dropped from a duel or during the muster. |
 | 1.8 | Round 7 (§11.7): after launch, Milestone C comes before the rest of Milestone B: status effects (§20), items bought at muster (§21), destructible low cover (§22) and character mastery (§23), which replaces game-wide unlocks (§7, B4). Round-7 questions (§24). |
+| 1.9 | The board is drawn isometrically, each square raised by its terrain's height (§13.1). |

@@ -1191,7 +1191,9 @@ description or theme colour is exactly what those two files exist to prevent.
     their landing options into view the instant a roll lands.
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`, `mapEdges.ts` and
-    `mapLabels.ts` (the two bits of board geometry the map kit above draws).
+    `mapLabels.ts` (the two bits of board geometry the map kit above draws),
+    and `isometric.ts` (a square grid drawn isometrically, each square at its
+    own height — Realm Arena's battlefield).
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
     picker; `useTurnNavigation`; `useNow`/`useNowToTheMinute`, the shared clock).
 - **Fetching and keeping it fresh.** One hook does this for the whole app:

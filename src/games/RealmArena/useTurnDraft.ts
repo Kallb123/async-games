@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { check, fighterById, fireballArea, isStanding, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
-import { attackOptions, rangeArea, reachLayers, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
+import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim = "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise";
@@ -180,10 +180,10 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         () => fighter && isMoving(aim) ? reachOf({ field, fighters }, fighter, aim === "sneak") : null,
         [field, fighters, fighter, aim],
     );
-    const shading = useMemo(() => fighter && reach ? reachLayers(field, fighter, reach, aim === "sneak") : null, [field, fighter, reach, aim]);
+    const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
     // Aimed at anything else, the shading is where it could land instead: its range.
     const rangeKind = RANGE[aim];
-    const range = useMemo(() => fighter && rangeKind ? rangeArea({ field, fighters }, fighter, rangeKind) : null, [field, fighters, fighter, rangeKind]);
+    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters }, fighter, rangeKind) : null, [field, fighters, fighter, rangeKind]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;
