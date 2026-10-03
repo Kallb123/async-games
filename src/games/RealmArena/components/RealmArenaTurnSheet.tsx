@@ -9,7 +9,7 @@ import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, ty
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, rangeSquares, targetsOf, whoseName, type TargetKind } from '@/games/RealmArena/ui';
-import { ABILITY_MARK, CHARACTER_MARK, weaponLine } from '@/games/RealmArena/roster';
+import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -141,7 +141,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
             <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
             <div className="ag-build-list">
                 {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
-                {row('attack', CHARACTER_MARK[fighter.character], weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
+                {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
                     needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
                 {abilitiesOf(fighter).map(id => {
                     const ability = ABILITIES[id];

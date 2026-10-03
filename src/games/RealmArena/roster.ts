@@ -6,7 +6,7 @@
 // carrying the whole of rules.ts into its bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { ABILITIES, CHARACTERS, EFFECTS, OPTIONS, type CharacterId, type OptionId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECTS, OPTIONS, type AbilityId, type CharacterId, type OptionId, type Weapon } from "./characters";
 import { nextRankXp, rankOf } from "./mastery";
 
 /**
@@ -40,22 +40,51 @@ export function optionsFor(character: CharacterId): OptionId[] {
         .sort((a, b) => OPTIONS[a].rank - OPTIONS[b].rank);
 }
 
-/** The glyph an ability's row leads with, where a weapon's leads with its character's mark. */
+/** The glyph an ability's row leads with, where a weapon's leads with `weaponMark`. */
 export const ABILITY_MARK = "✦";
+
+/** The marks of the weapons an option swaps in, where the character's own mark would read wrong: Frost bolt isn't fire. */
+const OPTION_WEAPON_MARK: Partial<Record<OptionId, string>> = { frostBolt: "❄️" };
+
+/** The glyph a weapon's row leads with: its character's mark, or the swapped-in weapon's own. */
+export function weaponMark(character: CharacterId, option?: OptionId): string {
+    return (option && OPTION_WEAPON_MARK[option]) ?? CHARACTER_MARK[character];
+}
+
+/** A part of a character's kit an option can swap out (§23.2): its weapon, or one of its abilities. */
+export type KitPart = AbilityId | "weapon";
+
+/** A kit part or an option as a row shows it: its glyph, its name, and what it does. */
+export interface KitView {
+    icon: string;
+    name: string;
+    line: string;
+}
+
+/** A character's own kit part, as the starter character fights with it: "Cleave · 2 AP · Strike two enemies…". */
+export function starterView(character: CharacterId, part: KitPart): KitView {
+    if (part === "weapon") {
+        const { weapon } = CHARACTERS[character];
+        return { icon: weaponMark(character), name: weapon.name, line: weaponLine(weapon) };
+    }
+    const ability = ABILITIES[part];
+    return { icon: ABILITY_MARK, name: ability.name, line: `${ability.ap} AP · ${ability.description}` };
+}
 
 /**
  * An option as a row shows it: its glyph, its name — the ability or weapon it
  * swaps in — and what it swaps out and does in its place ("In place of Cleave
  * · 2 AP · Strike one enemy…").
  */
-export function optionView(id: OptionId): { icon: string; name: string; line: string } {
+export function optionView(id: OptionId): KitView {
     const option = OPTIONS[id];
+    const replaced = starterView(option.character, option.replaces).name;
     if ("weapon" in option) {
         const { character, weapon } = option;
-        return { icon: CHARACTER_MARK[character], name: weapon.name, line: `In place of the ${CHARACTERS[character].weapon.name} · ${weaponLine(weapon)}` };
+        return { icon: weaponMark(character, id), name: weapon.name, line: `In place of the ${replaced} · ${weaponLine(weapon)}` };
     }
     const ability = ABILITIES[option.ability];
-    return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${ABILITIES[option.replaces].name} · ${ability.ap} AP · ${ability.description}` };
+    return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${replaced} · ${ability.ap} AP · ${ability.description}` };
 }
 
 /** Where a character's XP stands against the ranks (§23.1): "75 XP · 105 more for rank 2". */

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ABILITIES, kitOf } from "./characters";
-import { masteryLine, optionsFor, optionView, weaponLine } from "./roster";
+import { masteryLine, optionsFor, optionView, starterView, weaponLine, weaponMark } from "./roster";
 
-describe("optionsFor and optionView", () => {
+describe("optionsFor, starterView and optionView", () => {
     it("lists each character's own options, and nobody else's", () => {
         expect(optionsFor("manAtArms")).toEqual(["shieldBash"]);
         expect(optionsFor("mage")).toEqual(["frostBolt"]);
@@ -10,7 +10,22 @@ describe("optionsFor and optionView", () => {
 
     it("names an option by what it swaps in, and says what it swaps out", () => {
         expect(optionView("shieldBash")).toEqual({ icon: "✦", name: "Shield bash", line: `In place of Cleave · 2 AP · ${ABILITIES.shieldBash.description}` });
-        expect(optionView("frostBolt")).toEqual({ icon: "🔥", name: "Frost bolt", line: "In place of the Bolt · 70% · range 10 · 2 damage · slowed on a hit" });
+        expect(optionView("frostBolt")).toEqual({ icon: "❄️", name: "Frost bolt", line: "In place of the Bolt · 70% · range 10 · 2 damage · slowed on a hit" });
+    });
+});
+
+describe("starterView", () => {
+    it("shows the part of its own kit an option would swap out", () => {
+        expect(starterView("manAtArms", "cleave")).toEqual({ icon: "✦", name: "Cleave", line: `2 AP · ${ABILITIES.cleave.description}` });
+        expect(starterView("mage", "weapon")).toEqual({ icon: "🔥", name: "Bolt", line: "70% · range 10 · 3 damage" });
+    });
+});
+
+describe("weaponMark", () => {
+    it("leads a weapon with its character's mark, unless an option's weapon has its own", () => {
+        expect(weaponMark("mage")).toBe("🔥");
+        expect(weaponMark("mage", "frostBolt")).toBe("❄️");
+        expect(weaponMark("archer", "cripplingShot")).toBe("🏹");
     });
 });
 

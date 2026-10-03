@@ -1503,11 +1503,14 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     PR 3's muster screen.
 - **What PR 3 settled:**
   - **The muster offers options beside items.** A character picked up while
-    placing the squad shows its options above the items it can carry, a
-    `BuildRow` each saying what it swaps out. Tapping one takes it, and
-    tapping it again goes back to the starter character. One the player's
-    rank hasn't unlocked is greyed, with the rank that unlocks it, so the
-    muster also shows what's still to earn. Each
+    placing the squad shows its options above the items it can carry. Each
+    option sits under the part of the character's own kit it swaps out, a
+    `BuildRow` for that part marked taken until an option replaces it, so the
+    player sees what they'd give up. Tapping a row takes it, and tapping the
+    character's own part goes back to the starter character. One the
+    player's rank hasn't unlocked is greyed, with the rank that unlocks it,
+    so the muster also shows what's still to earn. A weapon an option swaps
+    in can bring its own mark: Frost bolt's is frost, not the Mage's fire. Each
     character's step names its rank, read from the battle's snapshot, the
     same ranks the server checks the muster against.
   - **The profile's section lists all six characters**, once the player has

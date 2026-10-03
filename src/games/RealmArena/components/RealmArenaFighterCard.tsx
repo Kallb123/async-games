@@ -7,7 +7,7 @@ import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
 import { abilitiesOf, isStanding, weaponOf, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
-import { ABILITY_MARK, CHARACTER_MARK, weaponLine } from '@/games/RealmArena/roster';
+import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { SpriteImage } from './RealmArenaTerrain';
 
@@ -42,7 +42,7 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
             <RealmArenaStatusList effects={effectsOn(fighter)} />
             {children ?? (
                 <div className="ag-list">
-                    <ListRow icon={CHARACTER_MARK[fighter.character]} title={weapon.name} sub={weaponLine(weapon)} />
+                    <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon)} />
                     {abilitiesOf(fighter).map(id => {
                         const ability = ABILITIES[id];
                         return (
