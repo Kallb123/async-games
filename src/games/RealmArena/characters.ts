@@ -1,6 +1,7 @@
 // Realm Arena's first faction as data (docs/games/realm-arena.md §13.6): the
 // six characters a squad is bought from, their weapons and abilities, the
-// points budget, and the ready-made squad a timed-out muster gets (§17.2).
+// items they can carry (§21), the points budget, and the ready-made squad a
+// timed-out muster gets (§17.2).
 // The numbers are §13's first guesses for playtesting, not balance — tuning
 // one is an edit here, and `rules.ts` reads them rather than repeating them.
 //
@@ -50,6 +51,9 @@ export const EFFECTS = {
 
 /** Every effect, in the order a character's are listed. */
 export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
+
+/** The effects something else puts on a character, rather than stances it takes up itself. */
+export type Affliction = Exclude<EffectId, "hunkered" | "shieldWall">;
 
 /** A melee weapon needs its target next to it and always hits; a ranged one rolls (§13.3). */
 export type Weapon =
@@ -126,6 +130,55 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
         weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
     },
 };
+
+export type ItemId = "fireFlask" | "thunderFlask" | "smokePot" | "healingDraught";
+
+/** How far away, in squares, an item can be thrown (§21.1). */
+export const THROW_RANGE = 6;
+
+/**
+ * Something a character carries into battle, bought at muster and used once
+ * (§21.1). A thrown one is aimed at a square in range and in sight, as a
+ * fireball is, and never rolls; the healing draught is handed to an ally next
+ * to the carrier, as a heal is, or drunk by the carrier itself.
+ */
+export interface Item {
+    name: string;
+    /** What it adds to a squad's cost at muster. */
+    points: number;
+    ap: number;
+    /** How far away, in squares, it can be thrown: absent for one that isn't thrown. */
+    range?: number;
+    /** Lands on the 3×3 around the square it's thrown at, rather than that square alone. */
+    area?: true;
+    /** What it does to each character it hits (the fire flask). */
+    damage?: number;
+    /** What it leaves on each character it hits, friend or foe. */
+    effect?: Affliction;
+    /**
+     * Taken off every shot at a character standing in the smoke pot's cloud,
+     * until the thrower's next turn — and overwatch can't fire at all at a
+     * mover stepping into it. The rules name the smoke pot for its cloud.
+     */
+    hitPenalty?: number;
+    /** HP it restores (the healing draught), clearing what a Cleric's Heal does too. */
+    hp?: number;
+    description: string;
+}
+
+export const ITEMS = {
+    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", description: "Thrown at one square: 2 damage to whoever is there, and sets them burning" },
+    thunderFlask: { name: "Thunder flask", points: 5, ap: 2, range: THROW_RANGE, area: true, effect: "stunned", description: "Thrown at a 3×3 area: stuns everyone in it, friend or foe" },
+    smokePot: { name: "Smoke pot", points: 5, ap: 1, range: THROW_RANGE, area: true, hitPenalty: 20, description: "Thrown at a 3×3 area: until the thrower's next turn, −20% to hit anyone in it, and no overwatch at anyone stepping into it" },
+    healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed and stunned" },
+} as const satisfies Record<ItemId, Item>;
+
+/** Every item, in the order the muster offers them. */
+export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
+
+export function isItemId(value: unknown): value is ItemId {
+    return typeof value === "string" && Object.hasOwn(ITEMS, value);
+}
 
 export type PlayerCount = 2 | 3 | 4;
 

@@ -92,7 +92,8 @@ describe("Realm Arena replay", () => {
 
 describe("the sealed muster, replayed (§17.2)", () => {
     // A squad a player chose, so nothing of it could be mistaken for the
-    // ready-made one a timed-out muster brings.
+    // ready-made one a timed-out muster brings — and carrying an item, which
+    // that never does (§21.1).
     async function oneMustered(): Promise<RealmArenaTestGame> {
         const game = makeGame();
         const zone = readyMadePicks(game, 0).map(pick => pick.square);
@@ -100,7 +101,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
             { character: "mage" as const, square: zone[0] },
             { character: "archer" as const, square: zone[1] },
             { character: "cleric" as const, square: zone[2] },
-            { character: "scout" as const, square: zone[3] },
+            { character: "scout" as const, square: zone[3], item: "smokePot" as const },
         ];
         expect((await play(game, muster("a", picks))).outcome.validMove).toBe(true);
         return game;
@@ -111,7 +112,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
         for (const viewer of ["b", null]) {
             const timeline = await buildTimeline(game, NAMES, [], undefined, viewer);
             const wire = JSON.stringify(timeline);
-            expect(wire).not.toMatch(/"character"|"square"/);
+            expect(wire).not.toMatch(/"character"|"square"|"item"|smoke/i);
             for (const name of CHARACTER_NAMES) expect(wire).not.toContain(name);
             for (const snapshot of timeline.snapshots) {
                 const gs = snapshot.specificGameState as IRealmArenaSpecificGameStateResponse;
@@ -126,6 +127,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
         const timeline = await buildTimeline(game, NAMES, [], undefined, "a");
         const gs = timeline.snapshots.at(-1)?.specificGameState as IRealmArenaSpecificGameStateResponse;
         expect(gs.myMuster?.map(pick => pick.character)).toEqual(["mage", "archer", "cleric", "scout"]);
+        expect(gs.myMuster?.[3].item).toBe("smokePot");
     });
 
     it("says only that the squad was mustered in the opponent's recap", async () => {
