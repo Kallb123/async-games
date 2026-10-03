@@ -156,9 +156,9 @@ export interface Item {
     /** What it leaves on each character it hits, friend or foe. */
     effect?: Affliction;
     /**
-     * Taken off every shot at a character standing in it, until the thrower's
-     * next turn — and overwatch can't fire at all at a mover stepping into it
-     * (the smoke pot's cloud).
+     * Taken off every shot at a character standing in the smoke pot's cloud,
+     * until the thrower's next turn — and overwatch can't fire at all at a
+     * mover stepping into it. The rules name the smoke pot for its cloud.
      */
     hitPenalty?: number;
     /** HP it restores (the healing draught), clearing what a Cleric's Heal does too. */

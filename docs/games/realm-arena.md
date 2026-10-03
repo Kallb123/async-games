@@ -1600,8 +1600,8 @@ function of the ground.
   but an effect is something that happens to the character it's on, which
   shows its mark on that figure and lists it on the unit's box. The thrower
   has nothing happening to it, and the cloud is drawn on the ground (PR 2).
-  `smokeSquares` is the cloud, every standing thrower's: what `shotOdds` and
-  `reactionsTo` read, and what the board will draw.
+  `smokeSquares` is the cloud, every thrower's while it lasts: what
+  `shotOdds` and `reactionsTo` read, and what the board will draw.
 - **Smoke takes 20 off a shot at anyone standing in it, friend or foe of the
   thrower, and clouds don't stack.** Overwatch can't fire at a mover stepping
   onto a smoked square; a guard strikes in it all the same, since melee
@@ -1613,7 +1613,8 @@ function of the ground.
 - **The healing draught may be drunk by its carrier**, which the Cleric's
   Heal still can't do for the Cleric. Otherwise its check is Heal's: an ally
   next to it that is hurt or has something to clear. One `healRefusal` and
-  one `mend` serve both.
+  one `mend` serve both, as one `aimRefusal` and one `land` serve the
+  fireball and the flasks.
 - **An item is used up as it's used**, whatever it hit, so a fire flask
   thrown at an empty square is gone. Its event still carries its damage, as a
   fireball's does when it hits nobody.

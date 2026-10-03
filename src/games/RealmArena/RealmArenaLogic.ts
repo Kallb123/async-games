@@ -120,8 +120,9 @@ const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "h
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
- * knock-out or the points for one. A heal clearing an effect is an `effect`
- * event, and so would a mark be (§20.3).
+ * knock-out or the points for one. A heal or a draught clearing an effect is
+ * an `effect` event, and so would a mark be (§20.3). A `thrown` event is
+ * peaceful only when it hit nobody, which `peaceful` checks itself.
  */
 const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect"]);
 

@@ -368,11 +368,19 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "downed":
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
             case "healed":
-                return [{ icon: event.draught ? ITEM_MARK.healingDraught : "✚", title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}`, sub: event.draught ? ITEMS.healingDraught.name : undefined }];
+                return [{
+                    icon: event.draught ? ITEM_MARK.healingDraught : "✚",
+                    title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}`,
+                    ...(event.draught ? { sub: ITEMS.healingDraught.name } : {}),
+                }];
             case "thrown": {
                 const { name: item } = ITEMS[event.item];
                 if (event.item === "smokePot") return [{ icon: ITEM_MARK.smokePot, title: `${Name(event.fighter)} threw a smoke pot` }];
-                return [{ icon: ITEM_MARK[event.item], title: `${item}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`, sub: event.damage > 0 ? `${event.damage} damage each` : undefined }];
+                return [{
+                    icon: ITEM_MARK[event.item],
+                    title: `${item}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    ...(event.damage > 0 ? { sub: `${event.damage} damage each` } : {}),
+                }];
             }
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];

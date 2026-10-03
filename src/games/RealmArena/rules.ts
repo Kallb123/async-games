@@ -241,10 +241,12 @@ function shielded(state: BattleState, target: Fighter): boolean {
         && knight.owner === target.owner && nextTo(state.field, knight.square, target.square));
 }
 
-/** The squares under a smoke cloud: the 3×3 around where each smoke pot landed whose thrower still stands (§21.2). */
+/**
+ * The squares under a smoke cloud: the 3×3 around where each smoke pot
+ * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
+ */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
-    return new Set(state.fighters.flatMap(thrower =>
-        thrower.smoke !== undefined && isStanding(thrower) ? areaAround(state.field, thrower.smoke) : []));
+    return new Set(state.fighters.flatMap(thrower => thrower.smoke !== undefined ? areaAround(state.field, thrower.smoke) : []));
 }
 
 /**
@@ -439,9 +441,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         case "shieldWall":
             return ability("shieldWall", () => undefined);
         case "fireball":
-            return ability("fireball", () =>
-                isSquare(state.field, at) && inRange(state.field, actor.square, at, ABILITIES.fireball.range)
-                    ? undefined : "Out of range or out of sight");
+            return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
         case "heal":
             return ability("heal", () => healRefusal(state, actor, target, false));
         case "raise":
@@ -455,7 +455,8 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         case "throw": {
             const item: Item | undefined = actor.item ? ITEMS[actor.item] : undefined;
             if (item?.range === undefined) return refused("They have nothing to throw");
-            return isSquare(state.field, at) && inRange(state.field, actor.square, at, item.range) ? afford(item.ap) : refused("Out of range or out of sight");
+            const reason = aimRefusal(state, actor, at, item.range);
+            return reason ? refused(reason) : afford(item.ap);
         }
         case "draught": {
             if (actor.item !== "healingDraught") return refused("They have no healing draught");
@@ -465,6 +466,11 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         default:
             return refused("That isn't an action");
     }
+}
+
+/** Why something can't be aimed at a square — a fireball, a throw — or undefined when it can: in range and in sight. */
+function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: number): string | undefined {
+    return isSquare(state.field, at) && inRange(state.field, actor.square, at, range) ? undefined : "Out of range or out of sight";
 }
 
 /**
@@ -553,6 +559,20 @@ function resolver(state: BattleState, roll: Roll) {
     };
 
     /**
+     * Something landing on some squares without a roll — a fireball, a thrown
+     * flask — hitting everyone standing there, friend or foe: the event
+     * `told` makes of who it hit, then its damage, then its effect on
+     * whoever it didn't down (§13.6, §20.2).
+     */
+    const land = (by: Fighter, squares: readonly Square[], damage: number, effect: Affliction | undefined, told: (targets: number[]) => BattleEvent) => {
+        const area = new Set(squares);
+        const hit = fighters.filter(one => isStanding(one) && area.has(one.square));
+        events.push(told(hit.map(one => one.id)));
+        if (damage > 0) for (const target of hit) wound(by, target, damage);
+        if (effect) for (const target of hit) afflict(by, target, effect);
+    };
+
+    /**
      * Restores up to `hp` to a character, never past full, and clears what a
      * heal does: the one heal-and-clear a Cleric's Heal and a healing draught
      * share (§20.2, §21.3).
@@ -568,7 +588,7 @@ function resolver(state: BattleState, roll: Roll) {
         delete target.burnedBy;
     };
 
-    return { fighters, battle, events, get, shoot, strike, wound, afflict, mend };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, mend };
 }
 
 /**
@@ -647,12 +667,9 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Every character in the area, friend or foe — the Mage too, if it's
             // that close — and no roll (§13.6). Whoever it doesn't down is left
             // burning: it doesn't roll, so it always does (§20.2).
-            const area = new Set(areaAround(state.field, action.at));
-            const hit = run.fighters.filter(one => isStanding(one) && area.has(one.square));
             const { damage, effect } = ABILITIES.fireball;
-            events.push({ kind: "fireball", fighter: actor.id, at: action.at, targets: hit.map(one => one.id), damage });
-            for (const target of hit) run.wound(actor, target, damage);
-            for (const target of hit) run.afflict(actor, target, effect);
+            run.land(actor, areaAround(state.field, action.at), damage, effect,
+                targets => ({ kind: "fireball", fighter: actor.id, at: action.at, targets, damage }));
             break;
         }
         case "heal":
@@ -669,20 +686,16 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const id = actor.item as ItemId;
             const item: Item = ITEMS[id];
             actor.item = null;
-            if (item.hitPenalty !== undefined) {
+            if (id === "smokePot") {
                 // A smoke pot hurts nobody: the cloud lives on the thrower (§21.2).
                 actor.smoke = action.at;
                 events.push({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets: [], damage: 0 });
                 break;
             }
-            // Friend or foe, the thrower too if it's that close, and no roll —
-            // so an effect always lands on whoever it doesn't down (§20.2).
-            const area = new Set(item.area ? areaAround(state.field, action.at) : [action.at]);
-            const hit = run.fighters.filter(one => isStanding(one) && area.has(one.square));
+            // Friend or foe, the thrower too if it's that close, as a fireball.
             const damage = item.damage ?? 0;
-            events.push({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets: hit.map(one => one.id), damage });
-            if (damage > 0) for (const target of hit) run.wound(actor, target, damage);
-            if (item.effect) for (const target of hit) run.afflict(actor, target, item.effect);
+            run.land(actor, item.area ? areaAround(state.field, action.at) : [action.at], damage, item.effect,
+                targets => ({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets, damage }));
             break;
         }
         case "raise": {
