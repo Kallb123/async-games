@@ -1,5 +1,5 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { distance } from "@/utils/games/battlefield/terrain";
+import { distance, TERRAIN } from "@/utils/games/battlefield/terrain";
 import { PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS, type CharacterId } from "./characters";
@@ -8,11 +8,11 @@ import { meta } from "./meta";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { RealmArenaAct, RealmArenaMuster, type IRealmArenaOutcome } from "./RealmArenaLogic";
 import {
-    ACTION_POINTS, BATTLE_ROUNDS, centrePoints, check, isStanding, knockoutPoints,
+    ACTION_POINTS, BATTLE_ROUNDS, blastedBy, centrePoints, check, isStanding, knockoutPoints,
     type Action, type Fighter,
 } from "./rules";
 import {
-    actBy, battleOf, cmd, endTurnBy, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks, scriptedAction,
+    actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks, scriptedAction,
     type RealmArenaTestGame,
 } from "./testFixtures";
 
@@ -364,6 +364,45 @@ describe("items (§21)", () => {
         const command = actBy("a", { kind: "draught", fighter: knight.id, target: knight.id, at: 3, junk: "x" } as unknown as Action);
         await play(game, command);
         expect(command.action).toEqual({ kind: "draught", fighter: knight.id, target: knight.id });
+    });
+});
+
+describe("blasting low cover (§22)", () => {
+    it("keeps what a fire flask blasted, so every rule reads the ground without it", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        const thrower = own(game, "a")[0];
+        const aim = blastSpot(game, thrower);
+        const blasted = blastedBy(battleOf(game), thrower, "throw", aim);
+        expect(blasted.length).toBeGreaterThan(0);
+
+        const { outcome } = await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: aim }));
+        expect(outcome.validMove).toBe(true);
+        expect((outcome as IRealmArenaOutcome).events.at(-1)).toEqual({ kind: "blasted", fighter: thrower.id, squares: blasted });
+        expect(game.specificGameState.blasted).toEqual(blasted);
+        for (const square of blasted) expect(battleOf(game).field.tiles[square].terrain).toBe(TERRAIN["_"]);
+        expect(game.gameState.history[0].text).toBe(`{{a}} threw a fire flask with their ${CHARACTERS[thrower.character].name}; blasted away ${blasted.length} square${blasted.length === 1 ? "" : "s"} of low cover`);
+    });
+
+    it("sends what was blasted to every viewer, and starts every battle with nothing blasted", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        const thrower = own(game, "a")[0];
+        await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: blastSpot(game, thrower) }));
+        const live = structuredClone(game.specificGameState.blasted);
+        for (const viewer of ["a", "b", null]) expect((await responseFor(game, viewer)).specificGameState.blasted).toEqual(live);
+        expect(buildInitialRealmArenaState(PLAYERS).blasted).toEqual([]);
+    });
+
+    it("reads a battle stored before anything could be blasted as one where nothing has been", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        delete (game.specificGameState as Partial<typeof game.specificGameState>).blasted;
+        expect((await responseFor(game, "a")).specificGameState.blasted).toEqual([]);
+        expect(battleOf(game).field).toBe(battleOf(makeGame()).field);
+        const thrower = own(game, "a")[0];
+        await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: blastSpot(game, thrower) }));
+        expect(game.specificGameState.blasted.length).toBeGreaterThan(0);
     });
 });
 

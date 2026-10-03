@@ -1,8 +1,9 @@
-// Realm Arena's rules (docs/games/realm-arena.md §13, §17.2, §20, §21): what
+// Realm Arena's rules (docs/games/realm-arena.md §13, §17.2, §20–§22): what
 // an action costs and whether it can be taken, hit chances, grazes and damage,
 // who reacts to a move and in what order, abilities, status effects, items
-// and the smoke a smoke pot leaves, knock-outs and raising, scoring, the end
-// of the battle with its tie-break chain, and what a squad may muster.
+// and the smoke a smoke pot leaves, the low cover a blast clears, knock-outs
+// and raising, scoring, the end of the battle with its tie-break chain, and
+// what a squad may muster.
 //
 // Pure and isomorphic, with no server-only imports (docs/new-game.md,
 // "Isomorphic rules modules"): PR 3's commands act through it, and the board
@@ -109,6 +110,7 @@ export interface Fighter {
 
 /** What every rule reads: the ground, and everyone on it. */
 export interface BattleState {
+    /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */
     field: Battlefield;
     fighters: readonly Fighter[];
 }
@@ -133,6 +135,8 @@ export type BattleEvent =
     | { kind: "healed"; fighter: number; target: number; hp: number; draught?: true }
     /** A thrown item landing: `targets` is everyone it hit, which a smoke pot never does — its cloud is the thrower's `smoke`. */
     | { kind: "thrown"; fighter: number; item: ItemId; at: Square; targets: number[]; damage: number }
+    /** Low cover blasted away to scorched ground by `fighter`'s fireball or fire flask, after its damage (§22). */
+    | { kind: "blasted"; fighter: number; squares: Square[] }
     | { kind: "raised"; fighter: number; target: number; hp: number }
     | { kind: "hunkered" | "shieldWall"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
@@ -513,6 +517,21 @@ export function healedEffects(fighter: Fighter): EffectId[] {
     return EFFECT_IDS.filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
 }
 
+/**
+ * The low cover a fireball or a thrown item aimed at `at` would blast away
+ * (§22): every square of it in the 3×3 round `at`, for one that blasts — a
+ * fireball, a fire flask — and none for anything else.
+ */
+export function blastedBy(state: BattleState, fighter: Fighter, aim: "fireball" | "throw", at: Square): Square[] {
+    const blasts = aim === "fireball" ? ABILITIES.fireball.blasts : itemOf(fighter)?.blasts;
+    return blasts ? areaAround(state.field, at).filter(square => state.field.tiles[square].terrain.destructible) : [];
+}
+
+/** Every square a run of events blasted away, in order (§22). */
+export function blastedIn(events: readonly BattleEvent[]): Square[] {
+    return events.flatMap(event => event.kind === "blasted" ? event.squares : []);
+}
+
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
     const fighters = structuredClone(state.fighters) as Fighter[];
@@ -579,6 +598,15 @@ function resolver(state: BattleState, roll: Roll) {
     };
 
     /**
+     * Low cover blasted away, after whatever did it has done its damage: so
+     * whoever it was covering keeps it for that, and loses it for the next
+     * attack (§22). Nobody can be standing on it, so nobody moves.
+     */
+    const blast = (by: Fighter, squares: readonly Square[]) => {
+        if (squares.length > 0) events.push({ kind: "blasted", fighter: by.id, squares: [...squares] });
+    };
+
+    /**
      * Restores up to `hp` to a character, never past full, and clears what a
      * heal does: the one heal-and-clear a Cleric's Heal and a healing draught
      * share (§20.2, §21.3).
@@ -594,7 +622,7 @@ function resolver(state: BattleState, roll: Roll) {
         delete target.burnedBy;
     };
 
-    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, mend };
+    return { fighters, battle, events, get, shoot, strike, wound, afflict, land, blast, mend };
 }
 
 /**
@@ -672,10 +700,12 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "fireball": {
             // Every character in the area, friend or foe — the Mage too, if it's
             // that close — and no roll (§13.6). Whoever it doesn't down is left
-            // burning: it doesn't roll, so it always does (§20.2).
+            // burning: it doesn't roll, so it always does (§20.2). Then the
+            // low cover it landed on is gone (§22).
             const { damage, effect } = ABILITIES.fireball;
             run.land(actor, areaAround(state.field, action.at), damage, effect,
                 targets => ({ kind: "fireball", fighter: actor.id, at: action.at, targets, damage }));
+            run.blast(actor, blastedBy(state, actor, "fireball", action.at));
             break;
         }
         case "heal":
@@ -691,6 +721,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // `check` allowed it, so the actor carries something thrown.
             const id = actor.item as ItemId;
             const item: Item = ITEMS[id];
+            const blasted = blastedBy(state, actor, "throw", action.at);
             actor.item = null;
             if (id === "smokePot") {
                 // A smoke pot hurts nobody: the cloud lives on the thrower (§21.2).
@@ -702,6 +733,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const damage = item.damage ?? 0;
             run.land(actor, item.area ? areaAround(state.field, action.at) : [action.at], damage, item.effect,
                 targets => ({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets, damage }));
+            run.blast(actor, blasted);
             break;
         }
         case "raise": {

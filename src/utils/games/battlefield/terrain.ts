@@ -43,6 +43,8 @@ export interface Terrain {
     blocksSight: boolean;
     /** A stair: a step onto or off it is never a climb, by as much as its own height (`pathfinding.ts`). */
     stairs?: true;
+    /** Low cover, which a blast can clear away to scorched ground (`battlefieldWith`, realm-arena.md §22). Walls and trees never can. */
+    destructible?: true;
 }
 
 /** A tower top's height: half a height above the curtain wall it's built into. */
@@ -52,7 +54,7 @@ const PARAPET_HEIGHT = TOWER_HEIGHT + HALF_HEIGHT;
 const WALL: Terrain = { name: "Wall", moveCost: Infinity, standable: false, height: FULL_HEIGHT, cover: "none", blocksSight: false };
 
 const OPEN: Terrain = { name: "Open ground", moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false };
-const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: false, cover: "none", blocksSight: false };
+const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: false, cover: "none", blocksSight: false, destructible: true };
 
 /**
  * Every terrain, by the letter a map draws it with. Letters that play the same
@@ -61,7 +63,8 @@ const LOW_COVER: Omit<Terrain, "name" | "height"> = { moveCost: 1, standable: fa
  * onto either costs what any climb does. A parapet is the wall round a tower
  * top, standing half a height above it, so it gives whoever is up there half
  * cover the same way; where it has fallen to an ordinary wall, or gone, it
- * gives none.
+ * gives none. Scorched ground is what low cover leaves once it's blasted
+ * away (§22): it plays exactly as open ground, and is only drawn differently.
  */
 export const TERRAIN = {
     ".": OPEN,
@@ -72,6 +75,7 @@ export const TERRAIN = {
     "P": { ...WALL, name: "Parapet", height: PARAPET_HEIGHT },
     "s": { ...OPEN, name: "Tower stair", moveCost: 2, height: 3, stairs: true },
     "^": { ...OPEN, name: "Tower top", height: TOWER_HEIGHT },
+    "_": { ...OPEN, name: "Scorched ground" },
 } as const satisfies Record<string, Terrain>;
 
 export type TerrainLetter = keyof typeof TERRAIN;
@@ -190,6 +194,25 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
     }));
 
     return { name: map.name, width, height, tiles, deployments, objectives };
+}
+
+/**
+ * A battlefield with some of its low cover blasted away (realm-arena.md §22):
+ * each of `blasted` that holds destructible terrain becomes scorched ground,
+ * level with the ground it stood on. Any other square named is left as it is,
+ * so nothing a list holds can blast a wall, and the paths, sight and cover the
+ * map's tests prove can only ever open up. The same battlefield back when
+ * nothing changes, so a battle with nothing blasted keeps its map's identity.
+ */
+export function battlefieldWith(field: Battlefield, blasted: readonly Square[]): Battlefield {
+    const cleared = blasted.filter(square => field.tiles[square]?.terrain.destructible);
+    if (cleared.length === 0) return field;
+    const tiles = [...field.tiles];
+    for (const square of cleared) {
+        const { terrain, elevation } = field.tiles[square];
+        tiles[square] = { terrain: TERRAIN["_"], elevation: elevation - terrain.height };
+    }
+    return { ...field, tiles };
 }
 
 /** The square at a column and row, or undefined off the map. */

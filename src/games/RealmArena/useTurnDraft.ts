@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES } from "./characters";
-import { check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { blastedBy, check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -236,6 +236,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
         /** Every square a lined-up fireball or throw lands on. */
         area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
+        /** The low cover a lined-up fireball or fire flask would blast away (§22). */
+        blasts: (aim === "fireball" || aim === "throw") && draft.square !== null ? blastedBy(battle, fighter, aim, draft.square) : null,
         action,
         verdict,
         send,

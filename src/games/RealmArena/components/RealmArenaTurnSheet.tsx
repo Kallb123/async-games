@@ -151,7 +151,7 @@ interface LinedUpProps {
 /**
  * What's lined up on the board, before it's sent: a move's AP and every
  * watcher it would set off, an attack's chance to hit, graze and damage, or
- * who a fireball would catch (§17.3 PR 7). Until something is, what to tap.
+ * who a fireball would catch and the cover it would blast (§17.3 PR 7, §22). Until something is, what to tap.
  */
 function LinedUp({ draft, battle, name, pending, disabled }: LinedUpProps) {
     const { aim, action, verdict } = draft;
@@ -214,6 +214,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         return hint(<>
             {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
             {caught.some(one => one.owner === fighter.owner) ? ' That includes your own.' : ''}
+            {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
     if (aim === 'cleave') return hint(`Strikes ${draft.targets.map(name).join(' and ')} for ${strike} each.`);

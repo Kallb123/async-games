@@ -1,6 +1,7 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RealmArenaMapId } from "./maps";
 import type { Fighter, MusterPick } from "./rules";
+import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
 
 // docs/games/realm-arena.md §17.2's state, on the wire. Once the battle has
@@ -25,6 +26,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     budget: number;
     /** Everyone on the battlefield, standing or fallen. Empty until every squad has mustered. */
     fighters: Fighter[];
+    /** The low cover blasted away so far (§22): the board reads the map with these cleared, as the rules do. */
+    blasted: Square[];
     /** The players, in seat order, who have mustered. Whose turn it is already says who is mustering now. */
     mustered: string[];
     /** The viewer's own sealed squad, while the muster lasts; null once it's over, or for a viewer who hasn't mustered. */

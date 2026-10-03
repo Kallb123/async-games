@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Realm Arena's scorched ground (docs/games/realm-arena.md §22): what low
+  cover leaves once it's blasted away. Three kinds, one 64px cell each, each on
+  its square's footprint as every terrain cell is (src/games/RealmArena/art.ts).
+  Each patch is drawn flat about the diamond's middle and laid onto it by its
+  group's transform, clipped to the footprint. Ground, not a block: char, ash,
+  embers and chips of brick, ragged so the grass shows round it.
+
+  `npm run ra-marks` renders this to public/art/realmarena/scorched.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="64" viewBox="0 0 192 64">
+  <defs>
+    <!-- The footprint, in the flat square every patch is drawn in. -->
+    <clipPath id="footprint">
+      <rect x="-22.6" y="-22.6" width="45.2" height="45.2"/>
+    </clipPath>
+    <radialGradient id="char" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#1d1714"/>
+      <stop offset="0.55" stop-color="#2e2520"/>
+      <stop offset="0.85" stop-color="#4a3829"/>
+      <stop offset="1" stop-color="#5d4a32"/>
+    </radialGradient>
+    <!-- A chip of the brick that stood here. -->
+    <path id="chip" d="M-2.6 -1.6 L2.2 -2.2 L2.8 1.4 L-2 2 Z" fill="#9c4f37" stroke="#2a1a12" stroke-width="0.9"/>
+    <!-- A fleck of ash. -->
+    <circle id="ash" r="1.3" fill="#8d8780"/>
+    <!-- An ember: a hot core with a glow round it. -->
+    <g id="ember">
+      <circle r="2.1" fill="#d8571c" opacity="0.55"/>
+      <circle r="0.9" fill="#ffbe3a"/>
+    </g>
+  </defs>
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- One: a round burn, a few chips scattered to one side. -->
+    <g transform="translate(32 48) scale(1 0.5) rotate(45)">
+      <g clip-path="url(#footprint)">
+        <g transform="scale(1.15)">
+        <path d="M-17 -6 C-19 -14 -10 -20 -2 -18 C5 -21 14 -17 17 -9 C21 -2 19 8 14 13 C9 19 -1 21 -8 17 C-15 15 -21 7 -18 1 C-21 -2 -19 -4 -17 -6 Z" fill="url(#char)"/>
+        <path d="M-9 -4 C-8 -10 -1 -12 4 -9 C10 -7 11 0 8 5 C5 10 -3 10 -7 6 C-10 3 -11 0 -9 -4 Z" fill="#141010" opacity="0.7"/>
+        <use href="#ash" x="-6" y="-11"/>
+        <use href="#ash" x="9" y="-4"/>
+        <use href="#ash" x="-12" y="5"/>
+        <use href="#ash" x="3" y="12"/>
+        <use href="#ash" x="12" y="8"/>
+        <use href="#chip" x="-13" y="-8"/>
+        <use href="#chip" x="7" y="-13" transform="rotate(30 7 -13)"/>
+        <use href="#chip" x="14" y="1" transform="rotate(-40 14 1)"/>
+        <use href="#ember" x="-2" y="2"/>
+        <use href="#ember" x="6" y="7"/>
+      </g>
+      </g>
+    </g>
+
+    <!-- Two: a burn spread long, as if the blast ran along a wall. -->
+    <g transform="translate(96 48) scale(1 0.5) rotate(45)">
+      <g clip-path="url(#footprint)">
+        <g transform="scale(1.15)">
+        <path d="M-21 -2 C-20 -10 -12 -13 -4 -12 C4 -16 13 -14 19 -8 C23 -3 22 6 16 10 C10 15 1 13 -6 15 C-13 16 -20 11 -21 5 C-23 2 -22 0 -21 -2 Z" fill="url(#char)"/>
+        <path d="M-12 -1 C-10 -6 -3 -7 3 -6 C9 -6 12 -2 11 2 C10 7 3 7 -2 7 C-8 8 -13 4 -12 -1 Z" fill="#141010" opacity="0.7"/>
+        <use href="#ash" x="-15" y="-6"/>
+        <use href="#ash" x="-4" y="10"/>
+        <use href="#ash" x="10" y="-9"/>
+        <use href="#ash" x="15" y="5"/>
+        <use href="#chip" x="-17" y="7" transform="rotate(20 -17 7)"/>
+        <use href="#chip" x="0" y="-11"/>
+        <use href="#chip" x="12" y="10" transform="rotate(-25 12 10)"/>
+        <use href="#chip" x="18" y="-3" transform="rotate(60 18 -3)"/>
+        <use href="#ember" x="-7" y="1"/>
+        <use href="#ember" x="5" y="-1"/>
+      </g>
+      </g>
+    </g>
+
+    <!-- Three: a ragged burn, more ash than char, one ember left. -->
+    <g transform="translate(160 48) scale(1 0.5) rotate(45)">
+      <g clip-path="url(#footprint)">
+        <g transform="scale(1.15)">
+        <path d="M-15 -13 C-8 -21 3 -19 9 -16 C16 -14 21 -7 19 0 C22 7 16 16 8 17 C1 21 -7 18 -12 14 C-19 11 -21 2 -18 -4 C-20 -8 -18 -11 -15 -13 Z" fill="url(#char)"/>
+        <path d="M-7 -8 C-2 -11 5 -9 7 -4 C10 1 7 7 2 8 C-3 10 -8 6 -9 1 C-10 -3 -9 -6 -7 -8 Z" fill="#141010" opacity="0.7"/>
+        <use href="#ash" x="-10" y="-12"/>
+        <use href="#ash" x="-14" y="2"/>
+        <use href="#ash" x="-6" y="12"/>
+        <use href="#ash" x="7" y="13"/>
+        <use href="#ash" x="13" y="-6"/>
+        <use href="#ash" x="15" y="6"/>
+        <use href="#ash" x="2" y="-14"/>
+        <use href="#chip" x="-9" y="9" transform="rotate(-15 -9 9)"/>
+        <use href="#chip" x="10" y="-12" transform="rotate(45 10 -12)"/>
+        <use href="#ember" x="1" y="0"/>
+      </g>
+      </g>
+    </g>
+  </g>
+</svg>

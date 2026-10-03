@@ -34,6 +34,12 @@ export const ART_SHEETS = {
      * by `npm run ra-marks`.
      */
     items: { href: "/art/realmarena/items.png", width: 480, height: 96 },
+    /**
+     * Scorched ground (§22): three kinds of what low cover leaves once it's
+     * blasted away, a terrain cell each. Rendered from
+     * `art-masters/realmarena/scorched.svg` by `npm run ra-marks`.
+     */
+    scorched: { href: "/art/realmarena/scorched.png", width: 192, height: 64 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -79,6 +85,8 @@ const BATTLEMENTS = [0, 2].map(col => cell("walls", col, 10, 2));
 const LOW_WALLS = [2, 3].map(col => cell("walls", col, 4, 2));
 /** A heap of fallen brick. */
 const RUBBLE = [5, 6, 7].map(col => cell("walls", col, 6, 2));
+/** Blackened earth, ash and a few chips of brick: low cover blasted away, lying flat on the ground. */
+const SCORCHED = [0, 1, 2].map(col => cell("scorched", col, 0));
 
 /** One sprite standing on a square: one of `sprites`, picked by the square, so a run of one terrain isn't one picture repeated. */
 export interface ArtLayer {
@@ -103,7 +111,8 @@ const PARAPET_FOOT = TERRAIN["P"].height - FULL_HEIGHT;
 /**
  * What each terrain is drawn with, bottom up, standing on its square's
  * ground. Open ground has nothing: the board lays grass over the whole map
- * first (`GRASS`). Heights come from the rules' own `TERRAIN`, so a tower
+ * first (`GRASS`). Scorched ground is drawn over that grass, a square at a
+ * time, since it's only ever where low cover was (§22). Heights come from the rules' own `TERRAIN`, so a tower
  * drawn here is as tall as the tower the rules play.
  */
 export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> = {
@@ -118,6 +127,7 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
     "P": [{ sprites: [BRICK_COLUMN], at: 0, clip: PARAPET_FOOT }, { sprites: BATTLEMENTS, at: PARAPET_FOOT }],
     "s": [{ sprites: [BRICK_COLUMN], at: 0, clip: STAIR }, { sprites: [MOSSY_ROCK], at: STAIR, clip: 0 }],
     "^": [{ sprites: [BRICK_COLUMN], at: 0, clip: TOWER }, { sprites: [MOSSY_ROCK], at: TOWER, clip: 0 }],
+    "_": [{ sprites: SCORCHED, at: 0 }],
 };
 
 const LAYERS = Object.values(TERRAIN_ART).flat();

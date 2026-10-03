@@ -1,5 +1,5 @@
 'use client'
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -17,6 +17,7 @@ import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldById } from "@/games/RealmArena/maps";
+import { battlefieldWith } from "@/utils/games/battlefield/terrain";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
 import { actionSquares, fighterName } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
@@ -94,7 +95,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const seats = gameData?.gameState?.turnOrder ?? [];
-    const field = battlefieldById(gs?.map ?? '');
+    // The map with whatever has been blasted cleared from it (§22), as the
+    // rules read it: rebuilt only when something more is blasted, so the
+    // board lays its ground out again only then.
+    const blasted = gs?.blasted;
+    const field = useMemo(() => battlefieldWith(battlefieldById(gs?.map ?? ''), blasted ?? []), [gs?.map, blasted]);
 
     const playerName = (userId?: string): string => userId === myUserId ? 'You' : nameForUserId(gameData, userId);
     const colourFor = (userId: string): string => playerColourForId(userId, userIdList);
@@ -305,6 +310,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 range: turn.range,
                                 path: turn.path,
                                 area: turn.area,
+                                blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.targets,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),

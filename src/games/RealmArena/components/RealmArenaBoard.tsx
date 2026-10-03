@@ -9,7 +9,7 @@ import { RealmArenaTerrainArt, RealmArenaTerrainDefs, SpriteUse } from '@/games/
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
-import { ITEM_ART, SMOKE_ART } from '@/games/RealmArena/art';
+import { ITEM_ART, SMOKE_ART, TERRAIN_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { apPips, areaRect, type AttackOption, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
@@ -101,8 +101,10 @@ interface Aiming {
     range: ReadonlySet<Square> | null;
     /** The path a lined-up move takes. */
     path: readonly Square[] | null;
-    /** The 3×3 a lined-up fireball hits. */
+    /** The 3×3 a lined-up fireball hits, or the square a lined-up throw lands on. */
     area: readonly Square[] | null;
+    /** The low cover a lined-up fireball or fire flask would blast away (§22), shaded as the blast is. */
+    blasts: readonly Square[] | null;
     /** Who a tap could aim at. */
     candidates: readonly number[];
     /** Who is aimed at. */
@@ -217,15 +219,18 @@ function flatRuns<K>(view: IsoView, keyOf: (square: Square) => K | undefined) {
     return isoRuns(view, square => view.heights[square] === 0 ? keyOf(square) : undefined);
 }
 
-/** A raised square, as the board lays it out once a battlefield. */
-interface RaisedBlock {
+/** A square's art, where it stands: its terrain, and the square's back corner on its ground. */
+interface SquareArt {
     square: Square;
-    depth: number;
     letter: TerrainLetter;
+    corner: Point;
+}
+
+/** A raised square, as the board lays it out once a battlefield. */
+interface RaisedBlock extends SquareArt {
+    depth: number;
     /** Its top, at its full height: what it's shaded on. */
     top: string;
-    /** The square's back corner on its ground, where its art stands. */
-    corner: Point;
     /** The ground it stands on, where a map raises that off the slab: drawn as a block of its own under the art. */
     plinth: IsoBlock | null;
 }
@@ -345,7 +350,9 @@ interface DepthItem {
  * The terrain is tile art (`art.ts`, drawn by `RealmArenaTerrain`): grass laid
  * over the whole map as one pattern, and on every raised square the sprites
  * its terrain is drawn with — battlements, rubble, a tree — standing on it at
- * the heights the rules play.
+ * the heights the rules play. Low cover blasted away (§22) arrives as
+ * scorched ground in `field` itself, flat, and is drawn over the grass, a
+ * square at a time.
  *
  * Every standing figure wears its status effects (§20) as a column of marks
  * down its left, drawn from their own sheet (`EFFECT_ART`), whoever's
@@ -399,7 +406,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
     const { rotation } = turned;
 
-    // The ground doesn't change during a match, so it's laid out once a battlefield, and again each turn of the view.
+    // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
     const ground = useMemo(() => {
         const view = isoView(
             { width: field.width, height: field.height, heights: field.tiles.map(tile => tile.elevation) },
@@ -412,6 +419,11 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             view,
             slab: isoSlab(view),
             lines: isoGridLines(view),
+            // Flat squares with art of their own — scorched ground — lying on the grass.
+            flat: view.heights.flatMap((height, square): SquareArt[] => {
+                const letter = terrainLetter(field, square);
+                return height === 0 && TERRAIN_ART[letter].length > 0 ? [{ square, letter, corner: isoCorner(view, square, 0) }] : [];
+            }),
             blocks: view.heights.flatMap((height, square): RaisedBlock[] => {
                 if (height === 0) return [];
                 const base = plinths.heights[square];
@@ -464,7 +476,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     if (reach) shades.push(square => reach.has(square) ? `ag-ra-reach ag-ra-reach--${reach.get(square)}` : undefined);
     const range = aiming?.range;
     if (range) shades.push(square => range.has(square) ? 'ag-ra-range' : undefined);
-    const blast = new Set(aiming?.area);
+    const blast = new Set([...aiming?.area ?? [], ...aiming?.blasts ?? []]);
     if (blast.size > 0) shades.push(square => blast.has(square) ? 'ag-ra-blast' : undefined);
     if (placing && placing.selected !== null) {
         // Somewhere to put the character picked up: anywhere in the zone nobody stands.
@@ -559,6 +571,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
                     <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
                     <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
+                    {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
                     <path className="ag-ra-grid" d={ground.lines} />
 
                     {field.deployments.map((squares, seat) => {

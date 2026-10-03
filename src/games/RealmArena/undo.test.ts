@@ -12,7 +12,7 @@ import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
-import { actBy, battleOf, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/undo.md's eighth game, shaped like Fires Out's: a turn is a run of
 // actions and only End turn hands it on, so every action that rolls nothing
@@ -246,6 +246,19 @@ describe("Realm Arena — taking back an item (§21)", () => {
         expect(byId(game, thrower.id)).toEqual(thrower);
         expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
         expect(byId(game, smoker.id)).toEqual(smoker);
+    });
+
+    it("takes back a fire flask that landed on nobody, putting back the cover it blasted (§22)", async () => {
+        const game = await battle();
+        const thrower = own(game, "a")[0];
+        const aim = blastSpot(game, thrower);
+        const before = structuredClone(thrower);
+        expect((await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: aim }))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.blasted.length).toBeGreaterThan(0);
+
+        expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.blasted).toEqual([]);
+        expect(byId(game, thrower.id)).toEqual(before);
     });
 
     it("never takes back a flask that landed on someone, even one that only stunned", async () => {
