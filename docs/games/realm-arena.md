@@ -1,15 +1,15 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.19. Split out of Defender of the Realm in its third round of
+**Status:** v1.20. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
 first characters, and §15 the first battlefield, a ruined fort. §17 is the
 implementation plan and where it stands. Milestone A, free-for-all and C1–C3
-(status effects §20, items §21, destructible low cover §22) are built. C4,
-battle visuals (§26), is under way: hit text is built, and the shot and the
-fireball in flight are next. Then C5, character mastery earned by what a
-character does (§23).
+(status effects §20, items §21, destructible low cover §22) are built, and so
+is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
+and the strikes played out on the board. Next is C5, character mastery earned
+by what a character does (§23).
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -961,8 +961,8 @@ recap, a guide and a tutorial.
 | C1 | Status effects (§20) | Built |
 | C2 | Items bought at muster (§21) | Built |
 | C3 | Destructible low cover (§22) | Built |
-| **C4** | **Battle visuals: hit text, then the shot and the fireball in flight (§26)** | **Under way**: hit text built (§26.3) |
-| C5 | Character mastery, earned by what a character does (§23) | After C4. Replaces B4 |
+| C4 | Battle visuals: hit text, then the shot and the fireball in flight (§26) | Built |
+| **C5** | **Character mastery, earned by what a character does (§23)** | **Next**. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, if it's chosen (§8) | After C |
 | B6 | More factions | After C |
@@ -1620,9 +1620,9 @@ sends (`BattleEvent` in `rules.ts`).
 - **One layer on the board.** `RealmArenaFx` draws the cues in the board's
   SVG, above the figures. It uses the same isometric projection, at each
   figure's height, so it turns with the view (§13.1). The hit text is CSS
-  keyframes in `ag-theme.css`. The arrow, the fireball and the burst start as
-  simple SVG shapes. Drawn art can replace them later, as an SVG master
-  rendered by `npm run ra-marks`, like the effects and items.
+  keyframes in `ag-theme.css`. The arrow, the fireball and the burst are
+  drawn art: an SVG master rendered by `npm run ra-marks`, like the effects
+  and items.
 - **The review needs each step's events.** A replayed snapshot carries the
   state after a command, not the command's outcome. The difference between two
   snapshots shows the damage but not a miss, so it isn't enough. The timeline
@@ -1654,9 +1654,28 @@ sends (`BattleEvent` in `rules.ts`).
      tells. Only Realm Arena opts in.
    - The player's own playback is dropped once it has played, so leaving a
      review doesn't play it again.
-2. **The shot and the fireball:** the arrow and the fireball with its burst,
-   then the bolt, the flasks and the strike, and a figure downed by the action
-   staying drawn until its hit lands. Reviewer: `caveman`.
+2. **The shot and the fireball.** *Built.* The arrow and the fireball with its
+   burst, then the bolt, the flasks and the strike, and a figure downed by the
+   action staying drawn until its hit lands. What it settled:
+   - Each thing an action did lands at least 0.45 s after the last, and sets
+     off no sooner than the last one landed. Its text rises as it lands.
+   - A shot is a bolt if the Mage fired it and an arrow otherwise. A hit
+     sticks in the figure and fades; a graze glances off, turned upward; a miss
+     is aimed just over the head and flies on past, coming down beyond.
+   - A fireball or a flask flies to the square it was aimed at and bursts
+     there, whoever it hit, so a smoke pot or a flask thrown at nobody still
+     plays. A fireball, a thunder flask and a smoke pot burst over the 3×3; a
+     fire flask over its one square. The smoke pot's burst is its own cloud.
+   - A strike is a slash across its target, its damage rising as the slash
+     lands.
+   - Cover a burst blasts away stands, drawn from the battlefield as the
+     action found it, until the burst fades, and then fades off the scorched
+     ground. A downed figure does the same over its fallen one.
+   - What flies is moved a frame at a time, turned to face the way it's going.
+     What stays put (a burst, a slash, a fall) is CSS keyframes, like the text.
+   - The art is `fx.svg`, rendered to one sheet with the rest by
+     `npm run ra-marks`. A flask in flight is drawn bare, without the tile its
+     mark has.
 
 The game isn't announced yet, so neither PR gets a What's new line (§17.1).
 
@@ -1709,3 +1728,4 @@ Realm, its sibling in the same world.
 | 1.17 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |
 | 1.18 | Round 10 (§11.10). The implementation plan is summarised: §17 keeps the principles, the engine decisions and a few lines a PR, with a status table for Milestones B and C, and the engine and PR parts of C1–C3 (§20.3–§22.3) are cut to what was built. Mastery is earned by actions, as XP: a little for fighting in a battle, more for each attack, ability and item (§23.1), counted by a tally on each fighter (§23.3). Battle visuals come next, as C4 (§26): hit text, then the Archer's shot and the fireball in flight. Mastery becomes C5. |
 | 1.19 | C4 PR 1 fills in hit text (§26.3): the beats and the cap, an effect's name under its number, what a heal and a Raise show, text rising where the hit happened, and the events a replayed snapshot carries. A downed figure staying drawn until its hit lands moves to PR 2, with the arrow it's for. |
+| 1.20 | C4 PR 2 fills in the shot and the fireball (§26.3): when each part sets off and lands, how a hit, a graze and a miss end, a throw at nobody still flying and bursting, the burst's spread, blasted cover standing until its burst fades, and drawn art for all of it. C4 is built; C5 is next. |

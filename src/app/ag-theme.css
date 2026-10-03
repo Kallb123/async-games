@@ -5313,9 +5313,39 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     65% { opacity: 1; }
     100% { opacity: 0; transform: translateY(var(--ra-hit-lift)); }
 }
-/* With reduced motion it doesn't rise: it appears where it happened, and fades. */
+/* A burst (§26.1): the fireball's or a flask's, flaring over where it landed
+   and fading. A strike's slash: wiped across its target. Both are timed by
+   their cue, like the hit text, and grow about their own middles. What flies
+   is moved a frame at a time by RealmArenaFx itself. */
+.ag-ra-burst, .ag-ra-slash { opacity: 0; transform-box: fill-box; transform-origin: center; }
+/* No length of their own: each cue sets its delay and length inline (`cueTiming`). */
+.ag-ra-burst { animation: ag-ra-burst ease-out both; }
+.ag-ra-slash { animation: ag-ra-slash ease-out both; }
+@keyframes ag-ra-burst {
+    0% { opacity: 0; transform: scale(0.35); }
+    20% { opacity: 1; transform: scale(1); }
+    60% { opacity: 0.85; }
+    100% { opacity: 0; transform: scale(1.08); }
+}
+@keyframes ag-ra-slash {
+    0% { opacity: 0; transform: translate(2px, -2px) scale(0.7); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-2px, 2px) scale(1.05); }
+}
+/* A character the action downed, standing as it was until its blow lands,
+   then fading off its fallen figure; and cover it blasted away, standing
+   until the burst fades, then fading off its scorched ground. Never in the
+   way of a tap. */
+.ag-ra-falling, .ag-ra-blasting { pointer-events: none; animation: ag-ra-fall ease-in both; }
+@keyframes ag-ra-fall {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+/* With reduced motion the text doesn't rise: it appears where it happened,
+   and fades. Nothing flies, bursts or slashes. */
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
+    .ag-ra-burst, .ag-ra-slash { display: none; }
 }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */

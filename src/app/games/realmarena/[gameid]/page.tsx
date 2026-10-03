@@ -134,13 +134,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
     // What the viewer's own last action or End turn did, played over the board
-    // as it comes back (§26.1), from where everyone stood when it was sent.
+    // as it comes back (§26.1), from where everyone stood — and the cover that
+    // stood — when it was sent.
     // Gone once it has had its time, whether or not the board was showing it,
     // so coming back from a review doesn't play it again.
     const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
     const play = (key: string, events: BattleEvent[]) => {
         const cues = battleCues(events, fighters);
-        setOwnPlayback(cues.length > 0 ? { key, cues } : null);
+        setOwnPlayback(cues.length > 0 ? { key, cues, field } : null);
     };
     useEffect(() => {
         if (!ownPlayback) return;
@@ -194,7 +195,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepEvents = nav.displayedOutcome?.events;
     const stepCues = previous && stepEvents ? battleCues(stepEvents, previous.specificGameState.fighters) : [];
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : stepCues.length > 0 ? { key: `step:${nav.viewIndex}`, cues: stepCues } : null;
+        : previous && stepCues.length > 0 ? { key: `step:${nav.viewIndex}`, cues: stepCues, field: battlefieldOf(map, previous.specificGameState.blasted) } : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {

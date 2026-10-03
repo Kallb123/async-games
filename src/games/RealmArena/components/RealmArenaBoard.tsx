@@ -7,13 +7,13 @@ import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefie
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
-import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
+import RealmArenaFx, { cueTiming, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { ITEM_ART, SMOKE_ART, TERRAIN_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, type BattleCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, type ScorchCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -100,6 +100,8 @@ interface RealmArenaBoardProps {
 export interface Playback {
     key: string;
     cues: readonly BattleCue[];
+    /** The battlefield as the action found it: what cover it blasted away is drawn from until it goes. */
+    field: Battlefield;
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
@@ -142,6 +144,12 @@ type Shade = (square: Square) => string | undefined;
 function discCentre(view: IsoView, square: Square): Point {
     const { x, y } = isoCentre(view, square);
     return { x, y: y - FIGURE_RISE };
+}
+
+/** Where the battle visuals go on a square (§26): its ground, a figure's disc there, and the top of that disc. */
+function fxPoints(view: IsoView, square: Square): FxPoints {
+    const body = discCentre(view, square);
+    return { ground: isoCentre(view, square), body, head: { x: body.x, y: body.y - FIGURE_RADIUS } };
 }
 
 /**
@@ -197,6 +205,32 @@ function Figure({ view, square, character, artId, item, className = '', fill, ri
     );
 }
 
+/** A standing figure's HP bar, under its disc centred on (`x`, `y`). */
+function HpBar({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
+    return (
+        <>
+            <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-fill" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
+        </>
+    );
+}
+
+/**
+ * A character the action being played downed, standing as it was until the
+ * blow lands and then fading (§26.1), over its fallen figure: so a shot has
+ * something to hit. Drawn without its marks, and not to be tapped.
+ */
+function Falling({ view, cue, colourFor }: { view: IsoView; cue: FallCue; colourFor: (userId: string) => string }) {
+    const { fighter } = cue;
+    const { x, y } = discCentre(view, fighter.square);
+    return (
+        <g className="ag-ra-falling" style={cueTiming(cue)}>
+            <Figure view={view} square={fighter.square} character={fighter.character} fill={colourFor(fighter.owner)} ghost />
+            <HpBar x={x} y={y} fighter={fighter} />
+        </g>
+    );
+}
+
 /** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
 function SmokePuff({ artId, view, square }: { artId: string; view: IsoView; square: Square }) {
     const { x, y } = isoCentre(view, square);
@@ -242,6 +276,24 @@ interface RaisedBlock extends SquareArt {
     top: string;
     /** The ground it stands on, where a map raises that off the slab: drawn as a block of its own under the art. */
     plinth: IsoBlock | null;
+}
+
+/** `view` with each square at the ground its terrain stands on in `field`: where a raised square's plinth is drawn from. */
+function plinthsOf(view: IsoView, field: Battlefield): IsoView {
+    return { ...view, heights: field.tiles.map(tile => tile.elevation - tile.terrain.height) };
+}
+
+/** A raised square of `field`, as `view` draws it at `field`'s heights. */
+function raisedBlock(view: IsoView, plinths: IsoView, field: Battlefield, square: Square): RaisedBlock {
+    const base = plinths.heights[square];
+    return {
+        square,
+        depth: isoDepth(view, square),
+        letter: terrainLetter(field, square),
+        top: isoBlock(view, square).top,
+        corner: isoCorner(view, square, base),
+        plinth: base > 0 ? isoBlock(plinths, square) : null,
+    };
 }
 
 /** A raised square: the ground under it, the art standing on that, and whatever its top is shaded with. */
@@ -303,16 +355,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colourFor, 
                 className={`${standing ? '' : 'ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
                 fill={standing ? colourFor(fighter.owner) : undefined}
             />
-            {standing && (
-                <>
-                    <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-                    <rect
-                        className="ag-ra-hp-fill"
-                        x={x - HP_BAR_WIDTH / 2} y={y + FIGURE_RADIUS - 0.2}
-                        width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT}
-                    />
-                </>
-            )}
+            {standing && <HpBar x={x} y={y} fighter={fighter} />}
             <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -346,6 +389,28 @@ function turnedPoint(from: IsoView, to: IsoView, { x, y }: Point): Point {
 interface DepthItem {
     depth: number;
     node: React.ReactNode;
+}
+
+/**
+ * The cover the action being played blasted away (§26.1), standing on each
+ * square as it did — drawn from the battlefield as the action found it — until
+ * the burst fades, then fading off the scorched ground under it.
+ */
+function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue): DepthItem[] {
+    const before = playback.field;
+    const was: IsoView = { ...view, heights: before.tiles.map(tile => tile.elevation) };
+    const plinths = plinthsOf(view, before);
+    return cue.squares.map(square => {
+        const block = raisedBlock(was, plinths, before, square);
+        return {
+            depth: block.depth,
+            node: (
+                <g key={`blast-${playback.key}-${square}`} className="ag-ra-blasting" style={cueTiming(cue)}>
+                    <RaisedSquare id={artId} block={block} shades={[]} />
+                </g>
+            ),
+        };
+    });
 }
 
 /**
@@ -405,7 +470,9 @@ interface DepthItem {
  *
  * What an action did plays over the figures (`playback`, §26) — the viewer's
  * own as it comes back, and each step of a review — drawn by `RealmArenaFx`
- * above everything else, where nothing can be tapped.
+ * above everything else, where nothing can be tapped: the shots and the
+ * throws flying, their bursts, the slashes and the hit text. Anyone it
+ * downed stands where it fell until the blow lands, then fades.
  *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
@@ -427,7 +494,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
         );
         // The ground each square's terrain stands on, laid out on the same
         // board: where it's raised, it's a block of its own under the art.
-        const plinths: IsoView = { ...view, heights: field.tiles.map(tile => tile.elevation - tile.terrain.height) };
+        const plinths = plinthsOf(view, field);
         return {
             view,
             slab: isoSlab(view),
@@ -437,18 +504,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                 const letter = terrainLetter(field, square);
                 return height === 0 && TERRAIN_ART[letter].length > 0 ? [{ square, letter, corner: isoCorner(view, square, 0) }] : [];
             }),
-            blocks: view.heights.flatMap((height, square): RaisedBlock[] => {
-                if (height === 0) return [];
-                const base = plinths.heights[square];
-                return [{
-                    square,
-                    depth: isoDepth(view, square),
-                    letter: terrainLetter(field, square),
-                    top: isoBlock(view, square).top,
-                    corner: isoCorner(view, square, base),
-                    plinth: base > 0 ? isoBlock(plinths, square) : null,
-                }];
-            }),
+            blocks: view.heights.flatMap((height, square) => height === 0 ? [] : [raisedBlock(view, plinths, field, square)]),
         };
     }, [field, rotation]);
     const { view } = ground;
@@ -551,6 +607,16 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                 />
             ),
         });
+    }
+    // Anyone the action being played downed stands over its fallen figure
+    // until the blow lands, and the cover it blasted stands over its
+    // scorched ground until the burst fades: both as the action found them.
+    if (playback) for (const cue of playback.cues) {
+        if (cue.kind === 'fall') items.push({
+            depth: isoDepth(view, cue.fighter.square) + 0.6,
+            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} view={view} cue={cue} colourFor={colourFor} />,
+        });
+        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }
     items.sort((a, b) => a.depth - b.depth);
 
@@ -657,18 +723,8 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                         />
                     )}
 
-                    {/* What the last action did, rising off the figures it happened to: last, over everything. */}
-                    {playback && (
-                        <RealmArenaFx
-                            key={playback.key}
-                            id={artId}
-                            cues={playback.cues}
-                            over={square => {
-                                const { x, y } = discCentre(view, square);
-                                return { x, y: y - FIGURE_RADIUS };
-                            }}
-                        />
-                    )}
+                    {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
+                    {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} />}
                 </svg>
             </BoardZoom>
             {/* Turning the view: beside BoardZoom rather than in it, since

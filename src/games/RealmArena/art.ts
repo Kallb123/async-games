@@ -15,7 +15,7 @@
 
 import { FULL_HEIGHT, TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP } from "@/utils/ui/isometric";
-import { EFFECT_IDS, ITEM_IDS } from "./characters";
+import { EFFECT_IDS, ITEM_IDS, type ItemId } from "./characters";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -40,6 +40,13 @@ export const ART_SHEETS = {
      * `art-masters/realmarena/scorched.svg` by `npm run ra-marks`.
      */
     scorched: { href: "/art/realmarena/scorched.png", width: 192, height: 64 },
+    /**
+     * The battle visuals (§26): what flies, a `MARK_PX` cell each in
+     * `MISSILE_IDS` order, then a strike's slash; under them the bursts, two
+     * cells wide. Rendered from `art-masters/realmarena/fx.svg` by
+     * `npm run ra-marks`.
+     */
+    fx: { href: "/art/realmarena/fx.png", width: 672, height: 192 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -154,9 +161,45 @@ export const ITEM_ART = marks("items", ITEM_IDS);
  */
 export const SMOKE_ART = mark("items", ITEM_IDS.length);
 
+/** Something thrown: never the draught, which is drunk. */
+export type ThrownItem = Exclude<ItemId, "healingDraught">;
+
+/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, and a thrown flask or pot. */
+export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem;
+
+/** What a burst looks like (§26.1): the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff. */
+export type BurstKind = "fire" | "thunder" | "smoke";
+
+/** The order what flies is drawn in along the top of the fx sheet. */
+const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot"];
+
+/**
+ * Each missile as it flies (§26.1). An arrow, a bolt or a fireball points
+ * right, its front at its cell's right edge, for the board to turn along its
+ * flight; a flask or a pot is upright in its cell, to tumble.
+ */
+export const MISSILE_ART = marks("fx", MISSILE_IDS);
+
+/** A melee strike's slash across its target (§26.1). */
+export const SLASH_ART = mark("fx", MISSILE_IDS.length);
+
+/**
+ * Each burst (§26.1), lying flat on the ground, twice as wide as it's deep:
+ * the board stretches it over the square or the 3×3 it went off on. The
+ * smoke pot's is its cloud.
+ */
+export const BURST_ART: Readonly<Record<BurstKind, Sprite>> = {
+    fire: { sheet: "fx", x: 0, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    thunder: { sheet: "fx", x: 2 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    smoke: SMOKE_ART,
+};
+
 /** Every sprite the board draws, once each, by the number it defines it under up front. */
 export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
-    [...new Set([...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), ...Object.values(ITEM_ART), SMOKE_ART])].map((sprite, index) => [sprite, index]),
+    [...new Set([
+        ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), ...Object.values(ITEM_ART), SMOKE_ART,
+        ...Object.values(MISSILE_ART), SLASH_ART, ...Object.values(BURST_ART),
+    ])].map((sprite, index) => [sprite, index]),
 );
 
 /** The spans a clipped layer is cut to, as [low, high] quarters above the ground, once each. */

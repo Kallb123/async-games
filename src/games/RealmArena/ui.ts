@@ -6,9 +6,9 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Weapon } from "./characters";
-import { EFFECT_ART, ITEM_ART, type Sprite } from "./art";
-import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ToldEvent } from "./rules";
+import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
+import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
+import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -408,11 +408,14 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
 /** How a piece of hit text is coloured (§26.1): damage, a graze, a miss, a heal, or a word of its own — an effect, a knock-out. */
 export type HitTone = "hit" | "graze" | "miss" | "heal" | "word";
 
-/**
- * Hit text over a figure (§26.1): one thing the board plays as an action comes
- * back, timed from the moment it starts playing.
- */
-export interface TextCue {
+/** When a cue starts and how long it lasts, in milliseconds from the moment the action starts playing. */
+interface Timed {
+    start: number;
+    length: number;
+}
+
+/** Hit text over a figure (§26.1). */
+export interface TextCue extends Timed {
     kind: "text";
     /** Who it happened to. */
     fighter: number;
@@ -428,51 +431,145 @@ export interface TextCue {
     /** The effect whose mark stands beside it: burning's, as it does its damage. */
     mark?: EffectId;
     tone: HitTone;
-    /** When it starts and how long it lasts, in milliseconds. */
-    start: number;
-    length: number;
 }
 
-/** What the board plays: hit text for now; the shot and the fireball in flight join it (§26.3 PR 2). */
-export type BattleCue = TextCue;
+/** Something flying from one square to another (§26.1). */
+export interface FlightCue extends Timed {
+    kind: "flight";
+    missile: Missile;
+    /** Where it's shot or thrown from, and the square it's aimed at: a figure's for a shot, the ground's for a throw. */
+    from: Square;
+    to: Square;
+    /**
+     * How it ends: stuck in the target, glancing off it, flying past it, or
+     * coming down on the square it was aimed at, where its burst takes over.
+     */
+    result: ShotResult | "landed";
+    /** How long after its start it gets there: a shot goes on after, for the rest of its `length`. */
+    land: number;
+}
+
+/** Something going off where it landed (§26.1): over its square, or the 3×3 round it. */
+export interface BurstCue extends Timed {
+    kind: "burst";
+    burst: BurstKind;
+    at: Square;
+    /** How many squares it spreads each way from `at`: 1 for a 3×3. */
+    radius: 0 | 1;
+}
+
+/** A melee strike: a short slash over the target (§26.1). */
+export interface SlashCue extends Timed {
+    kind: "slash";
+    square: Square;
+}
+
+/**
+ * A character the action downs, standing as it was until the blow that
+ * downed it lands, and then fading (§26.1): `start` is when the blow lands.
+ */
+export interface FallCue extends Timed {
+    kind: "fall";
+    /** As the action found it, standing where it fell. */
+    fighter: Fighter;
+}
+
+/**
+ * Low cover blasted away (§22), standing until the burst that did it fades:
+ * the board draws it from the battlefield as the action found it, and from
+ * `start` it fades off the scorched ground under it.
+ */
+export interface ScorchCue extends Timed {
+    kind: "scorch";
+    squares: readonly Square[];
+}
+
+/** One thing the board plays as an action comes back. */
+export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue;
 
 /** How long a piece of hit text takes to rise and fade (§26.1). */
 export const HIT_TEXT_MS = 1000;
-/** From one thing an action did to the next: long enough to see each land before the next. */
+/** From one thing an action did landing to the next: long enough to see each land before the next. */
 const CUE_STEP_MS = 450;
 /** The longest any one action plays for, however much it set off: every part is shortened to fit (§26.1). */
 export const PLAYBACK_MS = 3000;
+/** How long each missile takes to get there (§26.1): an arrow quickly, a bolt quicker, a fireball or a throw on a higher, slower arc. */
+export const FLIGHT_MS: Readonly<Record<Missile, number>> = { arrow: 400, bolt: 250, fireball: 600, fireFlask: 600, thunderFlask: 600, smokePot: 600 };
+/** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
+const SHOT_AFTER_MS = 350;
+/** How long a burst takes to flash and fade. */
+const BURST_MS = 700;
+/** How far through its burst blasted cover starts to go: as the burst fades, and gone with it. */
+const SCORCH_AT = 0.6;
+/** How long a strike's slash takes to cross its target, and the hit lands as it does. */
+const SLASH_MS = 250;
+/** How long a downed character takes to fade once its blow has landed. */
+const FALL_MS = 400;
+
+/** What each thrown item bursts into (§26.1), and over how much. */
+const THROWN_BURST: Readonly<Record<ThrownItem, BurstKind>> = { fireFlask: "fire", thunderFlask: "thunder", smokePot: "smoke" };
 
 /** Damage as the board shows it, with a real minus sign. */
 const minus = (damage: number) => `−${damage}`;
 
+/** Every timing in a cue, scaled. */
+function scaled(cue: BattleCue, scale: number): BattleCue {
+    const by = (ms: number) => Math.round(ms * scale);
+    const timed = { ...cue, start: by(cue.start), length: by(cue.length) };
+    // A flight's arc is drawn by how far through it is, so it never lands in no time.
+    return timed.kind === "flight" ? { ...timed, land: Math.max(1, by(timed.land)) } : timed;
+}
+
 /**
  * What an action did, as the board plays it (§26.2): a timed cue for each
- * thing that happened to someone, one after another in the order of the
- * events, each starting as the last one lands. Everyone a fireball or a flask
- * hits is hit at once, and the effect it puts on goes under each number. A
- * knock-out's "Down" follows its damage. `before` is everyone as the action
- * found them, which says where each cue stands: a move carries its mover
- * along, so an overwatch shot lands where the mover had got to.
+ * thing that happened, one after another in the order of the events, each
+ * starting as the last one lands.
  *
- * Moves, stances, watches and scores play nothing. However much happened, it
- * all fits in `PLAYBACK_MS`.
+ * A shot flies from the shooter to its target — an arrow, or the Mage's
+ * bolt — and its hit text rises as it gets there: stuck in the target on a
+ * hit, glancing off on a graze, flying past on a miss. A strike slashes
+ * across its target. A fireball or a thrown flask flies to the square it was
+ * aimed at and bursts there, and everyone it hit is hit at once, with the
+ * effect it puts on under each number. A knock-out's "Down" follows its
+ * damage, and the character it downed stands until that damage lands. Low
+ * cover the burst blasted away goes as the burst fades.
+ *
+ * `before` is everyone as the action found them, which says where each cue
+ * stands: a move carries its mover along, so an overwatch shot flies to where
+ * the mover had got to. Moves, stances, watches and scores play nothing of
+ * their own. However much happened, it all fits in `PLAYBACK_MS`.
  */
 export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[]): BattleCue[] {
+    const as = new Map(before.map(fighter => [fighter.id, fighter]));
     const at = new Map(before.map(fighter => [fighter.id, fighter.square]));
-    const cues: TextCue[] = [];
-    /** The latest cue on each character: where an effect's name goes under the number that came with it. */
+    const cues: BattleCue[] = [];
+    /** The latest text on each character: where an effect's name goes under the number that came with it. */
     const latest = new Map<number, TextCue>();
-    let start = -CUE_STEP_MS;
+    /** When the last thing landed. */
+    let landed: number | null = null;
     /** Who the last fireball or flask came down on, and when: a flask that only stuns names its effect there. */
     let landing: { start: number; targets: readonly number[] } | null = null;
-    const next = () => (start += CUE_STEP_MS);
+    /**
+     * When the next thing lands, `lead` after it sets off: no sooner than the
+     * last one landed, and far enough after it to be seen on its own.
+     */
+    const beat = (lead = 0) => {
+        landed = landed === null ? lead : landed + Math.max(CUE_STEP_MS, lead);
+        return landed;
+    };
     const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark"> = {}) => {
         const square = at.get(fighter);
         if (square === undefined) return;
         const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: HIT_TEXT_MS };
         cues.push(cue);
         latest.set(fighter, cue);
+    };
+    /** Something flying from a character to a square, landing at `land`. */
+    const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, after = 0) => {
+        const from = at.get(fighter);
+        const flight = FLIGHT_MS[missile];
+        if (from === undefined || to === undefined) return;
+        cues.push({ kind: "flight", missile, from, to, result, start: land - flight, land: flight, length: flight + after });
     };
 
     for (const event of events) {
@@ -482,33 +579,59 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 if (end !== undefined) at.set(event.fighter, end);
                 break;
             }
-            case "shot":
-                text(event.target, next(), event.result === "miss" ? "Miss" : minus(event.damage), event.result,
+            case "shot": {
+                // The Mage's bolt; anyone else who shoots has a bow.
+                const missile = as.get(event.fighter)?.character === "mage" ? "bolt" : "arrow";
+                const land = beat(FLIGHT_MS[missile]);
+                fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
+                text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
                     event.result === "graze" ? { label: "Graze" } : {});
                 break;
-            case "struck":
-                text(event.target, next(), minus(event.damage), "hit");
+            }
+            case "struck": {
+                const land = beat(SLASH_MS);
+                const square = at.get(event.target);
+                if (square !== undefined) cues.push({ kind: "slash", square, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                text(event.target, land, minus(event.damage), "hit");
                 break;
+            }
             case "burned":
-                text(event.fighter, next(), minus(event.damage), "hit", { mark: "burning" });
+                text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning" });
                 break;
             case "fireball":
             case "thrown": {
-                if (event.targets.length === 0) break;
-                landing = { start: next(), targets: event.targets };
-                const when = landing.start;
-                if (event.damage > 0) event.targets.forEach(target => text(target, when, minus(event.damage), "hit"));
+                const item = event.kind === "thrown" ? event.item : null;
+                // A draught is never thrown: it's drunk, and told as a heal.
+                if (item === "healingDraught") break;
+                const missile = item ?? "fireball";
+                const land = beat(FLIGHT_MS[missile]);
+                fly(event.fighter, event.at, missile, "landed", land);
+                // A fireball spreads over the 3×3, and so does a flask made to.
+                const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
+                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
+                landing = { start: land, targets: event.targets };
+                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;
             }
+            case "blasted":
+                cues.push({ kind: "scorch", squares: event.squares, start: (landing?.start ?? 0) + Math.round(BURST_MS * SCORCH_AT), length: Math.round(BURST_MS * (1 - SCORCH_AT)) });
+                break;
             case "healed":
-                text(event.target, next(), event.hp > 0 ? `+${event.hp}` : "Cured", "heal");
+                text(event.target, beat(), event.hp > 0 ? `+${event.hp}` : "Cured", "heal");
                 break;
             case "raised":
-                text(event.target, next(), `+${event.hp}`, "heal", { label: "Raised" });
+                text(event.target, beat(), `+${event.hp}`, "heal", { label: "Raised" });
                 break;
-            case "downed":
-                text(event.fighter, next(), "Down", "word");
+            case "downed": {
+                // It stands as it was until the blow that downed it lands, then fades.
+                const blow = latest.get(event.fighter);
+                const fighter = as.get(event.fighter);
+                const square = at.get(event.fighter);
+                const land = beat();
+                if (fighter && square !== undefined) cues.push({ kind: "fall", fighter: { ...fighter, square }, start: blow?.start ?? land, length: FALL_MS });
+                text(event.fighter, land, "Down", "word");
                 break;
+            }
             case "effect": {
                 const cue = latest.get(event.fighter);
                 if (event.change === "cleared") {
@@ -518,7 +641,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const { name } = EFFECTS[event.effect];
                 if (cue && (cue.tone === "hit" || cue.tone === "graze") && !cue.label && !cue.mark) cue.label = name;
                 else if (landing?.targets.includes(event.fighter)) text(event.fighter, landing.start, name, "word");
-                else text(event.fighter, next(), name, "word");
+                else text(event.fighter, beat(), name, "word");
                 break;
             }
         }
@@ -526,6 +649,5 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
 
     const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
     if (end <= PLAYBACK_MS) return cues;
-    const scale = PLAYBACK_MS / end;
-    return cues.map(cue => ({ ...cue, start: Math.round(cue.start * scale), length: Math.round(cue.length * scale) }));
+    return cues.map(cue => scaled(cue, PLAYBACK_MS / end));
 }
