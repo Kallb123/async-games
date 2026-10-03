@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -328,8 +328,13 @@ export function attackOptions(state: BattleState, fighter: Fighter, square: Squa
     const { battle, moved } = standingAt(state, { ...fighter, ap: ACTION_POINTS }, square);
     return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
         const target = fighterById(battle, id);
-        return target ? [{ target, chance: shotOdds(battle, moved, target)?.chance ?? 100 }] : [];
+        return target ? [{ target, chance: hitChance(battle, moved, target) }] : [];
     }).sort((a, b) => b.chance - a.chance);
+}
+
+/** A character's chance to hit an enemy, 0–100: a shot's odds, or — for a strike, or with no shot at all — every time. */
+export function hitChance(state: BattleState, fighter: Fighter, target: Fighter, shot: ShotKind | undefined = "attack"): number {
+    return (shot && shotOdds(state, fighter, target, shot)?.chance) ?? 100;
 }
 
 /** One reaction a move would set off, and what it would do to the mover (§13.4). */

@@ -103,7 +103,7 @@ interface RealmArenaBoardProps {
     refocus?: number;
     /** The player whose turn it is in battle: their characters show the AP they have left. */
     acting?: string | null;
-    /** A review's step (§17.3 PR 8): the squares it touched, brought into view whenever `key` changes. */
+    /** Squares brought into view whenever `key` changes: a review's step (§17.3 PR 8), or a target picked from the turn sheet's list. */
     follow?: { squares: readonly Square[]; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;

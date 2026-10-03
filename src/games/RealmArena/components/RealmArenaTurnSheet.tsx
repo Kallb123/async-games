@@ -9,8 +9,8 @@ import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, ty
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, rangeSquares, targetsOf, whoseName, type TargetKind } from '@/games/RealmArena/ui';
-import { ABILITY_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
-import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
+import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
+import { INSTANT_KINDS, shotOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
 
@@ -86,6 +86,8 @@ interface RealmArenaTurnSheetProps {
     nameFor: (userId: string) => string;
     /** The `target` of the command in flight, so only what was tapped spins. */
     pendingTarget: string | null;
+    /** Brings the board's view to a character picked from the list of targets. */
+    onFocus: (fighter: Fighter) => void;
 }
 
 /**
@@ -93,9 +95,11 @@ interface RealmArenaTurnSheetProps {
  * (docs/games/realm-arena.md §17.3 PR 7): whatever is lined up on the board,
  * with its cost and what it would set off or the odds, and a `BuildRow` for
  * each action it has. A row that needs aiming arms the board; hunkering down,
- * going on watch and a shield wall go the moment they're tapped.
+ * going on watch and a shield wall go the moment they're tapped. While one is
+ * armed for a character, everyone it could be aimed at is listed above the
+ * actions, and picking one there lines it up and brings the board to them.
  */
-export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pendingTarget }: RealmArenaTurnSheetProps) {
+export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pendingTarget, onFocus }: RealmArenaTurnSheetProps) {
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
     const weapon = weaponOf(fighter);
@@ -139,6 +143,7 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
     return (
         <>
             <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
+            <TargetList draft={draft} name={name} disabled={busy} onFocus={onFocus} />
             <div className="ag-build-list">
                 {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
                 {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
@@ -159,6 +164,45 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
                     needs(REACTION_COST), 'Watch')}
             </div>
         </>
+    );
+}
+
+interface TargetListProps {
+    draft: TurnDraft;
+    name: (id: number) => string;
+    disabled: boolean;
+    onFocus: (fighter: Fighter) => void;
+}
+
+/**
+ * Everyone the armed action could be aimed at, each with their HP and — at an
+ * enemy — the chance to hit them. Picking one lines it up and brings the
+ * board to them; picking a cleave's target again lets it go, and stays put.
+ */
+function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
+    if (draft.options.length === 0) return null;
+    return (
+        <div className="ag-build-list">
+            {draft.options.map(({ target, chance }) => {
+                const aimed = draft.targets.includes(target.id);
+                const pick = () => {
+                    draft.pick(target.id);
+                    if (!(aimed && draft.aim === 'cleave')) onFocus(target);
+                };
+                return (
+                    <BuildRow
+                        key={target.id}
+                        icon={CHARACTER_MARK[target.character]}
+                        name={capitalise(name(target.id))}
+                        cost={`${target.hp}/${CHARACTERS[target.character].hp} HP`}
+                        tag={chance !== undefined ? `${chance}% to hit` : aimed ? 'Aiming' : 'Pick'}
+                        disabled={disabled}
+                        active={aimed}
+                        onClick={pick}
+                    />
+                );
+            })}
+        </div>
     );
 }
 
@@ -259,7 +303,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
     if (aim === 'shieldBash') return hint(`${health} · always hits, for ${ABILITIES.shieldBash.damage}, and stuns them.`);
-    const shot = aim === 'attack' || aim === 'aimedShot' || aim === 'cripplingShot' ? aim : undefined;
+    const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
     if (!shot || !odds) return hint(`${health} · a strike always hits, for ${strike}.`);
     const effect = shotEffect(fighter, shot);
