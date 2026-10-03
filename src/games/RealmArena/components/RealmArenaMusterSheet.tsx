@@ -1,4 +1,5 @@
 'use client'
+import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
@@ -7,7 +8,7 @@ import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import { itemPoints, type MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView } from '@/games/RealmArena/roster';
+import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -91,11 +92,13 @@ interface OptionPickerProps {
 }
 
 /**
- * The character picked up's options (§23.2), a `BuildRow` each saying what it
- * swaps out. Tapping one musters the character with it, and tapping the one
- * it has musters the starter character again. One its rank hasn't unlocked is
- * greyed, with the rank that does. An option costs what it replaces, so the
- * points never decide it.
+ * The character picked up's options (§23.2), each under the part of its own
+ * kit it would swap out, so the player sees what they'd give up: a `BuildRow`
+ * for the starter part, marked as taken while no option replaces it, then one
+ * for each option in its place. Tapping a row takes it, and tapping the
+ * starter part musters the starter character again. An option its rank hasn't
+ * unlocked is greyed, with the rank that does. An option costs what it
+ * replaces, so the points never decide it.
  */
 function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
     const { character } = pick;
@@ -103,30 +106,48 @@ function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
     if (options.length === 0) return null;
     const rank = ranks[character] ?? 0;
     const { name } = CHARACTERS[character];
+    // The parts of its kit some option swaps out, in the options' order.
+    const parts = [...new Set(options.map(id => OPTIONS[id].replaces))];
     return (
         <>
             <p className="ag-hint ag-hint--tight">
                 {rank > 0
-                    ? `You're rank ${rank} with the ${name}: swap part of its kit for an option, or fight with it as it is.`
-                    : `Fight with the ${name} to rank up with it and unlock its options.`}
+                    ? `You're rank ${rank} with the ${name}: keep its own kit, or swap part of it for an option.`
+                    : `Fight with the ${name} to rank up with it and unlock the options below.`}
             </p>
             <div className="ag-build-list">
-                {options.map(id => {
-                    const { icon, name: optionName, line } = optionView(id);
-                    const chosen = pick.option === id;
-                    const locked = OPTIONS[id].rank > rank;
+                {parts.map(part => {
+                    const starter = starterView(character, part);
+                    const kept = !pick.option || OPTIONS[pick.option].replaces !== part;
                     return (
-                        <BuildRow
-                            key={id}
-                            icon={icon}
-                            name={optionName}
-                            cost={line}
-                            tag={chosen ? 'Taken' : locked ? `Rank ${OPTIONS[id].rank}` : 'Take'}
-                            tagMuted={locked}
-                            disabled={locked}
-                            active={chosen}
-                            onClick={() => onChoose(chosen ? null : id)}
-                        />
+                        <React.Fragment key={part}>
+                            <BuildRow
+                                icon={starter.icon}
+                                name={starter.name}
+                                cost={`Standard · ${starter.line}`}
+                                tag={kept ? 'Taken' : 'Take'}
+                                active={kept}
+                                onClick={() => { if (!kept) onChoose(null); }}
+                            />
+                            {options.filter(id => OPTIONS[id].replaces === part).map(id => {
+                                const { icon, name: optionName, line } = optionView(id);
+                                const chosen = pick.option === id;
+                                const locked = OPTIONS[id].rank > rank;
+                                return (
+                                    <BuildRow
+                                        key={id}
+                                        icon={icon}
+                                        name={optionName}
+                                        cost={line}
+                                        tag={chosen ? 'Taken' : locked ? `Rank ${OPTIONS[id].rank}` : 'Take'}
+                                        tagMuted={locked}
+                                        disabled={locked}
+                                        active={chosen}
+                                        onClick={() => onChoose(id)}
+                                    />
+                                );
+                            })}
+                        </React.Fragment>
                     );
                 })}
             </div>
