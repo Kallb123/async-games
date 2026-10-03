@@ -18,8 +18,6 @@ interface RealmArenaFxProps {
     cues: readonly BattleCue[];
     /** Where a cue on a square rises from: the top of a figure's disc there, at the square's height and the view's turn. */
     over: (square: Square) => Point;
-    /** Once everything has played, so a playback nobody needs any more can go. */
-    onDone?: () => void;
 }
 
 /**
@@ -32,9 +30,7 @@ interface RealmArenaFxProps {
  *
  * Keyed by its playback, so the next one starts it over and cuts this one short.
  */
-export default function RealmArenaFx({ id, cues, over, onDone }: RealmArenaFxProps) {
-    const ends = cues.map(cue => cue.start + cue.length);
-    const last = ends.indexOf(Math.max(...ends));
+export default function RealmArenaFx({ id, cues, over }: RealmArenaFxProps) {
     return (
         <g className="ag-ra-fx" aria-hidden="true">
             {cues.map((cue, index) => {
@@ -44,7 +40,6 @@ export default function RealmArenaFx({ id, cues, over, onDone }: RealmArenaFxPro
                         key={index}
                         className={`ag-ra-hit ag-ra-hit--${cue.tone}`}
                         style={{ animationDelay: `${cue.start}ms`, animationDuration: `${cue.length}ms` }}
-                        onAnimationEnd={index === last ? onDone : undefined}
                     >
                         <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
                         {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}

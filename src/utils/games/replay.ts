@@ -129,7 +129,8 @@ export interface IReplayAdapter {
     // opts in, since an outcome is built for the player who sent the command:
     // only a game whose outcomes say nothing that player's opponents may not
     // see belongs here. Whatever it returns goes to every viewer of the
-    // timeline. Called for every applied command, planned ones too.
+    // timeline. Never asked of a planned command, whose outcome is resolved
+    // against the real game.
     snapshotOutcome?(outcome: ICommandOutcome): unknown;
 }
 
@@ -441,7 +442,7 @@ export async function buildTimeline(
     const snapshots: ITurnSnapshot[] = [];
     let index = 0;
     const snapshot = (command: IGameCommand | null, planned: boolean, outcome?: ICommandOutcome) => {
-        const told = outcome && adapter.snapshotOutcome?.(outcome);
+        const told = outcome && !planned ? adapter.snapshotOutcome?.(outcome) : undefined;
         snapshots.push({
             index: index++,
             specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory, state.complete),

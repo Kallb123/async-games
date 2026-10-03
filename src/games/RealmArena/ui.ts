@@ -477,9 +477,11 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
 
     for (const event of events) {
         switch (event.kind) {
-            case "moved":
-                at.set(event.fighter, event.path[event.path.length - 1]);
+            case "moved": {
+                const end = event.path.at(-1);
+                if (end !== undefined) at.set(event.fighter, end);
                 break;
+            }
             case "shot":
                 text(event.target, next(), event.result === "miss" ? "Miss" : minus(event.damage), event.result,
                     event.result === "graze" ? { label: "Graze" } : {});

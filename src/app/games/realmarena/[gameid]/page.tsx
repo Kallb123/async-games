@@ -1,5 +1,5 @@
 'use client'
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, fighterName } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, fighterName, PLAYBACK_MS } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -135,12 +135,18 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
     // What the viewer's own last action or End turn did, played over the board
     // as it comes back (§26.1), from where everyone stood when it was sent.
-    // Gone once it's played, so coming back from a review doesn't play it again.
+    // Gone once it has had its time, whether or not the board was showing it,
+    // so coming back from a review doesn't play it again.
     const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
     const play = (key: string, events: BattleEvent[]) => {
         const cues = battleCues(events, fighters);
-        setOwnPlayback(cues.length > 0 ? { key, cues, onDone: () => setOwnPlayback(null) } : null);
+        setOwnPlayback(cues.length > 0 ? { key, cues } : null);
     };
+    useEffect(() => {
+        if (!ownPlayback) return;
+        const played = setTimeout(() => setOwnPlayback(null), PLAYBACK_MS);
+        return () => clearTimeout(played);
+    }, [ownPlayback]);
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;

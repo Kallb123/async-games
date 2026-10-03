@@ -265,6 +265,11 @@ export function gameStateToModel(
  * battlefield (§8), and the log already tells each one — except a shot's roll,
  * which the log leaves out and so does this. A muster's outcome, where the one
  * secret is, carries no events at all, and gets nothing here.
+ *
+ * That rests on there being no fog of war (§8). If B5 brings it, an event
+ * about a character some viewer can't see is a secret, and this has to be
+ * built per viewer — replay.test.ts pins every event's fields so a new one
+ * can't slip through unnoticed.
  */
 export function stepOutcomeToModel(outcome: unknown): IRealmArenaStepOutcome | undefined {
     const events = (outcome as { events?: unknown } | null)?.events;

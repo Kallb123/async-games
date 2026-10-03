@@ -96,11 +96,10 @@ interface RealmArenaBoardProps {
     playback?: Playback | null;
 }
 
-/** What the board plays, and what it tells once it's played it all. */
+/** What the board plays. */
 export interface Playback {
     key: string;
     cues: readonly BattleCue[];
-    onDone?: () => void;
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
@@ -668,7 +667,6 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                 const { x, y } = discCentre(view, square);
                                 return { x, y: y - FIGURE_RADIUS };
                             }}
-                            onDone={playback.onDone}
                         />
                     )}
                 </svg>

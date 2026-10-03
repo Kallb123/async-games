@@ -556,7 +556,9 @@ as it's stepped to: it picks what of the command's outcome goes on the snapshot,
 as `outcome`, which the client reads as `nav.displayedOutcome`. An outcome is
 built for the player who sent the command, and this sends it to everybody, so
 only a game whose outcomes hide nothing opts in. Realm Arena is the one that
-does (its §26.2): a battle's events, less a shot's roll.
+does (its §26.2): a battle's events, less a shot's roll — which holds only for
+as long as the battle has no fog of war. A planned command's outcome is never
+asked for.
 
 Recap **events** are a different question and don't get the same latitude: they
 are written once and read by whoever the feed is built for, so a `toEvents`

@@ -4,6 +4,7 @@ import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
+import type { ToldEvent } from "./rules";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import { endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
 
@@ -66,18 +67,44 @@ describe("Realm Arena replay", () => {
         await expect(noRandomness(() => buildTimeline(game, NAMES))).rejects.toThrow("replay consumed randomness");
     });
 
-    it("carries each action's events on its step, without a shot's roll, and nothing on a muster (§26.2)", async () => {
+    it("carries each action's events on its step, the same for every viewer, without a shot's roll, and nothing on a muster (§26.2)", async () => {
         const game = await playScriptedBattle();
-        const timeline = await buildTimeline(game, NAMES, [], undefined, "b");
-        const steps = timeline.snapshots.slice(1);
-        const outcomes = steps.map(snapshot => snapshot.outcome as IRealmArenaStepOutcome | undefined);
+        const [own, other, nobody] = await Promise.all(["a", "b", null].map(viewer => buildTimeline(game, NAMES, [], undefined, viewer)));
+        const outcomes = own.snapshots.slice(1).map(snapshot => snapshot.outcome as IRealmArenaStepOutcome | undefined);
+        // An outcome is everybody's: nothing in it is built for whoever asked.
+        expect(other.snapshots.map(snapshot => snapshot.outcome)).toEqual(own.snapshots.map(snapshot => snapshot.outcome));
+        expect(nobody.snapshots.map(snapshot => snapshot.outcome)).toEqual(own.snapshots.map(snapshot => snapshot.outcome));
         // The two musters: one sealed, and one that put both squads on the field.
         expect(outcomes.slice(0, 2)).toEqual([undefined, undefined]);
-        const events = outcomes.flatMap(outcome => outcome?.events ?? []);
-        expect(events.some(event => event.kind === "shot")).toBe(true);
-        expect(events.every(event => !("roll" in event))).toBe(true);
         // An action that did nothing carries nothing, rather than an empty list.
         expect(outcomes.every(outcome => outcome === undefined || outcome.events.length > 0)).toBe(true);
+
+        // Every field each event carries, so one added later has to be
+        // decided on here before it reaches every player (§8 has no fog).
+        const fields: Record<ToldEvent["kind"], string[]> = {
+            moved: ["fighter", "path", "sneaking"],
+            shot: ["chance", "damage", "fighter", "reaction", "result", "target"],
+            struck: ["damage", "fighter", "reaction", "target"],
+            fireball: ["at", "damage", "fighter", "targets"],
+            downed: ["by", "fighter"],
+            healed: ["fighter", "hp", "target"],
+            thrown: ["at", "damage", "fighter", "item", "targets"],
+            blasted: ["fighter", "squares"],
+            raised: ["fighter", "hp", "target"],
+            hunkered: ["fighter"],
+            shieldWall: ["fighter"],
+            watching: ["banked", "fighter"],
+            effect: ["change", "effect", "fighter"],
+            burned: ["damage", "fighter"],
+            scored: ["player", "points", "reason"],
+        };
+        const events = outcomes.flatMap(outcome => outcome?.events ?? []);
+        expect(events.some(event => event.kind === "shot")).toBe(true);
+        for (const event of events) {
+            const { kind, ...rest } = event;
+            // A draught's `draught` flag is the one optional field.
+            expect(Object.keys(rest).filter(key => key !== "draught").sort()).toEqual(fields[kind]);
+        }
     });
 
     it("titles each step of the review in the player's words", async () => {
