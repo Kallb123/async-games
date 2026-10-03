@@ -5,7 +5,7 @@
 import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
@@ -143,7 +143,9 @@ export function apPips(fighter: Fighter): boolean[] {
  * middle of the map, where the battle is fought over.
  */
 export function facingOf(field: Pick<Battlefield, "width" | "height">, { square, facing }: { square: Square; facing?: Facing }): Facing {
-    return facing ?? facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
+    // Read back from a Mixed path, so only trusted to be one of the facings.
+    if (Number.isInteger(facing) && facing! >= 0 && facing! < FACING_COUNT) return facing!;
+    return facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
 /** How full a character's HP bar is, 0–1. */

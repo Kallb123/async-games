@@ -257,7 +257,8 @@ const HALFWAY = normalise(sub(LIGHT, VIEW));
 /** The angle a facing turns the model's forward (+x) to, anticlockwise from east. */
 const facingAngle = index => rad(-45 - 45 * index);
 
-function hexToRgb(hex) {
+/** A `#rrggbb` colour as three channels in 0–1. */
+export function hexToRgb(hex) {
     const n = parseInt(hex.replace('#', ''), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => c / 255);
 }

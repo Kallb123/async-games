@@ -5248,6 +5248,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* A character: its art, in its owner's colour, over its shadow, and its HP
    above it. Fallen, it lies there, faded. */
 .ag-ra-shadow { fill: rgba(0, 0, 0, 0.3); pointer-events: none; }
+/* Only the body is tapped (`.ag-ra-figure-hit`): the art's cell is mostly
+   see-through, and would catch taps meant for the square behind it. */
+.ag-ra-figure { pointer-events: none; }
+.ag-ra-figure-hit { fill: transparent; }
 .ag-ra-figure--down { opacity: 0.75; }
 /* A standing character hidden behind something in front of it, drawn again
    over it, faint, in its owner's colour, and tappable like the figure. */

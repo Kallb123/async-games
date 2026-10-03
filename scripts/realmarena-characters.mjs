@@ -22,7 +22,8 @@
 // Run with `npm run ra-characters` after changing a master, and commit what it
 // writes. Two options help while drawing one:
 //
-//   --only <characterId>   draw just one character, and write only the preview
+//   --only <characterId>   draw just one character, leaving the rest of the
+//                          sheet empty, and write only the preview
 //   --preview <file.png>   also write the sheet tinted in the seat colours,
 //                          each figure on its square, to look at
 
@@ -32,10 +33,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import sharp from 'sharp';
 
-import { CHARACTER_CELL, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
-import { CHARACTERS } from '../src/games/RealmArena/characters.ts';
+import { ART_SHEETS, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES } from '../src/games/RealmArena/art.ts';
+import { CHARACTER_IDS } from '../src/games/RealmArena/roster.ts';
+import { FACING_COUNT } from '../src/utils/games/battlefield/terrain.ts';
 import { PLAYER_COLOURS } from '../src/utils/ui/playerColours.ts';
-import { FACINGS, renderCell } from './lib/isoRender.mjs';
+import { FACINGS, hexToRgb, renderCell } from './lib/isoRender.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MASTERS = path.join(ROOT, 'art-masters', 'realmarena', 'characters');
@@ -47,32 +49,37 @@ const CELL = { width: CHARACTER_CELL.width, height: CHARACTER_CELL.height };
 
 const { values: options } = parseArgs({ options: { only: { type: 'string' }, preview: { type: 'string' } } });
 
-const ids = Object.keys(CHARACTERS).filter(id => !options.only || id === options.only);
-if (ids.length === 0) throw new Error(`No character "${options.only}": pick one of ${Object.keys(CHARACTERS).join(', ')}`);
+if (FACINGS.length !== FACING_COUNT) throw new Error(`The renderer draws ${FACINGS.length} facings, and the board has ${FACING_COUNT}`);
+const ids = CHARACTER_IDS.filter(id => !options.only || id === options.only);
+if (ids.length === 0) throw new Error(`No character "${options.only}": pick one of ${CHARACTER_IDS.join(', ')}`);
 const { MATERIALS, OUTLINE, POSES } = await import(pathToFileURL(path.join(MASTERS, 'kit.mjs')).href);
-const masters = await Promise.all(ids.map(async id => (await import(pathToFileURL(path.join(MASTERS, `${id}.mjs`)).href)).parts));
 
-const sheetWidth = CELL.width * FACINGS.length, sheetHeight = CELL.height * ids.length * CHARACTER_POSES.length;
+const { width: sheetWidth, height: sheetHeight } = ART_SHEETS.characters;
 const sheet = Buffer.alloc(sheetWidth * sheetHeight * 4);
 const team = Buffer.alloc(sheetWidth * sheetHeight * 4);
 
-for (const [p, pose] of CHARACTER_POSES.entries()) {
-    if (!POSES[pose]) throw new Error(`kit.mjs doesn't say how to draw a character ${pose}`);
-    for (const [c, id] of ids.entries()) {
-        const row = p * ids.length + c;
+/** Copies a cell's pixels to where `sprite` cuts them from its sheet. */
+function place(pixels, into, sprite) {
+    for (let y = 0; y < CELL.height; y++) {
+        const from = y * CELL.width * 4;
+        into.set(pixels.subarray(from, from + CELL.width * 4), ((sprite.y + y) * sheetWidth + sprite.x) * 4);
+    }
+}
+
+for (const id of ids) {
+    const { parts } = await import(pathToFileURL(path.join(MASTERS, `${id}.mjs`)).href);
+    for (const pose of CHARACTER_POSES) {
+        if (!POSES[pose]) throw new Error(`kit.mjs doesn't say how to draw a character ${pose}`);
+        const art = CHARACTER_ART[id][pose];
         for (const facing of FACINGS.keys()) {
-            const cell = renderCell(masters[c], MATERIALS, {
+            const cell = renderCell(parts, MATERIALS, {
                 facing, pose: POSES[pose], ...CELL, pxPerUnit: CHARACTER_CELL.tile / Math.SQRT2, supersample: SUPERSAMPLE, outline: OUTLINE,
             });
-            for (let y = 0; y < CELL.height; y++) {
-                const from = y * CELL.width * 4;
-                const to = ((row * CELL.height + y) * sheetWidth + facing * CELL.width) * 4;
-                sheet.set(cell.pixels.subarray(from, from + CELL.width * 4), to);
-                team.set(cell.team.subarray(from, from + CELL.width * 4), to);
-            }
+            place(cell.pixels, sheet, art.body[facing]);
+            place(cell.team, team, art.team[facing]);
         }
-        console.log(`${id} ${pose}: ${masters[c].length} parts`);
     }
+    console.log(`${id}: ${parts.length} parts`);
 }
 
 const png = (pixels, width = sheetWidth, height = sheetHeight) =>
@@ -105,7 +112,7 @@ function preview() {
     const half = { w: CELL.width / 2, h: CELL.width / 4 };
     for (let y = 0; y < sheetHeight; y++) {
         const row = Math.floor(y / CELL.height), cy = y % CELL.height;
-        const tint = PLAYER_COLOURS[(row % ids.length) % PLAYER_COLOURS.length].match(/\w\w/g).map(h => parseInt(h, 16) / 255);
+        const tint = hexToRgb(PLAYER_COLOURS[(row % CHARACTER_IDS.length) % PLAYER_COLOURS.length]);
         for (let x = 0; x < sheetWidth; x++) {
             const cx = x % CELL.width, i = (y * sheetWidth + x) * 4;
             const onSquare = Math.abs(cx - half.w) / half.w + Math.abs(cy - (CELL.height - half.h)) / half.h <= 1;

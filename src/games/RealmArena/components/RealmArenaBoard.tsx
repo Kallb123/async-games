@@ -29,9 +29,11 @@ const MIN_ASPECT = 0.62;
  * facing the way it last stepped, over a shadow; fallen, it lies there. Its
  * body is taken as a disc `FIGURE_RADIUS` across, `FIGURE_RISE` above the
  * middle of the square's top — what a tap lands on, what its marks sit
- * beside and what a shot flies to — and the tallest of them stands about
- * `FIGURE_TOP` high, with its HP bar just over that. Everything here is in
- * board units, against a square `2 * ISO_HALF_WIDTH` across.
+ * beside and what a shot flies to — and the tallest of them (a mage's hat, a
+ * staff's head) stands about `FIGURE_TOP` high, with its HP bar just over
+ * that: a model drawn taller in art-masters/realmarena/characters wants this
+ * raised with it. Everything here is in board units, against a square
+ * `2 * ISO_HALF_WIDTH` across.
  */
 const FIGURE_RADIUS = 4.5;
 const FIGURE_RISE = 7;
@@ -40,7 +42,12 @@ const HP_BAR_WIDTH = 9;
 const HP_BAR_HEIGHT = 1.5;
 /** How high the HP bar's foot is over the middle of its square. */
 const HP_BAR_RISE = FIGURE_TOP + 0.5;
-/** The rings on the ground round a figure's feet: the one it's picked out by, and the dashed one round one on watch or still sealed. */
+/**
+ * The rings on the ground round a figure's feet, as fractions of its square's
+ * diamond: the one it's picked out by, wide enough to show round its feet,
+ * and outside that, still inside the square, the dashed one round one on
+ * watch or still sealed.
+ */
 const RING_RADIUS = 0.62;
 const MARKER_RADIUS = 0.8;
 /** The AP pips: a column of dots down the figure's right, clear of the disc and inside its square's width. */
@@ -56,8 +63,9 @@ const EFFECT_MARK_SIZE = 3;
 const EFFECT_MARK_STEP = 3.1;
 const EFFECT_MARK_OFFSET = 6.2;
 /**
- * The item a character carries (§21.1): one tile up by its disc's right
- * shoulder, above the AP pips, so it never covers them or the effect marks.
+ * The item a character carries (§21.1): by its right shoulder, in the AP
+ * pips' column above them, so it never covers them, the effect marks or the
+ * HP bar over the figure's head.
  */
 const ITEM_MARK_SIZE = 3;
 const ITEM_MARK_OFFSET = { x: AP_PIP_OFFSET, y: -5 };
@@ -140,6 +148,12 @@ type Ring = 'selected' | 'candidate' | 'aimed' | 'flagged';
 
 /** The dashed ring round a figure's feet, outside its `Ring`: on watch, or a squad still sealed. */
 type Marker = 'watch' | 'sealed';
+
+/** Which way a figure — a fighter, or a pick still sealed — is drawn facing (`facingOf`). */
+type FacingFor = (figure: { square: Square; facing?: Facing }) => Facing;
+
+/** The filter a player's characters are tinted with (`tintId`), or undefined for one not seated. */
+type TintFor = (userId: string) => string | undefined;
 
 interface Placing {
     zone: readonly Square[];
@@ -231,9 +245,7 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
     const { x, y } = discCentre(view, square);
     const art = CHARACTER_ART[character][pose];
     const cell = facingCell(facing, view.rotation);
-    // `spriteBox` places a sprite from its square's back corner, half a diamond above the middle.
     const box = spriteBox(art.body[cell]);
-    const at = { x: feet.x + box.x, y: feet.y - ISO_HALF_HEIGHT + box.y, width: box.width, height: box.height };
     const groundRing = (className: string, radius: number) => (
         <ellipse className={className} cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH * radius} ry={ISO_HALF_HEIGHT * radius} />
     );
@@ -242,10 +254,13 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
             {!ghost && <ellipse className="ag-ra-shadow" cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH / 2} ry={ISO_HALF_HEIGHT / 2} />}
             {marker && groundRing(`ag-ra-marker ag-ra-marker--${marker}`, MARKER_RADIUS)}
             {ring && groundRing(`ag-ra-ring ag-ra-ring--${ring}`, RING_RADIUS)}
-            <g className={`ag-ra-figure ${className}`}>
-                <use href={`#${spriteId(artId, art.body[cell])}`} {...at} />
-                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...at} filter={`url(#${tint})`} />}
+            {/* `spriteBox` places a sprite from its square's back corner, half a diamond above the middle. */}
+            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
+                <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
+                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
             </g>
+            {/* The art is a whole cell, mostly see-through: only the body is tapped, so a tap above a figure reaches the square or the figure behind it. */}
+            <circle className="ag-ra-figure-hit" cx={x} cy={y} r={FIGURE_RADIUS} />
             {item && (
                 <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
             )}
@@ -269,12 +284,12 @@ function HpBar({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
  * something to hit. Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, field, cue, tintFor }: { artId: string; view: IsoView; field: Battlefield; cue: FallCue; tintFor: (userId: string) => string | undefined }) {
+function Falling({ artId, view, cue, facing, tintFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     return (
         <g className="ag-ra-falling" style={cueTiming(cue)}>
-            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingOf(field, fighter)} tint={tintFor(fighter.owner)} ghost />
+            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
             <HpBar x={x} y={y} fighter={fighter} />
         </g>
     );
@@ -370,19 +385,19 @@ interface FighterNodeProps {
     /** The board's id, which its art is defined under. */
     artId: string;
     view: IsoView;
-    field: Battlefield;
     fighter: Fighter;
     ring: Ring | undefined;
     selected: boolean;
     /** It's its owner's turn in battle, so it shows the AP it has left. */
     acting: boolean;
-    tintFor: (userId: string) => string | undefined;
+    facingFor: FacingFor;
+    tintFor: TintFor;
     nameFor: (userId: string) => string;
     onSelect: (fighterId: number) => void;
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, field, fighter, ring, selected, acting, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -402,7 +417,7 @@ function FighterNode({ artId, view, field, fighter, ring, selected, acting, tint
                 view={view}
                 square={fighter.square}
                 character={fighter.character}
-                facing={facingOf(field, fighter)}
+                facing={facingFor(fighter)}
                 pose={standing ? 'standing' : 'fallen'}
                 artId={artId}
                 item={standing ? fighter.item : null}
@@ -569,8 +584,9 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     };
     const { width, height } = view.size;
     const artId = useSvgId('ra');
+    const facingFor: FacingFor = figure => facingOf(field, figure);
     // Each player's characters wear their colour; anyone not seated keeps the art's grey.
-    const tintFor = (userId: string) => {
+    const tintFor: TintFor = userId => {
         const seat = seats.indexOf(userId);
         return seat < 0 ? undefined : tintId(artId, seat);
     };
@@ -643,7 +659,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             >
                 <title>{`${CHARACTERS[pick.character].name}${pick.item ? ` with a ${ITEMS[pick.item].name.toLowerCase()}` : ''} · your squad, sealed until every player has mustered`}</title>
                 <Figure
-                    artId={artId} view={view} square={pick.square} character={pick.character} facing={facingOf(field, pick)} item={pick.item}
+                    artId={artId} view={view} square={pick.square} character={pick.character} facing={facingFor(pick)} item={pick.item}
                     marker="sealed" ring={placing?.selected === index ? 'selected' : undefined}
                 />
             </g>
@@ -659,11 +675,11 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                     key={fighter.id}
                     artId={artId}
                     view={view}
-                    field={field}
                     fighter={fighter}
                     ring={ringOf(fighter)}
                     selected={fighter.id === selected?.id}
                     acting={fighter.owner === acting}
+                    facingFor={facingFor}
                     tintFor={tintFor}
                     nameFor={nameFor}
                     onSelect={onSelect}
@@ -675,9 +691,10 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     // until the blow lands, and the cover it blasted stands over its
     // scorched ground until the burst fades: both as the action found them.
     if (playback) for (const cue of playback.cues) {
+        // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         if (cue.kind === 'fall') items.push({
             depth: isoDepth(view, cue.fighter.square) + 0.6,
-            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} field={field} cue={cue} tintFor={tintFor} />,
+            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} />,
         });
         if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }
@@ -760,7 +777,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                                 title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
                             >
                                 <g className="ag-ra-ghost">
-                                    <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingOf(field, fighter)} tint={tintFor(fighter.owner)} ghost />
+                                    <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />
                                 </g>
                             </ClickableMapNode>
                         );

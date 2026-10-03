@@ -38,6 +38,12 @@ describe("facingOf", () => {
         expect(facingOf(RUINED_FORT, { square: squareAt(RUINED_FORT, 2, 2)! })).toBe(1);
         expect(facingOf(RUINED_FORT, { square: squareAt(RUINED_FORT, 30, 24)! })).toBe(4);
     });
+
+    it("falls back to facing the middle for a stored facing that isn't one", () => {
+        for (const facing of [8, -1, 2.5, NaN, "2", null]) {
+            expect(facingOf(RUINED_FORT, { square: squareAt(RUINED_FORT, 18, 30)!, facing: facing as never })).toBe(6);
+        }
+    });
 });
 
 describe("actionSquares", () => {

@@ -15,7 +15,8 @@
 
 import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
-import { CHARACTERS, EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
+import { EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
+import { CHARACTER_IDS } from "./roster";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -217,8 +218,6 @@ export interface CharacterArt {
     body: readonly Sprite[];
     team: readonly Sprite[];
 }
-
-const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 /** A row of a character sheet's cells, one a facing. */
 const characterCells = (sheet: ArtSheet, row: number) => Array.from({ length: FACING_COUNT }, (_, facing): Sprite => ({
