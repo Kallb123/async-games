@@ -114,7 +114,8 @@ out. A second copy is the signal to extract the first one.
   don't hand-write that markup again. Picking an amount of each of several
   things — either side of a trade offer, a caravan's load — is
   `AmountSteppers`: one `ag-list` with a `Stepper` per row, shared by Kingdom
-  Builder's trade board and Settlements & Cities' trade offers.
+  Builder's trade board, Settlements & Cities' trade offers and Realm Arena's
+  muster.
   Every hover card on a result chart is a `ChartTooltip` — the round on a
   `LineChart`, a stacked bar's per-player breakdown on a `BarChart`.
   A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`

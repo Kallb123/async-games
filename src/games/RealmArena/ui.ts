@@ -6,10 +6,10 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -154,15 +154,53 @@ export function abilityWait(fighter: Fighter, id: AbilityId): string | undefined
 /** How many of each character a squad holds — what the muster's steppers read. */
 export type SquadCounts = Record<CharacterId, number>;
 
-export function squadCounts(squad: readonly CharacterId[]): SquadCounts {
-    const counts = Object.fromEntries(CHARACTER_IDS.map(id => [id, 0])) as SquadCounts;
-    for (const character of squad) counts[character]++;
+/** How many of each item a squad bought (§21.1), to hand out while it's placed — what the muster's item steppers read. */
+export type ItemCounts = Record<ItemId, number>;
+
+function countsOf<K extends string>(kinds: readonly K[], list: readonly K[]): Record<K, number> {
+    const counts = Object.fromEntries(kinds.map(id => [id, 0])) as Record<K, number>;
+    for (const kind of list) counts[kind]++;
     return counts;
 }
 
+function listOf<K extends string>(kinds: readonly K[], counts: Record<K, number>): K[] {
+    return kinds.flatMap(id => Array<K>(counts[id]).fill(id));
+}
+
+export const squadCounts = (squad: readonly CharacterId[]): SquadCounts => countsOf(CHARACTER_IDS, squad);
+
 /** The squad a set of counts makes, in the muster's order. */
-export function squadOf(counts: SquadCounts): CharacterId[] {
-    return CHARACTER_IDS.flatMap(id => Array<CharacterId>(counts[id]).fill(id));
+export const squadOf = (counts: SquadCounts): CharacterId[] => listOf(CHARACTER_IDS, counts);
+
+/** No items bought: where a muster starts, as the ready-made squad carries none. */
+export const NO_ITEMS: ItemCounts = countsOf(ITEM_IDS, []);
+
+/** The items a set of counts buys, one entry each, in the muster's order. */
+export const itemsOf = (counts: ItemCounts): ItemId[] => listOf(ITEM_IDS, counts);
+
+/**
+ * A placed squad carrying the items bought, handed down it one each in order:
+ * what placing starts from, so every item bought is carried before the player
+ * moves one. Any the squad has no hands for are left out — the muster refuses
+ * more items than characters before it gets here.
+ */
+export function handOut(picks: readonly MusterPick[], items: ItemCounts): MusterPick[] {
+    const bought = itemsOf(items);
+    return picks.map((pick, i) => pickOf({ ...pick, item: bought[i] }));
+}
+
+/**
+ * Gives the character at `selected` one of the items the squad carries: it
+ * takes it from whoever else of the squad has it, and hands them what it
+ * carried in exchange, or nothing. Every item bought stays carried, so the
+ * points spent choosing the squad never change while it's placed. An item
+ * nobody else carries changes nothing.
+ */
+export function handItem(picks: MusterPick[], selected: number, item: ItemId): MusterPick[] {
+    const from = picks.findIndex((pick, i) => i !== selected && pick.item === item);
+    if (from < 0 || picks[selected].item === item) return picks;
+    const mine = picks[selected].item;
+    return picks.map((pick, i) => i === selected ? pickOf({ ...pick, item }) : i === from ? pickOf({ ...pick, item: mine }) : pick);
 }
 
 /** A squad being placed: where each pick stands, and the one picked up to move, if any. */

@@ -6,8 +6,9 @@ import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
-import { itemPoints, type MusterPick } from '@/games/RealmArena/rules';
+import type { MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView } from '@/games/RealmArena/roster';
+import { squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -23,18 +24,20 @@ interface RealmArenaMusterSheetProps {
 
 /**
  * The muster, on the player's own turn (docs/games/realm-arena.md §17.3 PR 6):
- * first the squad, a stepper per character with the points left, and then
- * placing it on the board before the sealed muster goes. While placing, the
- * character picked up is offered the options its rank has unlocked (§23.2)
- * and the items to carry (§21.3), out of the same points.
+ * first the squad and the items it carries (§21.3), a stepper for each
+ * character and each item with the points left, and then placing it on the
+ * board before the sealed muster goes. While placing, the character picked up
+ * is offered the options its rank has unlocked (§23.2) and the items bought,
+ * to take from whoever carries one.
  */
 export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending }: RealmArenaMusterSheetProps) {
-    const { counts, setCounts, pointsLeft, refusal, placement, ranks } = draft;
+    const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const points = pointsLeft >= 0
         ? `${pointsLeft} of ${budget} points left.`
         : `${pluralize(-pointsLeft, 'point')} over the budget of ${budget}.`;
 
     if (!placement) {
+        const squadSize = squadOf(counts).length;
         return (
             <Section label="Muster your squad">
                 <AmountSteppers
@@ -46,7 +49,20 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     max={() => MAX_OF_EACH}
                     onChange={setCounts}
                 />
-                <p className="ag-hint">{points}{pointsLeft >= 0 ? ` Up to ${MAX_OF_EACH} of each.` : ''}</p>
+                <p className="ag-hint ag-hint--tight">
+                    Up to {MAX_OF_EACH} of each character, and items for them to carry into battle: one each, used once.
+                    You choose who carries what as you place your squad.
+                </p>
+                <AmountSteppers
+                    kinds={ITEM_IDS}
+                    icon={id => <SpriteImage sprite={ITEM_ART[id]} boxed />}
+                    title={id => ITEMS[id].name}
+                    sub={id => `${ITEMS[id].points} points · ${ITEMS[id].ap} AP · ${ITEMS[id].description}`}
+                    amounts={items}
+                    max={id => Math.max(squadSize, items[id])}
+                    onChange={setItems}
+                />
+                <p className="ag-hint">{pointsLeft >= 0 && refusal ? refusal : points}</p>
                 <div className="ag-action-grid">
                     <button type="button" className="ag-btn ag-btn--primary" disabled={refusal !== undefined} onClick={draft.place}>
                         Place your squad
@@ -67,7 +83,7 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
             {picked && (
                 <>
                     <OptionPicker pick={picked} ranks={ranks} onChoose={draft.choose} />
-                    <ItemPicker pick={picked} pointsLeft={pointsLeft} onCarry={draft.carry} />
+                    <ItemPicker pick={picked} picks={placement.picks} onCarry={draft.carry} />
                 </>
             )}
             <p className="ag-hint">{refusal ?? points}</p>
@@ -137,37 +153,42 @@ function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
 interface ItemPickerProps {
     /** The character picked up. */
     pick: MusterPick;
-    pointsLeft: number;
-    onCarry: (item: ItemId | null) => void;
+    /** The whole squad as placed, every item bought carried by one of them. */
+    picks: readonly MusterPick[];
+    onCarry: (item: ItemId) => void;
 }
 
 /**
- * The items the character picked up can carry, one at most (§21.1): a
- * `BuildRow` each with its cost. Tapping one gives it to the character in place
- * of whatever it carried, and tapping the one it carries leaves it behind. One
- * the points left can't pay for, even trading in what it carries, is greyed.
+ * The items the squad bought, for the character picked up to carry (§21.1):
+ * a `BuildRow` for each kind carried. Tapping one it doesn't carry takes it
+ * from whoever does, and hands them this character's own item, if it has
+ * one, in exchange. Nothing is bought or left behind here: the points were
+ * spent choosing the squad, and changing the squad is where to change them.
  */
-function ItemPicker({ pick, pointsLeft, onCarry }: ItemPickerProps) {
-    const spare = pointsLeft + itemPoints(pick.item);
+function ItemPicker({ pick, picks, onCarry }: ItemPickerProps) {
+    const { name } = CHARACTERS[pick.character];
+    const carried = ITEM_IDS.filter(id => picks.some(one => one.item === id));
+    if (carried.length === 0) {
+        return <p className="ag-hint ag-hint--tight">Your squad has no items to carry. Change squad to buy some.</p>;
+    }
     return (
         <>
-            <p className="ag-hint ag-hint--tight">Your {CHARACTERS[pick.character].name} can carry one item into battle, to use once.</p>
+            <p className="ag-hint ag-hint--tight">
+                Your {name} can carry one of your items into battle, to use once. Taking one from another of your squad hands them {pick.item ? `its ${ITEMS[pick.item].name.toLowerCase()}` : 'nothing'} in exchange.
+            </p>
             <div className="ag-build-list">
-                {ITEM_IDS.map(id => {
+                {carried.map(id => {
                     const item = ITEMS[id];
-                    const carried = pick.item === id;
-                    const short = !carried && item.points > spare;
+                    const mine = pick.item === id;
                     return (
                         <BuildRow
                             key={id}
                             icon={<SpriteImage sprite={ITEM_ART[id]} />}
                             name={item.name}
-                            cost={`${item.points} points · ${item.ap} AP · ${item.description}`}
-                            tag={carried ? 'Carrying' : short ? 'Over budget' : 'Carry'}
-                            tagMuted={short}
-                            disabled={short}
-                            active={carried}
-                            onClick={() => onCarry(carried ? null : id)}
+                            cost={`${item.ap} AP · ${item.description}`}
+                            tag={mine ? 'Carrying' : pick.item ? 'Swap' : 'Take'}
+                            active={mine}
+                            onClick={() => onCarry(id)}
                         />
                     );
                 })}

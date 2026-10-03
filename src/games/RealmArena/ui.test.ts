@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading, reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
+import { abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, placeTap, rangeSquares, reachFocus, reachShading, reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -109,6 +109,41 @@ describe("squadCounts and squadOf", () => {
         const counts = squadCounts(["cleric", "manAtArms", "knight", "manAtArms"]);
         expect(counts).toEqual({ manAtArms: 2, knight: 1, archer: 0, scout: 0, mage: 0, cleric: 1 });
         expect(squadOf(counts)).toEqual(["manAtArms", "manAtArms", "knight", "cleric"]);
+    });
+});
+
+describe("itemsOf, handOut and handItem", () => {
+    const placed = [{ character: "knight", square: 0 }, { character: "archer", square: 1 }, { character: "cleric", square: 2 }] as const;
+    const bought = { ...NO_ITEMS, smokePot: 1, fireFlask: 1 };
+
+    it("list the items bought in the muster's order", () => {
+        expect(itemsOf(bought)).toEqual(["fireFlask", "smokePot"]);
+        expect(itemsOf(NO_ITEMS)).toEqual([]);
+    });
+
+    it("hand the items bought down the squad, one each, leaving the rest empty-handed", () => {
+        expect(handOut([...placed], bought)).toEqual([
+            { character: "knight", square: 0, item: "fireFlask" },
+            { character: "archer", square: 1, item: "smokePot" },
+            { character: "cleric", square: 2 },
+        ]);
+    });
+
+    it("give a character an item, swapping it for whatever it carried", () => {
+        const picks = handOut([...placed], bought);
+        expect(handItem(picks, 1, "fireFlask").map(pick => pick.item)).toEqual(["smokePot", "fireFlask", undefined]);
+    });
+
+    it("move an item to an empty-handed character, leaving its old carrier with nothing", () => {
+        const moved = handItem(handOut([...placed], bought), 2, "smokePot");
+        expect(moved.map(pick => pick.item)).toEqual(["fireFlask", undefined, "smokePot"]);
+        expect(moved[1]).not.toHaveProperty("item");
+    });
+
+    it("change nothing for an item it already carries, or one nobody carries", () => {
+        const picks = handOut([...placed], bought);
+        expect(handItem(picks, 0, "fireFlask")).toBe(picks);
+        expect(handItem(picks, 2, "thunderFlask")).toBe(picks);
     });
 });
 

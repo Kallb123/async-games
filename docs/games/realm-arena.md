@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.23. Split out of Defender of the Realm in its third round of
+**Status:** v1.24. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -1251,8 +1251,13 @@ function of the ground.
   don't stack. A guard strikes into smoke all the same.
 - **An item is used up as soon as it's used**, whatever it hits. A throw that
   hurts nobody, and a draught, can be undone, and the item goes back.
-- **The muster screen** offers each character the four items as `BuildRow`s
-  when it's picked up. One the player can't afford is greyed.
+- **The muster screen** buys the items beside the squad, a stepper for each
+  of the four under the characters' steppers, so every point is spent on the
+  one screen; a squad can't buy more items than it has characters. Placing
+  hands them down the squad one each, and a character picked up offers the
+  items bought as `BuildRow`s: taking one from whoever carries it hands them
+  its own item, or nothing, in exchange. Nothing is bought or left behind
+  while placing, so the points never change there.
 
 ### 21.4 PRs
 
@@ -1500,9 +1505,9 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
   - **The muster offers options beside items.** A character picked up while
     placing the squad shows its options above the items it can carry, a
     `BuildRow` each saying what it swaps out. Tapping one takes it, and
-    tapping it again goes back to the starter character, as an item is left
-    behind. One the player's rank hasn't unlocked is greyed, with the rank
-    that unlocks it, so the muster also shows what's still to earn. Each
+    tapping it again goes back to the starter character. One the player's
+    rank hasn't unlocked is greyed, with the rank that unlocks it, so the
+    muster also shows what's still to earn. Each
     character's step names its rank, read from the battle's snapshot, the
     same ranks the server checks the muster against.
   - **The profile's section lists all six characters**, once the player has
@@ -1843,3 +1848,4 @@ Realm, its sibling in the same world.
 | 1.21 | C5 PR 1 fills in mastery from results (§23.3): the tally counts the action for the actor and reactions for the watcher, the result keeps a row per player and kind of character, a dropped player earns nothing from the battle, the battle keeps ranks rather than options, XP counts the battles a profile does, and a battle starts with nobody ranked if mastery can't be read. |
 | 1.22 | C5 PR 2 fills in options (§23.3): options are data, swapping a fighter's kit, checked at muster against the battle's own snapshot of ranks, which the response carries; each is an action of its own; Demolish strikes everyone beside the cover but the Knight; Purify reaches the Cleric too and clears every affliction but no stance; a mark, a Purify and a Demolish on nobody can be undone. |
 | 1.23 | C5 PR 3 fills in the screens (§23.3): the muster offers a character's options above its items, locked ones greyed with the rank that unlocks them; the profile lists all six characters' XP, rank and unlocked options for a player who has fought, read under a time limit and failing soft; the guide tells how mastery is earned. C5 is built. |
+| 1.24 | The muster buys items on the squad step, beside the characters, so every point is spent on one screen; placing hands them out one each and lets the player pass them between characters (§21.3). |
