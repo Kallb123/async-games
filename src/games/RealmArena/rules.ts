@@ -518,13 +518,12 @@ export function healedEffects(fighter: Fighter): EffectId[] {
 }
 
 /**
- * The low cover a fireball or a thrown item aimed at `at` would blast away
- * (§22): every square of it in the 3×3 round `at`, for one that blasts — a
- * fireball, a fire flask — and none for anything else.
+ * The low cover something landing at `at` would blast away (§22): every
+ * square of it in the 3×3 round `at`, for something that blasts — Fireball,
+ * a fire flask — and none for anything else.
  */
-export function blastedBy(state: BattleState, fighter: Fighter, aim: "fireball" | "throw", at: Square): Square[] {
-    const blasts = aim === "fireball" ? ABILITIES.fireball.blasts : itemOf(fighter)?.blasts;
-    return blasts ? areaAround(state.field, at).filter(square => state.field.tiles[square].terrain.destructible) : [];
+export function blastedBy(field: Battlefield, by: Ability | Item | undefined, at: Square): Square[] {
+    return by?.blasts ? areaAround(field, at).filter(square => field.tiles[square].terrain.destructible) : [];
 }
 
 /** Every square a run of events blasted away, in order (§22). */
@@ -705,7 +704,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const { damage, effect } = ABILITIES.fireball;
             run.land(actor, areaAround(state.field, action.at), damage, effect,
                 targets => ({ kind: "fireball", fighter: actor.id, at: action.at, targets, damage }));
-            run.blast(actor, blastedBy(state, actor, "fireball", action.at));
+            run.blast(actor, blastedBy(state.field, ABILITIES.fireball, action.at));
             break;
         }
         case "heal":
@@ -721,7 +720,6 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // `check` allowed it, so the actor carries something thrown.
             const id = actor.item as ItemId;
             const item: Item = ITEMS[id];
-            const blasted = blastedBy(state, actor, "throw", action.at);
             actor.item = null;
             if (id === "smokePot") {
                 // A smoke pot hurts nobody: the cloud lives on the thrower (§21.2).
@@ -733,7 +731,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             const damage = item.damage ?? 0;
             run.land(actor, item.area ? areaAround(state.field, action.at) : [action.at], damage, item.effect,
                 targets => ({ kind: "thrown", fighter: actor.id, item: id, at: action.at, targets, damage }));
-            run.blast(actor, blasted);
+            run.blast(actor, blastedBy(state.field, item, action.at));
             break;
         }
         case "raise": {

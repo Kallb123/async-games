@@ -112,8 +112,9 @@ const PARAPET_FOOT = TERRAIN["P"].height - FULL_HEIGHT;
  * What each terrain is drawn with, bottom up, standing on its square's
  * ground. Open ground has nothing: the board lays grass over the whole map
  * first (`GRASS`). Scorched ground is drawn over that grass, a square at a
- * time, since it's only ever where low cover was (§22). Heights come from the rules' own `TERRAIN`, so a tower
- * drawn here is as tall as the tower the rules play.
+ * time, since it's only ever where low cover was (§22). Heights come from the
+ * rules' own `TERRAIN`, so a tower drawn here is as tall as the tower the
+ * rules play.
  */
 export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> = {
     ".": [],

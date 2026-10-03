@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId } from "./characters";
+import { CHARACTERS, ITEMS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
     ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
@@ -940,7 +940,7 @@ describe("blasting low cover (§22)", () => {
     it("nothing else blasts: not a thunder flask, nor a smoke pot", () => {
         const state = (item: ItemId): BattleState => ({ field, fighters: [fighter(1, "a", "scout", at(field, 4, 4), { item })] });
         for (const item of ["thunderFlask", "smokePot"] as const) {
-            expect(blastedBy(state(item), state(item).fighters[0], "throw", at(field, 4, 2))).toEqual([]);
+            expect(blastedBy(field, ITEMS[item], at(field, 4, 2))).toEqual([]);
             expect(blastedIn(run(state(item), "a", { kind: "throw", fighter: 1, at: at(field, 4, 3) }).events)).toEqual([]);
         }
     });

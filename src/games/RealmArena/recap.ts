@@ -23,7 +23,7 @@ import type { IHistoryEntry } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import type { IRealmArenaOutcome } from "./RealmArenaLogic";
-import { battlefieldById } from "./maps";
+import { battlefieldOf } from "./maps";
 import type { ItemId } from "./characters";
 import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
 
@@ -242,7 +242,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    const holders = centreHolders({ field: battlefieldById(gs.map), fighters: gs.fighters });
+    const holders = centreHolders({ field: battlefieldOf(gs.map, gs.blasted), fighters: gs.fighters });
     const centre = holders.length === 0 ? "the centre is empty"
         : holders.length > 1 ? "the centre is contested"
         : holders[0] === forUserId ? "the centre is yours" : "the enemy holds the centre";

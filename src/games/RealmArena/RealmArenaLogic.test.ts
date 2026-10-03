@@ -2,7 +2,7 @@ import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { distance, TERRAIN } from "@/utils/games/battlefield/terrain";
 import { PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
-import { CHARACTERS, type CharacterId } from "./characters";
+import { CHARACTERS, ITEMS, type CharacterId } from "./characters";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel } from "./RealmArenaModels";
 import { meta } from "./meta";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
@@ -373,7 +373,7 @@ describe("blasting low cover (§22)", () => {
         await musterAll(game);
         const thrower = own(game, "a")[0];
         const aim = blastSpot(game, thrower);
-        const blasted = blastedBy(battleOf(game), thrower, "throw", aim);
+        const blasted = blastedBy(battleOf(game).field, ITEMS.fireFlask, aim);
         expect(blasted.length).toBeGreaterThan(0);
 
         const { outcome } = await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: aim }));

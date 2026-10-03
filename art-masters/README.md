@@ -42,6 +42,6 @@ it writes.
 are drawn as code rather than exported, so their masters are the SVGs
 themselves: the served `public/art/realmarena/effects.png`, `items.png` and
 `scorched.png` are rendered from them, never saved by hand. After changing any
-of them, run `npm run ra-marks` (it renders
-every SVG in `realmarena/`) and commit the PNGs it writes. The sheets are a few
-KB, so `optimise-art` leaves them alone.
+of them, run `npm run ra-marks` (it renders every SVG in `realmarena/`) and
+commit the PNGs it writes. The sheets are a few KB, so `optimise-art` leaves
+them alone.

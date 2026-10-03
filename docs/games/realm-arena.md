@@ -1735,14 +1735,17 @@ and a line in the guide. Reviewer: `caveman`.
   handed can blast a wall. Given nothing to clear, it hands back the map
   itself.
 - **What blasts is data**: `blasts` on Fireball and on the fire flask, as
-  `area` and `effect` are. `blastedBy` is the cover an aim at a square would
-  clear — every square of it in the 3×3 round that square — which the
-  resolver blasts and the turn sheet previews alike.
+  `area` and `effect` are, so whether a fireball should blast at all (§24,
+  question 4) is one edit. `blastedBy(field, what, at)` is the cover
+  something landing at a square would clear — every square of it in the 3×3
+  round that square — which the resolver blasts and the turn sheet previews
+  alike.
 - **The `blasted` event names the squares and who blasted them**, told after
   the damage, the knock-outs and the effects. A square already gone isn't
   blasted again, so a blast with no cover left in reach tells nothing.
 - **The state keeps `blasted`**, the squares in the order they went, and
-  `battleOf` reads the map through it. Absent on a battle from before it, it's
+  `battlefieldOf(map, blasted)` (`maps/index.ts`) is the battlefield as it
+  stands: what `battleOf`, the board and the recap's tip all read. Absent on a battle from before it, it's
   read as nothing blasted. It's on the wire for every viewer, as the
   battlefield is, and a replay builds it again from the events.
 - **A fire flask that lands on nobody is still undoable** when it blasts
@@ -2013,5 +2016,5 @@ Realm, its sibling in the same world.
 | 1.13 | The view turns a quarter either way, so a player can see round a tower (§13.1). |
 | 1.14 | C1 PR 1 fills in status effects' rules and engine (§20.4): the End turn begins the next turn, so burning can end the battle; heal is for an ally hurt or affected; a stunned character can't go on watch. |
 | 1.15 | C1 PR 2 fills in the board for status effects (§20.4): a drawn mark for each effect on figures, unit boxes and the selected character's card, the recap's row for burning as a turn begins, and the guide's text on burning. |
-| 1.16 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |
 | 1.16 | C2 PR 1 fills in items' rules (§21.4): items as data, the throw and the draught, the smoke kept on the thrower as the square it landed on rather than as an effect, a draught its carrier can drink, and a throw that lands on nobody undoable. |
+| 1.17 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |

@@ -8,8 +8,7 @@ import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/uti
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
-import { battlefieldById } from "@/games/RealmArena/maps";
-import { battlefieldWith } from "@/utils/games/battlefield/terrain";
+import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import {
     ACTION_POINTS,
     act,
@@ -53,7 +52,7 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
 /** The battle as rules.ts reads it: the map, with what has been blasted cleared from it (§22). */
 export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
-    return { field: battlefieldWith(battlefieldById(gs.map), gs.blasted ?? []), fighters: (gs.fighters ?? []).map(storedFighter) };
+    return { field: battlefieldOf(gs.map, gs.blasted), fighters: (gs.fighters ?? []).map(storedFighter) };
 }
 
 /**
@@ -485,6 +484,8 @@ export class RealmArenaUndo implements IGameCommand {
         const undoStack = gs.undoStack.slice(0, -1);
         const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
         Object.assign(gs, restored);
+        // Every snapshot is cloned with the list, but nothing is left to rest on that.
+        gs.blasted = restored.blasted ?? [];
         gs.undoStack = undoStack;
         gs.undoAnchorId = this.id;
 
