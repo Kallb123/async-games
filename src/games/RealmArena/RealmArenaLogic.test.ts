@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
@@ -21,6 +21,12 @@ vi.mock("@/utils/users/clerk", () => ({
 }));
 
 const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
+
+/**
+ * A trace without the times it's stamped with: a history line carries when it
+ * was written, whose hours and minutes are numbers that can be a square's.
+ */
+const untimed = (trace: string) => trace.replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, "");
 
 /** What the server sends `viewer`: the game's own `CreateDataResponse`, on a document built from the game in memory. */
 async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
@@ -90,9 +96,15 @@ describe("the muster (§17.2)", () => {
     });
 
     it("sends an opponent nothing of a squad until both have mustered", async () => {
+        // Mustered at a minute that is one of its squares, so a time stamped
+        // on what's sent is never mistaken for a square (`untimed`).
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-10-03T06:46:00Z"));
+        onTestFinished(() => { vi.useRealTimers(); });
         const game = makeGame();
         // A squad nobody else musters, so any trace of it is unmistakable.
         const picks = readyMadePicks(game, 0).slice(0, 2).map((pick, i) => ({ ...pick, character: (["mage", "scout"] as const)[i] }));
+        expect(picks.map(pick => pick.square)).toContain(46);
         const command = muster("a", picks);
         const { outcome } = await play(game, command);
 
@@ -106,7 +118,7 @@ describe("the muster (§17.2)", () => {
             for (const trace of await traces(viewer)) {
                 for (const id of CHARACTER_IDS) expect(trace, `${viewer} sees "${id}"`).not.toContain(`"${id}"`);
                 for (const { name } of Object.values(CHARACTERS)) expect(trace, `${viewer} sees ${name}`).not.toContain(name);
-                for (const { square } of picks) expect(trace, `${viewer} sees square ${square}`).not.toMatch(new RegExp(`\\b${square}\\b`));
+                for (const { square } of picks) expect(untimed(trace), `${viewer} sees square ${square}`).not.toMatch(new RegExp(`\\b${square}\\b`));
             }
             expect((await responseFor(game, viewer)).specificGameState).toMatchObject({ fighters: [], myMuster: null, mustered: ["a"] });
         }
