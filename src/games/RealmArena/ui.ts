@@ -6,7 +6,7 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, type AbilityId, type CharacterId, type EffectId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type ItemId, type Weapon } from "./characters";
 import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /**
@@ -21,6 +21,14 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     scout: "👟",
     mage: "🔥",
     cleric: "✚",
+};
+
+/** The glyph each item is told with where it has no drawn mark: what it did, as the board shows it coming back. */
+export const ITEM_MARK: Readonly<Record<ItemId, string>> = {
+    fireFlask: "🔥",
+    thunderFlask: "⚡",
+    smokePot: "💨",
+    healingDraught: "🧪",
 };
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
@@ -360,7 +368,12 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "downed":
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
             case "healed":
-                return [{ icon: "✚", title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}` }];
+                return [{ icon: event.draught ? ITEM_MARK.healingDraught : "✚", title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}`, sub: event.draught ? ITEMS.healingDraught.name : undefined }];
+            case "thrown": {
+                const { name: item } = ITEMS[event.item];
+                if (event.item === "smokePot") return [{ icon: ITEM_MARK.smokePot, title: `${Name(event.fighter)} threw a smoke pot` }];
+                return [{ icon: ITEM_MARK[event.item], title: `${item}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`, sub: event.damage > 0 ? `${event.damage} damage each` : undefined }];
+            }
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":

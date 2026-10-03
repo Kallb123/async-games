@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { distance } from "@/utils/games/battlefield/terrain";
 import { PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS, type CharacterId } from "./characters";
@@ -277,6 +278,80 @@ describe("a whole battle, played by two scripted squads", () => {
         }
         expect(replay.specificGameState).toEqual(game.specificGameState);
         expect(replay.winner).toBe(game.winner);
+    });
+});
+
+describe("items (§21)", () => {
+    /** a's ready-made squad less a Man-at-arms, with the 15 points it frees spent on three items. */
+    function pickedWithItems(game: RealmArenaTestGame) {
+        const [knight, manAtArms, , archer, cleric] = readyMadePicks(game, 0);
+        return [{ ...knight, item: "healingDraught" as const }, { ...manAtArms, item: "thunderFlask" as const }, { ...archer, item: "smokePot" as const }, cleric];
+    }
+
+    /** Both squads mustered, a's carrying `pickedWithItems`. */
+    async function battleWithItems() {
+        const game = makeGame();
+        expect((await play(game, muster("a", pickedWithItems(game)))).outcome.validMove).toBe(true);
+        expect((await play(game, muster("b", readyMadePicks(game, 1)))).outcome.validMove).toBe(true);
+        return game;
+    }
+
+    it("carries each item from the muster onto the battlefield, and none for a pick without one", async () => {
+        const game = await battleWithItems();
+        expect(own(game, "a").map(one => one.item)).toEqual(["healingDraught", "thunderFlask", "smokePot", null]);
+        expect(own(game, "b").every(one => one.item === null)).toBe(true);
+    });
+
+    it("refuses a muster whose items take it over budget", async () => {
+        const game = makeGame();
+        const picks = readyMadePicks(game, 0).map((pick, i) => i === 0 ? { ...pick, item: "fireFlask" as const } : pick);
+        expect((await play(game, muster("a", picks))).outcome.validMove).toBe(false);
+    });
+
+    it("keeps the items sealed with the squad: its owner's to see, and nobody else's", async () => {
+        const game = makeGame();
+        const picks = pickedWithItems(game);
+        const command = muster("a", picks);
+        const { outcome } = await play(game, command);
+        for (const viewer of ["b", null]) {
+            const traces = [JSON.stringify(await responseFor(game, viewer)), command.myString(), JSON.stringify(outcome), game.gameState.history[0].text];
+            for (const trace of traces) {
+                for (const item of ["healingDraught", "thunderFlask", "smokePot", "draught", "flask", "smoke"]) {
+                    expect(trace.toLowerCase(), `${viewer} sees ${item}`).not.toContain(item.toLowerCase());
+                }
+            }
+        }
+        expect((await responseFor(game, "a")).specificGameState.myMuster).toEqual(picks);
+    });
+
+    it("writes a throw and a draught to the log, naming what was used and who it hit", async () => {
+        const game = await battleWithItems();
+        const thrower = own(game, "a")[1];
+        const enemy = own(game, "b")[0];
+        const battle = battleOf(game);
+        // An empty square in range, two or more from anyone else, for b's character to stand on.
+        const spot = battle.field.tiles.findIndex((tile, square) => tile.terrain.standable
+            && !("refused" in check(battle, "a", { kind: "throw", fighter: thrower.id, at: square }))
+            && battle.fighters.every(one => distance(battle.field, one.square, square) >= 2));
+        enemy.square = spot;
+
+        expect((await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: spot }))).outcome.validMove).toBe(true);
+        expect(game.gameState.history[0].text).toBe("{{a}} threw a thunder flask with their Man-at-arms, hitting 1 character; {{b}}'s Knight is stunned");
+
+        // Every action replaces the fighters, so the Knight is looked up after it.
+        const knight = own(game, "a")[0];
+        knight.hp = 5;
+        expect((await play(game, actBy("a", { kind: "draught", fighter: knight.id, target: knight.id }))).outcome.validMove).toBe(true);
+        expect(game.gameState.history[0].text).toBe("{{a}} healed their Knight with its healing draught for 3");
+    });
+
+    it("keeps nothing of an item's action but what was checked", async () => {
+        const game = await battleWithItems();
+        const knight = own(game, "a")[0];
+        knight.hp = 5;
+        const command = actBy("a", { kind: "draught", fighter: knight.id, target: knight.id, at: 3, junk: "x" } as unknown as Action);
+        await play(game, command);
+        expect(command.action).toEqual({ kind: "draught", fighter: knight.id, target: knight.id });
     });
 });
 

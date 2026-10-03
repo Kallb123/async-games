@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { check, fighterById, fireballArea, isStanding, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { check, fighterById, areaAround, isStanding, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -223,7 +223,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Where the character would stand, and with what AP, once a lined-up move is made. */
         after: afterMove(fighter, path, verdict),
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
-        area: aim === "fireball" && draft.square !== null ? fireballArea(field, draft.square) : null,
+        area: aim === "fireball" && draft.square !== null ? areaAround(field, draft.square) : null,
         action,
         verdict,
         send,

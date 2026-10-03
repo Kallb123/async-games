@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, POINTS_BUDGET, REALM, type CharacterId } from "./characters";
+import { CHARACTERS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    ACTION_POINTS, act, afflicted, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterRefusal, newFighter, reachOf,
-    reactionsTo, readyMadeMuster, shotOdds, shotResult, standings, startTurn,
-    type Action, type BattleState, type Fighter,
+    ACTION_POINTS, act, afflicted, areaAround, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
+    newFighter, pickOf, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter,
+    type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
 const OPEN = ["..........", "..........", "..........", "..........", ".........."];
@@ -532,7 +532,41 @@ describe("mustering", () => {
     it("musters each character at full HP with nothing to spend until its owner's turn", () => {
         expect(newFighter(7, "a", "cleric", 3)).toEqual({
             id: 7, owner: "a", character: "cleric", square: 3, hp: CHARACTERS.cleric.hp,
-            ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [],
+            ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item: null,
+        });
+        expect(newFighter(7, "a", "cleric", 3, "healingDraught").item).toBe("healingDraught");
+    });
+
+    describe("with items (§21.1)", () => {
+        const pick = (character: CharacterId, i: number, item?: ItemId): MusterPick => ({ character, square: zone[i], ...(item === undefined ? {} : { item }) });
+
+        it("counts each item's points against the budget with the characters", () => {
+            // 25 + 25 + 30 + 15 = 95, so one 5-point item fits and a second doesn't.
+            const squad = (["knight", "knight", "mage", "manAtArms"] as const).map((character, i) => pick(character, i));
+            expect(musterRefusal(RUINED_FORT, 0, squad, budget)).toBeUndefined();
+            const one = [pick("knight", 0, "fireFlask"), ...squad.slice(1)];
+            expect(musterPoints(one)).toBe(100);
+            expect(musterRefusal(RUINED_FORT, 0, one, budget)).toBeUndefined();
+            const two = [pick("knight", 0, "fireFlask"), pick("knight", 1, "smokePot"), ...squad.slice(2)];
+            expect(musterRefusal(RUINED_FORT, 0, two, budget)).toBe("That squad costs 105 points, and the budget is 100");
+        });
+
+        it("refuses anything but one item's id, and takes null for none", () => {
+            for (const item of ["sword", ["fireFlask", "smokePot"], 5, { id: "fireFlask" }]) {
+                expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item }], budget), JSON.stringify(item)).toBe("That isn't an item");
+            }
+            expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item: null }], budget)).toBeUndefined();
+        });
+
+        it("keeps a pick's item, and nothing else it carried", () => {
+            expect(pickOf({ ...pick("scout", 0, "smokePot"), hp: 99 } as never)).toEqual({ character: "scout", square: zone[0], item: "smokePot" });
+            expect(pickOf({ ...pick("scout", 0), item: null } as never)).toEqual({ character: "scout", square: zone[0] });
+        });
+
+        it("leaves the ready-made squad carrying none, and spending the whole budget still", () => {
+            const picks = readyMadeMuster(RUINED_FORT, 0, REALM.readyMade[2]);
+            expect(picks.every(one => one.item === undefined)).toBe(true);
+            expect(musterPoints(picks)).toBe(budget);
         });
     });
 });
@@ -695,5 +729,177 @@ describe("status effects (§20)", () => {
         const hunkered = run({ field, fighters: [knight] }, "a", { kind: "hunker", fighter: 1 }).byId(1);
         expect(hunkered.effects).toEqual({ hunkered: 1 });
         expect(turnStart([hunkered]).byId(1).effects).toEqual({});
+    });
+});
+
+describe("items (§21)", () => {
+    const field = fieldOf(["..........", "..........", "..........", "..........", "..........", ".........."]);
+    const carrying = (id: number, owner: string, character: CharacterId, square: number, item: ItemId, extra: Partial<Fighter> = {}) =>
+        fighter(id, owner, character, square, { item, ...extra });
+
+    describe("throwing", () => {
+        it("needs the square in range and in sight, as a fireball does, but only 6 squares away", () => {
+            const wide = fieldOf(["..............", "..............", "......#......."]);
+            const scout = carrying(1, "a", "scout", at(wide, 0, 0), "thunderFlask");
+            const state = { field: wide, fighters: [scout] };
+            expect(check(state, "a", { kind: "throw", fighter: 1, at: at(wide, THROW_RANGE, 0) })).toEqual({ ap: 2 });
+            expect(check(state, "a", { kind: "throw", fighter: 1, at: at(wide, THROW_RANGE + 1, 0) })).toEqual({ refused: "Out of range or out of sight" });
+            const behind = { field: wide, fighters: [{ ...scout, square: at(wide, 5, 2) }] };
+            expect(check(behind, "a", { kind: "throw", fighter: 1, at: at(wide, 7, 2) })).toEqual({ refused: "Out of range or out of sight" });
+            expect(check(state, "a", { kind: "throw", fighter: 1, at: -1 })).toEqual({ refused: "Out of range or out of sight" });
+        });
+
+        it("needs something to throw: not nothing, and not a healing draught", () => {
+            const throwFrom = (item: Fighter["item"]) => check({ field, fighters: [fighter(1, "a", "scout", 0, { item })] }, "a", { kind: "throw", fighter: 1, at: 2 });
+            expect(throwFrom(null)).toEqual({ refused: "They have nothing to throw" });
+            expect(throwFrom("healingDraught")).toEqual({ refused: "They have nothing to throw" });
+            expect(throwFrom("smokePot")).toEqual({ ap: 1 });
+        });
+
+        it("uses the item up, whatever it hit, so it can't be thrown twice", () => {
+            const scout = carrying(1, "a", "scout", at(field, 0, 0), "fireFlask");
+            const { byId, events } = run({ field, fighters: [scout] }, "a", { kind: "throw", fighter: 1, at: at(field, 3, 0) });
+            expect(byId(1)).toMatchObject({ item: null, ap: 2 });
+            expect(events).toEqual([{ kind: "thrown", fighter: 1, item: "fireFlask", at: at(field, 3, 0), targets: [], damage: 2 }]);
+            expect(check({ field, fighters: [byId(1)] }, "a", { kind: "throw", fighter: 1, at: at(field, 3, 0) })).toEqual({ refused: "They have nothing to throw" });
+        });
+    });
+
+    describe("the fire flask", () => {
+        it("does 2 damage to whoever is on the one square, friend or foe, and sets them burning", () => {
+            const scout = carrying(1, "a", "scout", at(field, 0, 0), "fireFlask");
+            const ally = fighter(2, "a", "knight", at(field, 3, 0));
+            const beside = fighter(3, "b", "knight", at(field, 4, 0));
+            const { byId, events } = run({ field, fighters: [scout, ally, beside] }, "a", { kind: "throw", fighter: 1, at: at(field, 3, 0) });
+            expect(byId(2)).toMatchObject({ hp: 10, effects: { burning: 2 }, burnedBy: 1 });
+            expect(byId(3)).toMatchObject({ hp: 12, effects: {} });
+            expect(events).toEqual([
+                { kind: "thrown", fighter: 1, item: "fireFlask", at: at(field, 3, 0), targets: [2], damage: 2 },
+                { kind: "effect", fighter: 2, effect: "burning", change: "applied" },
+            ]);
+        });
+
+        it("scores the knock-out for the thrower, and leaves nobody it downed burning", () => {
+            const scout = carrying(1, "a", "scout", at(field, 0, 0), "fireFlask");
+            const mage = fighter(2, "b", "mage", at(field, 3, 0), { hp: 2 });
+            const { byId, events } = run({ field, fighters: [scout, mage] }, "a", { kind: "throw", fighter: 1, at: at(field, 3, 0) });
+            expect(byId(2)).toMatchObject({ hp: 0, effects: {} });
+            expect(events).toContainEqual({ kind: "scored", player: "a", points: 6, reason: "knockout" });
+            expect(events.some(event => event.kind === "effect")).toBe(false);
+        });
+    });
+
+    describe("the thunder flask", () => {
+        it("stuns everyone in the 3×3, friend or foe, losing what they banked, and does no damage", () => {
+            const scout = carrying(1, "a", "scout", at(field, 0, 0), "thunderFlask");
+            const ally = fighter(2, "a", "knight", at(field, 3, 1));
+            const watcher = fighter(3, "b", "archer", at(field, 5, 3), { banked: 4 });
+            const outside = fighter(4, "b", "knight", at(field, 6, 2));
+            const { byId, events } = run({ field, fighters: [scout, ally, watcher, outside] }, "a", { kind: "throw", fighter: 1, at: at(field, 4, 2) });
+            expect(byId(2)).toMatchObject({ hp: 12, effects: { stunned: 1 } });
+            expect(byId(3)).toMatchObject({ hp: 6, banked: 0, effects: { stunned: 1 } });
+            expect(byId(4)).toMatchObject({ effects: {} });
+            expect(events).toEqual([
+                { kind: "thrown", fighter: 1, item: "thunderFlask", at: at(field, 4, 2), targets: [2, 3], damage: 0 },
+                { kind: "effect", fighter: 2, effect: "stunned", change: "applied" },
+                { kind: "effect", fighter: 3, effect: "stunned", change: "applied" },
+            ]);
+            expect(areaAround(field, at(field, 4, 2))).toHaveLength(9);
+        });
+    });
+
+    describe("the smoke pot", () => {
+        const archer = fighter(1, "a", "archer", at(field, 0, 0));
+        const thrower = carrying(2, "b", "scout", at(field, 9, 5), "smokePot");
+        const smoked = run({ field, fighters: [archer, thrower] }, "b", { kind: "throw", fighter: 2, at: at(field, 6, 2) });
+
+        it("leaves a cloud on the 3×3 for 1 AP, hitting nobody", () => {
+            expect(smoked.byId(2)).toMatchObject({ item: null, smoke: at(field, 6, 2), ap: 3 });
+            expect(smoked.events).toEqual([{ kind: "thrown", fighter: 2, item: "smokePot", at: at(field, 6, 2), targets: [], damage: 0 }]);
+            expect(smokeSquares({ field, fighters: smoked.fighters })).toEqual(new Set(areaAround(field, at(field, 6, 2))));
+        });
+
+        it("takes 20 off a shot at anyone standing in it, friend or foe of the thrower, and nobody outside it", () => {
+            const inside = fighter(3, "b", "knight", at(field, 7, 3));
+            const outside = fighter(4, "b", "knight", at(field, 8, 3));
+            const state = { field, fighters: [...smoked.fighters, inside, outside] };
+            expect(shotOdds(state, archer, inside)?.chance).toBe(60);
+            expect(shotOdds(state, archer, outside)?.chance).toBe(80);
+            const own = fighter(5, "a", "knight", at(field, 5, 1));
+            expect(shotOdds({ field, fighters: [...state.fighters, own] }, fighter(6, "b", "archer", at(field, 9, 0)), own)?.chance).toBe(60);
+        });
+
+        it("stops overwatch firing at a mover stepping into it, but not a guard striking, nor a shot as it steps out", () => {
+            const watcher = fighter(3, "b", "archer", at(field, 9, 0), { banked: 4 });
+            const mover = fighter(1, "a", "manAtArms", at(field, 4, 2));
+            const state = { field, fighters: [...smoked.fighters.filter(one => one.id !== 1), watcher, mover] };
+            expect(reactionsTo(state, mover, [at(field, 4, 2), at(field, 5, 2), at(field, 6, 2)])).toEqual([]);
+            expect(reactionsTo(state, mover, [at(field, 4, 2), at(field, 5, 2), at(field, 5, 3), at(field, 5, 4)])).toEqual([{ watcher: 3, step: 3 }]);
+            const guard = fighter(4, "b", "knight", at(field, 7, 1), { banked: 4 });
+            expect(reactionsTo({ ...state, fighters: [...state.fighters, guard] }, mover, [at(field, 4, 2), at(field, 5, 2), at(field, 6, 2)]))
+                .toEqual([{ watcher: 4, step: 2 }]);
+        });
+
+        it("clears at the start of the thrower's next turn, and not before", () => {
+            const state = { field, fighters: smoked.fighters };
+            expect(startTurn(state, "a").fighters.find(one => one.id === 2)?.smoke).toBe(at(field, 6, 2));
+            const next = startTurn(state, "b").fighters;
+            expect(next.find(one => one.id === 2)).not.toHaveProperty("smoke");
+            expect(smokeSquares({ field, fighters: next }).size).toBe(0);
+        });
+
+        it("goes with a thrower who is downed", () => {
+            const knight = fighter(3, "a", "knight", at(field, 8, 5));
+            const thrown = { ...smoked.byId(2), hp: 1 };
+            const { byId } = run({ field, fighters: [knight, thrown] }, "a", { kind: "attack", fighter: 3, target: 2 });
+            expect(byId(2)).toMatchObject({ hp: 0 });
+            expect(byId(2)).not.toHaveProperty("smoke");
+        });
+    });
+
+    describe("the healing draught", () => {
+        it("gives 3 HP back to the carrier or an ally next to it, never past full, for 1 AP", () => {
+            const carrier = carrying(1, "a", "archer", at(field, 0, 0), "healingDraught", { hp: 2 });
+            const ally = fighter(2, "a", "knight", at(field, 1, 0), { hp: 11 });
+            const self = run({ field, fighters: [carrier, ally] }, "a", { kind: "draught", fighter: 1, target: 1 });
+            expect(self.byId(1)).toMatchObject({ hp: 5, ap: 3, item: null });
+            expect(self.events).toEqual([{ kind: "healed", fighter: 1, target: 1, hp: 3, draught: true }]);
+            const other = run({ field, fighters: [carrier, ally] }, "a", { kind: "draught", fighter: 1, target: 2 });
+            expect(other.byId(2).hp).toBe(12);
+            expect(other.events).toEqual([{ kind: "healed", fighter: 1, target: 2, hp: 1, draught: true }]);
+        });
+
+        it("puts out burning and clears slowed and stunned, as a heal does", () => {
+            const carrier = carrying(1, "a", "archer", at(field, 0, 0), "healingDraught", { effects: { burning: 2, slowed: 2, marked: 2 }, burnedBy: 9 });
+            const { byId, events } = run({ field, fighters: [carrier] }, "a", { kind: "draught", fighter: 1, target: 1 });
+            expect(byId(1)).toMatchObject({ effects: { marked: 2 } });
+            expect(byId(1)).not.toHaveProperty("burnedBy");
+            expect(events.slice(1)).toEqual([
+                { kind: "effect", fighter: 1, effect: "burning", change: "cleared" },
+                { kind: "effect", fighter: 1, effect: "slowed", change: "cleared" },
+            ]);
+        });
+
+        it("is for the carrier or an ally next to it that is hurt or has something to clear", () => {
+            const carrier = carrying(1, "a", "archer", at(field, 0, 0), "healingDraught", { hp: 5 });
+            const draught = (target: Fighter) => check({ field, fighters: [carrier, target] }, "a", { kind: "draught", fighter: 1, target: target.id });
+            expect(draught(fighter(2, "a", "knight", at(field, 2, 0), { hp: 5 }))).toEqual({ refused: "Too far away to heal" });
+            expect(draught(fighter(2, "b", "knight", at(field, 1, 0), { hp: 5 }))).toEqual({ refused: "Pick an ally to heal" });
+            expect(draught(fighter(2, "a", "knight", at(field, 1, 0), { hp: 0 }))).toEqual({ refused: "Pick an ally to heal" });
+            expect(draught(fighter(2, "a", "knight", at(field, 1, 0)))).toEqual({ refused: "Already at full health" });
+            expect(check({ field, fighters: [{ ...carrier, hp: 6 }] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "Already at full health" });
+        });
+
+        it("needs a healing draught, which a Cleric's Heal still doesn't stretch to the Cleric itself", () => {
+            const flask = carrying(1, "a", "archer", at(field, 0, 0), "fireFlask", { hp: 2 });
+            expect(check({ field, fighters: [flask] }, "a", { kind: "draught", fighter: 1, target: 1 })).toEqual({ refused: "They have no healing draught" });
+            const cleric = fighter(1, "a", "cleric", at(field, 0, 0), { hp: 2 });
+            expect(check({ field, fighters: [cleric] }, "a", { kind: "heal", fighter: 1, target: 1 })).toEqual({ refused: "Pick an ally to heal" });
+        });
+    });
+
+    it("are public on the battlefield: a fighter read back from before items carries none", () => {
+        const { item: _, ...old } = fighter(1, "a", "scout", 0);
+        expect(storedFighter(old as Fighter).item).toBeNull();
     });
 });

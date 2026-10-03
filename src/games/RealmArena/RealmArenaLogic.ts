@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { CHARACTERS, EFFECTS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
+import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import {
     ACTION_POINTS,
@@ -17,6 +17,7 @@ import {
     isBattleOver,
     musterRefusal,
     newFighter,
+    pickOf,
     ROLL_SIDES,
     squadsStanding,
     standings,
@@ -95,14 +96,17 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
 // the player does something that isn't undoable.
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
-// heal and a raise — the actions that roll nothing and hurt nobody. Never an
-// attack of any kind (an attack, an aimed shot, a cleave, a fireball): a shot
-// rolls, and a strike or a fireball deals damage the other side has seen land.
-// Nor a move that sets anyone off: an overwatch shot rolls, and a guard's
-// strike is an attack on the mover, so a move a watcher reacted to stays
-// made. That is decided off what the action did rather than off its kind —
-// `peaceful` — so a move along a path nobody watches can be taken back, and the
-// same move into a watcher's sight can't.
+// heal, a raise, a healing draught, and a throw that lands on nobody — a smoke
+// pot always does (§21.2) — the actions that roll nothing and hurt nobody.
+// Never an attack of any kind (an attack, an aimed shot, a cleave, a fireball,
+// a flask that lands on someone): a shot rolls, and a strike, a fireball or a
+// flask hits someone the other side has seen it land on. Nor a move that sets
+// anyone off: an overwatch shot rolls, and a guard's strike is an attack on
+// the mover, so a move a watcher reacted to stays made. That is decided off
+// what the action did rather than off its kind — `peaceful` — so a move along
+// a path nobody watches can be taken back, and the same move into a watcher's
+// sight can't. Taking back an item's use puts the item back: the snapshot
+// holds it like everything else.
 //
 // Anything that isn't peaceful empties the stack rather than only moving the
 // anchor: otherwise a peaceful action after it would push on top of the older
@@ -112,7 +116,7 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise", "draught", "throw"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
@@ -128,9 +132,10 @@ const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "hea
  */
 export const UNDO_STACK_DEPTH = ACTION_POINTS;
 
-/** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. */
+/** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. A throw is, when it landed on nobody. */
 function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonly number[]): boolean {
-    return UNDOABLE_KINDS.has(action.kind) && rolls.length === 0 && events.every(event => PEACEFUL_EVENTS.has(event.kind));
+    return UNDOABLE_KINDS.has(action.kind) && rolls.length === 0
+        && events.every(event => PEACEFUL_EVENTS.has(event.kind) || (event.kind === "thrown" && event.targets.length === 0));
 }
 
 /**
@@ -145,7 +150,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         phase: gs.phase,
         roundsPlayed: gs.roundsPlayed,
         fighters: (gs.fighters ?? []).map(storedFighter),
-        musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(({ character, square }) => ({ character, square })) })),
+        musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
         undoStack: [],
         undoAnchorId: null,
@@ -202,7 +207,16 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
         case "fireball":
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
-        case "healed": return `healed ${name(event.target)} with ${name(event.fighter)}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
+        case "healed": {
+            const by = !event.draught ? name(event.fighter)
+                : event.target === event.fighter ? "its healing draught" : `${name(event.fighter)}'s healing draught`;
+            return `healed ${name(event.target)} with ${by}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
+        }
+        case "thrown": {
+            const hit = event.targets.length === 0 ? ""
+                : `, hitting ${pluralize(event.targets.length, "character")}${event.damage > 0 ? ` for ${event.damage}` : ""}`;
+            return `threw a ${ITEMS[event.item].name.toLowerCase()} with ${name(event.fighter)}${hit}`;
+        }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
@@ -308,7 +322,7 @@ export class RealmArenaMuster implements IGameCommand {
         if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[order.length as PlayerCount]) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
-        this.picks = this.picks.map(({ character, square }) => ({ character, square }));
+        this.picks = this.picks.map(pickOf);
         musters.push({ owner: this.senderId, picks: this.picks });
         gs.musters = musters;
         data.gameState.history.unshift(playerHistory(this.senderId, this.myString()));
@@ -316,7 +330,7 @@ export class RealmArenaMuster implements IGameCommand {
         if (musters.length === order.length) {
             // Every squad joins the battlefield at once, ids in seat order.
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
@@ -350,6 +364,8 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     fireball: "threw a fireball",
     heal: "healed an ally",
     raise: "raised a fallen ally",
+    throw: "threw an item",
+    draught: "used a healing draught",
 };
 
 /**
@@ -363,16 +379,18 @@ function cleanAction(action: Action): Action {
         case "attack":
         case "aimedShot":
         case "heal":
-        case "raise": return { kind: action.kind, fighter: action.fighter, target: action.target };
+        case "raise":
+        case "draught": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
         case "shieldWall": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
-        case "fireball": return { kind: action.kind, fighter: action.fighter, at: action.at };
+        case "fireball":
+        case "throw": return { kind: action.kind, fighter: action.fighter, at: action.at };
     }
 }
 
-/** One action by one character (§17.2): a move, a sneak, an attack, an aimed shot, an ability, hunkering down, or going on watch. */
+/** One action by one character (§17.2): a move, a sneak, an attack, an aimed shot, an ability, an item (§21), hunkering down, or going on watch. */
 @serializable
 export class RealmArenaAct implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;

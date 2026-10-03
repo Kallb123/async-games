@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { consumedRandomness } from "@/utils/apiModels/gameCommand";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
-import { isNeighbour } from "@/utils/games/battlefield/terrain";
+import { distance, isNeighbour } from "@/utils/games/battlefield/terrain";
 import { buildAllEvents } from "@/utils/games/recap";
 import { buildTimeline } from "@/utils/games/replay";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
@@ -11,14 +11,15 @@ import { battlefieldById } from "./maps";
 import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
-import { moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
+import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
 import { actBy, battleOf, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/undo.md's eighth game, shaped like Fires Out's: a turn is a run of
 // actions and only End turn hands it on, so every action that rolls nothing
 // and hurts nobody — a move nobody reacts to, a sneak, a stance, a heal, a
-// raise — can be taken back, one at a time, until the player does something
-// that can't. What never can: any attack, a move a watcher reacted to, and
+// raise, a healing draught, a throw that lands on nobody — can be taken back,
+// one at a time, until the player does something that can't. What never can:
+// any attack, a flask that lands on someone, a move a watcher reacted to, and
 // End turn.
 
 vi.mock("@/utils/users/clerk", () => ({
@@ -203,6 +204,61 @@ describe("Realm Arena — what can't be taken back", () => {
         await resolveStalledTurn(game, "a", "a");
         expect(game.currentTurn).toBe("b");
         expect(game.specificGameState.undoStack).toEqual([]);
+    });
+});
+
+describe("Realm Arena — taking back an item (§21)", () => {
+    /** A square `thrower` can throw at with nobody standing in the 3×3 around it. */
+    function emptyAim(game: RealmArenaTestGame, thrower: Fighter): number {
+        const battle = battleOf(game);
+        const aim = battle.field.tiles.findIndex((_, square) =>
+            !("refused" in check(battle, thrower.owner, { kind: "throw", fighter: thrower.id, at: square }))
+            && battle.fighters.every(one => distance(battle.field, one.square, square) >= 2));
+        if (aim < 0) throw new Error("nowhere to throw");
+        return aim;
+    }
+
+    it("takes back a healing draught, putting the draught back", async () => {
+        const game = await battle();
+        const knight = own(game, "a").find(one => one.character === "knight")!;
+        Object.assign(knight, { hp: 5, item: "healingDraught" });
+        const before = structuredClone(knight);
+        expect((await play(game, actBy("a", { kind: "draught", fighter: knight.id, target: knight.id }))).outcome.validMove).toBe(true);
+        expect(byId(game, knight.id)).toMatchObject({ hp: 8, item: null });
+
+        expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
+        expect(byId(game, knight.id)).toEqual(before);
+    });
+
+    it("takes back a smoke pot, and a flask that lands on nobody, putting each back", async () => {
+        const game = await battle();
+        const [first, second] = own(game, "a");
+        Object.assign(first, { item: "smokePot" });
+        Object.assign(second, { item: "thunderFlask" });
+        const [smoker, thrower] = [structuredClone(first), structuredClone(second)];
+
+        await play(game, actBy("a", { kind: "throw", fighter: smoker.id, at: smoker.square }));
+        expect(byId(game, smoker.id)).toMatchObject({ item: null, smoke: smoker.square });
+        await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: emptyAim(game, thrower) }));
+        expect(byId(game, thrower.id).item).toBeNull();
+
+        expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
+        expect(byId(game, thrower.id)).toEqual(thrower);
+        expect((await play(game, undoBy("a"))).outcome.validMove).toBe(true);
+        expect(byId(game, smoker.id)).toEqual(smoker);
+    });
+
+    it("never takes back a flask that landed on someone, even one that only stunned", async () => {
+        const game = await battle();
+        const thrower = own(game, "a")[0];
+        Object.assign(thrower, { item: "thunderFlask" });
+        const aim = emptyAim(game, thrower);
+        own(game, "b")[0].square = aim;
+        const command = actBy("a", { kind: "throw", fighter: thrower.id, at: aim });
+        expect((await play(game, command)).outcome.validMove).toBe(true);
+        expect(own(game, "b")[0].effects).toEqual({ stunned: 1 });
+        expect(game.specificGameState.undoAnchorId).not.toBe(command.id);
+        expect((await play(game, undoBy("a"))).outcome.validMove).toBe(false);
     });
 });
 

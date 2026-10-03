@@ -1588,6 +1588,50 @@ function of the ground.
    drawn on the board, recap narration, guide text. Reviewers: `caveman`,
    `croupier` (an item in a sealed muster).
 
+*Filled in by PR 1*, in `characters.ts`, `rules.ts` and `RealmArenaLogic.ts`:
+
+- **Items are data**, as abilities are: `ITEMS` in `characters.ts`, each with
+  its points, AP and what it does. A thrown one has a `range`
+  (`THROW_RANGE`, 6), and `area` when it lands on the 3×3 rather than one
+  square. Tuning one is an edit there.
+- **The smoke lives on the thrower as `smoke`, the square it landed on, not as
+  an effect.** It lasts exactly as a count-of-1 effect would — cleared at the
+  start of the thrower's next turn, and gone with the thrower if it's downed —
+  but an effect is something that happens to the character it's on, which
+  shows its mark on that figure and lists it on the unit's box. The thrower
+  has nothing happening to it, and the cloud is drawn on the ground (PR 2).
+  `smokeSquares` is the cloud, every standing thrower's: what `shotOdds` and
+  `reactionsTo` read, and what the board will draw.
+- **Smoke takes 20 off a shot at anyone standing in it, friend or foe of the
+  thrower, and clouds don't stack.** Overwatch can't fire at a mover stepping
+  onto a smoked square; a guard strikes in it all the same, since melee
+  doesn't aim. A mover stepping out of the smoke can be shot as it lands.
+- **A thrown item's event is `thrown`**, shaped like the fireball's: who threw
+  what where, everyone it hit, and the damage. A smoke pot hits nobody. A
+  draught is the `healed` event a Heal makes, marked `draught`, with `fighter`
+  the carrier and `target` whoever drank it.
+- **The healing draught may be drunk by its carrier**, which the Cleric's
+  Heal still can't do for the Cleric. Otherwise its check is Heal's: an ally
+  next to it that is hurt or has something to clear. One `healRefusal` and
+  one `mend` serve both.
+- **An item is used up as it's used**, whatever it hit, so a fire flask
+  thrown at an empty square is gone. Its event still carries its damage, as a
+  fireball's does when it hits nobody.
+- **A throw that lands on nobody can be taken back**, a smoke pot always,
+  and so can a draught; a flask that lands on anyone can't, even a thunder
+  flask that only stuns (`docs/undo.md`, "The eighth game"). Undo puts the
+  item back.
+- **A muster pick's `item` is one id or nothing**: anything else is refused,
+  and null is read as none. `pickOf` keeps a pick's character, square and
+  item and nothing else a request carried, for the muster, the undo snapshot
+  and `myMuster` alike. `musterPoints` is what a muster costs with its items.
+- **The board tells what an item did** in `eventLines`, with a glyph for each
+  item (`ITEM_MARK`) until PR 2 decides how items are drawn. Nothing yet
+  offers an item at muster or in the turn sheet, and the recap reads a throw
+  only through its log line.
+- **`fireballArea` is `areaAround`.** `rangeSquares`' `"fireball"` kind is left
+  for PR 2, which is the first to shade a throw.
+
 ## 22. Destructible low cover (C3)
 
 In XCOM, blowing cover away is the answer to an enemy dug in behind it.
@@ -1885,3 +1929,4 @@ Realm, its sibling in the same world.
 | 1.13 | The view turns a quarter either way, so a player can see round a tower (§13.1). |
 | 1.14 | C1 PR 1 fills in status effects' rules and engine (§20.4): the End turn begins the next turn, so burning can end the battle; heal is for an ally hurt or affected; a stunned character can't go on watch. |
 | 1.15 | C1 PR 2 fills in the board for status effects (§20.4): a drawn mark for each effect on figures, unit boxes and the selected character's card, the recap's row for burning as a turn begins, and the guide's text on burning. |
+| 1.16 | C2 PR 1 fills in items' rules (§21.4): items as data, the throw and the draught, the smoke kept on the thrower as the square it landed on rather than as an effect, a draught its carrier can drink, and a throw that lands on nobody undoable. |

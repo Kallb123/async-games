@@ -9,7 +9,7 @@ import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { POINTS_BUDGET, type PlayerCount } from "./characters";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
-import { battleRounds, storedFighter, type Fighter, type MusterPick } from "./rules";
+import { battleRounds, pickOf, storedFighter, type Fighter, type MusterPick } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "./apiModels";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -237,7 +237,7 @@ export function gameStateToModel(
         budget: POINTS_BUDGET[seats.length as PlayerCount],
         fighters: (gs.fighters ?? []).map(storedFighter),
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
-        myMuster: own ? own.picks.map(({ character, square }) => ({ character, square })) : null,
+        myMuster: own ? own.picks.map(pickOf) : null,
         scores: { ...gs.scores },
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
