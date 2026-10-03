@@ -157,6 +157,17 @@ describe("the result stats (§23.3)", () => {
             { username: "Bob", lines: ["Archer: 2 XP"] },
         ]);
     });
+
+    it("show the same XP read off a stored result as off the plain rows", () => {
+        const result = RealmArenaGameResultModel.hydrate({
+            gameId: "g",
+            gameType: "RealmArena",
+            stats: { mastery: [{ userId: "a", character: "knight", attacks: 2, abilities: 1, items: 0 }] },
+        });
+        expect(formatRealmArenaResultStats(result.stats, new Map([["a", "Alice"]]))).toEqual([
+            { username: "Alice", lines: ["Knight: 13 XP"] },
+        ]);
+    });
 });
 
 describe("the ranks a battle is created with (§23.3)", () => {

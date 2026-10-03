@@ -364,8 +364,11 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
     const groups = new Map<string, string[]>();
     for (const row of stats.mastery ?? []) {
         const lines = groups.get(row.userId) ?? [];
-        // A row is one battle's worth.
-        lines.push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, ...row })} XP`);
+        // A row is one battle's worth. Its counts are read by name: the row is
+        // a Mongoose subdocument when it comes off a stored result, and
+        // spreading one copies its internals, not these fields.
+        const { attacks, abilities, items } = row;
+        lines.push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
         groups.set(row.userId, lines);
     }
     return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? userId, lines }));
