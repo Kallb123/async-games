@@ -13,7 +13,8 @@ import { useSvgId } from '@/utils/hooks/useSvgId';
 import { ITEM_ART, SMOKE_ART, TERRAIN_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, type ScorchCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, type ScorchCue, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;

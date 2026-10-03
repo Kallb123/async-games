@@ -7,7 +7,7 @@ import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import { itemPoints, type MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView } from '@/games/RealmArena/ui';
+import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView } from '@/games/RealmArena/roster';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';

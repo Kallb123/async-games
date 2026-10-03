@@ -6,7 +6,8 @@ import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
 import { abilitiesOf, isStanding, weaponOf, type Fighter } from '@/games/RealmArena/rules';
-import { ABILITY_MARK, abilityWait, CHARACTER_MARK, effectsOn, watchStatus, weaponLine } from '@/games/RealmArena/ui';
+import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
+import { ABILITY_MARK, CHARACTER_MARK, weaponLine } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { SpriteImage } from './RealmArenaTerrain';
 

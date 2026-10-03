@@ -11,7 +11,12 @@ import { globSync } from 'node:fs';
 // achievement catalogue (which the home and profile routes load, checks and
 // all) now needs Dice Cities' card table and the S&C board geometry. Moving
 // the match checks out of the client bundle would win this back.
-const limits = { routeJavaScript: 950_000, largestImage: 5_250_000 };
+//
+// Raised again from 950,000 when Realm Arena's mastery screens took its board
+// route to 925 KB, within 3 KB of the limit. They put a section on the profile
+// too, which reads roster.ts rather than ui.ts so it doesn't carry the rules
+// engine with it.
+const limits = { routeJavaScript: 960_000, largestImage: 5_250_000 };
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;

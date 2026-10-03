@@ -4,7 +4,7 @@ import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
 import { CHARACTERS, OPTIONS } from '@/games/RealmArena/characters';
 import { rankOf, type PlayerMastery } from '@/games/RealmArena/mastery';
-import { CHARACTER_IDS, CHARACTER_MARK, masteryLine, optionsFor, optionView } from '@/games/RealmArena/ui';
+import { CHARACTER_IDS, CHARACTER_MARK, masteryLine, optionsFor, optionView } from '@/games/RealmArena/roster';
 
 interface RealmArenaMasterySectionProps {
     /** The player's record with each character they've fought with; empty, or absent, for one who never has. */
