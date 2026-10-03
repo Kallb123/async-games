@@ -9,6 +9,7 @@ import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
+import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
     ACTION_POINTS,
     act,
@@ -89,6 +90,44 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
     gs.scores = scores;
 }
 
+// ─── Mastery (§23.3) ─────────────────────────────────────────────────────────
+
+/**
+ * Which count an action adds one to for the character taking it (§23.1): an
+ * attack or an aimed shot, an ability, or an item. A cleave is one ability
+ * however many it strikes. A move — a sneak too — hunkering down and going on
+ * watch earn nothing, since every character can do them.
+ */
+const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
+    attack: "attacks",
+    aimedShot: "attacks",
+    cleave: "abilities",
+    shieldWall: "abilities",
+    fireball: "abilities",
+    heal: "abilities",
+    raise: "abilities",
+    throw: "items",
+    draught: "items",
+};
+
+/**
+ * The fighters with what an action earned added to their tallies: one to the
+ * actor's count for the action (`TALLIED`), whatever it rolled, and an attack
+ * for every watcher whose reaction it set off — on overwatch or on guard,
+ * during somebody else's command. Run on every action, so undo takes a tally
+ * back with the snapshot it restores.
+ */
+export function tallied(fighters: readonly Fighter[], action: Action, events: readonly BattleEvent[]): Fighter[] {
+    const own = TALLIED[action.kind];
+    const credits: [number, keyof Tally][] = [
+        ...(own ? [[action.fighter, own] as [number, keyof Tally]] : []),
+        ...events.flatMap((event): [number, keyof Tally][] =>
+            (event.kind === "shot" || event.kind === "struck") && event.reaction ? [[event.fighter, "attacks"]] : []),
+    ];
+    return fighters.map(fighter => credits.reduce((one, [id, count]) => id !== fighter.id ? one
+        : { ...one, tally: addTally(one.tally ?? NO_TALLY, { ...NO_TALLY, [count]: 1 }) }, fighter));
+}
+
 // ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
 //
 // The eighth game to take a move back, and shaped like Fires Out's: a turn is
@@ -158,6 +197,8 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
+        // Written once as the battle is created and never changed, so shared.
+        mastery: gs.mastery ?? {},
         undoStack: [],
         undoAnchorId: null,
     };
@@ -442,7 +483,7 @@ export class RealmArenaAct implements IGameCommand {
         // `recorded…` key as randomness consumed (docs/undo.md §6).
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
-        gs.fighters = fighters;
+        gs.fighters = tallied(fighters, action, events);
         const blasted = blastedIn(events);
         if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
         addScores(gs, events);

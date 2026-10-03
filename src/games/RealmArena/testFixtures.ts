@@ -9,6 +9,7 @@ import { runCommand } from "@/utils/games/commandPipeline";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
 import { REALM, type PlayerCount } from "./characters";
 import { battlefieldById } from "./maps";
+import type { MasterySnapshot } from "./mastery";
 import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
@@ -19,8 +20,8 @@ export const PLAYERS = ["a", "b"];
 
 export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
 
-/** A battle before anyone has mustered, seats in `PLAYERS` order. */
-export function makeGame(turnOrder: string[] = PLAYERS): RealmArenaTestGame {
+/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says). */
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -28,7 +29,7 @@ export function makeGame(turnOrder: string[] = PLAYERS): RealmArenaTestGame {
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery),
         complete: false,
         winner: "",
         markModified: () => {},

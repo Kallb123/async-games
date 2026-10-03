@@ -22,7 +22,7 @@ import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStat
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
-import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
+import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome, IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -315,8 +315,13 @@ registerReplayAdapter({
     // From scratch (docs/games/realm-arena.md §17.3 PR 8): nothing is shuffled,
     // the seat order is the only randomness in setup and it is persisted as
     // `turnOrder`, and every 1–100 roll a battle uses is recorded on the
-    // `RealmArenaAct` that used it.
-    buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(gameData.gameState.turnOrder),
+    // `RealmArenaAct` that used it. The ranks the battle was created with are
+    // read back from the live state, which never changes them (§23.3), so a
+    // muster is checked against the ranks it was checked against then.
+    buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(
+        gameData.gameState.turnOrder,
+        (gameData as IRealmArenaGameData).specificGameState.mastery ?? {},
+    ),
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad
     // and nobody else's, and a null viewer's carries none at all.

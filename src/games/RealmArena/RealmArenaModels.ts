@@ -2,12 +2,13 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
-import { POINTS_BUDGET, type PlayerCount } from "./characters";
+import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
+import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
 import { battleRounds, pickOf, storedFighter, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
@@ -64,6 +65,14 @@ export interface IRealmArenaSpecificGameState {
     /** By userId, every player from 0 at the start — an empty object would be dropped when the document is first inserted. */
     scores: Record<string, number>;
     /**
+     * Each player's rank with each character, taken when the battle was
+     * created and never changed (§23.3). Only ranks above 0 are kept, and an
+     * empty object is dropped on insert as `scores` would be, so it's absent
+     * whenever nobody is ranked — and on a game that predates it. A player or
+     * character missing is rank 0.
+     */
+    mastery?: MasterySnapshot;
+    /**
      * Snapshots of the whole state, newest last, pushed by a `RealmArenaAct`
      * that rolled nothing and hurt nobody (docs/undo.md). `by` is whose action
      * it was. Never sent. Capped at UNDO_STACK_DEPTH, and emptied on every
@@ -96,9 +105,14 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const gameType = new RealmArenaGameType();
 
     // Seat order is the only randomness in setup, and it's persisted as
-    // `turnOrder`, so the starting state rebuilds from it alone (§17.1).
+    // `turnOrder`. With the mastery snapshot, which is persisted too, the
+    // starting state rebuilds from it (§17.1, §23.3).
     const { turnOrder, history } = rollOffTurnOrder(userIdList);
-    const specificGameState = buildInitialRealmArenaState(turnOrder);
+    // Imported here rather than at the top: the lookup reads game results,
+    // whose module reaches back to this one through the replay adapters, and
+    // a static import would make the two load each other.
+    const { masterySnapshotOf } = await import("./masteryRecord");
+    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder));
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
@@ -134,11 +148,12 @@ export var RealmArenaInvitationModel =
 
 /**
  * The battle before anyone has mustered: the map for the party's size, no
- * squads, nobody scored. A pure function of the seat order, so replay rebuilds
- * it rather than persisting a snapshot (§17.1). Throws for a party the map has
- * no deployment zone for.
+ * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
+ * battle was created. A pure function of those two, both persisted, so replay
+ * rebuilds it rather than persisting a snapshot of the state (§17.1, §23.3).
+ * Throws for a party the map has no deployment zone for.
  */
-export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot): IRealmArenaSpecificGameState {
     const map = mapForPlayers(turnOrder.length);
     const field = battlefieldById(map);
     if (turnOrder.length < 2 || turnOrder.length > field.deployments.length) {
@@ -153,6 +168,7 @@ export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpe
         blasted: [],
         musters: [],
         scores: Object.fromEntries(turnOrder.map(userId => [userId, 0])),
+        mastery: { ...mastery },
         undoStack: [],
         undoAnchorId: null,
     };
@@ -185,6 +201,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             blasted: [Number],
             musters: Schema.Types.Mixed,
             scores: Schema.Types.Mixed,
+            // Written once, as the battle is created (§23.3).
+            mastery: Schema.Types.Mixed,
             // ─── Undo (docs/undo.md) ───
             undoStack: Schema.Types.Mixed,
             undoAnchorId: { type: String, default: null },
@@ -286,3 +304,55 @@ export function stepOutcomeToModel(outcome: unknown): IRealmArenaStepOutcome | u
 export var RealmArenaGameDataModel =
     models.RealmArenaGameData ||
     GameDataModel.discriminator<IRealmArenaGameDataDocument, IRealmArenaGameDataModel>('RealmArenaGameData', RealmArenaGameDataSchema);
+
+// ─── Result stats (§23.3) ───────────────────────────────────────────────────
+
+/**
+ * What one player's characters of one kind did in a battle: that they fought
+ * in it, and their tallies pooled — two Knights earn into the one Knight
+ * mastery (§23.1). Mastery is read off these rows (masteryRecord.ts).
+ */
+export interface IRealmArenaMasteryRow extends Tally {
+    userId: string;
+    character: CharacterId;
+}
+
+/** Boiled down for the GameResult read model, once at game-end (see recordGameResult in GameResultData.ts). */
+export interface IRealmArenaGameResultStats {
+    mastery: IRealmArenaMasteryRow[];
+}
+
+export const realmArenaGameResultStatsSchemaDef = {
+    mastery: [{ _id: false, userId: String, character: String, attacks: Number, abilities: Number, items: Number }],
+};
+
+/**
+ * A row for every kind of character each player fought with, downed or not,
+ * in seat order and then the order the muster lists them. A battle given up
+ * during the muster has no fighters, so no rows, and nor does a dropped
+ * player, whose squad left the battlefield with its tallies (§17.4 B2).
+ */
+export function computeRealmArenaResultStats(gameData: IRealmArenaGameData): IRealmArenaGameResultStats {
+    const gs = gameData.specificGameState;
+    const fighters = gs.fighters ?? [];
+    const characterIds = Object.keys(CHARACTERS) as CharacterId[];
+    return {
+        mastery: gs.seats.flatMap(userId => characterIds.flatMap(character => {
+            const kind = fighters.filter(fighter => fighter.owner === userId && fighter.character === character);
+            if (kind.length === 0) return [];
+            return [{ userId, character, ...kind.reduce((sum, fighter) => addTally(sum, fighter.tally ?? NO_TALLY), NO_TALLY) }];
+        })),
+    };
+}
+
+/** One group a player: the XP each character they fought with earned in this battle. */
+export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const groups = new Map<string, string[]>();
+    for (const row of stats.mastery ?? []) {
+        const lines = groups.get(row.userId) ?? [];
+        // A row is one battle's worth.
+        lines.push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, ...row })} XP`);
+        groups.set(row.userId, lines);
+    }
+    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? userId, lines }));
+}

@@ -118,6 +118,13 @@ import {
 } from "@/games/RaceCars/RaceCarsModels";
 import type { IRaceCarsSpecificGameStateResponse } from "@/games/RaceCars/apiModels";
 import { trackById } from "@/games/RaceCars/board";
+import {
+    IRealmArenaGameData,
+    IRealmArenaGameResultStats,
+    computeRealmArenaResultStats,
+    realmArenaGameResultStatsSchemaDef,
+    formatRealmArenaResultStats,
+} from "@/games/RealmArena/RealmArenaModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -336,6 +343,16 @@ var RaceCarsGameResultSchema = new Schema<IRaceCarsGameResultDataDocument>({
 }, { discriminatorKey: 'kind' });
 export var RaceCarsGameResultModel = models.RaceCarsGameResult || GameResultModel.discriminator<IRaceCarsGameResultDataDocument, IRaceCarsGameResultDataModel>('RaceCarsGameResult', RaceCarsGameResultSchema);
 
+export interface IRealmArenaGameResultData extends IGameResultData {
+    stats: IRealmArenaGameResultStats;
+}
+export interface IRealmArenaGameResultDataDocument extends IRealmArenaGameResultData, Document {}
+export interface IRealmArenaGameResultDataModel extends Model<IRealmArenaGameResultDataDocument> {}
+var RealmArenaGameResultSchema = new Schema<IRealmArenaGameResultDataDocument>({
+    stats: realmArenaGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var RealmArenaGameResultModel = models.RealmArenaGameResult || GameResultModel.discriminator<IRealmArenaGameResultDataDocument, IRealmArenaGameResultDataModel>('RealmArenaGameResult', RealmArenaGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -534,6 +551,14 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatRaceCarsResultStats,
         charts: formatRaceCarsCharts,
+    },
+    RealmArena: {
+        model: RealmArenaGameResultModel,
+        // What each player's characters did, read off the final battlefield,
+        // whose fighters carry their tallies — character mastery is summed from
+        // these (docs/games/realm-arena.md §23.3), so nothing replays here.
+        compute: (gameData) => computeRealmArenaResultStats(gameData as IRealmArenaGameData),
+        format: formatRealmArenaResultStats,
     },
 };
 

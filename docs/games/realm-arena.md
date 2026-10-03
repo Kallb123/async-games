@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.20. Split out of Defender of the Realm in its third round of
+**Status:** v1.21. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -8,8 +8,8 @@ first characters, and §15 the first battlefield, a ruined fort. §17 is the
 implementation plan and where it stands. Milestone A, free-for-all and C1–C3
 (status effects §20, items §21, destructible low cover §22) are built, and so
 is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
-and the strikes played out on the board. Next is C5, character mastery earned
-by what a character does (§23).
+and the strikes played out on the board. C5, character mastery earned by what
+a character does (§23), is under way: PR 1, mastery from results, is built.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -867,7 +867,8 @@ settled is in the code and its tests, which cite these sections.
   `src/utils/games/battlefield/`, because Defender of the Realm will reuse it
   (§10). The board moves to `src/components/ui/` when a second game needs it.
 - **Replay data from the first command.** Every roll is recorded, and the
-  starting state is rebuilt from persisted fields (`turnOrder`).
+  starting state is rebuilt from persisted fields (`turnOrder`, and the
+  mastery snapshot since C5, §23.3).
 - **Every PR passes the gates** (`build`, `tsc`, `lint`, `test`) and the
   review crew for what it touches.
 - **No What's new line until the game is announced** (PR 10).
@@ -962,7 +963,7 @@ recap, a guide and a tutorial.
 | C2 | Items bought at muster (§21) | Built |
 | C3 | Destructible low cover (§22) | Built |
 | C4 | Battle visuals: hit text, then the shot and the fireball in flight (§26) | Built |
-| **C5** | **Character mastery, earned by what a character does (§23)** | **Next**. Replaces B4 |
+| **C5** | **Character mastery, earned by what a character does (§23)** | **Under way**: PR 1 built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, if it's chosen (§8) | After C |
 | B6 | More factions | After C |
@@ -1333,7 +1334,8 @@ first, so mastery moved from C4 to C5.
 - **Mastery is experience (XP), per player and per character.** It's earned
   in battles that count as played (the achievements' rule: at least two
   turns), win or lose.
-- **Acting earns XP, and being there earns a little.** *Proposal:*
+- **Acting earns XP, and being there earns a little.** As built in
+  `mastery.ts` (`XP_WEIGHTS`, `RANK_XP`):
 
   | What the character did in the battle | XP |
   |---|---:|
@@ -1391,22 +1393,61 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
 ### 23.3 Engine
 
 - **Each fighter keeps a tally** of its attacks, abilities and items used.
-  One helper in `RealmArenaLogic.ts` counts them from the events each command
-  produces. That includes reactions, which count for the watcher during
-  another player's command. The tally is public, like the rest of the
+  One helper in `RealmArenaLogic.ts` (`tallied`) counts them for each action:
+  the action itself for the character taking it, and each reaction it set
+  off, read from its events, for the watcher during another player's command. The tally is public, like the rest of the
   battlefield, and undo restores it with the snapshot.
 - **Mastery is read from game results, not from a new collection.** C5 gives
   Realm Arena's `GameResult` stats of its own: a schema, its discriminator in
-  `GameResultData.ts`, and a writer. For each player and character, the writer
-  records the battle and the summed tally. A player's XP is then the weights
+  `GameResultData.ts`, and a writer. For each player and kind of character
+  fielded, the writer records a row holding the tallies of every one of that
+  kind, pooled. A player's XP is then the weights
   of §23.1 applied to an aggregation over their results. Nothing stores XP,
   so it can't get out of step with the games behind it.
-- **A battle snapshots each player's unlocked options when it's created.** The
+- **A battle snapshots each player's ranks when it's created**, from which
+  the options they unlock follow (see below). The
   `Muster` check reads only that snapshot, so a rank reached mid-battle
   changes nothing, and a replay checks a muster the same way years later.
   `buildInitialRealmArenaState` takes the snapshot as a second input, so the
   starting state is no longer rebuilt from the seat order alone (§17.1). The
   replay adapter passes the snapshot back from the persisted field.
+- **What PR 1 settled:**
+  - **The tally counts the action, not its events, for the actor.** An
+    attack or aimed shot is an attack, a cleave is one ability however many
+    it strikes, and a throw or a draught is an item. A sneak is a move and
+    earns nothing. Only the reactions are read off the events: each `shot` or
+    `struck` marked as a reaction is an attack for its watcher. A fighter
+    has no tally until it first earns something.
+  - **The result keeps a row per player and kind of character**: that they
+    fought with it, and the tallies of every one of that kind pooled. A
+    battle given up during the muster has no rows.
+  - **A dropped player earns nothing from that battle.** Their squad leaves
+    the battlefield (§17.4 B2), and its tallies go with it.
+  - **The snapshot is ranks, not options.** No option exists until PR 2, and
+    the options a rank unlocks are data keyed by rank, so the battle keeps
+    each player's rank with each character (`mastery`, only ranks above 0).
+    An option, once given a rank, keeps it, so a replay still checks an old
+    muster the way it was checked.
+  - **XP counts the same battles a profile does**: those that count as
+    played, and none with an unclaimed guest at the table, until they claim.
+    One aggregation for the whole party, on the `playerIds` and `gameType`
+    index, with each result cut to the party's own rows before they're
+    unwound. It reads one result per battle the party has fought, which is
+    tens of milliseconds at thousands of battles. If a record ever outgrows
+    that, the next step is a running total per player written beside each
+    result.
+  - **A rank can go down.** A deleted account takes its results with it,
+    the other players' rows among them (as it takes its wins from their
+    profile), so a player's XP from those battles goes too. A battle already
+    created keeps the ranks it snapshotted.
+  - **A battle starts even when mastery can't be read.** The lookup has three
+    seconds on the database and half a second more to answer (`withTimeout`,
+    for a driver that never reaches the server); past that, or on an error,
+    nobody is ranked, and the log says so. It's the whole
+    party's lookup, so everyone has the starter characters alike, and ranks
+    only unlock options.
+  - **The result page shows each character's XP from the battle.** The
+    profile's totals and ranks come in PR 3.
 - **Ranks and unlocked options are public**, like the rest of a profile. Only
   the options picked for a squad are sealed, with the rest of the muster.
 - **The client never claims an option.** It sends the pick, and the server
@@ -1417,10 +1458,10 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
 
 ### 23.4 PRs
 
-1. **Mastery from results:** the tally, the result stats and their writer,
-   the aggregation into XP, the snapshot at creation, and the replay adapter
-   reading it back. Reviewers: `gremlin` (the cost of the aggregation on a
-   long record), `rulebook` (the wiring of the result stats).
+1. **Mastery from results**, built: the tally, the result stats and their
+   writer, the aggregation into XP, the snapshot at creation, and the replay
+   adapter reading it back. Reviewers: `gremlin` (the cost of the aggregation
+   on a long record), `rulebook` (the wiring of the result stats).
 2. **Options:** the rank-1 options as data and rules, and the muster check
    against the snapshot. Reviewers: `caveman`, `locksmith` (an option
    claimed but not unlocked).
@@ -1729,3 +1770,4 @@ Realm, its sibling in the same world.
 | 1.18 | Round 10 (§11.10). The implementation plan is summarised: §17 keeps the principles, the engine decisions and a few lines a PR, with a status table for Milestones B and C, and the engine and PR parts of C1–C3 (§20.3–§22.3) are cut to what was built. Mastery is earned by actions, as XP: a little for fighting in a battle, more for each attack, ability and item (§23.1), counted by a tally on each fighter (§23.3). Battle visuals come next, as C4 (§26): hit text, then the Archer's shot and the fireball in flight. Mastery becomes C5. |
 | 1.19 | C4 PR 1 fills in hit text (§26.3): the beats and the cap, an effect's name under its number, what a heal and a Raise show, text rising where the hit happened, and the events a replayed snapshot carries. A downed figure staying drawn until its hit lands moves to PR 2, with the arrow it's for. |
 | 1.20 | C4 PR 2 fills in the shot and the fireball (§26.3): when each part sets off and lands, how a hit, a graze and a miss end, a throw at nobody still flying and bursting, the burst's spread, blasted cover standing until its burst fades, and drawn art for all of it. C4 is built; C5 is next. |
+| 1.21 | C5 PR 1 fills in mastery from results (§23.3): the tally counts the action for the actor and reactions for the watcher, the result keeps a row per player and kind of character, a dropped player earns nothing from the battle, the battle keeps ranks rather than options, XP counts the battles a profile does, and a battle starts with nobody ranked if mastery can't be read. |
