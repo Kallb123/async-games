@@ -1,5 +1,6 @@
 // Integration tests over the three routes that change a game: taking a turn,
-// playing a command, and ending a game by hand.
+// playing a command, and ending a game by hand — and the timeline route that
+// reads one back.
 //
 // Everything above the database is the real thing here — the handler, the
 // request and response objects, the turn rules, the command registry, the
@@ -64,6 +65,8 @@ import { POST as command } from './command/route';
 import { GET as getGame } from './[gameid]/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
+import { POST as timeline } from './[gameid]/timeline/route';
+import { withFullHistories } from '@/utils/games/historyDelta';
 
 /** Where each player stands, as the stored game holds it. */
 function positions(saved: Record<string, unknown>): Record<string, { position: number }> {
@@ -1355,5 +1358,53 @@ describe('POST /api/game/end', () => {
 
         expect(response.status).toBe(400);
         expect(storedGame('game_1')!.complete).toBe(false);
+    });
+});
+
+describe('POST /api/game/[gameid]/timeline', () => {
+    /** Two rolls played through the command route, the first reacted to. */
+    async function playTwoRolls() {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        await command(commandPost(diceRoll()));
+        signIn(BOB);
+        await command(commandPost(diceRoll({ senderId: BOB.id, senderUsername: 'bob' })));
+        const [, first] = storedHistory(storedGame('game_1')!);
+        seedReaction({ gameId: 'game_1', commandId: first.commandId!, reaction: '😱' });
+        signIn(ANN);
+    }
+
+    const readTimeline = async (body: unknown) => {
+        const response = await timeline(jsonPost('/api/game/game_1/timeline', body), { params: Promise.resolve({ gameid: 'game_1' }) });
+        expect(response.status).toBe(200);
+        return response.json();
+    };
+
+    it("sends each snapshot's history as a delta, which reads back to the full logs", async () => {
+        await playTwoRolls();
+
+        const whole = await readTimeline({ plannedCommands: [] });
+        const sent = await readTimeline({ plannedCommands: [], historyDeltas: true });
+
+        // No snapshot carries its history in full, so the response stops
+        // growing with the square of the game's length…
+        expect(sent.snapshots.every((snapshot: object) => !('history' in snapshot))).toBe(true);
+        expect(sent.snapshots.map((snapshot: { historyDelta: { added: unknown[] } }) => snapshot.historyDelta.added.length)).toEqual([0, 1, 1]);
+        // …and the client rebuilds exactly what the full response would have
+        // said, reactions and all.
+        expect(withFullHistories(sent.snapshots)).toEqual(whole.snapshots);
+        expect(whole.snapshots[2].history).toHaveLength(2);
+        expect(whole.snapshots[2].history[1].reactions).toEqual([expect.objectContaining({ reaction: '😱' })]);
+    });
+
+    it('sends every history whole to a client that never asked for deltas', async () => {
+        // A page loaded before deltas shipped still reads `history` straight
+        // off each snapshot.
+        await playTwoRolls();
+
+        const whole = await readTimeline({ plannedCommands: [] });
+
+        expect(whole.snapshots.map((snapshot: { history: unknown[] }) => snapshot.history.length)).toEqual([0, 1, 2]);
+        expect(whole.snapshots.every((snapshot: object) => !('historyDelta' in snapshot))).toBe(true);
     });
 });

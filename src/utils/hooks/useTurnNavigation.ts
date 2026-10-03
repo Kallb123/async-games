@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
-import { fromHistoryDeltas, IHistoryDelta } from "@/utils/games/historyDelta";
+import { withFullHistories, WithHistoryDelta } from "@/utils/games/historyDelta";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 
 // One reconstructed point on the game timeline (mirrors the server ITurnSnapshot).
@@ -33,9 +33,9 @@ interface ITimelineResponse<TState, TOutcome> {
 
 // What the route actually sends: each snapshot's history as the change from the
 // one before it (see utils/games/historyDelta.ts), stitched back into full logs
-// on arrival.
+// on arrival — or, from a deployment that predates deltas, already in full.
 interface ITimelineWireResponse<TState, TOutcome> extends Omit<ITimelineResponse<TState, TOutcome>, "snapshots"> {
-    snapshots: (Omit<ITurnSnapshot<TState, TOutcome>, "history"> & { historyDelta: IHistoryDelta<IHistoryEntryResponse> })[];
+    snapshots: (WithHistoryDelta<ITurnSnapshot<TState, TOutcome>> | ITurnSnapshot<TState, TOutcome>)[];
 }
 
 export type NavMode = "live" | "recap" | "planning";
@@ -71,7 +71,7 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
                 const res = await fetch(`/api/game/${gameId}/timeline`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ plannedCommands: planned }),
+                    body: JSON.stringify({ plannedCommands: planned, historyDeltas: true }),
                     // Without a deadline a stalled connection never settles, so
                     // the `finally` below never runs and `loading` stays true —
                     // which now means the shell's loading bar pulses for the
@@ -84,11 +84,7 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
                     throw new Error("Unable to load timeline");
                 }
                 const wire: ITimelineWireResponse<TState, TOutcome> = await res.json();
-                const histories = fromHistoryDeltas(wire.snapshots.map((snapshot) => snapshot.historyDelta));
-                const data: ITimelineResponse<TState, TOutcome> = {
-                    ...wire,
-                    snapshots: wire.snapshots.map(({ historyDelta: _historyDelta, ...snapshot }, i) => ({ ...snapshot, history: histories[i] })),
-                };
+                const data: ITimelineResponse<TState, TOutcome> = { ...wire, snapshots: withFullHistories(wire.snapshots) };
                 setSnapshots(data.snapshots);
                 setCurrentIndex(data.currentIndex);
                 return data;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromHistoryDeltas, toHistoryDeltas } from "./historyDelta";
+import { fromHistoryDeltas, toHistoryDeltas, withFullHistories, withHistoryDeltas } from "./historyDelta";
 import type { IHistoryEntry } from "./history";
 
 const line = (text: string, extra: Partial<IHistoryEntry> = {}): IHistoryEntry => ({ text, ...extra });
@@ -76,5 +76,28 @@ describe("history deltas", () => {
         const sent = toHistoryDeltas(histories).reduce((total, delta) => total + delta.added.length, 0);
         expect(sent).toBe(300);
         expect(fromHistoryDeltas(toHistoryDeltas(histories))).toEqual(histories);
+    });
+});
+
+describe("timeline snapshots on the wire", () => {
+    const a = line("Alice rolled a 4", { commandId: "c1" });
+    const b = line("Bob rolled a 6", { commandId: "c2" });
+    const snapshots = [
+        { index: 0, planned: false, history: [] as IHistoryEntry[] },
+        { index: 1, planned: false, history: [a] },
+        { index: 2, planned: true, history: [b, a] },
+    ].map((snapshot) => ({ ...snapshot, history: copy(snapshot.history) }));
+
+    it("sends no snapshot its history in full, and reads back exactly what it was given", () => {
+        const sent = JSON.parse(JSON.stringify(withHistoryDeltas(snapshots)));
+
+        expect(sent.every((snapshot: object) => !("history" in snapshot))).toBe(true);
+        expect(sent.map((snapshot: { index: number }) => snapshot.index)).toEqual([0, 1, 2]);
+        expect(withFullHistories(sent)).toEqual(snapshots);
+    });
+
+    it("takes a response whose histories are already whole as it is", () => {
+        const legacy = JSON.parse(JSON.stringify(snapshots));
+        expect(withFullHistories(legacy)).toEqual(snapshots);
     });
 });

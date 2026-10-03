@@ -4,10 +4,10 @@ import type { IHistoryEntry } from "./history";
 //
 // Every snapshot on a reconstructed timeline carries the whole match history up
 // to that point, so sent as-is the timeline response grows with the square of
-// the game's length — a long Realm Arena battle runs to hundreds of steps, each
-// carrying every line before it. But a snapshot's history is almost always the
-// one before it with a line or two unshifted on top, so each one is sent as
-// just that difference, and the client stitches the full logs back together.
+// the game's length. But a snapshot's history is almost always the one before
+// it with a line or two unshifted on top, so the timeline route sends each one
+// as just that difference, and useTurnNavigation stitches the full logs back
+// together.
 //
 // History is newest-first, so what two neighbouring snapshots share is a tail.
 // A delta is what this snapshot puts in front of that tail (`added`), and how
@@ -52,4 +52,33 @@ export function fromHistoryDeltas<TEntry extends IHistoryEntry>(deltas: IHistory
         previous = [...added, ...previous.slice(dropped)];
         return previous;
     });
+}
+
+/** Anything carrying a history — a timeline snapshot, on either side of the wire. */
+type WithHistory<TEntry extends IHistoryEntry> = { history: TEntry[] };
+
+/** A snapshot as the timeline route sends it: its history swapped for the delta from the one before. */
+export type WithHistoryDelta<TSnapshot extends WithHistory<TEntry>, TEntry extends IHistoryEntry = TSnapshot["history"][number]> =
+    Omit<TSnapshot, "history"> & { historyDelta: IHistoryDelta<TEntry> };
+
+/** The timeline's snapshots as the route sends them. */
+export function withHistoryDeltas<TSnapshot extends WithHistory<TEntry>, TEntry extends IHistoryEntry>(
+    snapshots: TSnapshot[],
+): WithHistoryDelta<TSnapshot, TEntry>[] {
+    const deltas = toHistoryDeltas(snapshots.map((snapshot) => snapshot.history));
+    return snapshots.map(({ history: _history, ...snapshot }, i) => ({ ...snapshot, historyDelta: deltas[i] }));
+}
+
+/**
+ * The timeline's snapshots as the client reads them, with every history in
+ * full. A response that already has them — from a deployment that predates
+ * deltas, still serving while a new one rolls out — is taken as it is.
+ */
+export function withFullHistories<TSnapshot extends WithHistory<TEntry>, TEntry extends IHistoryEntry>(
+    snapshots: (WithHistoryDelta<TSnapshot, TEntry> | TSnapshot)[],
+): TSnapshot[] {
+    if (snapshots.every((snapshot) => "history" in snapshot)) return snapshots as TSnapshot[];
+    const sent = snapshots as WithHistoryDelta<TSnapshot, TEntry>[];
+    const histories = fromHistoryDeltas(sent.map((snapshot) => snapshot.historyDelta));
+    return sent.map(({ historyDelta: _historyDelta, ...snapshot }, i) => ({ ...snapshot, history: histories[i] }) as unknown as TSnapshot);
 }
