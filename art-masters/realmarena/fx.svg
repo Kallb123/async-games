@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Realm Arena's battle visuals (docs/games/realm-arena.md §26). Top row, a
+  96px cell each in `MISSILE_ART` order, then the slash: what flies points
+  right, its front at the cell's right edge; a flask or pot tumbles, so it's
+  upright in the middle. Bottom row, 192x96 each: the ring of flame and the
+  thunder flash, lying flat as the board's squares do. Rendered to
+  public/art/realmarena/fx.png by `npm run ra-marks`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="672" height="192" viewBox="0 0 672 192">
+  <defs>
+    <radialGradient id="fire-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff7d6"/>
+      <stop offset="0.35" stop-color="#ffd23a"/>
+      <stop offset="0.75" stop-color="#f0761c"/>
+      <stop offset="1" stop-color="#c8361a"/>
+    </radialGradient>
+    <linearGradient id="fire-tail" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#f6b21c"/>
+      <stop offset="0.6" stop-color="#e0521f" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#c8361a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bolt-tail" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#d9c8ff"/>
+      <stop offset="1" stop-color="#7a4fd6" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="bolt-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#d9c8ff"/>
+      <stop offset="1" stop-color="#7a4fd6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="burst-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#fff2c2" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#ffb22e" stop-opacity="0.8"/>
+      <stop offset="0.85" stop-color="#e0521f" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#c8361a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="flash-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.4" stop-color="#fff6c8" stop-opacity="0.9"/>
+      <stop offset="0.8" stop-color="#8fb1ff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#3b5bb5" stop-opacity="0"/>
+    </radialGradient>
+    <!-- A flame's tongue, its foot on the origin, licking up. -->
+    <path id="tongue" d="M-9 0 C-10 -12 -3 -17 0 -30 C4 -19 11 -12 9 0 Z"/>
+    <!-- A round-bottomed flask, its cork in: items.svg's, without its tile. -->
+    <path id="flask" d="M41 30 H55 V40 C65 44 71 52 71 62 C71 75 61 83 48 83 C35 83 25 75 25 62 C25 52 31 44 41 40 Z"/>
+    <path id="flask-fill" d="M27 63 C33 59 41 66 48 62 C55 58 63 65 69 61 C70 75 60 81 48 81 C36 81 26 75 27 63 Z"/>
+    <rect id="cork" x="38" y="19" width="20" height="12" rx="3" fill="#9a6535" stroke="#24150f" stroke-width="4"/>
+  </defs>
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- Arrow: a long shaft, a steel head at the right edge, fletching at the left. -->
+    <g>
+      <path d="M8 48 H80" stroke="#24150f" stroke-width="9"/>
+      <path d="M8 48 H80" stroke="#c99a5b" stroke-width="4"/>
+      <path d="M94 48 L74 37 L78 48 L74 59 Z" fill="#dfe4ea" stroke="#24150f" stroke-width="4"/>
+      <path d="M6 48 L20 36 H32 L22 48 Z M6 48 L20 60 H32 L22 48 Z" fill="#c8283a" stroke="#24150f" stroke-width="3.5"/>
+    </g>
+
+    <!-- Bolt: a white-hot spark trailing violet light, its head at the right edge. -->
+    <g transform="translate(96 0)">
+      <path d="M8 48 C30 40 56 38 82 42 L82 54 C56 58 30 56 8 48 Z" fill="url(#bolt-tail)"/>
+      <circle cx="78" cy="48" r="18" fill="url(#bolt-glow)"/>
+      <path d="M92 48 L80 41 L72 48 L80 55 Z" fill="#ffffff" stroke="#5b33b8" stroke-width="3"/>
+    </g>
+
+    <!-- Fireball: a ball of fire, its flames streaming back from its front at the right edge. -->
+    <g transform="translate(192 0)">
+      <path d="M4 48 C18 30 40 26 62 30 L62 66 C40 70 18 66 4 48 Z" fill="url(#fire-tail)"/>
+      <path d="M20 38 C30 33 38 36 46 34 M16 58 C28 62 38 60 46 62" fill="none" stroke="#f6b21c" stroke-width="4" stroke-opacity="0.8"/>
+      <circle cx="68" cy="48" r="24" fill="url(#fire-core)" stroke="#24150f" stroke-width="4"/>
+      <path d="M60 40 C64 36 70 35 75 37" fill="none" stroke="#fff" stroke-width="3.5" stroke-opacity="0.7"/>
+    </g>
+
+    <!-- Fire flask, tumbling: burning oil in a flask, a flame at its cork. -->
+    <g transform="translate(288 0)">
+      <use href="#flask" fill="#fff6e4"/>
+      <use href="#flask-fill" fill="#e0521f"/>
+      <path d="M48 52 C53 59 58 63 56 70 C55 75 52 77 48 77 C43 77 40 74 40 70 C40 64 45 61 48 52 Z" fill="#f6b21c"/>
+      <use href="#flask" fill="none" stroke="#24150f" stroke-width="4"/>
+      <use href="#cork"/>
+      <path d="M48 2 C55 9 59 14 56 20 C54 24 42 24 40 20 C38 15 43 10 48 2 Z" fill="#f6b21c" stroke="#24150f" stroke-width="3"/>
+    </g>
+
+    <!-- Thunder flask, tumbling: lightning sealed in a flask. -->
+    <g transform="translate(384 0)">
+      <use href="#flask" fill="#e6ecf8"/>
+      <use href="#flask-fill" fill="#3b5bb5"/>
+      <path d="M51 45 L38 64 L47 64 L43 79 L59 58 L50 58 L55 45 Z" fill="#f6c21c" stroke="#24150f" stroke-width="3"/>
+      <use href="#flask" fill="none" stroke="#24150f" stroke-width="4"/>
+      <use href="#cork"/>
+    </g>
+
+    <!-- Smoke pot, tumbling: a clay pot, smoke curling from its neck. -->
+    <g transform="translate(480 0)">
+      <path d="M48 40 C42 34 49 28 44 22 C40 17 46 11 52 12" fill="none" stroke="#24150f" stroke-width="12"/>
+      <path d="M48 40 C42 34 49 28 44 22 C40 17 46 11 52 12" fill="none" stroke="#ecebe6" stroke-width="6"/>
+      <path d="M41 42 H55 V48 C64 51 70 58 70 66 C70 77 60 83 48 83 C36 83 26 77 26 66 C26 58 32 51 41 48 Z" fill="#b4602f" stroke="#24150f" stroke-width="4"/>
+      <rect x="37" y="39" width="22" height="8" rx="3" fill="#cf7a43" stroke="#24150f" stroke-width="4"/>
+      <path d="M32 64 C40 68 56 68 64 64" fill="none" stroke="#24150f" stroke-width="3" stroke-opacity="0.45"/>
+    </g>
+
+    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <g transform="translate(576 0)">
+      <path d="M84 10 C78 46 54 74 12 86 C44 70 64 46 70 14 Z" fill="#ffffff" stroke="#24150f" stroke-width="4"/>
+      <path d="M78 16 C72 44 54 66 26 80" fill="none" stroke="#c9d6e6" stroke-width="3"/>
+      <path d="M90 30 C86 44 80 54 72 62 M62 8 C58 18 54 24 48 30" fill="none" stroke="#ffffff" stroke-width="3" stroke-opacity="0.75"/>
+    </g>
+
+    <!-- Fire burst: a flash of flame filling the ground, a ring of fire licking up round its edge. -->
+    <g transform="translate(0 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#burst-glow)"/>
+      <g fill="#f6b21c" stroke="#24150f" stroke-width="3">
+        <use href="#tongue" transform="translate(96 32) scale(0.9)"/>
+        <use href="#tongue" transform="translate(56 36) scale(0.8)"/>
+        <use href="#tongue" transform="translate(136 36) scale(0.8)"/>
+        <use href="#tongue" transform="translate(24 48) scale(0.75)"/>
+        <use href="#tongue" transform="translate(168 48) scale(0.75)"/>
+      </g>
+      <g fill="#e0521f" stroke="#24150f" stroke-width="3">
+        <use href="#tongue" transform="translate(14 60) scale(0.85)"/>
+        <use href="#tongue" transform="translate(178 60) scale(0.85)"/>
+        <use href="#tongue" transform="translate(38 80) scale(1)"/>
+        <use href="#tongue" transform="translate(154 80) scale(1)"/>
+        <use href="#tongue" transform="translate(76 90) scale(1.1)"/>
+        <use href="#tongue" transform="translate(116 90) scale(1.1)"/>
+      </g>
+      <g fill="#fff2c2">
+        <use href="#tongue" transform="translate(76 90) scale(0.5)"/>
+        <use href="#tongue" transform="translate(116 90) scale(0.5)"/>
+        <use href="#tongue" transform="translate(38 80) scale(0.45)"/>
+        <use href="#tongue" transform="translate(154 80) scale(0.45)"/>
+      </g>
+    </g>
+
+    <!-- Thunder flash: a white-hot flash across the ground, lightning cracking out from its middle. -->
+    <g transform="translate(192 96)">
+      <ellipse cx="96" cy="50" rx="92" ry="42" fill="url(#flash-glow)"/>
+      <g fill="none" stroke-width="9" stroke="#24150f">
+        <path d="M96 50 L70 40 L62 46 L30 30"/>
+        <path d="M96 50 L124 38 L132 46 L164 28"/>
+        <path d="M96 50 L80 66 L88 70 L64 86"/>
+        <path d="M96 50 L114 66 L106 72 L132 88"/>
+        <path d="M96 50 L20 56"/>
+        <path d="M96 50 L172 58"/>
+      </g>
+      <g fill="none" stroke-width="4" stroke="#fff3a8">
+        <path d="M96 50 L70 40 L62 46 L30 30"/>
+        <path d="M96 50 L124 38 L132 46 L164 28"/>
+        <path d="M96 50 L80 66 L88 70 L64 86"/>
+        <path d="M96 50 L114 66 L106 72 L132 88"/>
+        <path d="M96 50 L20 56"/>
+        <path d="M96 50 L172 58"/>
+      </g>
+      <circle cx="96" cy="50" r="12" fill="#ffffff"/>
+    </g>
+  </g>
+</svg>

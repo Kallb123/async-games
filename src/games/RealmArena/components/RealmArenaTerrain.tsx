@@ -10,9 +10,9 @@ const GRASS_TILE = { width: 6 * ISO_HALF_WIDTH, height: 6 * ISO_HALF_HEIGHT };
 /** The id a sprite is defined under on a board — a terrain's, or an effect's mark — for a `<use>` to draw it by. */
 export const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.get(sprite)}`;
 
-/** A sprite drawn on a board, by the id `RealmArenaTerrainDefs` defined it under, `size` across centred on (`x`, `y`). */
-export function SpriteUse({ id, sprite, x, y, size, className }: { id: string; sprite: Sprite; x: number; y: number; size: number; className: string }) {
-    return <use className={className} href={`#${spriteId(id, sprite)}`} x={x - size / 2} y={y - size / 2} width={size} height={size} />;
+/** A sprite drawn on a board, by the id `RealmArenaTerrainDefs` defined it under, `size` across — and `height` down, if not as much — centred on (`x`, `y`). */
+export function SpriteUse({ id, sprite, x, y, size, height = size, className }: { id: string; sprite: Sprite; x: number; y: number; size: number; height?: number; className: string }) {
+    return <use className={className} href={`#${spriteId(id, sprite)}`} x={x - size / 2} y={y - height / 2} width={size} height={height} />;
 }
 
 /** A sprite's cell, as the viewBox that crops its sheet to it. */

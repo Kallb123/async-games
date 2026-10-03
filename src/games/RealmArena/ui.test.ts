@@ -8,7 +8,7 @@ import { ABILITIES, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
 import {
     abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
-    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, HIT_TEXT_MS, PLAYBACK_MS, type Placement,
+    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement,
 } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -396,45 +396,96 @@ describe("abilityWait", () => {
 
 describe("battleCues", () => {
     const before = [ready(0, "a", "knight", 10), ready(1, "b", "archer", 50), ready(2, "b", "archer", 60), ready(3, "b", "mage", 70)];
-    /** Each cue as "who@square value/label at start", to read the order by. */
-    const told = (events: BattleEvent[]) => battleCues(events, before)
+    /** Every cue of one kind. */
+    const only = <K extends BattleCue["kind"]>(cues: BattleCue[], kind: K) => cues.filter((cue): cue is Extract<BattleCue, { kind: K }> => cue.kind === kind);
+    /** Each piece of hit text as "who@square value/label at start", to read the order by. */
+    const told = (cues: BattleCue[]) => only(cues, "text")
         .map(cue => `${cue.fighter}@${cue.square} ${cue.value}${cue.label ? `/${cue.label}` : ""} ${cue.start}`);
 
-    it("plays a move's overwatch shots one after another, each where the mover had got to", () => {
-        const cues = told([
+    it("flies a move's overwatch shots one after another, each to where the mover had got to, its text rising as it lands", () => {
+        const cues = battleCues([
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
-            { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 20, result: "hit", damage: 3, reaction: true },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
             { kind: "moved", fighter: 0, path: [12, 13, 14], sneaking: false },
-            { kind: "shot", fighter: 2, target: 0, chance: 60, roll: 70, result: "graze", damage: 2, reaction: true },
+            { kind: "shot", fighter: 2, target: 0, chance: 60, result: "graze", damage: 2, reaction: true },
             { kind: "moved", fighter: 0, path: [14, 15], sneaking: false },
+        ], before);
+        expect(only(cues, "flight")).toMatchObject([
+            { missile: "arrow", from: 50, to: 12, result: "hit", start: 0, land: FLIGHT_MS.arrow },
+            // Setting off once the first has landed, and landing far enough after it to be seen.
+            { missile: "arrow", from: 60, to: 14, result: "graze", start: 450, land: FLIGHT_MS.arrow },
         ]);
-        expect(cues).toEqual(["0@12 \u22123 0", "0@14 \u22122/Graze 450"]);
+        expect(told(cues)).toEqual(["0@12 \u22123 400", "0@14 \u22122/Graze 850"]);
     });
 
-    it("calls a miss a miss, on the target where it stood", () => {
-        const miss: BattleEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 90, result: "miss", damage: 0, reaction: false };
-        const [cue] = battleCues([miss], before);
-        expect(cue).toMatchObject({ fighter: 0, square: 10, value: "Miss", tone: "miss", start: 0, length: HIT_TEXT_MS });
+    it("calls a miss a miss, on the target where it stood, as the arrow flies past", () => {
+        const cues = battleCues([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "miss", damage: 0, reaction: false }], before);
+        expect(only(cues, "flight")).toMatchObject([{ missile: "arrow", from: 50, to: 10, result: "miss" }]);
+        expect(only(cues, "text")).toMatchObject([{ fighter: 0, square: 10, value: "Miss", tone: "miss", start: FLIGHT_MS.arrow, length: HIT_TEXT_MS }]);
     });
 
-    it("hits everyone a fireball lands on at once, names the burning under each, and downs after the damage", () => {
-        const cues = told([
+    it("flies the Mage's shot as a bolt, quicker than an arrow", () => {
+        const cues = battleCues([{ kind: "shot", fighter: 3, target: 0, chance: 60, result: "hit", damage: 3, reaction: false }], before);
+        expect(only(cues, "flight")).toMatchObject([{ missile: "bolt", from: 70, to: 10, start: 0, land: FLIGHT_MS.bolt }]);
+        expect(only(cues, "text")[0].start).toBe(FLIGHT_MS.bolt);
+    });
+
+    it("slashes across a struck target, and its damage rises as the slash lands", () => {
+        const cues = battleCues([{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: false }], before);
+        const [slash] = only(cues, "slash");
+        expect(slash).toMatchObject({ square: 50, start: 0 });
+        expect(only(cues, "text")[0].start).toBeGreaterThan(slash.start);
+    });
+
+    it("flies a fireball to its square and bursts it over the 3×3, hitting everyone at once, and downs after the damage", () => {
+        const cues = battleCues([
             { kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 },
             { kind: "downed", fighter: 1, by: 3 },
             { kind: "scored", player: "b", points: 4, reason: "knockout" },
             { kind: "effect", fighter: 2, effect: "burning", change: "applied" },
             { kind: "blasted", fighter: 3, squares: [56] },
-        ]);
-        expect(cues).toEqual(["1@50 \u22123 0", "2@60 \u22123/Burning 0", "1@50 Down 450"]);
+        ], before);
+        const land = FLIGHT_MS.fireball;
+        expect(only(cues, "flight")).toMatchObject([{ missile: "fireball", from: 70, to: 55, result: "landed", start: 0, land }]);
+        expect(only(cues, "burst")).toMatchObject([{ burst: "fire", at: 55, radius: 1, start: land }]);
+        expect(told(cues)).toEqual([`1@50 \u22123 ${land}`, `2@60 \u22123/Burning ${land}`, `1@50 Down ${land + 450}`]);
+        // The one it downs stands as it was until the fireball lands on it.
+        const [fall] = only(cues, "fall");
+        expect(fall).toMatchObject({ fighter: { id: 1, character: "archer", hp: before[1].hp, square: 50 }, start: land });
+        // And the cover it blasts goes as the burst fades.
+        const [scorch] = only(cues, "scorch");
+        expect(scorch.squares).toEqual([56]);
+        expect(scorch.start).toBeGreaterThan(land);
+        expect(scorch.start).toBeLessThan(land + only(cues, "burst")[0].length);
     });
 
-    it("names what a flask that does no damage puts on, on everyone it lands on at once", () => {
-        const cues = told([
+    it("downs a mover where an overwatch shot caught it, standing until the arrow lands", () => {
+        const cues = battleCues([
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
+            { kind: "downed", fighter: 0, by: 1 },
+        ], before);
+        expect(only(cues, "fall")).toMatchObject([{ fighter: { id: 0, square: 12 }, start: FLIGHT_MS.arrow }]);
+    });
+
+    it("names what a flask that does no damage puts on, on everyone it lands on at once, as it bursts", () => {
+        const cues = battleCues([
             { kind: "thrown", fighter: 0, item: "thunderFlask", at: 55, targets: [1, 2], damage: 0 },
             { kind: "effect", fighter: 1, effect: "stunned", change: "applied" },
             { kind: "effect", fighter: 2, effect: "stunned", change: "refreshed" },
-        ]);
-        expect(cues).toEqual(["1@50 Stunned 0", "2@60 Stunned 0"]);
+        ], before);
+        const land = FLIGHT_MS.thunderFlask;
+        expect(only(cues, "burst")).toMatchObject([{ burst: "thunder", at: 55, radius: 1, start: land }]);
+        expect(told(cues)).toEqual([`1@50 Stunned ${land}`, `2@60 Stunned ${land}`]);
+    });
+
+    it("bursts a fire flask over its one square, and a smoke pot that hits nobody still flies and puffs", () => {
+        const fire = battleCues([{ kind: "thrown", fighter: 0, item: "fireFlask", at: 55, targets: [], damage: 2 }], before);
+        expect(only(fire, "burst")).toMatchObject([{ burst: "fire", radius: 0 }]);
+        const smoke = battleCues([{ kind: "thrown", fighter: 0, item: "smokePot", at: 55, targets: [], damage: 0 }], before);
+        expect(only(smoke, "flight")).toMatchObject([{ missile: "smokePot", from: 10, to: 55 }]);
+        expect(only(smoke, "burst")).toMatchObject([{ burst: "smoke", radius: 1 }]);
+        expect(only(smoke, "text")).toEqual([]);
     });
 
     it("shows a heal in green, curing what it clears, and burning with its mark", () => {
@@ -455,16 +506,17 @@ describe("battleCues", () => {
             { kind: "hunkered", fighter: 0 },
             { kind: "watching", fighter: 1, banked: 4 },
             { kind: "scored", player: "a", points: 5, reason: "centre" },
-            { kind: "thrown", fighter: 0, item: "smokePot", at: 55, targets: [], damage: 0 },
         ], before)).toEqual([]);
     });
 
-    it("fits however much an action set off into three seconds", () => {
-        const strikes: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "struck", fighter: 0, target: 1, damage: 1, reaction: false }));
-        const cues = battleCues(strikes, before);
-        expect(cues).toHaveLength(12);
+    it("fits however much an action set off into three seconds, every flight still landing as its text rises", () => {
+        const shots: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: true }));
+        const cues = battleCues(shots, before);
         expect(Math.max(...cues.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
+        const flights = only(cues, "flight"), texts = only(cues, "text");
+        expect(texts).toHaveLength(12);
+        flights.forEach((flight, i) => expect(Math.abs(flight.start + flight.land - texts[i].start)).toBeLessThanOrEqual(1));
         // Still in order, and still one after another.
-        expect(cues.every((cue, i) => i === 0 || cue.start > cues[i - 1].start)).toBe(true);
+        expect(texts.every((cue, i) => i === 0 || cue.start > texts[i - 1].start)).toBe(true);
     });
 });

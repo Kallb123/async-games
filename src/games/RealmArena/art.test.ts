@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { EFFECT_IDS, ITEM_IDS } from "./characters";
-import { ART_SHEETS, CLIPS, EFFECT_ART, GRASS, ITEM_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { ART_SHEETS, BURST_ART, CLIPS, EFFECT_ART, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { FLIGHT_MS } from "./ui";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
 function pngSize(file: string): { width: number; height: number } {
@@ -48,6 +49,17 @@ describe("ITEM_ART", () => {
         expect(cells.every(cell => cell.sheet === "items")).toBe(true);
         expect(new Set(cells.map(cell => cell.x)).size).toBe(ITEM_IDS.length + 1);
         expect(cells.every(cell => SPRITES.has(cell))).toBe(true);
+    });
+});
+
+describe("the battle visuals' art", () => {
+    it("gives everything that flies a cell of its own on the fx sheet, the slash the next, and every burst its art", () => {
+        const missiles = Object.keys(FLIGHT_MS) as (keyof typeof FLIGHT_MS)[];
+        expect(Object.keys(MISSILE_ART).sort()).toEqual([...missiles].sort());
+        const cells = [...missiles.map(missile => MISSILE_ART[missile]), SLASH_ART];
+        expect(cells.every(cell => cell.sheet === "fx" && cell.y === 0)).toBe(true);
+        expect(new Set(cells.map(cell => cell.x)).size).toBe(missiles.length + 1);
+        expect([...cells, ...Object.values(BURST_ART)].every(cell => SPRITES.has(cell))).toBe(true);
     });
 });
 
