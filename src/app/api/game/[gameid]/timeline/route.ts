@@ -7,6 +7,7 @@ import { buildTimeline, plannableCommands } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { attachHistoryReactionsToEach } from '@/utils/games/historyReactions';
+import { toHistoryDeltas } from '@/utils/games/historyDelta';
 import { gameCommandVersion } from '@/utils/ui/games';
 
 export interface IGetTimelineParams {
@@ -81,11 +82,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         // The requesting player is the viewer, so a game with hidden information
         // reconstructs their own hand across the timeline — and nobody else's.
         const timeline = await buildTimeline(gameData, userIdNameMap, plannedCommands, undefined, userId);
-        // One query across every snapshot's history, so a reaction stays on its
-        // line whichever point in the game a player is stepping through — not
-        // just the live one.
-        const snapshots = (await attachHistoryReactionsToEach(gameid, timeline.snapshots.map((snapshot) => snapshot.history)))
-            .map((history, i) => ({ ...timeline.snapshots[i], history }));
+        // Each snapshot's history goes out as the change from the one before
+        // it, not in full: whole, the response grows with the square of the
+        // game's length (see utils/games/historyDelta.ts). useTurnNavigation
+        // puts the full logs back together.
+        const deltas = toHistoryDeltas(timeline.snapshots.map((snapshot) => snapshot.history));
+        // One query across every snapshot's new lines, so a reaction stays on
+        // its line whichever point in the game a player is stepping through —
+        // not just the live one. A line a delta doesn't resend keeps the
+        // reactions it was first sent with, which are the same ones.
+        const added = await attachHistoryReactionsToEach(gameid, deltas.map((delta) => delta.added));
+        const snapshots = timeline.snapshots.map(({ history: _history, ...snapshot }, i) => ({
+            ...snapshot,
+            historyDelta: { added: added[i], dropped: deltas[i].dropped },
+        }));
         return NextResponse.json({ success: true, ...timeline, snapshots, userIdNameMap });
     } catch (error) {
         console.error("Failed to build timeline", error);

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
+import { fromHistoryDeltas, IHistoryDelta } from "@/utils/games/historyDelta";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 
 // One reconstructed point on the game timeline (mirrors the server ITurnSnapshot).
@@ -28,6 +29,13 @@ interface ITimelineResponse<TState, TOutcome> {
     currentIndex: number;
     snapshots: ITurnSnapshot<TState, TOutcome>[];
     resolvedPlannedCommands: unknown[];
+}
+
+// What the route actually sends: each snapshot's history as the change from the
+// one before it (see utils/games/historyDelta.ts), stitched back into full logs
+// on arrival.
+interface ITimelineWireResponse<TState, TOutcome> extends Omit<ITimelineResponse<TState, TOutcome>, "snapshots"> {
+    snapshots: (Omit<ITurnSnapshot<TState, TOutcome>, "history"> & { historyDelta: IHistoryDelta<IHistoryEntryResponse> })[];
 }
 
 export type NavMode = "live" | "recap" | "planning";
@@ -75,7 +83,12 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
                 if (!res.ok) {
                     throw new Error("Unable to load timeline");
                 }
-                const data: ITimelineResponse<TState, TOutcome> = await res.json();
+                const wire: ITimelineWireResponse<TState, TOutcome> = await res.json();
+                const histories = fromHistoryDeltas(wire.snapshots.map((snapshot) => snapshot.historyDelta));
+                const data: ITimelineResponse<TState, TOutcome> = {
+                    ...wire,
+                    snapshots: wire.snapshots.map(({ historyDelta: _historyDelta, ...snapshot }, i) => ({ ...snapshot, history: histories[i] })),
+                };
                 setSnapshots(data.snapshots);
                 setCurrentIndex(data.currentIndex);
                 return data;
