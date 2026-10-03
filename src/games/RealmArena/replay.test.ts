@@ -4,7 +4,7 @@ import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
-import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
+import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import { endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.3 PR 8: the review and the recap are read off
@@ -64,6 +64,20 @@ describe("Realm Arena replay", () => {
         const shooter = game.gameState.commandHistory.find(command => (command as { recordedRolls?: number[] }).recordedRolls?.length);
         delete (shooter as { recordedRolls?: number[] }).recordedRolls;
         await expect(noRandomness(() => buildTimeline(game, NAMES))).rejects.toThrow("replay consumed randomness");
+    });
+
+    it("carries each action's events on its step, without a shot's roll, and nothing on a muster (§26.2)", async () => {
+        const game = await playScriptedBattle();
+        const timeline = await buildTimeline(game, NAMES, [], undefined, "b");
+        const steps = timeline.snapshots.slice(1);
+        const outcomes = steps.map(snapshot => snapshot.outcome as IRealmArenaStepOutcome | undefined);
+        // The two musters: one sealed, and one that put both squads on the field.
+        expect(outcomes.slice(0, 2)).toEqual([undefined, undefined]);
+        const events = outcomes.flatMap(outcome => outcome?.events ?? []);
+        expect(events.some(event => event.kind === "shot")).toBe(true);
+        expect(events.every(event => !("roll" in event))).toBe(true);
+        // An action that did nothing carries nothing, rather than an empty list.
+        expect(outcomes.every(outcome => outcome === undefined || outcome.events.length > 0)).toBe(true);
     });
 
     it("titles each step of the review in the player's words", async () => {

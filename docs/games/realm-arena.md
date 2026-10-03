@@ -1,14 +1,15 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.18. Split out of Defender of the Realm in its third round of
+**Status:** v1.19. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
 first characters, and §15 the first battlefield, a ruined fort. §17 is the
 implementation plan and where it stands. Milestone A, free-for-all and C1–C3
-(status effects §20, items §21, destructible low cover §22) are built. Next is
-C4, battle visuals (§26), then C5, character mastery earned by what a character
-does (§23).
+(status effects §20, items §21, destructible low cover §22) are built. C4,
+battle visuals (§26), is under way: hit text is built, and the shot and the
+fireball in flight are next. Then C5, character mastery earned by what a
+character does (§23).
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -960,7 +961,7 @@ recap, a guide and a tutorial.
 | C1 | Status effects (§20) | Built |
 | C2 | Items bought at muster (§21) | Built |
 | C3 | Destructible low cover (§22) | Built |
-| **C4** | **Battle visuals: hit text, then the shot and the fireball in flight (§26)** | **Next** (round 10) |
+| **C4** | **Battle visuals: hit text, then the shot and the fireball in flight (§26)** | **Under way**: hit text built (§26.3) |
 | C5 | Character mastery, earned by what a character does (§23) | After C4. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, if it's chosen (§8) | After C |
@@ -1635,12 +1636,27 @@ sends (`BattleEvent` in `rules.ts`).
 
 ### 26.3 PRs
 
-1. **Hit text:** the timeline, the layer and the text cues, on the player's
-   own actions and in the review, with the opt-in that puts events on a
-   replayed snapshot. Reviewers: `caveman`, `croupier` (the events on the
-   snapshot), `gremlin` (a long review stepped through quickly).
+1. **Hit text.** *Built.* `battleCues` in `ui.ts` and `RealmArenaFx` on the
+   board, on the player's own actions and End turn as they come back, and on
+   each step of the review. What it settled:
+   - The beats are 0.45 s apart and a piece of text lasts a second, so five
+     fit the three seconds before anything is shortened.
+   - An effect goes under the number that came with it ("−3", "Burning").
+     A flask that does no damage names its effect on its own, on everyone it
+     lands on at once. A heal that clears an effect says "Cured" under it, and
+     one that only clears says "Cured" alone.
+   - A Raise is "+N" with "Raised" under it. A move, a stance, a watch, a
+     smoke pot and a score play nothing.
+   - The text rises from where the character stood when it happened, so an
+     overwatch hit rises mid-path, where PR 2's arrow will land.
+   - A replayed snapshot carries the events as `outcome` through the replay
+     adapter's `snapshotOutcome`, less a shot's roll, which the log never
+     tells. Only Realm Arena opts in.
+   - The player's own playback is dropped once it has played, so leaving a
+     review doesn't play it again.
 2. **The shot and the fireball:** the arrow and the fireball with its burst,
-   then the bolt, the flasks and the strike. Reviewer: `caveman`.
+   then the bolt, the flasks and the strike, and a figure downed by the action
+   staying drawn until its hit lands. Reviewer: `caveman`.
 
 The game isn't announced yet, so neither PR gets a What's new line (§17.1).
 
@@ -1692,3 +1708,4 @@ Realm, its sibling in the same world.
 | 1.16 | C2 PR 1 fills in items' rules (§21.4): items as data, the throw and the draught, the smoke kept on the thrower as the square it landed on rather than as an effect, a draught its carrier can drink, and a throw that lands on nobody undoable. |
 | 1.17 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |
 | 1.18 | Round 10 (§11.10). The implementation plan is summarised: §17 keeps the principles, the engine decisions and a few lines a PR, with a status table for Milestones B and C, and the engine and PR parts of C1–C3 (§20.3–§22.3) are cut to what was built. Mastery is earned by actions, as XP: a little for fighting in a battle, more for each attack, ability and item (§23.1), counted by a tally on each fighter (§23.3). Battle visuals come next, as C4 (§26): hit text, then the Archer's shot and the fireball in flight. Mastery becomes C5. |
+| 1.19 | C4 PR 1 fills in hit text (§26.3): the beats and the cap, an effect's name under its number, what a heal and a Raise show, text rising where the hit happened, and the events a replayed snapshot carries. A downed figure staying drawn until its hit lands moves to PR 2, with the arrow it's for. |

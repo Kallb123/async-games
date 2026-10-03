@@ -1,6 +1,6 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RealmArenaMapId } from "./maps";
-import type { Fighter, MusterPick } from "./rules";
+import type { Fighter, MusterPick, ToldEvent } from "./rules";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
 
@@ -40,4 +40,13 @@ export interface IRealmArenaSpecificGameStateResponse {
 
 export interface IRealmArenaGameDataResponse extends IGameDataResponse {
     specificGameState: IRealmArenaSpecificGameStateResponse;
+}
+
+/**
+ * What one step of a review did (§26.2), on its replayed snapshot: every event
+ * of an action or an End turn, for the board to play. Absent on a step that
+ * did nothing to play, a muster above all.
+ */
+export interface IRealmArenaStepOutcome {
+    events: ToldEvent[];
 }

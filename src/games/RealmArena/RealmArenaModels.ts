@@ -9,8 +9,8 @@ import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { POINTS_BUDGET, type PlayerCount } from "./characters";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
-import { battleRounds, pickOf, storedFighter, type Fighter, type MusterPick } from "./rules";
-import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "./apiModels";
+import { battleRounds, pickOf, storedFighter, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -253,6 +253,28 @@ export function gameStateToModel(
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
+    };
+}
+
+/**
+ * What a replayed snapshot carries of the command behind it (§26.2): the
+ * events an action or an End turn returned, for a review to play.
+ *
+ * Every player is sent these, and everything in them is theirs to see: they
+ * only exist once the battle has begun, when there is nothing hidden on the
+ * battlefield (§8), and the log already tells each one — except a shot's roll,
+ * which the log leaves out and so does this. A muster's outcome, where the one
+ * secret is, carries no events at all, and gets nothing here.
+ */
+export function stepOutcomeToModel(outcome: unknown): IRealmArenaStepOutcome | undefined {
+    const events = (outcome as { events?: unknown } | null)?.events;
+    if (!Array.isArray(events) || events.length === 0) return undefined;
+    return {
+        events: (events as BattleEvent[]).map((event): ToldEvent => {
+            if (event.kind !== "shot") return event;
+            const { roll: _roll, ...told } = event;
+            return told;
+        }),
     };
 }
 
