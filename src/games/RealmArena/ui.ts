@@ -383,6 +383,8 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                     ...(event.damage > 0 ? { sub: `${event.damage} damage each` } : {}),
                 }];
             }
+            case "blasted":
+                return [{ icon: "💥", title: `${capitalise(pluralize(event.squares.length, "square"))} of low cover blasted away`, sub: "Open ground now" }];
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":

@@ -1,5 +1,5 @@
 'use client'
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -16,7 +16,7 @@ import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
-import { battlefieldById } from "@/games/RealmArena/maps";
+import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
 import { actionSquares, fighterName } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
@@ -94,7 +94,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const seats = gameData?.gameState?.turnOrder ?? [];
-    const field = battlefieldById(gs?.map ?? '');
+    // The map with whatever has been blasted cleared from it (§22), as the
+    // rules read it. Keyed on the squares rather than the array, which is a
+    // new one on every refresh, so it's rebuilt — and the board lays its
+    // ground out again — only when something more is blasted.
+    const blastedKey = (gs?.blasted ?? []).join(',');
+    const map = gs?.map ?? '';
+    const field = useMemo(() => battlefieldOf(map, blastedKey ? blastedKey.split(',').map(Number) : []), [map, blastedKey]);
 
     const playerName = (userId?: string): string => userId === myUserId ? 'You' : nameForUserId(gameData, userId);
     const colourFor = (userId: string): string => playerColourForId(userId, userIdList);
@@ -305,6 +311,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 range: turn.range,
                                 path: turn.path,
                                 area: turn.area,
+                                blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.targets,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),

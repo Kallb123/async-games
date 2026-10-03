@@ -11,6 +11,7 @@ import { POINTS_BUDGET, type PlayerCount } from "./characters";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
 import { battleRounds, pickOf, storedFighter, type Fighter, type MusterPick } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "./apiModels";
+import type { Square } from "@/utils/games/battlefield/terrain";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -51,6 +52,13 @@ export interface IRealmArenaSpecificGameState {
      * away the size of a squad still sealed.
      */
     fighters: Fighter[];
+    /**
+     * The low cover blasted away so far, in the order it went (§22). The map
+     * stays code and this is all that's stored of what happened to it: every
+     * rule reads the map with these cleared (`battleOf`). Absent on a game
+     * that predates it.
+     */
+    blasted: Square[];
     /** The sealed squads, in seat order, while the muster lasts; emptied as the battle begins. */
     musters: IRealmArenaMuster[];
     /** By userId, every player from 0 at the start — an empty object would be dropped when the document is first inserted. */
@@ -142,6 +150,7 @@ export function buildInitialRealmArenaState(turnOrder: string[]): IRealmArenaSpe
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
+        blasted: [],
         musters: [],
         scores: Object.fromEntries(turnOrder.map(userId => [userId, 0])),
         undoStack: [],
@@ -173,6 +182,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
+            blasted: [Number],
             musters: Schema.Types.Mixed,
             scores: Schema.Types.Mixed,
             // ─── Undo (docs/undo.md) ───
@@ -236,6 +246,7 @@ export function gameStateToModel(
         battleRounds: rounds,
         budget: POINTS_BUDGET[seats.length as PlayerCount],
         fighters: (gs.fighters ?? []).map(storedFighter),
+        blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(pickOf) : null,
         scores: { ...gs.scores },

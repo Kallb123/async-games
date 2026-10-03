@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES } from "./characters";
-import { check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { blastedBy, check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -47,11 +47,11 @@ const RANGE: Partial<Record<Aim, RangeKind>> = {
 
 const isMoving = (aim: Aim) => aim === "move" || aim === "sneak";
 /** A fireball or a throw is aimed at a square, whoever stands on it. */
-const isAtSquare = (aim: Aim) => aim === "fireball" || aim === "throw";
+const isAtSquare = (aim: Aim): aim is "fireball" | "throw" => aim === "fireball" || aim === "throw";
 
 /** Every square what's thrown at `at` lands on: the 3×3 for a fireball or an item with an area, else that square alone. */
-function landing(state: BattleState, fighter: Fighter, aim: Aim, at: Square): Square[] {
-    return aim === "fireball" || (aim === "throw" && itemOf(fighter)?.area) ? areaAround(state.field, at) : [at];
+function landing(state: BattleState, fighter: Fighter, aim: "fireball" | "throw", at: Square): Square[] {
+    return aim === "fireball" || itemOf(fighter)?.area ? areaAround(state.field, at) : [at];
 }
 
 /** The action a draft has lined up, once it has everything the action needs. */
@@ -236,6 +236,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
         /** Every square a lined-up fireball or throw lands on. */
         area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
+        /** The low cover a lined-up fireball or fire flask would blast away (§22). */
+        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, aim === "fireball" ? ABILITIES.fireball : itemOf(fighter), draft.square) : null,
         action,
         verdict,
         send,

@@ -1451,7 +1451,10 @@ action's kind but what the action set off.
   nothing and every event it produced is in `PEACEFUL_EVENTS`: something
   moved, healed, rose, braced or went on watch, and nobody was struck, shot,
   downed or scored off. A throw counts only when it landed on nobody, which a
-  smoke pot never does (its cloud is on the thrower). Taking back an item's
+  smoke pot never does (its cloud is on the thrower). A fire flask that lands
+  on nobody but blasts low cover away (realm-arena.md §22) still counts: the
+  cover hurt nobody, and the snapshot holds what was blasted, so it comes back
+  too. Taking back an item's
   use puts the item back, since the snapshot holds it like everything else. `RealmArenaAct` declares
   `readonly undoable = true`; the source scan in
   `src/games/RealmArena/undo.test.ts` holds the list to that one command, and

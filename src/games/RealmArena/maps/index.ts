@@ -4,7 +4,7 @@
 // id rather than the map, so the map stays code and a fix to it reaches every
 // battle — which is also why the id, once used, can never be renamed.
 
-import type { Battlefield } from "@/utils/games/battlefield/terrain";
+import { battlefieldWith, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { FOUR_GATE_FORT } from "./fourGateFort";
 import { RING_FORT } from "./ringFort";
 import { RUINED_FORT } from "./ruinedFort";
@@ -35,4 +35,14 @@ export function mapForPlayers(playerCount: number): RealmArenaMapId {
 /** The battlefield a stored id names; the default for an id no release knows, so a battle can always be read. */
 export function battlefieldById(id: string): Battlefield {
     return Object.hasOwn(REALM_ARENA_MAPS, id) ? REALM_ARENA_MAPS[id as RealmArenaMapId] : REALM_ARENA_MAPS[DEFAULT_MAP];
+}
+
+/**
+ * The battlefield as it stands in a battle: its map, with the low cover
+ * blasted so far cleared to scorched ground (docs/games/realm-arena.md §22).
+ * What every rule reads, on the server and the board alike. A battle stored
+ * before anything could be blasted has no list, and nothing blasted.
+ */
+export function battlefieldOf(id: string, blasted: readonly Square[] | undefined): Battlefield {
+    return battlefieldWith(battlefieldById(id), blasted ?? []);
 }

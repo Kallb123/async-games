@@ -209,8 +209,9 @@ resolution, and never touches the master. Kingdom Builder's world map
 single tile sheet, so run `npm run kb-atlas` instead and commit the
 `public/art/kingdombuilder/v2/` files and
 `src/games/KingdomBuilder/terrainAtlas.json` it writes. Art drawn as an SVG
-rather than exported — Realm Arena's effect and item marks — keeps the SVG as
-its master and renders the served PNG from it: run `npm run ra-marks`.
+rather than exported — Realm Arena's effect and item marks, and its scorched
+ground — keeps the SVG as its master and renders the served PNG from it: run
+`npm run ra-marks`.
 
 ## Design system conventions
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId } from "./characters";
+import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/utils/games/battlefield/terrain";
+import { CHARACTERS, ITEMS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    ACTION_POINTS, act, afflicted, areaAround, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
+    ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
     newFighter, pickOf, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
@@ -901,5 +901,57 @@ describe("items (§21)", () => {
     it("are public on the battlefield: a fighter read back from before items carries none", () => {
         const { item: _, ...old } = fighter(1, "a", "scout", 0);
         expect(storedFighter(old as Fighter).item).toBeNull();
+    });
+});
+
+describe("blasting low cover (§22)", () => {
+    // Rubble and a low wall to either side of (4, 2), a wall above it, and
+    // more rubble out of reach of anything aimed there.
+    const field = fieldOf(["..........", "....#.....", "...,.o....", "..........", "........,."]);
+    const fireball = (target: number): Action => ({ kind: "fireball", fighter: 1, at: target });
+
+    it("a fireball blasts every square of low cover in its 3×3, and never a wall", () => {
+        const mage = fighter(1, "a", "mage", at(field, 0, 2));
+        const { events } = run({ field, fighters: [mage] }, "a", fireball(at(field, 4, 2)));
+        expect(blastedIn(events)).toEqual([at(field, 3, 2), at(field, 5, 2)]);
+        expect(events.at(-1)).toEqual({ kind: "blasted", fighter: 1, squares: [at(field, 3, 2), at(field, 5, 2)] });
+    });
+
+    it("happens after the damage, so it's told last, and blasts nothing that's already gone", () => {
+        const mage = fighter(1, "a", "mage", at(field, 0, 2));
+        const enemy = fighter(2, "b", "scout", at(field, 4, 3), { hp: 2 });
+        const { events } = run({ field, fighters: [mage, enemy] }, "a", fireball(at(field, 4, 2)));
+        expect(events.map(event => event.kind)).toEqual(["fireball", "downed", "scored", "blasted"]);
+
+        const cleared = battlefieldWith(field, [at(field, 3, 2), at(field, 5, 2)]);
+        const again = run({ field: cleared, fighters: [mage] }, "a", fireball(at(field, 4, 2)));
+        expect(again.events.some(event => event.kind === "blasted")).toBe(false);
+    });
+
+    it("a fire flask blasts the low cover on and next to the square it lands on, though it only hurts whoever is on that one", () => {
+        const scout = fighter(1, "a", "scout", at(field, 4, 4), { item: "fireFlask" });
+        const { events } = run({ field, fighters: [scout] }, "a", { kind: "throw", fighter: 1, at: at(field, 4, 3) });
+        expect(events).toEqual([
+            { kind: "thrown", fighter: 1, item: "fireFlask", at: at(field, 4, 3), targets: [], damage: 2 },
+            { kind: "blasted", fighter: 1, squares: [at(field, 3, 2), at(field, 5, 2)] },
+        ]);
+    });
+
+    it("nothing else blasts: not a thunder flask, nor a smoke pot", () => {
+        const state = (item: ItemId): BattleState => ({ field, fighters: [fighter(1, "a", "scout", at(field, 4, 4), { item })] });
+        for (const item of ["thunderFlask", "smokePot"] as const) {
+            expect(blastedBy(field, ITEMS[item], at(field, 4, 2))).toEqual([]);
+            expect(blastedIn(run(state(item), "a", { kind: "throw", fighter: 1, at: at(field, 4, 3) }).events)).toEqual([]);
+        }
+    });
+
+    it("leaves the target its cover for the shot that blasted it, and takes it away for the next", () => {
+        // A Knight behind the rubble at (3, 2), from an archer due west of it.
+        const archer = fighter(1, "a", "archer", at(field, 0, 2));
+        const knight = fighter(2, "b", "knight", at(field, 4, 2));
+        expect(shotOdds({ field, fighters: [archer, knight] }, archer, knight, "attack")).toMatchObject({ cover: "half" });
+        const cleared = battlefieldWith(field, [at(field, 3, 2)]);
+        expect(cleared.tiles[at(field, 3, 2)].terrain).toBe(TERRAIN["_"]);
+        expect(shotOdds({ field: cleared, fighters: [archer, knight] }, archer, knight, "attack")).toMatchObject({ flanked: true });
     });
 });

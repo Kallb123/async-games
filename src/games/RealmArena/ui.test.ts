@@ -345,6 +345,14 @@ describe("eventLines", () => {
         ]);
     });
 
+    it("tells the low cover a blast cleared, after what the blast did (§22)", () => {
+        const events: BattleEvent[] = [
+            { kind: "fireball", fighter: 0, at: 5, targets: [], damage: 3 },
+            { kind: "blasted", fighter: 0, squares: [4, 6] },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor).at(-1)).toEqual({ icon: "💥", title: "2 squares of low cover blasted away", sub: "Open ground now" });
+    });
+
     it("leads an effect put on, cleared or burning with the effect's mark", () => {
         const events: BattleEvent[] = [
             { kind: "effect", fighter: 0, effect: "burning", change: "applied" },

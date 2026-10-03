@@ -13,7 +13,7 @@ import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArena
 import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
-import { check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
+import { areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -64,6 +64,30 @@ export async function musterAll(game: RealmArenaTestGame): Promise<void> {
 }
 
 export const battleOf = (game: RealmArenaTestGame): BattleState => battleOfState(game.specificGameState);
+
+/**
+ * Somewhere for `thrower` to throw a fire flask that lands on nobody but
+ * blasts low cover (§22): it's given the flask and stood within throwing range
+ * of a square beside some cover, with nobody else in the 3×3 round that
+ * square. Returns the square to throw at.
+ */
+export function blastSpot(game: RealmArenaTestGame, thrower: Fighter): number {
+    thrower.item = "fireFlask";
+    const battle = battleOf(game);
+    const { field } = battle;
+    const clear = (square: number) => battle.fighters.every(one => one.id === thrower.id || distance(field, one.square, square) >= 2);
+    for (let aim = 0; aim < field.tiles.length; aim++) {
+        if (!field.tiles[aim].terrain.standable || !clear(aim) || !areaAround(field, aim).some(square => field.tiles[square].terrain.destructible)) continue;
+        for (const spot of areaAround(field, aim).flatMap(square => areaAround(field, square))) {
+            if (!field.tiles[spot].terrain.standable || areaAround(field, aim).includes(spot) || !clear(spot)) continue;
+            const placed = { ...battle, fighters: battle.fighters.map(one => one.id === thrower.id ? { ...one, square: spot } : one) };
+            if ("refused" in check(placed, thrower.owner, { kind: "throw", fighter: thrower.id, at: aim })) continue;
+            thrower.square = spot;
+            return aim;
+        }
+    }
+    throw new Error("nowhere to blast");
+}
 
 /** The enemy nearest a fighter, or undefined when none is standing. */
 function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {

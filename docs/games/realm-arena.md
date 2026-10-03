@@ -1724,6 +1724,48 @@ and opening ground.
 One PR: the rule, the helper, the event, the scorched squares on the board,
 and a line in the guide. Reviewer: `caveman`.
 
+*Filled in by the PR*, in `terrain.ts`, `characters.ts`, `rules.ts`,
+`RealmArenaLogic.ts`, `RealmArenaModels.ts`, `art.ts` and the board:
+
+- **Low cover is `destructible`**, a flag on its `TERRAIN` entries, and
+  scorched ground is the letter `_`, open ground under another name.
+  `battlefieldWith(field, blasted)` (`battlefield/terrain.ts`) clears every
+  square named that holds destructible terrain to scorched ground, level with
+  the ground it stood on, and ignores any other square, so no list it's
+  handed can blast a wall. Given nothing to clear, it hands back the map
+  itself.
+- **What blasts is data**: `blasts` on Fireball and on the fire flask, as
+  `area` and `effect` are, so whether a fireball should blast at all (§24,
+  question 4) is one edit. `blastedBy(field, what, at)` is the cover
+  something landing at a square would clear — every square of it in the 3×3
+  round that square — which the resolver blasts and the turn sheet previews
+  alike.
+- **The `blasted` event names the squares and who blasted them**, told after
+  the damage, the knock-outs and the effects. A square already gone isn't
+  blasted again, so a blast with no cover left in reach tells nothing.
+- **The state keeps `blasted`**, the squares in the order they went, and
+  `battlefieldOf(map, blasted)` (`maps/index.ts`) is the battlefield as it
+  stands: what `battleOf`, the board and the recap's tip all read. Absent on a battle from before it, it's
+  read as nothing blasted. It's on the wire for every viewer, as the
+  battlefield is, and a replay builds it again from the events.
+- **A fire flask that lands on nobody is still undoable** when it blasts
+  cover (`docs/undo.md`, "The eighth game"): the snapshot holds what was
+  blasted, and undo puts it back. A fireball never was undoable.
+- **Scorched ground is drawn from its own sheet**,
+  `public/art/realmarena/scorched.png`, rendered by `npm run ra-marks` from
+  `art-masters/realmarena/scorched.svg`: three kinds of charred earth, ash,
+  embers and chips of brick, cut to the square's footprint. On flat ground
+  the board lays it over the grass, square by square, before anything is
+  shaded; on raised ground it stands on the square's plinth as any terrain
+  does.
+- **Lined up, a fireball or a fire flask shades the cover it would blast** as
+  it shades the blast, and the turn sheet counts it ("Blasts away 2 squares
+  of low cover"). What an action did lists the squares blasted after the
+  rest, and the log says so too. The recap's rows are unchanged: a blast is
+  part of the fireball or the throw that made it.
+- **The guide says so** in its section on action points, beside the fireball
+  and the fire flask.
+
 ## 23. Character mastery (C4)
 
 *Agreed in round 7* (§11.7, answer 3): **playing a character unlocks more
@@ -1975,3 +2017,4 @@ Realm, its sibling in the same world.
 | 1.14 | C1 PR 1 fills in status effects' rules and engine (§20.4): the End turn begins the next turn, so burning can end the battle; heal is for an ally hurt or affected; a stunned character can't go on watch. |
 | 1.15 | C1 PR 2 fills in the board for status effects (§20.4): a drawn mark for each effect on figures, unit boxes and the selected character's card, the recap's row for burning as a turn begins, and the guide's text on burning. |
 | 1.16 | C2 PR 1 fills in items' rules (§21.4): items as data, the throw and the draught, the smoke kept on the thrower as the square it landed on rather than as an effect, a draught its carrier can drink, and a throw that lands on nobody undoable. |
+| 1.17 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |

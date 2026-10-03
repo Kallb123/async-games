@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildBattlefield, coordsOf, coverOfRise, distance, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { battlefieldWith, buildBattlefield, coordsOf, coverOfRise, distance, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { coverAgainst } from "./cover";
+import { pathCost } from "./pathfinding";
 
 const map = (overrides: Partial<BattlefieldMap>): BattlefieldMap => ({
     name: "Test field",
@@ -113,5 +115,36 @@ describe("distance", () => {
         expect(distance(field, 0, 9)).toBe(Math.hypot(1, 2));
         expect(distance(field, 9, 0)).toBe(distance(field, 0, 9));
         expect(distance(field, 5, 5)).toBe(0);
+    });
+});
+
+describe("battlefieldWith (realm-arena.md §22)", () => {
+    // Rubble, a low wall, a wall, a tree and a stair, on a rise of a quarter.
+    const field = buildBattlefield(map({ rows: [",o#Ts", "....."], elevation: ["11111", "00000"] }));
+
+    it("blasts low cover to scorched ground, level with the ground it stood on", () => {
+        const blasted = battlefieldWith(field, [0, 1]);
+        for (const square of [0, 1]) {
+            expect(blasted.tiles[square]).toEqual({ terrain: TERRAIN["_"], elevation: 1 });
+            expect(blasted.tiles[square].terrain).toMatchObject({ moveCost: 1, standable: true, height: 0, cover: "none", blocksSight: false });
+        }
+        // The map it was read from is left as it was.
+        expect(field.tiles[0].terrain).toBe(TERRAIN[","]);
+    });
+
+    it("never blasts anything but low cover, whatever it's asked to", () => {
+        const blasted = battlefieldWith(field, [2, 3, 4, 5, -1, 99, 0.5]);
+        expect(blasted).toBe(field);
+        expect(battlefieldWith(field, [])).toBe(field);
+        expect(battlefieldWith(field, [2, 0]).tiles.slice(1)).toEqual(field.tiles.slice(1));
+    });
+
+    it("takes away the cover it gave, and opens a way across it", () => {
+        const flat = buildBattlefield(map({ rows: ["...", ".,.", "..."] }));
+        const behind = 7, beyond = 1, left = 3, right = 5;
+        const blasted = battlefieldWith(flat, [4]);
+        expect(coverAgainst(flat, behind, beyond)).toBe("half");
+        expect(coverAgainst(blasted, behind, beyond)).toBe("none");
+        expect(pathCost(blasted, [left, 4, right])).toBeLessThan(pathCost(flat, [left, 4, right])!);
     });
 });

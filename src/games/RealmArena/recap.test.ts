@@ -22,6 +22,7 @@ function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): I
         battleRounds: 15,
         budget: 100,
         fighters: [],
+        blasted: [],
         mustered: ["a", "b"],
         myMuster: null,
         scores: { a: 0, b: 0 },

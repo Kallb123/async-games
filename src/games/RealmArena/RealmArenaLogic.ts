@@ -8,10 +8,11 @@ import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/uti
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
-import { battlefieldById } from "@/games/RealmArena/maps";
+import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import {
     ACTION_POINTS,
     act,
+    blastedIn,
     check,
     endTurn,
     isBattleOver,
@@ -49,9 +50,9 @@ import { pluralize } from "@/utils/ui/text";
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
-/** The battle as rules.ts reads it. */
+/** The battle as rules.ts reads it: the map, with what has been blasted cleared from it (§22). */
 export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
-    return { field: battlefieldById(gs.map), fighters: (gs.fighters ?? []).map(storedFighter) };
+    return { field: battlefieldOf(gs.map, gs.blasted), fighters: (gs.fighters ?? []).map(storedFighter) };
 }
 
 /**
@@ -97,7 +98,9 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
 // heal, a raise, a healing draught, and a throw that lands on nobody — a smoke
-// pot always does (§21.2) — the actions that roll nothing and hurt nobody.
+// pot always does (§21.2) — the actions that roll nothing and hurt nobody. A
+// fire flask that lands on nobody can still blast low cover away (§22), and
+// is still taken back whole: the snapshot holds what was blasted.
 // Never an attack of any kind (an attack, an aimed shot, a cleave, a fireball,
 // a flask that lands on someone): a shot rolls, and a strike, a fireball or a
 // flask hits someone the other side has seen it land on. Nor a move that sets
@@ -121,10 +124,11 @@ const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "h
 /**
  * What an undoable action may have done: everything but an attack landing, a
  * knock-out or the points for one. A heal or a draught clearing an effect is
- * an `effect` event, and so would a mark be (§20.3). A `thrown` event is
- * peaceful only when it hit nobody, which `peaceful` checks itself.
+ * an `effect` event, and so would a mark be (§20.3). Cover blasted away hurts
+ * nobody (§22). A `thrown` event is peaceful only when it hit nobody, which
+ * `peaceful` checks itself.
  */
-const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect"]);
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "blasted"]);
 
 /**
  * How many snapshots the stack keeps: a character's whole turn of one-AP
@@ -151,6 +155,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         phase: gs.phase,
         roundsPlayed: gs.roundsPlayed,
         fighters: (gs.fighters ?? []).map(storedFighter),
+        blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
         undoStack: [],
@@ -218,6 +223,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
                 : `, hitting ${pluralize(event.targets.length, "character")}${event.damage > 0 ? ` for ${event.damage}` : ""}`;
             return `threw a ${ITEMS[event.item].name.toLowerCase()} with ${name(event.fighter)}${hit}`;
         }
+        case "blasted": return `blasted away ${pluralize(event.squares.length, "square")} of low cover`;
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
@@ -437,6 +443,8 @@ export class RealmArenaAct implements IGameCommand {
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
         gs.fighters = fighters;
+        const blasted = blastedIn(events);
+        if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, narrate(events, battle.fighters, this.senderId)));
         if (before && peaceful(action, events, used)) commitUndo(gs, this, before);
@@ -476,6 +484,8 @@ export class RealmArenaUndo implements IGameCommand {
         const undoStack = gs.undoStack.slice(0, -1);
         const { undoStack: _undoStack, undoAnchorId: _undoAnchorId, ...restored } = entry.state;
         Object.assign(gs, restored);
+        // Every snapshot is cloned with the list, but nothing is left to rest on that.
+        gs.blasted = restored.blasted ?? [];
         gs.undoStack = undoStack;
         gs.undoAnchorId = this.id;
 

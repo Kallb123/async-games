@@ -78,6 +78,8 @@ export interface Ability {
     hp?: number;
     /** What it leaves on everyone it hits (Fireball's burning). */
     effect?: EffectId;
+    /** Blasts away the low cover in the 3×3 round where it lands, after its damage (Fireball, §22). */
+    blasts?: true;
     description: string;
 }
 
@@ -86,7 +88,7 @@ export const ABILITIES = {
     shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to the Knight count as in half cover until its next turn" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
-    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", description: "Hits every character in a 3×3 area, friend or foe, and sets them burning" },
+    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: true, description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
     heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them, and clear burning, slowed and stunned" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
 } as const satisfies Record<AbilityId, Ability>;
@@ -155,6 +157,8 @@ export interface Item {
     damage?: number;
     /** What it leaves on each character it hits, friend or foe. */
     effect?: Affliction;
+    /** Blasts away the low cover on and next to the square it lands on, after its damage (the fire flask, §22). */
+    blasts?: true;
     /**
      * Taken off every shot at a character standing in the smoke pot's cloud,
      * until the thrower's next turn — and overwatch can't fire at all at a
@@ -167,7 +171,7 @@ export interface Item {
 }
 
 export const ITEMS = {
-    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", description: "Thrown at one square: 2 damage to whoever is there, and sets them burning" },
+    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", blasts: true, description: "Thrown at one square: 2 damage to whoever is there, sets them burning, and blasts away the low cover on and next to it" },
     thunderFlask: { name: "Thunder flask", points: 5, ap: 2, range: THROW_RANGE, area: true, effect: "stunned", description: "Thrown at a 3×3 area: stuns everyone in it, friend or foe" },
     smokePot: { name: "Smoke pot", points: 5, ap: 1, range: THROW_RANGE, area: true, hitPenalty: 20, description: "Thrown at a 3×3 area: until the thrower's next turn, −20% to hit anyone in it, and no overwatch at anyone stepping into it" },
     healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed and stunned" },
