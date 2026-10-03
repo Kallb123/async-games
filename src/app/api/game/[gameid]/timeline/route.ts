@@ -7,6 +7,7 @@ import { buildTimeline, plannableCommands } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { attachHistoryReactionsToEach } from '@/utils/games/historyReactions';
+import { withHistoryDeltas } from '@/utils/games/historyDelta';
 import { gameCommandVersion } from '@/utils/ui/games';
 
 export interface IGetTimelineParams {
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     }
 
     let plannedCommands: IGameCommand[] = [];
+    let historyDeltas = false;
     try {
         const body = await request.text();
         if (body) {
@@ -33,6 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
             if (Array.isArray(parsed?.plannedCommands)) {
                 plannedCommands = parsed.plannedCommands as IGameCommand[];
             }
+            historyDeltas = parsed?.historyDeltas === true;
         }
     } catch {
         return NextResponse.json({}, { status: 400, statusText: "Invalid request body" });
@@ -84,8 +87,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         // One query across every snapshot's history, so a reaction stays on its
         // line whichever point in the game a player is stepping through — not
         // just the live one.
-        const snapshots = (await attachHistoryReactionsToEach(gameid, timeline.snapshots.map((snapshot) => snapshot.history)))
+        const withReactions = (await attachHistoryReactionsToEach(gameid, timeline.snapshots.map((snapshot) => snapshot.history)))
             .map((history, i) => ({ ...timeline.snapshots[i], history }));
+        // Each history in full makes the response grow with the square of the
+        // game's length, so a client that can read them gets each one as the
+        // change from the snapshot before it (utils/games/historyDelta.ts). One
+        // that doesn't ask is a page loaded before deltas shipped, and still
+        // gets every history whole.
+        const snapshots = historyDeltas ? withHistoryDeltas(withReactions) : withReactions;
         return NextResponse.json({ success: true, ...timeline, snapshots, userIdNameMap });
     } catch (error) {
         console.error("Failed to build timeline", error);
