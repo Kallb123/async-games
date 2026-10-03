@@ -217,6 +217,17 @@ describe("act", () => {
         expect(state.fighters).toEqual(before);
     });
 
+    it("turns a mover to face the way it last stepped, and leaves anyone else facing as they were", () => {
+        const field = fieldOf();
+        const state: BattleState = { field, fighters: [fighter(1, "a", "scout", at(field, 0, 0)), fighter(2, "a", "knight", at(field, 5, 4), { facing: 6 })] };
+        // Along the columns, then down a diagonal: it ends facing the diagonal.
+        const path = [at(field, 0, 0), at(field, 1, 0), at(field, 2, 1)];
+        const { byId } = run(state, "a", { kind: "move", fighter: 1, path });
+        expect(byId(1).facing).toBe(1);
+        expect(byId(2).facing).toBe(6);
+        expect(run(state, "a", { kind: "hunker", fighter: 1 }).byId(1)).not.toHaveProperty("facing");
+    });
+
     it("throws on an action check refuses", () => {
         const field = fieldOf();
         expect(() => act({ field, fighters: [fighter(1, "a", "knight", 0)] }, "b", { kind: "hunker", fighter: 1 }, noRolls)).toThrow("That isn't one of your characters");
@@ -297,7 +308,8 @@ describe("reactions (§13.4)", () => {
             { kind: "moved", fighter: 2, path: path.slice(1), sneaking: false },
         ]);
         expect(byId(1).banked).toBe(2);
-        expect(byId(2)).toMatchObject({ hp: 4, square: path[3] });
+        // Up the board, then back along the columns: the shot doesn't stop it turning.
+        expect(byId(2)).toMatchObject({ hp: 4, square: path[3], facing: 4 });
     });
 
     it("come nearest watcher first, and not from one without 2 AP banked", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { battlefieldWith, buildBattlefield, coordsOf, coverOfRise, distance, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
+import { battlefieldWith, buildBattlefield, coordsOf, coverOfRise, distance, facingTowards, FULL_HEIGHT, riseOf, squareAt, TERRAIN, type BattlefieldMap } from "./terrain";
 import { coverAgainst } from "./cover";
 import { pathCost } from "./pathfinding";
 
@@ -104,6 +104,23 @@ describe("squareAt / coordsOf", () => {
         expect(squareAt(field, -1, 0)).toBeUndefined();
         expect(squareAt(field, 4, 0)).toBeUndefined();
         expect(squareAt(field, 0, 3)).toBeUndefined();
+    });
+});
+
+describe("facingTowards", () => {
+    const field = buildBattlefield(map({ rows: ["...", "...", "..."] }));
+    const middle = squareAt(field, 1, 1)!;
+
+    it("turns 45° a facing, from along the columns towards the rows", () => {
+        const steps: [number, number][] = [[2, 1], [2, 2], [1, 2], [0, 2], [0, 1], [0, 0], [1, 0], [2, 0]];
+        expect(steps.map(([col, row]) => facingTowards(field, middle, squareAt(field, col, row)!))).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it("rounds a long way to the nearest facing, and faces 0 towards itself", () => {
+        const wide = buildBattlefield(map({ rows: [".........", "........."] }));
+        expect(facingTowards(wide, 0, squareAt(wide, 8, 1)!)).toBe(0);
+        expect(facingTowards(wide, squareAt(wide, 8, 1)!, 0)).toBe(4);
+        expect(facingTowards(field, middle, middle)).toBe(0);
     });
 });
 

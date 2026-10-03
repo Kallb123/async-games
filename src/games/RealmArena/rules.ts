@@ -31,7 +31,7 @@
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, MAX_OF_EACH, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
@@ -83,6 +83,12 @@ export interface Fighter {
     character: CharacterId;
     /** Where it stands, or where it fell. */
     square: Square;
+    /**
+     * The way it last stepped, which the board draws it facing. Only for the
+     * eye: no rule reads it — flanking doesn't care which way a character
+     * faces — and it's absent until the character first moves.
+     */
+    facing?: Facing;
     /** 0 means it's down: out of the battle unless a Cleric raises it (§13.5). */
     hp: number;
     /** AP left to spend this turn. */
@@ -719,12 +725,16 @@ function resolver(state: BattleState, roll: Roll) {
  * Walks a path, resolving each reaction as it comes (nearest watcher first),
  * and stops the mover where a reaction downs it (§17.2). The walk is told as
  * `moved` segments broken by the reactions, so a replay can play it in order.
+ * The mover turns to face each step it takes, so it ends facing its last.
  */
 function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fighter, path: Square[], sneaking: boolean) {
     const reactions = sneaking ? [] : reactionsTo(state, mover, path);
     let from = 0;
     const moveTo = (step: number) => {
-        if (step > from) run.events.push({ kind: "moved", fighter: mover.id, path: path.slice(from, step + 1), sneaking });
+        if (step > from) {
+            run.events.push({ kind: "moved", fighter: mover.id, path: path.slice(from, step + 1), sneaking });
+            mover.facing = facingTowards(state.field, path[step - 1], path[step]);
+        }
         mover.square = path[step];
         from = step;
     };

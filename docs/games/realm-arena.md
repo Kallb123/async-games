@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.24. Split out of Defender of the Realm in its third round of
+**Status:** v1.25. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -10,7 +10,8 @@ implementation plan and where it stands. Milestone A, free-for-all and C1–C3
 is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
 and the strikes played out on the board. So is C5, character mastery earned
 by what a character does (§23): mastery from results, the rank-1 options, and
-the screens that show them.
+the screens that show them. Figures are drawn as character art, facing the
+way they last stepped (§26.5).
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -1805,6 +1806,16 @@ The game isn't announced yet, so neither PR gets a What's new line (§17.1).
 2. **Should figures walk their path?** Nobody has asked for it, but it would
    make an overwatch shot mid-move easier to read.
 
+### 26.5 Figures
+
+Each figure is its character's art — rendered from a model in code
+(`art-masters/realmarena/characters`, `npm run ra-characters`) — in its
+owner's colour, from whichever of eight directions it faces. It faces the way
+it last stepped (`Fighter.facing`, set as it walks); before its first move it
+faces the middle of the map. Facing is only for the eye: no rule reads it, so
+there's no flanking or facing bonus. A downed figure lies on its square, and a
+figure on watch stands in a dashed ring.
+
 ---
 
 ## Appendix: Working title
@@ -1852,3 +1863,4 @@ Realm, its sibling in the same world.
 | 1.22 | C5 PR 2 fills in options (§23.3): options are data, swapping a fighter's kit, checked at muster against the battle's own snapshot of ranks, which the response carries; each is an action of its own; Demolish strikes everyone beside the cover but the Knight; Purify reaches the Cleric too and clears every affliction but no stance; a mark, a Purify and a Demolish on nobody can be undone. |
 | 1.23 | C5 PR 3 fills in the screens (§23.3): the muster offers a character's options above its items, locked ones greyed with the rank that unlocks them; the profile lists all six characters' XP, rank and unlocked options for a player who has fought, read under a time limit and failing soft; the guide tells how mastery is earned. C5 is built. |
 | 1.24 | The muster buys items on the squad step, beside the characters, so every point is spent on one screen; placing hands them out one each and lets the player pass them between characters (§21.3). |
+| 1.25 | Figures are drawn as character art in the owner's colour, facing the way they last stepped, lying down once downed (§26.5). Facing is only visual: no rule reads it. |

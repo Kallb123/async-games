@@ -18,6 +18,7 @@
     "kb-atlas": "node scripts/kingdombuilder-atlas.mjs",
     "optimise-art": "node scripts/optimise-art.mjs",
     "ra-marks": "node scripts/realmarena-marks.mjs",
+    "ra-characters": "tsx scripts/realmarena-characters.mjs",
     "performance:budget": "node scripts/check-performance-budget.mjs"
   },
   "dependencies": {
