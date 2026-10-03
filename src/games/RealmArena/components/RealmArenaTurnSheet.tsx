@@ -8,7 +8,8 @@ import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
-import { abilityWait, CHARACTER_MARK, rangeSquares, targetsOf, weaponLine, whoseName, type TargetKind } from '@/games/RealmArena/ui';
+import { abilityWait, rangeSquares, targetsOf, whoseName, type TargetKind } from '@/games/RealmArena/ui';
+import { ABILITY_MARK, CHARACTER_MARK, weaponLine } from '@/games/RealmArena/roster';
 import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -67,13 +68,13 @@ const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs
     sneak: { icon: '🤫', tag: 'Sneak' },
     shieldWall: { icon: '🛡️', tag: 'Raise it' },
     fireball: { icon: '🔥', tag: 'Aim' },
-    cleave: { icon: '✦', tag: 'Aim', needs: 'attack', least: 2 },
-    aimedShot: { icon: '✦', tag: 'Aim', needs: 'aimedShot' },
+    cleave: { icon: ABILITY_MARK, tag: 'Aim', needs: 'attack', least: 2 },
+    aimedShot: { icon: ABILITY_MARK, tag: 'Aim', needs: 'aimedShot' },
     heal: { icon: '✚', tag: 'Aim', needs: 'heal' },
     raise: { icon: '✚', tag: 'Aim', needs: 'raise' },
     shieldBash: { icon: '🛡️', tag: 'Aim', needs: 'shieldBash' },
     demolish: { icon: '💥', tag: 'Aim', needs: 'cover' },
-    cripplingShot: { icon: '✦', tag: 'Aim', needs: 'cripplingShot' },
+    cripplingShot: { icon: ABILITY_MARK, tag: 'Aim', needs: 'cripplingShot' },
     huntersMark: { icon: '◎', tag: 'Aim', needs: 'huntersMark' },
     purify: { icon: '✚', tag: 'Purify' },
 };

@@ -6,7 +6,8 @@ import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
 import { abilitiesOf, isStanding, weaponOf, type Fighter } from '@/games/RealmArena/rules';
-import { abilityWait, CHARACTER_MARK, effectsOn, watchStatus, weaponLine } from '@/games/RealmArena/ui';
+import { abilityWait, effectsOn, watchStatus } from '@/games/RealmArena/ui';
+import { ABILITY_MARK, CHARACTER_MARK, weaponLine } from '@/games/RealmArena/roster';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { SpriteImage } from './RealmArenaTerrain';
 
@@ -47,7 +48,7 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
                         return (
                             <ListRow
                                 key={id}
-                                icon="✦"
+                                icon={ABILITY_MARK}
                                 title={ability.name}
                                 sub={`${ability.ap} AP · ${ability.description}`}
                                 action={<span className="ag-tag ag-tag--quiet">{abilityWait(fighter, id) ?? 'Ready'}</span>}

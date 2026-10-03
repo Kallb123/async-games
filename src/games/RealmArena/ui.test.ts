@@ -6,10 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import {
-    abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
-    reactionPreviews, squadCounts, squadOf, targetsOf, weaponLine, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement,
-} from "./ui";
+import { abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading, reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -405,14 +402,6 @@ describe("eventLines", () => {
     it("calls a missed shot a miss", () => {
         const [line] = eventLines([{ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 95, result: "miss", damage: 0, reaction: false }], fighters, "b", nameFor);
         expect(line).toMatchObject({ title: "Miss", sub: "Alice's Archer at your Knight · 80% to hit" });
-    });
-});
-
-describe("weaponLine", () => {
-    it("says what a weapon leaves on a hit, when it leaves anything (§23.2)", () => {
-        expect(weaponLine(kitOf("mage").weapon)).toBe("70% · range 10 · 3 damage");
-        expect(weaponLine(kitOf("mage", "frostBolt").weapon)).toBe("70% · range 10 · 2 damage · slowed on a hit");
-        expect(weaponLine(kitOf("knight").weapon)).toBe("Melee · 4 damage");
     });
 });
 

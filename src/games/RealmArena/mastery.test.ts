@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getReplayAdapter } from "@/utils/games/replay";
 import { RealmArenaGameResultModel } from "@/utils/mongodb/GameResultData";
-import { RANK_XP, rankOf, xpOf, type MasterySnapshot } from "./mastery";
+import { nextRankXp, RANK_XP, rankOf, xpOf, type MasterySnapshot } from "./mastery";
 import { masterySnapshotOf } from "./masteryRecord";
 import {
     computeRealmArenaResultStats,
@@ -33,6 +33,13 @@ describe("XP and ranks (§23.1)", () => {
             expect(rankOf(threshold)).toBe(index + 1);
         }
         expect(rankOf(10_000)).toBe(3);
+    });
+
+    it("names the XP the next rank is reached at, until the last is", () => {
+        expect(nextRankXp(0)).toBe(RANK_XP[0]);
+        expect(nextRankXp(RANK_XP[0])).toBe(RANK_XP[1]);
+        expect(nextRankXp(RANK_XP[2] - 1)).toBe(RANK_XP[2]);
+        expect(nextRankXp(RANK_XP[2])).toBeUndefined();
     });
 });
 

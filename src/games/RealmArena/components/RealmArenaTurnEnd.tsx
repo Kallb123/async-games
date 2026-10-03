@@ -6,7 +6,8 @@ import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import Section from '@/components/ui/Section';
 import UndoButton from '@/components/ui/UndoButton';
 import { isStanding, REACTION_COST, weaponOf, type Fighter } from '@/games/RealmArena/rules';
-import { CHARACTER_MARK, fighterName } from '@/games/RealmArena/ui';
+import { fighterName } from '@/games/RealmArena/ui';
+import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 interface RealmArenaTurnEndProps {
     fighters: readonly Fighter[];

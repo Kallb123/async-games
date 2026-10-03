@@ -6,23 +6,10 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item } from "./characters";
+import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
-
-/**
- * The placeholder figure each character stands as until PR 9's marked figures
- * (docs/games/realm-arena.md §17.3): one glyph, drawn on a disc in its owner's
- * colour, so two of the six never read alike at a glance.
- */
-export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
-    manAtArms: "🗡️",
-    knight: "🛡️",
-    archer: "🏹",
-    scout: "👟",
-    mage: "🔥",
-    cleric: "✚",
-};
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -155,13 +142,6 @@ export function hpFraction(fighter: Fighter): number {
     return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
 }
 
-/** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
-export function weaponLine(weapon: Weapon): string {
-    if (weapon.kind === "melee") return `Melee · ${weapon.damage} damage`;
-    const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
-    return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
-}
-
 /** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */
 export function abilityWait(fighter: Fighter, id: AbilityId): string | undefined {
     if (fighter.spent.includes(id)) return "Used";
@@ -170,9 +150,6 @@ export function abilityWait(fighter: Fighter, id: AbilityId): string | undefined
 }
 
 // ─── Mustering (§17.3 PR 6) ─────────────────────────────────────────────────
-
-/** The six characters in the order the muster lists them: §13.6's table's. */
-export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 /** How many of each character a squad holds — what the muster's steppers read. */
 export type SquadCounts = Record<CharacterId, number>;

@@ -5,7 +5,8 @@ import { CHARACTERS } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
-import { apPips, attackOptions, canAct, CHARACTER_MARK, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
+import { apPips, attackOptions, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
+import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 interface RealmArenaUnitsProps {
     /** The battlefield and everyone on it: the viewer's own are picked out of it. */

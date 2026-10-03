@@ -4,9 +4,10 @@ import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
 import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, type ItemId } from '@/games/RealmArena/characters';
+import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
+import type { Ranks } from '@/games/RealmArena/mastery';
 import { itemPoints, type MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_IDS, CHARACTER_MARK } from '@/games/RealmArena/ui';
+import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView } from '@/games/RealmArena/roster';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -24,11 +25,11 @@ interface RealmArenaMusterSheetProps {
  * The muster, on the player's own turn (docs/games/realm-arena.md §17.3 PR 6):
  * first the squad, a stepper per character with the points left, and then
  * placing it on the board before the sealed muster goes. While placing, the
- * character picked up is offered the items to carry (§21.3), out of the same
- * points.
+ * character picked up is offered the options its rank has unlocked (§23.2)
+ * and the items to carry (§21.3), out of the same points.
  */
 export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending }: RealmArenaMusterSheetProps) {
-    const { counts, setCounts, pointsLeft, refusal, placement } = draft;
+    const { counts, setCounts, pointsLeft, refusal, placement, ranks } = draft;
     const points = pointsLeft >= 0
         ? `${pointsLeft} of ${budget} points left.`
         : `${pluralize(-pointsLeft, 'point')} over the budget of ${budget}.`;
@@ -40,7 +41,7 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     kinds={CHARACTER_IDS}
                     icon={id => CHARACTER_MARK[id]}
                     title={id => CHARACTERS[id].name}
-                    sub={id => `${CHARACTERS[id].points} points · ${CHARACTERS[id].role}`}
+                    sub={id => `${CHARACTERS[id].points} points · ${CHARACTERS[id].role}${ranks[id] ? ` · Rank ${ranks[id]}` : ''}`}
                     amounts={counts}
                     max={() => MAX_OF_EACH}
                     onChange={setCounts}
@@ -60,10 +61,15 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
         <Section label="Place your squad">
             <p className="ag-hint">
                 Tap one of your squad on the board to pick it up, then a square of your zone to move it there,
-                another of your squad to swap the two, or an item below for it to carry. Nobody sees your squad
+                another of your squad to swap the two, or what it takes into battle below. Nobody sees your squad
                 until every player has mustered.
             </p>
-            {picked && <ItemPicker pick={picked} pointsLeft={pointsLeft} onCarry={draft.carry} />}
+            {picked && (
+                <>
+                    <OptionPicker pick={picked} ranks={ranks} onChoose={draft.choose} />
+                    <ItemPicker pick={picked} pointsLeft={pointsLeft} onCarry={draft.carry} />
+                </>
+            )}
             <p className="ag-hint">{refusal ?? points}</p>
             <div className="ag-action-grid">
                 <button type="button" className="ag-btn ag-btn--light" disabled={pending} onClick={draft.unplace}>
@@ -74,6 +80,57 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                 </ActionButton>
             </div>
         </Section>
+    );
+}
+
+interface OptionPickerProps {
+    /** The character picked up. */
+    pick: MusterPick;
+    ranks: Ranks;
+    onChoose: (option: OptionId | null) => void;
+}
+
+/**
+ * The character picked up's options (§23.2), a `BuildRow` each saying what it
+ * swaps out. Tapping one musters the character with it, and tapping the one
+ * it has musters the starter character again. One its rank hasn't unlocked is
+ * greyed, with the rank that does. An option costs what it replaces, so the
+ * points never decide it.
+ */
+function OptionPicker({ pick, ranks, onChoose }: OptionPickerProps) {
+    const { character } = pick;
+    const options = optionsFor(character);
+    if (options.length === 0) return null;
+    const rank = ranks[character] ?? 0;
+    const { name } = CHARACTERS[character];
+    return (
+        <>
+            <p className="ag-hint ag-hint--tight">
+                {rank > 0
+                    ? `You're rank ${rank} with the ${name}: swap part of its kit for an option, or fight with it as it is.`
+                    : `Fight with the ${name} to rank up with it and unlock its options.`}
+            </p>
+            <div className="ag-build-list">
+                {options.map(id => {
+                    const { icon, name: optionName, line } = optionView(id);
+                    const chosen = pick.option === id;
+                    const locked = OPTIONS[id].rank > rank;
+                    return (
+                        <BuildRow
+                            key={id}
+                            icon={icon}
+                            name={optionName}
+                            cost={line}
+                            tag={chosen ? 'Taken' : locked ? `Rank ${OPTIONS[id].rank}` : 'Take'}
+                            tagMuted={locked}
+                            disabled={locked}
+                            active={chosen}
+                            onClick={() => onChoose(chosen ? null : id)}
+                        />
+                    );
+                })}
+            </div>
+        </>
     );
 }
 
