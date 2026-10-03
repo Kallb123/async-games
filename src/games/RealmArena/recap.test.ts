@@ -12,7 +12,8 @@ import { CENTRE, newFighter, type BattleEvent, type Fighter } from "./rules";
 // handed to the adapter directly, the DiceCities/RaceCars style;
 // replay.test.ts covers the same adapter against real, replayed battles.
 
-const { toEvents, groupFeed, summarize, tip } = realmArenaRecapAdapter;
+const { toEvents, postProcess, summarize, tip } = realmArenaRecapAdapter;
+const forFeed = (events: IGameEvent[]) => postProcess!(events, { forFeed: true });
 
 function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): IRealmArenaSpecificGameStateResponse {
     return {
@@ -187,7 +188,7 @@ describe("Realm Arena feed, a row per character per turn", () => {
     const endTurn = (id: string, sender = "a") => toEvents(snap(state({ fighters })), snap(state({ fighters })), cmd("RealmArenaEndTurn", { id, senderId: sender }), valid());
 
     it("tells a move, a shot and a move as one line, by the most telling of them", () => {
-        const rows = groupFeed!([
+        const rows = forFeed([
             ...act("c1", 0, "Alice moved their Archer", [moved]),
             ...act("c2", 0, "Alice shot Bob's Knight with their Archer (80%): a hit for 3", [shot(3)]),
             ...act("c3", 0, "Alice moved their Archer", [moved]),
@@ -200,17 +201,19 @@ describe("Realm Arena feed, a row per character per turn", () => {
             affectedIds: ["b"],
         })]);
         // What the grouping reads off a row stays on the server.
-        expect(Object.keys(rows[0])).not.toContain("fighter");
-        expect(Object.keys(rows[0])).not.toContain("battle");
+        expect(JSON.stringify(rows)).not.toMatch(/"fighter"|"battle"|"clause"|"roll"/);
     });
 
-    it("tells a run of the same move once", () => {
-        const rows = groupFeed!([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Alice moved their Archer", [moved])]);
+    it("tells a run of the same move once, and two of the same shot twice", () => {
+        const rows = forFeed([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Alice moved their Archer", [moved])]);
         expect(rows.map(row => [row.type, row.title])).toEqual([["ra_manoeuvre", "Alice moved their Archer"]]);
+        const miss = "Alice shot Bob's Knight with their Archer (80%): a miss";
+        const shots = forFeed([...act("c1", 0, miss, [shot(0)]), ...act("c2", 0, miss, [shot(0)])]);
+        expect(shots.map(row => row.title)).toEqual([`${miss}; then shot Bob's Knight with their Archer (80%): a miss`]);
     });
 
     it("keeps each character's row where it first acted, and starts afresh each turn", () => {
-        const rows = groupFeed!([
+        const rows = forFeed([
             ...act("c1", 0, "Alice moved their Archer", [moved]),
             ...act("c2", 1, "Alice moved their Knight", [moved]),
             ...act("c3", 0, "Alice shot Bob's Knight with their Archer (80%): a miss", [shot(0)]),
@@ -225,8 +228,15 @@ describe("Realm Arena feed, a row per character per turn", () => {
         ]);
     });
 
+    it("folds nothing outside the feed, where a reaction to each line finds its own row, and strips every row there too", () => {
+        const rows = postProcess!([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Alice shot Bob's Knight with their Archer (80%): a miss", [shot(0)])], { forFeed: false });
+        expect(rows.map(row => row.id)).toEqual(["c1", "c2"]);
+        for (const row of rows) expect(Object.keys(row)).not.toEqual(expect.arrayContaining(["fighter"]));
+        expect(JSON.stringify(rows)).not.toMatch(/"battle"|"clause"|"roll"/);
+    });
+
     it("never folds one player's character into another's", () => {
-        const rows = groupFeed!([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Bob moved their Archer", [moved], "b")]);
+        const rows = forFeed([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Bob moved their Archer", [moved], "b")]);
         expect(rows.map(row => row.id)).toEqual(["c1", "c2"]);
     });
 });

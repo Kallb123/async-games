@@ -348,7 +348,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
 | Banned Islet | ✅ from snapshot | ✅ (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
 | Race Cars | ✅ from snapshot | ✅ (tip) | ✖ by design — the reach band, `docs/games/race-cars.md` §23.5 |
-| Realm Arena | ✅ from scratch | ✅ (tip, `groupFeed`) | ✖ by design — every attack needs a roll, `docs/games/realm-arena.md` §17.3 PR 8 |
+| Realm Arena | ✅ from scratch | ✅ (tip, `postProcess`) | ✖ by design — every attack needs a roll, `docs/games/realm-arena.md` §17.3 PR 8 |
 
 Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
 their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,
@@ -445,8 +445,8 @@ The pilot for all three features, and still the only game with planning.
 - **Recap** — deployments, battles and conquests (an elimination is folded into
   the conquest line that caused it), card cash-ins and fortifies. A plain end
   turn stays silent; when ending the turn pays out a conquest card, the public
-  draw and new hand count get a row instead. It's the only
-  adapter using **`postProcess`**: an attack and
+  draw and new hand count get a row instead. It uses
+  **`postProcess`**: an attack and
   the `WorldDominationOccupyTerritory` that follows it are two commands but one
   logical conquest, and `toEvents` only ever sees one command at a time, so the
   merge happens in the post-pass over the full event list.
@@ -589,9 +589,10 @@ must only ever describe what the whole table can already see.
    `nav.displayedHistory`, and disable interactive controls while
    `!nav.isLive`.
 6. For the "since you were last here" card, add `src/games/<Game>/recap.ts`
-   exporting an `IRecapAdapter` (`toEvents`, `summarize`, optional `tip`,
-   `postProcess` and `groupFeed` — the last folds rows for the feed alone,
-   leaving `buildAllEvents` a row per command for reactions to find), import it from `src/utils/games/recap.ts`, and render
+   exporting an `IRecapAdapter` (`toEvents`, `summarize`, optional `tip` and
+   `postProcess` — told `forFeed`, it may fold rows for the feed alone,
+   leaving `buildAllEvents` a row per command for reactions to find), import
+   it from `src/utils/games/recap.ts`, and render
    `TurnRecapScreen` from `useTurnRecap(gameId)` on the board page (`recap.show`
    is the whole condition; the page supplies only its call-to-action wording).
    `gameRegistry.test.ts` fails if a `recap.ts` exists but isn't imported by

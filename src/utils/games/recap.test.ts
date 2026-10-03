@@ -90,6 +90,8 @@ registerRecapAdapter({
         type: command.className,
         title: `${command.senderId} ${command.className}`,
     }],
+    // Marks the rows it was handed for the feed, so a test can see which path ran.
+    postProcess: (events, { forFeed }) => forFeed ? events.map(event => ({ ...event, title: `${event.title} (feed)` })) : events,
     summarize: (events) => ({ headline: `${events.length}`, subline: "" }),
 });
 
@@ -164,6 +166,16 @@ describe("buildEventFeed", () => {
         const feed = await buildEventFeed(game(history, "u1"), names, "u1");
 
         expect(feed.events.map(event => event.commandId)).toEqual(["e"]);
+    });
+
+    it("tells postProcess the feed is for the feed, and buildAllEvents that it isn't", async () => {
+        const history = [move("a", "u1"), move("b", "u2")];
+
+        const feed = await buildEventFeed(game(history, "u1"), names, "u1");
+        const all = await buildAllEvents(game(history, "u1"), names);
+
+        expect(feed.events.map(event => event.title)).toEqual(["u2 TestRecapMove (feed)"]);
+        expect(all.map(event => event.title)).toEqual(["u1 TestRecapMove", "u2 TestRecapMove"]);
     });
 
     it("excludes both an undo and the command it reversed", async () => {

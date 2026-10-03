@@ -229,7 +229,7 @@ describe("Realm Arena recap", () => {
         const rows = feed.events.filter(event => acts.some(command => command.id === event.commandId));
         expect(rows).toHaveLength(fighters.size);
         expect(rows.map(row => row.commandId)).toEqual([...fighters].map(fighter => acts.find(command => command.action.fighter === fighter)!.id));
-        expect(feed.events.every(event => !("fighter" in event) && !("battle" in event))).toBe(true);
+        expect(JSON.stringify(feed)).not.toMatch(/"fighter"|"battle"|"clause"|"roll"/);
     });
 
     it("opens the window on a turn ended with nothing done, and tells nobody it was", async () => {
