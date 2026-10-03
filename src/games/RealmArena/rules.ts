@@ -165,6 +165,12 @@ export const isStanding = (fighter: Fighter): boolean => fighter.hp > 0;
 
 export const hasEffect = (fighter: Fighter, effect: EffectId): boolean => (fighter.effects[effect] ?? 0) > 0;
 
+/** The item a character carries, if any (§21.1). */
+export const itemOf = (fighter: Pick<Fighter, "item">): Item | undefined => fighter.item ? ITEMS[fighter.item] : undefined;
+
+/** What an item adds to a muster's cost: nothing for none. */
+export const itemPoints = (item: ItemId | null | undefined): number => item ? ITEMS[item].points : 0;
+
 /** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
 export function movementOf(fighter: Fighter): number {
     const { movement } = CHARACTERS[fighter.character];
@@ -453,7 +459,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
                 return clear ? undefined : "There's no room to stand there";
             });
         case "throw": {
-            const item: Item | undefined = actor.item ? ITEMS[actor.item] : undefined;
+            const item = itemOf(actor);
             if (item?.range === undefined) return refused("They have nothing to throw");
             const reason = aimRefusal(state, actor, at, item.range);
             return reason ? refused(reason) : afford(item.ap);
@@ -503,7 +509,7 @@ export function afflicted(target: Fighter, effect: Affliction, by: number): { fi
 }
 
 /** The effects on a character that a heal clears (§20.2). */
-function healedEffects(fighter: Fighter): EffectId[] {
+export function healedEffects(fighter: Fighter): EffectId[] {
     return EFFECT_IDS.filter(effect => "healed" in EFFECTS[effect] && hasEffect(fighter, effect));
 }
 
@@ -841,7 +847,7 @@ export function pickOf({ character, square, item }: MusterPick): MusterPick {
 
 /** What a muster costs: its characters, and the items they carry (§21.1). */
 export function musterPoints(picks: readonly MusterPick[]): number {
-    return squadPoints(picks.map(pick => pick.character)) + picks.reduce((total, pick) => total + (pick.item ? ITEMS[pick.item].points : 0), 0);
+    return squadPoints(picks.map(pick => pick.character)) + picks.reduce((total, pick) => total + itemPoints(pick.item), 0);
 }
 
 /**

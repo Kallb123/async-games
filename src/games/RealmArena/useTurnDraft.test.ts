@@ -89,6 +89,23 @@ describe("tapFighter", () => {
         const fireball: Draft = { aim: "fireball", square: null, targets: [] };
         expect(tapFighter(context(fireball), far.id)).toEqual({ ...fireball, square: far.square });
     });
+
+    it("throws an item at the square of whoever is tapped, the thrower's own included", () => {
+        const thrown: Draft = { aim: "throw", square: null, targets: [] };
+        expect(tapFighter(context(thrown), near.id)).toEqual({ ...thrown, square: near.square });
+        expect(tapFighter(context(thrown), manAtArms.id)).toEqual({ ...thrown, square: manAtArms.square });
+    });
+
+    it("lines a draught up on the carrier when it can drink it, and leaves the tap to select when it can't", () => {
+        const draught: Draft = { aim: "draught", square: null, targets: [] };
+        const hurt = { ...manAtArms, hp: 2, item: "healingDraught" as const };
+        const drinking = (carrier: Fighter): TapContext => {
+            const state = { ...battle, fighters: battle.fighters.map(one => one.id === carrier.id ? carrier : one) };
+            return { battle: state, fighter: carrier, draft: draught, reach: null, candidates: targetsOf(state, "a", carrier, "draught") };
+        };
+        expect(tapFighter(drinking(hurt), hurt.id)).toEqual({ ...draught, targets: [hurt.id] });
+        expect(tapFighter(drinking({ ...hurt, hp: 8 }), hurt.id)).toBeUndefined();
+    });
 });
 
 describe("afterMove", () => {

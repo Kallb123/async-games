@@ -1,12 +1,13 @@
 'use client'
 import React from 'react';
-import { EFFECTS, type EffectId } from '@/games/RealmArena/characters';
-import { EFFECT_ART } from '@/games/RealmArena/art';
-import { spriteId, SpriteImage } from './RealmArenaTerrain';
+import { EFFECTS, ITEMS, type EffectId, type ItemId } from '@/games/RealmArena/characters';
+import { EFFECT_ART, ITEM_ART } from '@/games/RealmArena/art';
+import { SpriteImage, SpriteUse } from './RealmArenaTerrain';
 
-// The status effects' marks (docs/games/realm-arena.md §20.2), each a sprite
-// of the effects sheet (`EFFECT_ART`): on a figure on the board, in a unit's
-// box and the selected character's card, and beside what the last action did.
+// The drawn marks (docs/games/realm-arena.md §20.2, §21.2): each status
+// effect's, a sprite of the effects sheet (`EFFECT_ART`), on a figure on the
+// board, in a unit's box and the selected character's card, and beside what the
+// last action did; and each item's (`ITEM_ART`), wherever it's named.
 
 interface RealmArenaEffectMarksProps {
     /** The board's id, which `RealmArenaTerrainDefs` defined its sprites under. */
@@ -24,30 +25,31 @@ interface RealmArenaEffectMarksProps {
 export function RealmArenaEffectMarks({ id, effects, x, y, size, step }: RealmArenaEffectMarksProps) {
     const top = y - (step * (effects.length - 1)) / 2;
     return effects.map((effect, i) => (
-        <use key={effect} className="ag-ra-effect-mark" href={`#${spriteId(id, EFFECT_ART[effect])}`} x={x - size / 2} y={top + i * step - size / 2} width={size} height={size} />
+        <SpriteUse key={effect} className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[effect]} x={x} y={top + i * step} size={size} />
     ));
 }
 
 /**
- * One effect's mark in the page: its name is whatever it stands beside.
- * `boxed`, it leads a list row in the row's icon box, as a glyph would.
+ * What's on a character spelled out, each mark with its name: its effects,
+ * then the item it carries (§21.1). A unit's box, and the selected
+ * character's card.
  */
-export function RealmArenaEffectIcon({ effect, boxed = false }: { effect: EffectId; boxed?: boolean }) {
-    const icon = <SpriteImage sprite={EFFECT_ART[effect]} className={`ag-ra-effect-icon${boxed ? ' ag-ra-effect-icon--boxed' : ''}`} />;
-    return boxed ? <span className="ag-icon-box" aria-hidden="true">{icon}</span> : icon;
-}
-
-/** A character's effects spelled out, each mark with its name: a unit's box, and the selected character's card. */
-export function RealmArenaEffectList({ effects }: { effects: readonly EffectId[] }) {
-    if (effects.length === 0) return null;
+export function RealmArenaStatusList({ effects, item }: { effects: readonly EffectId[]; item?: ItemId | null }) {
+    if (effects.length === 0 && !item) return null;
     return (
         <span className="ag-ra-effects">
             {effects.map(effect => (
                 <span key={effect} className="ag-tag ag-tag--quiet">
-                    <RealmArenaEffectIcon effect={effect} />
+                    <SpriteImage sprite={EFFECT_ART[effect]} />
                     {EFFECTS[effect].name}
                 </span>
             ))}
+            {item && (
+                <span className="ag-tag ag-tag--quiet" title={`Carrying a ${ITEMS[item].name.toLowerCase()}`}>
+                    <SpriteImage sprite={ITEM_ART[item]} />
+                    {ITEMS[item].name}
+                </span>
+            )}
         </span>
     );
 }

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Realm Arena's items (docs/games/realm-arena.md §21): one 96px badge a cell,
+  left to right in `ITEM_IDS` order — fire flask, thunder flask, smoke pot,
+  healing draught — and then the smoke pot's cloud as the board draws it.
+
+  An item is a parchment tile with a dark rim, rather than the coin a status
+  effect is, so the two never read alike: a tile is something carried, a coin
+  something happening. The cloud is a puff of smoke with no tile, drawn over
+  every square a smoke pot covers.
+
+  `npm run ra-marks` renders this to public/art/realmarena/items.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="96" viewBox="0 0 480 96">
+  <defs>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.18"/>
+    </linearGradient>
+    <g id="tile">
+      <rect x="7" y="7" width="82" height="82" rx="17" fill="#ecdcb6"/>
+      <rect x="7" y="7" width="82" height="82" rx="17" fill="url(#sheen)" stroke="#24150f" stroke-width="7"/>
+    </g>
+    <!-- A round-bottomed flask, its cork in. -->
+    <path id="flask" d="M41 30 H55 V40 C65 44 71 52 71 62 C71 75 61 83 48 83 C35 83 25 75 25 62 C25 52 31 44 41 40 Z"/>
+    <path id="flask-fill" d="M27 63 C33 59 41 66 48 62 C55 58 63 65 69 61 C70 75 60 81 48 81 C36 81 26 75 27 63 Z"/>
+    <rect id="cork" x="38" y="19" width="20" height="12" rx="3" fill="#9a6535" stroke="#24150f" stroke-width="4"/>
+    <radialGradient id="puff" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#fbfaf6"/>
+      <stop offset="0.7" stop-color="#d9d6cf"/>
+      <stop offset="1" stop-color="#aaa59b"/>
+    </radialGradient>
+  </defs>
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- Fire flask: a flask of burning oil, a flame licking up from it. -->
+    <g>
+      <use href="#tile"/>
+      <use href="#flask" fill="#fff6e4"/>
+      <use href="#flask-fill" fill="#e0521f"/>
+      <path d="M48 52 C53 59 58 63 56 70 C55 75 52 77 48 77 C43 77 40 74 40 70 C40 64 45 61 48 52 Z" fill="#f6b21c"/>
+      <use href="#flask" fill="none" stroke="#24150f" stroke-width="4"/>
+      <use href="#cork"/>
+      <path d="M57 22 C62 21 64 18 64 14" fill="none" stroke="#24150f" stroke-width="5"/>
+      <path d="M64 4 C70 10 74 15 71 21 C69 25 62 25 60 21 C58 17 62 13 64 4 Z" fill="#f6b21c" stroke="#24150f" stroke-width="3"/>
+    </g>
+
+    <!-- Thunder flask: a flask with a lightning bolt sealed in it. -->
+    <g transform="translate(96 0)">
+      <use href="#tile"/>
+      <use href="#flask" fill="#e6ecf8"/>
+      <use href="#flask-fill" fill="#3b5bb5"/>
+      <path d="M51 45 L38 64 L47 64 L43 79 L59 58 L50 58 L55 45 Z" fill="#f6c21c" stroke="#24150f" stroke-width="3"/>
+      <use href="#flask" fill="none" stroke="#24150f" stroke-width="4"/>
+      <use href="#cork"/>
+    </g>
+
+    <!-- Smoke pot: a round clay pot, smoke curling up out of its neck. -->
+    <g transform="translate(192 0)">
+      <use href="#tile"/>
+      <path d="M48 44 C40 38 47 32 42 26 C38 21 44 15 50 16" fill="none" stroke="#24150f" stroke-width="12"/>
+      <path d="M48 44 C40 38 47 32 42 26 C38 21 44 15 50 16" fill="none" stroke="#ecebe6" stroke-width="6"/>
+      <g fill="#ecebe6" stroke="#24150f" stroke-width="4">
+        <circle cx="61" cy="25" r="8"/>
+        <circle cx="33" cy="33" r="6"/>
+      </g>
+      <path d="M41 42 H55 V48 C64 51 70 58 70 66 C70 77 60 83 48 83 C36 83 26 77 26 66 C26 58 32 51 41 48 Z" fill="#b4602f" stroke="#24150f" stroke-width="4"/>
+      <rect x="37" y="39" width="22" height="8" rx="3" fill="#cf7a43" stroke="#24150f" stroke-width="4"/>
+      <path d="M32 64 C40 68 56 68 64 64" fill="none" stroke="#24150f" stroke-width="3" stroke-opacity="0.45"/>
+      <path d="M34 58 C36 55 39 53 42 52" fill="none" stroke="#fff" stroke-width="3" stroke-opacity="0.45"/>
+    </g>
+
+    <!-- Healing draught: a tall bottle of red cordial, a white cross on it. -->
+    <g transform="translate(288 0)">
+      <use href="#tile"/>
+      <path d="M41 26 H55 V36 C63 39 67 44 67 52 V76 C67 80 64 83 60 83 H36 C32 83 29 80 29 76 V52 C29 44 33 39 41 36 Z" fill="#c8283a" stroke="#24150f" stroke-width="4"/>
+      <path d="M34 49 C34 45 37 42 42 41" fill="none" stroke="#fff" stroke-width="3" stroke-opacity="0.55"/>
+      <path d="M48 53 V73 M38 63 H58" fill="none" stroke="#24150f" stroke-width="12"/>
+      <path d="M48 53 V73 M38 63 H58" fill="none" stroke="#fff" stroke-width="6"/>
+      <rect x="38" y="15" width="20" height="12" rx="3" fill="#9a6535" stroke="#24150f" stroke-width="4"/>
+    </g>
+
+    <!-- The smoke pot's cloud, as the board draws it on each square under it:
+         a low puff, wider than it is tall, its foot along the cell's bottom. -->
+    <g transform="translate(384 0)">
+      <g fill="url(#puff)" fill-opacity="0.9">
+        <ellipse cx="22" cy="72" rx="17" ry="13"/>
+        <ellipse cx="74" cy="72" rx="17" ry="13"/>
+        <ellipse cx="34" cy="56" rx="19" ry="16"/>
+        <ellipse cx="62" cy="54" rx="20" ry="17"/>
+        <ellipse cx="47" cy="40" rx="17" ry="15"/>
+        <ellipse cx="48" cy="74" rx="26" ry="16"/>
+      </g>
+    </g>
+  </g>
+</svg>

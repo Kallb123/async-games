@@ -3,10 +3,12 @@ import React from 'react';
 import ListRow from '@/components/ui/ListRow';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS } from '@/games/RealmArena/characters';
+import { ITEM_ART } from '@/games/RealmArena/art';
+import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
 import { isStanding, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, CHARACTER_MARK, effectsOn, watchStatus, weaponLine } from '@/games/RealmArena/ui';
-import { RealmArenaEffectList } from './RealmArenaEffects';
+import { RealmArenaStatusList } from './RealmArenaEffects';
+import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaFighterCardProps {
     fighter: Fighter;
@@ -21,9 +23,9 @@ interface RealmArenaFighterCardProps {
 
 /**
  * Everything about the character selected on the board: its HP and AP, what
- * it's doing and its status effects (§20.2), and its weapon and abilities with their cooldowns
- * (docs/games/realm-arena.md §13.6) — or, when it's the viewer's to act with,
- * the turn sheet that uses them (§17.3 PR 7).
+ * it's doing and its status effects (§20.2), and its weapon, abilities with their cooldowns
+ * (docs/games/realm-arena.md §13.6) and the item it carries (§21) — or, when
+ * it's the viewer's to act with, the turn sheet that uses them (§17.3 PR 7).
  */
 export default function RealmArenaFighterCard({ fighter, label, children }: RealmArenaFighterCardProps) {
     const character = CHARACTERS[fighter.character];
@@ -35,7 +37,7 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
                 <Stat value={fighter.banked} label="AP banked" />
             </div>
             <p className="ag-hint ag-hint--tight">{isStanding(fighter) ? watchStatus(fighter) ?? character.role : 'Down'}</p>
-            <RealmArenaEffectList effects={effectsOn(fighter)} />
+            <RealmArenaStatusList effects={effectsOn(fighter)} />
             {children ?? (
                 <div className="ag-list">
                     <ListRow icon={CHARACTER_MARK[fighter.character]} title={character.weapon.name} sub={weaponLine(character.weapon)} />
@@ -51,6 +53,14 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
                             />
                         );
                     })}
+                    {fighter.item && (
+                        <ListRow
+                            icon={<SpriteImage sprite={ITEM_ART[fighter.item]} boxed />}
+                            title={ITEMS[fighter.item].name}
+                            sub={`${ITEMS[fighter.item].ap} AP · ${ITEMS[fighter.item].description}`}
+                            action={<span className="ag-tag ag-tag--quiet">Carried</span>}
+                        />
+                    )}
                 </div>
             )}
         </Section>

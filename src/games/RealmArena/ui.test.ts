@@ -4,7 +4,8 @@ import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
-import type { CharacterId } from "./characters";
+import { ABILITIES, type CharacterId } from "./characters";
+import { EFFECT_ART, ITEM_ART } from "./art";
 import {
     abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
     reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, type Placement,
@@ -65,6 +66,11 @@ describe("fighterStatus", () => {
 
     it("names the effects after the watch, in the order the marks are drawn", () => {
         expect(fighterStatus({ ...knight, banked: 2, effects: { marked: 2, burning: 1 } })).toEqual(["On watch (2 AP banked)", "Burning", "Marked"]);
+    });
+
+    it("names the item it carries last, and none once it's down", () => {
+        expect(fighterStatus({ ...knight, effects: { burning: 1 }, item: "smokePot" })).toEqual(["Burning", "Carrying a smoke pot"]);
+        expect(fighterStatus({ ...knight, hp: 0, item: "smokePot" })).toEqual(["Down"]);
     });
 });
 
@@ -217,8 +223,15 @@ describe("rangeSquares", () => {
         const state = { field, fighters: [mage] };
         // The Bolt reaches 10 squares, a fireball 12.
         expect(rangeSquares(state, mage, "weapon").has(at(field, 11, 0))).toBe(false);
-        expect(rangeSquares(state, mage, "fireball").has(at(field, 12, 0))).toBe(true);
-        expect(rangeSquares(state, mage, "fireball").has(at(field, 13, 0))).toBe(false);
+        expect(rangeSquares(state, mage, ABILITIES.fireball.range).has(at(field, 12, 0))).toBe(true);
+        expect(rangeSquares(state, mage, ABILITIES.fireball.range).has(at(field, 13, 0))).toBe(false);
+    });
+
+    it("draws a throw out to the item's range, in sight", () => {
+        const field = buildBattlefield({ name: "Wall", rows: ["......#..."], deployments: [], objectives: {} });
+        const archer = ready(0, "a", "archer", at(field, 0, 0));
+        // Six squares, the wall among them: a thrown item can land on anything it can see.
+        expect(named(field, rangeSquares({ field, fighters: [archer] }, archer, 6))).toEqual(["1,0", "2,0", "3,0", "4,0", "5,0", "6,0"]);
     });
 
     it("draws a heal's range as the squares next to it", () => {
@@ -339,9 +352,22 @@ describe("eventLines", () => {
             { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
         ];
         expect(eventLines(events, fighters, "a", nameFor)).toEqual([
-            { effect: "burning", title: "Your Archer is burning" },
-            { effect: "burning", title: "Your Archer burned for 1" },
-            { effect: "burning", title: "Your Archer is no longer burning" },
+            { mark: EFFECT_ART.burning, title: "Your Archer is burning" },
+            { mark: EFFECT_ART.burning, title: "Your Archer burned for 1" },
+            { mark: EFFECT_ART.burning, title: "Your Archer is no longer burning" },
+        ]);
+    });
+
+    it("leads what an item did with the item's mark", () => {
+        const events: BattleEvent[] = [
+            { kind: "thrown", fighter: 0, item: "fireFlask", at: 5, targets: [1], damage: 2 },
+            { kind: "thrown", fighter: 0, item: "smokePot", at: 5, targets: [], damage: 0 },
+            { kind: "healed", fighter: 0, target: 0, hp: 3, draught: true },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+            { mark: ITEM_ART.fireFlask, title: "Fire flask: Bob's Knight", sub: "2 damage each" },
+            { mark: ITEM_ART.smokePot, title: "Your Archer threw a smoke pot" },
+            { mark: ITEM_ART.healingDraught, title: "Your Archer healed for 3", sub: "Healing draught" },
         ]);
     });
 

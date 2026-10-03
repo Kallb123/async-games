@@ -10,6 +10,11 @@ const GRASS_TILE = { width: 6 * ISO_HALF_WIDTH, height: 6 * ISO_HALF_HEIGHT };
 /** The id a sprite is defined under on a board — a terrain's, or an effect's mark — for a `<use>` to draw it by. */
 export const spriteId = (id: string, sprite: Sprite) => `${id}-sprite-${SPRITES.get(sprite)}`;
 
+/** A sprite drawn on a board, by the id `RealmArenaTerrainDefs` defined it under, `size` across centred on (`x`, `y`). */
+export function SpriteUse({ id, sprite, x, y, size, className }: { id: string; sprite: Sprite; x: number; y: number; size: number; className: string }) {
+    return <use className={className} href={`#${spriteId(id, sprite)}`} x={x - size / 2} y={y - size / 2} width={size} height={size} />;
+}
+
 /** A sprite's cell, as the viewBox that crops its sheet to it. */
 const spriteViewBox = (sprite: Sprite) => `${sprite.x} ${sprite.y} ${sprite.width} ${sprite.height}`;
 
@@ -19,13 +24,19 @@ function SheetImage({ sprite }: { sprite: Sprite }) {
     return <image href={sheet.href} width={sheet.width} height={sheet.height} />;
 }
 
-/** One sprite on its own, outside a board: an effect's mark in a unit's box. Sized by its class. */
-export function SpriteImage({ sprite, className }: { sprite: Sprite; className?: string }) {
-    return (
-        <svg className={className} viewBox={spriteViewBox(sprite)} aria-hidden="true">
+/**
+ * One mark on its own, outside a board — an effect's or an item's — beside
+ * whatever names it. In a row's icon box (`ag-icon-box`) it fills the box, as
+ * a glyph would: `boxed` puts it in one, for a `ListRow`, which boxes only a
+ * glyph itself.
+ */
+export function SpriteImage({ sprite, boxed = false }: { sprite: Sprite; boxed?: boolean }) {
+    const image = (
+        <svg className="ag-ra-mark-icon" viewBox={spriteViewBox(sprite)} aria-hidden="true">
             <SheetImage sprite={sprite} />
         </svg>
     );
+    return boxed ? <span className="ag-icon-box" aria-hidden="true">{image}</span> : image;
 }
 const clipId = (id: string, low: number, high: number) => `${id}-clip-${low}-${high}`;
 

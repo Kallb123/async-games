@@ -5314,18 +5314,23 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-turn button + button { border-left: 1px solid color-mix(in oklch, var(--ag-on-dark) 25%, transparent); }
 .ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
+/* A smoke pot's cloud (§21.2): the squares under it greyed, and a puff of
+   smoke over each, thin enough to see whoever stands in it. */
+.ag-ra-smoke { fill: color-mix(in oklch, var(--ag-ink-softer) 35%, transparent); pointer-events: none; }
+.ag-ra-smoke-puff { opacity: 0.6; pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
 .ag-ra-roll { margin-bottom: 8px; }
 /* A character's AP left on its owner's turn, beside its figure: lit for each
    one unspent, hollow for each spent. The units strip below draws the same. */
 .ag-ra-ap { fill: rgba(0, 0, 0, 0.35); stroke: var(--ag-on-dark); stroke-width: 0.25; pointer-events: none; }
 .ag-ra-ap--on { fill: var(--ag-gold); }
-/* Status effects (§20.2): a figure's marks down its left on the board, and
-   the same marks spelled out with their names in a unit's box and the
-   selected character's card. Each is a sprite of one sheet (`EFFECT_ART`). */
-.ag-ra-effect-mark { pointer-events: none; filter: drop-shadow(0 0.3px 0.4px rgba(0, 0, 0, 0.5)); }
-.ag-ra-effect-icon { flex: none; display: block; width: 14px; height: 14px; }
-.ag-ra-effect-icon--boxed { width: 24px; height: 24px; }
+/* Status effects (§20.2) and items (§21.2): a figure's effect marks down its
+   left on the board and its item by its shoulder, and the same marks spelled
+   out with their names in a unit's box and the selected character's card.
+   Each is a sprite of a sheet (`EFFECT_ART`, `ITEM_ART`). */
+.ag-ra-figure-mark { pointer-events: none; filter: drop-shadow(0 0.3px 0.4px rgba(0, 0, 0, 0.5)); }
+.ag-ra-mark-icon { flex: none; display: block; width: 14px; height: 14px; }
+.ag-icon-box > .ag-ra-mark-icon { width: 24px; height: 24px; }
 /* A run of quiet `.ag-tag`s, each led by its mark. */
 .ag-ra-effects { display: flex; flex-wrap: wrap; gap: 4px; }
 .ag-ra-effects .ag-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 0; padding-left: 3px; }
