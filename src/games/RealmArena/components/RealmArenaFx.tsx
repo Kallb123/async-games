@@ -2,9 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
-import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART } from '@/games/RealmArena/art';
-import type { BattleCue, BurstCue, FlightCue, Missile, SlashCue, TextCue } from '@/games/RealmArena/ui';
+import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
+import type { BattleCue, BurstCue, FlightCue, SlashCue, TextCue } from '@/games/RealmArena/ui';
 import { SpriteUse } from './RealmArenaTerrain';
+import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
 /** The hit text, in board units: the number's middle above the point it's given, the label under it, and a mark beside the number. */
 const VALUE_RISE = 4;
@@ -168,6 +169,16 @@ function Flight({ id, cue, at, ms }: { id: string; cue: FlightCue; at: RealmAren
 }
 
 /**
+ * Everything flying at once, moved a frame at a time by its own clock — so
+ * only this re-renders each frame, not the keyframed cues beside it — for as
+ * long as the last of them lasts.
+ */
+function Flights({ id, flights, at }: { id: string; flights: readonly FlightCue[]; at: RealmArenaFxProps['at'] }) {
+    const ms = useElapsed(Math.max(0, ...flights.map(cue => cue.start + cue.length)));
+    return flights.map((cue, index) => <Flight key={index} id={id} cue={cue} at={at} ms={ms - cue.start} />);
+}
+
+/**
  * What an action did, played over the battlefield (docs/games/realm-arena.md
  * §26): drawn in the board's own SVG, above the figures, so it zooms, pans and
  * turns with the board. `battleCues` worked out when each part starts and how
@@ -177,14 +188,15 @@ function Flight({ id, cue, at, ms }: { id: string; cue: FlightCue; at: RealmAren
  * time along its arc, turned to face the way it's going. What stays put —
  * hit text rising and fading, a burst, a slash — is CSS keyframes
  * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. With reduced
- * motion, nothing flies, bursts or slashes: only the text plays. Nothing here
+ * motion, nothing flies, bursts or slashes: only the text plays — the
+ * flights aren't drawn, and the stylesheet hides the bursts and the slashes. Nothing here
  * can be tapped, so the board goes on working underneath while it plays.
  *
  * Keyed by its playback, so the next one starts it over and cuts this one short.
  */
 export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
+    const still = usePrefersReducedMotion();
     const flights = cues.filter((cue): cue is FlightCue => cue.kind === 'flight');
-    const ms = useElapsed(Math.max(0, ...flights.map(cue => cue.start + cue.length)));
     return (
         <g className="ag-ra-fx" aria-hidden="true">
             {cues.map((cue, index) => {
@@ -192,11 +204,11 @@ export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
                     case 'text': return <HitText key={index} id={id} cue={cue} over={at(cue.square).head} />;
                     case 'burst': return <Burst key={index} id={id} cue={cue} ground={at(cue.at).ground} />;
                     case 'slash': return <Slash key={index} id={id} cue={cue} body={at(cue.square).body} />;
-                    case 'flight': return <Flight key={index} id={id} cue={cue} at={at} ms={ms - cue.start} />;
-                    // A fall is the board's, which draws the figure; a scorch the screen's, which draws the ground.
+                    // A flight is drawn below; a fall and a scorch are the board's, which draws the figure and the ground.
                     default: return null;
                 }
             })}
+            {!still && flights.length > 0 && <Flights id={id} flights={flights} at={at} />}
         </g>
     );
 }

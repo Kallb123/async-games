@@ -13,7 +13,7 @@ import { useSvgId } from '@/utils/hooks/useSvgId';
 import { ITEM_ART, SMOKE_ART, TERRAIN_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, type ScorchCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -392,6 +392,28 @@ interface DepthItem {
 }
 
 /**
+ * The cover the action being played blasted away (§26.1), standing on each
+ * square as it did — drawn from the battlefield as the action found it — until
+ * the burst fades, then fading off the scorched ground under it.
+ */
+function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue): DepthItem[] {
+    const before = playback.field;
+    const was: IsoView = { ...view, heights: before.tiles.map(tile => tile.elevation) };
+    const plinths = plinthsOf(view, before);
+    return cue.squares.map(square => {
+        const block = raisedBlock(was, plinths, before, square);
+        return {
+            depth: block.depth,
+            node: (
+                <g key={`blast-${playback.key}-${square}`} className="ag-ra-blasting" style={cueTiming(cue)}>
+                    <RaisedSquare id={artId} block={block} shades={[]} />
+                </g>
+            ),
+        };
+    });
+}
+
+/**
  * The battlefield (docs/games/realm-arena.md §13.1, §17.3 PR 5), drawn
  * isometrically: each square a diamond, raised to its tile's elevation, so
  * the walls, the trees and the towers stand up off the ground at the heights
@@ -594,21 +616,7 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
             depth: isoDepth(view, cue.fighter.square) + 0.6,
             node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} view={view} cue={cue} colourFor={colourFor} />,
         });
-        if (cue.kind !== 'scorch') continue;
-        const before = playback.field;
-        const was: IsoView = { ...view, heights: before.tiles.map(tile => tile.elevation) };
-        const plinths = plinthsOf(view, before);
-        for (const square of cue.squares) {
-            const block = raisedBlock(was, plinths, before, square);
-            items.push({
-                depth: block.depth,
-                node: (
-                    <g key={`blast-${playback.key}-${square}`} className="ag-ra-blasting" style={cueTiming(cue)}>
-                        <RaisedSquare id={artId} block={block} shades={[]} />
-                    </g>
-                ),
-            });
-        }
+        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }
     items.sort((a, b) => a.depth - b.depth);
 

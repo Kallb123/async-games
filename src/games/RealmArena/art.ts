@@ -15,8 +15,7 @@
 
 import { FULL_HEIGHT, TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP } from "@/utils/ui/isometric";
-import { EFFECT_IDS, ITEM_IDS } from "./characters";
-import type { BurstKind, Missile } from "./ui";
+import { EFFECT_IDS, ITEM_IDS, type ItemId } from "./characters";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -161,6 +160,15 @@ export const ITEM_ART = marks("items", ITEM_IDS);
  * covers: its foot is along its cell's bottom edge, like a terrain sprite's.
  */
 export const SMOKE_ART = mark("items", ITEM_IDS.length);
+
+/** Something thrown: never the draught, which is drunk. */
+export type ThrownItem = Exclude<ItemId, "healingDraught">;
+
+/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, and a thrown flask or pot. */
+export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem;
+
+/** What a burst looks like (§26.1): the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff. */
+export type BurstKind = "fire" | "thunder" | "smoke";
 
 /** The order what flies is drawn in along the top of the fx sheet. */
 const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot"];

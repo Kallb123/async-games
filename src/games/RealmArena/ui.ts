@@ -6,8 +6,8 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId, type Weapon } from "./characters";
-import { EFFECT_ART, ITEM_ART, type Sprite } from "./art";
+import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
+import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 /**
@@ -433,12 +433,6 @@ export interface TextCue extends Timed {
     tone: HitTone;
 }
 
-/** Something thrown: never the draught, which is drunk. */
-export type ThrownItem = Exclude<ItemId, "healingDraught">;
-
-/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, and a thrown flask or pot. */
-export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem;
-
 /** Something flying from one square to another (§26.1). */
 export interface FlightCue extends Timed {
     kind: "flight";
@@ -454,9 +448,6 @@ export interface FlightCue extends Timed {
     /** How long after its start it gets there: a shot goes on after, for the rest of its `length`. */
     land: number;
 }
-
-/** What a burst looks like: the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff. */
-export type BurstKind = "fire" | "thunder" | "smoke";
 
 /** Something going off where it landed (§26.1): over its square, or the 3×3 round it. */
 export interface BurstCue extends Timed {
@@ -525,7 +516,8 @@ const minus = (damage: number) => `−${damage}`;
 function scaled(cue: BattleCue, scale: number): BattleCue {
     const by = (ms: number) => Math.round(ms * scale);
     const timed = { ...cue, start: by(cue.start), length: by(cue.length) };
-    return timed.kind === "flight" ? { ...timed, land: by(timed.land) } : timed;
+    // A flight's arc is drawn by how far through it is, so it never lands in no time.
+    return timed.kind === "flight" ? { ...timed, land: Math.max(1, by(timed.land)) } : timed;
 }
 
 /**
@@ -575,9 +567,9 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
     /** Something flying from a character to a square, landing at `land`. */
     const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, after = 0) => {
         const from = at.get(fighter);
-        const lead = FLIGHT_MS[missile];
+        const flight = FLIGHT_MS[missile];
         if (from === undefined || to === undefined) return;
-        cues.push({ kind: "flight", missile, from, to, result, start: land - lead, land: lead, length: lead + after });
+        cues.push({ kind: "flight", missile, from, to, result, start: land - flight, land: flight, length: flight + after });
     };
 
     for (const event of events) {
@@ -614,8 +606,9 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const missile = item ?? "fireball";
                 const land = beat(FLIGHT_MS[missile]);
                 fly(event.fighter, event.at, missile, "landed", land);
-                const thrown: Item | null = item && ITEMS[item];
-                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius: !thrown || thrown.area ? 1 : 0, start: land, length: BURST_MS });
+                // A fireball spreads over the 3×3, and so does a flask made to.
+                const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
+                cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
                 if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;
