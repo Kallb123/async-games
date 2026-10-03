@@ -3,8 +3,8 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, type Ability } from "./characters";
-import { blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
-import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
+import { blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
+import { attackOptions, hitChance, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
@@ -56,6 +56,34 @@ const RANGE: Partial<Record<Aim, RangeKind>> = {
     demolish: "cover",
     fireball: ABILITIES.fireball.range,
 };
+
+/** The shot an aim takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy always lands. */
+export function shotOf(aim: Aim): Exclude<ShotKind, "overwatch"> | undefined {
+    return aim === "attack" || aim === "aimedShot" || aim === "cripplingShot" ? aim : undefined;
+}
+
+/** One character the armed aim could be lined up on, and its chance to land on an enemy. */
+export interface TargetOption {
+    target: Fighter;
+    /** Percent to land, 0–100: undefined for help given to an ally, which has none. */
+    chance?: number;
+}
+
+/**
+ * Everyone the armed aim could be lined up on (its `candidates`), the enemies
+ * likeliest first: the turn sheet's list of targets. A shot's chance is its
+ * odds, with a melee weapon's strike, a cleave, a shield bash and a Hunter's
+ * mark landing every time.
+ */
+export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, candidates: readonly number[]): TargetOption[] {
+    const shot = shotOf(aim);
+    return candidates.flatMap((id): TargetOption[] => {
+        const target = fighterById(battle, id);
+        if (!target) return [];
+        if (target.owner === fighter.owner) return [{ target }];
+        return [{ target, chance: hitChance(battle, fighter, target, shot) }];
+    }).sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0));
+}
 
 const isMoving = (aim: Aim) => aim === "move" || aim === "sneak";
 type AtSquare = "fireball" | "throw" | "demolish";
@@ -250,6 +278,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         targets: draft.targets,
         /** Who a tap can line this aim up on. */
         candidates,
+        /** The same, with each enemy's chance to be hit: the sheet's list of targets. */
+        options: targetOptions(battle, fighter, aim, candidates),
         reach: shading,
         /** Every square the aim could land on, were someone there to aim at. */
         range,
@@ -268,6 +298,11 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         tapSquare: (square: Square) => { apply(tapSquare(context, square)); },
         /** A tap on a character: answers whether it was taken as aiming, or the board should select it instead. */
         tapFighter: (id: number): boolean => apply(tapFighter(context, id)),
+        /** A character picked from the sheet's list of targets: lines the aim up on it, but — unlike a second tap on the board — never sends. */
+        pick: (id: number) => {
+            const result = tapFighter(context, id);
+            if (result !== "send") apply(result);
+        },
     };
 }
 

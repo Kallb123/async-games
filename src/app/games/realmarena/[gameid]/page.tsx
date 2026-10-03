@@ -17,7 +17,7 @@ import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState, type Fighter } from "@/games/RealmArena/rules";
 import { actionSquares, battleCues, fighterName, PLAYBACK_MS } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -158,6 +158,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
+    // A target picked from the turn sheet's list brings the view to it and
+    // whoever is aiming at it, and keeps it there until the character acts,
+    // another is selected, a box is tapped or a review is stepped into.
+    const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
+    const [picked, setPicked] = useResettingState<{ squares: number[]; key: string } | null>(null, pickKey);
+    const focusTarget = (target: Fighter) => {
+        if (selected) setPicked({ squares: [selected.square, target.square], key: `target:${target.id}:${Date.now()}` });
+    };
     const endTurn = () => {
         const command = new RealmArenaEndTurn();
         command.keepStill = keepStill;
@@ -187,10 +195,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // A step that handed the turn on moved everyone's AP, not anyone in
     // particular, so the view stays where it is. One that ended the battle
     // hands it to nobody, and is followed: it's the blow that decided it.
+    // Live, it goes to a target picked from the turn sheet's list instead.
     const previous = nav.previousSnapshot;
-    const follow = previous && (previous.currentTurn === currentTurn || currentTurn === '')
-        ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
-        : null;
+    const follow = !nav.isLive
+        ? previous && (previous.currentTurn === currentTurn || currentTurn === '')
+            ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
+            : null
+        : picked;
     // And plays what each step did as it's stepped to (§26.1), whoever took it.
     const stepEvents = nav.displayedOutcome?.events;
     const stepCues = previous && stepEvents ? battleCues(stepEvents, previous.specificGameState.fighters) : [];
@@ -395,7 +406,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
                     {selected && (
                         <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
-                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} />}
+                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />}
                         </RealmArenaFighterCard>
                     )}
 

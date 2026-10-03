@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
-import { ACTION_POINTS, newFighter, reachOf, type BattleState, type Fighter } from "./rules";
+import { ACTION_POINTS, newFighter, reachOf, shotOdds, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./ui";
-import { afterMove, MOVE, reachAfter, tapFighter, tapSquare, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -152,5 +152,28 @@ describe("reachAfter", () => {
         const reach = reachAfter(battle, manAtArms, { square: at(field, 8, 4), ap: 1 });
         expect(targets(reach)).toEqual([{ target: 4, chance: 100 }]);
         expect(reach).toMatchObject({ previewing: true, ap: 1 });
+    });
+});
+
+describe("targetOptions", () => {
+    const listed = (options: ReturnType<typeof targetOptions>) => options.map(({ target, chance }) => ({ target: target.id, chance }));
+
+    it("lists everyone the aim could land on, a strike always hitting", () => {
+        const candidates = targetsOf(battle, "a", manAtArms, "attack");
+        expect(listed(targetOptions(battle, manAtArms, "cleave", candidates))).toEqual([{ target: 2, chance: 100 }, { target: 3, chance: 100 }]);
+    });
+
+    it("gives a shot its odds, likeliest first", () => {
+        const archer = ready(6, "a", "archer", at(field, 0, 4));
+        const marked = ready(7, "b", "knight", at(field, 6, 0), { effects: { marked: 1 } });
+        const shooting: BattleState = { field, fighters: [...battle.fighters, archer, marked] };
+        const options = targetOptions(shooting, archer, "attack", targetsOf(shooting, "a", archer, "attack"));
+        expect(options[0].target.id).toBe(marked.id);
+        for (const { target, chance } of options) expect(chance).toBe(shotOdds(shooting, archer, target)?.chance);
+        expect(options[0].chance).toBeGreaterThan(options[1].chance ?? 0);
+    });
+
+    it("gives help for an ally no chance to hit", () => {
+        expect(listed(targetOptions(battle, manAtArms, "heal", [ally.id]))).toEqual([{ target: 1, chance: undefined }]);
     });
 });
