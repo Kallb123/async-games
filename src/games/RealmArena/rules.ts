@@ -3,7 +3,7 @@
 // who reacts to a move and in what order, abilities, status effects, items
 // and the smoke a smoke pot leaves, the low cover a blast clears, knock-outs
 // and raising, scoring, the end of the battle with its tie-break chain, and
-// what a squad may muster.
+// what a squad may muster, the options its ranks unlock among it (§23.2).
 //
 // Pure and isomorphic, with no server-only imports (docs/new-game.md,
 // "Isomorphic rules modules"): PR 3's commands act through it, and the board
@@ -32,10 +32,10 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, ITEMS, MAX_OF_EACH, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type PlayerCount,
+    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, MAX_OF_EACH, OPTIONS, squadPoints,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
-import { addTally, NO_TALLY, type Tally } from "./mastery";
+import { addTally, NO_TALLY, type MasterySnapshot, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
@@ -101,6 +101,8 @@ export interface Fighter {
     spent: AbilityId[];
     /** The item it carries, bought at muster, or null once it's used or when it never had one (§21.1). */
     item: ItemId | null;
+    /** The option it was mustered with, swapping part of its kit for another (§23.2): absent on the starter character. */
+    option?: OptionId;
     /**
      * Where the smoke pot it threw landed, while the cloud lasts: until the
      * start of its owner's next turn, as a shield wall does, and gone with it
@@ -125,10 +127,11 @@ export interface BattleState {
 
 export type Action =
     | { kind: "move" | "sneak"; fighter: number; path: Square[] }
-    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught"; fighter: number; target: number }
-    | { kind: "hunker" | "watch" | "shieldWall"; fighter: number }
+    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark"; fighter: number; target: number }
+    | { kind: "hunker" | "watch" | "shieldWall" | "purify"; fighter: number }
     | { kind: "cleave"; fighter: number; targets: number[] }
-    | { kind: "fireball" | "throw"; fighter: number; at: Square };
+    /** A demolish is aimed at the square of low cover it blasts. */
+    | { kind: "fireball" | "throw" | "demolish"; fighter: number; at: Square };
 
 export type ShotResult = "hit" | "graze" | "miss";
 
@@ -139,12 +142,20 @@ export type BattleEvent =
     | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean }
     | { kind: "fireball"; fighter: number; at: Square; targets: number[]; damage: number }
     | { kind: "downed"; fighter: number; by: number }
-    /** A Cleric's Heal, or a healing draught (`draught`) given by `fighter` — to itself, when `target` is `fighter`. */
-    | { kind: "healed"; fighter: number; target: number; hp: number; draught?: true }
+    /**
+     * A Cleric's Heal; or, by `via`, a healing draught given by `fighter` — to
+     * itself, when `target` is `fighter` — or one ally a Purify reached, the
+     * Cleric among them (§23.2).
+     */
+    | { kind: "healed"; fighter: number; target: number; hp: number; via?: "draught" | "purify" }
     /** A thrown item landing: `targets` is everyone it hit, which a smoke pot never does — its cloud is the thrower's `smoke`. */
     | { kind: "thrown"; fighter: number; item: ItemId; at: Square; targets: number[]; damage: number }
-    /** Low cover blasted away to scorched ground by `fighter`'s fireball or fire flask, after its damage (§22). */
+    /** Low cover blasted away to scorched ground by `fighter`'s fireball, fire flask or Demolish, after its damage (§22). */
     | { kind: "blasted"; fighter: number; squares: Square[] }
+    /** A Knight's Demolish at the cover on `at`: `targets` is everyone beside it that it struck (§23.2). Its `blasted` follows. */
+    | { kind: "demolished"; fighter: number; at: Square; targets: number[]; damage: number }
+    /** A Scout's Hunter's mark on `target`, whose `effect` follows (§23.2). */
+    | { kind: "marked"; fighter: number; target: number }
     | { kind: "raised"; fighter: number; target: number; hp: number }
     | { kind: "hunkered" | "shieldWall"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
@@ -189,6 +200,12 @@ export const itemOf = (fighter: Pick<Fighter, "item">): Item | undefined => figh
 /** What an item adds to a muster's cost: nothing for none. */
 export const itemPoints = (item: ItemId | null | undefined): number => item ? ITEMS[item].points : 0;
 
+/** What a character fights with: its character's weapon, or the one its option swaps in (§23.2). */
+export const weaponOf = (fighter: Pick<Fighter, "character" | "option">): Weapon => kitOf(fighter.character, fighter.option).weapon;
+
+/** The abilities a character has: its character's, with the one its option swaps out swapped for its own (§23.2). */
+export const abilitiesOf = (fighter: Pick<Fighter, "character" | "option">): readonly AbilityId[] => kitOf(fighter.character, fighter.option).abilities;
+
 /** Movement points each AP spent on moving buys it: its character's, halved and rounded up while it's slowed (§20.1). */
 export function movementOf(fighter: Fighter): number {
     const { movement } = CHARACTERS[fighter.character];
@@ -219,7 +236,7 @@ export function inRange(field: Battlefield, from: Square, to: Square, range: num
 
 /** Whether a character's weapon could hit someone on a square from where it stands: in melee reach for a melee weapon, in range and in sight for a ranged one. */
 export function weaponReaches(state: BattleState, fighter: Fighter, square: Square): boolean {
-    const weapon = CHARACTERS[fighter.character].weapon;
+    const weapon = weaponOf(fighter);
     return weapon.kind === "ranged" ? inRange(state.field, fighter.square, square, weapon.range) : inMeleeReach(state.field, fighter.square, square);
 }
 
@@ -280,7 +297,7 @@ export function smokeSquares(state: BattleState): ReadonlySet<Square> {
  */
 export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch" = "attack"): ShotOdds | undefined {
     const { field } = state;
-    const weapon = CHARACTERS[attacker.character].weapon;
+    const weapon = weaponOf(attacker);
     if (weapon.kind !== "ranged") return undefined;
     if (!inRange(field, attacker.square, target.square, weapon.range)) return undefined;
 
@@ -318,7 +335,7 @@ export function shotResult({ chance, grazeChance }: Pick<ShotOdds, "chance" | "g
  */
 function setsOff(state: BattleState, watcher: Fighter, square: Square, smoke: ReadonlySet<Square>): boolean {
     if (!state.field.tiles[square].terrain.standable || !weaponReaches(state, watcher, square)) return false;
-    return CHARACTERS[watcher.character].weapon.kind === "melee" || !smoke.has(square);
+    return weaponOf(watcher).kind === "melee" || !smoke.has(square);
 }
 
 export interface Reaction {
@@ -380,8 +397,7 @@ const isSquare = (field: Battlefield, value: unknown): value is Square =>
 
 /** Why a character can't use an ability now, or undefined when it can. */
 function abilityRefusal(fighter: Fighter, ability: AbilityId): string | undefined {
-    const character = CHARACTERS[fighter.character];
-    if (!character.abilities.includes(ability)) return `A ${character.name} can't use ${ABILITIES[ability].name}`;
+    if (!abilitiesOf(fighter).includes(ability)) return `This ${CHARACTERS[fighter.character].name} can't use ${ABILITIES[ability].name}`;
     if (fighter.spent.includes(ability)) return `${ABILITIES[ability].name} has been used this battle`;
     if ((fighter.cooldowns[ability] ?? 0) > 0) return `${ABILITIES[ability].name} isn't ready yet`;
     return undefined;
@@ -404,7 +420,7 @@ const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter
 /** Why an attack can't be made, or undefined when it can. */
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
     if (!isEnemy(actor, target)) return "Pick an enemy";
-    if (CHARACTERS[actor.character].weapon.kind === "melee") {
+    if (weaponOf(actor).kind === "melee") {
         if (weaponReaches(state, actor, target.square)) return undefined;
         return nextTo(state.field, actor.square, target.square) ? "Too far above or below to strike" : "Too far away to strike";
     }
@@ -448,6 +464,15 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         }
         case "aimedShot":
             return ability("aimedShot", () => attackRefusal(state, actor, target, "aimedShot"));
+        // An attack with the character's own weapon, at its usual odds, that
+        // leaves an effect: Shield bash strikes, Crippling shot shoots (§23.2).
+        case "shieldBash":
+        case "cripplingShot":
+            return ability(kind, () => attackRefusal(state, actor, target, "attack"));
+        case "huntersMark":
+            return ability("huntersMark", () => isEnemy(actor, target)
+                ? aimRefusal(state, actor, target.square, ABILITIES.huntersMark.range)
+                : "Pick an enemy");
         case "hunker":
             return afford(HUNKER_AP);
         case "watch":
@@ -464,6 +489,12 @@ export function check(state: BattleState, player: string, action: unknown): Chec
             });
         case "shieldWall":
             return ability("shieldWall", () => undefined);
+        case "demolish":
+            return ability("demolish", () => isSquare(state.field, at) && state.field.tiles[at].terrain.destructible && nextTo(state.field, actor.square, at)
+                ? undefined
+                : "Pick low cover next to them");
+        case "purify":
+            return ability("purify", () => purified(state, actor).length > 0 ? undefined : "Nobody beside them needs it");
         case "fireball":
             return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
         case "heal":
@@ -506,6 +537,22 @@ function healRefusal(state: BattleState, healer: Fighter, target: Fighter | unde
     if (!target || target.owner !== healer.owner || !isStanding(target) || (target.id === healer.id && !self)) return "Pick an ally to heal";
     if (target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
     return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
+}
+
+/** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
+export function afflictionsOn(fighter: Fighter): Affliction[] {
+    return AFFLICTIONS.filter(effect => hasEffect(fighter, effect));
+}
+
+/**
+ * Who a Cleric's Purify would reach (§23.2): itself and every standing ally
+ * next to it, as a heal reaches, that is hurt or afflicted — the ones it would
+ * do anything for. Ids in battle order.
+ */
+export function purified(state: BattleState, cleric: Fighter): Fighter[] {
+    return state.fighters.filter(ally => ally.owner === cleric.owner && isStanding(ally)
+        && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
+        && (ally.hp < CHARACTERS[ally.character].hp || afflictionsOn(ally).length > 0));
 }
 
 // ─── Taking an action ───────────────────────────────────────────────────────
@@ -579,7 +626,14 @@ function resolver(state: BattleState, roll: Roll) {
         events.push(result.event);
     };
 
-    const shoot = (by: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch") => {
+    /**
+     * A shot, which leaves `effect` on a hit, and only then (§20.2): an
+     * ability's (Crippling shot), or else whatever the weapon leaves (a
+     * Frost bolt's, on overwatch too).
+     */
+    const shoot = (by: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch", ability?: Affliction) => {
+        const weapon = weaponOf(by);
+        const effect = ability ?? (weapon.kind === "ranged" ? weapon.effect : undefined);
         const odds = shotOdds(battle, by, target, kind);
         if (!odds) throw new Error(`${by.id} can't shoot ${target.id}`);
         const rolled = roll();
@@ -587,11 +641,11 @@ function resolver(state: BattleState, roll: Roll) {
         const damage = result === "hit" ? odds.damage : result === "graze" ? odds.grazeDamage : 0;
         events.push({ kind: "shot", fighter: by.id, target: target.id, chance: odds.chance, roll: rolled, result, damage, reaction: kind === "overwatch" });
         if (damage > 0) wound(by, target, damage);
+        if (result === "hit" && effect) afflict(by, target, effect);
     };
 
-    /** A melee strike, which always hits (§13.3). */
-    const strike = (by: Fighter, target: Fighter, reaction = false) => {
-        const { damage } = CHARACTERS[by.character].weapon;
+    /** A melee strike, which always hits (§13.3): for the weapon's damage, or an ability's own (Shield bash). */
+    const strike = (by: Fighter, target: Fighter, reaction = false, damage = weaponOf(by).damage) => {
         events.push({ kind: "struck", fighter: by.id, target: target.id, damage, reaction });
         wound(by, target, damage);
     };
@@ -621,14 +675,14 @@ function resolver(state: BattleState, roll: Roll) {
 
     /**
      * Restores up to `hp` to a character, never past full, and clears what a
-     * heal does: the one heal-and-clear a Cleric's Heal and a healing draught
-     * share (§20.2, §21.3).
+     * heal does — every affliction, for a Purify: the one heal-and-clear a
+     * Cleric's Heal, a healing draught and Purify share (§20.2, §21.3, §23.2).
      */
-    const mend = (by: Fighter, target: Fighter, hp: number, draught: boolean) => {
+    const mend = (by: Fighter, target: Fighter, hp: number, via?: "draught" | "purify") => {
         const restored = Math.min(hp, CHARACTERS[target.character].hp - target.hp);
         target.hp += restored;
-        events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(draught ? { draught: true as const } : {}) });
-        for (const effect of healedEffects(target)) {
+        events.push({ kind: "healed", fighter: by.id, target: target.id, hp: restored, ...(via ? { via } : {}) });
+        for (const effect of via === "purify" ? afflictionsOn(target) : healedEffects(target)) {
             delete target.effects[effect];
             events.push({ kind: "effect", fighter: target.id, effect, change: "cleared" });
         }
@@ -655,7 +709,7 @@ function walk(state: BattleState, run: ReturnType<typeof resolver>, mover: Fight
         moveTo(step);
         const watcher = run.get(id);
         watcher.banked -= REACTION_COST;
-        if (CHARACTERS[watcher.character].weapon.kind === "ranged") run.shoot(watcher, mover, "overwatch");
+        if (weaponOf(watcher).kind === "ranged") run.shoot(watcher, mover, "overwatch");
         else run.strike(watcher, mover, true);
         if (!isStanding(mover)) return;
     }
@@ -689,8 +743,30 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         case "attack":
         case "aimedShot": {
             const target = get(action.target);
-            if (CHARACTERS[actor.character].weapon.kind === "melee") run.strike(actor, target);
+            if (weaponOf(actor).kind === "melee") run.strike(actor, target);
             else run.shoot(actor, target, action.kind);
+            break;
+        }
+        case "shieldBash":
+            // For the ability's damage, not the sword's, and stunned if it stays up (§23.2).
+            run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage);
+            run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
+            break;
+        case "cripplingShot":
+            // At the bow's usual odds; slowed only on a hit (§20.2).
+            run.shoot(actor, get(action.target), "attack", ABILITIES.cripplingShot.effect);
+            break;
+        case "huntersMark":
+            events.push({ kind: "marked", fighter: actor.id, target: action.target });
+            run.afflict(actor, get(action.target), ABILITIES.huntersMark.effect);
+            break;
+        case "demolish": {
+            // Everyone beside the cover but the Knight, friend or foe as any
+            // blast is, then the cover goes, after the damage (§22, §23.2).
+            const { damage } = ABILITIES.demolish;
+            run.land(actor, areaAround(state.field, action.at).filter(square => square !== actor.square), damage, undefined,
+                targets => ({ kind: "demolished", fighter: actor.id, at: action.at, targets, damage }));
+            run.blast(actor, [action.at]);
             break;
         }
         case "hunker":
@@ -723,12 +799,15 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
         }
         case "heal":
             // The answer to effects: it puts out burning, and clears slowed and stunned (§20.2).
-            run.mend(actor, get(action.target), ABILITIES.heal.hp, false);
+            run.mend(actor, get(action.target), ABILITIES.heal.hp);
+            break;
+        case "purify":
+            for (const ally of purified(state, actor)) run.mend(actor, get(ally.id), ABILITIES.purify.hp, "purify");
             break;
         case "draught":
             // Used up whatever it does (§21.1).
             actor.item = null;
-            run.mend(actor, get(action.target), ITEMS.healingDraught.hp, true);
+            run.mend(actor, get(action.target), ITEMS.healingDraught.hp, "draught");
             break;
         case "throw": {
             // `check` allowed it, so the actor carries something thrown.
@@ -882,11 +961,13 @@ export interface MusterPick {
     square: Square;
     /** The one item it carries into battle, if any (§21.1). */
     item?: ItemId;
+    /** The option it's mustered with, if any: one its owner's rank with the character unlocks (§23.2). */
+    option?: OptionId;
 }
 
-/** A pick as `musterRefusal` checked it, and nothing else a request carried: no `item` key at all when it carries none. */
-export function pickOf({ character, square, item }: MusterPick): MusterPick {
-    return item ? { character, square, item } : { character, square };
+/** A pick as `musterRefusal` checked it, and nothing else a request carried: no `item` or `option` key at all when it has none. */
+export function pickOf({ character, square, item, option }: MusterPick): MusterPick {
+    return { character, square, ...(item ? { item } : {}), ...(option ? { option } : {}) };
 }
 
 /** What a muster costs: its characters, and the items they carry (§21.1). */
@@ -895,12 +976,25 @@ export function musterPoints(picks: readonly MusterPick[]): number {
 }
 
 /**
+ * Why a pick's option can't be mustered, or undefined when it can (§23.2):
+ * none at all, or one of that character's that `ranks` — the player's own, as
+ * the battle snapshotted them when it was created (§23.3) — has unlocked. The
+ * client never claims an option; it only sends the pick.
+ */
+function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: MasterySnapshot[string]): string | undefined {
+    if (pick.option == null) return undefined;
+    if (!isOptionId(pick.option) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
+    return (ranks[character] ?? 0) >= OPTIONS[pick.option].rank ? undefined : "That option isn't unlocked yet";
+}
+
+/**
  * Why a squad can't muster, or undefined when it can: at least one
  * character, no more than `MAX_OF_EACH` of any one, at most one item each,
- * within the budget with the items, and each on its own square of the seat's
- * deployment zone. Total, like `check`.
+ * at most one option each that `ranks` unlocks, within the budget with the
+ * items, and each on its own square of the seat's deployment zone. Total,
+ * like `check`.
  */
-export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number): string | undefined {
+export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number, ranks: MasterySnapshot[string]): string | undefined {
     if (!Array.isArray(picks) || picks.length === 0) return "Muster at least one character";
     const zone = new Set(Array.isArray(field.deployments[seat]) ? field.deployments[seat] : []);
     const squares = new Set<Square>();
@@ -912,6 +1006,8 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
         counts.set(pick.character, count);
         // One slot, so an item is one id or nothing: never a list (§21.1).
         if (pick.item != null && !isItemId(pick.item)) return "That isn't an item";
+        const option = optionRefusal(pick, pick.character, ranks);
+        if (option) return option;
         if (!zone.has(pick.square as Square) || squares.has(pick.square as Square)) return "Each character needs its own square in your deployment zone";
         squares.add(pick.square as Square);
     }
@@ -920,8 +1016,8 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
 }
 
 /** A character as it first stands on the battlefield, at full HP with nothing spent, carrying what it was mustered with. */
-export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null): Fighter {
-    return { id, owner, character, square, hp: CHARACTERS[character].hp, ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item };
+export function newFighter(id: number, owner: string, character: CharacterId, square: Square, item: ItemId | null = null, option?: OptionId): Fighter {
+    return { id, owner, character, square, hp: CHARACTERS[character].hp, ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item, ...(option ? { option } : {}) };
 }
 
 /**

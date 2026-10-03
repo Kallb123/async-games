@@ -5,8 +5,7 @@ import OptionSection from '@/components/ui/OptionSection';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import Section from '@/components/ui/Section';
 import UndoButton from '@/components/ui/UndoButton';
-import { CHARACTERS } from '@/games/RealmArena/characters';
-import { isStanding, REACTION_COST, type Fighter } from '@/games/RealmArena/rules';
+import { isStanding, REACTION_COST, weaponOf, type Fighter } from '@/games/RealmArena/rules';
 import { CHARACTER_MARK, fighterName } from '@/games/RealmArena/ui';
 
 interface RealmArenaTurnEndProps {
@@ -57,7 +56,7 @@ export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepS
         <OptionSection label="End your turn" footer={footer}>
             {watchers.map(fighter => {
                 const still = keepStill.includes(fighter.id);
-                const stance = CHARACTERS[fighter.character].weapon.kind === 'ranged' ? 'overwatch' : 'guard';
+                const stance = weaponOf(fighter).kind === 'ranged' ? 'overwatch' : 'guard';
                 return (
                     <OptionToggleRow
                         key={fighter.id}

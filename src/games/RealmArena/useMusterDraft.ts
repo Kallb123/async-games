@@ -1,6 +1,7 @@
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { REALM, type ItemId, type PlayerCount } from "./characters";
+import type { MasterySnapshot } from "./mastery";
 import { musterPoints, musterRefusal, pickOf, readyMadeMuster } from "./rules";
 import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from "./ui";
 
@@ -16,7 +17,7 @@ import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from
  * a square, and the player only moves the ones they want elsewhere — and gives
  * an item (§21.1) to whichever they pick up, out of the same points.
  */
-export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, turnKey: string) {
+export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, ranks: MasterySnapshot[string], turnKey: string) {
     const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
     const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
     const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);
@@ -27,7 +28,7 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
     const spread = zone.length > 0 ? readyMadeMuster(field, seat, squad) : [];
     const picks = placement?.picks ?? spread;
     // The server's own rule, so nothing it would refuse is offered.
-    const refusal = musterRefusal(field, seat, picks, budget);
+    const refusal = musterRefusal(field, seat, picks, budget, ranks);
 
     return {
         counts,

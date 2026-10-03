@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.21. Split out of Defender of the Realm in its third round of
+**Status:** v1.22. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -9,7 +9,8 @@ implementation plan and where it stands. Milestone A, free-for-all and C1–C3
 (status effects §20, items §21, destructible low cover §22) are built, and so
 is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
 and the strikes played out on the board. C5, character mastery earned by what
-a character does (§23), is under way: PR 1, mastery from results, is built.
+a character does (§23), is under way: PR 1, mastery from results, and PR 2,
+the rank-1 options, are built.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -963,7 +964,7 @@ recap, a guide and a tutorial.
 | C2 | Items bought at muster (§21) | Built |
 | C3 | Destructible low cover (§22) | Built |
 | C4 | Battle visuals: hit text, then the shot and the fireball in flight (§26) | Built |
-| **C5** | **Character mastery, earned by what a character does (§23)** | **Under way**: PR 1 built. Replaces B4 |
+| **C5** | **Character mastery, earned by what a character does (§23)** | **Under way**: PRs 1 and 2 built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, if it's chosen (§8) | After C |
 | B6 | More factions | After C |
@@ -1240,9 +1241,9 @@ function of the ground.
   aimed at an ally like Heal. Its carrier can drink it, which Heal can't do
   for the Cleric.
 - **Reused, not rebuilt.** `areaAround` (once `fireballArea`) is every 3×3.
-  Heal, the draught and Purify (§23) share one heal-and-clear resolver
-  (`healRefusal`, `mend`). Fireball and the flasks share `aimRefusal` and
-  `land`.
+  Heal and the draught share `healRefusal`, and with Purify (§23) one
+  heal-and-clear resolver, `mend`. Fireball, the flasks and Demolish share
+  `land`, and Fireball, the flasks and Hunter's mark `aimRefusal`.
 - **The smoke lives on the thrower, as the square it landed on.** It isn't an
   effect, because an effect happens to the character it's on. It clears
   as a count of 1 would, and goes with the thrower if the thrower is downed.
@@ -1384,7 +1385,7 @@ The rank-1 options, built from effects, items and blasting:
 | Archer | **Crippling shot** | Aimed shot | A shot at normal accuracy that slows on a hit (3 AP, 2 turns) |
 | Scout | **Hunter's mark** | Sneak | Mark an enemy it can see within 12 squares (1 AP, 2 turns) |
 | Mage | **Frost bolt** | Bolt | Damage 2 instead of 3, and slows on a hit |
-| Cleric | **Purify** | Raise | Clear every effect from allies within 1 square, and give each 2 HP (2 AP, 3 turns) |
+| Cleric | **Purify** | Raise | Clear every effect from allies within 1 square, itself among them, and give each 2 HP (2 AP, 3 turns) |
 
 The rank-2 and rank-3 options will be designed once C1–C3 have been played.
 Two already fit: a **second item slot** (the item still has to be paid for) and a
@@ -1448,6 +1449,49 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     only unlock options.
   - **The result page shows each character's XP from the battle.** The
     profile's totals and ranks come in PR 3.
+- **What PR 2 settled:**
+  - **Options are data**: `OPTIONS` in `characters.ts`, each naming its
+    character, its rank and what it swaps, an ability or the weapon. `kitOf`
+    is a character's weapon and abilities with its option swapped in, and
+    the rules read a fighter's kit through it (`weaponOf`, `abilitiesOf`), so
+    a Man-at-arms with Shield bash can't Cleave and one without can't bash.
+    The new abilities sit in `ABILITIES` beside the starter ones. Frost bolt
+    is a weapon with an `effect`.
+  - **The pick carries the option** (`MusterPick.option`), and so does the
+    fighter (`Fighter.option`), absent on a starter character. A ready-made
+    squad has none.
+  - **The muster is checked against the snapshot.** `musterRefusal` takes
+    the player's own ranks from the battle's `mastery`, and refuses an option
+    that isn't that character's, or that the rank hasn't unlocked. Nothing in
+    the request is read for a rank. The response carries the snapshot
+    (`mastery`) to every viewer, since ranks are public, so the muster screen
+    checks with the server's own rule.
+  - **Each option is an `Act` of its own**: `shieldBash`, `cripplingShot`
+    and `huntersMark` are aimed at a character, `demolish` at the square of
+    cover, and `purify` needs nothing aimed. Frost bolt is the Mage's attack,
+    and its overwatch, as before.
+  - **An effect from a shot comes only on a hit**, Crippling shot's and
+    Frost bolt's alike, and Frost bolt's on overwatch too. Shield bash always
+    stuns whoever it doesn't down. A crippling shot is shot at the bow's
+    usual odds, with nothing of the aimed shot's bonus.
+  - **Demolish strikes everyone beside the cover but the Knight, friend or
+    foe**, as every blast does, then the cover goes, after the damage (§22).
+    It's told as a `demolished` event, then the `blasted` one.
+  - **Hunter's mark is aimed as a fireball is**, at an enemy in sight within
+    12 squares, and told as a `marked` event, then the `effect`.
+  - **Purify reaches the Cleric and every ally next to it**, as a heal does,
+    and only those it would do something for: hurt or afflicted. "Every
+    effect" means every affliction (burning, stunned, slowed and marked), not
+    a stance an ally took itself, so a shield wall or hunkering down stands.
+    Each ally reached is a `healed` event `via` Purify, as a draught's is
+    `via` the draught. Nobody beside it needing it refuses it.
+  - **Undo**: a Hunter's mark, a Purify and a Demolish that strikes nobody
+    can be taken back, the cover with it, like a throw. A shield bash and a
+    crippling shot never can.
+  - **The board plays them already.** The turn sheet's rows come from the
+    fighter's kit, so a figure mustered with an option shows that option's
+    row, aims it, and previews it. Nothing can be mustered with one until
+    PR 3's muster screen.
 - **Ranks and unlocked options are public**, like the rest of a profile. Only
   the options picked for a squad are sealed, with the rest of the muster.
 - **The client never claims an option.** It sends the pick, and the server
@@ -1462,9 +1506,9 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
    writer, the aggregation into XP, the snapshot at creation, and the replay
    adapter reading it back. Reviewers: `gremlin` (the cost of the aggregation
    on a long record), `rulebook` (the wiring of the result stats).
-2. **Options:** the rank-1 options as data and rules, and the muster check
-   against the snapshot. Reviewers: `caveman`, `locksmith` (an option
-   claimed but not unlocked).
+2. **Options**, built: the rank-1 options as data and rules, the muster check
+   against the snapshot, and the board playing them. Reviewers: `caveman`,
+   `locksmith` (an option claimed but not unlocked).
 3. **Screens:** options at muster, the profile section and the guide text.
    Reviewers: `caveman`, `rulebook`.
 
@@ -1771,3 +1815,4 @@ Realm, its sibling in the same world.
 | 1.19 | C4 PR 1 fills in hit text (§26.3): the beats and the cap, an effect's name under its number, what a heal and a Raise show, text rising where the hit happened, and the events a replayed snapshot carries. A downed figure staying drawn until its hit lands moves to PR 2, with the arrow it's for. |
 | 1.20 | C4 PR 2 fills in the shot and the fireball (§26.3): when each part sets off and lands, how a hit, a graze and a miss end, a throw at nobody still flying and bursting, the burst's spread, blasted cover standing until its burst fades, and drawn art for all of it. C4 is built; C5 is next. |
 | 1.21 | C5 PR 1 fills in mastery from results (§23.3): the tally counts the action for the actor and reactions for the watcher, the result keeps a row per player and kind of character, a dropped player earns nothing from the battle, the battle keeps ranks rather than options, XP counts the battles a profile does, and a battle starts with nobody ranked if mastery can't be read. |
+| 1.22 | C5 PR 2 fills in options (§23.3): options are data, swapping a fighter's kit, checked at muster against the battle's own snapshot of ranks, which the response carries; each is an action of its own; Demolish strikes everyone beside the cover but the Knight; Purify reaches the Cleric too and clears every affliction but no stance; a mark, a Purify and a Demolish on nobody can be undone. |

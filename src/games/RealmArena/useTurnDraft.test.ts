@@ -56,7 +56,22 @@ describe("tapSquare", () => {
     });
 });
 
+describe("tapSquare, for a Demolish (§23.2)", () => {
+    it("lines up the cover tapped, whoever is beside it", () => {
+        const demolish: Draft = { aim: "demolish", square: null, targets: [] };
+        expect(tapSquare(context(demolish), at(field, 3, 1))).toEqual({ ...demolish, square: at(field, 3, 1) });
+    });
+});
+
 describe("tapFighter", () => {
+    it("lines up an option's ability on an enemy out of reach, so the sheet can say why it can't be (§23.2)", () => {
+        for (const aim of ["shieldBash", "cripplingShot", "huntersMark"] as const) {
+            const draft: Draft = { aim, square: null, targets: [] };
+            expect(tapFighter(context(draft), far.id), aim).toEqual({ ...draft, targets: [far.id] });
+            expect(tapFighter(context(draft), ally.id), aim).toBeUndefined();
+        }
+    });
+
     it("lines up an attack on an enemy tapped while moving, in reach or not", () => {
         expect(tapFighter(context(MOVE), near.id)).toEqual({ aim: "attack", square: null, targets: [near.id] });
         expect(tapFighter(context(MOVE), far.id)).toEqual({ aim: "attack", square: null, targets: [far.id] });

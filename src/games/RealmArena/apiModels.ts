@@ -1,6 +1,7 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RealmArenaMapId } from "./maps";
 import type { Fighter, MusterPick, ToldEvent } from "./rules";
+import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
 
@@ -32,6 +33,13 @@ export interface IRealmArenaSpecificGameStateResponse {
     mustered: string[];
     /** The viewer's own sealed squad, while the muster lasts; null once it's over, or for a viewer who hasn't mustered. */
     myMuster: MusterPick[] | null;
+    /**
+     * Each player's rank with each character, as the battle snapshotted them
+     * when it was created (§23.3): what the muster's options are checked
+     * against. Public, like the rest of a profile — only the options picked
+     * are sealed, with the rest of the muster. Only ranks above 0.
+     */
+    mastery: MasterySnapshot;
     /** Every player's score, by userId (§13.7). */
     scores: Record<string, number>;
     /** True when the viewer has an action of their own they can still take back (docs/undo.md). The undo stack itself is never sent. */

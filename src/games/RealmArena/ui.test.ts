@@ -4,11 +4,11 @@ import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
-import { ABILITIES, type CharacterId } from "./characters";
+import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
 import {
     abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
-    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement,
+    reactionPreviews, squadCounts, squadOf, targetsOf, weaponLine, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement,
 } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -238,6 +238,12 @@ describe("rangeSquares", () => {
         const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
         expect(named(OPEN, rangeSquares({ field: OPEN, fighters: [cleric] }, cleric, "nextTo"))).toEqual(["0,1", "1,0", "1,1"]);
     });
+
+    it("draws a Demolish's range as the low cover next to it, and nothing else (§23.2)", () => {
+        const field = buildBattlefield({ name: "Cover", rows: [",.o.,", "..#..", "....."], deployments: [], objectives: {} });
+        const knight = ready(0, "a", "knight", at(field, 1, 1), { option: "demolish" });
+        expect(named(field, rangeSquares({ field, fighters: [knight] }, knight, "cover"))).toEqual(["0,0", "2,0"]);
+    });
 });
 
 describe("fighterName and whoseName", () => {
@@ -370,7 +376,7 @@ describe("eventLines", () => {
         const events: BattleEvent[] = [
             { kind: "thrown", fighter: 0, item: "fireFlask", at: 5, targets: [1], damage: 2 },
             { kind: "thrown", fighter: 0, item: "smokePot", at: 5, targets: [], damage: 0 },
-            { kind: "healed", fighter: 0, target: 0, hp: 3, draught: true },
+            { kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" },
         ];
         expect(eventLines(events, fighters, "a", nameFor)).toEqual([
             { mark: ITEM_ART.fireFlask, title: "Fire flask: Bob's Knight", sub: "2 damage each" },
@@ -379,9 +385,34 @@ describe("eventLines", () => {
         ]);
     });
 
+    it("tells the options' own events, and a Purify as it reaches each ally (§23.2)", () => {
+        const events: BattleEvent[] = [
+            { kind: "demolished", fighter: 0, at: 5, targets: [1], damage: 2 },
+            { kind: "demolished", fighter: 0, at: 5, targets: [], damage: 2 },
+            { kind: "marked", fighter: 0, target: 1 },
+            { kind: "healed", fighter: 0, target: 0, hp: 2, via: "purify" },
+            { kind: "healed", fighter: 0, target: 0, hp: 0, via: "purify" },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+            { icon: "💥", title: "Demolish: Bob's Knight", sub: "2 damage each" },
+            { icon: "💥", title: "Demolish: nobody hit" },
+            { icon: "◎", title: "Your Archer used Hunter's mark on Bob's Knight" },
+            { icon: "✚", title: "Your Archer purified for 2", sub: "Purify" },
+            { icon: "✚", title: "Your Archer purified", sub: "Purify" },
+        ]);
+    });
+
     it("calls a missed shot a miss", () => {
         const [line] = eventLines([{ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 95, result: "miss", damage: 0, reaction: false }], fighters, "b", nameFor);
         expect(line).toMatchObject({ title: "Miss", sub: "Alice's Archer at your Knight · 80% to hit" });
+    });
+});
+
+describe("weaponLine", () => {
+    it("says what a weapon leaves on a hit, when it leaves anything (§23.2)", () => {
+        expect(weaponLine(kitOf("mage").weapon)).toBe("70% · range 10 · 3 damage");
+        expect(weaponLine(kitOf("mage", "frostBolt").weapon)).toBe("70% · range 10 · 2 damage · slowed on a hit");
+        expect(weaponLine(kitOf("knight").weapon)).toBe("Melee · 4 damage");
     });
 });
 
@@ -428,6 +459,19 @@ describe("battleCues", () => {
         const cues = battleCues([{ kind: "shot", fighter: 3, target: 0, chance: 60, result: "hit", damage: 3, reaction: false }], before);
         expect(only(cues, "flight")).toMatchObject([{ missile: "bolt", from: 70, to: 10, start: 0, land: FLIGHT_MS.bolt }]);
         expect(only(cues, "text")[0].start).toBe(FLIGHT_MS.bolt);
+    });
+
+    it("slashes across the cover a Demolish blasts, striking everyone beside it at once, the cover going after", () => {
+        const cues = battleCues([
+            { kind: "demolished", fighter: 0, at: 11, targets: [1, 2], damage: 2 },
+            { kind: "blasted", fighter: 0, squares: [11] },
+        ], before);
+        const [slash] = only(cues, "slash");
+        expect(slash).toMatchObject({ square: 11, start: 0 });
+        const texts = only(cues, "text");
+        expect(texts.map(text => [text.fighter, text.value])).toEqual([[1, "−2"], [2, "−2"]]);
+        expect(new Set(texts.map(text => text.start)).size).toBe(1);
+        expect(only(cues, "scorch")[0].start).toBeGreaterThan(texts[0].start);
     });
 
     it("slashes across a struck target, and its damage rises as the slash lands", () => {

@@ -6,9 +6,9 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -155,11 +155,11 @@ export function hpFraction(fighter: Fighter): number {
     return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
 }
 
-/** A weapon in one line: "80% · range 20 · 3 damage". */
+/** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slows on a hit". */
 export function weaponLine(weapon: Weapon): string {
-    return weapon.kind === "melee"
-        ? `Melee · ${weapon.damage} damage`
-        : `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage`;
+    if (weapon.kind === "melee") return `Melee · ${weapon.damage} damage`;
+    const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
+    return `${weapon.accuracy}% · range ${weapon.range} · ${weapon.damage} damage${leaves}`;
 }
 
 /** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */
@@ -228,10 +228,11 @@ export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean):
 
 /**
  * What decides where an aimed action can land: the character's weapon, the
- * squares next to it (a heal, a raise, a healing draught), or — a number — how
- * far something aimed at a square reaches (a fireball, a thrown item).
+ * squares next to it (a heal, a raise, a healing draught), the low cover next
+ * to it (a Demolish), or — a number — how far something aimed at a square
+ * reaches (a fireball, a thrown item, a Hunter's mark).
  */
-export type RangeKind = "weapon" | "nextTo" | number;
+export type RangeKind = "weapon" | "nextTo" | "cover" | number;
 
 /**
  * An aimed action's range from where a character stands: every square it
@@ -246,6 +247,7 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
         if (typeof kind === "number") return inRange(field, fighter.square, square, kind);
+        if (kind === "cover") return !!field.tiles[square].terrain.destructible && nextTo(field, fighter.square, square);
         if (!field.tiles[square].terrain.standable) return false;
         return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
     };
@@ -268,7 +270,7 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
 }
 
 /** The actions aimed at one character. */
-export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught";
+export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark";
 
 /** The characters an action could be aimed at now, by the server's own `check`. */
 export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: TargetKind): number[] {
@@ -324,7 +326,7 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
     return reactionsTo(state, mover, path).flatMap(({ watcher: id, step }): ReactionPreview[] => {
         const watcher = fighterById(state, id);
         if (!watcher) return [];
-        const weapon = CHARACTERS[watcher.character].weapon;
+        const weapon = weaponOf(watcher);
         if (weapon.kind === "melee") return [{ watcher, kind: "guard", damage: weapon.damage }];
         const { battle: there, moved } = standingAt(state, mover, path[step]);
         const odds = shotOdds(there, watcher, moved, "overwatch");
@@ -371,8 +373,9 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
             case "healed":
                 return [{
-                    ...(event.draught ? { mark: ITEM_ART.healingDraught, sub: ITEMS.healingDraught.name } : { icon: "✚" }),
-                    title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}`,
+                    ...(event.via === "draught" ? { mark: ITEM_ART.healingDraught, sub: ITEMS.healingDraught.name }
+                        : { icon: "✚", ...(event.via === "purify" ? { sub: ABILITIES.purify.name } : {}) }),
+                    title: `${Name(event.target)} ${event.via === "purify" ? "purified" : "healed"}${event.hp > 0 ? ` for ${event.hp}` : ""}`,
                 }];
             case "thrown": {
                 const { name: item } = ITEMS[event.item];
@@ -385,6 +388,14 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             }
             case "blasted":
                 return [{ icon: "💥", title: `${capitalise(pluralize(event.squares.length, "square"))} of low cover blasted away`, sub: "Open ground now" }];
+            case "demolished":
+                return [{
+                    icon: "💥",
+                    title: `${ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
+                }];
+            case "marked":
+                return [{ icon: "◎", title: `${Name(event.fighter)} used ${ABILITIES.huntersMark.name} on ${name(event.target)}` }];
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":
@@ -611,6 +622,14 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
                 if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
+                break;
+            }
+            case "demolished": {
+                // A blow at the cover, and everyone beside it struck at once as it lands.
+                const land = beat(SLASH_MS);
+                cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                landing = { start: land, targets: event.targets };
+                event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;
             }
             case "blasted":

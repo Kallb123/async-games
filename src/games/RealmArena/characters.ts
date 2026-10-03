@@ -1,7 +1,7 @@
 // Realm Arena's first faction as data (docs/games/realm-arena.md §13.6): the
 // six characters a squad is bought from, their weapons and abilities, the
-// items they can carry (§21), the points budget, and the ready-made squad a
-// timed-out muster gets (§17.2).
+// options mastery unlocks for them (§23.2), the items they can carry (§21),
+// the points budget, and the ready-made squad a timed-out muster gets (§17.2).
 // The numbers are §13's first guesses for playtesting, not balance — tuning
 // one is an edit here, and `rules.ts` reads them rather than repeating them.
 //
@@ -12,7 +12,10 @@ import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 
 export type CharacterId = "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric";
 
-export type AbilityId = "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise";
+export type AbilityId =
+    | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
+    // The abilities an option swaps in (§23.2).
+    | "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "purify";
 
 /**
  * Something that happens to a character for a few of its owner's turns
@@ -55,10 +58,17 @@ export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
 /** The effects something else puts on a character, rather than stances it takes up itself. */
 export type Affliction = Exclude<EffectId, "hunkered" | "shieldWall">;
 
-/** A melee weapon needs its target next to it and always hits; a ranged one rolls (§13.3). */
+/** Every affliction, in `EFFECT_IDS` order: what Purify clears (§23.2). */
+export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => effect !== "hunkered" && effect !== "shieldWall");
+
+/**
+ * A melee weapon needs its target next to it and always hits; a ranged one
+ * rolls (§13.3), and may leave an effect on whoever it hits — only on a hit,
+ * not a graze (§20.2), and on overwatch as much as on the owner's turn.
+ */
 export type Weapon =
     | { name: string; kind: "melee"; damage: number }
-    | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number };
+    | { name: string; kind: "ranged"; damage: number; accuracy: number; range: number; effect?: Affliction };
 
 export interface Ability {
     name: string;
@@ -70,14 +80,14 @@ export interface Ability {
     oncePerBattle?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
-    /** How far away, in squares, it can be aimed (Fireball). */
+    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark). */
     range?: number;
-    /** What it does to each character it hits (Fireball). */
+    /** What it does to each character it hits, in place of the weapon's (Fireball, Shield bash, Demolish). */
     damage?: number;
-    /** HP it restores (Heal). */
+    /** HP it restores (Heal, Purify). */
     hp?: number;
-    /** What it leaves on everyone it hits (Fireball's burning). */
-    effect?: EffectId;
+    /** What it leaves on everyone it hits: Fireball's burning, and the options' (§23.2). A shot leaves it only on a hit (§20.2). */
+    effect?: Affliction;
     /** Blasts away the low cover in the 3×3 round where it lands, after its damage (Fireball, §22). */
     blasts?: true;
     description: string;
@@ -91,6 +101,11 @@ export const ABILITIES = {
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: true, description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
     heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them, and clear burning, slowed and stunned" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
+    shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
+    demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
+    cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
+    huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
+    purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed and marked from itself and each ally next to it, and give each 2 HP" },
 } as const satisfies Record<AbilityId, Ability>;
 
 export interface Character {
@@ -132,6 +147,59 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
         weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
     },
 };
+
+export type OptionId = "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "frostBolt" | "purify";
+
+/**
+ * A swap of one part of a character's kit for another, unlocked by mastery
+ * and picked per figure at muster (§23.2): one ability for another, or the
+ * weapon. A sidegrade that costs what the kit it replaces does, so a squad's
+ * points don't change. A figure with no option is the starter character.
+ */
+export type CharacterOption = {
+    character: CharacterId;
+    /**
+     * The rank with its character that unlocks it (§23.1). Once an option has
+     * a rank it keeps it, so a replay checks an old muster as it was checked
+     * (§23.3).
+     */
+    rank: 1 | 2 | 3;
+} & ({ replaces: AbilityId; ability: AbilityId } | { replaces: "weapon"; weapon: Weapon });
+
+/** The rank-1 options (§23.2). The rank-2 and rank-3 ones wait on a playtest. */
+export const OPTIONS = {
+    shieldBash: { character: "manAtArms", rank: 1, replaces: "cleave", ability: "shieldBash" },
+    demolish: { character: "knight", rank: 1, replaces: "shieldWall", ability: "demolish" },
+    cripplingShot: { character: "archer", rank: 1, replaces: "aimedShot", ability: "cripplingShot" },
+    huntersMark: { character: "scout", rank: 1, replaces: "sneak", ability: "huntersMark" },
+    frostBolt: { character: "mage", rank: 1, replaces: "weapon", weapon: { name: "Frost bolt", kind: "ranged", damage: 2, accuracy: 70, range: 10, effect: "slowed" } },
+    purify: { character: "cleric", rank: 1, replaces: "raise", ability: "purify" },
+} as const satisfies Record<OptionId, CharacterOption>;
+
+export function isOptionId(value: unknown): value is OptionId {
+    return typeof value === "string" && Object.hasOwn(OPTIONS, value);
+}
+
+/** An option's name: the ability or the weapon it swaps in. */
+export function optionName(id: OptionId): string {
+    const option: CharacterOption = OPTIONS[id];
+    return "weapon" in option ? option.weapon.name : ABILITIES[option.ability].name;
+}
+
+/** What a character fights with, once its option — if it was mustered with one — has swapped its part in. */
+export interface Kit {
+    weapon: Weapon;
+    abilities: readonly AbilityId[];
+}
+
+export function kitOf(character: CharacterId, option?: OptionId): Kit {
+    const { weapon, abilities } = CHARACTERS[character];
+    const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
+    if (!swap || swap.character !== character) return { weapon, abilities };
+    return "weapon" in swap
+        ? { weapon: swap.weapon, abilities }
+        : { weapon, abilities: abilities.map(id => id === swap.replaces ? swap.ability : id) };
+}
 
 export type ItemId = "fireFlask" | "thunderFlask" | "smokePot" | "healingDraught";
 

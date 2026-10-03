@@ -90,6 +90,8 @@ describe("Realm Arena replay", () => {
             healed: ["fighter", "hp", "target"],
             thrown: ["at", "damage", "fighter", "item", "targets"],
             blasted: ["fighter", "squares"],
+            demolished: ["at", "damage", "fighter", "targets"],
+            marked: ["fighter", "target"],
             raised: ["fighter", "hp", "target"],
             hunkered: ["fighter"],
             shieldWall: ["fighter"],
@@ -102,8 +104,8 @@ describe("Realm Arena replay", () => {
         expect(events.some(event => event.kind === "shot")).toBe(true);
         for (const event of events) {
             const { kind, ...rest } = event;
-            // A draught's `draught` flag is the one optional field.
-            expect(Object.keys(rest).filter(key => key !== "draught").sort()).toEqual(fields[kind]);
+            // A draught's or a Purify's `via` is the one optional field.
+            expect(Object.keys(rest).filter(key => key !== "via").sort()).toEqual(fields[kind]);
         }
     });
 

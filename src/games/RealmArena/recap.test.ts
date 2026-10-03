@@ -25,6 +25,7 @@ function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): I
         blasted: [],
         mustered: ["a", "b"],
         myMuster: null,
+        mastery: {},
         scores: { a: 0, b: 0 },
         canUndo: false,
         ...overrides,
@@ -71,7 +72,14 @@ describe("Realm Arena recap rows", () => {
         const act = (event: BattleEvent) => toEvents(snap(state({ fighters })), snap(state({ fighters }), [line("Alice threw an item", "a")]), cmd("RealmArenaAct"), valid([event]))[0];
         expect(act({ kind: "thrown", fighter: 0, item: "fireFlask", at: 20, targets: [1], damage: 2 })).toMatchObject({ type: "ra_thrown", glyph: "🔥", affectedIds: ["b"] });
         expect(act({ kind: "thrown", fighter: 0, item: "smokePot", at: 20, targets: [], damage: 0 })).toMatchObject({ type: "ra_thrown", glyph: "💨", affectedIds: [] });
-        expect(act({ kind: "healed", fighter: 0, target: 0, hp: 3, draught: true })).toMatchObject({ type: "ra_healed", glyph: "🧪" });
+        expect(act({ kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" })).toMatchObject({ type: "ra_healed", glyph: "🧪" });
+    });
+
+    it("tells a Demolish that struck someone as a hit, naming who, and one that struck nobody as a manoeuvre (§23.2)", () => {
+        const act = (event: BattleEvent) => toEvents(snap(state({ fighters })), snap(state({ fighters }), [line("Alice used Demolish", "a")]), cmd("RealmArenaAct"), valid([event]))[0];
+        expect(act({ kind: "demolished", fighter: 0, at: 20, targets: [1], damage: 2 })).toMatchObject({ type: "ra_hit", glyph: "💥", affectedIds: ["b"] });
+        expect(act({ kind: "demolished", fighter: 0, at: 20, targets: [], damage: 2 })).toMatchObject({ type: "ra_manoeuvre", affectedIds: [] });
+        expect(act({ kind: "healed", fighter: 0, target: 0, hp: 2, via: "purify" })).toMatchObject({ type: "ra_healed", glyph: "✚" });
     });
 
     it("titles an action with the line the log wrote for it, and names who it hurt", () => {

@@ -267,6 +267,7 @@ export function gameStateToModel(
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(pickOf) : null,
+        mastery: Object.fromEntries(Object.entries(gs.mastery ?? {}).map(([userId, ranks]) => [userId, { ...ranks }])),
         scores: { ...gs.scores },
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.

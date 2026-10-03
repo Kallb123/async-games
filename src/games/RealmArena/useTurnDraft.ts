@@ -7,15 +7,17 @@ import { blastedBy, check, fighterById, areaAround, isStanding, itemOf, reachOf,
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
-export type Aim = "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise" | "throw" | "draught";
+export type Aim =
+    | "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise" | "throw" | "draught"
+    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
-export const INSTANT_KINDS = ["hunker", "watch", "shieldWall"] as const;
+export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify"] as const;
 export type InstantKind = typeof INSTANT_KINDS[number];
 
 export interface Draft {
     aim: Aim;
-    /** The square a move, a fireball or a throw is lined up on. */
+    /** The square a move, a fireball, a throw or a Demolish is lined up on. */
     square: Square | null;
     /** The characters an attack, a heal, a raise, a draught or a cleave is lined up on. */
     targets: number[];
@@ -30,9 +32,15 @@ const TARGETED: Partial<Record<Aim, TargetKind>> = {
     heal: "heal",
     raise: "raise",
     draught: "draught",
+    shieldBash: "shieldBash",
+    cripplingShot: "cripplingShot",
+    huntersMark: "huntersMark",
     // Cleave strikes where an attack could: within the Man-at-arms's melee reach.
     cleave: "attack",
 };
+
+/** The aims at an enemy: one tapped out of reach is lined up anyway, so the sheet can say why it can't be. */
+const AT_ENEMY: ReadonlySet<Aim> = new Set(["attack", "aimedShot", "shieldBash", "cripplingShot", "huntersMark"]);
 
 /** What each aim's range is read from, for the shading of where it could land: a throw's is the item's own. */
 const RANGE: Partial<Record<Aim, RangeKind>> = {
@@ -42,16 +50,33 @@ const RANGE: Partial<Record<Aim, RangeKind>> = {
     heal: "nextTo",
     raise: "nextTo",
     draught: "nextTo",
+    shieldBash: "weapon",
+    cripplingShot: "weapon",
+    huntersMark: ABILITIES.huntersMark.range,
+    demolish: "cover",
     fireball: ABILITIES.fireball.range,
 };
 
 const isMoving = (aim: Aim) => aim === "move" || aim === "sneak";
-/** A fireball or a throw is aimed at a square, whoever stands on it. */
-const isAtSquare = (aim: Aim): aim is "fireball" | "throw" => aim === "fireball" || aim === "throw";
+type AtSquare = "fireball" | "throw" | "demolish";
 
-/** Every square what's thrown at `at` lands on: the 3×3 for a fireball or an item with an area, else that square alone. */
-function landing(state: BattleState, fighter: Fighter, aim: "fireball" | "throw", at: Square): Square[] {
+/** A fireball, a throw or a Demolish is aimed at a square, whoever stands on it. */
+const isAtSquare = (aim: Aim): aim is AtSquare => aim === "fireball" || aim === "throw" || aim === "demolish";
+
+/**
+ * Every square what's aimed at `at` lands on: the 3×3 for a fireball or an
+ * item with an area, everyone beside the cover but the Knight for a Demolish,
+ * else that square alone.
+ */
+function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
+    if (aim === "demolish") return areaAround(state.field, at).filter(square => square !== fighter.square);
     return aim === "fireball" || itemOf(fighter)?.area ? areaAround(state.field, at) : [at];
+}
+
+/** The low cover what's aimed at `at` would blast away (§22): the square itself, for a Demolish. */
+function blasting(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
+    if (aim === "demolish") return state.field.tiles[at].terrain.destructible ? [at] : [];
+    return blastedBy(state.field, aim === "fireball" ? ABILITIES.fireball : itemOf(fighter), at);
 }
 
 /** The action a draft has lined up, once it has everything the action needs. */
@@ -60,7 +85,8 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
         case "move":
         case "sneak": return path ? { kind: aim, fighter: fighter.id, path } : null;
         case "fireball":
-        case "throw": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
+        case "throw":
+        case "demolish": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
         case "cleave": return targets.length === 2 ? { kind: "cleave", fighter: fighter.id, targets } : null;
         default: return targets.length === 1 ? { kind: aim, fighter: fighter.id, target: targets[0] } : null;
     }
@@ -120,7 +146,7 @@ export type TapResult = Draft | "send" | undefined;
 
 const lineUp = (next: Draft, same: boolean): TapResult => same ? "send" : next;
 
-/** A tap on a square: a move's destination, or where a fireball or a throw lands. */
+/** A tap on a square: a move's destination, or where a fireball, a throw or a Demolish lands. */
 export function tapSquare({ draft, reach }: TapContext, tapped: Square): TapResult {
     if (isAtSquare(draft.aim)) return lineUp({ ...draft, square: tapped }, tapped === draft.square);
     if (isMoving(draft.aim) && reach && tapped !== reach.from && reach.costs[tapped] !== Infinity) {
@@ -156,7 +182,7 @@ export function tapFighter(context: TapContext, id: number): TapResult {
         if (!isStanding(target)) return tapSquare(context, target.square);
         return undefined;
     }
-    if ((enemy && (aim === "attack" || aim === "aimedShot")) || candidates.includes(id)) {
+    if ((enemy && AT_ENEMY.has(aim)) || candidates.includes(id)) {
         return lineUp({ ...draft, targets: [id] }, targets[0] === id);
     }
     return undefined;
@@ -234,10 +260,10 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Where the character would stand, and with what AP, once a lined-up move is made. */
         after: afterMove(fighter, path, verdict),
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
-        /** Every square a lined-up fireball or throw lands on. */
+        /** Every square a lined-up fireball, throw or Demolish lands on. */
         area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
-        /** The low cover a lined-up fireball or fire flask would blast away (§22). */
-        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, aim === "fireball" ? ABILITIES.fireball : itemOf(fighter), draft.square) : null,
+        /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
+        blasts: isAtSquare(aim) && draft.square !== null ? blasting(battle, fighter, aim, draft.square) : null,
         action,
         verdict,
         send,

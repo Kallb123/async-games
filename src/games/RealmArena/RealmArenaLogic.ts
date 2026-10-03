@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -95,8 +95,9 @@ function addScores(gs: IRealmArenaSpecificGameState, events: readonly BattleEven
 /**
  * Which count an action adds one to for the character taking it (§23.1): an
  * attack or an aimed shot, an ability, or an item. A cleave is one ability
- * however many it strikes. A move — a sneak too — hunkering down and going on
- * watch earn nothing, since every character can do them.
+ * however many it strikes, and so is every ability an option swaps in, a
+ * crippling shot among them (§23.2). A move — a sneak too — hunkering down
+ * and going on watch earn nothing, since every character can do them.
  */
 const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     attack: "attacks",
@@ -106,6 +107,11 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     fireball: "abilities",
     heal: "abilities",
     raise: "abilities",
+    shieldBash: "abilities",
+    demolish: "abilities",
+    cripplingShot: "abilities",
+    huntersMark: "abilities",
+    purify: "abilities",
     throw: "items",
     draught: "items",
 };
@@ -136,13 +142,17 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // the player does something that isn't undoable.
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
-// heal, a raise, a healing draught, and a throw that lands on nobody — a smoke
-// pot always does (§21.2) — the actions that roll nothing and hurt nobody. A
-// fire flask that lands on nobody can still blast low cover away (§22), and
-// is still taken back whole: the snapshot holds what was blasted.
-// Never an attack of any kind (an attack, an aimed shot, a cleave, a fireball,
-// a flask that lands on someone): a shot rolls, and a strike, a fireball or a
-// flask hits someone the other side has seen it land on. Nor a move that sets
+// heal, a raise, a Purify, a Hunter's mark, a healing draught, and a throw or a
+// Demolish that lands on nobody — a smoke pot always does (§21.2) — the
+// actions that roll nothing and hurt nobody. A fire flask or a Demolish that
+// lands on nobody still blasts low cover away (§22), and is still taken back
+// whole: the snapshot holds what was blasted. A mark hurts nobody either: it
+// only makes a target easier to hit, which the other side sees whether or not
+// it's taken back.
+// Never an attack of any kind (an attack, an aimed shot, a crippling shot, a
+// cleave, a shield bash, a fireball, a flask or a Demolish that lands on
+// someone): a shot rolls, and a strike, a fireball or a flask hits someone
+// the other side has seen it land on. Nor a move that sets
 // anyone off: an overwatch shot rolls, and a guard's strike is an attack on
 // the mover, so a move a watcher reacted to stays made. That is decided off
 // what the action did rather than off its kind — `peaceful` — so a move along
@@ -158,16 +168,16 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise", "draught", "throw"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
- * knock-out or the points for one. A heal or a draught clearing an effect is
- * an `effect` event, and so would a mark be (§20.3). Cover blasted away hurts
- * nobody (§22). A `thrown` event is peaceful only when it hit nobody, which
- * `peaceful` checks itself.
+ * knock-out or the points for one. A heal, a draught or a Purify clearing an
+ * effect is an `effect` event, and so is a mark (§20.3). Cover blasted away
+ * hurts nobody (§22). A `thrown` or a `demolished` event is peaceful only when
+ * it hit nobody, which `peaceful` checks itself.
  */
-const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "blasted"]);
+const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "healed", "raised", "hunkered", "shieldWall", "watching", "effect", "marked", "blasted"]);
 
 /**
  * How many snapshots the stack keeps: a character's whole turn of one-AP
@@ -176,10 +186,10 @@ const PEACEFUL_EVENTS: ReadonlySet<BattleEvent["kind"]> = new Set(["moved", "hea
  */
 export const UNDO_STACK_DEPTH = ACTION_POINTS;
 
-/** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. A throw is, when it landed on nobody. */
+/** Whether an action rolled nothing and hurt nobody, so taking it back hands nobody a second go at a roll. A throw or a Demolish is, when it landed on nobody. */
 function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonly number[]): boolean {
     return UNDOABLE_KINDS.has(action.kind) && rolls.length === 0
-        && events.every(event => PEACEFUL_EVENTS.has(event.kind) || (event.kind === "thrown" && event.targets.length === 0));
+        && events.every(event => PEACEFUL_EVENTS.has(event.kind) || ((event.kind === "thrown" || event.kind === "demolished") && event.targets.length === 0));
 }
 
 /**
@@ -255,9 +265,10 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
-            const by = !event.draught ? name(event.fighter)
-                : event.target === event.fighter ? "its healing draught" : `${name(event.fighter)}'s healing draught`;
-            return `healed ${name(event.target)} with ${by}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
+            // A Cleric's Purify reaches itself, and needs no "with" to say so.
+            const by = event.via === "draught" ? (event.target === event.fighter ? "its healing draught" : `${name(event.fighter)}'s healing draught`)
+                : event.target === event.fighter ? undefined : name(event.fighter);
+            return `${event.via === "purify" ? "purified" : "healed"} ${name(event.target)}${by ? ` with ${by}` : ""}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
         }
         case "thrown": {
             const hit = event.targets.length === 0 ? ""
@@ -265,6 +276,11 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
             return `threw a ${ITEMS[event.item].name.toLowerCase()} with ${name(event.fighter)}${hit}`;
         }
         case "blasted": return `blasted away ${pluralize(event.squares.length, "square")} of low cover`;
+        case "demolished": {
+            const hit = event.targets.length === 0 ? "" : `, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
+            return `used ${ABILITIES.demolish.name} with ${name(event.fighter)}${hit}`;
+        }
+        case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
@@ -367,7 +383,9 @@ export class RealmArenaMuster implements IGameCommand {
         // Seat order, one turn each, so a player's seat is the next muster.
         if (seat !== musters.length) return INVALID;
         const field = battlefieldById(gs.map);
-        if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[order.length as PlayerCount]) !== undefined) return INVALID;
+        // Held to the ranks the battle was created with, never to anything sent (§23.3).
+        const ranks = gs.mastery?.[this.senderId] ?? {};
+        if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[order.length as PlayerCount], ranks) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
@@ -378,7 +396,7 @@ export class RealmArenaMuster implements IGameCommand {
         if (musters.length === order.length) {
             // Every squad joins the battlefield at once, ids in seat order.
             gs.fighters = musters.flatMap(({ owner, picks }) => picks.map(pick => ({ owner, pick })))
-                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null));
+                .map(({ owner, pick }, id) => newFighter(id, owner, pick.character, pick.square, pick.item ?? null, pick.option));
             gs.musters = [];
             gs.phase = "battle";
             data.gameState.history.unshift({ text: "The squads take the field, and the battle begins" });
@@ -414,6 +432,11 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     raise: "raised a fallen ally",
     throw: "threw an item",
     draught: "used a healing draught",
+    shieldBash: "used Shield bash",
+    demolish: "used Demolish",
+    cripplingShot: "took a crippling shot",
+    huntersMark: "used Hunter's mark",
+    purify: "used Purify",
 };
 
 /**
@@ -428,13 +451,18 @@ function cleanAction(action: Action): Action {
         case "aimedShot":
         case "heal":
         case "raise":
-        case "draught": return { kind: action.kind, fighter: action.fighter, target: action.target };
+        case "draught":
+        case "shieldBash":
+        case "cripplingShot":
+        case "huntersMark": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
-        case "shieldWall": return { kind: action.kind, fighter: action.fighter };
+        case "shieldWall":
+        case "purify": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
-        case "throw": return { kind: action.kind, fighter: action.fighter, at: action.at };
+        case "throw":
+        case "demolish": return { kind: action.kind, fighter: action.fighter, at: action.at };
     }
 }
 
