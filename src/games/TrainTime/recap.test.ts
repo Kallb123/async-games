@@ -128,7 +128,7 @@ describe("Train Time recap adapter", () => {
         const [drawA] = events(state([ALICE, BOB]), state([ALICE, BOB]), cmd({ className: "TrainTimeDrawCarriageCard", ...{ source: "market", marketIndex: 0 } } as never));
         const [drawB] = events(state([ALICE, BOB]), state([ALICE, BOB]), cmd({ id: "c2", className: "TrainTimeDrawCarriageCard", ...{ source: "deck", marketIndex: 0 } } as never));
 
-        const merged = trainTimeRecapAdapter.postProcess!([drawA, drawB]);
+        const merged = trainTimeRecapAdapter.postProcess!([drawA, drawB], { forFeed: false });
         expect(merged).toHaveLength(1);
         expect(merged[0].title).toBe("Alice drew 2 cards");
         expect(merged[0].detail).toBe("face-up Red · blind from the deck");
@@ -141,7 +141,7 @@ describe("Train Time recap adapter", () => {
             cmd({ id, className: "TrainTimeDrawCarriageCard", ...{ source: "deck", marketIndex: 0 } } as never),
         )[0];
 
-        const merged = trainTimeRecapAdapter.postProcess!([draw("c1"), draw("c2"), draw("c3")]);
+        const merged = trainTimeRecapAdapter.postProcess!([draw("c1"), draw("c2"), draw("c3")], { forFeed: false });
         expect(merged.map(e => e.title)).toEqual(["Alice drew 2 cards", "Alice drew from the deck"]);
     });
 

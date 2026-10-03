@@ -73,7 +73,17 @@ export interface IRecapAdapter {
     // action (e.g. a conquest immediately followed by its occupation) into one
     // display row — toEvents only sees one command at a time, so cross-command
     // merges belong here instead.
-    postProcess?(events: IGameEvent[]): IGameEvent[];
+    //
+    // `forFeed` says who the list is for. True for the feed (the recap and the
+    // turn notification), where a game may fold as much as reads well — e.g.
+    // every action one character took in a turn — keeping the id and
+    // commandId of the first row folded in, so a reaction sent from the feed
+    // lands on that command's history line. False for buildAllEvents, whose
+    // rows a reaction to a match-history line is looked up in by commandId:
+    // a row folded away there would leave its history line unreactable.
+    // Rows leave here as they're sent, so a game strips any field of its own
+    // that toEvents added for this pass, on both paths.
+    postProcess?(events: IGameEvent[], context: { forFeed: boolean }): IGameEvent[];
 }
 
 const adapters = createAdapterRegistry<IRecapAdapter>();
@@ -106,7 +116,9 @@ async function replayEvents(
     // The player the feed is for, so a game with hidden information can shape
     // their own cards into the snapshots the adapter reads (the tip needs
     // them). Null when the feed isn't being built for anybody in particular.
-    viewerId: string | null
+    viewerId: string | null,
+    // Whether the events are for the feed (see IRecapAdapter.postProcess).
+    forFeed: boolean
 ): Promise<{ events: IGameEvent[]; timeline: ITimeline; outOfTurnCommandIds: Set<string> }> {
     const steps: IReplayStep[] = [];
     const timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
@@ -141,7 +153,7 @@ async function replayEvents(
         }
         previousCommandId = step.command.id;
     }
-    return { events: adapter.postProcess ? adapter.postProcess(events) : events, timeline, outOfTurnCommandIds };
+    return { events: adapter.postProcess ? adapter.postProcess(events, { forFeed }) : events, timeline, outOfTurnCommandIds };
 }
 
 // Builds a viewer's "since you were last here" feed by replaying the game and
@@ -171,7 +183,7 @@ export async function buildEventFeed(
     let timeline: ITimeline;
     let outOfTurnCommandIds: Set<string>;
     try {
-        ({ events: allEvents, timeline, outOfTurnCommandIds } = await replayEvents(gameData, userIdNameMap, adapter, forUserId));
+        ({ events: allEvents, timeline, outOfTurnCommandIds } = await replayEvents(gameData, userIdNameMap, adapter, forUserId, true));
     } catch {
         // Some games can't be replayed for every historical game (e.g. Settlements
         // & Cities games created before recap support lack the stored initial-state
@@ -225,7 +237,7 @@ export async function buildAllEvents(
         return [];
     }
     try {
-        const { events } = await replayEvents(gameData, userIdNameMap, adapter, null);
+        const { events } = await replayEvents(gameData, userIdNameMap, adapter, null, false);
         return events;
     } catch {
         return [];

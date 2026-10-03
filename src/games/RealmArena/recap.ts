@@ -7,10 +7,13 @@
 // replay has already resolved, and it is the only way this adapter names
 // anyone but the actor: the response carries no names of its own.
 //
-// Every command keeps a row of its own, a quiet move included: a reaction to a
-// line of the match history is resolved to the recap row of the command that
-// wrote it (the reaction route's `buildAllEvents` lookup), so folding a run
-// of moves into one row would leave the rest of the run unreactable.
+// The feed tells everything one character did in a turn as one row, so a
+// move, a shot and a move back into cover read as one line (`byCharacter`).
+// Everywhere else every command keeps a row of its own, a quiet move
+// included: a reaction to a line of the match history is resolved to the
+// recap row of the command that wrote it (the reaction route's
+// `buildAllEvents` lookup), so folding a run of moves into one row there
+// would leave the rest of the run unreactable.
 //
 // The muster stays sealed here as it does everywhere else (§17.2). A muster's
 // row says only that it happened. Nothing below reads the command's `picks`,
@@ -22,12 +25,20 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import type { IRealmArenaOutcome } from "./RealmArenaLogic";
+import type { IRealmArenaOutcome, RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import type { ItemId } from "./characters";
 import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
+
+/**
+ * An action's row as `toEvents` leaves it: the character that acted, what
+ * happened, and its line without the player's name it starts with — what
+ * `byCharacter` folds a character's turn by. `postProcess` strips all three
+ * from every row, on every path: `battle` holds each shot's roll.
+ */
+type RAEvent = IGameEvent & { fighter?: number; battle?: readonly BattleEvent[]; clause?: string };
 
 const RA_MUSTER = "ra_muster";
 const RA_BATTLE = "ra_battle";
@@ -146,13 +157,17 @@ function toEvents(
             const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
             // The oldest of its lines: one that ended the battle has the
             // winner's line above it, and that names an actor too.
-            const line = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text;
-            rows.push({
+            const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
+            const row: RAEvent = {
                 ...base,
                 ...actionKind(events),
-                title: line ?? `${name} ${command.myString()}`,
+                title,
                 affectedIds: hurt(events, state(next).fighters),
-            });
+                fighter: (command as Partial<RealmArenaAct>).action?.fighter,
+                battle: events,
+                clause: title.startsWith(`${name} `) ? title.slice(name.length + 1) : title,
+            };
+            rows.push(row);
             break;
         }
         case "RealmArenaEndTurn": {
@@ -204,6 +219,54 @@ function toEvents(
         rows.push({ ...base, id: `${command.id}:won`, type: RA_WON, glyph: "🏆", title: lines[0].text, detail: lines[1].text });
     }
     return rows;
+}
+
+/**
+ * Folds every action one character took in a turn into the row of its first,
+ * so a move, a shot and a move back into cover are one line: the first
+ * action's narration, then each later one's without the player's name it
+ * starts with ("Alice moved their Archer; then shot Bob's Knight with their
+ * Archer (80%): a hit for 3; then moved their Archer"). A move straight after
+ * the same move is told once, as one move broken up by reactions is
+ * (`narrate`); anything else is told as often as it happened. The row takes
+ * the kind of the most telling thing the character did all turn, and everyone
+ * any of it hurt. Anything but an action — an End turn, a muster, the
+ * battle's end — closes the turn.
+ */
+function byCharacter(events: readonly RAEvent[]): RAEvent[] {
+    const rows: RAEvent[] = [];
+    // This turn's row for each character, by fighter id.
+    let turn = new Map<number, number>();
+    let actor: string | undefined;
+    for (const event of events) {
+        if (event.fighter === undefined || event.actorId !== actor) turn = new Map();
+        actor = event.actorId;
+        const at = event.fighter === undefined ? undefined : turn.get(event.fighter);
+        if (at === undefined) {
+            if (event.fighter !== undefined) turn.set(event.fighter, rows.length);
+            rows.push(event);
+            continue;
+        }
+        const first = rows[at];
+        const battle = [...(first.battle ?? []), ...(event.battle ?? [])];
+        const again = event.clause === first.clause && (event.battle ?? []).every(one => one.kind === "moved");
+        rows[at] = {
+            ...first,
+            ...actionKind(battle),
+            title: again ? first.title : `${first.title}; then ${event.clause}`,
+            affectedIds: [...new Set([...(first.affectedIds ?? []), ...(event.affectedIds ?? [])])],
+            battle,
+            // The clause the row now ends on, so a move repeating it is told once.
+            clause: event.clause,
+        };
+    }
+    return rows;
+}
+
+/** Folds the feed by character (`byCharacter`); and strips what `toEvents` kept for it from every row. */
+function postProcess(events: IGameEvent[], { forFeed }: { forFeed: boolean }): IGameEvent[] {
+    const rows = forFeed ? byCharacter(events) : events as RAEvent[];
+    return rows.map(({ fighter, battle, clause, ...row }) => row);
 }
 
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
@@ -258,6 +321,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 export const realmArenaRecapAdapter: IRecapAdapter = {
     className: "RealmArenaGameType",
     toEvents,
+    postProcess,
     summarize,
     tip,
 };

@@ -944,6 +944,9 @@ recap, a guide and a tutorial.
     lined-up move.
 - **PR 8, replay and recap.**
   - A recap row is the line the log already wrote.
+  - The feed tells everything one character did in a turn as one row: its
+    actions' lines, joined by "then". The match history keeps a row per
+    command, so every line of the log can still be reacted to.
   - A muster's row says only that it happened.
   - The review follows each action by the characters it changed.
   - Planning is out by design: `plannableCommands` stays empty, since a
@@ -1864,3 +1867,4 @@ Realm, its sibling in the same world.
 | 1.23 | C5 PR 3 fills in the screens (§23.3): the muster offers a character's options above its items, locked ones greyed with the rank that unlocks them; the profile lists all six characters' XP, rank and unlocked options for a player who has fought, read under a time limit and failing soft; the guide tells how mastery is earned. C5 is built. |
 | 1.24 | The muster buys items on the squad step, beside the characters, so every point is spent on one screen; placing hands them out one each and lets the player pass them between characters (§21.3). |
 | 1.25 | Figures are drawn as character art in the owner's colour, facing the way they last stepped, lying down once downed (§26.5). Facing is only visual: no rule reads it. |
+| 1.26 | The recap tells everything one character did in a turn as one row (§17.3 PR 8). |
