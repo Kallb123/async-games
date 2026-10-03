@@ -201,6 +201,9 @@ export const itemOf = (fighter: Pick<Fighter, "item">): Item | undefined => figh
 /** What an item adds to a muster's cost: nothing for none. */
 export const itemPoints = (item: ItemId | null | undefined): number => item ? ITEMS[item].points : 0;
 
+/** What a set of items costs at muster, a missing one nothing. */
+export const itemsPoints = (items: readonly (ItemId | null | undefined)[]): number => items.reduce((total, item) => total + itemPoints(item), 0);
+
 /** What a character fights with: its character's weapon, or the one its option swaps in (§23.2). */
 export const weaponOf = (fighter: Pick<Fighter, "character" | "option">): Weapon => kitOf(fighter.character, fighter.option).weapon;
 
@@ -992,7 +995,7 @@ export function pickOf({ character, square, item, option }: MusterPick): MusterP
 
 /** What a muster costs: its characters, and the items they carry (§21.1). */
 export function musterPoints(picks: readonly MusterPick[]): number {
-    return squadPoints(picks.map(pick => pick.character)) + picks.reduce((total, pick) => total + itemPoints(pick.item), 0);
+    return squadPoints(picks.map(pick => pick.character)) + itemsPoints(picks.map(pick => pick.item));
 }
 
 /**

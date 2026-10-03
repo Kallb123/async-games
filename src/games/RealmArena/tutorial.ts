@@ -33,7 +33,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "board",
             title: "Muster your squad",
-            body: `Spend your points below — up to ${MAX_OF_EACH} of each character — then place them in your zone on the board. Nobody sees anyone's squad until every player has mustered.`,
+            body: `Spend your points below — up to ${MAX_OF_EACH} of each character, and items for them to carry — then place them in your zone on the board. Nobody sees anyone's squad until every player has mustered.`,
             when: "mustering",
         },
         {
