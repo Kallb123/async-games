@@ -7,6 +7,8 @@ import BackLink from "@/components/ui/BackLink";
 import Tabs, { TabPanel } from "@/components/ui/Tabs";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
+import RealmArenaMasterySection from "@/games/RealmArena/components/RealmArenaMasterySection";
+import type { PlayerMastery } from "@/games/RealmArena/mastery";
 import type { IAchievementUnlock, IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IProfileUser } from "@/app/api/profile/[userId]/route";
 import { usePathname, useRouter } from 'next/navigation';
@@ -21,6 +23,7 @@ interface IProfileResponse {
     recent: IRecentMatch[];
     byGame: IGameStats[];
     achievements?: IAchievementUnlock[];
+    realmArena?: PlayerMastery;
 }
 
 export default function FriendProfile({ params }: { params: Promise<{ userId: string }> }) {
@@ -85,6 +88,9 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
 
                             {/* Match outcome history, by game */}
                             <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
+
+                            {/* Realm Arena's character mastery, for a player who has fought */}
+                            <RealmArenaMasterySection mastery={data?.realmArena} isLoading={isLoading} isRefreshing={isRefreshing} />
                         </TabPanel>
 
                         <TabPanel id="achievements" active={tab}>

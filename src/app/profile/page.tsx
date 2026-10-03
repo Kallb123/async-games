@@ -12,6 +12,8 @@ import ReactionPicker from "@/components/ui/ReactionPicker";
 import Tabs, { TabPanel } from "@/components/ui/Tabs";
 import ListSection from "@/components/ui/ListSection";
 import CollapsingSection from "@/components/ui/CollapsingSection";
+import RealmArenaMasterySection from "@/games/RealmArena/components/RealmArenaMasterySection";
+import type { PlayerMastery } from "@/games/RealmArena/mastery";
 import NameForm from "@/components/NameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime, isRecentlyActive } from "@/utils/ui/time";
@@ -64,7 +66,7 @@ function Profile() {
     );
 
     const friendsData = useRefreshableData<IFriendsResponse>('/api/friends', FRIEND_EVENTS);
-    const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[]; achievements?: IAchievementUnlock[] }>('/api/stats');
+    const statsData = useRefreshableData<{ recent: IRecentMatch[]; byGame: IGameStats[]; achievements?: IAchievementUnlock[]; realmArena?: PlayerMastery }>('/api/stats');
     const reactionsData = useRefreshableData<{ reactions: IReceivedReaction[] }>('/api/reactions');
 
     const friends = friendsData.data?.friends ?? [];
@@ -212,6 +214,9 @@ function Profile() {
 
             {/* Per-game stats */}
             <GameStatsList label="Stats by game" stats={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
+
+            {/* Realm Arena's character mastery, for a player who has fought */}
+            <RealmArenaMasterySection mastery={statsData.data?.realmArena} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
 
             {/* Reactions received */}
             <ListSection

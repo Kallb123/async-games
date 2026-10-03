@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { getPlayerStats } from '@/utils/mongodb/GameResultData';
+import { profileMasteryOf } from '@/games/RealmArena/masteryRecord';
 import { UserDto, toUserDto } from '@/utils/users/clerk';
 
 export type IProfileUser = UserDto;
@@ -27,7 +28,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const profileUser: IProfileUser = toUserDto(clerkUser);
 
-    const { recent, byGame, achievements } = await getPlayerStats(profileUserId, userId);
+    const [{ recent, byGame, achievements }, realmArena] = await Promise.all([
+        getPlayerStats(profileUserId, userId),
+        // Public, like the rest of a profile (docs/games/realm-arena.md §23.3).
+        profileMasteryOf(profileUserId),
+    ]);
 
-    return NextResponse.json({ success: true, user: profileUser, recent, byGame, achievements });
+    return NextResponse.json({ success: true, user: profileUser, recent, byGame, achievements, realmArena });
 }

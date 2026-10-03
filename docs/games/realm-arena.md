@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.22. Split out of Defender of the Realm in its third round of
+**Status:** v1.23. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -8,9 +8,9 @@ first characters, and §15 the first battlefield, a ruined fort. §17 is the
 implementation plan and where it stands. Milestone A, free-for-all and C1–C3
 (status effects §20, items §21, destructible low cover §22) are built, and so
 is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
-and the strikes played out on the board. C5, character mastery earned by what
-a character does (§23), is under way: PR 1, mastery from results, and PR 2,
-the rank-1 options, are built.
+and the strikes played out on the board. So is C5, character mastery earned
+by what a character does (§23): mastery from results, the rank-1 options, and
+the screens that show them.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -964,7 +964,7 @@ recap, a guide and a tutorial.
 | C2 | Items bought at muster (§21) | Built |
 | C3 | Destructible low cover (§22) | Built |
 | C4 | Battle visuals: hit text, then the shot and the fireball in flight (§26) | Built |
-| **C5** | **Character mastery, earned by what a character does (§23)** | **Under way**: PRs 1 and 2 built. Replaces B4 |
+| C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, if it's chosen (§8) | After C |
 | B6 | More factions | After C |
@@ -1449,7 +1449,7 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     party's lookup, so everyone has the starter characters alike, and ranks
     only unlock options.
   - **The result page shows each character's XP from the battle.** The
-    profile's totals and ranks come in PR 3.
+    profile's totals and ranks came in PR 3.
 - **What PR 2 settled:**
   - **Options are data**: `OPTIONS` in `characters.ts`, each naming its
     character, its rank and what it swaps, an ability or the weapon. `kitOf`
@@ -1494,8 +1494,30 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     crippling shot never can.
   - **The board plays them already.** The turn sheet's rows come from the
     fighter's kit, so a figure mustered with an option shows that option's
-    row, aims it, and previews it. Nothing can be mustered with one until
+    row, aims it, and previews it. Nothing could be mustered with one until
     PR 3's muster screen.
+- **What PR 3 settled:**
+  - **The muster offers options beside items.** A character picked up while
+    placing the squad shows its options above the items it can carry, a
+    `BuildRow` each saying what it swaps out. Tapping one takes it, and
+    tapping it again goes back to the starter character, as an item is left
+    behind. One the player's rank hasn't unlocked is greyed, with the rank
+    that unlocks it, so the muster also shows what's still to earn. Each
+    character's step names its rank, read from the battle's snapshot, the
+    same ranks the server checks the muster against.
+  - **The profile's section lists all six characters**, once the player has
+    fought a battle: each one's XP, how much more the next rank needs, its
+    rank and the options it has unlocked. One never fought with is greyed at
+    0 XP. A player who has never fought has no section at all. Both profile
+    screens show it, a friend's too, since ranks are public.
+  - **The profile reads it the way a battle's creation does**, one
+    aggregation for the one player, alongside the rest of the profile, and
+    with the same limits: on the database, and on the wait for a driver that
+    never answers. It fails soft, as the achievements do: a read
+    that fails shows no section, and the next one asks again.
+  - **The guide's first section tells it**: what earns XP, the XP rank 1
+    needs (read from `RANK_XP`, so a retune can't leave it behind), what an
+    option is, and that the profile shows the ranks.
 - **Ranks and unlocked options are public**, like the rest of a profile. Only
   the options picked for a squad are sealed, with the rest of the muster.
 - **The client never claims an option.** It sends the pick, and the server
@@ -1513,8 +1535,8 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
 2. **Options**, built: the rank-1 options as data and rules, the muster check
    against the snapshot, and the board playing them. Reviewers: `caveman`,
    `locksmith` (an option claimed but not unlocked).
-3. **Screens:** options at muster, the profile section and the guide text.
-   Reviewers: `caveman`, `rulebook`.
+3. **Screens**, built: options at muster, the profile section and the guide
+   text. Reviewers: `caveman`, `rulebook`.
 
 ## 24. Questions (round 7)
 
@@ -1820,3 +1842,4 @@ Realm, its sibling in the same world.
 | 1.20 | C4 PR 2 fills in the shot and the fireball (§26.3): when each part sets off and lands, how a hit, a graze and a miss end, a throw at nobody still flying and bursting, the burst's spread, blasted cover standing until its burst fades, and drawn art for all of it. C4 is built; C5 is next. |
 | 1.21 | C5 PR 1 fills in mastery from results (§23.3): the tally counts the action for the actor and reactions for the watcher, the result keeps a row per player and kind of character, a dropped player earns nothing from the battle, the battle keeps ranks rather than options, XP counts the battles a profile does, and a battle starts with nobody ranked if mastery can't be read. |
 | 1.22 | C5 PR 2 fills in options (§23.3): options are data, swapping a fighter's kit, checked at muster against the battle's own snapshot of ranks, which the response carries; each is an action of its own; Demolish strikes everyone beside the cover but the Knight; Purify reaches the Cleric too and clears every affliction but no stance; a mark, a Purify and a Demolish on nobody can be undone. |
+| 1.23 | C5 PR 3 fills in the screens (§23.3): the muster offers a character's options above its items, locked ones greyed with the rank that unlocks them; the profile lists all six characters' XP, rank and unlocked options for a player who has fought, read under a time limit and failing soft; the guide tells how mastery is earned. C5 is built. |

@@ -9,7 +9,7 @@
 import { GameResultModel, RESULT_COUNTS_FILTER } from "@/utils/mongodb/GameResultData";
 import { withTimeout } from "@/utils/withTimeout";
 import { isCharacterId, type CharacterId } from "./characters";
-import { rankOf, xpOf, type MasteryRecord, type MasterySnapshot } from "./mastery";
+import { rankOf, xpOf, type MasteryRecord, type MasterySnapshot, type PlayerMastery } from "./mastery";
 
 /** How long the lookup a battle is created with may run on the database before the battle starts without it. */
 export const SNAPSHOT_TIME_LIMIT_MS = 3000;
@@ -23,9 +23,6 @@ export const SNAPSHOT_WAIT_MS = SNAPSHOT_TIME_LIMIT_MS + 500;
 
 /** One player's record with one character, as the aggregation hands it back. */
 type MasteryGroup = MasteryRecord & { _id: { userId: string; character: string } };
-
-/** Each character's record and XP, for one player. */
-export type PlayerMastery = Partial<Record<CharacterId, MasteryRecord & { xp: number }>>;
 
 /**
  * Each of `userIds`' records with each character they've fought with, by
@@ -90,4 +87,23 @@ export async function masterySnapshotOf(userIds: readonly string[]): Promise<Mas
         }
     }
     return snapshot;
+}
+
+/**
+ * One player's mastery for their profile (§23.3): each character they've
+ * fought with, its XP and the record behind it, or none when they haven't.
+ *
+ * Fails soft, as a profile's achievements do: it's one section of a profile
+ * whose stats and recent form are the point of it, so a read that fails or
+ * outlasts the wait a battle's creation gives it is logged and shows none,
+ * and the next profile read asks again.
+ */
+export async function profileMasteryOf(userId: string): Promise<PlayerMastery> {
+    const byPlayer = await withTimeout(
+        () => masteryOf([userId], { maxTimeMS: SNAPSHOT_TIME_LIMIT_MS }),
+        SNAPSHOT_WAIT_MS,
+        new Map<string, PlayerMastery>(),
+        "Realm Arena: reading mastery for a profile",
+    );
+    return byPlayer.get(userId) ?? {};
 }

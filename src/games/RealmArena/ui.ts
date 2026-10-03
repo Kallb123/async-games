@@ -6,7 +6,8 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, OPTIONS, type AbilityId, type CharacterId, type EffectId, type Item, type OptionId, type Weapon } from "./characters";
+import { nextRankXp, rankOf } from "./mastery";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
@@ -210,6 +211,39 @@ export function placeTap({ picks, selected }: Placement, square: Square, zone: r
     }
     if (!zone.includes(square)) return { picks, selected };
     return { picks: picks.map((pick, i) => i === selected ? { ...pick, square } : pick), selected: null };
+}
+
+// ─── Mastery (§23) ──────────────────────────────────────────────────────────
+
+/** A character's options (§23.2), lowest rank first: what its muster row offers, locked or not. */
+export function optionsFor(character: CharacterId): OptionId[] {
+    return (Object.keys(OPTIONS) as OptionId[])
+        .filter(id => OPTIONS[id].character === character)
+        .sort((a, b) => OPTIONS[a].rank - OPTIONS[b].rank);
+}
+
+/** The glyph an ability's row leads with, where a weapon's leads with its character's mark. */
+export const ABILITY_MARK = "✦";
+
+/**
+ * An option as a row shows it: its glyph, its name — the ability or weapon it
+ * swaps in — and what it swaps out and does in its place ("In place of Cleave
+ * · 2 AP · Strike one enemy…").
+ */
+export function optionView(id: OptionId): { icon: string; name: string; line: string } {
+    const option = OPTIONS[id];
+    if ("weapon" in option) {
+        const { character, weapon } = option;
+        return { icon: CHARACTER_MARK[character], name: weapon.name, line: `In place of the ${CHARACTERS[character].weapon.name} · ${weaponLine(weapon)}` };
+    }
+    const ability = ABILITIES[option.ability];
+    return { icon: ABILITY_MARK, name: ability.name, line: `In place of ${ABILITIES[option.replaces].name} · ${ability.ap} AP · ${ability.description}` };
+}
+
+/** Where a character's XP stands against the ranks (§23.1): "75 XP · 105 more for rank 2". */
+export function masteryLine(xp: number): string {
+    const next = nextRankXp(xp);
+    return next === undefined ? `${xp} XP · the highest rank` : `${xp} XP · ${next - xp} more for rank ${rankOf(xp) + 1}`;
 }
 
 // ─── Taking a turn (§17.3 PR 7) ─────────────────────────────────────────────

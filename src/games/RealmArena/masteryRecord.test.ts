@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GameResultModel, RESULT_COUNTS_FILTER } from "@/utils/mongodb/GameResultData";
-import { masteryOf, masterySnapshotOf, SNAPSHOT_TIME_LIMIT_MS, SNAPSHOT_WAIT_MS } from "./masteryRecord";
+import { masteryOf, masterySnapshotOf, profileMasteryOf, SNAPSHOT_TIME_LIMIT_MS, SNAPSHOT_WAIT_MS } from "./masteryRecord";
 
 // A player's mastery, summed from their Realm Arena results (§23.3) with Mongo
 // stubbed out: the pipeline's shape is checked, and the rows it hands back
@@ -81,6 +81,42 @@ describe("masterySnapshotOf", () => {
             const snapshot = masterySnapshotOf(["a"]);
             await vi.advanceTimersByTimeAsync(SNAPSHOT_WAIT_MS);
             expect(await snapshot).toEqual({});
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe("profileMasteryOf", () => {
+    it("reads the one player's record with each character, under the same time limit", async () => {
+        const aggregate = aggregateReturning([group("a", "knight", 1, 5, 1)]);
+
+        expect(await profileMasteryOf("a")).toEqual({ knight: { battles: 1, attacks: 5, abilities: 1, items: 0, xp: 22 } });
+        const [, options] = aggregate.mock.calls[0] as unknown as [unknown, unknown];
+        expect(options).toEqual({ maxTimeMS: SNAPSHOT_TIME_LIMIT_MS });
+    });
+
+    it("is none for a player who has never fought", async () => {
+        aggregateReturning([]);
+        expect(await profileMasteryOf("a")).toEqual({});
+    });
+
+    it("shows none rather than failing the profile when the results can't be read", async () => {
+        vi.spyOn(GameResultModel, "aggregate").mockRejectedValue(new Error("operation exceeded time limit") as never);
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(await profileMasteryOf("a")).toEqual({});
+        expect(error).toHaveBeenCalled();
+    });
+
+    it("doesn't hold the profile up for a driver that never answers", async () => {
+        vi.useFakeTimers();
+        try {
+            vi.spyOn(GameResultModel, "aggregate").mockReturnValue(new Promise(() => {}) as never);
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            const mastery = profileMasteryOf("a");
+            await vi.advanceTimersByTimeAsync(SNAPSHOT_WAIT_MS);
+            expect(await mastery).toEqual({});
         } finally {
             vi.useRealTimers();
         }

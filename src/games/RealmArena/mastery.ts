@@ -54,6 +54,14 @@ export function rankOf(xp: number): Rank {
     return RANK_XP.filter(threshold => xp >= threshold).length as Rank;
 }
 
+/** The XP the rank after `xp`'s is reached at, or undefined once the last rank is. */
+export function nextRankXp(xp: number): number | undefined {
+    return (RANK_XP as readonly number[])[rankOf(xp)];
+}
+
+/** Each character's record and XP, for one player: a character they've never fought with is missing. */
+export type PlayerMastery = Partial<Record<CharacterId, MasteryRecord & { xp: number }>>;
+
 /**
  * Each player's rank with each character, taken as a battle is created
  * (§23.3) and fixed for the whole of it, so a rank reached mid-battle changes
