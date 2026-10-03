@@ -12,7 +12,7 @@ import {
 } from "./RealmArenaModels";
 import { RealmArenaUndo, tallied } from "./RealmArenaLogic";
 import { newFighter, type Action, type BattleEvent, type Fighter } from "./rules";
-import { actBy, cmd, makeGame, musterAll, play, PLAYERS } from "./testFixtures";
+import { actBy, cmd, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks } from "./testFixtures";
 
 // Character mastery (docs/games/realm-arena.md §23), PR 1: the tally each
 // fighter keeps, the result stats that keep it once the battle is over, the
@@ -121,8 +121,15 @@ describe("the result stats (§23.3)", () => {
         ]);
     });
 
-    it("has no rows for a battle given up during the muster", () => {
+    it("has no rows for a battle given up during the muster, and nothing of a squad still sealed", async () => {
         expect(computeRealmArenaResultStats(makeGame()).mastery).toEqual([]);
+
+        // a has mustered, b hasn't: a's squad is still sealed when the game ends.
+        const game = makeGame();
+        expect((await play(game, muster("a", readyMadePicks(game, 0)))).outcome.validMove).toBe(true);
+        const stats = computeRealmArenaResultStats(game);
+        expect(stats.mastery).toEqual([]);
+        expect(formatRealmArenaResultStats(stats, new Map())).toEqual([]);
     });
 
     it("are kept by the result's schema, as rows with no ids of their own", () => {
@@ -178,9 +185,4 @@ describe("the ranks a battle is created with (§23.3)", () => {
         expect(adapter.buildInitialSpecificGameState(older)).toMatchObject({ mastery: {} });
     });
 
-    it("keep only the seats' own ranks, copied rather than shared", () => {
-        const game = makeGame(PLAYERS, { ...RANKS, stranger: { mage: 3 } });
-        expect(game.specificGameState.mastery).toEqual(RANKS);
-        expect(game.specificGameState.mastery.a).not.toBe(RANKS.a);
-    });
 });

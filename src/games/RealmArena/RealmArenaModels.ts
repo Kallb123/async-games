@@ -2,14 +2,13 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
-import type { GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
-import { NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
+import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
 import { battleRounds, pickOf, storedFighter, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
@@ -68,11 +67,11 @@ export interface IRealmArenaSpecificGameState {
     /**
      * Each player's rank with each character, taken when the battle was
      * created and never changed (§23.3). Only ranks above 0 are kept, and an
-     * empty object is dropped on insert as `scores` would be, so a player or
-     * character missing — or the whole field, on a game that predates it — is
-     * rank 0.
+     * empty object is dropped on insert as `scores` would be, so it's absent
+     * whenever nobody is ranked — and on a game that predates it. A player or
+     * character missing is rank 0.
      */
-    mastery: MasterySnapshot;
+    mastery?: MasterySnapshot;
     /**
      * Snapshots of the whole state, newest last, pushed by a `RealmArenaAct`
      * that rolled nothing and hurt nobody (docs/undo.md). `by` is whose action
@@ -169,7 +168,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         blasted: [],
         musters: [],
         scores: Object.fromEntries(turnOrder.map(userId => [userId, 0])),
-        mastery: Object.fromEntries(turnOrder.filter(userId => mastery[userId]).map(userId => [userId, { ...mastery[userId] }])),
+        mastery: { ...mastery },
         undoStack: [],
         undoAnchorId: null,
     };
@@ -341,10 +340,7 @@ export function computeRealmArenaResultStats(gameData: IRealmArenaGameData): IRe
         mastery: gs.seats.flatMap(userId => characterIds.flatMap(character => {
             const kind = fighters.filter(fighter => fighter.owner === userId && fighter.character === character);
             if (kind.length === 0) return [];
-            const tally = kind.map(fighter => fighter.tally ?? NO_TALLY).reduce((sum, one) => ({
-                attacks: sum.attacks + one.attacks, abilities: sum.abilities + one.abilities, items: sum.items + one.items,
-            }), NO_TALLY);
-            return [{ userId, character, ...tally }];
+            return [{ userId, character, ...kind.reduce((sum, fighter) => addTally(sum, fighter.tally ?? NO_TALLY), NO_TALLY) }];
         })),
     };
 }
@@ -354,6 +350,7 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
     const groups = new Map<string, string[]>();
     for (const row of stats.mastery ?? []) {
         const lines = groups.get(row.userId) ?? [];
+        // A row is one battle's worth.
         lines.push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, ...row })} XP`);
         groups.set(row.userId, lines);
     }

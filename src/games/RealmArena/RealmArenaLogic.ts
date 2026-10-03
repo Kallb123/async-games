@@ -9,7 +9,7 @@ import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
-import { NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
+import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
     ACTION_POINTS,
     act,
@@ -118,23 +118,14 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
  * back with the snapshot it restores.
  */
 export function tallied(fighters: readonly Fighter[], action: Action, events: readonly BattleEvent[]): Fighter[] {
-    const earned = new Map<number, Tally>();
-    const add = (id: number, count: keyof Tally) => {
-        const tally = earned.get(id) ?? { ...NO_TALLY };
-        tally[count] += 1;
-        earned.set(id, tally);
-    };
     const own = TALLIED[action.kind];
-    if (own) add(action.fighter, own);
-    for (const event of events) {
-        if ((event.kind === "shot" || event.kind === "struck") && event.reaction) add(event.fighter, "attacks");
-    }
-    return fighters.map(fighter => {
-        const more = earned.get(fighter.id);
-        if (!more) return fighter;
-        const tally = fighter.tally ?? NO_TALLY;
-        return { ...fighter, tally: { attacks: tally.attacks + more.attacks, abilities: tally.abilities + more.abilities, items: tally.items + more.items } };
-    });
+    const credits: [number, keyof Tally][] = [
+        ...(own ? [[action.fighter, own] as [number, keyof Tally]] : []),
+        ...events.flatMap((event): [number, keyof Tally][] =>
+            (event.kind === "shot" || event.kind === "struck") && event.reaction ? [[event.fighter, "attacks"]] : []),
+    ];
+    return fighters.map(fighter => credits.reduce((one, [id, count]) => id !== fighter.id ? one
+        : { ...one, tally: addTally(one.tally ?? NO_TALLY, { ...NO_TALLY, [count]: 1 }) }, fighter));
 }
 
 // ─── Undo (docs/undo.md) ────────────────────────────────────────────────────
@@ -206,7 +197,8 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
-        mastery: structuredClone(gs.mastery ?? {}),
+        // Written once as the battle is created and never changed, so shared.
+        mastery: gs.mastery ?? {},
         undoStack: [],
         undoAnchorId: null,
     };

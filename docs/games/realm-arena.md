@@ -1334,7 +1334,8 @@ first, so mastery moved from C4 to C5.
 - **Mastery is experience (XP), per player and per character.** It's earned
   in battles that count as played (the achievements' rule: at least two
   turns), win or lose.
-- **Acting earns XP, and being there earns a little.** *Proposal:*
+- **Acting earns XP, and being there earns a little.** As built in
+  `mastery.ts` (`XP_WEIGHTS`, `RANK_XP`):
 
   | What the character did in the battle | XP |
   |---|---:|
@@ -1392,17 +1393,19 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
 ### 23.3 Engine
 
 - **Each fighter keeps a tally** of its attacks, abilities and items used.
-  One helper in `RealmArenaLogic.ts` counts them from the events each command
-  produces. That includes reactions, which count for the watcher during
-  another player's command. The tally is public, like the rest of the
+  One helper in `RealmArenaLogic.ts` (`tallied`) counts them for each action:
+  the action itself for the character taking it, and each reaction it set
+  off, read from its events, for the watcher during another player's command. The tally is public, like the rest of the
   battlefield, and undo restores it with the snapshot.
 - **Mastery is read from game results, not from a new collection.** C5 gives
   Realm Arena's `GameResult` stats of its own: a schema, its discriminator in
-  `GameResultData.ts`, and a writer. For each player and character, the writer
-  records the battle and the summed tally. A player's XP is then the weights
+  `GameResultData.ts`, and a writer. For each player and kind of character
+  fielded, the writer records a row holding the tallies of every one of that
+  kind, pooled. A player's XP is then the weights
   of §23.1 applied to an aggregation over their results. Nothing stores XP,
   so it can't get out of step with the games behind it.
-- **A battle snapshots each player's unlocked options when it's created.** The
+- **A battle snapshots each player's ranks when it's created**, from which
+  the options they unlock follow (see below). The
   `Muster` check reads only that snapshot, so a rank reached mid-battle
   changes nothing, and a replay checks a muster the same way years later.
   `buildInitialRealmArenaState` takes the snapshot as a second input, so the
@@ -1428,9 +1431,19 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
   - **XP counts the same battles a profile does**: those that count as
     played, and none with an unclaimed guest at the table, until they claim.
     One aggregation for the whole party, on the `playerIds` and `gameType`
-    index.
+    index, with each result cut to the party's own rows before they're
+    unwound. It reads one result per battle the party has fought, which is
+    tens of milliseconds at thousands of battles. If a record ever outgrows
+    that, the next step is a running total per player written beside each
+    result.
+  - **A rank can go down.** A deleted account takes its results with it,
+    the other players' rows among them (as it takes its wins from their
+    profile), so a player's XP from those battles goes too. A battle already
+    created keeps the ranks it snapshotted.
   - **A battle starts even when mastery can't be read.** The lookup has three
-    seconds; past that, or on an error, nobody is ranked. It's the whole
+    seconds on the database and half a second more to answer (`withTimeout`,
+    for a driver that never reaches the server); past that, or on an error,
+    nobody is ranked, and the log says so. It's the whole
     party's lookup, so everyone has the starter characters alike, and ranks
     only unlock options.
   - **The result page shows each character's XP from the battle.** The

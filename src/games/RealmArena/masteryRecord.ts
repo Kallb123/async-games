@@ -7,17 +7,22 @@
 // Server-only: it reads the GameResult collection.
 
 import { GameResultModel, RESULT_COUNTS_FILTER } from "@/utils/mongodb/GameResultData";
+import { withTimeout } from "@/utils/withTimeout";
 import { isCharacterId, type CharacterId } from "./characters";
 import { rankOf, xpOf, type MasteryRecord, type MasterySnapshot } from "./mastery";
 
-/** How long the lookup a battle is created with may run before the battle starts without it. */
+/** How long the lookup a battle is created with may run on the database before the battle starts without it. */
 export const SNAPSHOT_TIME_LIMIT_MS = 3000;
 
+/**
+ * How long the battle's creation waits for it: the server-side limit and a
+ * little over, for a driver that never gets as far as the server (a failover,
+ * a stalled socket), where `maxTimeMS` can't fire.
+ */
+export const SNAPSHOT_WAIT_MS = SNAPSHOT_TIME_LIMIT_MS + 500;
+
 /** One player's record with one character, as the aggregation hands it back. */
-interface MasteryGroup extends Omit<MasteryRecord, "battles"> {
-    _id: { userId: string; character: string };
-    battles: number;
-}
+type MasteryGroup = MasteryRecord & { _id: { userId: string; character: string } };
 
 /** Each character's record and XP, for one player. */
 export type PlayerMastery = Partial<Record<CharacterId, MasteryRecord & { xp: number }>>;
@@ -31,8 +36,9 @@ export type PlayerMastery = Partial<Record<CharacterId, MasteryRecord & { xp: nu
  * One aggregation for the whole party. The { playerIds: 1, gameType: 1 }
  * index finds a player's Realm Arena results, so a long record in other games
  * costs nothing, and what comes back is at most one group per player and
- * character, however many battles there were. Each result is cut to its rows
- * before they're unwound.
+ * character, however many battles there were. Each result is cut to the
+ * party's own rows before they're unwound, so an opponent's are never
+ * exploded only to be thrown away.
  */
 export async function masteryOf(userIds: readonly string[], options: { maxTimeMS?: number } = {}): Promise<Map<string, PlayerMastery>> {
     const byPlayer = new Map<string, PlayerMastery>();
@@ -40,9 +46,8 @@ export async function masteryOf(userIds: readonly string[], options: { maxTimeMS
     const players = [...userIds];
     const groups: MasteryGroup[] = await GameResultModel.aggregate([
         { $match: { playerIds: { $in: players }, gameType: "RealmArena", countsAsPlayed: { $ne: false }, ...RESULT_COUNTS_FILTER } },
-        { $project: { _id: 0, row: "$stats.mastery" } },
+        { $project: { _id: 0, row: { $filter: { input: "$stats.mastery", cond: { $in: ["$$this.userId", players] } } } } },
         { $unwind: "$row" },
-        { $match: { "row.userId": { $in: players } } },
         { $group: {
             _id: { userId: "$row.userId", character: "$row.character" },
             battles: { $sum: 1 },
@@ -66,24 +71,23 @@ export async function masteryOf(userIds: readonly string[], options: { maxTimeMS
  * character, keeping only those above 0.
  *
  * If the results can't be read in time, the battle starts with nobody ranked
- * rather than not at all. It's the whole party's lookup, so everyone fights
- * with the starter characters alike, and ranks only ever unlock options, never
- * power (§23), so nobody is outgunned for it.
+ * rather than not at all, which `withTimeout` logs. It's the whole party's
+ * lookup, so everyone fights with the starter characters alike, and ranks only
+ * ever unlock options, never power (§23), so nobody is outgunned for it.
  */
 export async function masterySnapshotOf(userIds: readonly string[]): Promise<MasterySnapshot> {
-    let byPlayer: Map<string, PlayerMastery>;
-    try {
-        byPlayer = await masteryOf(userIds, { maxTimeMS: SNAPSHOT_TIME_LIMIT_MS });
-    } catch (err) {
-        console.error("Realm Arena: couldn't read mastery, so the battle starts with nobody ranked", err);
-        return {};
-    }
+    const byPlayer = await withTimeout(
+        () => masteryOf(userIds, { maxTimeMS: SNAPSHOT_TIME_LIMIT_MS }),
+        SNAPSHOT_WAIT_MS,
+        new Map<string, PlayerMastery>(),
+        "Realm Arena: reading mastery for a new battle",
+    );
     const snapshot: MasterySnapshot = {};
     for (const [userId, mastery] of byPlayer) {
-        const ranks = Object.fromEntries(Object.entries(mastery)
-            .map(([character, record]) => [character, rankOf(record.xp)] as const)
-            .filter(([, rank]) => rank > 0));
-        if (Object.keys(ranks).length > 0) snapshot[userId] = ranks;
+        for (const [character, record] of Object.entries(mastery) as [CharacterId, { xp: number }][]) {
+            const rank = rankOf(record.xp);
+            if (rank > 0) snapshot[userId] = { ...snapshot[userId], [character]: rank };
+        }
     }
     return snapshot;
 }

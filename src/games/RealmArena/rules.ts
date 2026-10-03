@@ -35,7 +35,7 @@ import {
     ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, ITEMS, MAX_OF_EACH, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type PlayerCount,
 } from "./characters";
-import type { Tally } from "./mastery";
+import { addTally, NO_TALLY, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
@@ -934,7 +934,7 @@ export function storedFighter(fighter: Fighter): Fighter {
     return {
         ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])], item: fighter.item ?? null,
         // Copied, so an undo snapshot never shares it with the live fighter.
-        ...(fighter.tally ? { tally: { ...fighter.tally } } : {}),
+        ...(fighter.tally ? { tally: addTally(fighter.tally, NO_TALLY) } : {}),
     };
 }
 

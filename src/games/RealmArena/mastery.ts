@@ -23,6 +23,11 @@ export interface Tally {
 
 export const NO_TALLY: Readonly<Tally> = { attacks: 0, abilities: 0, items: 0 };
 
+/** Two tallies summed: the one place that lists the counts (masteryRecord.ts's `$group` sums the same three). */
+export function addTally(a: Readonly<Tally>, b: Readonly<Tally>): Tally {
+    return { attacks: a.attacks + b.attacks, abilities: a.abilities + b.abilities, items: a.items + b.items };
+}
+
 /** A character's record across every battle that counts: how many it fought in, and its tallies summed. */
 export interface MasteryRecord extends Tally {
     battles: number;

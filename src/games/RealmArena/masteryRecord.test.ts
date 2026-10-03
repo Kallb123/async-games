@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GameResultModel, RESULT_COUNTS_FILTER } from "@/utils/mongodb/GameResultData";
-import { masteryOf, masterySnapshotOf, SNAPSHOT_TIME_LIMIT_MS } from "./masteryRecord";
+import { masteryOf, masterySnapshotOf, SNAPSHOT_TIME_LIMIT_MS, SNAPSHOT_WAIT_MS } from "./masteryRecord";
 
 // A player's mastery, summed from their Realm Arena results (§23.3) with Mongo
 // stubbed out: the pipeline's shape is checked, and the rows it hands back
@@ -24,7 +24,7 @@ describe("masteryOf", () => {
         const [pipeline] = aggregate.mock.calls[0] as unknown as [Record<string, unknown>[]];
         expect(pipeline[0]).toEqual({ $match: { playerIds: { $in: ["a", "b"] }, gameType: "RealmArena", countsAsPlayed: { $ne: false }, ...RESULT_COUNTS_FILTER } });
         // Only the party's own rows are summed, not their opponents'.
-        expect(pipeline).toContainEqual({ $match: { "row.userId": { $in: ["a", "b"] } } });
+        expect(pipeline[1]).toEqual({ $project: { _id: 0, row: { $filter: { input: "$stats.mastery", cond: { $in: ["$$this.userId", ["a", "b"]] } } } } });
     });
 
     it("turns each player's record with each character into XP", async () => {
@@ -71,5 +71,18 @@ describe("masterySnapshotOf", () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
 
         expect(await masterySnapshotOf(["a", "b"])).toEqual({});
+    });
+
+    it("doesn't wait on a driver that never answers, past its own deadline", async () => {
+        vi.useFakeTimers();
+        try {
+            vi.spyOn(GameResultModel, "aggregate").mockReturnValue(new Promise(() => {}) as never);
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            const snapshot = masterySnapshotOf(["a"]);
+            await vi.advanceTimersByTimeAsync(SNAPSHOT_WAIT_MS);
+            expect(await snapshot).toEqual({});
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
