@@ -265,10 +265,14 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
             return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
-            // A Cleric's Purify reaches itself, and needs no "with" to say so.
-            const by = event.via === "draught" ? (event.target === event.fighter ? "its healing draught" : `${name(event.fighter)}'s healing draught`)
-                : event.target === event.fighter ? undefined : name(event.fighter);
-            return `${event.via === "purify" ? "purified" : "healed"} ${name(event.target)}${by ? ` with ${by}` : ""}${event.hp > 0 ? ` for ${event.hp}` : ""}`;
+            const hp = event.hp > 0 ? ` for ${event.hp}` : "";
+            const self = event.target === event.fighter;
+            switch (event.via) {
+                case "draught": return `healed ${name(event.target)} with ${self ? "its" : `${name(event.fighter)}'s`} healing draught${hp}`;
+                // A Cleric's Purify reaches itself, and needs no "with" to say so.
+                case "purify": return `purified ${name(event.target)}${self ? "" : ` with ${name(event.fighter)}`}${hp}`;
+                default: return `healed ${name(event.target)} with ${name(event.fighter)}${hp}`;
+            }
         }
         case "thrown": {
             const hit = event.targets.length === 0 ? ""

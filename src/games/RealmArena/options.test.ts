@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OPTIONS, REALM, type OptionId } from "./characters";
+import { ABILITIES, OPTIONS, REALM, type CharacterOption, type OptionId } from "./characters";
 import { battlefieldById } from "./maps";
 import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { RealmArenaUndo, tallied } from "./RealmArenaLogic";
@@ -85,11 +85,13 @@ describe("mustering with options (§23.2)", () => {
         const picks = optionPicks(game);
         const command = muster("a", picks);
         const { outcome } = await play(game, command);
-        const names = ["shieldBash", "demolish", "cripplingShot", "Shield bash", "Demolish", "Crippling shot", "Purify"];
+        // Every option's id and the name of what it swaps in, and the key a pick would carry one under.
+        const names = (Object.entries(OPTIONS) as [OptionId, CharacterOption][])
+            .flatMap(([id, option]) => [id, "weapon" in option ? option.weapon.name : ABILITIES[option.ability].name]);
         for (const viewer of ["b", null]) {
             const traces = [JSON.stringify((await responseFor(game, viewer)).specificGameState), command.myString(), JSON.stringify(outcome), game.gameState.history[0].text];
             for (const trace of traces) {
-                for (const name of names) expect(trace, `${viewer} sees ${name}`).not.toContain(name);
+                for (const name of [...names, '"option"']) expect(trace, `${viewer} sees ${name}`).not.toContain(name);
             }
         }
         expect((await responseFor(game, "a")).specificGameState.myMuster).toEqual(picks);
@@ -105,6 +107,11 @@ describe("mustering with options (§23.2)", () => {
             expect((await responseFor(game, viewer)).specificGameState.mastery).toEqual(A_RANKED);
         }
         expect((await responseFor(makeGame(), "a")).specificGameState.mastery).toEqual({});
+    });
+
+    it("sends only ranks of 1–3 by a character, whatever else the snapshot holds", async () => {
+        const game = makeGame(undefined, { a: { knight: 2, archer: 0, dragon: 3, mage: 7, xp: 900 } as never, b: { cleric: 3 } });
+        expect((await responseFor(game, "b")).specificGameState.mastery).toEqual({ a: { knight: 2 }, b: { cleric: 3 } });
     });
 });
 

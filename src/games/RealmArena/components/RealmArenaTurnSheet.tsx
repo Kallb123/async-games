@@ -7,7 +7,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, CHARACTER_MARK, rangeSquares, targetsOf, weaponLine, whoseName, type TargetKind } from '@/games/RealmArena/ui';
 import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
@@ -63,18 +63,18 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
  * Each ability's row: its icon and tag, and who — or, for a Demolish, what —
  * it needs in reach before it can be aimed.
  */
-const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: { kind: TargetKind; least: number } | 'cover' }>> = {
+const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs?: TargetKind | 'cover'; least?: number }>> = {
     sneak: { icon: '🤫', tag: 'Sneak' },
     shieldWall: { icon: '🛡️', tag: 'Raise it' },
     fireball: { icon: '🔥', tag: 'Aim' },
-    cleave: { icon: '✦', tag: 'Aim', needs: { kind: 'attack', least: 2 } },
-    aimedShot: { icon: '✦', tag: 'Aim', needs: { kind: 'aimedShot', least: 1 } },
-    heal: { icon: '✚', tag: 'Aim', needs: { kind: 'heal', least: 1 } },
-    raise: { icon: '✚', tag: 'Aim', needs: { kind: 'raise', least: 1 } },
-    shieldBash: { icon: '🛡️', tag: 'Aim', needs: { kind: 'shieldBash', least: 1 } },
+    cleave: { icon: '✦', tag: 'Aim', needs: 'attack', least: 2 },
+    aimedShot: { icon: '✦', tag: 'Aim', needs: 'aimedShot' },
+    heal: { icon: '✚', tag: 'Aim', needs: 'heal' },
+    raise: { icon: '✚', tag: 'Aim', needs: 'raise' },
+    shieldBash: { icon: '🛡️', tag: 'Aim', needs: 'shieldBash' },
     demolish: { icon: '💥', tag: 'Aim', needs: 'cover' },
-    cripplingShot: { icon: '✦', tag: 'Aim', needs: { kind: 'cripplingShot', least: 1 } },
-    huntersMark: { icon: '◎', tag: 'Aim', needs: { kind: 'huntersMark', least: 1 } },
+    cripplingShot: { icon: '✦', tag: 'Aim', needs: 'cripplingShot' },
+    huntersMark: { icon: '◎', tag: 'Aim', needs: 'huntersMark' },
     purify: { icon: '✚', tag: 'Purify' },
 };
 
@@ -105,9 +105,9 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
         targetsOf(battle, player, fighter, kind).length >= least ? undefined : 'Nobody in reach';
     /** Why an ability that's ready and affordable still can't be used: nothing in reach for it, or — for one that goes at once — whatever `check` says. */
     const blocked = (id: AbilityId): string | undefined => {
-        const inReach = ABILITY_ROW[id].needs;
+        const { needs: inReach, least } = ABILITY_ROW[id];
         if (inReach === 'cover') return rangeSquares(battle, fighter, 'cover').size > 0 ? undefined : 'No low cover beside them';
-        if (inReach) return reachable(inReach.kind, inReach.least);
+        if (inReach) return reachable(inReach, least);
         if (!isInstant(id)) return undefined;
         const verdict = check(battle, player, { kind: id, fighter: fighter.id });
         return 'refused' in verdict ? verdict.refused : undefined;
@@ -258,13 +258,10 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
     if (aim === 'shieldBash') return hint(`${health} · always hits, for ${ABILITIES.shieldBash.damage}, and stuns them.`);
-    // A crippling shot is shot at the weapon's usual odds (§23.2).
-    const odds = aim === 'attack' || aim === 'aimedShot' || aim === 'cripplingShot'
-        ? shotOdds(battle, fighter, target, aim === 'cripplingShot' ? 'attack' : aim) : undefined;
-    if (!odds) return hint(`${health} · a strike always hits, for ${strike}.`);
-    // What a hit leaves: the crippling shot's, or the weapon's own (a Frost bolt's).
-    const weapon = weaponOf(fighter);
-    const effect = aim === 'cripplingShot' ? ABILITIES.cripplingShot.effect : weapon.kind === 'ranged' ? weapon.effect : undefined;
+    const shot = aim === 'attack' || aim === 'aimedShot' || aim === 'cripplingShot' ? aim : undefined;
+    const odds = shot && shotOdds(battle, fighter, target, shot);
+    if (!shot || !odds) return hint(`${health} · a strike always hits, for ${strike}.`);
+    const effect = shotEffect(fighter, shot);
     return (
         <>
             <div className="ag-stat-row">

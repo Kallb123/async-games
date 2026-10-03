@@ -55,11 +55,14 @@ export const EFFECTS = {
 /** Every effect, in the order a character's are listed. */
 export const EFFECT_IDS = Object.keys(EFFECTS) as EffectId[];
 
+/** The effects a character takes up itself. */
+const STANCES = ["hunkered", "shieldWall"] as const satisfies readonly EffectId[];
+
 /** The effects something else puts on a character, rather than stances it takes up itself. */
-export type Affliction = Exclude<EffectId, "hunkered" | "shieldWall">;
+export type Affliction = Exclude<EffectId, typeof STANCES[number]>;
 
 /** Every affliction, in `EFFECT_IDS` order: what Purify clears (§23.2). */
-export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => effect !== "hunkered" && effect !== "shieldWall");
+export const AFFLICTIONS = EFFECT_IDS.filter((effect): effect is Affliction => !(STANCES as readonly EffectId[]).includes(effect));
 
 /**
  * A melee weapon needs its target next to it and always hits; a ranged one
@@ -88,8 +91,12 @@ export interface Ability {
     hp?: number;
     /** What it leaves on everyone it hits: Fireball's burning, and the options' (§23.2). A shot leaves it only on a hit (§20.2). */
     effect?: Affliction;
-    /** Blasts away the low cover in the 3×3 round where it lands, after its damage (Fireball, §22). */
-    blasts?: true;
+    /**
+     * Blasts away low cover after its damage (§22): every square of it in the
+     * 3×3 round where it lands (`area`, Fireball), or the one square it's aimed
+     * at (`target`, Demolish).
+     */
+    blasts?: "area" | "target";
     description: string;
 }
 
@@ -98,11 +105,11 @@ export const ABILITIES = {
     shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to the Knight count as in half cover until its next turn" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
-    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: true, description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
+    fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
     heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them, and clear burning, slowed and stunned" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
-    demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
+    demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
     cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
     huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
     purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed and marked from itself and each ally next to it, and give each 2 HP" },
@@ -180,12 +187,6 @@ export function isOptionId(value: unknown): value is OptionId {
     return typeof value === "string" && Object.hasOwn(OPTIONS, value);
 }
 
-/** An option's name: the ability or the weapon it swaps in. */
-export function optionName(id: OptionId): string {
-    const option: CharacterOption = OPTIONS[id];
-    return "weapon" in option ? option.weapon.name : ABILITIES[option.ability].name;
-}
-
 /** What a character fights with, once its option — if it was mustered with one — has swapped its part in. */
 export interface Kit {
     weapon: Weapon;
@@ -226,7 +227,7 @@ export interface Item {
     /** What it leaves on each character it hits, friend or foe. */
     effect?: Affliction;
     /** Blasts away the low cover on and next to the square it lands on, after its damage (the fire flask, §22). */
-    blasts?: true;
+    blasts?: "area";
     /**
      * Taken off every shot at a character standing in the smoke pot's cloud,
      * until the thrower's next turn — and overwatch can't fire at all at a
@@ -239,7 +240,7 @@ export interface Item {
 }
 
 export const ITEMS = {
-    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", blasts: true, description: "Thrown at one square: 2 damage to whoever is there, sets them burning, and blasts away the low cover on and next to it" },
+    fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", blasts: "area", description: "Thrown at one square: 2 damage to whoever is there, sets them burning, and blasts away the low cover on and next to it" },
     thunderFlask: { name: "Thunder flask", points: 5, ap: 2, range: THROW_RANGE, area: true, effect: "stunned", description: "Thrown at a 3×3 area: stuns everyone in it, friend or foe" },
     smokePot: { name: "Smoke pot", points: 5, ap: 1, range: THROW_RANGE, area: true, hitPenalty: 20, description: "Thrown at a 3×3 area: until the thrower's next turn, −20% to hit anyone in it, and no overwatch at anyone stepping into it" },
     healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed and stunned" },

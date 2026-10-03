@@ -1004,7 +1004,7 @@ describe("options (§23.2)", () => {
         });
 
         it("refuses another character's option, and anything that isn't one", () => {
-            for (const option of ["shieldBash", "fireball", "cleave", ["demolish"], 1, { id: "demolish" }]) {
+            for (const option of ["shieldBash", "fireball", "cleave", "__proto__", "constructor", "toString", "", ["demolish"], 1, { id: "demolish" }]) {
                 expect(musterRefusal(RUINED_FORT, 0, [pick("knight", option)], budget, { knight: 3 }), JSON.stringify(option)).toBe("That isn't an option for that character");
             }
             expect(musterRefusal(RUINED_FORT, 0, [pick("knight", null)], budget, {})).toBeUndefined();

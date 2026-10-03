@@ -1,7 +1,7 @@
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { REALM, type ItemId, type PlayerCount } from "./characters";
-import type { MasterySnapshot } from "./mastery";
+import type { Ranks } from "./mastery";
 import { musterPoints, musterRefusal, pickOf, readyMadeMuster } from "./rules";
 import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from "./ui";
 
@@ -17,7 +17,7 @@ import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from
  * a square, and the player only moves the ones they want elsewhere — and gives
  * an item (§21.1) to whichever they pick up, out of the same points.
  */
-export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, ranks: MasterySnapshot[string], turnKey: string) {
+export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, ranks: Ranks, turnKey: string) {
     const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
     const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
     const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);

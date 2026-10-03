@@ -1300,14 +1300,15 @@ and opening ground.
   it to scorched ground, and ignores anything else, so no list can blast a
   wall. `battlefieldOf(map, blasted)` is the battlefield as it stands, and
   the server, the board, the recap and a replay all read it.
-- **What blasts is data:** `blasts` on Fireball and on the fire flask.
+- **What blasts is data:** `blasts` on Fireball and on the fire flask (the
+  3×3, `area`), and on Demolish (the square it's aimed at, `target`, §23.2).
   `blastedBy` is the cover something would clear, and both the resolver and
   the turn sheet's preview use it.
 - **The `blasted` event** names the squares and who blasted them. It comes
   after the damage, the knock-outs and the effects.
 - The map tests still hold, because blasting only removes cover, never walls.
-- A fire flask that blasts but hurts nobody can still be undone. The snapshot
-  holds what was blasted.
+- A fire flask or a Demolish that blasts but hurts nobody can still be
+  undone. The snapshot holds what was blasted.
 
 ### 22.3 PRs
 
@@ -1381,7 +1382,7 @@ The rank-1 options, built from effects, items and blasting:
 | Character | Option | Replaces | What it does |
 |---|---|---|---|
 | Man-at-arms | **Shield bash** | Cleave | Strike one enemy next to them for 2, and stun it (2 AP, 3 turns) |
-| Knight | **Demolish** | Shield wall | Blast one low cover square next to them, and strike anyone standing beside it for 2 (2 AP, 2 turns) |
+| Knight | **Demolish** | Shield wall | Blast one low cover square next to them, and strike everyone else beside it for 2, friend or foe (2 AP, 2 turns) |
 | Archer | **Crippling shot** | Aimed shot | A shot at normal accuracy that slows on a hit (3 AP, 2 turns) |
 | Scout | **Hunter's mark** | Sneak | Mark an enemy it can see within 12 squares (1 AP, 2 turns) |
 | Mage | **Frost bolt** | Bolt | Damage 2 instead of 3, and slows on a hit |
@@ -1476,7 +1477,10 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     usual odds, with nothing of the aimed shot's bonus.
   - **Demolish strikes everyone beside the cover but the Knight, friend or
     foe**, as every blast does, then the cover goes, after the damage (§22).
-    It's told as a `demolished` event, then the `blasted` one.
+    It's told as a `demolished` event, then the `blasted` one. Who it strikes
+    (`demolishArea`), the cover it can be aimed at (`coverNextTo`) and what a
+    shot leaves on a hit (`shotEffect`) are one helper each in `rules.ts`, which
+    the board's preview reads too.
   - **Hunter's mark is aimed as a fireball is**, at an enemy in sight within
     12 squares, and told as a `marked` event, then the `effect`.
   - **Purify reaches the Cleric and every ally next to it**, as a heal does,

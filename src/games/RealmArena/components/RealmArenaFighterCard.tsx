@@ -29,6 +29,7 @@ interface RealmArenaFighterCardProps {
  */
 export default function RealmArenaFighterCard({ fighter, label, children }: RealmArenaFighterCardProps) {
     const character = CHARACTERS[fighter.character];
+    const weapon = weaponOf(fighter);
     return (
         <Section label={label}>
             <div className="ag-stat-row">
@@ -40,7 +41,7 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
             <RealmArenaStatusList effects={effectsOn(fighter)} />
             {children ?? (
                 <div className="ag-list">
-                    <ListRow icon={CHARACTER_MARK[fighter.character]} title={weaponOf(fighter).name} sub={weaponLine(weaponOf(fighter))} />
+                    <ListRow icon={CHARACTER_MARK[fighter.character]} title={weapon.name} sub={weaponLine(weapon)} />
                     {abilitiesOf(fighter).map(id => {
                         const ability = ABILITIES[id];
                         return (

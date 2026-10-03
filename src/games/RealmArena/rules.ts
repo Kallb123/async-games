@@ -3,7 +3,8 @@
 // who reacts to a move and in what order, abilities, status effects, items
 // and the smoke a smoke pot leaves, the low cover a blast clears, knock-outs
 // and raising, scoring, the end of the battle with its tie-break chain, and
-// what a squad may muster, the options its ranks unlock among it (§23.2).
+// what a squad may muster, including the options its owner's ranks unlock
+// (§23.2).
 //
 // Pure and isomorphic, with no server-only imports (docs/new-game.md,
 // "Isomorphic rules modules"): PR 3's commands act through it, and the board
@@ -35,7 +36,7 @@ import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, MAX_OF_EACH, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
-import { addTally, NO_TALLY, type MasterySnapshot, type Tally } from "./mastery";
+import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
@@ -295,7 +296,21 @@ export function smokeSquares(state: BattleState): ReadonlySet<Square> {
  * can't take one: it fights in melee, the target is out of range, or it can't
  * see the target (§13.3).
  */
-export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch" = "attack"): ShotOdds | undefined {
+/** The kinds of shot: an attack, an aimed shot, a crippling shot — at an attack's odds — and one on overwatch. */
+export type ShotKind = "attack" | "aimedShot" | "cripplingShot" | "overwatch";
+
+/**
+ * What a shot leaves on a hit, and only then (§20.2): a crippling shot's
+ * slow, or else whatever the weapon leaves — a Frost bolt's, on overwatch
+ * too (§23.2).
+ */
+export function shotEffect(shooter: Fighter, kind: ShotKind): Affliction | undefined {
+    if (kind === "cripplingShot") return ABILITIES.cripplingShot.effect;
+    const weapon = weaponOf(shooter);
+    return weapon.kind === "ranged" ? weapon.effect : undefined;
+}
+
+export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
     const { field } = state;
     const weapon = weaponOf(attacker);
     if (weapon.kind !== "ranged") return undefined;
@@ -418,7 +433,7 @@ const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter
     target !== undefined && isStanding(target) && target.owner !== actor.owner;
 
 /** Why an attack can't be made, or undefined when it can. */
-function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: "attack" | "aimedShot"): string | undefined {
+function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: Exclude<ShotKind, "overwatch">): string | undefined {
     if (!isEnemy(actor, target)) return "Pick an enemy";
     if (weaponOf(actor).kind === "melee") {
         if (weaponReaches(state, actor, target.square)) return undefined;
@@ -467,8 +482,9 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         // An attack with the character's own weapon, at its usual odds, that
         // leaves an effect: Shield bash strikes, Crippling shot shoots (§23.2).
         case "shieldBash":
+            return ability("shieldBash", () => attackRefusal(state, actor, target, "attack"));
         case "cripplingShot":
-            return ability(kind, () => attackRefusal(state, actor, target, "attack"));
+            return ability("cripplingShot", () => attackRefusal(state, actor, target, "cripplingShot"));
         case "huntersMark":
             return ability("huntersMark", () => isEnemy(actor, target)
                 ? aimRefusal(state, actor, target.square, ABILITIES.huntersMark.range)
@@ -490,9 +506,7 @@ export function check(state: BattleState, player: string, action: unknown): Chec
         case "shieldWall":
             return ability("shieldWall", () => undefined);
         case "demolish":
-            return ability("demolish", () => isSquare(state.field, at) && state.field.tiles[at].terrain.destructible && nextTo(state.field, actor.square, at)
-                ? undefined
-                : "Pick low cover next to them");
+            return ability("demolish", () => isSquare(state.field, at) && coverNextTo(state.field, actor.square, at) ? undefined : "Pick low cover next to them");
         case "purify":
             return ability("purify", () => purified(state, actor).length > 0 ? undefined : "Nobody beside them needs it");
         case "fireball":
@@ -539,6 +553,16 @@ function healRefusal(state: BattleState, healer: Fighter, target: Fighter | unde
     return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
 }
 
+/** Whether a square is low cover next to one standing on `from`: what a Knight's Demolish can be aimed at (§23.2). */
+export function coverNextTo(field: Battlefield, from: Square, square: Square): boolean {
+    return !!field.tiles[square].terrain.destructible && nextTo(field, from, square);
+}
+
+/** Who a Demolish at the cover on `at` strikes: everyone beside it but the Knight that swung it, friend or foe (§23.2). */
+export function demolishArea(field: Battlefield, knight: Square, at: Square): Square[] {
+    return areaAround(field, at).filter(square => square !== knight);
+}
+
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
 export function afflictionsOn(fighter: Fighter): Affliction[] {
     return AFFLICTIONS.filter(effect => hasEffect(fighter, effect));
@@ -580,11 +604,12 @@ export function healedEffects(fighter: Fighter): EffectId[] {
 
 /**
  * The low cover something landing at `at` would blast away (§22): every
- * square of it in the 3×3 round `at`, for something that blasts — Fireball,
- * a fire flask — and none for anything else.
+ * square of it in the 3×3 round `at` for Fireball or a fire flask, `at`
+ * itself for a Demolish, and none for anything else.
  */
 export function blastedBy(field: Battlefield, by: Ability | Item | undefined, at: Square): Square[] {
-    return by?.blasts ? areaAround(field, at).filter(square => field.tiles[square].terrain.destructible) : [];
+    const squares = by?.blasts === "area" ? areaAround(field, at) : by?.blasts === "target" ? [at] : [];
+    return squares.filter(square => field.tiles[square].terrain.destructible);
 }
 
 /** Every square a run of events blasted away, in order (§22). */
@@ -626,14 +651,9 @@ function resolver(state: BattleState, roll: Roll) {
         events.push(result.event);
     };
 
-    /**
-     * A shot, which leaves `effect` on a hit, and only then (§20.2): an
-     * ability's (Crippling shot), or else whatever the weapon leaves (a
-     * Frost bolt's, on overwatch too).
-     */
-    const shoot = (by: Fighter, target: Fighter, kind: "attack" | "aimedShot" | "overwatch", ability?: Affliction) => {
-        const weapon = weaponOf(by);
-        const effect = ability ?? (weapon.kind === "ranged" ? weapon.effect : undefined);
+    /** A shot, which leaves its `shotEffect` on a hit, and only then (§20.2). */
+    const shoot = (by: Fighter, target: Fighter, kind: ShotKind) => {
+        const effect = shotEffect(by, kind);
         const odds = shotOdds(battle, by, target, kind);
         if (!odds) throw new Error(`${by.id} can't shoot ${target.id}`);
         const rolled = roll();
@@ -754,7 +774,7 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         case "cripplingShot":
             // At the bow's usual odds; slowed only on a hit (§20.2).
-            run.shoot(actor, get(action.target), "attack", ABILITIES.cripplingShot.effect);
+            run.shoot(actor, get(action.target), "cripplingShot");
             break;
         case "huntersMark":
             events.push({ kind: "marked", fighter: actor.id, target: action.target });
@@ -764,9 +784,9 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             // Everyone beside the cover but the Knight, friend or foe as any
             // blast is, then the cover goes, after the damage (§22, §23.2).
             const { damage } = ABILITIES.demolish;
-            run.land(actor, areaAround(state.field, action.at).filter(square => square !== actor.square), damage, undefined,
+            run.land(actor, demolishArea(state.field, actor.square, action.at), damage, undefined,
                 targets => ({ kind: "demolished", fighter: actor.id, at: action.at, targets, damage }));
-            run.blast(actor, [action.at]);
+            run.blast(actor, blastedBy(state.field, ABILITIES.demolish, action.at));
             break;
         }
         case "hunker":
@@ -981,7 +1001,7 @@ export function musterPoints(picks: readonly MusterPick[]): number {
  * the battle snapshotted them when it was created (§23.3) — has unlocked. The
  * client never claims an option; it only sends the pick.
  */
-function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: MasterySnapshot[string]): string | undefined {
+function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks: Ranks): string | undefined {
     if (pick.option == null) return undefined;
     if (!isOptionId(pick.option) || OPTIONS[pick.option].character !== character) return "That isn't an option for that character";
     return (ranks[character] ?? 0) >= OPTIONS[pick.option].rank ? undefined : "That option isn't unlocked yet";
@@ -994,7 +1014,7 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
  * items, and each on its own square of the seat's deployment zone. Total,
  * like `check`.
  */
-export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number, ranks: MasterySnapshot[string]): string | undefined {
+export function musterRefusal(field: Battlefield, seat: number, picks: unknown, budget: number, ranks: Ranks): string | undefined {
     if (!Array.isArray(picks) || picks.length === 0) return "Muster at least one character";
     const zone = new Set(Array.isArray(field.deployments[seat]) ? field.deployments[seat] : []);
     const squares = new Set<Square>();

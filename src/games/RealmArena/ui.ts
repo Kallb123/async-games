@@ -8,7 +8,7 @@ import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type Weapon } from "./characters";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -155,7 +155,7 @@ export function hpFraction(fighter: Fighter): number {
     return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
 }
 
-/** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slows on a hit". */
+/** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
 export function weaponLine(weapon: Weapon): string {
     if (weapon.kind === "melee") return `Melee · ${weapon.damage} damage`;
     const leaves = weapon.effect ? ` · ${EFFECTS[weapon.effect].name.toLowerCase()} on a hit` : "";
@@ -247,7 +247,7 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
         if (typeof kind === "number") return inRange(field, fighter.square, square, kind);
-        if (kind === "cover") return !!field.tiles[square].terrain.destructible && nextTo(field, fighter.square, square);
+        if (kind === "cover") return coverNextTo(field, fighter.square, square);
         if (!field.tiles[square].terrain.standable) return false;
         return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
     };

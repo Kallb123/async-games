@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES } from "./characters";
-import { blastedBy, check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { ABILITIES, type Ability } from "./characters";
+import { blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -69,15 +69,12 @@ const isAtSquare = (aim: Aim): aim is AtSquare => aim === "fireball" || aim === 
  * else that square alone.
  */
 function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
-    if (aim === "demolish") return areaAround(state.field, at).filter(square => square !== fighter.square);
+    if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
     return aim === "fireball" || itemOf(fighter)?.area ? areaAround(state.field, at) : [at];
 }
 
-/** The low cover what's aimed at `at` would blast away (§22): the square itself, for a Demolish. */
-function blasting(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
-    if (aim === "demolish") return state.field.tiles[at].terrain.destructible ? [at] : [];
-    return blastedBy(state.field, aim === "fireball" ? ABILITIES.fireball : itemOf(fighter), at);
-}
+/** What blasts away low cover where it's aimed (§22): the ability, or the item thrown. */
+const BLASTER: Readonly<Record<Exclude<AtSquare, "throw">, Ability>> = { fireball: ABILITIES.fireball, demolish: ABILITIES.demolish };
 
 /** The action a draft has lined up, once it has everything the action needs. */
 function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Square[] | undefined): Action | null {
@@ -263,7 +260,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Every square a lined-up fireball, throw or Demolish lands on. */
         area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
         /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
-        blasts: isAtSquare(aim) && draft.square !== null ? blasting(battle, fighter, aim, draft.square) : null,
+        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, aim === "throw" ? itemOf(fighter) : BLASTER[aim], draft.square) : null,
         action,
         verdict,
         send,
