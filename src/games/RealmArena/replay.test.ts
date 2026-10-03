@@ -90,6 +90,8 @@ describe("Realm Arena replay", () => {
             healed: ["fighter", "hp", "target"],
             thrown: ["at", "damage", "fighter", "item", "targets"],
             blasted: ["fighter", "squares"],
+            demolished: ["at", "damage", "fighter", "targets"],
+            marked: ["fighter", "target"],
             raised: ["fighter", "hp", "target"],
             hunkered: ["fighter"],
             shieldWall: ["fighter"],
@@ -102,8 +104,8 @@ describe("Realm Arena replay", () => {
         expect(events.some(event => event.kind === "shot")).toBe(true);
         for (const event of events) {
             const { kind, ...rest } = event;
-            // A draught's `draught` flag is the one optional field.
-            expect(Object.keys(rest).filter(key => key !== "draught").sort()).toEqual(fields[kind]);
+            // A draught's or a Purify's `via` is the one optional field.
+            expect(Object.keys(rest).filter(key => key !== "via").sort()).toEqual(fields[kind]);
         }
     });
 
@@ -136,10 +138,11 @@ describe("the sealed muster, replayed (§17.2)", () => {
     // ready-made one a timed-out muster brings — and carrying an item, which
     // that never does (§21.1).
     async function oneMustered(): Promise<RealmArenaTestGame> {
-        const game = makeGame();
+        // Ranked, so the Mage can carry its option (§23.2), sealed like the rest.
+        const game = makeGame(undefined, { a: { mage: 1 } });
         const zone = readyMadePicks(game, 0).map(pick => pick.square);
         const picks = [
-            { character: "mage" as const, square: zone[0] },
+            { character: "mage" as const, square: zone[0], option: "frostBolt" as const },
             { character: "archer" as const, square: zone[1] },
             { character: "cleric" as const, square: zone[2] },
             { character: "scout" as const, square: zone[3], item: "smokePot" as const },
@@ -153,7 +156,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
         for (const viewer of ["b", null]) {
             const timeline = await buildTimeline(game, NAMES, [], undefined, viewer);
             const wire = JSON.stringify(timeline);
-            expect(wire).not.toMatch(/"character"|"square"|"item"|smoke/i);
+            expect(wire).not.toMatch(/"character"|"square"|"item"|smoke|"option"|frost/i);
             for (const name of CHARACTER_NAMES) expect(wire).not.toContain(name);
             for (const snapshot of timeline.snapshots) {
                 const gs = snapshot.specificGameState as IRealmArenaSpecificGameStateResponse;
@@ -169,6 +172,7 @@ describe("the sealed muster, replayed (§17.2)", () => {
         const gs = timeline.snapshots.at(-1)?.specificGameState as IRealmArenaSpecificGameStateResponse;
         expect(gs.myMuster?.map(pick => pick.character)).toEqual(["mage", "archer", "cleric", "scout"]);
         expect(gs.myMuster?.[3].item).toBe("smokePot");
+        expect(gs.myMuster?.[0].option).toBe("frostBolt");
     });
 
     it("says only that the squad was mustered in the opponent's recap", async () => {

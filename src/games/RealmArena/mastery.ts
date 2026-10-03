@@ -62,4 +62,7 @@ export function rankOf(xp: number): Rank {
  * a rank unlocks are data keyed by rank, and an option once given a rank keeps
  * it, so the ranks are all a battle needs to keep.
  */
-export type MasterySnapshot = Record<string, Partial<Record<CharacterId, Rank>>>;
+export type MasterySnapshot = Record<string, Ranks>;
+
+/** One player's ranks in a `MasterySnapshot`: a character missing is rank 0. */
+export type Ranks = Partial<Record<CharacterId, Rank>>;

@@ -267,11 +267,25 @@ export function gameStateToModel(
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(pickOf) : null,
+        mastery: ranksOnTheWire(gs.mastery ?? {}),
         scores: { ...gs.scores },
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
+}
+
+/**
+ * The battle's snapshot of ranks as every viewer gets it (§23.3): built key by
+ * key rather than copied, so only a rank of 1–3 by a character's id reaches
+ * the wire, whatever else a Mixed path might one day hold.
+ */
+function ranksOnTheWire(mastery: MasterySnapshot): MasterySnapshot {
+    const characterIds = Object.keys(CHARACTERS) as CharacterId[];
+    return Object.fromEntries(Object.entries(mastery).map(([userId, ranks]) => [userId, Object.fromEntries(characterIds.flatMap(id => {
+        const rank = ranks?.[id];
+        return rank === 1 || rank === 2 || rank === 3 ? [[id, rank]] : [];
+    }))]));
 }
 
 /**

@@ -1446,26 +1446,29 @@ back — and the line between undoable and not runs through one command,
 action's kind but what the action set off.
 
 - **What is undoable.** A move, a sneak, hunkering down, going on watch, a
-  shield wall, a heal, a raise, a healing draught and a throw —
-  `UNDOABLE_KINDS` (`RealmArenaLogic.ts`) — and only when the action rolled
-  nothing and every event it produced is in `PEACEFUL_EVENTS`: something
-  moved, healed, rose, braced or went on watch, and nobody was struck, shot,
-  downed or scored off. A throw counts only when it landed on nobody, which a
-  smoke pot never does (its cloud is on the thrower). A fire flask that lands
-  on nobody but blasts low cover away (realm-arena.md §22) still counts: the
-  cover hurt nobody, and the snapshot holds what was blasted, so it comes back
-  too. Taking back an item's
-  use puts the item back, since the snapshot holds it like everything else. `RealmArenaAct` declares
-  `readonly undoable = true`; the source scan in
-  `src/games/RealmArena/undo.test.ts` holds the list to that one command, and
-  the guard beside it holds every action that pushed to no `recorded…` field.
-- **What is not.** No attack, ever: an attack, an aimed shot, a cleave, a
-  fireball, or a flask that lands on someone, even a thunder flask that only
-  stuns. A shot rolls, and a strike, a fireball or a flask hits someone both
-  sides have watched it land on. Nor a move that sets off a watcher: an overwatch shot
-  rolls, and a guard's strike — which rolls nothing — is still an attack on the
-  mover, so a move into a watcher's sight stays made while the same move along
-  an unwatched path can be taken back. That is decided off the events, not the
+  shield wall, a heal, a raise, a Purify, a Hunter's mark, a healing draught,
+  a throw and a Demolish — `UNDOABLE_KINDS` (`RealmArenaLogic.ts`) — and only
+  when the action rolled nothing and every event it produced is in
+  `PEACEFUL_EVENTS`: something moved, healed, rose, braced or went on watch,
+  and nobody was struck, shot, downed or scored off. A throw or a Demolish
+  counts only when it landed on nobody; a smoke pot always does (its cloud is
+  on the thrower). A fire flask or a Demolish that lands on nobody but blasts
+  low cover away (realm-arena.md §22, §23.3) still counts: the cover hurt
+  nobody, and the snapshot holds what was blasted, so it comes back too. A
+  mark only makes its target easier to hit, which hurts nobody, so it counts.
+  Taking back an item's use puts the item back, since the snapshot holds it
+  like everything else. `RealmArenaAct` declares `readonly undoable = true`;
+  the source scan in `src/games/RealmArena/undo.test.ts` holds the list to
+  that one command, and the guard beside it holds every action that pushed to
+  no `recorded…` field.
+- **What is not.** No attack, ever: an attack, an aimed shot, a crippling
+  shot, a cleave, a shield bash, a fireball, or a flask or a Demolish that
+  lands on someone, even a thunder flask that only stuns. A shot rolls, and a
+  strike, a fireball or a flask hits someone both sides have watched it land
+  on. Nor a move that sets off a watcher: an overwatch shot rolls, and a
+  guard's strike — which rolls nothing — is still an attack on the mover, so a
+  move into a watcher's sight stays made while the same move along an
+  unwatched path can be taken back. That is decided off the events, not the
   kind, so it is Fires Out's `revealedAnyPoi` shape: whatever the command turned
   up decides. And anything that isn't peaceful **empties the stack**, not just
   moves the anchor: a move after an attack would otherwise push on top of the

@@ -5,7 +5,7 @@ import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ABILITIES, CHARACTERS, ITEMS } from '@/games/RealmArena/characters';
-import { isStanding, type Fighter } from '@/games/RealmArena/rules';
+import { abilitiesOf, isStanding, weaponOf, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, CHARACTER_MARK, effectsOn, watchStatus, weaponLine } from '@/games/RealmArena/ui';
 import { RealmArenaStatusList } from './RealmArenaEffects';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -29,6 +29,7 @@ interface RealmArenaFighterCardProps {
  */
 export default function RealmArenaFighterCard({ fighter, label, children }: RealmArenaFighterCardProps) {
     const character = CHARACTERS[fighter.character];
+    const weapon = weaponOf(fighter);
     return (
         <Section label={label}>
             <div className="ag-stat-row">
@@ -40,8 +41,8 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
             <RealmArenaStatusList effects={effectsOn(fighter)} />
             {children ?? (
                 <div className="ag-list">
-                    <ListRow icon={CHARACTER_MARK[fighter.character]} title={character.weapon.name} sub={weaponLine(character.weapon)} />
-                    {character.abilities.map(id => {
+                    <ListRow icon={CHARACTER_MARK[fighter.character]} title={weapon.name} sub={weaponLine(weapon)} />
+                    {abilitiesOf(fighter).map(id => {
                         const ability = ABILITIES[id];
                         return (
                             <ListRow

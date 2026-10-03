@@ -86,10 +86,12 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
     if (thrown) return { type: RA_THROWN, glyph: ITEM_GLYPH[thrown.item] };
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
+    // A Demolish that struck someone beside the cover hit them, as a strike does (§23.2).
+    if (has(event => event.kind === "demolished" && event.targets.length > 0)) return { type: RA_HIT, glyph: "💥" };
     if (has(event => event.kind === "shot")) return { type: RA_MISS, glyph: "🎯" };
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
     const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
-    if (healed) return { type: RA_HEALED, glyph: healed.draught ? ITEM_GLYPH.healingDraught : "✚" };
+    if (healed) return { type: RA_HEALED, glyph: healed.via === "draught" ? ITEM_GLYPH.healingDraught : "✚" };
     return { type: RA_MANOEUVRE, glyph: "👣" };
 }
 
@@ -103,7 +105,8 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
             case "shot":
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball":
-            case "thrown": return event.damage > 0 ? event.targets : [];
+            case "thrown":
+            case "demolished": return event.damage > 0 ? event.targets : [];
             case "burned": return [event.fighter];
             case "downed": return [event.fighter];
             default: return [];
