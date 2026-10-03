@@ -54,16 +54,23 @@ const line = (text: string, actorId?: string): IHistoryEntry => ({ text, actorId
 describe("Realm Arena recap rows", () => {
     it("says a squad was mustered, and nothing of what's in it", () => {
         const before = state({ phase: "muster", mustered: [], fighters: [] });
-        const after = state({ phase: "muster", mustered: ["a"], myMuster: [{ character: "mage", square: 3 }] });
+        const after = state({ phase: "muster", mustered: ["a"], myMuster: [{ character: "mage", square: 3, item: "smokePot" }] });
         const rows = toEvents(snap(before), snap(after, [line("Alice mustered their squad", "a")]),
-            cmd("RealmArenaMuster", { picks: [{ character: "mage", square: 3 }] }), valid());
+            cmd("RealmArenaMuster", { picks: [{ character: "mage", square: 3, item: "smokePot" }] }), valid());
         expect(rows.map(row => row.title)).toEqual(["Alice mustered their squad"]);
-        expect(JSON.stringify(rows)).not.toMatch(/mage|Mage|square/);
+        expect(JSON.stringify(rows)).not.toMatch(/mage|Mage|square|smoke|💨/i);
     });
 
     it("starts the battle on the last muster", () => {
         const rows = toEvents(snap(state({ phase: "muster" })), snap(state({ fighters })), cmd("RealmArenaMuster", { senderId: "b", senderUsername: "Bob" }), valid());
         expect(rows.map(row => row.type)).toEqual(["ra_muster", "ra_battle"]);
+    });
+
+    it("tells a thrown item by its glyph, naming who it hurt, and a smoke pot as hurting nobody", () => {
+        const act = (event: BattleEvent) => toEvents(snap(state({ fighters })), snap(state({ fighters }), [line("Alice threw an item", "a")]), cmd("RealmArenaAct"), valid([event]))[0];
+        expect(act({ kind: "thrown", fighter: 0, item: "fireFlask", at: 20, targets: [1], damage: 2 })).toMatchObject({ type: "ra_thrown", glyph: "🔥", affectedIds: ["b"] });
+        expect(act({ kind: "thrown", fighter: 0, item: "smokePot", at: 20, targets: [], damage: 0 })).toMatchObject({ type: "ra_thrown", glyph: "💨", affectedIds: [] });
+        expect(act({ kind: "healed", fighter: 0, target: 0, hp: 3, draught: true })).toMatchObject({ type: "ra_healed", glyph: "🧪" });
     });
 
     it("titles an action with the line the log wrote for it, and names who it hurt", () => {

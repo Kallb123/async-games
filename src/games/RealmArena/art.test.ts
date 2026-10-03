@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS } from "./characters";
-import { ART_SHEETS, CLIPS, EFFECT_ART, GRASS, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { EFFECT_IDS, ITEM_IDS } from "./characters";
+import { ART_SHEETS, CLIPS, EFFECT_ART, GRASS, ITEM_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
 function pngSize(file: string): { width: number; height: number } {
@@ -17,7 +17,7 @@ describe("the art sheets", () => {
             const size = { width: sheet.width, height: sheet.height };
             expect(pngSize(path.join("public", sheet.href))).toEqual(size);
             // A drawn sheet's master is the export itself; one rendered from an
-            // SVG master (the effects') declares the same size in it.
+            // SVG master (the effects' and the items') declares the same size in it.
             const master = path.join("art-masters", sheet.href.replace(/^\/art\//, ""));
             if (existsSync(master)) expect(pngSize(master)).toEqual(size);
             else expect(readFileSync(master.replace(/\.png$/, ".svg"), "utf8")).toContain(`width="${size.width}" height="${size.height}"`);
@@ -38,6 +38,15 @@ describe("EFFECT_ART", () => {
         const cells = EFFECT_IDS.map(effect => EFFECT_ART[effect]);
         expect(cells.every(cell => cell.sheet === "effects")).toBe(true);
         expect(new Set(cells.map(cell => cell.x)).size).toBe(EFFECT_IDS.length);
+        expect(cells.every(cell => SPRITES.has(cell))).toBe(true);
+    });
+});
+
+describe("ITEM_ART", () => {
+    it("gives every item a cell of its own on the items sheet, and the smoke's cloud the next", () => {
+        const cells = [...ITEM_IDS.map(item => ITEM_ART[item]), SMOKE_ART];
+        expect(cells.every(cell => cell.sheet === "items")).toBe(true);
+        expect(new Set(cells.map(cell => cell.x)).size).toBe(ITEM_IDS.length + 1);
         expect(cells.every(cell => SPRITES.has(cell))).toBe(true);
     });
 });

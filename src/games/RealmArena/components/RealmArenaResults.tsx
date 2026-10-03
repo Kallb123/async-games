@@ -5,7 +5,7 @@ import RollReadout from '@/components/ui/RollReadout';
 import Section from '@/components/ui/Section';
 import { ROLL_SIDES, type BattleEvent, type Fighter } from '@/games/RealmArena/rules';
 import { eventLines, type EventLine } from '@/games/RealmArena/ui';
-import { RealmArenaEffectIcon } from './RealmArenaEffects';
+import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaResultsProps {
     events: readonly BattleEvent[];
@@ -39,7 +39,7 @@ export default function RealmArenaResults({ events, fighters, viewerId, nameFor 
                     {run.map((line, row) => (
                         <ListRow
                             key={row}
-                            icon={line.effect ? <RealmArenaEffectIcon effect={line.effect} boxed /> : line.icon}
+                            icon={line.mark ? <SpriteImage sprite={line.mark} boxed /> : line.icon}
                             title={line.title}
                             sub={line.sub}
                         />

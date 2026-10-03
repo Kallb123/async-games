@@ -1,7 +1,7 @@
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
-import { REALM, squadPoints, type PlayerCount } from "./characters";
-import { musterRefusal, readyMadeMuster } from "./rules";
+import { REALM, type ItemId, type PlayerCount } from "./characters";
+import { musterPoints, musterRefusal, pickOf, readyMadeMuster } from "./rules";
 import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from "./ui";
 
 /**
@@ -13,7 +13,8 @@ import { placeTap, squadCounts, squadOf, type Placement, type SquadCounts } from
  * It starts from the faction's ready-made squad, the one a timed-out muster
  * gets (§17.2), so a player happy with it musters in two taps. Placing starts
  * from the same spread a ready-made squad stands in, so every pick already has
- * a square, and the player only moves the ones they want elsewhere.
+ * a square, and the player only moves the ones they want elsewhere — and gives
+ * an item (§21.1) to whichever they pick up, out of the same points.
  */
 export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, turnKey: string) {
     const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
@@ -24,13 +25,15 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
     const zone = field.deployments[seat] ?? [];
     // Only a seat with a zone can muster; anyone else has nothing to place.
     const spread = zone.length > 0 ? readyMadeMuster(field, seat, squad) : [];
+    const picks = placement?.picks ?? spread;
     // The server's own rule, so nothing it would refuse is offered.
-    const refusal = musterRefusal(field, seat, placement?.picks ?? spread, budget);
+    const refusal = musterRefusal(field, seat, picks, budget);
 
     return {
         counts,
         setCounts,
-        pointsLeft: budget - squadPoints(squad),
+        /** What's left of the budget, items included. */
+        pointsLeft: budget - musterPoints(picks),
         refusal,
         /** The squad as placed so far, or null while it's still being picked. */
         placement,
@@ -38,6 +41,12 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
         place: () => setPlacement({ picks: spread, selected: null }),
         unplace: () => setPlacement(null),
         tap: (square: Square) => placement && setPlacement(placeTap(placement, square, zone)),
+        /** Gives the character picked up `item` to carry, in place of whatever it had, or nothing. */
+        carry: (item: ItemId | null) => {
+            if (placement?.selected == null) return;
+            const { selected } = placement;
+            setPlacement({ ...placement, picks: placement.picks.map((pick, i) => i === selected ? pickOf({ ...pick, item: item ?? undefined }) : pick) });
+        },
     };
 }
 

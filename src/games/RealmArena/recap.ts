@@ -24,6 +24,7 @@ import { pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import type { IRealmArenaOutcome } from "./RealmArenaLogic";
 import { battlefieldById } from "./maps";
+import type { ItemId } from "./characters";
 import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -32,6 +33,7 @@ const RA_MUSTER = "ra_muster";
 const RA_BATTLE = "ra_battle";
 const RA_KNOCKOUT = "ra_knockout";
 const RA_FIREBALL = "ra_fireball";
+const RA_THROWN = "ra_thrown";
 const RA_HIT = "ra_hit";
 const RA_MISS = "ra_miss";
 const RA_RAISED = "ra_raised";
@@ -49,6 +51,18 @@ const RA_WON = "ra_won";
  */
 const BATTLE_END_LINES = 2;
 
+/**
+ * The glyph a row about an item leads with (§21.2). The board draws each
+ * item's mark (`ITEM_ART`), but a recap row takes a glyph, as it does for
+ * burning.
+ */
+const ITEM_GLYPH: Readonly<Record<ItemId, string>> = {
+    fireFlask: "🔥",
+    thunderFlask: "⚡",
+    smokePot: "💨",
+    healingDraught: "🧪",
+};
+
 function state(snapshot: ITurnSnapshot): RAState {
     return snapshot.specificGameState as RAState;
 }
@@ -60,18 +74,22 @@ function newLines(prev: ITurnSnapshot, next: ITurnSnapshot): IHistoryEntry[] {
 
 /**
  * What an action is told as: the row type and glyph of the most telling thing
- * it did — a knock-out over a fireball over a hit, and so on down to a move,
- * a stance or going on watch, which are quiet. The glyphs are the ones the
- * board shows the same events with (`eventLines`, ui.ts).
+ * it did — a knock-out over a fireball or a thrown item over a hit, and so on
+ * down to a move, a stance or going on watch, which are quiet. The glyphs are
+ * the ones the board shows the same events with (`eventLines`, ui.ts), or an
+ * item's own (`ITEM_GLYPH`) where the board draws its mark.
  */
 function actionKind(events: readonly BattleEvent[]): { type: string; glyph: string } {
     const has = (match: (event: BattleEvent) => boolean) => events.some(match);
     if (has(event => event.kind === "downed")) return { type: RA_KNOCKOUT, glyph: "✕" };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: "🔥" };
+    const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
+    if (thrown) return { type: RA_THROWN, glyph: ITEM_GLYPH[thrown.item] };
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
     if (has(event => event.kind === "shot")) return { type: RA_MISS, glyph: "🎯" };
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
-    if (has(event => event.kind === "healed")) return { type: RA_HEALED, glyph: "✚" };
+    const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
+    if (healed) return { type: RA_HEALED, glyph: healed.draught ? ITEM_GLYPH.healingDraught : "✚" };
     return { type: RA_MANOEUVRE, glyph: "👣" };
 }
 
@@ -84,7 +102,8 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
         switch (event.kind) {
             case "shot":
             case "struck": return event.damage > 0 ? [event.target] : [];
-            case "fireball": return event.damage > 0 ? event.targets : [];
+            case "fireball":
+            case "thrown": return event.damage > 0 ? event.targets : [];
             case "burned": return [event.fighter];
             case "downed": return [event.fighter];
             default: return [];

@@ -15,7 +15,7 @@
 
 import { FULL_HEIGHT, TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP } from "@/utils/ui/isometric";
-import { EFFECT_IDS, type EffectId } from "./characters";
+import { EFFECT_IDS, ITEM_IDS } from "./characters";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -23,11 +23,17 @@ export const ART_SHEETS = {
     /** Brick walls, battlements and rubble. */
     walls: { href: "/art/realmarena/walls.png", width: 512, height: 1024 },
     /**
-     * The status effects' marks (§20.2), one `EFFECT_PX` badge a cell in a
+     * The status effects' marks (§20.2), one `MARK_PX` badge a cell in a
      * row, in `EFFECT_IDS` order. Rendered from its SVG master,
-     * `art-masters/realmarena/effects.svg`, by `npm run ra-effects`.
+     * `art-masters/realmarena/effects.svg`, by `npm run ra-marks`.
      */
     effects: { href: "/art/realmarena/effects.png", width: 576, height: 96 },
+    /**
+     * The items (§21.2), one `MARK_PX` badge a cell in `ITEM_IDS` order, and
+     * then the smoke pot's cloud. Rendered from `art-masters/realmarena/items.svg`
+     * by `npm run ra-marks`.
+     */
+    items: { href: "/art/realmarena/items.png", width: 480, height: 96 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -116,17 +122,30 @@ export const TERRAIN_ART: Readonly<Record<TerrainLetter, readonly ArtLayer[]>> =
 
 const LAYERS = Object.values(TERRAIN_ART).flat();
 
-/** The width and height of an effect's mark on its sheet. */
-const EFFECT_PX = 96;
+/** The width and height of an effect's or an item's mark on its sheet. */
+const MARK_PX = 96;
+
+const mark = (sheet: ArtSheet, index: number): Sprite => ({ sheet, x: index * MARK_PX, y: 0, width: MARK_PX, height: MARK_PX });
+
+/** One mark for each of `ids`, cut left to right along a row of `sheet`. */
+const marks = <Id extends string>(sheet: ArtSheet, ids: readonly Id[]) =>
+    Object.fromEntries(ids.map((id, index) => [id, mark(sheet, index)])) as Readonly<Record<Id, Sprite>>;
 
 /** The mark a figure wears for each effect on it (§20.2), and its box beside the effect's name. */
-export const EFFECT_ART = Object.fromEntries(
-    EFFECT_IDS.map((effect, index): [EffectId, Sprite] => [effect, { sheet: "effects", x: index * EFFECT_PX, y: 0, width: EFFECT_PX, height: EFFECT_PX }]),
-) as Readonly<Record<EffectId, Sprite>>;
+export const EFFECT_ART = marks("effects", EFFECT_IDS);
+
+/** Each item's mark (§21.2): by the shoulder of a figure carrying it, and beside its name wherever it's named. */
+export const ITEM_ART = marks("items", ITEM_IDS);
+
+/**
+ * A puff of the smoke pot's cloud (§21.2), drawn over each square the cloud
+ * covers: its foot is along its cell's bottom edge, like a terrain sprite's.
+ */
+export const SMOKE_ART = mark("items", ITEM_IDS.length);
 
 /** Every sprite the board draws, once each, by the number it defines it under up front. */
 export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
-    [...new Set([...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART)])].map((sprite, index) => [sprite, index]),
+    [...new Set([...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), ...Object.values(ITEM_ART), SMOKE_ART])].map((sprite, index) => [sprite, index]),
 );
 
 /** The spans a clipped layer is cut to, as [low, high] quarters above the ground, once each. */

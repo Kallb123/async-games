@@ -2,11 +2,12 @@ import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { check, fighterById, areaAround, isStanding, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { ABILITIES } from "./characters";
+import { check, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { attackOptions, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
-export type Aim = "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise";
+export type Aim = "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise" | "throw" | "draught";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
 export const INSTANT_KINDS = ["hunker", "watch", "shieldWall"] as const;
@@ -14,9 +15,9 @@ export type InstantKind = typeof INSTANT_KINDS[number];
 
 export interface Draft {
     aim: Aim;
-    /** The square a move or a fireball is lined up on. */
+    /** The square a move, a fireball or a throw is lined up on. */
     square: Square | null;
-    /** The characters an attack, a heal, a raise or a cleave is lined up on. */
+    /** The characters an attack, a heal, a raise, a draught or a cleave is lined up on. */
     targets: number[];
 }
 
@@ -28,28 +29,38 @@ const TARGETED: Partial<Record<Aim, TargetKind>> = {
     aimedShot: "aimedShot",
     heal: "heal",
     raise: "raise",
+    draught: "draught",
     // Cleave strikes where an attack could: within the Man-at-arms's melee reach.
     cleave: "attack",
 };
 
-/** What each aim's range is read from, for the shading of where it could land. */
+/** What each aim's range is read from, for the shading of where it could land: a throw's is the item's own. */
 const RANGE: Partial<Record<Aim, RangeKind>> = {
     attack: "weapon",
     aimedShot: "weapon",
     cleave: "weapon",
     heal: "nextTo",
     raise: "nextTo",
-    fireball: "fireball",
+    draught: "nextTo",
+    fireball: ABILITIES.fireball.range,
 };
 
 const isMoving = (aim: Aim) => aim === "move" || aim === "sneak";
+/** A fireball or a throw is aimed at a square, whoever stands on it. */
+const isAtSquare = (aim: Aim) => aim === "fireball" || aim === "throw";
+
+/** Every square what's thrown at `at` lands on: the 3×3 for a fireball or an item with an area, else that square alone. */
+function landing(state: BattleState, fighter: Fighter, aim: Aim, at: Square): Square[] {
+    return aim === "fireball" || (aim === "throw" && itemOf(fighter)?.area) ? areaAround(state.field, at) : [at];
+}
 
 /** The action a draft has lined up, once it has everything the action needs. */
 function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Square[] | undefined): Action | null {
     switch (aim) {
         case "move":
         case "sneak": return path ? { kind: aim, fighter: fighter.id, path } : null;
-        case "fireball": return square === null ? null : { kind: "fireball", fighter: fighter.id, at: square };
+        case "fireball":
+        case "throw": return square === null ? null : { kind: aim, fighter: fighter.id, at: square };
         case "cleave": return targets.length === 2 ? { kind: "cleave", fighter: fighter.id, targets } : null;
         default: return targets.length === 1 ? { kind: aim, fighter: fighter.id, target: targets[0] } : null;
     }
@@ -109,9 +120,9 @@ export type TapResult = Draft | "send" | undefined;
 
 const lineUp = (next: Draft, same: boolean): TapResult => same ? "send" : next;
 
-/** A tap on a square: a move's destination, or a fireball's centre. */
+/** A tap on a square: a move's destination, or where a fireball or a throw lands. */
 export function tapSquare({ draft, reach }: TapContext, tapped: Square): TapResult {
-    if (draft.aim === "fireball") return lineUp({ ...draft, square: tapped }, tapped === draft.square);
+    if (isAtSquare(draft.aim)) return lineUp({ ...draft, square: tapped }, tapped === draft.square);
     if (isMoving(draft.aim) && reach && tapped !== reach.from && reach.costs[tapped] !== Infinity) {
         return lineUp({ ...draft, square: tapped }, tapped === draft.square);
     }
@@ -129,9 +140,9 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     const { aim, targets } = draft;
     const target = fighterById(battle, id);
     if (!target) return undefined;
-    // A fireball is aimed at a square, whoever stands on it.
-    if (aim === "fireball") return tapSquare(context, target.square);
-    if (target.id === fighter.id) return undefined;
+    if (isAtSquare(aim)) return tapSquare(context, target.square);
+    // Itself, only when it can be the aim's target: a draught it drinks.
+    if (target.id === fighter.id && !candidates.includes(id)) return undefined;
     const enemy = target.owner !== fighter.owner && isStanding(target);
 
     if (aim === "cleave") {
@@ -182,7 +193,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     );
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
     // Aimed at anything else, the shading is where it could land instead: its range.
-    const rangeKind = RANGE[aim];
+    const rangeKind = aim === "throw" ? (fighter ? itemOf(fighter)?.range : undefined) : RANGE[aim];
     const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters }, fighter, rangeKind) : null, [field, fighters, fighter, rangeKind]);
     if (!fighter) return null;
 
@@ -223,7 +234,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         /** Where the character would stand, and with what AP, once a lined-up move is made. */
         after: afterMove(fighter, path, verdict),
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
-        area: aim === "fireball" && draft.square !== null ? areaAround(field, draft.square) : null,
+        /** Every square a lined-up fireball or throw lands on. */
+        area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
         action,
         verdict,
         send,

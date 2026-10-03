@@ -1497,7 +1497,7 @@ board's components:
   bold glyph (a flame, a bolt, an hourglass, a crosshair, chevrons pressing
   down, a shield). They're one sheet, `public/art/realmarena/effects.png`,
   rendered from its SVG master in `art-masters/realmarena/effects.svg` by
-  `npm run ra-effects`, and cut by `EFFECT_ART` like any other sprite.
+  `npm run ra-marks`, and cut by `EFFECT_ART` like any other sprite.
 - **A figure wears its marks in a column down its left**, opposite the AP
   pips, whoever's turn it is, and none once it's down. The tooltip names them,
   since it can't show them.
@@ -1632,6 +1632,50 @@ function of the ground.
   only through its log line.
 - **`fireballArea` is `areaAround`.** `rangeSquares`' `"fireball"` kind is left
   for PR 2, which is the first to shade a throw.
+
+*Filled in by PR 2*, in `art.ts`, `ui.ts`, `useTurnDraft.ts`,
+`useMusterDraft.ts`, `recap.ts`, `guide.ts` and the board's components:
+
+- **Every item has a drawn mark**: a parchment tile with the item on it, rather
+  than the coin an effect is, so something carried never reads as something
+  happening. They're one sheet with the smoke pot's cloud,
+  `public/art/realmarena/items.png`, rendered from
+  `art-masters/realmarena/items.svg`, cut by `ITEM_ART` and `SMOKE_ART`. The
+  script that renders the effects' sheet renders every SVG master in the folder
+  now, as `npm run ra-marks`.
+- **The muster picks items while the squad is placed.** Tapping one of the
+  squad picks it up, as before, and the sheet offers it the four items as
+  `BuildRow`s with their points; tapping the one it carries leaves it behind.
+  One the points left can't pay for, even trading in what it carries, is
+  greyed. The points left count the items (`musterPoints`). Going back to
+  change the squad drops what was placed, the items with it.
+- **A figure wears its item by its right shoulder**, above the AP pips, and a
+  sealed squad being placed wears its own the same way, for its owner alone.
+  The tooltip names it. A unit's box lists it after its effects; the selected
+  character's card lists it with its weapon and abilities, so an enemy's item
+  can be read too.
+- **The turn sheet has a row for the item**: `Throw` for a flask or a smoke pot,
+  `Aim` for the draught. A throw shades its range through `rangeSquares`, whose
+  `"fireball"` kind is now a number — how far something aimed at a square
+  reaches — for Fireball and every throw. Lined up, the board shades where it
+  lands: the 3×3, or the one square for a fire flask. What's lined up says what
+  it would do to whom ("Leaves Bob's Knight stunned"), or, for a smoke pot,
+  what the cloud does.
+- **A draught can be lined up on its carrier**, by tapping the carrier itself,
+  as long as it's hurt or has something to clear. That's the one aim a tap on
+  the acting character lines up; any other still selects it. A heal or a
+  draught lined up says what it would clear as well as heal.
+- **The smoke is drawn as a cloud**: the squares under it greyed on the ground,
+  and a puff of smoke standing on each, drawn in depth order under the figure
+  on its square, thin enough to see whoever is in it. A shot lined up at a
+  character in smoke says so.
+- **What an action did leads each item line with the item's mark.** The recap,
+  whose rows take a glyph, tells a throw as a row of its own kind
+  (`ra_thrown`) with a glyph per item, after a knock-out and a fireball and
+  ahead of a hit; a draught is a heal with the draught's glyph. A muster's row
+  still says nothing of what was mustered, items included.
+- **The guide covers items** in its sections on the goal (giving one out while
+  placing) and on action points (what each does), and Stunned with them.
 
 ## 22. Destructible low cover (C3)
 

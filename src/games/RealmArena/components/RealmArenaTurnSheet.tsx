@@ -5,11 +5,13 @@ import BuildRow from '@/components/ui/BuildRow';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS, type AbilityId } from '@/games/RealmArena/characters';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, fighterById, hasEffect, isStanding, shotOdds, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type AbilityId, type Affliction } from '@/games/RealmArena/characters';
+import { ITEM_ART } from '@/games/RealmArena/art';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotOdds, smokeSquares, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, CHARACTER_MARK, targetsOf, weaponLine, whoseName, type TargetKind } from '@/games/RealmArena/ui';
 import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
+import { SpriteImage } from './RealmArenaTerrain';
 
 /** The `target` an action lined up on the board wears while it's in flight: the sheet's send button. */
 const LINED_UP = 'act';
@@ -31,6 +33,8 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     fireball: 'Tap the square to centre the fireball on. It hits the 3×3 around it, friend or foe.',
     heal: 'Tap a hurt ally next to them.',
     raise: 'Tap a downed ally next to them.',
+    throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
+    draught: 'Tap them, or a hurt ally next to them, to give the draught.',
 };
 
 /** What the send button says, by the action lined up. */
@@ -43,6 +47,8 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     fireball: 'Throw the fireball',
     heal: 'Heal',
     raise: 'Raise',
+    throw: 'Throw',
+    draught: 'Give the draught',
 };
 
 /**
@@ -83,9 +89,11 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
     const needs = (ap: number) => fighter.ap < ap ? `Needs ${ap} AP` : undefined;
     const reachable = (kind: TargetKind, least = 1) =>
         targetsOf(battle, player, fighter, kind).length >= least ? undefined : 'Nobody in reach';
+    const item = itemOf(fighter);
+    const thrown = item?.range !== undefined;
 
     /** A row: one that arms the board for `id`, or one that sends `id` at once. */
-    const row = (id: Aim | InstantKind, icon: string, title: string, cost: string, wait: string | undefined, tag: string) => {
+    const row = (id: Aim | InstantKind, icon: React.ReactNode, title: string, cost: string, wait: string | undefined, tag: string) => {
         const instant = isInstant(id);
         const pending = instant && pendingTarget === `act:${id}`;
         return (
@@ -118,6 +126,9 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
                     const wait = abilityWait(fighter, id) ?? needs(ability.ap) ?? (inReach && reachable(inReach.kind, inReach.least));
                     return row(id, icon, ability.name, `${ability.ap} AP${per} · ${ability.description}`, wait, tag);
                 })}
+                {/* Its one item (§21.1): thrown at a square, or a draught handed to whoever needs it. */}
+                {fighter.item && item && row(thrown ? 'throw' : 'draught', <SpriteImage sprite={ITEM_ART[fighter.item]} />, item.name,
+                    `${item.ap} AP · ${item.description}`, needs(item.ap) ?? (thrown ? undefined : reachable('draught')), thrown ? 'Throw' : 'Aim')}
                 {row('hunker', '⛨', 'Hunker down', `${HUNKER_AP} AP · doubles its cover against shots until your next turn, and ends its turn`, needs(HUNKER_AP), 'Hunker')}
                 {row('watch', '👁', character.weapon.kind === 'ranged' ? 'Go on overwatch' : 'Go on guard',
                     `All ${fighter.ap} AP left · ${pluralize(Math.floor(fighter.ap / REACTION_COST), 'reaction')} before your next turn`,
@@ -194,17 +205,27 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
+        // What lands — a fireball, or the item thrown — and on whom.
+        const thrown = aim === 'throw' ? itemOf(fighter) : undefined;
+        if (thrown?.hitPenalty) return hint('Smoke over the 3×3 until your next turn. It hurts nobody.');
         const area = new Set(draft.area);
         const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square));
+        const { damage = 0, effect } = thrown ?? ABILITIES.fireball;
         return hint(<>
-            {caught.length === 0 ? 'Nobody is in the blast.' : `${ABILITIES.fireball.damage} damage to ${caught.map(one => name(one.id)).join(', ')}.`}
+            {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
             {caught.some(one => one.owner === fighter.owner) ? ' That includes your own.' : ''}
         </>);
     }
     if (aim === 'cleave') return hint(`Strikes ${draft.targets.map(name).join(' and ')} for ${strike} each.`);
     if (!target) return null;
     const max = CHARACTERS[target.character].hp;
-    if (aim === 'heal') return hint(`${Name(target.id)} heals for ${Math.min(ABILITIES.heal.hp, max - target.hp)} HP.`);
+    if (aim === 'heal' || aim === 'draught') {
+        const hp = Math.min(aim === 'heal' ? ABILITIES.heal.hp : ITEMS.healingDraught.hp, max - target.hp);
+        const cleared = healedEffects(target).map(effect => EFFECTS[effect].state);
+        const heals = hp > 0 ? `heals for ${hp} HP` : '';
+        const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';
+        return hint(`${Name(target.id)} ${[heals, clears].filter(Boolean).join(', and ')}.`);
+    }
     if (aim === 'raise') return hint(`${Name(target.id)} stands again at ${Math.ceil(max / 2)} HP, and acts from your next turn.`);
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
@@ -217,9 +238,16 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
                 <Stat value={`${odds.grazeChance}%`} label="Graze" />
                 <Stat value={odds.grazeChance > 0 ? `${odds.damage} / ${odds.grazeDamage}` : odds.damage} label="Damage" />
             </div>
-            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}`)}
+            {hint(`${health} · ${odds.flanked ? 'flanked, +1 damage' : `${odds.cover} cover`}${hasEffect(target, 'hunkered') ? ', hunkered down' : ''}${smokeSquares(battle).has(target.square) ? ', in smoke' : ''}`)}
         </>
     );
+}
+
+/** What something landing does to everyone it catches: "3 damage to your Knight, and leaves them burning". */
+function landsOn(names: string, damage: number, effect: Affliction | undefined): string {
+    const leaves = effect ? EFFECTS[effect].state : '';
+    if (damage === 0) return `Leaves ${names} ${leaves}.`;
+    return `${damage} damage to ${names}${leaves ? `, and leaves them ${leaves}` : ''}.`;
 }
 
 /** A move lined up: what it costs, and every watcher it would set off with what each would do. */

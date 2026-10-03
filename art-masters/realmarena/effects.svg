@@ -6,7 +6,7 @@
   reads on grass, stone or a figure's own colour at a few pixels across, and
   one bold glyph in white.
 
-  `npm run ra-effects` renders this to public/art/realmarena/effects.png.
+  `npm run ra-marks` renders this to public/art/realmarena/effects.png.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="576" height="96" viewBox="0 0 576 96">
   <defs>

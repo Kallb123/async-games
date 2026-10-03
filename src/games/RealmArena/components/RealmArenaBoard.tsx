@@ -5,12 +5,13 @@ import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
-import { RealmArenaTerrainArt, RealmArenaTerrainDefs } from '@/games/RealmArena/components/RealmArenaTerrain';
+import { RealmArenaTerrainArt, RealmArenaTerrainDefs, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
-import { CHARACTERS, type CharacterId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
+import { ITEM_ART, SMOKE_ART } from '@/games/RealmArena/art';
+import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
+import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { apPips, areaRect, type AttackOption, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
@@ -44,6 +45,14 @@ const AP_PIP_OFFSET = 5.6;
 const EFFECT_MARK_SIZE = 3;
 const EFFECT_MARK_STEP = 3.1;
 const EFFECT_MARK_OFFSET = 6.2;
+/**
+ * The item a character carries (§21.1): one tile up by its disc's right
+ * shoulder, above the AP pips, so it never covers them or the effect marks.
+ */
+const ITEM_MARK_SIZE = 3;
+const ITEM_MARK_OFFSET = { x: 4.6, y: -5 };
+/** A puff of a smoke pot's cloud: a square across, its foot just in front of the square's middle. */
+const SMOKE_SIZE = 2 * ISO_HALF_WIDTH;
 /** A target's chance to hit: a pill wide enough for "100%", worn above its figure's disc. */
 const ODDS_WIDTH = 10.5;
 const ODDS_HEIGHT = 4;
@@ -149,6 +158,10 @@ interface FigureProps {
     square: Square;
     /** The character it stands as, or null for a fallen one, which is marked ✕. */
     character: CharacterId | null;
+    /** The board's id, which its art is defined under: needed to draw `item`. */
+    artId?: string;
+    /** The item it carries, marked by its shoulder. */
+    item?: ItemId | null;
     className?: string;
     fill?: string;
     ring?: Ring;
@@ -156,8 +169,8 @@ interface FigureProps {
     ghost?: boolean;
 }
 
-/** A character's disc with its mark on it, stood upright over its shadow on its square. */
-function Figure({ view, square, character, className = '', fill, ring, ghost = false }: FigureProps) {
+/** A character's disc with its mark on it, stood upright over its shadow on its square, and the item it carries. */
+function Figure({ view, square, character, artId, item, className = '', fill, ring, ghost = false }: FigureProps) {
     const feet = isoCentre(view, square);
     const { x, y } = discCentre(view, square);
     return (
@@ -166,8 +179,17 @@ function Figure({ view, square, character, className = '', fill, ring, ghost = f
             {ring && <circle className={`ag-ra-ring ag-ra-ring--${ring}`} cx={x} cy={y} r={FIGURE_RADIUS + 1.2} />}
             <circle className={`ag-ra-figure ${className}`} cx={x} cy={y} r={FIGURE_RADIUS} fill={fill} />
             <text className="ag-ra-mark" x={x} y={y}>{character ? CHARACTER_MARK[character] : '✕'}</text>
+            {item && artId && (
+                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
+            )}
         </>
     );
+}
+
+/** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
+function SmokePuff({ artId, view, square }: { artId: string; view: IsoView; square: Square }) {
+    const { x, y } = isoCentre(view, square);
+    return <SpriteUse className="ag-ra-smoke-puff" id={artId} sprite={SMOKE_ART} x={x} y={y + ISO_HALF_HEIGHT - SMOKE_SIZE / 2} size={SMOKE_SIZE} />;
 }
 
 /** A character's AP left this turn as a column of pips centred on `y` — the same pips the units strip shows. */
@@ -262,6 +284,8 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colourFor, 
                 view={view}
                 square={fighter.square}
                 character={standing ? fighter.character : null}
+                artId={artId}
+                item={standing ? fighter.item : null}
                 className={`${standing ? '' : 'ag-ra-figure--down'}${fighter.banked > 0 ? ' ag-ra-figure--watch' : ''}`}
                 fill={standing ? colourFor(fighter.owner) : undefined}
             />
@@ -431,8 +455,11 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     const centreSquares = field.objectives[CENTRE] ?? [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
-    // Everything shaded square by square, in the order it's painted.
+    // Everything shaded square by square, in the order it's painted: the
+    // smoke a smoke pot left first, under whatever is being aimed (§21.2).
+    const smoke = smokeSquares({ field, fighters });
     const shades: Shade[] = [];
+    if (smoke.size > 0) shades.push(square => smoke.has(square) ? 'ag-ra-smoke' : undefined);
     const reach = aiming?.reach;
     if (reach) shades.push(square => reach.has(square) ? `ag-ra-reach ag-ra-reach--${reach.get(square)}` : undefined);
     const range = aiming?.range;
@@ -460,6 +487,12 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
         node: <RaisedSquare key={`block-${block.square}`} id={artId} block={block} shades={shades} />,
     }));
 
+    // The cloud stands over the ground and anything on it, under the figure on the square.
+    smoke.forEach(square => items.push({
+        depth: isoDepth(view, square) + 0.4,
+        node: <SmokePuff key={`smoke-${square}`} artId={artId} view={view} square={square} />,
+    }));
+
     sealed?.forEach((pick, index) => items.push({
         depth: isoDepth(view, pick.square) + 0.5,
         node: (
@@ -468,8 +501,8 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                 className={`ag-ra-sealed${placing ? ' ag-ra-sealed--placing' : ''}`}
                 onClick={placing ? () => placing.onTap(pick.square) : undefined}
             >
-                <title>{`${CHARACTERS[pick.character].name} · your squad, sealed until every player has mustered`}</title>
-                <Figure view={view} square={pick.square} character={pick.character} ring={placing?.selected === index ? 'selected' : undefined} />
+                <title>{`${CHARACTERS[pick.character].name}${pick.item ? ` with a ${ITEMS[pick.item].name.toLowerCase()}` : ''} · your squad, sealed until every player has mustered`}</title>
+                <Figure view={view} square={pick.square} character={pick.character} artId={artId} item={pick.item} ring={placing?.selected === index ? 'selected' : undefined} />
             </g>
         ),
     }));

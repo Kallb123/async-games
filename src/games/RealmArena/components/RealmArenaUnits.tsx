@@ -4,7 +4,7 @@ import Section from '@/components/ui/Section';
 import { CHARACTERS } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
-import { RealmArenaEffectList } from './RealmArenaEffects';
+import { RealmArenaStatusList } from './RealmArenaEffects';
 import { apPips, attackOptions, canAct, CHARACTER_MARK, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
 
 interface RealmArenaUnitsProps {
@@ -67,7 +67,7 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                             <span className="ag-ra-unit-hp">
                                 <span style={{ width: `${hpFraction(fighter) * 100}%` }} />
                             </span>
-                            <RealmArenaEffectList effects={effectsOn(fighter)} />
+                            <RealmArenaStatusList effects={effectsOn(fighter)} item={fighter.item} />
                             <span className={`ag-ra-unit-foot${done ? ' ag-ra-unit-foot--done' : ''}`}>
                                 <UnitStatus fighter={fighter} acting={acting} done={done} />
                                 {standing && showReach && <TargetCount count={attackOptions(battle, fighter).length} />}

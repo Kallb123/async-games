@@ -6,7 +6,8 @@ import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type ItemId, type Weapon } from "./characters";
+import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Weapon } from "./characters";
+import { EFFECT_ART, ITEM_ART, type Sprite } from "./art";
 import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
 
 /**
@@ -21,14 +22,6 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     scout: "👟",
     mage: "🔥",
     cleric: "✚",
-};
-
-/** The glyph each item is told with where it has no drawn mark: what it did, as the board shows it coming back. */
-export const ITEM_MARK: Readonly<Record<ItemId, string>> = {
-    fireFlask: "🔥",
-    thunderFlask: "⚡",
-    smokePot: "💨",
-    healingDraught: "🧪",
 };
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
@@ -133,13 +126,18 @@ export function watchStatus(fighter: Fighter): string | undefined {
 }
 
 /**
- * What a character is doing, and what's been done to it, in words: the
- * figure's tooltip, which can't show the marks. The watch, then its effects.
+ * What a character is doing, what's been done to it and what it carries, in
+ * words: the figure's tooltip, which can't show the marks. The watch, its
+ * effects, then its item.
  */
 export function fighterStatus(fighter: Fighter): string[] {
     if (!isStanding(fighter)) return ["Down"];
     const watch = watchStatus(fighter);
-    return [...(watch ? [watch] : []), ...effectsOn(fighter).map(effect => EFFECTS[effect].name)];
+    return [
+        ...(watch ? [watch] : []),
+        ...effectsOn(fighter).map(effect => EFFECTS[effect].name),
+        ...(fighter.item ? [`Carrying a ${ITEMS[fighter.item].name.toLowerCase()}`] : []),
+    ];
 }
 
 /** A character with AP left to spend on its owner's turn: what the units strip counts as ready. */
@@ -228,22 +226,26 @@ export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean):
     return shading;
 }
 
-/** What decides where an aimed action can land: the character's weapon, a fireball's range, or the squares next to it (a heal, a raise). */
-export type RangeKind = "weapon" | "fireball" | "nextTo";
+/**
+ * What decides where an aimed action can land: the character's weapon, the
+ * squares next to it (a heal, a raise, a healing draught), or — a number — how
+ * far something aimed at a square reaches (a fireball, a thrown item).
+ */
+export type RangeKind = "weapon" | "nextTo" | number;
 
 /**
  * An aimed action's range from where a character stands: every square it
  * could be lined up on, were someone there to aim at. A weapon, a
  * heal or a raise is aimed at a character, so only a square one could stand on
- * counts; a fireball can land on any square it can see in range. Where the
- * character stands isn't drawn. Read from the rules `check` itself asks, so
- * the shading and what the server allows can't drift apart.
+ * counts; a fireball or a throw can land on any square it can see in range.
+ * Where the character stands isn't drawn. Read from the rules `check` itself
+ * asks, so the shading and what the server allows can't drift apart.
  */
 export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKind): ReadonlySet<Square> {
     const { field } = state;
     const reaches = (square: Square): boolean => {
         if (square === fighter.square) return false;
-        if (kind === "fireball") return inRange(field, fighter.square, square, ABILITIES.fireball.range);
+        if (typeof kind === "number") return inRange(field, fighter.square, square, kind);
         if (!field.tiles[square].terrain.standable) return false;
         return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
     };
@@ -266,7 +268,7 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
 }
 
 /** The actions aimed at one character. */
-export type TargetKind = "attack" | "aimedShot" | "heal" | "raise";
+export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught";
 
 /** The characters an action could be aimed at now, by the server's own `check`. */
 export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: TargetKind): number[] {
@@ -332,15 +334,15 @@ export function reactionPreviews(state: BattleState, mover: Fighter, path: reado
 
 /**
  * One line of what an action did, as the board shows it coming back, led by a
- * glyph or by the mark of the effect it's about. A shot carries the roll it
- * was decided by.
+ * glyph or by the drawn mark of the effect or item it's about. A shot carries
+ * the roll it was decided by.
  */
 export type EventLine = {
     title: string;
     sub?: string;
     /** The 1–100 roll a shot was decided by. */
     roll?: number;
-} & ({ icon: string; effect?: never } | { effect: EffectId; icon?: never });
+} & ({ icon: string; mark?: never } | { mark: Sprite; icon?: never });
 
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
@@ -369,15 +371,14 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
             case "healed":
                 return [{
-                    icon: event.draught ? ITEM_MARK.healingDraught : "✚",
+                    ...(event.draught ? { mark: ITEM_ART.healingDraught, sub: ITEMS.healingDraught.name } : { icon: "✚" }),
                     title: `${Name(event.target)} healed${event.hp > 0 ? ` for ${event.hp}` : ""}`,
-                    ...(event.draught ? { sub: ITEMS.healingDraught.name } : {}),
                 }];
             case "thrown": {
                 const { name: item } = ITEMS[event.item];
-                if (event.item === "smokePot") return [{ icon: ITEM_MARK.smokePot, title: `${Name(event.fighter)} threw a smoke pot` }];
+                if (event.item === "smokePot") return [{ mark: ITEM_ART.smokePot, title: `${Name(event.fighter)} threw a smoke pot` }];
                 return [{
-                    icon: ITEM_MARK[event.item],
+                    mark: ITEM_ART[event.item],
                     title: `${item}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
                     ...(event.damage > 0 ? { sub: `${event.damage} damage each` } : {}),
                 }];
@@ -385,15 +386,15 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "raised":
                 return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
             case "hunkered":
-                return [{ effect: "hunkered", title: `${Name(event.fighter)} hunkered down` }];
+                return [{ mark: EFFECT_ART.hunkered, title: `${Name(event.fighter)} hunkered down` }];
             case "shieldWall":
-                return [{ effect: "shieldWall", title: `${Name(event.fighter)} raised a shield wall` }];
+                return [{ mark: EFFECT_ART.shieldWall, title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
             case "effect":
-                return [{ effect: event.effect, title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
+                return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
             case "burned":
-                return [{ effect: "burning", title: `${Name(event.fighter)} burned for ${event.damage}` }];
+                return [{ mark: EFFECT_ART.burning, title: `${Name(event.fighter)} burned for ${event.damage}` }];
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: event.reason === "centre" ? "Holding the centre" : "The knock-out" }];
         }
