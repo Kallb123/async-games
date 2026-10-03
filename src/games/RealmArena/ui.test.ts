@@ -7,8 +7,8 @@ import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } fr
 import { ABILITIES, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
 import {
-    abilityWait, actionSquares, apPips, areaRect, attackOptions, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
-    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, type Placement,
+    abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, fighterName, fighterStatus, focusOn, hpFraction, placeTap, rangeSquares, reachFocus, reachShading,
+    reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, HIT_TEXT_MS, PLAYBACK_MS, type Placement,
 } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -391,5 +391,80 @@ describe("abilityWait", () => {
         expect(abilityWait(cleric, "heal")).toBe("Back in 2 turns");
         expect(abilityWait(cleric, "raise")).toBe("Used");
         expect(abilityWait(ready(1, "a", "cleric", 0), "heal")).toBeUndefined();
+    });
+});
+
+describe("battleCues", () => {
+    const before = [ready(0, "a", "knight", 10), ready(1, "b", "archer", 50), ready(2, "b", "archer", 60), ready(3, "b", "mage", 70)];
+    /** Each cue as "who@square value/label at start", to read the order by. */
+    const told = (events: BattleEvent[]) => battleCues(events, before)
+        .map(cue => `${cue.fighter}@${cue.square} ${cue.value}${cue.label ? `/${cue.label}` : ""} ${cue.start}`);
+
+    it("plays a move's overwatch shots one after another, each where the mover had got to", () => {
+        const cues = told([
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 20, result: "hit", damage: 3, reaction: true },
+            { kind: "moved", fighter: 0, path: [12, 13, 14], sneaking: false },
+            { kind: "shot", fighter: 2, target: 0, chance: 60, roll: 70, result: "graze", damage: 2, reaction: true },
+            { kind: "moved", fighter: 0, path: [14, 15], sneaking: false },
+        ]);
+        expect(cues).toEqual(["0@12 \u22123 0", "0@14 \u22122/Graze 450"]);
+    });
+
+    it("calls a miss a miss, on the target where it stood", () => {
+        const miss: BattleEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 90, result: "miss", damage: 0, reaction: false };
+        const [cue] = battleCues([miss], before);
+        expect(cue).toMatchObject({ fighter: 0, square: 10, value: "Miss", tone: "miss", start: 0, length: HIT_TEXT_MS });
+    });
+
+    it("hits everyone a fireball lands on at once, names the burning under each, and downs after the damage", () => {
+        const cues = told([
+            { kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 },
+            { kind: "downed", fighter: 1, by: 3 },
+            { kind: "scored", player: "b", points: 4, reason: "knockout" },
+            { kind: "effect", fighter: 2, effect: "burning", change: "applied" },
+            { kind: "blasted", fighter: 3, squares: [56] },
+        ]);
+        expect(cues).toEqual(["1@50 \u22123 0", "2@60 \u22123/Burning 0", "1@50 Down 450"]);
+    });
+
+    it("names what a flask that does no damage puts on, on everyone it lands on at once", () => {
+        const cues = told([
+            { kind: "thrown", fighter: 0, item: "thunderFlask", at: 55, targets: [1, 2], damage: 0 },
+            { kind: "effect", fighter: 1, effect: "stunned", change: "applied" },
+            { kind: "effect", fighter: 2, effect: "stunned", change: "refreshed" },
+        ]);
+        expect(cues).toEqual(["1@50 Stunned 0", "2@60 Stunned 0"]);
+    });
+
+    it("shows a heal in green, curing what it clears, and burning with its mark", () => {
+        const cues = battleCues([
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "healed", fighter: 3, target: 0, hp: 4 },
+            { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
+        ], before);
+        expect(cues).toMatchObject([
+            { fighter: 0, value: "\u22121", tone: "hit", mark: "burning", start: 0 },
+            { fighter: 0, value: "+4", label: "Cured", tone: "heal", start: 450 },
+        ]);
+    });
+
+    it("plays nothing for a move, a stance, a watch or a score", () => {
+        expect(battleCues([
+            { kind: "moved", fighter: 0, path: [10, 11], sneaking: true },
+            { kind: "hunkered", fighter: 0 },
+            { kind: "watching", fighter: 1, banked: 4 },
+            { kind: "scored", player: "a", points: 5, reason: "centre" },
+            { kind: "thrown", fighter: 0, item: "smokePot", at: 55, targets: [], damage: 0 },
+        ], before)).toEqual([]);
+    });
+
+    it("fits however much an action set off into three seconds", () => {
+        const strikes: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "struck", fighter: 0, target: 1, damage: 1, reaction: false }));
+        const cues = battleCues(strikes, before);
+        expect(cues).toHaveLength(12);
+        expect(Math.max(...cues.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
+        // Still in order, and still one after another.
+        expect(cues.every((cue, i) => i === 0 || cue.start > cues[i - 1].start)).toBe(true);
     });
 });

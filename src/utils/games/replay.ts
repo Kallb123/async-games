@@ -22,7 +22,7 @@ import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStat
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
-import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel } from "@/games/RealmArena/RealmArenaModels";
+import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -48,6 +48,10 @@ export interface ITurnSnapshot {
     } | null;
     // True when this snapshot is a hypothetical planned move (beyond real history).
     planned: boolean;
+    // What the command behind this snapshot did, for a game whose adapter opts
+    // in (IReplayAdapter.snapshotOutcome). Absent otherwise, and on the
+    // initial state.
+    outcome?: unknown;
 }
 
 export interface ITimeline {
@@ -119,6 +123,15 @@ export interface IReplayAdapter {
     // hold (the replay sends it as the player holding it) when the recorded
     // one is something the hold wouldn't have let through, or null.
     closeUnrecordedHold?(specificGameState: unknown, holderId: string, next: IGameCommand): IGameCommand | null;
+    // Optional: what of a command's outcome goes on the snapshot after it, for
+    // a game whose board plays what each step did, which the difference
+    // between two states can't show (a miss changes nothing). Off unless a game
+    // opts in, since an outcome is built for the player who sent the command:
+    // only a game whose outcomes say nothing that player's opponents may not
+    // see belongs here. Whatever it returns goes to every viewer of the
+    // timeline. Never asked of a planned command, whose outcome is resolved
+    // against the real game.
+    snapshotOutcome?(outcome: ICommandOutcome): unknown;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -311,6 +324,10 @@ registerReplayAdapter({
     // just the stack's own owner — see gameStateToModel's lastCommandId.
     toResponseState: (specificGameState, _userIdNameMap, viewerId, commandHistory) =>
         realmArenaStateToModel(specificGameState as never, viewerId, commandHistory.at(-1)?.id ?? null),
+    // What each action and End turn did, so a review can play it (§26.2): a
+    // miss changes nothing in the state. See stepOutcomeToModel for why it's
+    // everybody's to see.
+    snapshotOutcome: realmArenaStepOutcome,
     // Out by design: every attack worth planning needs a roll, and a planned
     // one would show a player a board they won't get. Nor is the hit chance
     // it would teach them anything the turn sheet doesn't already show before
@@ -424,7 +441,8 @@ export async function buildTimeline(
 
     const snapshots: ITurnSnapshot[] = [];
     let index = 0;
-    const snapshot = (command: IGameCommand | null, planned: boolean) => {
+    const snapshot = (command: IGameCommand | null, planned: boolean, outcome?: ICommandOutcome) => {
+        const told = outcome && !planned ? adapter.snapshotOutcome?.(outcome) : undefined;
         snapshots.push({
             index: index++,
             specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory, state.complete),
@@ -445,6 +463,7 @@ export async function buildTimeline(
                   }
                 : null,
             planned,
+            ...(told !== undefined ? { outcome: told } : {}),
         });
     };
 
@@ -528,7 +547,7 @@ export async function buildTimeline(
                     // Every command actually applied, the follow-ups among them:
                     // this is the plan handed back to the client to resend.
                     resolvedOut?.push(applied);
-                    snapshot(applied, planned);
+                    snapshot(applied, planned, appliedOutcome);
                     onStep?.({
                         prev: snapshots[snapshots.length - 2],
                         next: snapshots[snapshots.length - 1],

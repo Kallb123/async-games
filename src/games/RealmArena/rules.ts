@@ -146,6 +146,12 @@ export type BattleEvent =
     | { kind: "burned"; fighter: number; damage: number }
     | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" };
 
+/**
+ * An event as a review sends it to every player (§26.2): a shot without the
+ * roll that decided it, which the log never tells.
+ */
+export type ToldEvent = Exclude<BattleEvent, { kind: "shot" }> | Omit<Extract<BattleEvent, { kind: "shot" }>, "roll">;
+
 export interface Outcome {
     fighters: Fighter[];
     events: BattleEvent[];

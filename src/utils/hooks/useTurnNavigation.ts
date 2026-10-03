@@ -4,7 +4,7 @@ import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 
 // One reconstructed point on the game timeline (mirrors the server ITurnSnapshot).
-export interface ITurnSnapshot<TState = unknown> {
+export interface ITurnSnapshot<TState = unknown, TOutcome = unknown> {
     index: number;
     specificGameState: TState;
     currentTurn: string;
@@ -18,12 +18,15 @@ export interface ITurnSnapshot<TState = unknown> {
         summary: string;
     } | null;
     planned: boolean;
+    // What the command behind it did, for a game whose replay adapter opts in
+    // (IReplayAdapter.snapshotOutcome).
+    outcome?: TOutcome;
 }
 
-interface ITimelineResponse<TState> {
+interface ITimelineResponse<TState, TOutcome> {
     success: boolean;
     currentIndex: number;
-    snapshots: ITurnSnapshot<TState>[];
+    snapshots: ITurnSnapshot<TState, TOutcome>[];
     resolvedPlannedCommands: unknown[];
 }
 
@@ -43,9 +46,9 @@ export interface LiveGameView<TState> {
 // future actions). Both step one *command* at a time, not one turn: a turn
 // that took several commands (roll, build, build, end) is several steps here.
 // Both are driven by the same reconstructed timeline from /api/game/[id]/timeline.
-export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TState>) {
+export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, live: LiveGameView<TState>) {
     const [mode, setMode] = useState<NavMode>("live");
-    const [snapshots, setSnapshots] = useState<ITurnSnapshot<TState>[]>([]);
+    const [snapshots, setSnapshots] = useState<ITurnSnapshot<TState, TOutcome>[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [viewIndex, setViewIndex] = useState(0);
     const [plannedCommands, setPlannedCommands] = useState<unknown[]>([]);
@@ -53,7 +56,7 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
     const [error, setError] = useState<string | null>(null);
 
     const fetchTimeline = useCallback(
-        async (planned: unknown[]): Promise<ITimelineResponse<TState> | null> => {
+        async (planned: unknown[]): Promise<ITimelineResponse<TState, TOutcome> | null> => {
             setLoading(true);
             setError(null);
             try {
@@ -72,7 +75,7 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
                 if (!res.ok) {
                     throw new Error("Unable to load timeline");
                 }
-                const data: ITimelineResponse<TState> = await res.json();
+                const data: ITimelineResponse<TState, TOutcome> = await res.json();
                 setSnapshots(data.snapshots);
                 setCurrentIndex(data.currentIndex);
                 return data;
@@ -113,7 +116,7 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
     const planMove = useCallback(
         async (
             command: IGameCommand
-        ): Promise<{ snapshot: ITurnSnapshot<TState> | null; resolvedCommand: unknown } | null> => {
+        ): Promise<{ snapshot: ITurnSnapshot<TState, TOutcome> | null; resolvedCommand: unknown } | null> => {
             const next = [...plannedCommands, command];
             const data = await fetchTimeline(next);
             if (!data) return null;
@@ -144,7 +147,7 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
     const jumpToCurrent = useCallback(() => setViewIndex(currentIndex), [currentIndex]);
 
     const isLive = mode === "live";
-    const activeSnapshot: ITurnSnapshot<TState> | undefined = isLive ? undefined : snapshots[viewIndex];
+    const activeSnapshot: ITurnSnapshot<TState, TOutcome> | undefined = isLive ? undefined : snapshots[viewIndex];
 
     return {
         mode,
@@ -158,6 +161,9 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
         displayedWinner: isLive ? live.winner : activeSnapshot?.winner ?? "",
         displayedHistory: isLive ? live.history : activeSnapshot?.history ?? [],
         displayedCommand: activeSnapshot?.command ?? null,
+        // What the viewed step did, where the game sends it — Realm Arena
+        // plays it over the board. Undefined when live.
+        displayedOutcome: activeSnapshot?.outcome,
         // The point the viewed step was played from, so a board can show what
         // that step changed — Realm Arena follows each action with its zoom.
         // Undefined when live, and at the start of the game.

@@ -8,7 +8,7 @@ import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { CHARACTERS, EFFECT_IDS, EFFECTS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Weapon } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Sprite } from "./art";
-import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds } from "./rules";
+import { ACTION_POINTS, check, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, reachOf, reactionsTo, shotOdds, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotOdds, type ToldEvent } from "./rules";
 
 /**
  * The placeholder figure each character stands as until PR 9's marked figures
@@ -401,4 +401,131 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: event.reason === "centre" ? "Holding the centre" : "The knock-out" }];
         }
     });
+}
+
+// ─── Battle visuals (§26) ───────────────────────────────────────────────────
+
+/** How a piece of hit text is coloured (§26.1): damage, a graze, a miss, a heal, or a word of its own — an effect, a knock-out. */
+export type HitTone = "hit" | "graze" | "miss" | "heal" | "word";
+
+/**
+ * Hit text over a figure (§26.1): one thing the board plays as an action comes
+ * back, timed from the moment it starts playing.
+ */
+export interface TextCue {
+    kind: "text";
+    /** Who it happened to. */
+    fighter: number;
+    /**
+     * Where it stood when it happened, which a move can leave behind: an
+     * overwatch shot is taken where the mover had got to, not where it stopped.
+     */
+    square: Square;
+    /** The big text: "−3", "+4", "Miss", "Down", or an effect's name on its own. */
+    value: string;
+    /** The small text under it: "Graze", or the effect it put on. */
+    label?: string;
+    /** The effect whose mark stands beside it: burning's, as it does its damage. */
+    mark?: EffectId;
+    tone: HitTone;
+    /** When it starts and how long it lasts, in milliseconds. */
+    start: number;
+    length: number;
+}
+
+/** What the board plays: hit text for now; the shot and the fireball in flight join it (§26.3 PR 2). */
+export type BattleCue = TextCue;
+
+/** How long a piece of hit text takes to rise and fade (§26.1). */
+export const HIT_TEXT_MS = 1000;
+/** From one thing an action did to the next: long enough to see each land before the next. */
+const CUE_STEP_MS = 450;
+/** The longest any one action plays for, however much it set off: every part is shortened to fit (§26.1). */
+export const PLAYBACK_MS = 3000;
+
+/** Damage as the board shows it, with a real minus sign. */
+const minus = (damage: number) => `−${damage}`;
+
+/**
+ * What an action did, as the board plays it (§26.2): a timed cue for each
+ * thing that happened to someone, one after another in the order of the
+ * events, each starting as the last one lands. Everyone a fireball or a flask
+ * hits is hit at once, and the effect it puts on goes under each number. A
+ * knock-out's "Down" follows its damage. `before` is everyone as the action
+ * found them, which says where each cue stands: a move carries its mover
+ * along, so an overwatch shot lands where the mover had got to.
+ *
+ * Moves, stances, watches and scores play nothing. However much happened, it
+ * all fits in `PLAYBACK_MS`.
+ */
+export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[]): BattleCue[] {
+    const at = new Map(before.map(fighter => [fighter.id, fighter.square]));
+    const cues: TextCue[] = [];
+    /** The latest cue on each character: where an effect's name goes under the number that came with it. */
+    const latest = new Map<number, TextCue>();
+    let start = -CUE_STEP_MS;
+    /** Who the last fireball or flask came down on, and when: a flask that only stuns names its effect there. */
+    let landing: { start: number; targets: readonly number[] } | null = null;
+    const next = () => (start += CUE_STEP_MS);
+    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark"> = {}) => {
+        const square = at.get(fighter);
+        if (square === undefined) return;
+        const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: HIT_TEXT_MS };
+        cues.push(cue);
+        latest.set(fighter, cue);
+    };
+
+    for (const event of events) {
+        switch (event.kind) {
+            case "moved": {
+                const end = event.path.at(-1);
+                if (end !== undefined) at.set(event.fighter, end);
+                break;
+            }
+            case "shot":
+                text(event.target, next(), event.result === "miss" ? "Miss" : minus(event.damage), event.result,
+                    event.result === "graze" ? { label: "Graze" } : {});
+                break;
+            case "struck":
+                text(event.target, next(), minus(event.damage), "hit");
+                break;
+            case "burned":
+                text(event.fighter, next(), minus(event.damage), "hit", { mark: "burning" });
+                break;
+            case "fireball":
+            case "thrown": {
+                if (event.targets.length === 0) break;
+                landing = { start: next(), targets: event.targets };
+                const when = landing.start;
+                if (event.damage > 0) event.targets.forEach(target => text(target, when, minus(event.damage), "hit"));
+                break;
+            }
+            case "healed":
+                text(event.target, next(), event.hp > 0 ? `+${event.hp}` : "Cured", "heal");
+                break;
+            case "raised":
+                text(event.target, next(), `+${event.hp}`, "heal", { label: "Raised" });
+                break;
+            case "downed":
+                text(event.fighter, next(), "Down", "word");
+                break;
+            case "effect": {
+                const cue = latest.get(event.fighter);
+                if (event.change === "cleared") {
+                    if (cue?.tone === "heal" && !cue.label && cue.value !== "Cured") cue.label = "Cured";
+                    break;
+                }
+                const { name } = EFFECTS[event.effect];
+                if (cue && (cue.tone === "hit" || cue.tone === "graze") && !cue.label && !cue.mark) cue.label = name;
+                else if (landing?.targets.includes(event.fighter)) text(event.fighter, landing.start, name, "word");
+                else text(event.fighter, next(), name, "word");
+                break;
+            }
+        }
+    }
+
+    const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
+    if (end <= PLAYBACK_MS) return cues;
+    const scale = PLAYBACK_MS / end;
+    return cues.map(cue => ({ ...cue, start: Math.round(cue.start * scale), length: Math.round(cue.length * scale) }));
 }

@@ -1,10 +1,10 @@
 'use client'
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import RealmArenaBoard from "@/games/RealmArena/components/RealmArenaBoard";
+import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "@/games/RealmArena/apiModels";
+import RealmArenaBoard, { type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState } from "@/games/RealmArena/rules";
-import { actionSquares, fighterName } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, fighterName, PLAYBACK_MS } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -75,7 +75,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // Planning is out by design (§17.3 PR 8): every attack worth planning
     // needs a roll, and the turn sheet already shows the odds of one before
     // it's sent. So the review steps back through the match, and no further.
-    const nav = useTurnNavigation<IRealmArenaSpecificGameStateResponse>(gameId, {
+    const nav = useTurnNavigation<IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome>(gameId, {
         specificGameState: gameData?.specificGameState,
         currentTurn: gameData?.currentTurn ?? '',
         complete: gameData?.complete ?? false,
@@ -133,19 +133,41 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
+    // What the viewer's own last action or End turn did, played over the board
+    // as it comes back (§26.1), from where everyone stood when it was sent.
+    // Gone once it has had its time, whether or not the board was showing it,
+    // so coming back from a review doesn't play it again.
+    const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
+    const play = (key: string, events: BattleEvent[]) => {
+        const cues = battleCues(events, fighters);
+        setOwnPlayback(cues.length > 0 ? { key, cues } : null);
+    };
+    useEffect(() => {
+        if (!ownPlayback) return;
+        const played = setTimeout(() => setOwnPlayback(null), PLAYBACK_MS);
+        return () => clearTimeout(played);
+    }, [ownPlayback]);
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
-        submitCommand(command, response => setLastEvents((response.outcome as IRealmArenaOutcome).events ?? []), actTarget(action));
+        submitCommand(command, response => {
+            const events = (response.outcome as IRealmArenaOutcome).events ?? [];
+            setLastEvents(events);
+            play(command.id, events);
+        }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
     const endTurn = () => {
         const command = new RealmArenaEndTurn();
         command.keepStill = keepStill;
-        submitCommand(command, undefined, 'endTurn');
+        // Burning, as the next player's turn begins (§20.2).
+        submitCommand(command, response => play(command.id, (response.outcome as IRealmArenaOutcome).events ?? []), 'endTurn');
     };
     // What the undone action did is no longer what happened, so its results go too.
-    const undo = () => submitCommand(new RealmArenaUndo(), () => setLastEvents([]), 'undo');
+    const undo = () => submitCommand(new RealmArenaUndo(), () => {
+        setLastEvents([]);
+        setOwnPlayback(null);
+    }, 'undo');
     // A tap on a character aims the action lined up, when it can; otherwise it selects.
     const tapFighter = (id: number) => {
         if (turn?.tapFighter(id)) return;
@@ -168,6 +190,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const follow = previous && (previous.currentTurn === currentTurn || currentTurn === '')
         ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
         : null;
+    // And plays what each step did as it's stepped to (§26.1), whoever took it.
+    const stepEvents = nav.displayedOutcome?.events;
+    const stepCues = previous && stepEvents ? battleCues(stepEvents, previous.specificGameState.fighters) : [];
+    const playback: Playback | null = nav.isLive ? ownPlayback
+        : stepCues.length > 0 ? { key: `step:${nav.viewIndex}`, cues: stepCues } : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
@@ -322,6 +349,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             follow={follow}
                             odds={reach?.options}
                             overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
+                            playback={playback}
                         />
                     </div>
 

@@ -549,6 +549,17 @@ neither is built for anybody in particular. A snapshot therefore only ever
 carries the asking player's own secrets — everybody else stays a card count,
 exactly as in live play.
 
+A snapshot carries the state after its command, not what the command did, and
+a difference of two states can't show what changed nothing — a missed shot.
+`IReplayAdapter.snapshotOutcome` is the opt-in for a board that plays each step
+as it's stepped to: it picks what of the command's outcome goes on the snapshot,
+as `outcome`, which the client reads as `nav.displayedOutcome`. An outcome is
+built for the player who sent the command, and this sends it to everybody, so
+only a game whose outcomes hide nothing opts in. Realm Arena is the one that
+does (its §26.2): a battle's events, less a shot's roll — which holds only for
+as long as the battle has no fog of war. A planned command's outcome is never
+asked for.
+
 Recap **events** are a different question and don't get the same latitude: they
 are written once and read by whoever the feed is built for, so a `toEvents`
 must only ever describe what the whole table can already see.

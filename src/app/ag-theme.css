@@ -5281,6 +5281,42 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-odds { pointer-events: none; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
 .ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
+/* Hit text (§26.1): what an action did, rising off the figure it happened to
+   and fading. RealmArenaFx sets each one's delay and length from its cue;
+   before its delay it's unseen, and once played it stays unseen. Outlined in
+   the night so it reads on grass, stone or a figure. Nothing here takes a tap. */
+.ag-ra-fx { pointer-events: none; }
+.ag-ra-hit {
+    --ra-hit: var(--ag-on-dark);
+    --ra-hit-settle: 1.5px;
+    --ra-hit-lift: -6px;
+    opacity: 0;
+    animation: ag-ra-hit-rise 1s ease-out both;
+}
+.ag-ra-hit text {
+    fill: var(--ra-hit);
+    stroke: var(--ra-night);
+    stroke-linejoin: round;
+    paint-order: stroke;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+.ag-ra-hit-value { font: 800 6px var(--ag-font); stroke-width: 1.3; }
+.ag-ra-hit-label { font: 800 2.8px var(--ag-font); stroke-width: 0.8; }
+.ag-ra-hit--hit { --ra-hit: color-mix(in oklch, var(--ag-danger) 80%, var(--ag-on-dark)); }
+.ag-ra-hit--graze { --ra-hit: var(--ag-gold); }
+.ag-ra-hit--miss { --ra-hit: color-mix(in oklch, var(--ag-on-dark) 65%, var(--ra-night)); }
+.ag-ra-hit--heal { --ra-hit: color-mix(in oklch, var(--ag-green) 80%, var(--ag-on-dark)); }
+@keyframes ag-ra-hit-rise {
+    0% { opacity: 0; transform: translateY(var(--ra-hit-settle)); }
+    15% { opacity: 1; transform: translateY(0); }
+    65% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(var(--ra-hit-lift)); }
+}
+/* With reduced motion it doesn't rise: it appears where it happened, and fades. */
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
+}
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but hollow, since it isn't on the battlefield until both have mustered. */
 .ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }

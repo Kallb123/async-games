@@ -7,12 +7,13 @@ import type { Battlefield, Square, TerrainLetter } from '@/utils/games/battlefie
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
+import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { ITEM_ART, SMOKE_ART, TERRAIN_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
-import { apPips, areaRect, type AttackOption, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type AttackOption, type BattleCue, CHARACTER_MARK, effectsOn, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -91,6 +92,14 @@ interface RealmArenaBoardProps {
     odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
     overlay?: React.ReactNode;
+    /** What an action did, played over the figures (§26): a new `key` starts it over. */
+    playback?: Playback | null;
+}
+
+/** What the board plays. */
+export interface Playback {
+    key: string;
+    cues: readonly BattleCue[];
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */
@@ -394,6 +403,10 @@ interface DepthItem {
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit.
  *
+ * What an action did plays over the figures (`playback`, §26) — the viewer's
+ * own as it comes back, and each step of a review — drawn by `RealmArenaFx`
+ * above everything else, where nothing can be tapped.
+ *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
  * isometric board, the grid turned before it's drawn (`IsoRotation`), so
@@ -401,7 +414,7 @@ interface DepthItem {
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
     const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
     const { rotation } = turned;
@@ -641,6 +654,19 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
                             offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
                             fontSize={10}
                             fontWeight={800}
+                        />
+                    )}
+
+                    {/* What the last action did, rising off the figures it happened to: last, over everything. */}
+                    {playback && (
+                        <RealmArenaFx
+                            key={playback.key}
+                            id={artId}
+                            cues={playback.cues}
+                            over={square => {
+                                const { x, y } = discCentre(view, square);
+                                return { x, y: y - FIGURE_RADIUS };
+                            }}
                         />
                     )}
                 </svg>
