@@ -74,6 +74,15 @@ export interface IRecapAdapter {
     // display row — toEvents only sees one command at a time, so cross-command
     // merges belong here instead.
     postProcess?(events: IGameEvent[]): IGameEvent[];
+
+    // Optional pass that folds several commands' rows into one, for the feed
+    // only (the recap and the turn notification) — e.g. every action one
+    // character took in a turn. Unlike postProcess it never reaches
+    // buildAllEvents, which keeps a row per command so a reaction to any
+    // match-history line still finds the row of the command that wrote it.
+    // A folded row keeps the id and commandId of the first row in it, so a
+    // reaction sent from the feed lands on that command's history line.
+    groupFeed?(events: IGameEvent[]): IGameEvent[];
 }
 
 const adapters = createAdapterRegistry<IRecapAdapter>();
@@ -179,6 +188,9 @@ export async function buildEventFeed(
         // recap rather than surfacing an error — the same graceful no-op the
         // client already handles for adapter-less games.
         return empty;
+    }
+    if (adapter.groupFeed) {
+        allEvents = adapter.groupFeed(allEvents);
     }
 
     // The window is everything after the viewer's own last event on their own

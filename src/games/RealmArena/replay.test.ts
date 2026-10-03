@@ -4,9 +4,9 @@ import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
-import type { ToldEvent } from "./rules";
+import { check, type ToldEvent } from "./rules";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
-import { endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, scriptedAction, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.3 PR 8: the review and the recap are read off
 // the same recorded command log, so this replays whole real battles with the
@@ -203,6 +203,33 @@ describe("Realm Arena recap", () => {
         expect(feed.events.map(event => event.title)).not.toContain("Bob ended their turn");
         expect(feed.summary?.headline).toBe("Your move 👋");
         expect(feed.tip?.text).toMatch(/standing/);
+    });
+
+    it("tells everything one character did in the turn as one row", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        await playScriptedTurn(game);
+        const before = game.gameState.commandHistory.length;
+        // Bob's first character takes the first step of its scripted move, and
+        // the script then plays the turn out: the rest of the move, and on.
+        const first = battleOf(game).fighters.find(fighter => fighter.owner === "b")!;
+        const move = scriptedAction(game, first);
+        if (move?.kind !== "move") throw new Error("the script didn't move Bob's first character");
+        const step = move.path.map((_, end) => move.path.slice(0, end + 1)).slice(1, -1)
+            .find(path => !("refused" in check(battleOf(game), "b", { ...move, path })));
+        if (!step) throw new Error("no step short of the whole move can be stopped on");
+        expect((await play(game, actBy("b", { ...move, path: step }))).outcome.validMove).toBe(true);
+        await playScriptedTurn(game);
+        const acts = game.gameState.commandHistory.slice(before).filter(command => command.className === "RealmArenaAct") as unknown as { id: string; action: { fighter: number } }[];
+        const fighters = new Set(acts.map(command => command.action.fighter));
+        // A character acted more than once, or there is nothing to fold.
+        expect(acts.length).toBeGreaterThan(fighters.size);
+
+        const feed = await noRandomness(() => buildEventFeed(game, NAMES, "a"));
+        const rows = feed.events.filter(event => acts.some(command => command.id === event.commandId));
+        expect(rows).toHaveLength(fighters.size);
+        expect(rows.map(row => row.commandId)).toEqual([...fighters].map(fighter => acts.find(command => command.action.fighter === fighter)!.id));
+        expect(feed.events.every(event => !("fighter" in event) && !("battle" in event))).toBe(true);
     });
 
     it("opens the window on a turn ended with nothing done, and tells nobody it was", async () => {

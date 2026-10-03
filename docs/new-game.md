@@ -301,7 +301,7 @@ table can see (Train Time names a face-up card taken, never a blind draw).
 | File | What to add |
 |---|---|
 | `src/utils/games/replay.ts` | `registerReplayAdapter({ className, buildInitialSpecificGameState, toResponseState })` |
-| `src/games/<Game>/recap.ts` | an `IRecapAdapter`: `toEvents` (one replayed command → display events), `summarize`, optional `tip` (the green advice box) and `postProcess` (fold two commands that are one logical action into one row) |
+| `src/games/<Game>/recap.ts` | an `IRecapAdapter`: `toEvents` (one replayed command → display events), `summarize`, optional `tip` (the green advice box), `postProcess` (fold two commands that are one logical action into one row) and `groupFeed` (fold rows for the recap and turn notification only, keeping a row per command for a reaction to a history line to find) |
 | `src/utils/games/recap.ts` | `import "@/games/<Game>/recap";` — **`gameRegistry.test.ts` fails without it**, since an unimported adapter never registers and the feed silently returns nothing |
 | `src/app/games/<game>/[gameid]/page.tsx` | `useTurnRecap(gameId)` + `<TurnRecapScreen …>` (one `if (recap.show)` early return; the page supplies only its call-to-action wording), and `useTurnNavigation` + `TurnNavControls` for the step-back controls; render `nav.displayedState`, drive the log from `nav.displayedHistory`, and disable interactive controls while `!nav.isLive` |
 
