@@ -35,6 +35,7 @@ import {
     ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, ITEMS, MAX_OF_EACH, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type PlayerCount,
 } from "./characters";
+import type { Tally } from "./mastery";
 
 // ─── Numbers (§13) ──────────────────────────────────────────────────────────
 
@@ -106,6 +107,13 @@ export interface Fighter {
      * if it's downed first (§21.2). The cloud is the 3×3 around that square.
      */
     smoke?: Square;
+    /**
+     * What it has done this battle that earns mastery (§23.3): its attacks,
+     * reactions among them, its abilities and its items. Kept by the command
+     * that acts (`tallied`, RealmArenaLogic.ts) rather than any rule here, and
+     * absent until it first does one.
+     */
+    tally?: Tally;
 }
 
 /** What every rule reads: the ground, and everyone on it. */
@@ -923,7 +931,11 @@ export function newFighter(id: number, owner: string, character: CharacterId, sq
  * before items carries none.
  */
 export function storedFighter(fighter: Fighter): Fighter {
-    return { ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])], item: fighter.item ?? null };
+    return {
+        ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])], item: fighter.item ?? null,
+        // Copied, so an undo snapshot never shares it with the live fighter.
+        ...(fighter.tally ? { tally: { ...fighter.tally } } : {}),
+    };
 }
 
 /**

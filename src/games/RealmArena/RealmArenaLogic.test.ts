@@ -43,7 +43,7 @@ describe("setting up a match", () => {
     it("starts a battle for every party size the setup routes accept", () => {
         for (let size = meta.minPlayers; size <= meta.maxPlayers; size++) {
             const seats = Array.from({ length: size }, (_, seat) => `player${seat}`);
-            expect(() => buildInitialRealmArenaState(seats), `${size} players`).not.toThrow();
+            expect(() => buildInitialRealmArenaState(seats, {}), `${size} players`).not.toThrow();
         }
     });
 });
@@ -391,7 +391,7 @@ describe("blasting low cover (§22)", () => {
         await play(game, actBy("a", { kind: "throw", fighter: thrower.id, at: blastSpot(game, thrower) }));
         const live = structuredClone(game.specificGameState.blasted);
         for (const viewer of ["a", "b", null]) expect((await responseFor(game, viewer)).specificGameState.blasted).toEqual(live);
-        expect(buildInitialRealmArenaState(PLAYERS).blasted).toEqual([]);
+        expect(buildInitialRealmArenaState(PLAYERS, {}).blasted).toEqual([]);
     });
 
     it("reads a battle stored before anything could be blasted as one where nothing has been", async () => {
