@@ -45,3 +45,17 @@ themselves: the served `public/art/realmarena/effects.png`, `items.png` and
 of them, run `npm run ra-marks` (it renders every SVG in `realmarena/`) and
 commit the PNGs it writes. The sheets are a few KB, so `optimise-art` leaves
 them alone.
+
+## Realm Arena's characters
+
+`realmarena/characters/` holds a master per character, named by its id in
+`src/games/RealmArena/characters.ts`: a model built in code out of boxes,
+balls, capsules and tapered cylinders, dressed from the shared body and palette
+in `kit.mjs`. `npm run ra-characters` draws every one of them from all eight
+directions a figure can face, in the battlefield's own isometric projection
+(`scripts/lib/isoRender.mjs`), into `public/art/realmarena/characters.png` (a
+row per character, a column per facing) and `characters-team.png` (where the
+owner's colour goes, for the board to tint). Commit both after changing a
+master. While working on one, `npm run ra-characters -- --only knight
+--preview /tmp/knight.png` draws just that character, tinted and standing on
+its square, without touching the sheets.

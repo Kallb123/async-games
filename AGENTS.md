@@ -212,7 +212,10 @@ single tile sheet, so run `npm run kb-atlas` instead and commit the
 `src/games/KingdomBuilder/terrainAtlas.json` it writes. Art drawn as an SVG
 rather than exported — Realm Arena's effect and item marks, its scorched
 ground and its battle visuals — keeps the SVG as its master and renders the served PNG from it: run
-`npm run ra-marks`.
+`npm run ra-marks`. Realm Arena's characters are modelled in code too, in
+`art-masters/realmarena/characters`, and `npm run ra-characters` renders each
+one facing all eight isometric directions into a sprite sheet and a team-colour
+mask (see [`art-masters/README.md`](./art-masters/README.md)).
 
 ## Design system conventions
 
