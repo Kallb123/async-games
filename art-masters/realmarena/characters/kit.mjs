@@ -37,6 +37,17 @@ export const MATERIALS = {
     flame: { colour: '#ff6a1f', glow: true },
 };
 
+/**
+ * How a whole figure is drawn in each pose the board shows it in — one for
+ * each of `CHARACTER_POSES` in src/games/RealmArena/art.ts. Fallen, it's laid
+ * on its back, its head where its back was, and slid forward and up so it
+ * lies on the ground across the middle of its square.
+ */
+export const POSES = {
+    standing: {},
+    fallen: { tilt: -90, shift: [0.34, 0, 0.09] },
+};
+
 /** The line drawn round a figure and between its parts. */
 export const OUTLINE = { colour: '#22170f', width: 1, crease: 0.06 };
 

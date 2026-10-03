@@ -5,7 +5,7 @@
 import type { Rect } from "@/utils/ui/mapLabels";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, TERRAIN, type Battlefield, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { coordsOf, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
@@ -135,6 +135,15 @@ export function canAct(fighter: Fighter): boolean {
 /** A character's AP as pips, one of `ACTION_POINTS` each, lit while unspent: the board and the units strip draw the same row. */
 export function apPips(fighter: Fighter): boolean[] {
     return Array.from({ length: ACTION_POINTS }, (_, i) => i < fighter.ap);
+}
+
+/**
+ * Which way the board draws a figure facing: the way it last stepped, or —
+ * before it has moved, and for a squad still being placed — towards the
+ * middle of the map, where the battle is fought over.
+ */
+export function facingOf(field: Pick<Battlefield, "width" | "height">, { square, facing }: { square: Square; facing?: Facing }): Facing {
+    return facing ?? facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
 /** How full a character's HP bar is, 0–1. */

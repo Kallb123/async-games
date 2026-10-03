@@ -5245,39 +5245,28 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     pointer-events: none;
 }
 
-/* A character: a disc in its owner's colour with its mark on it, stood upright
-   over its shadow, and its HP beneath. The stroke is painted under the fill so
-   the edge reads on any ground. */
+/* A character: its art, in its owner's colour, over its shadow, and its HP
+   above it. Fallen, it lies there, faded. */
 .ag-ra-shadow { fill: rgba(0, 0, 0, 0.3); pointer-events: none; }
-.ag-ra-figure {
-    stroke: var(--ag-on-dark);
-    stroke-width: 0.7;
-    paint-order: stroke;
-    filter: drop-shadow(0 0.4px 0.6px rgba(0, 0, 0, 0.5));
-}
+.ag-ra-figure--down { opacity: 0.75; }
 /* A standing character hidden behind something in front of it, drawn again
    over it, faint, in its owner's colour, and tappable like the figure. */
 .ag-ra-ghost { opacity: 0.5; }
-/* Banked AP on overwatch or guard: a dashed edge, so a watcher is plain at a glance. */
-.ag-ra-figure--watch { stroke-dasharray: 1.2 0.8; stroke-width: 0.9; }
-.ag-ra-figure--down { fill: var(--ag-ink-softer); opacity: 0.6; }
-.ag-ra-mark {
-    font: 700 5px var(--ag-font);
-    fill: var(--ag-on-dark);
-    text-anchor: middle;
-    dominant-baseline: central;
-    pointer-events: none;
-}
+/* The dashed ring round a character's feet: banked AP on overwatch or guard,
+   so a watcher is plain at a glance, or the viewer's squad still sealed. */
+.ag-ra-marker { fill: none; stroke-width: 0.7; stroke-dasharray: 1.2 0.8; pointer-events: none; }
+.ag-ra-marker--watch { stroke: var(--ag-on-dark); }
+.ag-ra-marker--sealed { stroke: var(--ra-oxblood); }
 .ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
-/* The ring round a figure: the one selected, one a tap could aim at, one aimed
+/* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */
 .ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }
 .ag-ra-ring--selected { stroke: var(--ag-on-dark); }
 .ag-ra-ring--candidate { stroke: var(--ag-gold); }
 .ag-ra-ring--aimed { stroke: var(--ag-danger); stroke-width: 1.2; }
 .ag-ra-ring--flagged { stroke: var(--ag-danger); stroke-dasharray: 1.4 0.9; }
-/* The selected character's chance to hit an enemy, a badge across the top of the enemy's figure. */
+/* The selected character's chance to hit an enemy, a badge over the enemy's figure. */
 .ag-ra-odds { pointer-events: none; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
 .ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
@@ -5348,9 +5337,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     .ag-ra-burst, .ag-ra-slash { display: none; }
 }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
-   but hollow, since it isn't on the battlefield until both have mustered. */
-.ag-ra-sealed .ag-ra-figure { fill: color-mix(in oklch, var(--ag-surface) 70%, transparent); stroke: var(--ra-oxblood); stroke-dasharray: 1.2 0.8; }
-.ag-ra-sealed .ag-ra-mark { fill: var(--ra-oxblood); }
+   but faded and uncoloured, since it isn't on the battlefield until both have
+   mustered. */
+.ag-ra-sealed .ag-ra-figure { opacity: 0.7; }
 .ag-ra-sealed--placing { cursor: pointer; }
 /* A square of the viewer's zone while they place their squad, lit as
    somewhere to go once a character is picked up. */

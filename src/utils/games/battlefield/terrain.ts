@@ -224,6 +224,23 @@ export function coordsOf(field: Pick<Battlefield, "width">, square: Square): { c
     return { col: square % field.width, row: Math.floor(square / field.width) };
 }
 
+/**
+ * One of the eight ways a figure on the grid can face: 0 along the columns
+ * (towards the next column), and each next one 45° on from there towards the
+ * rows, so 2 is along the rows, 4 back along the columns and 6 back along the
+ * rows; the odd ones face a diagonal.
+ */
+export type Facing = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export const FACING_COUNT = 8;
+
+/** The facing nearest the way from one square to another: exact for a step to a neighbour. A square faces 0 towards itself. */
+export function facingTowards(field: Pick<Battlefield, "width">, from: Square, to: Square): Facing {
+    const one = coordsOf(field, from), other = coordsOf(field, to);
+    const turns = Math.round(Math.atan2(other.row - one.row, other.col - one.col) / (Math.PI / 4));
+    return (((turns % FACING_COUNT) + FACING_COUNT) % FACING_COUNT) as Facing;
+}
+
 /** Whether two squares touch, along a side or at a corner. */
 export function isNeighbour(field: Pick<Battlefield, "width">, a: Square, b: Square): boolean {
     const one = coordsOf(field, a), other = coordsOf(field, b);

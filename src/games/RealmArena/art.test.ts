@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { EFFECT_IDS, ITEM_IDS } from "./characters";
-import { ART_SHEETS, BURST_ART, CLIPS, EFFECT_ART, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
+import { FACING_COUNT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { CHARACTERS, EFFECT_IDS, ITEM_IDS, type CharacterId } from "./characters";
+import { ART_SHEETS, BURST_ART, CHARACTER_ART, CHARACTER_CELL, CHARACTER_POSES, CLIPS, EFFECT_ART, facingCell, GRASS, ITEM_ART, MISSILE_ART, SLASH_ART, SMOKE_ART, grassOf, SPRITES, spriteBox, TERRAIN_ART, variantOf } from "./art";
 import { FLIGHT_MS } from "./ui";
 
 /** A PNG's size, read off its header: the served sheet is the one the sprites are cut from. */
@@ -12,13 +12,18 @@ function pngSize(file: string): { width: number; height: number } {
     return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
+/** Where the characters' sheets are served: rendered from models, not from a master image (`npm run ra-characters`). */
+const CHARACTER_SHEETS = "/art/realmarena/characters";
+
 describe("the art sheets", () => {
     it("are served at the size the sprites are measured against, from a master of the same size", () => {
         for (const sheet of Object.values(ART_SHEETS)) {
             const size = { width: sheet.width, height: sheet.height };
             expect(pngSize(path.join("public", sheet.href))).toEqual(size);
             // A drawn sheet's master is the export itself; one rendered from an
-            // SVG master (the effects' and the items') declares the same size in it.
+            // SVG master (the effects' and the items') declares the same size in
+            // it. The characters' are models, checked below.
+            if (sheet.href.startsWith(CHARACTER_SHEETS)) continue;
             const master = path.join("art-masters", sheet.href.replace(/^\/art\//, ""));
             if (existsSync(master)) expect(pngSize(master)).toEqual(size);
             else expect(readFileSync(master.replace(/\.png$/, ".svg"), "utf8")).toContain(`width="${size.width}" height="${size.height}"`);
@@ -31,6 +36,45 @@ describe("the art sheets", () => {
             expect(sprite.x + sprite.width).toBeLessThanOrEqual(sheet.width);
             expect(sprite.y + sprite.height).toBeLessThanOrEqual(sheet.height);
         }
+    });
+});
+
+describe("CHARACTER_ART", () => {
+    const characters = Object.keys(CHARACTERS) as CharacterId[];
+
+    it("is drawn from a model for every character, a row of the sheets each per pose and a cell per facing", () => {
+        for (const character of characters) expect(existsSync(path.join("art-masters", "realmarena", "characters", `${character}.mjs`))).toBe(true);
+        const size = { width: FACING_COUNT * CHARACTER_CELL.width, height: characters.length * CHARACTER_POSES.length * CHARACTER_CELL.height };
+        expect(ART_SHEETS.characters).toMatchObject(size);
+        expect(ART_SHEETS.charactersTeam).toMatchObject(size);
+    });
+
+    it("gives every character, pose and facing a cell of its own, and its owner's colour the same cell of the team sheet", () => {
+        const cells = characters.flatMap(character => CHARACTER_POSES.map(pose => CHARACTER_ART[character][pose]));
+        expect(new Set(cells.flatMap(art => art.body.map(cell => `${cell.x},${cell.y}`))).size).toBe(cells.length * FACING_COUNT);
+        for (const art of cells) {
+            expect(art.body).toHaveLength(FACING_COUNT);
+            expect(art.body.every(cell => cell.sheet === "characters" && SPRITES.has(cell))).toBe(true);
+            expect(art.team.every(cell => cell.sheet === "charactersTeam" && SPRITES.has(cell))).toBe(true);
+            expect(art.team.map(({ x, y }) => ({ x, y }))).toEqual(art.body.map(({ x, y }) => ({ x, y })));
+        }
+    });
+
+    it("stands a character's cell on its square, though its diamond is twice a tile's", () => {
+        const box = spriteBox(CHARACTER_ART.knight.standing.body[0]);
+        // As wide as a square, its foot on the square's front corner, a diamond's height below its back corner.
+        expect(box.width).toBe(20);
+        expect(box.x).toBe(-10);
+        expect(box.y + box.height).toBe(10);
+    });
+});
+
+describe("facingCell", () => {
+    it("is the facing on an unturned board, and two cells round for each quarter it's turned", () => {
+        expect([0, 1, 2, 3, 4, 5, 6, 7].map(facing => facingCell(facing as Facing, 0))).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+        expect(facingCell(0, 1)).toBe(2);
+        expect(facingCell(7, 1)).toBe(1);
+        expect(facingCell(5, 3)).toBe(3);
     });
 });
 

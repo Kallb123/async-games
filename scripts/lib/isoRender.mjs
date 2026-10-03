@@ -225,11 +225,21 @@ function boundsOf(solid) {
     }
 }
 
-/** Turns a solid about the vertical through the origin. */
-function turnSolid(solid, angle) {
-    const spin = v => rotate(v, [0, 0, 1], angle);
-    if (solid.kind === 'capsule') return { ...solid, from: spin(solid.from), to: spin(solid.to) };
-    return { ...solid, centre: spin(solid.centre), axes: solid.axes.map(spin) };
+/** Moves a solid by `move`, a rigid motion: `turn` for its directions, and `move` itself for its points. */
+function moveSolid(solid, move, turn = move) {
+    if (solid.kind === 'capsule') return { ...solid, from: move(solid.from), to: move(solid.to) };
+    return { ...solid, centre: move(solid.centre), axes: solid.axes.map(turn) };
+}
+
+/**
+ * A pose a whole model can be drawn in, beyond standing as it's written: tipped
+ * `tilt` degrees about its own y axis (-90 lays it on its back, its head where
+ * its back was) and then shifted by `shift`, in its own frame.
+ */
+function posed(solid, { tilt = 0, shift = [0, 0, 0] } = {}) {
+    if (tilt === 0 && shift.every(n => n === 0)) return solid;
+    const turn = v => rotate(v, [0, 1, 0], rad(tilt));
+    return moveSolid(solid, v => add(turn(v), shift), turn);
 }
 
 // --- The camera and the light ----------------------------------------------
@@ -271,18 +281,22 @@ function shade(material, normal) {
 }
 
 /**
- * Draws one model facing one direction, into a `width`×`height` cell whose
- * foot is the square's diamond, front corner at the middle of the bottom edge
- * — the convention every Realm Arena sheet cell keeps (src/games/RealmArena/art.ts).
+ * Draws one model facing one direction, in a `pose` if it's given one, into a
+ * `width`×`height` cell whose foot is the square's diamond, front corner at
+ * the middle of the bottom edge — the convention every Realm Arena sheet cell
+ * keeps (src/games/RealmArena/art.ts). Nothing below the ground is drawn: the
+ * board's ground hides it.
  *
- * Returns the cell's pixels, RGBA in 0–255 and not premultiplied, and the
- * team mask: one byte a pixel, how much of it is the owner's colour.
+ * Returns the cell's pixels, and the owner's colour on its own: just the
+ * pixels drawn in a `team` material, shaded as they are in `pixels`, for the
+ * board to tint and lay over them. Both are RGBA in 0–255, not premultiplied.
  */
-export function renderCell(parts, materials, { facing, width, height, pxPerUnit, supersample = 4, outline }) {
+export function renderCell(parts, materials, { facing, pose, width, height, pxPerUnit, supersample = 4, outline }) {
     const mats = Object.fromEntries(Object.entries(materials).map(([name, m]) => [name, { ...m, rgb: hexToRgb(m.colour) }]));
+    const spin = v => rotate(v, [0, 0, 1], facingAngle(facing));
     const solids = parts.map(part => {
         if (!mats[part.mat]) throw new Error(`Unknown material "${part.mat}"`);
-        return { ...turnSolid(solidOf(part), facingAngle(facing)), mat: part.mat };
+        return { ...moveSolid(posed(solidOf(part), pose), spin), mat: part.mat };
     });
 
     const ss = supersample;
@@ -304,9 +318,12 @@ export function renderCell(parts, materials, { facing, width, height, pxPerUnit,
         const y0 = Math.max(0, Math.floor(c.y - r)), y1 = Math.min(H - 1, Math.ceil(c.y + r));
         for (let y = y0; y <= y1; y++) {
             for (let x = x0; x <= x1; x++) {
-                const hit = SOLIDS[solid.kind](solid, rayOrigin(x + 0.5, y + 0.5), VIEW);
+                const origin = rayOrigin(x + 0.5, y + 0.5);
+                const hit = SOLIDS[solid.kind](solid, origin, VIEW);
                 const i = y * W + x;
-                if (!hit || hit.t >= depth[i]) continue;
+                // The ray only goes down, so a hit under the ground is the
+                // nearest this solid has, and the ground would hide it.
+                if (!hit || hit.t >= depth[i] || origin[2] + hit.t * VIEW[2] < 0) continue;
                 depth[i] = hit.t;
                 owner[i] = index;
                 normals.set(hit.normal, i * 3);
@@ -346,24 +363,28 @@ export function renderCell(parts, materials, { facing, width, height, pxPerUnit,
     }
 
     // Down to the cell: each pixel the mean of its ss×ss samples, colour
-    // weighted by how much of it is covered.
+    // weighted by how much of it is covered — and, for the team layer, the
+    // mean of just its team samples, covering as much as they do.
     const pixels = new Uint8ClampedArray(width * height * 4);
-    const team = new Uint8ClampedArray(width * height);
+    const team = new Uint8ClampedArray(width * height * 4);
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-            let r = 0, g = 0, b = 0, a = 0, t = 0;
+            const all = [0, 0, 0, 0], own = [0, 0, 0, 0];
             for (let sy = 0; sy < ss; sy++) {
                 for (let sx = 0; sx < ss; sx++) {
                     const i = ((y * ss + sy) * W + x * ss + sx);
                     const alpha = samples[i * 4 + 3];
-                    r += samples[i * 4] * alpha; g += samples[i * 4 + 1] * alpha; b += samples[i * 4 + 2] * alpha;
-                    a += alpha;
-                    t += teamSamples[i];
+                    for (let c = 0; c < 3; c++) all[c] += samples[i * 4 + c] * alpha;
+                    all[3] += alpha;
+                    if (!teamSamples[i]) continue;
+                    for (let c = 0; c < 3; c++) own[c] += samples[i * 4 + c];
+                    own[3] += 1;
                 }
             }
             const o = (y * width + x) * 4;
-            if (a > 0) pixels.set([r / a * 255, g / a * 255, b / a * 255, a / (ss * ss) * 255], o);
-            team[y * width + x] = t / (ss * ss) * 255;
+            for (const [sum, out] of [[all, pixels], [own, team]]) {
+                if (sum[3] > 0) out.set([sum[0] / sum[3] * 255, sum[1] / sum[3] * 255, sum[2] / sum[3] * 255, sum[3] / (ss * ss) * 255], o);
+            }
         }
     }
     return { pixels, team };

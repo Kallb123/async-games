@@ -13,9 +13,9 @@
 // (`FULL_HEIGHT`) is 32px of the sheet: the cube the outdoor sheet's blocks
 // are drawn as.
 
-import { FULL_HEIGHT, TERRAIN, type TerrainLetter } from "@/utils/games/battlefield/terrain";
-import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP } from "@/utils/ui/isometric";
-import { EFFECT_IDS, ITEM_IDS, type ItemId } from "./characters";
+import { FACING_COUNT, FULL_HEIGHT, TERRAIN, type Facing, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoRotation } from "@/utils/ui/isometric";
+import { CHARACTERS, EFFECT_IDS, ITEM_IDS, type CharacterId, type ItemId } from "./characters";
 
 export const ART_SHEETS = {
     /** Grass, rock, water and trees. */
@@ -47,6 +47,14 @@ export const ART_SHEETS = {
      * `npm run ra-marks`.
      */
     fx: { href: "/art/realmarena/fx.png", width: 672, height: 192 },
+    /**
+     * The characters (`CHARACTER_ART`): every one in every pose, from all eight
+     * facings. Rendered from the models in `art-masters/realmarena/characters`
+     * by `npm run ra-characters`.
+     */
+    characters: { href: "/art/realmarena/characters.png", width: 1024, height: 1920 },
+    /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
+    charactersTeam: { href: "/art/realmarena/characters-team.png", width: 1024, height: 1920 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -69,6 +77,8 @@ export interface Sprite {
      * top up by.
      */
     rise?: number;
+    /** The width of a square's diamond on its sheet, where it isn't `TILE_PX`: the characters are drawn at twice it. */
+    tile?: number;
 }
 
 const cell = (sheet: ArtSheet, col: number, row: number, height = 1, rise?: number): Sprite =>
@@ -194,11 +204,58 @@ export const BURST_ART: Readonly<Record<BurstKind, Sprite>> = {
     smoke: SMOKE_ART,
 };
 
+/** The poses a character is drawn in, in the order their rows come down the characters' sheet. */
+export const CHARACTER_POSES = ["standing", "fallen"] as const;
+
+export type CharacterPose = typeof CHARACTER_POSES[number];
+
+/** A character's cell: a square's diamond twice the tile sheets' across, so a figure stays sharp zoomed in, and room above it for what it holds up. */
+export const CHARACTER_CELL = { tile: 2 * TILE_PX, width: 2 * TILE_PX, height: 160 } as const;
+
+/** One character in one pose: its figure from each facing, in `Facing` order as the board is drawn, and the owner's colour on each. */
+export interface CharacterArt {
+    body: readonly Sprite[];
+    team: readonly Sprite[];
+}
+
+const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
+
+/** A row of a character sheet's cells, one a facing. */
+const characterCells = (sheet: ArtSheet, row: number) => Array.from({ length: FACING_COUNT }, (_, facing): Sprite => ({
+    sheet, x: facing * CHARACTER_CELL.width, y: row * CHARACTER_CELL.height,
+    width: CHARACTER_CELL.width, height: CHARACTER_CELL.height, tile: CHARACTER_CELL.tile,
+}));
+
+/**
+ * Every character in every pose (`CHARACTER_POSES`): a row of the
+ * characters' sheet each — every character standing, in `CHARACTERS` order,
+ * then every one fallen — and a cell a facing along it. The team sheet
+ * holds the owner's colour in the same cells.
+ */
+export const CHARACTER_ART = Object.fromEntries(CHARACTER_IDS.map((character, index) => {
+    const poses = {} as Record<CharacterPose, CharacterArt>;
+    CHARACTER_POSES.forEach((pose, p) => {
+        const row = p * CHARACTER_IDS.length + index;
+        poses[pose] = { body: characterCells("characters", row), team: characterCells("charactersTeam", row) };
+    });
+    return [character, poses];
+})) as Readonly<Record<CharacterId, Readonly<Record<CharacterPose, CharacterArt>>>>;
+
+/**
+ * Which of a character's cells a figure facing `facing` on the grid is drawn
+ * with, on a board turned `rotation` quarters: the cells go round as the
+ * facings do, and a quarter turn of the board is two of them.
+ */
+export function facingCell(facing: Facing, rotation: IsoRotation): number {
+    return (facing + 2 * rotation) % FACING_COUNT;
+}
+
 /** Every sprite the board draws, once each, by the number it defines it under up front. */
 export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
     [...new Set([
         ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), ...Object.values(ITEM_ART), SMOKE_ART,
         ...Object.values(MISSILE_ART), SLASH_ART, ...Object.values(BURST_ART),
+        ...Object.values(CHARACTER_ART).flatMap(poses => Object.values(poses).flatMap(art => [...art.body, ...art.team])),
     ])].map((sprite, index) => [sprite, index]),
 );
 
@@ -231,14 +288,15 @@ export function grassOf(col: number, row: number): Sprite {
 /** Where a sprite goes, in its square's frame (`isoColumnOutline`): the layer's foot on the square's middle. */
 export function spriteBox(sprite: Sprite, layer: Pick<ArtLayer, "at" | "clip" | "scale"> = { at: 0 }): { x: number; y: number; width: number; height: number } {
     const foot = layer.clip === undefined ? layer.at : layer.at + layer.clip - (sprite.rise ?? 0);
-    const scale = TILE_SCALE * (layer.scale ?? 1);
+    const tile = sprite.tile ?? TILE_PX;
+    const scale = TILE_SCALE * (TILE_PX / tile) * (layer.scale ?? 1);
     // The footprint's middle — a quarter of a diamond's width above the
     // cell's foot — goes on the middle of the square, so a sprite drawn
     // smaller still stands where it did.
     const middle = ISO_HALF_HEIGHT - foot * ISO_STEP;
     return {
         x: -(sprite.width / 2) * scale,
-        y: middle - (sprite.height - TILE_PX / 4) * scale,
+        y: middle - (sprite.height - tile / 4) * scale,
         width: sprite.width * scale,
         height: sprite.height * scale,
     };

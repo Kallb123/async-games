@@ -52,10 +52,12 @@ them alone.
 `src/games/RealmArena/characters.ts`: a model built in code out of boxes,
 balls, capsules and tapered cylinders, dressed from the shared body and palette
 in `kit.mjs`. `npm run ra-characters` draws every one of them from all eight
-directions a figure can face, in the battlefield's own isometric projection
-(`scripts/lib/isoRender.mjs`), into `public/art/realmarena/characters.png` (a
-row per character, a column per facing) and `characters-team.png` (where the
-owner's colour goes, for the board to tint). Commit both after changing a
+directions a figure can face, standing and fallen (`POSES` in `kit.mjs`), in
+the battlefield's own isometric projection (`scripts/lib/isoRender.mjs`), into
+`public/art/realmarena/characters.png` (a row per character per pose, a column
+per facing — `CHARACTER_ART` in `src/games/RealmArena/art.ts` is the layout)
+and `characters-team.png` (just the owner's colour, grey and shaded, which the
+board tints per seat and lays over the figure). Commit both after changing a
 master. While working on one, `npm run ra-characters -- --only knight
 --preview /tmp/knight.png` draws just that character, tinted and standing on
 its square, without touching the sheets.
