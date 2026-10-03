@@ -1,14 +1,14 @@
 # Realm Arena — Game Design Document
 
-**Status:** Design agreed for the first playable version, v0.9. Split out of
-Defender of the Realm in its third round of design, when one concept became
-two games ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). This
-is the one to build first (§10). §11 records every answer. §13 is the battle
-rules and the first characters, settled in rounds 3–6, and §15 is the first
-battlefield, a ruined fort. §17 is the implementation plan, agreed in round
-6. Building starts once this doc has merged (§11.6, answer 6). §20–§23 are
-Milestone C, agreed in round 7: status effects, items, destructible low cover
-and character mastery, built after launch and before the rest of Milestone B.
+**Status:** v1.18. Split out of Defender of the Realm in its third round of
+design, when one concept became two games
+([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
+built first (§10). §11 records every answer. §13 has the battle rules and the
+first characters, and §15 the first battlefield, a ruined fort. §17 is the
+implementation plan and where it stands. Milestone A, free-for-all and C1–C3
+(status effects §20, items §21, destructible low cover §22) are built. Next is
+C4, battle visuals (§26), then C5, character mastery earned by what a character
+does (§23).
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -95,6 +95,8 @@ What's decided so far:
 | The name: Realm Arena | §11.1, answer 6 |
 | After launch: status effects, then items bought at muster, then destructible low cover, then character mastery (Milestone C, §17.4) | §11.7, answers 1–2 |
 | Progression is per character: playing a character widens what you can muster it with (§7, §23) | §11.7, answer 3 |
+| Mastery is earned by what a character does: a little for being there, more for every attack and ability (§23.1) | §11.10, answer 2 |
+| Battle visuals come next, before mastery: hit text, then the Archer's shot and the fireball in flight (§26) | §11.10, answer 3 |
 
 ---
 
@@ -218,7 +220,8 @@ the budget.
 
 *Changed in round 7:* progression is **character mastery** (§23). Unlocks are
 earned per character, by playing that character, and widen what you can
-muster it with. The principles below still hold: sidegrades, earned across all
+muster it with. Round 10 made it earned by what the character does in battle:
+its attacks, abilities and items, with only a little for being there (§23.1). The principles below still hold: sidegrades, earned across all
 your matches, no permanent death, a starter set that plays well. What changed
 is that you earn them for a character, not for the game as a whole, and the
 first ones are new ways to equip a character rather than new characters.
@@ -335,7 +338,8 @@ The build order, agreed in round 2 (§11.2, answer 6):
 depth comes before breadth. Status effects, items, destructible low cover and
 character mastery (Milestone C, §20–§23) come next, and character mastery
 replaces step 3's unlocks. Teams, fog of war, factions and a second mission
-follow, in that order.
+follow, in that order. Round 10 (§11.10) put battle visuals (§26) before
+mastery.
 
 ---
 
@@ -465,6 +469,19 @@ Two of round 8's open questions (§25.5), answered.
 2. **Parapets?** A tower top gets half cover from the parapet round it. A
    tower whose parapet is ruined, or missing on a side, gives no cover from
    that side, and that's fine.
+
+### 11.10 Round 10
+
+Asked after destructible low cover (C3) shipped.
+
+1. **The plan's size?** The implementation plan and the sections that go
+   with it were far too big. They're now summarised (§17, §20.3–§22.3). The
+   code holds the detail and cites the sections.
+2. **How is mastery earned?** By actions, not by being in a battle. Being
+   there can earn a small amount of XP, and every ability or attack should
+   earn more (§23.1).
+3. **What next?** Visuals, before mastery: hit text showing the damage, or a
+   miss, and animations for the fireball and the Archer's shot (§26).
 
 ---
 
@@ -828,434 +845,144 @@ Answered in §11.5.
 
 ## 17. Implementation plan
 
-Two milestones. **A** is the first playable version agreed in §10: two
-players, one faction, Hold the Centre on the Ruined Fort. **B** is everything
-after it, in the order §10 set.
+Two milestones built the game so far. **A** is the first playable version
+agreed in §10: two players, one faction, Hold the Centre on the Ruined Fort.
+**B** and **C** come after it (§17.4). Everything up to C3 is built, except
+PR 10, which turns the game on.
+
+This section keeps what the code still rests on, the principles and the
+engine decisions, and a few lines for each PR. The detail of what each PR
+settled is in the code and its tests, which cite these sections.
 
 ### 17.1 Principles
 
-- **The game stays hidden until it's ready.** From PR 3, `meta.ts` carries
-  `available: false`, which keeps Realm Arena out of the game library
-  (`GameLibrary` filters on it). Its setup screen can still be reached by URL
-  for playtesting. PR 10 turns it on.
+- **Hidden until it's ready.** `meta.ts` carries `available: false`, which
+  keeps Realm Arena out of `GameLibrary`. The setup screen can still be
+  reached by URL for playtesting. PR 10 turns it on.
 - **Shared files change only when a guard test requires it.** The registry
-  tests (`gameRegistry.test.ts`, `serializableRegistry.test.ts`) fail as soon
-  as a `@serializable` class or a `meta.ts` exists without its wiring, so
-  PR 3 makes every engine one-liner at once. After that, each remaining
-  shared file is touched by one PR: the recap import (PR 8), the guide and
-  tutorial registries (PR 9), and What's new with the share card (PR 10).
-- **What the two games share is written to be shared from the start.** The
-  battlefield's geometry (terrain, paths, sight and cover) goes in
-  `src/utils/games/battlefield/`. It's game-agnostic, as `DiceRoll.ts` and
-  `Cards.ts` are, because Defender of the Realm is committed to reusing it
-  (§10). The board component starts in `src/games/RealmArena/components/`. It
-  moves to `src/components/ui/` when Defender of the Realm needs a second
-  copy, as AGENTS.md's second-copy rule says.
-- **Replay data from the first command.** Every command that rolls records its
-  rolls (PR 3), and the starting state is rebuilt from persisted fields. Those
-  are the two things recap can never get back later (`new-game.md` §7).
-- **Every PR passes the gates:** `npm run build`, `npx tsc --noEmit`,
-  `npm run lint` and `npm test`, plus the review crew for what it touches
-  (named for each PR below).
-- **No What's new line until the game is announced** (PR 10), as with Kingdom
-  Builder: one line, once.
+  tests fail as soon as a `@serializable` class or a `meta.ts` exists without
+  its wiring, so PR 3 made every engine one-liner at once.
+- **Shared from the start.** The battlefield's geometry is in
+  `src/utils/games/battlefield/`, because Defender of the Realm will reuse it
+  (§10). The board moves to `src/components/ui/` when a second game needs it.
+- **Replay data from the first command.** Every roll is recorded, and the
+  starting state is rebuilt from persisted fields (`turnOrder`).
+- **Every PR passes the gates** (`build`, `tsc`, `lint`, `test`) and the
+  review crew for what it touches.
+- **No What's new line until the game is announced** (PR 10).
 
 ### 17.2 Engine decisions
 
-These are the decisions the PRs rest on. They're taken now because they can't
-be cheaply changed once games are being played.
+These are the decisions that can't be cheaply changed once games are being
+played.
 
-- **Four commands:**
-  - `RealmArenaMuster`: the squad, and where each character stands.
-  - `RealmArenaAct`: one action by one character. That's a move, a sneak, an
-    attack, an aimed shot, an ability, hunkering down, or going on watch.
-  - `RealmArenaUndo`: takes back the sender's last `Act`, when it rolled
-    nothing and hurt nobody (added later — `docs/undo.md` §16).
-  - `RealmArenaEndTurn`: which characters keep still rather than go on watch.
-
-  That's one general-purpose `Act` rather than a class per action, as
-  `new-game.md` recommends (Solitaire has a single move command).
-- **One action per command.** A player has to see a shot land before choosing
-  the next action. So every action goes to the server and comes back with its
-  result. A turn is a run of `Act` commands and one `EndTurn`, like a
-  Settlements & Cities turn.
-- **Reactions happen inside the command that sets them off.** A move that
-  crosses an enemy's watch is one `Act`. The server walks the path, resolves
-  each reaction in turn (nearest watcher first), and stops the mover if
-  they're downed on the way. No out-of-turn commands are needed.
-- **Rolls are recorded in order.** A move can set off any number of reactions,
-  so each `Act` stores the rolls it used as a list (`recordedRolls`), left off
-  when it used none. Rolls are 1–100, drawn with `randomInt`.
-- **The rules take rolls as inputs.** `rules.ts` never draws a random number.
-  A command draws, records, and hands the rolls to pure functions. So the
-  client can show the same hit chance the server will use, and tests can hand
-  in any roll.
-- **The muster is sealed.** Players muster in seat order, one turn each. Until
-  the last player has mustered, `gameStateToModel` sends each player only
-  their own squad. Everyone else's is left out of the response entirely, not
-  just hidden on screen (`new-game.md`, "Don't leak hidden information").
-  Recap follows the same rule.
-- **A timed-out turn ends the way the player would have ended it.** A
-  turn-timeout adapter runs `EndTurn`, so every character's AP go on watch,
-  as a missed turn should (§4). A timed-out muster musters a ready-made
-  squad in the deployment zone, so the battle can still start (agreed in
-  round 6). Each faction's ready-made squad is part of its data (PR 2).
-- **No drop at two players.** A two-player duel ends when one player stops
-  turning up, which is what the platform already does. The dropout adapter
-  came with free-for-all (B2), and its `minPlayers` of two keeps it that way.
+- **Four commands.** `RealmArenaMuster` is the squad and where each character
+  stands. `RealmArenaAct` is one action by one character. `RealmArenaUndo`
+  takes back an `Act` that rolled nothing and hurt nobody (`docs/undo.md`
+  §16). `RealmArenaEndTurn` names the characters that keep still rather than
+  go on watch. One general `Act` replaces a class per action.
+- **One action per command**, so a player sees a shot land before choosing
+  the next action.
+- **Reactions happen inside the command that sets them off.** The server
+  walks the path, resolves each reaction (nearest watcher first), and stops
+  the mover if it's downed on the way. No out-of-turn commands are needed.
+- **The rules take rolls as inputs.** A command draws 1–100 rolls, records
+  them in order on itself (`recordedRolls`) and hands them to `rules.ts`, which
+  never draws. So the client shows the same odds the server uses.
+- **The muster is sealed.** Players muster in seat order. Until the last one
+  has, each player sees only their own squad (`myMuster`), and nothing in a
+  response is derived from anyone else's, not even a count. Then every squad
+  takes the field at once, with fighter ids in seat order. Replay and recap
+  keep the seal.
+- **A timed-out turn ends the way the player would have ended it:** `EndTurn`,
+  with every character going on watch. A timed-out muster gets the faction's
+  ready-made squad.
+- **The End turn that hands the turn on begins the next turn.** It gives the
+  next seat fresh AP, counts effects down and burns (§20.3). It steps past a
+  seat that has dropped or has nobody standing, and ends the round when it
+  goes back round the table.
+- **No drop at two players.** A duel ends when one player stops turning up.
+  The dropout adapter (B2) has a `minPlayers` of two.
 - **The squads live in plain arrays** (`Schema.Types.Mixed`), so every
-  `Execute` ends by calling one `markModified` helper (`new-game.md`,
-  "Gotchas").
-
-*Filled in by PR 3*, in `RealmArenaModels.ts` and `RealmArenaLogic.ts`:
-
-- **A sealed squad stays off the battlefield.** Each muster is kept on its
-  own until the last player's, and then every squad takes the field at once,
-  with fighter ids in seat order. So until then nothing in a response is
-  derived from anyone else's squad, not even a count or an id. A player sees
-  only their own, as `myMuster`.
-- **A turn begins on the hand-off.** `CheckEndTurn` passes the turn round the
-  seats and gives the next player's characters their fresh AP, so a played,
-  a timed-out and a replayed turn all begin the next one the same way.
-  *Moved by C1 PR 1 (§20.4):* the End turn that hands the turn on now begins
-  the next one, so burning there can end the battle.
-- **A request keeps only what was checked.** An `Act` stores the action as
-  `check` read it, a `Muster` each pick's character and square, and an
-  `EndTurn` only the player's own characters to keep still.
+  `Execute` ends with one `markModified` helper.
+- **A request keeps only what was checked.**
 
 ### 17.3 Milestone A: the first playable version
 
-**Goal:** two players can set up a match, muster sealed squads from the first
-six characters, and fight Hold the Centre on the Ruined Fort to a winner, with
+**Goal:** two players set up a match, muster sealed squads from the first six
+characters, and fight Hold the Centre on the Ruined Fort to a winner, with
 recap, a guide and a tutorial.
 
-**PR 1 — The battlefield (pure functions, no UI, no persistence).** New files
-only, and nothing imports them yet.
-
-1. `src/utils/games/battlefield/terrain.ts`: the terrain types, with their
-   movement costs, cover and sight (§13.1). Also the map format: one letter
-   per square, plus deployment zones and objective areas.
-2. `pathfinding.ts`: the cheapest path between two squares, with 1.5×
-   diagonals and no cutting corners. Also every square reachable for a given
-   number of movement points, which drives the tap-to-move shading.
-3. `lineOfSight.ts`: whether one square can see another.
-4. `cover.ts`: the cover a target has against an attacker: none (flanked),
-   half or full.
-5. `src/games/RealmArena/maps/ruinedFort.ts`: the Ruined Fort at full size
-   (§15). Its test checks the map is unchanged when turned upside down, and
-   that every deployment square can reach the centre.
-6. Unit tests for each.
-
-Reviewers: `caveman`.
-
-**PR 2 — The rules (pure functions).**
-
-1. `src/games/RealmArena/characters.ts`: the six characters and their
-   abilities as data (§13.6), the points budget, and the ready-made squad a
-   timed-out muster uses (§17.2).
-2. `src/games/RealmArena/rules.ts`, importable by the client as well as the
-   server. It covers:
-   - the AP a path costs;
-   - hit chance, grazes and damage (§13.3);
-   - which watchers react to a move, and in what order (§13.4);
-   - each ability's targets and effect;
-   - knock-outs and raising;
-   - scoring for the centre and for knock-outs (§13.7);
-   - the end of the battle and the tie-break chain (§5.1).
-3. Tests. For example: an 80% shot hits on 1–80, grazes on 81–90, and misses
-   on 91–100.
-
-Reviewers: `caveman`.
-
-**PR 3 — The engine (models, commands and wiring; no UI).**
-
-1. `RealmArenaModels.ts`:
-   - the invitation, with `CreateGame` (two seats, seat order rolled);
-   - `buildInitialRealmArenaState` (the map, empty squads, the muster
-     phase);
-   - the game document;
-   - `gameStateToModel`, with the sealed muster.
-2. `apiModels.ts`: the response DTOs.
-3. `RealmArenaLogic.ts`: `RealmArenaGameType` (the rotation, the battle-round
-   counter, the turn limit and the winner), and the three commands, each
-   recording every roll it uses.
-4. `meta.ts` with `available: false`, and the engine's one-liners: the
-   `GameLogic` barrel, `gameCommands.ts`, `mongodb.ts` and `GAME_META`.
-5. The turn-timeout adapter, registered in `turnTimeout.ts`.
-6. Tests:
-   - a `makeGame()`/`cmd()` harness, per `new-game.md`;
-   - a whole battle played by two scripted squads, checking AP, HP and scores
-     stay consistent throughout;
-   - a sealed-muster test, asserting an opponent's squad is absent from
-     `JSON.stringify(response)` until both players have mustered.
-
-Reviewers: `croupier` (the sealed muster), `gremlin`, `rulebook` (the wiring).
-
-**PR 4 — Setting up a match.**
-
-1. `POST /api/newgame/realmarena`: creates the invitation, following the other
-   games' routes.
-2. `/newgame/realmarena`: a thin setup screen, built from `GameSetupLayout`,
-   `UserInviteList` and `TurnTimerSelect`. Two players for now.
-
-It's reachable by URL only, since the game is still unavailable in the
-library.
-
-Reviewers: `locksmith` and `gremlin` (the new route), `caveman`.
-
-**PR 5 — The board, read-only.**
-
-1. `components/RealmArenaBoard.tsx`: the fort drawn as one ground image, with
-   an SVG layer on top for characters, HP and highlights. It sits inside
-   `BoardZoom`, with a deep `maxWidth` and a `focus` on the selected character
-   (§13.1).
-2. `/games/realmarena/[gameid]`: the board screen, built on `GameShell`,
-   `useGameData` (which listens for the push events itself) and
-   `useEndGame`. It shows the squads, the scores, the round and whose turn
-   it is.
-3. Placeholder ground drawn from the map's letters, so the art isn't holding
-   anything up (PR 9).
-
-Reviewers: `caveman`.
-
-**PR 6 — Mustering.**
-
-1. Picking the squad: one `AmountSteppers` row per character, up to two of
-   each, with the points left shown.
-2. Placing the squad in the deployment zone on the board, then sending the
-   sealed `Muster`.
-3. While waiting: "Bob is mustering", with nothing shown about Bob's squad.
-
-Reviewers: `caveman`, `croupier`.
-
-*Filled in by PR 6:*
-
-- **The muster starts from the ready-made squad**, placed the way a timed-out
-  muster's is (§17.2), so a player happy with it musters in two taps. The
-  steppers can go over the budget while a squad is rebalanced, but the squad
-  can't be placed until it's back within it.
-- **Placing is tap to pick up, tap to put down.** A tap on one of your squad
-  picks it up and brings the view to it. The next tap on an empty square of
-  your zone moves it there, and a tap on another of your squad swaps the two.
-- **A squad left as it starts is no secret.** The ready-made squad and where
-  it stands are public, and so is the turn timer, so an opponent can tell
-  what a timed-out muster brought, and guess at a squad mustered untouched.
-  That's accepted: the seal keeps a squad a player chose from being
-  counter-picked, and the default is a starting point, not a hiding place.
-
-**PR 7 — Taking a turn.**
-
-1. Selecting a character shades its reach for 1–4 AP. Tapping a square
-   previews the path, flags any watcher it would set off, and sends the move.
-2. Tapping an enemy shows the hit chance, graze and damage before you commit.
-   Abilities are `BuildRow`s in the turn sheet.
-3. Buttons for hunker down, go on watch and End turn. Each character has a
-   switch to keep still rather than go on watch when the turn ends.
-4. Each result (hit, graze, miss, reactions set off) is shown as it comes
-   back.
-
-Reviewers: `caveman`.
-
-*Filled in by PR 7:*
-
-- **A tap lines an action up, and a second tap sends it.** One tap on a
-  square in reach shows the path, its AP and every watcher it would set off,
-  with the odds of each overwatch shot. One tap on an enemy shows the chance
-  to hit, graze and damage. Tapping the same square or enemy again, or the
-  sheet's button, sends it. On a phone zoomed into a 36×48 board, one tap
-  that moved a character would make every slip of a finger a move.
-- **An enemy tapped while moving lines up an attack on it**, so the odds are
-  one tap away from any selected character. If it can't be attacked, the sheet
-  says why ("Out of range or out of sight"). A tap on one of your own squad
-  selects it instead, so you can switch characters mid-turn.
-- **Hunker down, going on watch and a shield wall go when they're tapped.**
-  They need nothing aimed, so there's nothing to line up first.
-- **The keep-still switches start on watch**, the way a timed-out turn leaves
-  every character (§17.2). Only a character with at least 2 AP left gets a
-  switch, since nobody else could go on watch.
-- **The result shown is the last action's**: every shot with the 1–100 roll
-  that decided it, and every strike, knock-out and score, in order. The whole
-  turn stays in the log. It lives on the device, so a reload loses it, as it
-  does anything lined up but not sent.
-- **What's in reach is always on show.** Each box under the board carries a
-  crosshair with the number of enemies that character's weapon could hit from
-  where it stands. Selecting one of your own floats a list over the foot of the
-  board: the three it's likeliest to hit, each with its chance (a strike is
-  100%), and each enemy in reach wears its own chance in a small pill above its
-  figure. With a move lined up, the list and the pills read from the end of
-  the move, so you see what a square puts in reach before going there, and the
-  list says when the move would leave too little AP to attack. Reach ignores AP left, since
-  where a character stands decides what it can hit; a refused move previews
-  nothing.
-
-**PR 8 — Watching the other player's turn: replay and recap.**
-
-1. The replay adapter (`replay.ts`), which rebuilds from scratch since nothing
-   is shuffled. And `recap.ts`, whose events never show a squad before the
-   muster is over, wired in with `import "@/games/RealmArena/recap"` in
-   `src/utils/games/recap.ts`.
-2. On the board:
-   - `useTurnRecap` with `TurnRecapScreen`;
-   - `useTurnNavigation` with `TurnNavControls`, to step through the
-     opponent's turn one action at a time. The view follows each action
-     through `BoardZoom`'s `focus`, as Race Cars does.
-3. Tests and upkeep:
-   - `replay.test.ts`, with the random-number source stubbed to throw;
-   - `recap.test.ts`;
-   - Realm Arena's row in the per-game table in `turn-recap-and-planning.md`.
-     Planning: not offered, because every future attack would need a roll.
-
-Reviewers: `croupier`, `gremlin`.
-
-*Filled in by PR 8:*
-
-- **A recap row is a line the log already wrote.** An action's row is the
-  narration `RealmArenaAct` wrote for it, read off the replayed snapshot, so
-  the log, the review and the recap tell a shot in the same words, and the
-  response needs no names of its own. Every command keeps a row, a quiet move
-  included, since a reaction to a line of the log lands on the row of the
-  command that wrote it. Ending a turn is always a row too: it's the edge
-  between one turn and the next, so a player's feed opens on their own End
-  turn rather than reaching back into the turn before it.
-- **A muster's row says only that it happened.** It never reads the
-  command's picks or the snapshot's `myMuster`, which holds the squad of
-  whoever the feed is built for: a row is written once and read by whoever
-  it's shown to. The replayed snapshots keep the seal as the live response
-  does, since they're built by the same `gameStateToModel`.
-- **The review follows each action by what it changed.** Each step of the
-  review brings into view every character it changed, where they stood before
-  and where they stand now, compared across the states either side of it. So
-  a reaction is followed too: the watcher spent its banked AP. A step that
-  handed the turn on changed everyone's AP, so the view stays where it is,
-  unless it ended the battle.
-  That needs the snapshot before the one shown, which `useTurnNavigation` now
-  exposes as `previousSnapshot`: with the replay adapter and the recap import,
-  the third shared file this PR touches.
-- **Planning is out by design.** A planned shot would be one made-up roll,
-  and the turn sheet already shows its odds before it's sent.
-  `plannableCommands` stays empty, and that's the control: the timeline route
-  leaves recorded rolls in a planned command, so listing `RealmArenaAct`
-  would let a player choose their own.
-
-**PR 9 — Guide, tutorial and placeholder art.**
-
-1. `guide.ts` (Goal, Your turn, Action points, Cover and flanking, Overwatch
-   and guard), in `GAME_GUIDES`.
-2. `tutorial.ts`, in `GAME_TUTORIALS`: a tour of the live board covering your
-   squad, the reach shading, an enemy's hit chance, the centre, and End turn.
-3. Placeholder art (round 6): the ground drawn in flat colours from the map's
-   letters (PR 5), standing up isometrically at each terrain's height
-   (§13.1), and a simple marked figure for each of the six characters. A tile
-   sheet's isometric tiles can replace the flat colours square by square,
-   since the board already draws the same 2:1 diamonds.
-   Real art can land later, whenever it's ready, exported to `art-masters/`
-   and served through `npm run optimise-art`, without touching the rules.
-
-Reviewers: `rulebook`, `caveman`.
-
-*Filled in by PR 9:*
-
-- **The tile art came first.** Two isometric sheets — an outdoor one (grass,
-  rock, trees) and one of brick walls and rubble — landed before this PR,
-  so the placeholder colours went straight to art. Both are served whole
-  from `public/art/realmarena`, with their masters in
-  `art-masters/realmarena`, and `src/games/RealmArena/art.ts` says which
-  cell draws each terrain. Every cell stands its square's diamond along its
-  foot, the same 2:1 diamond the board draws, so a sprite lands on its square
-  by scale alone.
-- **Open ground is one pattern of grass**, not a sprite per square: 18 kinds
-  of grass on a tile six diagonals each way, laid over the whole slab, which
-  is the one image §13.1 asked the flat ground to be.
-- **Everything else stands on its square at the rules' heights.** Rubble is a
-  heap of brick, a low wall a broken one, a wall a full height with
-  battlements, trees a pine a little under the sheet's size so a crown stays
-  close to the height that hides a character. A tower, a stair and a
-  parapet's foot are a tall brick column cut down to their height along the
-  square's edges (`isoColumnOutline`), floored with grass-grown rock where
-  someone stands on them, and a parapet's battlements stand a full height
-  under its top, so they rise from the tower's floor as the curtain wall's do
-  from the ground. The heights are read from `TERRAIN`, so the art can't
-  disagree with the rules about how tall anything is. Ground a map raises
-  (§25.3) is still drawn in flat colour under its art; no map raises any yet.
-- **The figures stay discs with each character's mark**, as PR 5 drew them:
-  they're what the art has no sheet for yet.
-- **The tour opens on whichever phase the match is in.** A first match
-  usually opens on the muster, so the tour covers it — the squad picked
-  below and placed on the board, sealed until everyone has mustered — and
-  the battle steps (your units, the reach, the targets in reach, End turn)
-  only show on a battle turn. The guide carries all of it, and both read
-  their numbers from `rules.ts`.
-
-**PR 10 — Turn it on.**
-
-1. `available: true` in `meta.ts`.
-2. `npm run icons`, committing `public/icons/og-game-realmarena.png`.
-3. One line in the new-games group of `whatsNew.ts`.
-4. A full crew pass over the whole game.
+- **PR 1, the battlefield.** Terrain, pathfinding, line of sight and cover in
+  `battlefield/`, and the Ruined Fort, tested to be unchanged upside down.
+- **PR 2, the rules.** `characters.ts` and `rules.ts`, which settled the cases
+  listed under §13.6.
+- **PR 3, the engine.** Models, commands, wiring and the turn-timeout
+  adapter, which settled §17.2's sealed squad and hand-off.
+- **PR 4, setting up a match.** `POST /api/newgame/realmarena` and a thin
+  setup screen.
+- **PR 5, the board, read-only.** Inside `BoardZoom`, with a `focus` on the
+  selected character. The viewer's own sealed squad is drawn hollow where it
+  will stand.
+- **PR 6, mustering.** It starts from the ready-made squad, so a player happy
+  with it musters in two taps. A character is placed by tapping to pick it up
+  and tapping to put it down. A squad left as it starts is no secret, which
+  is accepted: the seal stops counter-picks, not guesses.
+- **PR 7, taking a turn.**
+  - The first tap lines an action up, and a second tap sends it: the path, its
+    AP and the watchers it would set off, or the chance to hit, graze and
+    damage.
+  - An enemy tapped while moving lines up an attack on it.
+  - Stances (hunker down, watch, shield wall) go on the first tap.
+  - The keep-still switches start on watch.
+  - The sheet shows the last action's result with its rolls.
+  - Each enemy in reach wears its chance to hit, previewed from the end of a
+    lined-up move.
+- **PR 8, replay and recap.**
+  - A recap row is the line the log already wrote.
+  - A muster's row says only that it happened.
+  - The review follows each action by the characters it changed.
+  - Planning is out by design: `plannableCommands` stays empty, since a
+    planned `Act` would let a player choose their own rolls.
+- **PR 9, guide, tutorial and art.** Two isometric tile sheets at the rules'
+  heights, with open ground as one pattern of grass. The tour opens on
+  whichever phase the match is in.
+- **PR 10, turn it on.** *Not yet done.* `available: true`, the share card,
+  one What's new line and a full crew pass. It needs a command version first
+  (§25.5).
 
 ### 17.4 Milestones B and C: after the first playable version
 
-B1 and B2 are built. Round 7 put **Milestone C** (below) next, after PR 10.
-The rest of Milestone B (B3, B5–B7) follows C, in its own order. C4 replaces
-B4.
+| Step | What | Status |
+|---|---|---|
+| B1 | Battlefields for three and four players (§19) | Built |
+| B2 | Free-for-all for three and four players | Built |
+| C1 | Status effects (§20) | Built |
+| C2 | Items bought at muster (§21) | Built |
+| C3 | Destructible low cover (§22) | Built |
+| **C4** | **Battle visuals: hit text, then the shot and the fireball in flight (§26)** | **Next** (round 10) |
+| C5 | Character mastery, earned by what a character does (§23) | After C4. Replaces B4 |
+| B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
+| B5 | Fog of war, if it's chosen (§8) | After C |
+| B6 | More factions | After C |
+| B7 | A second mission and battlefield | After C |
 
-In the order §10 set, and in less detail for now:
+**What B2 settled:**
 
-- **B1 — Battlefields for three and four players** (§19): the Four-Gate
-  Fort for four and the Ring Fort for three, as map files and their tests,
-  with nothing choosing them yet.
-- **B2 — Free-for-all for three and four players:**
-  - choosing the battlefield from the player count (§19.1);
-  - budgets and turn limits by player count (§13.6, §13.8);
-  - a dropout adapter, so a player who stops turning up has their squad
-    leave while their score stands (§4).
+- The party's size picks the map.
+- A round ends with the last seat still playing.
+- A dropped player's squad leaves the battlefield. Nobody scores it, raises
+  it, or is left facing it on watch. Their score stands, but the winner is the
+  best-placed player still there, and their undo snapshots go with them.
+- Nobody is dropped from a duel or during the muster.
 
-  *Filled in by B2:*
-
-  - **The party's size picks the map** (§19.1): the Ruined Fort for two,
-    the Ring Fort for three and the Four-Gate Fort for four. The host picks
-    nothing more than before, and the setup log names where each seat
-    deploys.
-  - **A round ends with the last seat still playing.** The rotation steps
-    past a seat that has been dropped or whose squad has nobody standing
-    (§5.1), so "the last seat's End turn" became "an End turn that hands the
-    turn back round the table". At two players nothing changes.
-  - **A dropped player's squad leaves the battlefield.** Its characters are
-    taken off rather than downed, so nobody scores a knock-out for them,
-    nobody can raise them, and none is left on watch. Their score stands in
-    the final line, but the winner is the best-placed player still there,
-    and a drop that leaves one squad standing ends the battle. Every undo
-    snapshot goes with them, since restoring one would put the squad back.
-  - **Nobody is dropped from a duel, or during the muster.** A two-player
-    battle is still abandoned, as before (§17.2). A muster is one turn each,
-    so nobody can miss three in a row before it's over.
-- **B3 — Teams of two**, in alternate seats, with a team score (§5.2).
-- **B4 — Unlocks** (§7). *Replaced by C4, character mastery (§23).*
-- **B5 — Fog of war**, if it's chosen (§8). It's hidden state in every
-  response and every replay (`croupier`).
-- **B6 — More factions.**
-- **B7 — A second mission and battlefield.** This was B1, until the three-
-  and four-player battlefields went first.
-- **Milestone C — depth, in this order** (round 7, §11.7):
-  - **C1 — Status effects** (§20).
-  - **C2 — Items** bought at muster (§21).
-  - **C3 — Destructible low cover** (§22).
-  - **C4 — Character mastery** (§23).
-
-  Each step depends on the one before it. Items carry effects, blasting needs
-  something that blasts, and mastery's first options are built from all
-  three. Each has its own PRs, listed in its section.
-- **Later platform work:** the shared team turn (§5.2). Undo for an action
-  that rolled nothing and hurt nobody — a move that set off no reactions among
-  them — is built (`docs/undo.md` §16, "The eighth game").
+**Later platform work:** the shared team turn (§5.2).
 
 ### 17.5 The riskiest part
 
-The riskiest part is taking a turn on a phone (PR 7): choosing among up to
-six characters, reading a 36×48 board while zoomed in, and tapping
-accurately. It deserves the most attention in review and playtesting, so
-it's worth getting PRs 5 and 7 onto a real phone early, even with placeholder
-art.
+The riskiest part is still taking a turn on a phone (PR 7): choosing among up
+to six characters, and tapping accurately on a big board while zoomed in.
+Playtest it on a real phone.
 
 ---
 
@@ -1424,97 +1151,36 @@ a third and fourth.
 
 ### 20.3 Engine
 
-- `Fighter` gains `effects: Partial<Record<EffectId, number>>` (the
-  counts), plus the id of whoever set it burning. `hunkered` and `shieldWall`
-  fold into it, and `startTurn` counts effects down with the cooldowns'
-  code. Nothing migrates the old booleans: the game isn't available yet, so
-  only playtest games have the old shape, and they can go.
-- `fighterStatus` (`ui.ts`), which already lists the stances on a unit's box,
-  lists the effects.
-- **`startTurn` returns an `Outcome`**, not just fighters, because burning
-  can now hurt, down and score at the start of a turn. The hand-off in
-  `CheckEndTurn` applies those events and writes them to the log. It rolls
-  nothing, so replay is unchanged.
-- **A squad can be wiped out at the start of its own turn.** The rotation
-  already steps past a squad with nobody standing (B2), but it has to check
-  again after the burning, not only before it. If that leaves one squad
-  standing, the battle ends there.
-- New events: `effect` (applied, refreshed or cleared) and `burned`. Recap
-  narrates them in the log's words, as every other event is (§17.3 PR 8).
-- Undo needs no change. An action that applies an effect either rolled or hurt
-  somebody, except a mark, which is stored in the snapshot like everything
-  else.
+*Built.* The engine as it stands:
+
+- `Fighter.effects` holds the counts, and remembers who last set the fighter
+  burning. The two stances are folded into it. The counts go down with the
+  cooldowns' code.
+- **The End turn that hands on begins the next turn** (§17.2), not
+  `CheckEndTurn`. Only a game over that `CheckGameOver` finds actually
+  finishes a match, so a squad burned out at the start of its turn has to be
+  found there. The hand-off passes on again past a squad that is burned out,
+  and nothing burns once the turn limit has been played out.
+- **Burning gets its own line in the log**, after the End turn's line. End
+  turn's outcome carries every event, so the recap reads the centre's points
+  from those events.
+- New events: `effect` (applied, refreshed or cleared by a heal; an effect
+  running out is silent) and `burned`. `afflicted` is the one way an effect
+  is put on. A mark would also be an `effect` event.
+- **A stunned character can't go on watch.** A heal can be used on an ally
+  that isn't hurt but has something to clear.
 
 ### 20.4 PRs
 
-1. **Rules and engine:** effects in `characters.ts` and `rules.ts`, folding
-   in the two stances, Burning on Fireball, Heal clearing effects, and
-   `startTurn`'s outcome. Its one caller, the hand-off in `CheckEndTurn`,
-   changes in the same PR, applying the start-of-turn events and checking
-   for the end of the battle after them, so no PR leaves burning that downs
-   and scores without a log. Tests for each row of §20.1 and each rule in
-   §20.2. Reviewers: `caveman`, `gremlin` (a squad burned out at the start of
-   its turn).
-2. **Board:** the effect marks on figures and unit boxes, recap narration and
-   guide text. Reviewer: `caveman`. The recap's End turn row is quiet today
-   even when burning knocks someone out as the next turn begins; it should
-   tell that knock-out, from the events End turn's outcome carries.
+Both built. **PR 1** added the rules and the engine above. **PR 2** added the
+board:
 
-*Filled in by PR 1*, in `characters.ts`, `rules.ts` and `RealmArenaLogic.ts`:
-
-- **The End turn begins the next turn, not `CheckEndTurn`.** The command
-  pipeline asks `CheckGameOver` before `CheckEndTurn`, and only a game over
-  found there finishes the match (results, notifications). So a squad burned
-  out in `CheckEndTurn` would leave a battle over that nobody finished.
-  `RealmArenaEndTurn` now hands off: it passes the turn on, ends the round if
-  it goes back round the table, begins the next seat's turn, and passes on
-  again past a squad burned out, stopping where the battle is over.
-  `CheckEndTurn` only moves `currentTurn` to that same seat. The muster's
-  last command begins the first battle turn the same way.
-- **Nothing burns once the turn limit is played out.** The last round's last
-  End turn ends the battle before anyone's turn begins.
-- **The burning gets a line of its own in the log**, after the End turn's,
-  naming everyone by owner: "Bob's Knight burned for 1". End turn's outcome
-  carries every event, including these, so the recap reads the centre's
-  points from them rather than from the score, which a knock-out by burning
-  adds to as well.
-- **A heal is for an ally that is hurt or has something to clear.** One that's
-  only burning, slowed or stunned can be healed for nothing but the clearing.
-- **A stunned character can't go on watch**, by choice or at the end of a
-  turn, since it can't react until its owner's next turn.
-- **Burning remembers the last character to set it**, and scores nobody if
-  that character's squad has left the battle (a dropped player's).
-- **An effect running out is silent.** `effect` events say an effect was put
-  on, put on again, or cleared by a heal; a stance keeps its own event.
-- **No shot carries an effect yet**, so "a shot applies its effect only on a
-  hit" waits for the first one (Crippling shot, §23). `afflicted` is the one
-  way an effect is put on, and items and mastery options build on it.
-
-*Filled in by PR 2*, in `art.ts`, `ui.ts`, `recap.ts`, `guide.ts` and the
-board's components:
-
-- **Every effect has a drawn mark**, the stances included: a coin with one
-  bold glyph (a flame, a bolt, an hourglass, a crosshair, chevrons pressing
-  down, a shield). They're one sheet, `public/art/realmarena/effects.png`,
-  rendered from its SVG master in `art-masters/realmarena/effects.svg` by
-  `npm run ra-marks`, and cut by `EFFECT_ART` like any other sprite.
-- **A figure wears its marks in a column down its left**, opposite the AP
-  pips, whoever's turn it is, and none once it's down. The tooltip names them,
-  since it can't show them.
-- **The unit's box and the selected character's card spell them out**, each
-  mark with its name, so an enemy's effects can be read too (it has no box).
-  The box's own last line says only whether it's on watch off its turn.
-- **What an action did leads each effect line with its mark**: put on, put on
-  again, cleared, burning, and the two stances.
-- **The recap tells what burning did as a turn began** in a row of its own
-  under the End turn, titled with the line the hand-off wrote — every such
-  line, oldest first, when it burned a squad out and passed on. It's a
-  knock-out row when the burning downed someone, so the summary leads with it,
-  and it names whose squad it hurt.
-- **The guide covers burning** in its section on action points: what a
-  fireball leaves, what a knock-out by it scores, that a heal puts it out, and
-  where a character's effects are shown. Stunned, Slowed and Marked wait for
-  the items and options that cause them (§21, §23).
+- Every effect has a mark drawn on a coin. They share one sheet, rendered from
+  an SVG master by `npm run ra-marks`.
+- A figure shows its marks down its left. The unit's box and the selected
+  character's card spell them out.
+- The recap has a row for burning as a turn begins.
+- The guide explains burning.
 
 ## 21. Items (C2)
 
@@ -1562,120 +1228,40 @@ function of the ground.
 
 ### 21.3 Engine and muster
 
-- `MusterPick` gains an optional `item`, checked by `musterRefusal` against
-  the budget with the characters. `Fighter` gains `item: ItemId | null`.
-- Two new `Act` kinds, each shaped like the ability it resembles: a throw is
-  `{ kind: "throw", fighter, at }`, aimed at a square as Fireball is, and a
-  draught is `{ kind: "draught", fighter, target }`, aimed at an ally as
-  Heal is.
-- **Reused, not rebuilt:** `fireballArea` is the 3×3 for the thunder flask,
-  the smoke pot and the fire flask's blast, renamed `areaAround`. Heal, the
-  healing draught and Purify (§23) share one heal-and-clear resolver.
-- **The muster screen** picks an item while the squad is placed: tap one of
-  your squad to pick it up, as today (§17.3 PR 6), and its card offers the
-  four items as `BuildRow`s with their cost. The points left counts items
-  too.
-- **On the board**, an item is a `BuildRow` in the turn sheet like an
-  ability. Arming one shades its range through `rangeSquares` (`ui.ts`): its
-  `"fireball"` kind becomes a general area kind that takes a range, for
-  Fireball and every throw, and the draught uses `"nextTo"`, as Heal does.
+*Built.*
+
+- **Items are data:** `ITEMS` in `characters.ts`. `MusterPick` has an optional
+  `item`, which `musterRefusal` checks against the budget (`musterPoints`).
+  `Fighter.item` is the item a fighter carries, or none.
+- **Two new `Act` kinds.** A throw is `{ kind: "throw", fighter, at }`, aimed
+  at a square like Fireball. A draught is `{ kind: "draught", fighter, target }`,
+  aimed at an ally like Heal. Its carrier can drink it, which Heal can't do
+  for the Cleric.
+- **Reused, not rebuilt.** `areaAround` (once `fireballArea`) is every 3×3.
+  Heal, the draught and Purify (§23) share one heal-and-clear resolver
+  (`healRefusal`, `mend`). Fireball and the flasks share `aimRefusal` and
+  `land`.
+- **The smoke lives on the thrower, as the square it landed on.** It isn't an
+  effect, because an effect happens to the character it's on. It clears
+  as a count of 1 would, and goes with the thrower if the thrower is downed.
+  `smokeSquares` is what `shotOdds`, `reactionsTo` and the board read. Clouds
+  don't stack. A guard strikes into smoke all the same.
+- **An item is used up as soon as it's used**, whatever it hits. A throw that
+  hurts nobody, and a draught, can be undone, and the item goes back.
+- **The muster screen** offers each character the four items as `BuildRow`s
+  when it's picked up. One the player can't afford is greyed.
 
 ### 21.4 PRs
 
-1. **Rules:** items as data, the item action, smoke in `shotOdds` and
-   `reactionsTo`, the muster check with items. Reviewer: `caveman`.
-2. **Muster and board:** the item picker, the turn sheet rows, the smoke
-   drawn on the board, recap narration, guide text. Reviewers: `caveman`,
-   `croupier` (an item in a sealed muster).
+Both built. **PR 1** added the rules above. **PR 2** added the muster and the
+board:
 
-*Filled in by PR 1*, in `characters.ts`, `rules.ts` and `RealmArenaLogic.ts`:
-
-- **Items are data**, as abilities are: `ITEMS` in `characters.ts`, each with
-  its points, AP and what it does. A thrown one has a `range`
-  (`THROW_RANGE`, 6), and `area` when it lands on the 3×3 rather than one
-  square. Tuning one is an edit there.
-- **The smoke lives on the thrower as `smoke`, the square it landed on, not as
-  an effect.** It lasts exactly as a count-of-1 effect would — cleared at the
-  start of the thrower's next turn, and gone with the thrower if it's downed —
-  but an effect is something that happens to the character it's on, which
-  shows its mark on that figure and lists it on the unit's box. The thrower
-  has nothing happening to it, and the cloud is drawn on the ground (PR 2).
-  `smokeSquares` is the cloud, every thrower's while it lasts: what
-  `shotOdds` and `reactionsTo` read, and what the board will draw.
-- **Smoke takes 20 off a shot at anyone standing in it, friend or foe of the
-  thrower, and clouds don't stack.** Overwatch can't fire at a mover stepping
-  onto a smoked square; a guard strikes in it all the same, since melee
-  doesn't aim. A mover stepping out of the smoke can be shot as it lands.
-- **A thrown item's event is `thrown`**, shaped like the fireball's: who threw
-  what where, everyone it hit, and the damage. A smoke pot hits nobody. A
-  draught is the `healed` event a Heal makes, marked `draught`, with `fighter`
-  the carrier and `target` whoever drank it.
-- **The healing draught may be drunk by its carrier**, which the Cleric's
-  Heal still can't do for the Cleric. Otherwise its check is Heal's: an ally
-  next to it that is hurt or has something to clear. One `healRefusal` and
-  one `mend` serve both, as one `aimRefusal` and one `land` serve the
-  fireball and the flasks.
-- **An item is used up as it's used**, whatever it hit, so a fire flask
-  thrown at an empty square is gone. Its event still carries its damage, as a
-  fireball's does when it hits nobody.
-- **A throw that lands on nobody can be taken back**, a smoke pot always,
-  and so can a draught; a flask that lands on anyone can't, even a thunder
-  flask that only stuns (`docs/undo.md`, "The eighth game"). Undo puts the
-  item back.
-- **A muster pick's `item` is one id or nothing**: anything else is refused,
-  and null is read as none. `pickOf` keeps a pick's character, square and
-  item and nothing else a request carried, for the muster, the undo snapshot
-  and `myMuster` alike. `musterPoints` is what a muster costs with its items.
-- **The board tells what an item did** in `eventLines`, with a glyph for each
-  item (`ITEM_MARK`) until PR 2 decides how items are drawn. Nothing yet
-  offers an item at muster or in the turn sheet, and the recap reads a throw
-  only through its log line.
-- **`fireballArea` is `areaAround`.** `rangeSquares`' `"fireball"` kind is left
-  for PR 2, which is the first to shade a throw.
-
-*Filled in by PR 2*, in `art.ts`, `ui.ts`, `useTurnDraft.ts`,
-`useMusterDraft.ts`, `recap.ts`, `guide.ts` and the board's components:
-
-- **Every item has a drawn mark**: a parchment tile with the item on it, rather
-  than the coin an effect is, so something carried never reads as something
-  happening. They're one sheet with the smoke pot's cloud,
-  `public/art/realmarena/items.png`, rendered from
-  `art-masters/realmarena/items.svg`, cut by `ITEM_ART` and `SMOKE_ART`. The
-  script that renders the effects' sheet renders every SVG master in the folder
-  now, as `npm run ra-marks`.
-- **The muster picks items while the squad is placed.** Tapping one of the
-  squad picks it up, as before, and the sheet offers it the four items as
-  `BuildRow`s with their points; tapping the one it carries leaves it behind.
-  One the points left can't pay for, even trading in what it carries, is
-  greyed. The points left count the items (`musterPoints`). Going back to
-  change the squad drops what was placed, the items with it.
-- **A figure wears its item by its right shoulder**, above the AP pips, and a
-  sealed squad being placed wears its own the same way, for its owner alone.
-  The tooltip names it. A unit's box lists it after its effects; the selected
-  character's card lists it with its weapon and abilities, so an enemy's item
-  can be read too.
-- **The turn sheet has a row for the item**: `Throw` for a flask or a smoke pot,
-  `Aim` for the draught. A throw shades its range through `rangeSquares`, whose
-  `"fireball"` kind is now a number — how far something aimed at a square
-  reaches — for Fireball and every throw. Lined up, the board shades where it
-  lands: the 3×3, or the one square for a fire flask. What's lined up says what
-  it would do to whom ("Leaves Bob's Knight stunned"), or, for a smoke pot,
-  what the cloud does.
-- **A draught can be lined up on its carrier**, by tapping the carrier itself,
-  as long as it's hurt or has something to clear. That's the one aim a tap on
-  the acting character lines up; any other still selects it. A heal or a
-  draught lined up says what it would clear as well as heal.
-- **The smoke is drawn as a cloud**: the squares under it greyed on the ground,
-  and a puff of smoke standing on each, drawn in depth order under the figure
-  on its square, thin enough to see whoever is in it. A shot lined up at a
-  character in smoke says so.
-- **What an action did leads each item line with the item's mark.** The recap,
-  whose rows take a glyph, tells a throw as a row of its own kind
-  (`ra_thrown`) with a glyph per item, after a knock-out and a fireball and
-  ahead of a hit; a draught is a heal with the draught's glyph. A muster's row
-  still says nothing of what was mustered, items included.
-- **The guide covers items** in its sections on the goal (giving one out while
-  placing) and on action points (what each does), and Stunned with them.
+- Each item is drawn on a parchment tile, on the same sheet as the smoke cloud.
+- A figure wears its item by its right shoulder.
+- The turn sheet has a `Throw` or `Aim` row for the item.
+- The smoke is drawn as a cloud you can see through.
+- The recap has a `ra_thrown` row.
+- The guide covers the items.
 
 ## 22. Destructible low cover (C3)
 
@@ -1702,90 +1288,78 @@ and opening ground.
 
 ### 22.2 Engine
 
-- The battle state gains `blasted: Square[]`. The battlefield every rule
-  reads becomes `battlefieldWith(map, blasted)`: the map's terrain with each
-  blasted square swapped for a new `TERRAIN` entry, scorched ground
-  (`{ ...OPEN, name: "Scorched ground" }`). It stays a pure function of persisted
-  fields, so the client, the server and a replay all build the same ground.
-  `battlefield/` gets the one helper. Nothing else there changes, since paths,
-  sight and cover already read the terrain they're given.
-- New event: `blasted`, with its squares.
-- **The board needs no new layer.** It draws each terrain from its entry in
-  `TERRAIN_ART` (`src/games/RealmArena/art.ts`, PR 9), which has to cover
-  every `TERRAIN` letter, so scorched ground is one more art entry, and a
-  terrain of height 0 (§25), so it stands level with the ground around it.
-  Open ground's grass is one pattern under the whole map, so scorched ground
-  is drawn over it, square by square.
-- The map tests check the maps as drawn. Blasting only takes cover away, and
-  never walls, so nothing they prove can be undone.
+*Built.*
+
+- **Low cover is `destructible`**, a flag on its `TERRAIN` entries. Scorched
+  ground is the letter `_`: open ground under another name.
+- **The battle state keeps `blasted`**, in the order the squares went.
+  `battlefieldWith(field, blasted)` clears each destructible square named in
+  it to scorched ground, and ignores anything else, so no list can blast a
+  wall. `battlefieldOf(map, blasted)` is the battlefield as it stands, and
+  the server, the board, the recap and a replay all read it.
+- **What blasts is data:** `blasts` on Fireball and on the fire flask.
+  `blastedBy` is the cover something would clear, and both the resolver and
+  the turn sheet's preview use it.
+- **The `blasted` event** names the squares and who blasted them. It comes
+  after the damage, the knock-outs and the effects.
+- The map tests still hold, because blasting only removes cover, never walls.
+- A fire flask that blasts but hurts nobody can still be undone. The snapshot
+  holds what was blasted.
 
 ### 22.3 PRs
 
-One PR: the rule, the helper, the event, the scorched squares on the board,
-and a line in the guide. Reviewer: `caveman`.
+One PR, built. It added the rule, the helper, the event, and scorched ground
+drawn from its own sheet (`npm run ra-marks`). When a fireball or flask is
+lined up, the board shades the cover it would blast, and the sheet counts it.
+The guide got a line too.
 
-*Filled in by the PR*, in `terrain.ts`, `characters.ts`, `rules.ts`,
-`RealmArenaLogic.ts`, `RealmArenaModels.ts`, `art.ts` and the board:
-
-- **Low cover is `destructible`**, a flag on its `TERRAIN` entries, and
-  scorched ground is the letter `_`, open ground under another name.
-  `battlefieldWith(field, blasted)` (`battlefield/terrain.ts`) clears every
-  square named that holds destructible terrain to scorched ground, level with
-  the ground it stood on, and ignores any other square, so no list it's
-  handed can blast a wall. Given nothing to clear, it hands back the map
-  itself.
-- **What blasts is data**: `blasts` on Fireball and on the fire flask, as
-  `area` and `effect` are, so whether a fireball should blast at all (§24,
-  question 4) is one edit. `blastedBy(field, what, at)` is the cover
-  something landing at a square would clear — every square of it in the 3×3
-  round that square — which the resolver blasts and the turn sheet previews
-  alike.
-- **The `blasted` event names the squares and who blasted them**, told after
-  the damage, the knock-outs and the effects. A square already gone isn't
-  blasted again, so a blast with no cover left in reach tells nothing.
-- **The state keeps `blasted`**, the squares in the order they went, and
-  `battlefieldOf(map, blasted)` (`maps/index.ts`) is the battlefield as it
-  stands: what `battleOf`, the board and the recap's tip all read. Absent on a battle from before it, it's
-  read as nothing blasted. It's on the wire for every viewer, as the
-  battlefield is, and a replay builds it again from the events.
-- **A fire flask that lands on nobody is still undoable** when it blasts
-  cover (`docs/undo.md`, "The eighth game"): the snapshot holds what was
-  blasted, and undo puts it back. A fireball never was undoable.
-- **Scorched ground is drawn from its own sheet**,
-  `public/art/realmarena/scorched.png`, rendered by `npm run ra-marks` from
-  `art-masters/realmarena/scorched.svg`: three kinds of charred earth, ash,
-  embers and chips of brick, cut to the square's footprint. On flat ground
-  the board lays it over the grass, square by square, before anything is
-  shaded; on raised ground it stands on the square's plinth as any terrain
-  does.
-- **Lined up, a fireball or a fire flask shades the cover it would blast** as
-  it shades the blast, and the turn sheet counts it ("Blasts away 2 squares
-  of low cover"). What an action did lists the squares blasted after the
-  rest, and the log says so too. The recap's rows are unchanged: a blast is
-  part of the fireball or the throw that made it.
-- **The guide says so** in its section on action points, beside the fireball
-  and the fire flask.
-
-## 23. Character mastery (C4)
+## 23. Character mastery (C5)
 
 *Agreed in round 7* (§11.7, answer 3): **playing a character unlocks more
 flexibility with that character.** This replaces the game-wide unlocks of §7.
 It's closest to Final Fantasy Tactics' jobs: you get more out of a Knight by
 fielding Knights. It keeps §7's principles: options, not power, so a newer
-player isn't outgunned, and no named characters with levels and wounds to
-keep.
+player isn't outgunned. There are no named characters with levels and wounds
+to keep track of.
+
+*Changed in round 10* (§11.10, answer 2): **mastery is earned by what a
+character does, not by being in a battle.** Being there earns a little, and
+every attack and ability earns more. Round 10 also put battle visuals (§26)
+first, so mastery moved from C4 to C5.
 
 ### 23.1 How it's earned
 
-- **A character's mastery is the number of your finished battles it fought
-  in.** Each character mustered in a battle that counts as played (the
-  achievements' rule: at least two turns) earns one, win or lose. Two of the
-  same character in one battle still earn one.
-- **Three ranks:** rank 1 after 2 battles, rank 2 after 5, rank 3 after 10.
-  Each rank unlocks one option for that character.
-- **It's per player and per character.** Six characters at rank 3 is 60
-  battles' worth, which is a long tail. Getting one character to rank 1 takes
-  two battles.
+- **Mastery is experience (XP), per player and per character.** It's earned
+  in battles that count as played (the achievements' rule: at least two
+  turns), win or lose.
+- **Acting earns XP, and being there earns a little.** *Proposal:*
+
+  | What the character did in the battle | XP |
+  |---|---:|
+  | Fought in it (once, however many of that character were mustered) | 2 |
+  | Each attack: a shot, an aimed shot, a strike, or a reaction on overwatch or guard | 3 |
+  | Each ability used: Cleave, Shield wall, Fireball, Heal, Raise, and the options of §23.2 | 5 |
+  | Each item used | 3 |
+
+- **An action earns the same whatever it rolls.** A miss earns as much as a
+  hit, and a knock-out earns nothing extra. XP pays for using the character,
+  so the dice don't decide who progresses. Winning doesn't count either.
+- **Moving, hunkering down and going on watch earn nothing.** Every
+  character can do them, so paying for them would just pay for being there
+  under another name. A watch earns XP when its reaction fires.
+- **Two of the same character** pool their actions into the one mastery.
+- **Three ranks:** rank 1 at 60 XP, rank 2 at 180 and rank 3 at 450. A
+  character that's used, attacking about once a turn and using its ability
+  when it can, earns about 30–50 XP in a two-player battle. That's rank 1 in
+  about two battles and rank 3 in about ten, round 7's pace. A character kept
+  at the back gets there more slowly.
+- **The weights and thresholds are data**, and XP is worked out from the
+  counts stored for each battle (§23.3). Retuning them reprices every
+  player's history at once, with nothing to migrate.
+- **Balance to watch.** The support characters earn mostly through abilities
+  with cooldowns, and a Knight holding the keep may attack little. If the
+  playtest shows one character's mastery lagging well behind the others, raise
+  its ability's weight.
 
 ### 23.2 What an option is
 
@@ -1793,9 +1367,8 @@ keep.
   or one ability. It's picked per figure at muster, like an item, and costs
   the same points as the kit it replaces. A character with no option picked
   is the starter character of §13.6.
-- **An option is a sidegrade.** It trades something for something else and
-  never adds HP, accuracy or AP outright. Where it adds something, it gives
-  something up.
+- **An option is a sidegrade.** It never adds HP, accuracy or AP outright.
+  Anything it adds, it pays for by giving something else up.
 - **The options picked are public once the battle starts**, like items.
   During the muster they're sealed with the rest of the squad.
 
@@ -1810,69 +1383,66 @@ The rank-1 options, built from effects, items and blasting:
 | Mage | **Frost bolt** | Bolt | Damage 2 instead of 3, and slows on a hit |
 | Cleric | **Purify** | Raise | Clear every effect from allies within 1 square, and give each 2 HP (2 AP, 3 turns) |
 
-The rank-2 and rank-3 options are left to design once C1–C3 have been
-played. Two that already fit: a **second item slot** (the item is still paid
-for), and a **second weapon option** per character.
+The rank-2 and rank-3 options will be designed once C1–C3 have been played.
+Two already fit: a **second item slot** (the item still has to be paid for) and a
+**second weapon option** per character.
 
 ### 23.3 Engine
 
-- **Mastery is read from game results, not a new collection.** Every
-  finished game writes a `GameResult`, which the achievements and the profile
-  count from (`docs/achievements.md` §2). Realm Arena's has no stats of its
-  own yet, so C4 adds them: a stats schema, its discriminator in
-  `GameResultData.ts`, and the writer that records each player's mustered
-  characters. A player's mastery is then an aggregation over their results.
-  Nothing writes mastery, so nothing can get it out of step with the games
-  behind it.
-- **A battle snapshots each player's unlocked options when it's created**,
-  into the game state. That's all the `Muster` check reads, so ranks
-  themselves aren't stored. The command stays a pure function of the game, a
-  replay checks it the same way years later, and a rank reached mid-battle
-  changes nothing. This changes a decision of §17.1: the starting state is no
-  longer a function of the seat order alone. `buildInitialRealmArenaState`
-  takes the snapshot as a second input, and the replay adapter
-  (`src/utils/games/replay.ts`) passes it back from the persisted field.
-- **Ranks and unlocked options are public**, like the rest of a profile.
-  Profile sections are shared with a friend's read-only profile, so hiding
-  them in a battle's response would protect nothing. Only the options picked
-  for a squad are sealed, with the rest of the muster.
-- **The client never claims an option.** It sends the pick. The server
-  refuses an option its sender hasn't unlocked, and the setup route never
-  reads ranks from the request.
-- **The muster screen** shows each character's rank and the options it has
-  unlocked, beside the item picker. The profile gets a Realm Arena section
-  with each character's mastery and the battles to its next rank.
+- **Each fighter keeps a tally** of its attacks, abilities and items used.
+  One helper in `RealmArenaLogic.ts` counts them from the events each command
+  produces. That includes reactions, which count for the watcher during
+  another player's command. The tally is public, like the rest of the
+  battlefield, and undo restores it with the snapshot.
+- **Mastery is read from game results, not from a new collection.** C5 gives
+  Realm Arena's `GameResult` stats of its own: a schema, its discriminator in
+  `GameResultData.ts`, and a writer. For each player and character, the writer
+  records the battle and the summed tally. A player's XP is then the weights
+  of §23.1 applied to an aggregation over their results. Nothing stores XP,
+  so it can't get out of step with the games behind it.
+- **A battle snapshots each player's unlocked options when it's created.** The
+  `Muster` check reads only that snapshot, so a rank reached mid-battle
+  changes nothing, and a replay checks a muster the same way years later.
+  `buildInitialRealmArenaState` takes the snapshot as a second input, so the
+  starting state is no longer rebuilt from the seat order alone (§17.1). The
+  replay adapter passes the snapshot back from the persisted field.
+- **Ranks and unlocked options are public**, like the rest of a profile. Only
+  the options picked for a squad are sealed, with the rest of the muster.
+- **The client never claims an option.** It sends the pick, and the server
+  refuses an option the player hasn't unlocked.
+- **The muster screen** shows each character's rank and unlocked options
+  beside the item picker. The profile gets a Realm Arena section showing each
+  character's XP and how far it is from the next rank.
 
 ### 23.4 PRs
 
-1. **Mastery from results:** Realm Arena's result stats schema, its
-   discriminator and writer, the aggregation, the snapshot at creation, and
-   the replay adapter reading it back. Reviewers: `gremlin` (the
-   aggregation's cost on a long record, and a creation that can't read it),
-   `rulebook` (the result-stats wiring).
-2. **Options:** the rank-1 options as data and rules, the muster check
+1. **Mastery from results:** the tally, the result stats and their writer,
+   the aggregation into XP, the snapshot at creation, and the replay adapter
+   reading it back. Reviewers: `gremlin` (the cost of the aggregation on a
+   long record), `rulebook` (the wiring of the result stats).
+2. **Options:** the rank-1 options as data and rules, and the muster check
    against the snapshot. Reviewers: `caveman`, `locksmith` (an option
    claimed but not unlocked).
-3. **Screens:** options at muster, the profile section, guide text and the
-   "What's new" line. Reviewers: `caveman`, `rulebook`.
+3. **Screens:** options at muster, the profile section and the guide text.
+   Reviewers: `caveman`, `rulebook`.
 
 ## 24. Questions (round 7)
 
 Open, and worth settling before each part is built:
 
-1. **Effects (§20):** are four the right first four? Poison and a positive
-   effect (blessed: +10% to hit) are the obvious next ones.
-2. **Items (§21):** is one slot and 5 points right? At 100 points, three
+1. **Effects (§20):** are these four the right ones to start with? Poison and
+   a positive effect (blessed: +10% to hit) are the obvious next ones.
+2. **Items (§21):** are one slot and 5 points right? At 100 points, three
    items cost 15, as much as a Man-at-arms.
 3. **Smoke (§21.2):** is −20% and no overwatch into it enough, or should it
-   block sight? Blocking sight means sight depends on the battle, not just the
-   map, which every replay and every preview then has to carry.
+   block sight? If it blocked sight, sight would depend on the battle, not
+   just the map, and every replay and every preview would have to carry it.
 4. **Blasting (§22):** should a fireball blast cover at all, or only the
-   flask and Demolish? With Burning, a fireball already does 5 over two turns,
-   enough to down a Mage, so one that also strips cover may be too strong at
-   30 points.
-5. **Mastery (§23):** is earning one per battle fought, win or lose, right,
-   or should a win, a knock-out, or surviving the battle count for more?
+   flask and Demolish? With Burning, a fireball already does 5 damage over
+   two turns, enough to down a Mage, so one that also strips cover may be
+   too strong for 30 points.
+5. ~~**Mastery (§23):** one per battle fought, or more for what a character
+   did?~~ *Answered in round 10:* it's earned by actions (§23.1).
 6. **Mastery (§23):** do rank-1 options belong in the tutorial and guide from
    the start, or only once a player has unlocked one?
 
@@ -1980,6 +1550,109 @@ drawn.
 
 ---
 
+## 26. Battle visuals (C4)
+
+*Asked for in round 10* (§11.10, answer 3), before mastery. Today an
+action's result is text. The sheet lists what the last action did, with its
+rolls, and a figure's HP bar gets shorter. Nothing on the board shows *this*
+arrow hitting *that* Knight for 3, or a fireball landing. C4 adds that: numbers
+that rise off the figures, and the shot or the fireball flying to get there.
+
+It changes no rule. Everything it draws comes from events the server already
+sends (`BattleEvent` in `rules.ts`).
+
+### 26.1 What the player sees
+
+- **Hit text** rises off the figure it happened to and fades within about a
+  second. Its colours are the design system's tokens:
+
+  | Event | Text |
+  |---|---|
+  | A hit | **−3**, in the danger colour |
+  | A graze | **−2** with "Graze" under it, in amber |
+  | A miss | **Miss**, muted |
+  | A strike | **−4** |
+  | Burning, as a turn begins | **−1** with the burning mark |
+  | A heal or a draught | **+4**, in green |
+  | An effect put on | its name under the number ("Stunned") |
+  | Knocked out | **Down**, after the damage |
+
+- **The Archer's shot.** An arrow flies from the Archer to the target on a
+  shallow arc, quickly (about 0.4 s). On a hit it stops in the figure. On a
+  graze it glances off. On a miss it flies past and lands beyond the target.
+  An aimed shot and an overwatch shot fly the same way.
+- **The fireball.** A ball of fire flies on a higher, slower arc (about 0.6 s)
+  from the Mage to the square it was aimed at. It bursts across the 3×3 in a
+  flash and a ring of flame. The numbers rise from everyone it hit at once,
+  and the scorched squares (§22) appear as the burst fades.
+- **Then the rest, almost for free.** With a flight and a burst built, the
+  Mage's bolt is a quick spark in a straight line. A flask is a thrown pot on
+  the fireball's arc, with its own burst: fire, a thunderclap's flash, a puff
+  of smoke. A strike is a short slash over the target. The two the round asked
+  for come first (§26.3).
+- **In order.** One action can set off several things, like a move that draws
+  two overwatch shots, or a fireball that downs two characters. They play one
+  after another, in the order of the events, each starting as the last one
+  lands. An overwatch shot flies to where the mover was when it was shot,
+  which is the end of the path so far, not where it stopped.
+- **A figure downed by the action stays drawn until its hit lands**, and
+  then fades, so the arrow has something to hit. Otherwise the board shows
+  the state after the action, as it does today.
+- **When it plays.** It plays when the player's own action comes back, and
+  when a review steps through another player's turn (§17.3 PR 8). The review
+  is where most players will see their own squad get hurt. Opening the game
+  doesn't replay anything by itself.
+- **It never gets in the way.** The board can be used while it plays, and the
+  next action cuts it short. However much one action set off, its whole
+  playback fits in about three seconds, with each part shortened to fit. With
+  `prefers-reduced-motion` set, nothing flies or bursts: the hit text appears
+  in place and fades.
+
+### 26.2 Building it
+
+- **A pure timeline.** One function in `ui.ts` turns an action's events, and
+  the fighters before it, into timed cues. A cue is a flight from one point to
+  another, a burst over some squares, or a text on a figure, each with a start
+  and a length. It's tested like the rest of `ui.ts`: the order, an overwatch
+  shot aimed at the right square, a miss landing beyond the target, and the
+  three-second cap.
+- **One layer on the board.** `RealmArenaFx` draws the cues in the board's
+  SVG, above the figures. It uses the same isometric projection, at each
+  figure's height, so it turns with the view (§13.1). The hit text is CSS
+  keyframes in `ag-theme.css`. The arrow, the fireball and the burst start as
+  simple SVG shapes. Drawn art can replace them later, as an SVG master
+  rendered by `npm run ra-marks`, like the effects and items.
+- **The review needs each step's events.** A replayed snapshot carries the
+  state after a command, not the command's outcome. The difference between two
+  snapshots shows the damage but not a miss, so it isn't enough. The timeline
+  route already resolves every command to build its snapshot, so the replay
+  adapter can opt in to sending that command's events with the snapshot. Only
+  Realm Arena opts in. Its events are all public once the battle starts,
+  since the log tells every one of them. A muster's outcome carries none.
+- **Kept local for now.** Hit text could suit other games, such as World
+  Domination's battles. It stays in `src/games/RealmArena/components/` until
+  a second game wants it (AGENTS.md's second-copy rule).
+
+### 26.3 PRs
+
+1. **Hit text:** the timeline, the layer and the text cues, on the player's
+   own actions and in the review, with the opt-in that puts events on a
+   replayed snapshot. Reviewers: `caveman`, `croupier` (the events on the
+   snapshot), `gremlin` (a long review stepped through quickly).
+2. **The shot and the fireball:** the arrow and the fireball with its burst,
+   then the bolt, the flasks and the strike. Reviewer: `caveman`.
+
+The game isn't announced yet, so neither PR gets a What's new line (§17.1).
+
+### 26.4 Open questions
+
+1. **Should opening the game play the last few actions** of the other players'
+   turns, instead of leaving them to the review?
+2. **Should figures walk their path?** Nobody has asked for it, but it would
+   make an overwatch shot mid-move easier to read.
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -2018,3 +1691,4 @@ Realm, its sibling in the same world.
 | 1.15 | C1 PR 2 fills in the board for status effects (§20.4): a drawn mark for each effect on figures, unit boxes and the selected character's card, the recap's row for burning as a turn begins, and the guide's text on burning. |
 | 1.16 | C2 PR 1 fills in items' rules (§21.4): items as data, the throw and the draught, the smoke kept on the thrower as the square it landed on rather than as an effect, a draught its carrier can drink, and a throw that lands on nobody undoable. |
 | 1.17 | C3 fills in destructible low cover (§22.3): low cover is flagged destructible, `battlefieldWith` clears it to scorched ground, the state keeps what was blasted, a flask that blasts but hurts nobody can still be undone, and scorched ground is drawn from its own sheet. |
+| 1.18 | Round 10 (§11.10). The implementation plan is summarised: §17 keeps the principles, the engine decisions and a few lines a PR, with a status table for Milestones B and C, and the engine and PR parts of C1–C3 (§20.3–§22.3) are cut to what was built. Mastery is earned by actions, as XP: a little for fighting in a battle, more for each attack, ability and item (§23.1), counted by a tally on each fighter (§23.3). Battle visuals come next, as C4 (§26): hit text, then the Archer's shot and the fireball in flight. Mastery becomes C5. |
