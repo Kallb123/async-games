@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES, CHARACTERS, MAX_OF_EACH, POINTS_BUDGET, REALM, squadPoints, type CharacterId, type PlayerCount } from "./characters";
+import { ABILITIES, CHARACTERS, POINTS_BUDGET, REALM, squadPoints, type PlayerCount } from "./characters";
 
 describe("the first faction's characters (§13.6)", () => {
     it("each have 5–12 HP and abilities that exist", () => {
@@ -16,11 +16,7 @@ describe("the first faction's characters (§13.6)", () => {
 });
 
 describe("the ready-made squads (§17.2)", () => {
-    it.each([2, 3, 4] as PlayerCount[])("spend the whole %i-player budget, within the limit on any one character", players => {
-        const squad = REALM.readyMade[players];
-        expect(squadPoints(squad)).toBe(POINTS_BUDGET[players]);
-        const counts = new Map<CharacterId, number>();
-        for (const character of squad) counts.set(character, (counts.get(character) ?? 0) + 1);
-        expect(Math.max(...counts.values())).toBeLessThanOrEqual(MAX_OF_EACH);
+    it.each([2, 3, 4] as PlayerCount[])("spend the whole %i-player budget", players => {
+        expect(squadPoints(REALM.readyMade[players])).toBe(POINTS_BUDGET[players]);
     });
 });

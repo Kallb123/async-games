@@ -34,7 +34,7 @@ export function RealmArenaEffectMarks({ id, effects, x, y, size, step }: RealmAr
  * then the item it carries (§21.1). A unit's box, and the selected
  * character's card.
  */
-export function RealmArenaStatusList({ effects, item }: { effects: readonly EffectId[]; item?: ItemId | null }) {
+export function RealmArenaStatusList({ effects = [], item }: { effects?: readonly EffectId[]; item?: ItemId | null }) {
     if (effects.length === 0 && !item) return null;
     return (
         <span className="ag-ra-effects">

@@ -5,21 +5,27 @@ import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
 import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
+import { CHARACTERS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import type { MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
-import { squadOf } from '@/games/RealmArena/ui';
+import { numberedName, squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { useHeightVar } from '@/utils/hooks/useHeightVar';
 import { pluralize } from '@/utils/ui/text';
+import { RealmArenaStatusList } from './RealmArenaEffects';
 import RealmArenaUnitInfo from './RealmArenaStats';
 import { SpriteImage } from './RealmArenaTerrain';
+import { UnitBox } from './RealmArenaUnits';
 
 interface RealmArenaMusterSheetProps {
     draft: MusterDraft;
     budget: number;
+    /** The viewer's own colour, behind each of their squad's marks. */
+    colour: string;
+    /** Picks up the `index`th of the squad being placed, and brings the board's view to it. */
+    onPick: (index: number) => void;
     /** Sends the sealed muster, as placed. */
     onMuster: () => void;
     /** The muster is in flight. */
@@ -30,11 +36,13 @@ interface RealmArenaMusterSheetProps {
  * The muster, on the player's own turn (docs/games/realm-arena.md §17.3 PR 6):
  * first the squad and the items it carries (§21.3), a stepper for each
  * character and each item with the points left, and then placing it on the
- * board before the sealed muster goes. While placing, the character picked up
- * is offered the options its rank has unlocked (§23.2) and the items bought,
- * to take from whoever carries one. Each character and item on the squad step
- * has an `InfoButton` opening its stats (`RealmArenaUnitInfo`), so a player can see what
- * the points buy before spending them. The points left float over the page
+ * board before the sealed muster goes. While placing, a box for each of the
+ * squad (`UnitBox`, as the battle's own list draws them) picks it up and
+ * brings the board's view to it, and the character picked up is offered the
+ * options its rank has unlocked (§23.2) and the items bought, to take from
+ * whoever carries one. Each character and item on the squad step has an
+ * `InfoButton` opening its stats (`RealmArenaUnitInfo`), so a player can see
+ * what the points buy before spending them. The points left float over the page
  * through both steps (`PointsBox`), so they stay in view while the steppers
  * change them.
  */
@@ -49,7 +57,7 @@ export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps)
 }
 
 /** Whichever step of the muster the player is on: picking the squad, or placing it. */
-function MusterStep({ draft, onMuster, pending }: RealmArenaMusterSheetProps) {
+function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmArenaMusterSheetProps) {
     const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
     // Over budget, the box already says why the muster can't go.
@@ -58,66 +66,98 @@ function MusterStep({ draft, onMuster, pending }: RealmArenaMusterSheetProps) {
     if (!placement) {
         const squadSize = squadOf(counts).length;
         return (
-            <Section label="Muster your squad">
+            <>
                 {info && <RealmArenaUnitInfo unit={info} onClose={() => setInfo(undefined)} />}
-                <AmountSteppers
-                    kinds={CHARACTER_IDS}
-                    icon={id => CHARACTER_MARK[id]}
-                    title={id => CHARACTERS[id].name}
-                    sub={id => `${CHARACTERS[id].points} points · ${CHARACTERS[id].role}${ranks[id] ? ` · Rank ${ranks[id]}` : ''}`}
-                    amounts={counts}
-                    max={() => MAX_OF_EACH}
-                    onChange={setCounts}
-                    onInfo={id => setInfo({ kind: 'character', id })}
-                />
-                <p className="ag-hint ag-hint--tight">
-                    Up to {MAX_OF_EACH} of each character, and items for them to carry into battle: one each, used once.
-                    You choose who carries what as you place your squad.
-                </p>
-                <AmountSteppers
-                    kinds={ITEM_IDS}
-                    icon={id => <SpriteImage sprite={ITEM_ART[id]} boxed />}
-                    title={id => ITEMS[id].name}
-                    sub={id => `${ITEMS[id].points} points · ${ITEMS[id].ap} AP · ${ITEMS[id].description}`}
-                    amounts={items}
-                    max={id => Math.max(squadSize, items[id])}
-                    onChange={setItems}
-                    onInfo={id => setInfo({ kind: 'item', id })}
-                />
-                {why}
-                <div className="ag-action-grid">
+                <Section label="Muster your squad">
+                    {/* No cap on any one character: the budget is the limit, so each
+                        goes as high as the whole budget would buy, and over it the
+                        points box turns red. */}
+                    <AmountSteppers
+                        kinds={CHARACTER_IDS}
+                        icon={id => CHARACTER_MARK[id]}
+                        title={id => CHARACTERS[id].name}
+                        sub={id => `${CHARACTERS[id].points} points · ${CHARACTERS[id].role}${ranks[id] ? ` · Rank ${ranks[id]}` : ''}`}
+                        amounts={counts}
+                        max={id => Math.max(Math.floor(budget / CHARACTERS[id].points), counts[id])}
+                        onChange={setCounts}
+                        onInfo={id => setInfo({ kind: 'character', id })}
+                    />
+                </Section>
+                <Section label="Consumables, given to units on the next step">
+                    <AmountSteppers
+                        kinds={ITEM_IDS}
+                        icon={id => <SpriteImage sprite={ITEM_ART[id]} boxed />}
+                        title={id => ITEMS[id].name}
+                        sub={id => `${ITEMS[id].points} points · ${ITEMS[id].ap} AP · ${ITEMS[id].description}`}
+                        amounts={items}
+                        max={id => Math.max(squadSize, items[id])}
+                        onChange={setItems}
+                        onInfo={id => setInfo({ kind: 'item', id })}
+                    />
+                </Section>
+                <MusterActions why={why}>
                     <button type="button" className="ag-btn ag-btn--primary" disabled={refusal !== undefined} onClick={draft.place}>
                         Place your squad
                     </button>
-                </div>
-            </Section>
+                </MusterActions>
+            </>
         );
     }
 
-    const picked = placement.selected !== null ? placement.picks[placement.selected] : undefined;
+    const { picks, selected } = placement;
+    const picked = selected !== null ? picks[selected] : undefined;
     return (
-        <Section label="Place your squad">
-            <p className="ag-hint">
-                Tap one of your squad on the board to pick it up, then a square of your zone to move it there,
-                another of your squad to swap the two, or what it takes into battle below. Nobody sees your squad
-                until every player has mustered.
-            </p>
-            {picked && (
-                <>
-                    <OptionPicker pick={picked} ranks={ranks} onChoose={draft.choose} />
-                    <ItemPicker pick={picked} picks={placement.picks} onCarry={draft.carry} />
-                </>
-            )}
-            {why}
-            <div className="ag-action-grid">
+        <>
+            <Section label="Place your squad">
+                <div className="ag-ra-units">
+                    {picks.map((pick, index) => (
+                        <UnitBox
+                            key={index}
+                            mark={CHARACTER_MARK[pick.character]}
+                            colour={colour}
+                            name={numberedName(picks, index)}
+                            sub={pick.option ? optionView(pick.option).name : `${CHARACTERS[pick.character].hp} HP`}
+                            selected={index === selected}
+                            onClick={() => onPick(index)}
+                        >
+                            <RealmArenaStatusList item={pick.item} />
+                        </UnitBox>
+                    ))}
+                </div>
+                <p className="ag-hint">
+                    Tap one of your squad, here or on the board, to pick it up. Then tap a square of your zone to move it
+                    there, another of your squad on the board to swap the two, or what it takes into battle below. Nobody
+                    sees your squad until every player has mustered.
+                </p>
+                {picked && (
+                    <>
+                        <OptionPicker pick={picked} ranks={ranks} onChoose={draft.choose} />
+                        <ItemPicker pick={picked} picks={picks} onCarry={draft.carry} />
+                    </>
+                )}
+            </Section>
+            <MusterActions why={why}>
                 <button type="button" className="ag-btn ag-btn--light" disabled={pending} onClick={draft.unplace}>
                     Change squad
                 </button>
                 <ActionButton className="ag-btn ag-btn--success" pending={pending} pendingLabel="Mustering…" disabled={refusal !== undefined} onClick={onMuster}>
                     Muster
                 </ActionButton>
-            </div>
-        </Section>
+            </MusterActions>
+        </>
+    );
+}
+
+/**
+ * The buttons at the foot of either step, with why they're greyed when they
+ * are: a section of their own, so they stand clear of the list above them.
+ */
+function MusterActions({ why, children }: { why: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <div className="ag-section">
+            {why}
+            <div className="ag-action-grid">{children}</div>
+        </div>
     );
 }
 

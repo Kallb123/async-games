@@ -301,11 +301,19 @@ export function centreInSight(state: BattleState, player: string): boolean {
     return (state.field.objectives[CENTRE] ?? []).every(seen);
 }
 
-/** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */
+/** A character's name, numbered where its owner has more than one of it: "Man-at-arms 2". */
 export function fighterName(fighters: readonly Fighter[], fighter: Fighter): string {
-    const name = CHARACTERS[fighter.character].name;
-    const same = fighters.filter(one => one.owner === fighter.owner && one.character === fighter.character);
-    return same.length > 1 ? `${name} ${same.findIndex(one => one.id === fighter.id) + 1}` : name;
+    const squad = fighters.filter(one => one.owner === fighter.owner);
+    const index = squad.findIndex(one => one.id === fighter.id);
+    return index < 0 ? CHARACTERS[fighter.character].name : numberedName(squad, index);
+}
+
+/** The name of one of a squad — fought with, or still being placed — numbered where it has more than one of it. */
+export function numberedName(squad: readonly { character: CharacterId }[], index: number): string {
+    const { character } = squad[index];
+    const name = CHARACTERS[character].name;
+    if (squad.filter(one => one.character === character).length === 1) return name;
+    return `${name} ${squad.slice(0, index).filter(one => one.character === character).length + 1}`;
 }
 
 /**

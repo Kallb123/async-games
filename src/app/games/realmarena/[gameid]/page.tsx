@@ -119,6 +119,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
+    // A box in the placing list picks that one up and brings the view to it, even when it already was.
+    const pickUp = (index: number) => {
+        draft.select(index);
+        setRefocus(n => n + 1);
+    };
     const muster = () => {
         if (!placement) return;
         const command = new RealmArenaMuster();
@@ -395,7 +400,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     )}
 
                     {musterTurn && (
-                        <RealmArenaMusterSheet draft={draft} budget={gs.budget} onMuster={muster} pending={pendingTarget === 'muster'} />
+                        <RealmArenaMusterSheet draft={draft} budget={gs.budget} colour={colourFor(myUserId)} onPick={pickUp} onMuster={muster} pending={pendingTarget === 'muster'} />
                     )}
 
                     {/* Nothing about anyone else's squad is on the wire until

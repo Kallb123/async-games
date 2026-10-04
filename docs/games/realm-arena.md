@@ -687,7 +687,7 @@ games are named for. It would also be Defender of the Realm's first faction.
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
-four. You can take up to two of any one character.
+four. You can take as many of any one character as the points buy.
 
 *Filled in by PR 2 (§17.3)*, where this section left a number or a case
 open. All are first guesses for playtesting, kept in `characters.ts` and
@@ -1271,7 +1271,9 @@ function of the ground.
   hands them down the squad one each, and a character picked up offers the
   items bought as `BuildRow`s: taking one from whoever carries it hands them
   its own item, or nothing, in exchange. Nothing is bought or left behind
-  while placing, so the points never change there.
+  while placing, so the points never change there. Placing also lists the
+  squad as a box each, as the battle's list under the board does: tapping one
+  picks that character up and brings the board's view to it.
 
 ### 21.4 PRs
 
@@ -1998,3 +2000,4 @@ Realm, its sibling in the same world.
 | 1.26 | The recap tells everything one character did in a turn as one row (§17.3 PR 8). |
 | 1.27 | B5, fog of war (§8, §27): the host's choice at setup, on to start with. A character sees 20 squares where its sight is clear — an Archer or a Scout 25, a Knight 15 — at least as far as anything it can use reaches; a player sees their squad and whoever it sees, live and in a review, until the battle ends; a move that finds an enemy out of sight in its path goes round it, or as near to where it was sent as it can, paying for the way it went; an action that shows an enemy can't be undone. Fog hides where, and the log still tells what. |
 | 1.28 | The muster's characters and items each have an ⓘ opening their stats — HP, movement, sight and points, and each weapon's, ability's, option's and item's AP, damage, range, chance to hit, cooldown and area — and `/admin/realmarena` shows every one at once, for balancing (docs/admin-tools.md). |
+| 1.29 | No cap on any one character: the budget is the only limit on a squad (§13.6). The muster heads its items "Consumables", and placing lists the squad as boxes that pick a character up and zoom the board to it (§21.3). |

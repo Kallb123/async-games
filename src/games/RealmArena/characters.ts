@@ -260,9 +260,6 @@ export type PlayerCount = 2 | 3 | 4;
 /** Each player's points to muster with, which shrinks as players are added (§13.6). */
 export const POINTS_BUDGET: Record<PlayerCount, number> = { 2: 100, 3: 80, 4: 70 };
 
-/** No squad takes more than this many of any one character (§13.6). */
-export const MAX_OF_EACH = 2;
-
 export function isCharacterId(value: unknown): value is CharacterId {
     return typeof value === "string" && Object.hasOwn(CHARACTERS, value);
 }
@@ -274,7 +271,7 @@ export function squadPoints(squad: readonly CharacterId[]): number {
 
 export interface Faction {
     name: string;
-    /** The squad a muster that runs out of time gets, by player count — spending the whole budget, within `MAX_OF_EACH` (§17.2). */
+    /** The squad a muster that runs out of time gets, by player count — spending the whole budget (§17.2). */
     readyMade: Readonly<Record<PlayerCount, readonly CharacterId[]>>;
 }
 

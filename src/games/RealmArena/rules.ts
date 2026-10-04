@@ -33,7 +33,7 @@ import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
-    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, MAX_OF_EACH, OPTIONS, squadPoints,
+    ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
@@ -1192,7 +1192,7 @@ function optionRefusal(pick: Partial<MusterPick>, character: CharacterId, ranks:
 
 /**
  * Why a squad can't muster, or undefined when it can: at least one
- * character, no more than `MAX_OF_EACH` of any one, at most one item each,
+ * character, as many of any one as the budget buys, at most one item each,
  * at most one option each that `ranks` unlocks, within the budget with the
  * items, and each on its own square of the seat's deployment zone. Total,
  * like `check`.
@@ -1201,12 +1201,8 @@ export function musterRefusal(field: Battlefield, seat: number, picks: unknown, 
     if (!Array.isArray(picks) || picks.length === 0) return "Muster at least one character";
     const zone = new Set(Array.isArray(field.deployments[seat]) ? field.deployments[seat] : []);
     const squares = new Set<Square>();
-    const counts = new Map<CharacterId, number>();
     for (const pick of picks as Partial<MusterPick>[]) {
         if (!isCharacterId(pick?.character)) return "That isn't a character";
-        const count = (counts.get(pick.character) ?? 0) + 1;
-        if (count > MAX_OF_EACH) return `No more than ${MAX_OF_EACH} of any one character`;
-        counts.set(pick.character, count);
         // One slot, so an item is one id or nothing: never a list (§21.1).
         if (pick.item != null && !isItemId(pick.item)) return "That isn't an item";
         const option = optionRefusal(pick, pick.character, ranks);

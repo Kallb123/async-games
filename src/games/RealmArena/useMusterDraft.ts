@@ -62,6 +62,8 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
         place: () => setPlacement({ picks, selected: null }),
         unplace: () => setPlacement(null),
         tap: (square: Square) => placement && setPlacement(placeTap(placement, square, zone)),
+        /** Picks up the `index`th of the squad, from the list under the board rather than its figure. */
+        select: (index: number) => placement && setPlacement({ ...placement, selected: index }),
         /** Gives the character picked up `item`, swapping with whoever of the squad carried it. */
         carry: (item: ItemId) => outfit((all, selected) => handItem(all, selected, item)),
         /** Musters the character picked up with `option`, or as the starter character. */

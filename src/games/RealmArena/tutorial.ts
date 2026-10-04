@@ -1,5 +1,4 @@
 import type { GameTutorial } from "@/utils/ui/gameTutorials";
-import { MAX_OF_EACH } from "./characters";
 import { ACTION_POINTS, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, REACTION_COST } from "./rules";
 
 // The guided tour of a first Realm Arena match — shown once per account in
@@ -33,7 +32,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "board",
             title: "Muster your squad",
-            body: `Spend your points below — up to ${MAX_OF_EACH} of each character, and items for them to carry — then place them in your zone on the board. Nobody sees anyone's squad until every player has mustered.`,
+            body: `Spend your points below on characters, as many of each as they buy, and items for them to carry — then place them in your zone on the board. Nobody sees anyone's squad until every player has mustered.`,
             when: "mustering",
         },
         {
