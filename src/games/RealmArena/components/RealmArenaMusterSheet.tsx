@@ -12,6 +12,7 @@ import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView, starterView } fr
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
+import { useHeightVar } from '@/utils/hooks/useHeightVar';
 import { pluralize } from '@/utils/ui/text';
 import RealmArenaUnitInfo from './RealmArenaStats';
 import { SpriteImage } from './RealmArenaTerrain';
@@ -33,14 +34,16 @@ interface RealmArenaMusterSheetProps {
  * is offered the options its rank has unlocked (§23.2) and the items bought,
  * to take from whoever carries one. Each character and item on the squad step
  * has an `InfoButton` opening its stats (`RealmArenaUnitInfo`), so a player can see what
- * the points buy before spending them.
+ * the points buy before spending them. The points left float over the page
+ * through both steps (`PointsBox`), so they stay in view while the steppers
+ * change them.
  */
 export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending }: RealmArenaMusterSheetProps) {
     const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
-    const points = pointsLeft >= 0
-        ? `${pointsLeft} of ${budget} points left.`
-        : `${pluralize(-pointsLeft, 'point')} over the budget of ${budget}.`;
+    const points = <PointsBox pointsLeft={pointsLeft} budget={budget} />;
+    // Over budget, the box already says why the muster can't go.
+    const why = pointsLeft >= 0 && refusal && <p className="ag-hint">{refusal}</p>;
 
     if (!placement) {
         const squadSize = squadOf(counts).length;
@@ -71,7 +74,8 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     onChange={setItems}
                     onInfo={id => setInfo({ kind: 'item', id })}
                 />
-                <p className="ag-hint">{pointsLeft >= 0 && refusal ? refusal : points}</p>
+                {why}
+                {points}
                 <div className="ag-action-grid">
                     <button type="button" className="ag-btn ag-btn--primary" disabled={refusal !== undefined} onClick={draft.place}>
                         Place your squad
@@ -95,7 +99,8 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     <ItemPicker pick={picked} picks={placement.picks} onCarry={draft.carry} />
                 </>
             )}
-            <p className="ag-hint">{refusal ?? points}</p>
+            {why}
+            {points}
             <div className="ag-action-grid">
                 <button type="button" className="ag-btn ag-btn--light" disabled={pending} onClick={draft.unplace}>
                     Change squad
@@ -105,6 +110,30 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                 </ActionButton>
             </div>
         </Section>
+    );
+}
+
+interface PointsBoxProps {
+    pointsLeft: number;
+    budget: number;
+}
+
+/**
+ * The points left of the budget, floating at the foot of the screen so a
+ * player tapping a stepper far down the list still sees what it cost. Red once
+ * the squad is over budget. It is an `ag-dock`, measured into
+ * `--ag-actions-dock-height` so the page scrolls clear of it.
+ */
+function PointsBox({ pointsLeft, budget }: PointsBoxProps) {
+    const measure = useHeightVar('--ag-actions-dock-height');
+    return (
+        <div className="ag-dock ag-dock--float" ref={measure}>
+            <div className={`ag-float-box${pointsLeft < 0 ? ' ag-float-box--warn' : ''}`} role="status">
+                {pointsLeft >= 0
+                    ? <><b>{pointsLeft}</b> of {budget} points left</>
+                    : <><b>{pluralize(-pointsLeft, 'point')}</b> over the budget of {budget}</>}
+            </div>
+        </div>
     );
 }
 
