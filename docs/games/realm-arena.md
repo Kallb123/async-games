@@ -2128,11 +2128,43 @@ from it (§29.7).
   the faction it came out as (`coop.enemy`), never as "random". So a replay
   rebuilds the same enemy, and the draw is made on the server, where no
   client can choose it.
-- **The players know whom they face from the muster on**: the setup line
-  names the enemy, and the muster shows its faction. The enemy can't
-  counter-pick (its warbands are ready-made, §29.7), so the players may.
-  Whether a random enemy should stay hidden until the squads take the field
-  is an open question (§29.12).
+- **A faction the host picked is known from the start**: the setup line names
+  it, and the muster shows it. The enemy can't counter-pick (its warbands are
+  ready-made, §29.7), so the players may.
+- **A random enemy stays hidden until one of its characters is seen.** The
+  players muster not knowing whom they'll face, so Random is a real gamble
+  rather than a coin toss. Without fog, that's the moment the squads take the
+  field. In fog (§27), it's the first time anyone on the team sees an enemy
+  character: the team shares its sight (§29.1), so it learns the enemy
+  together.
+
+**Keeping a random enemy hidden.** Until it's seen, the faction is hidden
+information, kept as a squad is during the muster (§17.2):
+
+- **Seen once, known for good.** The battle stores when the enemy was first
+  seen (`coop.enemySeen`), set by whichever command first puts an enemy
+  character in the team's view: the last muster without fog, otherwise an
+  action, an End turn or the enemy's own turn walking into sight. It's never
+  unset. An action that shows an enemy can't be undone already (§27.1), so
+  undo can never take the sighting back.
+- **Off the wire until then.** The response carries `coop.enemy` only once
+  `enemySeen` is set; before that, the board shows "an unknown enemy" on the
+  scoreboard and the muster. A review is built from the state at each step,
+  so a step before the sighting doesn't carry it either.
+- **The log doesn't give it away.** Fog's log tells *what* happened even out
+  of sight (§27.2) — "the Renegades' Archer moved" — and a character's kind
+  is its faction. So until the enemy is seen, `ownerToken` and `narrate` call
+  the enemy "the enemy" and each of its characters "an enemy character":
+  "an enemy character fired on overwatch at Alice's Knight". A history line
+  is kept as it was written, so those lines stay as the team knew them; lines
+  written after the sighting name everyone.
+- **Accepted: points and ids.** A knock-out scores a fifth of the character's
+  points (§13.7), and fighter ids hint at how many characters the squads
+  before them have (§27.2). A fireball into the fog that downs an unseen enemy
+  tells the team its points' worth, and the ids in a review hint at the
+  enemy's numbers; either might narrow down a faction. Both are told today in
+  fog, for the same reasons, and the team still hasn't seen what it fought.
+- **The fog lifts when the battle ends** (§27.1), and the faction with it.
 - **The players are the Realm**, as in every battle today. Choosing their own
   faction is B6's, for free-for-all and co-op alike.
 
@@ -2415,7 +2447,9 @@ sure it is.
 - **What's told**: the enemy's turn is in the End turn's events, so every
   viewer gets it through `stepOutcomeToModel`, cut to what their side saw
   (§27.3). The End turn's own response to its sender goes through the same
-  cut — the warband's moves out of the team's sight aren't in it.
+  cut — the warband's moves out of the team's sight aren't in it. A random
+  enemy's faction stays off the wire until it's seen (`coop.enemySeen`,
+  §29.3).
 - **No new command, no command version.** A co-op battle is a new kind of
   battle, and nothing about a free-for-all changes.
 
@@ -2427,7 +2461,8 @@ sure it is.
   screen that has fog of war's switch, with `GameSetupLayout` as now.
 - **The board**: the enemy's characters in its own colour and named by its
   faction (`nameFor`, `colourFor`); the muster names the enemy the players
-  will face; the scoreboard shows the team's total
+  will face, or "an unknown enemy" for a random one not yet seen (§29.3); the
+  scoreboard shows the team's total
   against the enemy's, with each player's share under it.
 - **The enemy's turn plays out** on the board as any other turn does (§26),
   and the recap gives it a row per action. `recap.ts` builds a player's
@@ -2448,7 +2483,7 @@ sure it is.
 | 2 | **The co-op battlefields** (§29.2): the Twin-Gate and Three-Gate Forts, their tests, and `mapFor`. **Factions as data** (§29.3): `FACTIONS` with the Realm in it, a roster and an `enemyName` each, and the muster checked against its faction | `caveman`, `rulebook` |
 | 3 | **The planner.** `tactics.ts` moved out of `ui.ts`, with each kind of action's aim (§29.3), `ai.ts`, the puzzles and the never-cheats test (§29.11). Not wired to anything | `caveman` |
 | 4a | **The enemy's turn.** `coop` from setup to state, Random drawn, `applyAction` and `applyEndTurn` out of the commands, the warbands mustered, their turn in `handOff`, recorded and replayed, and the whole-battle tests (§29.11). The setup route takes `coop`; the screen doesn't offer it yet | `caveman`, `locksmith`, `gremlin`, `croupier` |
-| 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, and the recap's rows for the enemy's turn | `caveman`, `croupier` |
+| 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, the recap's rows for the enemy's turn, and a random enemy kept hidden until it's seen (§29.3) | `caveman`, `croupier` |
 | 5 | **The screens** (§29.9), the enemy's faction picker among them, the guide, and the one What's new line | `caveman`, `rulebook` |
 | Later | Solo against the computer (one player, on the Ruined Fort, as Fires Out's solo setup does); difficulty; remembering where an enemy was last seen in fog; achievements for co-op; Banned Islet, Outbreak and Fires Out moved onto `endAsTeam` | |
 
@@ -2472,6 +2507,11 @@ sure it is.
   it worse, not a measure of how good it is; the playtest is that.
 - **Replay holds** (PR 4a). A recorded co-op battle replays to the same end
   with the planner swapped for one that throws.
+- **A random enemy stays hidden** (PR 4b). In fog, every response, review
+  step and log line before the first sighting is free of the faction and of
+  any of its characters' names, and the one after it carries them; without
+  fog, the faction is there from the moment the squads take the field. One of
+  `hiddenHands.test.ts`'s checks, as every hidden field is.
 
 ### 29.12 Open questions
 
@@ -2492,11 +2532,6 @@ sure it is.
 - **How big is big enough?** The sizes in §29.2 keep the squares a character
   has near the free-for-all's. If co-op wants more room to manoeuvre, the maps
   get wider, not deeper, and the phone's overview is what pays.
-- **Should a random enemy be a surprise?** As planned, the players see the
-  enemy when they muster, and can muster against it. Keeping a random draw
-  sealed until the squads take the field would make Random a real choice
-  rather than a coin toss, at the cost of one more thing kept off the wire
-  until then (§17.2).
 - **Teams on the same plan.** With sides built, teams of two (B3) is the
   free-for-all with two sides of two, and could follow co-op closely.
 
@@ -2527,7 +2562,8 @@ The caveman reviewed the first draft of this plan. What changed:
   team coming from three.
 - *After the review:* the enemy is a faction the host picks, or Random
   (§29.3), so that a second faction can be fought without touching the
-  computer.
+  computer. A random enemy stays hidden until the team sees one of its
+  characters.
 - The tests use the scripted player the fixtures already have, and the
   whole-battle tests move to PR 4a, which has the turn loop they need. PR 4
   is split, and the caveman reviews it.
@@ -2587,4 +2623,4 @@ Realm, its sibling in the same world.
 | 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |
 | 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). The crew's launch pass cuts a battle's ranks on the wire to the viewer's own (§23.3) and accepts a third player reading a shot's odds in fog (§27.2). |
 | 1.32 | Battle results (§28): the result page charts the points race round by round with each character downed marked on its owner's line, each squad's health, the damage each kind of character dealt and a table of everything each squad did, all read off the game-end replay. |
-| 1.33 | Co-op against the computer (§29), planned and reviewed by the caveman: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn, on battlefields of its own — line battles, the team along one edge and a warband opposite each player, unchanged by a half turn (§29.2). The enemy is a faction the host picks, or Random, drawn as the battle is created; factions become data, so a second one — monsters — can be fought with nothing new in the computer (§29.3). Built on sides (`sideOf`, `allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result with the board's own tactics helpers; its actions are recorded, so it can be improved without changing a battle already fought. Its warbands are its faction's ready-made squads. |
+| 1.33 | Co-op against the computer (§29), planned and reviewed by the caveman: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn, on battlefields of its own — line battles, the team along one edge and a warband opposite each player, unchanged by a half turn (§29.2). The enemy is a faction the host picks, or Random, drawn as the battle is created and kept hidden — off the wire and unnamed in the log — until the team first sees one of its characters; factions become data, so a second one — monsters — can be fought with nothing new in the computer (§29.3). Built on sides (`sideOf`, `allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result with the board's own tactics helpers; its actions are recorded, so it can be improved without changing a battle already fought. Its warbands are its faction's ready-made squads. |
