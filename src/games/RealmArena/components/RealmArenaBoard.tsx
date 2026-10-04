@@ -12,7 +12,7 @@ import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type BattleState, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
 import { apPips, areaRect, type AttackOption, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
@@ -90,6 +90,8 @@ interface RealmArenaBoardProps {
     unseen?: ReadonlySet<Square> | null;
     /** Smoke clouds the viewer can see whose throwers it can't, by the square each landed on (§27). */
     clouds?: readonly Square[];
+    /** The battle's sides (§29.6), so a selected character's reach passes through its allies as the rules' does. */
+    sides?: BattleState["sides"];
     /** The viewer's own sealed squad, while the muster lasts: drawn where they stand, but not yet on the battlefield. */
     sealed?: readonly MusterPick[] | null;
     /** The players in seat order, so each deployment zone wears the colour of the squad that musters in it. */
@@ -558,7 +560,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, unseen, clouds, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
     const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
     const { rotation } = turned;
@@ -604,8 +606,8 @@ export default function RealmArenaBoard({ field, fighters, unseen, clouds, seale
     // since a full turn's reach is too wide for any step but the fit. A search
     // over the whole map, so only redone when the selection or the board moves.
     const reachRect = useMemo(
-        () => selected && isStanding(selected) ? reachFocus({ field, fighters }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
-        [field, fighters, selected, acting],
+        () => selected && isStanding(selected) ? reachFocus({ field, fighters, sides }, selected, acting === selected.owner ? selected.ap : ACTION_POINTS) : null,
+        [field, fighters, sides, selected, acting],
     );
 
     // A character picked up to place is brought close enough to tap a square beside it.

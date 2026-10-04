@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, type Ability } from "./characters";
-import { blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
 import { attackOptions, hitChance, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -80,7 +80,7 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
     return candidates.flatMap((id): TargetOption[] => {
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (target.owner === fighter.owner) return [{ target }];
+        if (allied(battle, target.owner, fighter.owner)) return [{ target }];
         return [{ target, chance: hitChance(battle, fighter, target, shot) }];
     }).sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0));
 }
@@ -194,7 +194,7 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     if (isAtSquare(aim)) return tapSquare(context, target.square);
     // Itself, only when it can be the aim's target: a draught it drinks.
     if (target.id === fighter.id && !candidates.includes(id)) return undefined;
-    const enemy = target.owner !== fighter.owner && isStanding(target);
+    const enemy = !allied(battle, target.owner, fighter.owner) && isStanding(target);
 
     if (aim === "cleave") {
         if (!candidates.includes(id)) return enemy ? draft : undefined;
@@ -234,18 +234,19 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     // sent again from where it no longer stands.
     const key = fighter ? `${turnKey}:${fighter.id}:${fighter.square}:${fighter.ap}:${fighter.hp}` : turnKey;
     const [draft, setDraft] = useResettingState<Draft>(MOVE, key);
-    const { field, fighters } = battle;
+    // The pieces the searches read, sides among them, so a teammate is passed through as the server's `check` would (§29.6).
+    const { field, fighters, sides } = battle;
     const aim = draft.aim;
     // The reach is a search over every square of the map, so it's worked out
     // once per character and aim rather than on every render.
     const reach = useMemo(
-        () => fighter && isMoving(aim) ? reachOf({ field, fighters }, fighter, aim === "sneak") : null,
-        [field, fighters, fighter, aim],
+        () => fighter && isMoving(aim) ? reachOf({ field, fighters, sides }, fighter, aim === "sneak") : null,
+        [field, fighters, sides, fighter, aim],
     );
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
     // Aimed at anything else, the shading is where it could land instead: its range.
     const rangeKind = aim === "throw" ? (fighter ? itemOf(fighter)?.range : undefined) : RANGE[aim];
-    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters }, fighter, rangeKind) : null, [field, fighters, fighter, rangeKind]);
+    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides }, fighter, rangeKind) : null, [field, fighters, sides, fighter, rangeKind]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;

@@ -18,13 +18,13 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { CHARACTERS, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { battleRounds, knockoutPoints, type BattleEvent, type Fighter } from "./rules";
+import { allied, battleRounds, knockoutPoints, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
     /** HP taken off enemies, burning it set among it: never more than they had left. */
     dealt: number;
-    /** HP taken off its own side, by a blast landing on an ally. */
+    /** HP taken off its own side — its squad or an ally's — by a blast landing on them (§29.6). */
     friendlyFire: number;
     /** HP taken off it, by anyone. */
     taken: number;
@@ -80,15 +80,17 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
 
 /**
  * Watches a battle's replay, a step at a time, and keeps its record. `seats`
- * is the turn order.
+ * is the turn order, and `sides` the battle's (`battleFrom`, §29.6): who is
+ * whose ally, for friendly fire and knock-outs. Absent in a free-for-all.
  *
  * Undo: the one thing an undoable action can add to a record is healing — it
  * hurts nobody and rolls nothing (docs/undo.md). So the recorder keeps the
  * records as they stood before each action the game's own undo stack still
  * holds, and puts them back when one is taken back.
  */
-export function battleRecorder(seats: readonly string[]) {
+export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"]) {
     const lastRound = battleRounds(seats.length) - 1;
+    const sided = { sides };
     /** Everyone who has been on the battlefield, kept after a dropped player's squad has left it. */
     const known = new Map<number, Pick<Fighter, "owner" | "character">>();
     /** Each one's HP, and who set it burning, after the last step. */
@@ -120,7 +122,7 @@ export function battleRecorder(seats: readonly string[]) {
             if (victim) victim.taken += taken;
             const attacker = recordOf(by);
             if (!attacker) return;
-            if (known.get(by!)?.owner === known.get(target)?.owner) attacker.friendlyFire += taken;
+            if (allied(sided, known.get(by!)?.owner, known.get(target)?.owner)) attacker.friendlyFire += taken;
             else attacker.dealt += taken;
         };
         for (const event of events) {
@@ -164,12 +166,13 @@ export function battleRecorder(seats: readonly string[]) {
                     if (!fallen) break;
                     recordOf(event.fighter)!.downed += 1;
                     const by = event.by === event.fighter ? undefined : known.get(event.by);
-                    if (by && by.owner !== fallen.owner) {
+                    const ally = allied(sided, by?.owner, fallen.owner);
+                    if (by && !ally) {
                         const downer = recordOf(event.by)!;
                         downer.knockouts += 1;
                         downer.knockoutPoints += knockoutPoints(fallen.character);
                     }
-                    const how = !by ? "" : ` by ${by.owner === fallen.owner ? "its own" : "an enemy"} ${CHARACTERS[by.character].name}`;
+                    const how = !by ? "" : ` by ${by.owner === fallen.owner ? "its own" : ally ? "an allied" : "an enemy"} ${CHARACTERS[by.character].name}`;
                     losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: fallen.owner });
                     break;
                 }

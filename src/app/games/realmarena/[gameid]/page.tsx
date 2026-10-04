@@ -17,7 +17,7 @@ import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState, type Fighter } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, battleFrom, centreHolders, isStanding, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionSquares, battleCues, centreInSight, fighterName, PLAYBACK_MS, unseenSquares } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -139,12 +139,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // throwers it can't. The fog lifts once the battle is over.
     const fogged = !!gs?.fog && !complete;
     const clouds = gs?.clouds ?? [];
-    const battle: BattleState = { field, fighters, ...(fogged ? { fog: true } : {}), ...(clouds.length > 0 ? { clouds } : {}) };
+    const battle = battleFrom(field, { fighters, fog: fogged, clouds });
     // Every square the viewer's squad can't see, dimmed on the board: a
     // sweep of sight lines, so only redone when someone moves or cover goes.
     const shown = gs?.fighters;
     const unseen = useMemo(
-        () => fogged && !mustering && mySeat >= 0 ? unseenSquares({ field, fighters: shown ?? [], fog: true }, myUserId) : null,
+        () => fogged && !mustering && mySeat >= 0 ? unseenSquares(battleFrom(field, { fighters: shown ?? [], fog: true }), myUserId) : null,
         [fogged, mustering, mySeat, field, shown, myUserId],
     );
     const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
@@ -360,6 +360,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             fighters={fighters}
                             unseen={unseen}
                             clouds={clouds}
+                            sides={battle.sides}
                             sealed={placement?.picks ?? gs.myMuster}
                             seats={seats}
                             colourFor={colourFor}

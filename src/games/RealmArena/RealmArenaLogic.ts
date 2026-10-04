@@ -13,6 +13,8 @@ import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
     ACTION_POINTS,
     act,
+    allied,
+    battleFrom,
     blastedIn,
     check,
     endTurn,
@@ -59,7 +61,7 @@ const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
  * lifts once the battle is (`complete`, §27).
  */
 export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): BattleState {
-    return { field: battlefieldOf(gs.map, gs.blasted ?? []), fighters: (gs.fighters ?? []).map(storedFighter), fog: gs.fog === true && !complete };
+    return battleFrom(battlefieldOf(gs.map, gs.blasted ?? []), { fighters: (gs.fighters ?? []).map(storedFighter), fog: gs.fog === true && !complete });
 }
 
 /**
@@ -199,7 +201,7 @@ function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonl
 }
 
 /**
- * Whether an action showed its player an enemy their squad couldn't see
+ * Whether an action showed its player an enemy their side couldn't see
  * before it, or someone else's smoke cloud (§27): a move round a corner, cover
  * blasted open, an ally raised.
  * What's been seen can't be unseen, so such an action can't be taken back —
@@ -210,7 +212,7 @@ function revealed(before: BattleState, after: BattleState, player: string): bool
     if (!after.fog) return false;
     const sighted = (state: BattleState) => {
         const view = viewOf(state, player);
-        const others = view.fighters.filter(fighter => fighter.owner !== player);
+        const others = view.fighters.filter(fighter => !allied(view, fighter.owner, player));
         return { ids: others.map(fighter => fighter.id), clouds: [...landedSmoke(others), ...view.clouds ?? []] };
     };
     const was = sighted(before), now = sighted(after);

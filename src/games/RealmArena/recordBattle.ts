@@ -6,6 +6,7 @@
 import { replayTurnByTurn } from "@/utils/games/replay";
 import { withTimeout } from "@/utils/withTimeout";
 import { battleRecorder, type BattleRecord } from "./battleRecord";
+import { battleOf } from "./RealmArenaLogic";
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "./RealmArenaModels";
 
 /**
@@ -24,7 +25,8 @@ const RECORD_BUDGET_MS = 4_000;
 export async function recordBattle(gameData: IRealmArenaGameData): Promise<BattleRecord | undefined> {
     if (!gameData.complete) return undefined;
     return withTimeout(async () => {
-        const recorder = battleRecorder(gameData.specificGameState.seats);
+        const gs = gameData.specificGameState;
+        const recorder = battleRecorder(gs.seats, battleOf(gs).sides);
         const replayed = await replayTurnByTurn(gameData, (step, _turnIndex, _isFirstStepOfTurn, specificGameState) =>
             recorder.observe(step, specificGameState as IRealmArenaSpecificGameState), "battle record");
         return replayed ? recorder.result() : undefined;

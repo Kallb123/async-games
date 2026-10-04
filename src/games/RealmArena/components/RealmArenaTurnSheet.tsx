@@ -7,7 +7,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, rangeSquares, targetsOf, whoseName, type TargetKind } from '@/games/RealmArena/ui';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { INSTANT_KINDS, shotOf, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -282,7 +282,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
         const { damage = 0, effect } = lands;
         return hint(<>
             {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
-            {caught.some(one => one.owner === fighter.owner) ? ' That includes your own.' : ''}
+            {caught.some(one => allied(battle, one.owner, fighter.owner)) ? ' That includes your own.' : ''}
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }

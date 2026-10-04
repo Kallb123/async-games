@@ -17,7 +17,7 @@ import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaG
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
-import { areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
+import { allied, areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
 
 export const PLAYERS = ["a", "b"];
 
@@ -109,10 +109,10 @@ export function blastSpot(game: RealmArenaTestGame, thrower: Fighter): number {
 
 /** The enemy nearest a fighter, or undefined when none is standing. */
 function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {
-    const { field, fighters } = battleOf(game);
-    return fighters
-        .filter(one => one.owner !== fighter.owner && isStanding(one))
-        .sort((x, y) => distance(field, fighter.square, x.square) - distance(field, fighter.square, y.square))[0];
+    const battle = battleOf(game);
+    return battle.fighters
+        .filter(one => !allied(battle, one.owner, fighter.owner) && isStanding(one))
+        .sort((x, y) => distance(battle.field, fighter.square, x.square) - distance(battle.field, fighter.square, y.square))[0];
 }
 
 /**
@@ -121,7 +121,7 @@ function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | und
  */
 export function scriptedAction(game: RealmArenaTestGame, fighter: Fighter): Action | undefined {
     const battle = battleOf(game);
-    for (const enemy of battle.fighters.filter(one => one.owner !== fighter.owner && isStanding(one))) {
+    for (const enemy of battle.fighters.filter(one => !allied(battle, one.owner, fighter.owner) && isStanding(one))) {
         const attack: Action = { kind: "attack", fighter: fighter.id, target: enemy.id };
         if (!("refused" in check(battle, fighter.owner, attack))) return attack;
     }
