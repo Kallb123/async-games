@@ -66,6 +66,9 @@ describe("Realm Arena replay", () => {
             await musterAll(game);
             (game.gameState.commandHistory[0] as { version?: number }).version = playtest;
             await expect(buildTimeline(game, NAMES)).rejects.toThrow(/this server replays/);
+            // …and so it goes without a recap, rather than failing the board or the push that reads one.
+            expect(await buildEventFeed(game, NAMES, "a")).toEqual({ hasRecap: false, events: [], summary: null, tip: null });
+            expect(await buildAllEvents(game, NAMES)).toEqual([]);
         }
     });
 

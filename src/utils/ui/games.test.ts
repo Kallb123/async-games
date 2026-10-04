@@ -74,7 +74,7 @@ describe('shareImageForGame', () => {
     });
 
     it('falls back to the general Async Games card for a game with no card yet', () => {
-        expect(shareImageForGame('kingdombuilder', drawn)).toBe(OG_IMAGE);
+        expect(shareImageForGame('undrawn', drawn)).toBe(OG_IMAGE);
     });
 
     it('falls back to the general card when the game is unknown', () => {

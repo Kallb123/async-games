@@ -972,7 +972,8 @@ recap, a guide and a tutorial.
   recorded before it, as version 1 or with no version, was a playtest played
   while the rules were changing under it (§25.5), so it goes without a recap
   rather than getting a wrong one. A later rule change bumps the version and
-  keeps the old branch (`docs/command-versions.md`).
+  keeps the old branch (`docs/command-versions.md`). It launched without
+  achievements, which are left for later (`docs/achievements.md` §11).
 
 ### 17.4 Milestones B and C: after the first playable version
 
