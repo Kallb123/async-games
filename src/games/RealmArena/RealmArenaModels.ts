@@ -2,7 +2,9 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import type { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
+import { mongoMap } from "@/utils/games/mongoMaps";
+import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
 import { battleOf } from "./RealmArenaLogic";
@@ -14,6 +16,8 @@ import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId 
 import { areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
+import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
+import { CHARACTER_IDS } from "./roster";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -417,45 +421,175 @@ export interface IRealmArenaMasteryRow extends Tally {
     character: CharacterId;
 }
 
-/** Boiled down for the GameResult read model, once at game-end (see recordGameResult in GameResultData.ts). */
-export interface IRealmArenaGameResultStats {
+/**
+ * Boiled down for the GameResult read model, once at game-end (see
+ * recordGameResult in GameResultData.ts): the mastery rows, and the battle's
+ * record (§28) — every field of which is absent on a result recorded before
+ * it, on a battle given up during the muster, and on one whose replay didn't
+ * end where the battle did. A result without it shows the XP alone.
+ */
+export interface IRealmArenaGameResultStats extends Partial<BattleRecord> {
     mastery: IRealmArenaMasteryRow[];
 }
 
 export const realmArenaGameResultStatsSchemaDef = {
     mastery: [{ _id: false, userId: String, character: String, attacks: Number, abilities: Number, items: Number }],
+    // `default: undefined` so a result recorded before the record reads back
+    // as having none, rather than as a battle in which nobody did anything.
+    fighting: { type: [{ _id: false, userId: String, character: String, ...Object.fromEntries(RECORD_KEYS.map(key => [key, Number])) }], default: undefined },
+    centrePoints: { type: Schema.Types.Map, of: Number, default: undefined },
+    pointsPerRound: [{ type: Schema.Types.Map, of: Number }],
+    squadHpPerRound: [{ type: Schema.Types.Map, of: Number }],
+    losses: [gameResultEventSchemaDef],
 };
 
 /**
- * A row for every kind of character each player fought with, downed or not,
- * in seat order and then the order the muster lists them. A battle given up
- * during the muster has no fighters, so no rows, and nor does a dropped
- * player, whose squad left the battlefield with its tallies (§17.4 B2).
+ * Whether the replay the record was read from ended where the battle did:
+ * every seat on the score it finished with. One that drifted from the battle
+ * as fought refuses the moves it can no longer follow and carries on without
+ * them, so its record would tell a different battle while looking whole.
  */
-export function computeRealmArenaResultStats(gameData: IRealmArenaGameData): IRealmArenaGameResultStats {
+function recordEndsWhereBattleDid(gs: IRealmArenaSpecificGameState, record: BattleRecord): boolean {
+    const final = record.pointsPerRound.at(-1);
+    return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0));
+}
+
+/**
+ * A mastery row for every kind of character each player fought with, downed
+ * or not, in seat order and then the order the muster lists them. A battle
+ * given up during the muster has no fighters, so no rows, and nor does a
+ * dropped player, whose squad left the battlefield with its tallies (§17.4 B2).
+ *
+ * `record` is the battle's record, read off the game-end replay (§28):
+ * absent when the replay couldn't run, and left out when it didn't end where
+ * the battle did. A dropped player keeps their record — the replay saw what
+ * their squad did before it left.
+ */
+export function computeRealmArenaResultStats(gameData: IRealmArenaGameData, record?: BattleRecord): IRealmArenaGameResultStats {
     const gs = gameData.specificGameState;
     const fighters = gs.fighters ?? [];
-    const characterIds = Object.keys(CHARACTERS) as CharacterId[];
+    const mastery = gs.seats.flatMap(userId => CHARACTER_IDS.flatMap(character => {
+        const kind = fighters.filter(fighter => fighter.owner === userId && fighter.character === character);
+        if (kind.length === 0) return [];
+        return [{ userId, character, ...kind.reduce((sum, fighter) => addTally(sum, fighter.tally ?? NO_TALLY), NO_TALLY) }];
+    }));
+    if (!record || record.fighting.length === 0) return { mastery };
+    if (!recordEndsWhereBattleDid(gs, record)) {
+        console.warn(`Realm Arena game ${gameData.gameId}: the replay didn't end where the battle did, so its result has no battle record`);
+        return { mastery };
+    }
+    return { mastery, ...record };
+}
+
+/** A player's characters' records summed, and the one that dealt the most damage. */
+interface SquadRecord {
+    total: FightingRecord;
+    top?: FightingRow;
+}
+function squadRecords(stats: IRealmArenaGameResultStats): Map<string, SquadRecord> {
+    const squads = new Map<string, SquadRecord>();
+    for (const row of stats.fighting ?? []) {
+        const squad: SquadRecord = squads.get(row.userId) ?? { total: NO_RECORD };
+        // Read by name: a stored row is a Mongoose subdocument, and spreading
+        // one copies its internals, not these fields.
+        squad.total = addRecords(squad.total, row);
+        if (row.dealt > (squad.top?.dealt ?? 0)) squad.top = row;
+        squads.set(row.userId, squad);
+    }
+    return squads;
+}
+
+/**
+ * One group a player: their score and where it came from, who they downed and
+ * lost, the damage they dealt and the HP they healed, the character that did
+ * the most of it (§28), then the XP each character they fought with earned in
+ * this battle (§23.3). A result without the record has the XP alone.
+ */
+export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const groups = new Map<string, string[]>();
+    const linesOf = (userId: string) => {
+        const lines = groups.get(userId) ?? [];
+        groups.set(userId, lines);
+        return lines;
+    };
+    const finalScores = stats.pointsPerRound?.length ? mongoMap(stats.pointsPerRound[stats.pointsPerRound.length - 1]) : undefined;
+    const centre = stats.centrePoints ? mongoMap(stats.centrePoints) : undefined;
+    for (const [userId, { total, top }] of squadRecords(stats)) {
+        const lines = linesOf(userId);
+        const score = finalScores?.get(userId) ?? 0;
+        lines.push(`${pluralize(score, "point")}: ${centre?.get(userId) ?? 0} for the centre, ${total.knockoutPoints} for knock-outs`);
+        lines.push(`Downed ${pluralize(total.knockouts, "enemy", "enemies")}, lost ${pluralize(total.downed, "character")}`);
+        lines.push(`Dealt ${total.dealt} damage, healed ${total.healed} HP`);
+        if (top) lines.push(`Top fighter: ${CHARACTERS[top.character]?.name ?? top.character}, with ${top.dealt} damage`);
+    }
+    for (const row of stats.mastery ?? []) {
+        // A row is one battle's worth. Its counts are read by name, as above.
+        const { attacks, abilities, items } = row;
+        linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
+    }
+    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? userId, lines }));
+}
+
+/** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */
+function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
+    const rows = stats.fighting ?? [];
+    const bars = CHARACTER_IDS.flatMap(character => {
+        const kind = rows.filter(row => row.character === character);
+        if (kind.length === 0) return [];
+        const segments: Record<string, number> = {};
+        for (const row of kind) segments[row.userId] = (segments[row.userId] ?? 0) + row.dealt;
+        return [{ label: CHARACTERS[character].name, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
+    });
+    return bars.length > 0 ? { kind: "bar", title: "Damage by character", yLabel: "Damage", bars } : undefined;
+}
+
+/** Everything each squad did, a row a count and a column a player. Friendly fire only when somebody did some. */
+function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable | undefined {
+    const squads = [...squadRecords(stats)];
+    if (squads.length === 0) return undefined;
+    const centre = stats.centrePoints ? mongoMap(stats.centrePoints) : undefined;
+    const row = (label: string, value: (total: FightingRecord, userId: string) => number) => ({
+        label,
+        values: Object.fromEntries(squads.map(([userId, { total }]) => [userId, value(total, userId)])),
+    });
+    const friendlyFire = squads.some(([, { total }]) => total.friendlyFire > 0);
     return {
-        mastery: gs.seats.flatMap(userId => characterIds.flatMap(character => {
-            const kind = fighters.filter(fighter => fighter.owner === userId && fighter.character === character);
-            if (kind.length === 0) return [];
-            return [{ userId, character, ...kind.reduce((sum, fighter) => addTally(sum, fighter.tally ?? NO_TALLY), NO_TALLY) }];
-        })),
+        kind: "table",
+        title: "Battle record",
+        rowLabel: "Stat",
+        rows: [
+            row("Points for the centre", (_total, userId) => centre?.get(userId) ?? 0),
+            row("Points for knock-outs", total => total.knockoutPoints),
+            row("Enemies downed", total => total.knockouts),
+            row("Own characters downed", total => total.downed),
+            row("Damage dealt", total => total.dealt),
+            row("Damage taken", total => total.taken),
+            row("HP healed", total => total.healed),
+            row("Shots taken", total => total.shots),
+            row("Shots that landed (%)", total => total.shots > 0 ? Math.round(100 * total.landed / total.shots) : 0),
+            row("Reactions on watch", total => total.reactions),
+            ...(friendlyFire ? [row("Friendly fire", total => total.friendlyFire)] : []),
+        ],
     };
 }
 
-/** One group a player: the XP each character they fought with earned in this battle. */
-export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
-    const groups = new Map<string, string[]>();
-    for (const row of stats.mastery ?? []) {
-        const lines = groups.get(row.userId) ?? [];
-        // A row is one battle's worth. Its counts are read by name: the row is
-        // a Mongoose subdocument when it comes off a stored result, and
-        // spreading one copies its internals, not these fields.
-        const { attacks, abilities, items } = row;
-        lines.push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
-        groups.set(row.userId, lines);
-    }
-    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? userId, lines }));
+/**
+ * The battle's record as charts (§28): the race for points, a round at a time,
+ * with every character downed marked on its owner's line, and each squad's
+ * health beside it; then the damage each kind of character dealt, and the
+ * table of everything each squad did. None for a result without the record.
+ */
+export function formatRealmArenaCharts(stats: IRealmArenaGameResultStats): GameResultAnyChart[] {
+    const damage = formatDamageChart(stats);
+    const table = formatRecordTable(stats);
+    return [
+        // Each series is already a round apiece, so it's charted as one
+        // player's turns are: a playerCount of 1 collapses nothing.
+        ...compactCharts(
+            formatPerTurnChart(stats.pointsPerRound, "Points per round", "Points", 1, undefined, stats.losses),
+            formatPerTurnChart(stats.squadHpPerRound, "Squad health per round", "HP", 1),
+        ),
+        ...(damage ? [damage] : []),
+        ...(table ? [table] : []),
+    ];
 }

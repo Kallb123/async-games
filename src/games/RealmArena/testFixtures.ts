@@ -152,3 +152,14 @@ export async function playScriptedTurn(game: RealmArenaTestGame): Promise<void> 
     }
     if (!game.complete && !(await play(game, endTurnBy(player))).outcome.validMove) throw new Error(`${player}'s End turn was refused`);
 }
+
+/** A battle fought from the muster to its winner by the scripted squads, in fog of war if `fog` says (§27). */
+export async function playScriptedBattle(fog = false): Promise<RealmArenaTestGame> {
+    const game = makeGame(undefined, undefined, fog);
+    await musterAll(game);
+    for (let turn = 0; !game.complete; turn++) {
+        if (turn > 100) throw new Error("the battle outlasted its turn limit");
+        await playScriptedTurn(game);
+    }
+    return game;
+}

@@ -6,7 +6,7 @@ import { CHARACTERS } from "./characters";
 import { gameStateToModel } from "./RealmArenaModels";
 import { check, type ToldEvent } from "./rules";
 import type { IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
-import { actBy, battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, scriptedAction, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, scriptedAction, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §17.3 PR 8: the review and the recap are read off
 // the same recorded command log, so this replays whole real battles with the
@@ -27,17 +27,6 @@ async function noRandomness<T>(replay: () => Promise<T>): Promise<T> {
         entropy.mockRestore();
         random.mockRestore();
     }
-}
-
-/** A battle fought from the muster to its winner by the scripted squads, in fog of war if `fog` says (§27). */
-async function playScriptedBattle(fog = false): Promise<RealmArenaTestGame> {
-    const game = makeGame(undefined, undefined, fog);
-    await musterAll(game);
-    for (let turn = 0; !game.complete; turn++) {
-        if (turn > 100) throw new Error("the battle outlasted its turn limit");
-        await playScriptedTurn(game);
-    }
-    return game;
 }
 
 /** Every character's name, as the board and the log write them. */

@@ -124,7 +124,9 @@ import {
     computeRealmArenaResultStats,
     realmArenaGameResultStatsSchemaDef,
     formatRealmArenaResultStats,
+    formatRealmArenaCharts,
 } from "@/games/RealmArena/RealmArenaModels";
+import { recordBattle } from "@/games/RealmArena/recordBattle";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -554,11 +556,16 @@ const GAME_RESULT_STATS: Record<string, {
     },
     RealmArena: {
         model: RealmArenaGameResultModel,
-        // What each player's characters did, read off the final battlefield,
-        // whose fighters carry their tallies — character mastery is summed from
-        // these (docs/games/realm-arena.md §23.3), so nothing replays here.
-        compute: (gameData) => computeRealmArenaResultStats(gameData as IRealmArenaGameData),
+        compute: async (gameData) => {
+            const raGameData = gameData as IRealmArenaGameData;
+            // Mastery is read off the final battlefield, whose fighters carry
+            // their tallies (docs/games/realm-arena.md §23.3). The battle's
+            // record (§28) — damage, knock-outs, points a round — is read off
+            // the events of every step, from one replay.
+            return computeRealmArenaResultStats(raGameData, await recordBattle(raGameData));
+        },
         format: formatRealmArenaResultStats,
+        charts: formatRealmArenaCharts,
     },
 };
 
