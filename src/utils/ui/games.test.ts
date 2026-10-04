@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIRST_COMMAND_VERSION, GAME_META, availableGames, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
+import { FIRST_COMMAND_VERSION, GAME_META, availableGames, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame, type GameMeta } from './games';
 import { OG_IMAGE } from '@/utils/app';
 import { UNVERSIONED_COMMAND } from '@/utils/apiModels/gameCommand';
 
@@ -95,8 +95,13 @@ describe('command versions', () => {
 
 describe('availableGames', () => {
     it('leaves out a game still being built, so nothing counts or lists it', () => {
-        expect(GAME_META.realmarena.available).toBe(false);
-        expect(availableGames()).not.toContain(GAME_META.realmarena);
-        expect(availableGames()).toEqual(Object.values(GAME_META).filter(game => game.available));
+        const unfinished: GameMeta = { ...GAME_META.realmarena, url: 'unfinished', available: false };
+        GAME_META.unfinished = unfinished;
+        try {
+            expect(availableGames()).not.toContain(unfinished);
+            expect(availableGames()).toEqual(Object.values(GAME_META).filter(game => game.available));
+        } finally {
+            delete GAME_META.unfinished;
+        }
     });
 });

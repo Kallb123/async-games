@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.30. Split out of Defender of the Realm in its third round of
+**Status:** v1.31. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -13,7 +13,8 @@ by what a character does (§23): mastery from results, the rank-1 options, and
 the screens that show them. Figures are drawn as character art, facing the
 way they last stepped (§26.5). From Milestone B, free-for-all (B1–B2) and fog
 of war (B5, §27) are built: a host can have a battle fought in fog, where each
-player sees only what their squad can.
+player sees only what their squad can. PR 10 turned it on: it's in the game
+library, at command version 2.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -860,8 +861,8 @@ Answered in §11.5.
 
 Two milestones built the game so far. **A** is the first playable version
 agreed in §10: two players, one faction, Hold the Centre on the Ruined Fort.
-**B** and **C** come after it (§17.4). Everything up to C3 is built, except
-PR 10, which turns the game on.
+**B** and **C** come after it (§17.4). Milestone A, B1, B2, B5 and C1–C5
+are built, and PR 10 has turned the game on.
 
 This section keeps what the code still rests on, the principles and the
 engine decisions, and a few lines for each PR. The detail of what each PR
@@ -869,9 +870,10 @@ settled is in the code and its tests, which cite these sections.
 
 ### 17.1 Principles
 
-- **Hidden until it's ready.** `meta.ts` carries `available: false`, which
-  keeps Realm Arena out of `GameLibrary`. The setup screen can still be
-  reached by URL for playtesting. PR 10 turns it on.
+- **Hidden until it's ready.** Until PR 10, `meta.ts` carried
+  `available: false`, which kept Realm Arena out of `GameLibrary` while its
+  setup screen could still be reached by URL for playtesting. PR 10 turned
+  it on.
 - **Shared files change only when a guard test requires it.** The registry
   tests fail as soon as a `@serializable` class or a `meta.ts` exists without
   its wiring, so PR 3 made every engine one-liner at once.
@@ -964,9 +966,13 @@ recap, a guide and a tutorial.
 - **PR 9, guide, tutorial and art.** Two isometric tile sheets at the rules'
   heights, with open ground as one pattern of grass. The tour opens on
   whichever phase the match is in.
-- **PR 10, turn it on.** *Not yet done.* `available: true`, the share card,
-  one What's new line and a full crew pass. It needs a command version first
-  (§25.5).
+- **PR 10, turn it on.** `available: true`, the share card, one What's new
+  line and a full crew pass. The game launched at command version 2, and
+  nothing older replays (`oldestReplayableCommandVersion: 2`): every battle
+  recorded before it, as version 1 or with no version, was a playtest played
+  while the rules were changing under it (§25.5), so it goes without a recap
+  rather than getting a wrong one. A later rule change bumps the version and
+  keeps the old branch (`docs/command-versions.md`).
 
 ### 17.4 Milestones B and C: after the first playable version
 
@@ -1684,9 +1690,11 @@ drawn.
 3. **Old battles.** Maps are stored by id, so these rules reach every stored
    battle, and a replay of a playtest battle from before them can go wrong
    (a step onto a tower top from the ground is now refused, a strike across
-   a height is too, and walls touching the towers are now parapets). Realm Arena has
-   no command version yet; it wants one before PR 10 turns the game on, so a
-   later rule change can tell old moves from new.
+   a height is too, and walls touching the towers are now parapets).
+   *Settled by PR 10* (§17.3): the game launched at command version 2, and a
+   battle holding an older command isn't replayed, so a playtest battle goes
+   without a recap rather than getting a wrong one, and a later rule change
+   can tell old moves from new.
 
 ---
 
@@ -2004,3 +2012,4 @@ Realm, its sibling in the same world.
 | 1.28 | The muster's characters and items each have an ⓘ opening their stats — HP, movement, sight and points, and each weapon's, ability's, option's and item's AP, damage, range, chance to hit, cooldown and area — and `/admin/realmarena` shows every one at once, for balancing (docs/admin-tools.md). |
 | 1.29 | No cap on any one character: the budget is the only limit on a squad (§13.6). The muster heads its items "Consumables", and placing lists the squad as boxes that pick a character up and zoom the board to it (§21.3). |
 | 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |
+| 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). |
