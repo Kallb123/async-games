@@ -5,8 +5,8 @@
 //
 // None of it is kept on the game as it's played. It's read off the events
 // each command returned, by watching the game-end replay step by step
-// (`replayTurnByTurn`, driven from this game's GAME_RESULT_STATS entry in
-// GameResultData.ts): every one of them is told by the log, which every
+// (`replayTurnByTurn`, driven by `recordBattle` in recordBattle.ts from this
+// game's GAME_RESULT_STATS entry in GameResultData.ts): every one of them is told by the log, which every
 // player reads, so nothing here is a secret once the battle is over — the
 // rolls behind a shot are never read, only whether it landed.
 //
@@ -75,13 +75,6 @@ export interface BattleRecord {
 }
 
 const keyOf = (userId: string, character: CharacterId) => `${userId}\u0000${character}`;
-
-/** A round no step was counted towards — passed round the table twice in one hand-off — reads as the one before it. */
-function held(perRound: readonly Map<string, number>[]): Map<string, number>[] {
-    const filled: Map<string, number>[] = [];
-    for (let index = 0; index < perRound.length; index++) filled.push(perRound[index] ?? filled[index - 1]);
-    return filled;
-}
 
 const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...records].map(([key, record]) => [key, { ...record }]));
 
@@ -195,9 +188,10 @@ export function battleRecorder(seats: readonly string[]) {
             if (className === "RealmArenaUndo") {
                 records = undoable.pop() ?? records;
             } else {
-                const before = copyOf(records);
+                // Only an action can push the game's undo stack.
+                const before = className === "RealmArenaAct" ? copyOf(records) : undefined;
                 tell((step.outcome as { events?: BattleEvent[] }).events ?? []);
-                if (className === "RealmArenaAct" && gs.undoAnchorId === id) undoable.push(before);
+                if (before && gs.undoAnchorId === id) undoable.push(before);
             }
             // Whatever the game's stack has dropped since — its oldest, past
             // its depth, or all of it, on anything that can't be taken back
@@ -207,6 +201,7 @@ export function battleRecorder(seats: readonly string[]) {
             const fighters = gs.fighters ?? [];
             for (const fighter of fighters) {
                 known.set(fighter.id, { owner: fighter.owner, character: fighter.character });
+                // Starts its row, so a character that did nothing still has one.
                 recordOf(fighter.id);
             }
             last = new Map(fighters.map(fighter => [fighter.id, { hp: fighter.hp, burnedBy: fighter.burnedBy }]));
@@ -215,6 +210,12 @@ export function battleRecorder(seats: readonly string[]) {
             // closes a round, and any burning as the next one begins, are
             // that round's.
             const index = Math.min(round, lastRound);
+            // A round no step began in — passed round the table twice in one
+            // hand-off — reads as the one before it.
+            for (let skipped = pointsPerRound.length; skipped < index; skipped++) {
+                pointsPerRound.push(pointsPerRound[skipped - 1]);
+                squadHpPerRound.push(squadHpPerRound[skipped - 1]);
+            }
             pointsPerRound[index] = new Map(seats.map(userId => [userId, gs.scores?.[userId] ?? 0]));
             squadHpPerRound[index] = new Map(seats.map(userId => [userId, fighters.reduce((sum, fighter) => sum + (fighter.owner === userId ? fighter.hp : 0), 0)]));
             round = gs.roundsPlayed;
@@ -227,8 +228,8 @@ export function battleRecorder(seats: readonly string[]) {
                     return record ? [{ userId, character, ...record }] : [];
                 })),
                 centrePoints: new Map(centrePoints),
-                pointsPerRound: held(pointsPerRound),
-                squadHpPerRound: held(squadHpPerRound),
+                pointsPerRound: [...pointsPerRound],
+                squadHpPerRound: [...squadHpPerRound],
                 losses: [...losses],
             };
         },

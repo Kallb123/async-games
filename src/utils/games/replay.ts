@@ -628,7 +628,7 @@ export function identityNameMap(userIdList: readonly string[]): { [userId: strin
 // Replays a game via buildTimeline, calling `onStep` for every applied
 // command together with the 0-based index of the turn it belongs to and
 // whether it's the first step of that turn — the shared bookkeeping
-// computePerTurnStat and computePerTurnEvents both need: a turn ends when
+// computePerTurnStat and computePerTurnEvents share: a turn ends when
 // whose turn it is changes (`playedOnTurnOf` — the sender, or for a command
 // played out of turn the player whose turn it was, so an interrupt is part of
 // the turn it landed in rather than a turn of its own), not whenever a
@@ -639,20 +639,21 @@ export function identityNameMap(userIdList: readonly string[]): { [userId: strin
 // countTurns() (turnCount.ts) uses for the result page's "N turns" line, so
 // every per-turn chart and that summary agree on how long the game ran.
 // Usernames aren't resolved yet at game-end (recordGameResult only has
-// userIds), so both callers give it the identityNameMap.
+// userIds), so every caller is given the identityNameMap.
 //
 // Returns false (having already warned) if the replay itself throws, rather
 // than letting the error propagate: a snapshot-replay game created before its
 // snapshot existed can't be replayed at all (see
-// docs/turn-recap-and-planning.md), and both callers run on the last move of
+// docs/turn-recap-and-planning.md), and every caller runs on the last move of
 // a game, inside recordGameResult, so throwing here would cost a player their
 // final turn to lose a chart nobody has seen yet. Downgrading instead is the
 // same graceful no-op recap already makes for those games — but it's worth a
 // warning, since the other way to land here is a genuinely broken adapter.
 //
 // Exported for a game whose result reads more than a per-turn series can
-// carry — Realm Arena's battle record, which tallies what every event of every
-// step did — so it still costs the last move one replay.
+// carry — Realm Arena's battle record (`recordBattle.ts`), which tallies
+// what every event of every step did — so it still costs the last move one
+// replay.
 export async function replayTurnByTurn(
     gameData: IGameData,
     onStep: (step: IReplayStep, turnIndex: number, isFirstStepOfTurn: boolean, specificGameState: unknown) => void,

@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.31. Split out of Defender of the Realm in its third round of
+**Status:** v1.32. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -14,7 +14,9 @@ the screens that show them. Figures are drawn as character art, facing the
 way they last stepped (§26.5). From Milestone B, free-for-all (B1–B2) and fog
 of war (B5, §27) are built: a host can have a battle fought in fog, where each
 player sees only what their squad can. PR 10 turned it on: it's in the game
-library, at command version 2.
+library, at command version 2. A finished battle's result tells the battle
+(§28): the points race, each squad's health, the damage by character and a
+record of what each squad did.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -1996,7 +1998,8 @@ points came, who did the damage and what each squad went through.
 
 - **From the game-end replay, not from new state.** Nothing about the record
   is kept as the battle is played. The result replays the battle once, and a
-  recorder (`battleRecorder`, `battleRecord.ts`) watches every step: the events
+  recorder (`battleRecorder`, `battleRecord.ts`, driven by `recordBattle.ts`,
+  which reads only a finished battle) watches every step: the events
   its command returned, and the state after it. Damage is the HP a hit actually
   took, so a hit for 4 on a character with 2 left deals 2. Burning is credited
   to whoever set it alight, as its knock-out is (§20.2). A blast landing on an

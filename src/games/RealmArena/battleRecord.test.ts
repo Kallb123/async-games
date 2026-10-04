@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { replayTurnByTurn } from "@/utils/games/replay";
 import { formatGameResultCharts, formatGameResultStats, RealmArenaGameResultModel } from "@/utils/mongodb/GameResultData";
 import { battleRecorder, NO_RECORD, type BattleRecord } from "./battleRecord";
+import { recordBattle } from "./recordBattle";
 import {
     buildInitialRealmArenaState,
     computeRealmArenaResultStats,
@@ -12,7 +12,7 @@ import {
 } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
 import { battleRounds, isStanding, knockoutPoints, newFighter, type BattleEvent, type Fighter } from "./rules";
-import { PLAYERS, playScriptedBattle, type RealmArenaTestGame } from "./testFixtures";
+import { makeGame, musterAll, PLAYERS, playScriptedBattle, playScriptedTurn, type RealmArenaTestGame } from "./testFixtures";
 
 // docs/games/realm-arena.md §28: the battle's record, read off the events of
 // every step of the game-end replay, and the result page's charts drawn from it.
@@ -23,10 +23,9 @@ const NAMES = new Map([["a", "Alice"], ["b", "Bob"]]);
 
 /** The record the result keeps, read off a whole battle's replay as GameResultData.ts reads it. */
 async function recordOf(game: RealmArenaTestGame): Promise<BattleRecord> {
-    const recorder = battleRecorder(game.specificGameState.seats);
-    const replayed = await replayTurnByTurn(game, (step, _turn, _first, gs) => recorder.observe(step, gs as IRealmArenaSpecificGameState), "test");
-    if (!replayed) throw new Error("the replay failed");
-    return recorder.result();
+    const record = await recordBattle(game);
+    if (!record) throw new Error("the replay failed");
+    return record;
 }
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
@@ -90,6 +89,24 @@ describe("the battle record, read off a whole battle (§28)", () => {
                 [userId, sum(stats.fighting!.filter(row => row.userId === userId).map(row => row.dealt))])));
         }
         expect(formatGameResultStats("RealmArena", stored, NAMES)).toEqual(formatRealmArenaResultStats(stats, NAMES));
+    });
+
+    it("never keeps a shot's roll, which the log never tells (§26.2)", async () => {
+        const game = await playScriptedBattle();
+        expect(game.gameState.commandHistory.some(command => (command as { recordedRolls?: number[] }).recordedRolls?.length)).toBe(true);
+        const stats = computeRealmArenaResultStats(game, await recordOf(game));
+        const stored = new RealmArenaGameResultModel({ gameId: "g", gameType: "RealmArena", stats }).toObject().stats;
+        const shown = [formatGameResultStats("RealmArena", stored, NAMES), formatGameResultCharts("RealmArena", stored, NAMES)];
+        for (const bytes of [JSON.stringify(stored), JSON.stringify(shown)]) {
+            expect(bytes).not.toMatch(/roll|chance/i);
+        }
+    });
+
+    it("isn't read off a battle still being fought, whose replay would see through the fog", async () => {
+        const game = makeGame(undefined, undefined, true);
+        await musterAll(game);
+        await playScriptedTurn(game);
+        expect(await recordBattle(game)).toBeUndefined();
     });
 
     it("is left out when the replay didn't end where the battle did", async () => {

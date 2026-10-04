@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultEvent, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -428,13 +428,8 @@ export interface IRealmArenaMasteryRow extends Tally {
  * it, on a battle given up during the muster, and on one whose replay didn't
  * end where the battle did. A result without it shows the XP alone.
  */
-export interface IRealmArenaGameResultStats {
+export interface IRealmArenaGameResultStats extends Partial<BattleRecord> {
     mastery: IRealmArenaMasteryRow[];
-    fighting?: FightingRow[];
-    centrePoints?: Map<string, number>;
-    pointsPerRound?: Map<string, number>[];
-    squadHpPerRound?: Map<string, number>[];
-    losses?: GameResultEvent[];
 }
 
 export const realmArenaGameResultStatsSchemaDef = {
@@ -498,7 +493,7 @@ function squadRecords(stats: IRealmArenaGameResultStats): Map<string, SquadRecor
         // Read by name: a stored row is a Mongoose subdocument, and spreading
         // one copies its internals, not these fields.
         squad.total = addRecords(squad.total, row);
-        if (row.dealt > 0 && row.dealt > (squad.top?.dealt ?? 0)) squad.top = row;
+        if (row.dealt > (squad.top?.dealt ?? 0)) squad.top = row;
         squads.set(row.userId, squad);
     }
     return squads;
@@ -512,7 +507,11 @@ function squadRecords(stats: IRealmArenaGameResultStats): Map<string, SquadRecor
  */
 export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
     const groups = new Map<string, string[]>();
-    const linesOf = (userId: string) => groups.get(userId) ?? groups.set(userId, []).get(userId)!;
+    const linesOf = (userId: string) => {
+        const lines = groups.get(userId) ?? [];
+        groups.set(userId, lines);
+        return lines;
+    };
     const finalScores = stats.pointsPerRound?.length ? mongoMap(stats.pointsPerRound[stats.pointsPerRound.length - 1]) : undefined;
     const centre = stats.centrePoints ? mongoMap(stats.centrePoints) : undefined;
     for (const [userId, { total, top }] of squadRecords(stats)) {
@@ -579,12 +578,13 @@ function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable |
  * with every character downed marked on its owner's line, and each squad's
  * health beside it; then the damage each kind of character dealt, and the
  * table of everything each squad did. None for a result without the record.
- * Each series is already a round apiece, so it's charted as a "turn" a round.
  */
 export function formatRealmArenaCharts(stats: IRealmArenaGameResultStats): GameResultAnyChart[] {
     const damage = formatDamageChart(stats);
     const table = formatRecordTable(stats);
     return [
+        // Each series is already a round apiece, so it's charted as one
+        // player's turns are: a playerCount of 1 collapses nothing.
         ...compactCharts(
             formatPerTurnChart(stats.pointsPerRound, "Points per round", "Points", 1, undefined, stats.losses),
             formatPerTurnChart(stats.squadHpPerRound, "Squad health per round", "HP", 1),

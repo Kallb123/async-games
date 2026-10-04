@@ -19,7 +19,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat, computePerTurnEvents, computePerTurnInternalStats, replayTurnByTurn } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents, computePerTurnInternalStats } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -121,13 +121,12 @@ import { trackById } from "@/games/RaceCars/board";
 import {
     IRealmArenaGameData,
     IRealmArenaGameResultStats,
-    IRealmArenaSpecificGameState,
     computeRealmArenaResultStats,
     realmArenaGameResultStatsSchemaDef,
     formatRealmArenaResultStats,
     formatRealmArenaCharts,
 } from "@/games/RealmArena/RealmArenaModels";
-import { battleRecorder } from "@/games/RealmArena/battleRecord";
+import { recordBattle } from "@/games/RealmArena/recordBattle";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -563,13 +562,7 @@ const GAME_RESULT_STATS: Record<string, {
             // their tallies (docs/games/realm-arena.md §23.3). The battle's
             // record (§28) — damage, knock-outs, points a round — is read off
             // the events of every step, from one replay.
-            const recorder = battleRecorder(raGameData.specificGameState.seats);
-            const replayed = await replayTurnByTurn(
-                raGameData,
-                (step, _turnIndex, _isFirstStepOfTurn, specificGameState) => recorder.observe(step, specificGameState as IRealmArenaSpecificGameState),
-                "battle record",
-            );
-            return computeRealmArenaResultStats(raGameData, replayed ? recorder.result() : undefined);
+            return computeRealmArenaResultStats(raGameData, await recordBattle(raGameData));
         },
         format: formatRealmArenaResultStats,
         charts: formatRealmArenaCharts,
