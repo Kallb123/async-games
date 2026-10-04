@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.32. Split out of Defender of the Realm in its third round of
+**Status:** v1.33. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -16,7 +16,9 @@ of war (B5, §27) are built: a host can have a battle fought in fog, where each
 player sees only what their squad can. PR 10 turned it on: it's in the game
 library, at command version 2. A finished battle's result tells the battle
 (§28): the points race, each squad's health, the damage by character and a
-record of what each squad did.
+record of what each squad did. §29 plans co-op against the computer: the
+players as one team, and an enemy played by game AI that takes a turn after
+each of theirs.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -992,6 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
+| B8 | Co-op against the computer (§29) | Planned |
 
 **What B2 settled:**
 
@@ -2020,6 +2023,301 @@ points came, who did the damage and what each squad went through.
 - **A dropped player keeps their record**: the replay saw what their squad did
   before it left, though their characters are gone from the final battlefield.
 
+## 29. Co-op against the computer (B8)
+
+*Proposal.* The players fight together, as one team, against a squad the game
+plays itself. Turns stay individual: each player takes their own turn, as now,
+and the enemy moves straight after each one, inside the command that ended it
+— as the island floods after every turn in Banned Islet and the infection
+spreads after every turn in Outbreak. Nobody waits on the computer, and
+nobody's turn is shared.
+
+"The computer" is game AI: rules written in code that read the battle and pick
+an action. No language model is involved, and nothing leaves the server.
+
+### 29.1 What the players see
+
+- **The host chooses the mode.** The setup screen gains *Free-for-all* or
+  *Co-op against the computer*, and for co-op a difficulty: *Easy*, *Normal*
+  or *Hard*. Co-op is for two or three players. Solo (one player against the
+  computer) comes after it (§29.8).
+- **The battlefield is the one for one more squad** (`mapForPlayers(players +
+  1)`): two players on the Ring Fort, three on the Four-Gate Fort. The players
+  take the first deployment zones and the enemy the last one: on the Ring Fort
+  the players get the twin corners and the enemy the bottom edge (§19.2).
+- **The players muster as now**, sealed from each other until the last one
+  has (§17.2). The budget and the battle's length are the ones for the number
+  of squads on the map, players plus the enemy (§13.6, §13.8): 80 points and
+  13 rounds for two players, 70 and 12 for three.
+- **The enemy fields one warband per player.** A warband is a squad of its
+  own (§29.4), deployed in the enemy's zone. So a three-player team faces
+  three warbands, and the enemy's turn after each player's moves one of them.
+- **The team is one side.** Teammates are allies: they share their sight in
+  fog, a Cleric heals and raises a teammate's character as its own, a shield
+  wall covers them, and nobody's overwatch fires at a teammate. A fireball or
+  a flask still hits whoever is under it, as now.
+- **Each player still scores**, for the centre and for knock-outs, and the
+  team's score is the sum. Downing a teammate's character scores nobody, as
+  downing your own doesn't (§13.6).
+
+### 29.2 The enemy's turn
+
+- **After every player's turn, one warband takes a turn.** The warbands go in
+  their own rotation, one after each player's turn, stepping past any with
+  nobody left standing. With every player still in, each warband acts once a
+  round, between the players, as a team in alternate seats would (§5.2): A1,
+  enemy, A2, enemy.
+- **A warband's turn is a player's turn**: it begins with `startTurn`, takes
+  actions one at a time with `check` and `act`, and ends with `endTurn`,
+  whose quick defaults put every character with AP left on watch (§6). The
+  rules don't know a computer is playing.
+- **It happens inside the player's End turn.** `RealmArenaEndTurn` ends the
+  player's turn, plays the next warband's, and begins the next player's
+  (`handOff`). So the command that ends a turn is the one the next player is
+  notified about, as today, and the enemy's turn is in its outcome for the
+  board to play out (§26) and the recap to tell.
+- **A turn the player missed still gets its enemy turn.** A timed-out turn is
+  an End turn (§17.2), so it runs the enemy's too.
+- **A dropped player** leaves as in a free-for-all (§17.4 B2), and the
+  warbands carry on. With fewer players' turns, each warband acts a little
+  less often. That's a small mercy for a team a player short, and it needs no
+  rule of its own.
+
+### 29.3 Winning and losing
+
+- **The battle ends** at the turn limit, or when one side has nobody standing
+  — the same rule as now, read by side instead of by squad (§5.1, §29.4).
+- **The team wins** if its score beats the enemy's. Level scores go to the
+  side with more points' worth still standing, as §5.1's first tie-break. If
+  that is level too, the enemy holds the field and the team loses.
+- **It's one ending for everybody**, `teamwin` or `teamloss`, as Banned Islet
+  and Outbreak end (`finishGame`): `winner` is empty and `endDetail` gives the
+  final score ("The team 41, the enemy 33").
+- **Mastery is earned as in any battle** (§23.1): a co-op battle is a battle.
+  The enemy's characters earn nothing; they have nobody to earn it for.
+
+### 29.4 Sides: one change shared with teams
+
+Every rule that asks "is this an enemy?" asks today whether two characters
+have different owners. Co-op needs it asked by side, and so will teams of two
+(B3). So both are built on one change, made first and on its own:
+
+- **`sides`** on `BattleState`: who is on whose side, by owner. A battle
+  without it is a free-for-all, and every owner is a side of its own, so
+  nothing changes for any battle fought so far.
+- **One helper, `allied(state, a, b)`**, replaces each owner comparison in
+  `rules.ts` that means "friend or foe": an enemy to attack, a watcher that
+  reacts, sight under fog (`squadSight`, `viewOf`), a heal, a raise, a Purify,
+  a shield wall, a path's way round (`routed`), the centre's holders, who is
+  still standing (`squadsStanding`) and the end of the battle. "Whose
+  character is this?" — the actor is the player's own, its turn begins —
+  stays an owner check, since a player still moves only their own squad.
+- **`battleOf` builds `sides`** from the game's persisted fields (`coop`,
+  `seats`), so nothing new is stored on a fighter and replay rebuilds it.
+- **The warbands are owners too**: `ai:0`, `ai:1`, …, which no Clerk id can
+  ever be. A name helper (`nameFor`) calls them "the enemy's first warband"
+  and so on, and the log, the board's labels and the results all go through
+  it. The enemy wears one colour, whichever warband.
+
+### 29.5 How the computer plays
+
+**Principles.** These are what make the enemy fair, testable and safe to
+improve:
+
+- **The same rules.** Every action the computer takes goes through `check`
+  and `act`, exactly as a player's does. It can't do anything a player
+  couldn't.
+- **The same view.** It plans from `viewOf(battle, its side)`, never from the
+  battle, so in fog it knows only what its warbands see (§27). The planner is
+  handed only the view, so it can't cheat by mistake.
+- **The same dice.** Its rolls are drawn and recorded as a player's are
+  (§17.2). It never sees a roll before it acts.
+- **One action at a time.** It picks the best action, takes it, sees the
+  result — the shot hit, the overwatch downed the mover — and plans again
+  from there, as a player does.
+- **Deterministic.** Ties are broken by fighter id, then by square, and
+  nothing in it draws a random number. The same view always gets the same
+  action, which is what makes it testable.
+- **Recorded, not replayed.** The actions it chose are stored on the End turn
+  (`recordedEnemyActions`), beside the rolls they used. A replay applies the
+  recorded actions and never runs the planner, so the computer can be
+  improved at any time without a command version (`docs/command-versions.md`)
+  and without changing a battle already fought. Being a `recorded…` field,
+  it's stripped from every request (`stripRecordedRandomness`): no client can
+  choose the enemy's moves.
+
+**What it can do next.** For each of the warband's standing characters, the
+planner lists the actions it could take, and keeps only those `check`
+allows:
+
+- **From where it stands:** an attack or aimed shot at each enemy it can see,
+  each ability and option at each target or square it could be aimed at (a
+  fireball or a flask at each square within range that has an enemy in its
+  3×3), its item, hunkering down.
+- **A move and then an action:** a move to a square it can reach this turn
+  (`reachOf`), then any of the above from there with the AP left, or
+  stopping there (and going on watch, as the turn's end will put it).
+- **Ending the warband's turn**, which is always on the list. When nothing
+  scores better than stopping, the turn ends.
+
+**Judging an action.** The planner plays the action out on a copy of the
+battle, with `act`, and scores the battle that results. One scoring function
+judges every action, so there is no code per ability: a Cleric heals because
+a healthier squad scores higher, and a Mage holds a fireball that would
+catch its own side because the friendly damage costs more than the enemy
+damage earns.
+
+- **A shot is judged on its odds.** It is played out three times, with a roll
+  that hits, one that grazes and one that misses, and the three results are
+  weighed by the chance of each (`shotOdds`). A fireball, a flask and a
+  strike roll nothing, so they're played out once.
+- **A move is judged on the overwatch it walks into.** The move is played out
+  with every reaction missing, and the expected damage of the reactions on
+  its path (`reactionsTo`, each at its odds) is taken off. In fog it can only
+  count the watchers it can see; walking into an ambush it couldn't see is
+  fair.
+
+**The score of a battle**, from the computer's side, adds up:
+
+| Term | Rewards |
+|---|---|
+| **Points** | Its side's score less the team's: a knock-out is worth what it scores, and the centre what it will score at the turn's end (§13.7). This is what makes it finish a wounded character rather than spread damage |
+| **Strength** | Its characters' points' worth standing, scaled by the HP each has left, less the same for the team's. Healing, damage and friendly fire all show up here |
+| **Exposure** | Less the damage each of its characters could take next turn: the best expected hit (`shotOdds` × damage) any enemy it can see could make on it from where that enemy stands, and a strike from any melee enemy that could reach it. This is what puts it in cover, keeps it from being flanked, and makes a Knight's shield wall worth raising |
+| **Threat** | A little for the damage each of its characters could deal next turn from where it stands, so an Archer holds a firing position and a watcher stands where it covers the ground |
+| **The objective** | Being nearer the centre, by walking distance, weighing more as the round it starts scoring (§15.3) comes nearer. Without an enemy in sight, this is what moves it |
+
+**Temperament.** Each character weighs those terms a little differently,
+read from one small table beside `CHARACTERS`: how much it fears exposure,
+and the range it likes to keep from the nearest enemy (next to it for melee,
+about two-thirds of its weapon's range for a shot). A Knight walks into fire
+that an Archer would step back from; a Scout presses for a flank; a Cleric
+keeps behind its line. These are the numbers to tune at the playtest, and the
+only character-specific thing in it.
+
+**Thinking fast enough.** A warband's turn runs inside a player's request, so
+it has to be quick. A 48×48 map gives a character a few hundred squares it
+could reach:
+
+- Before anything is played out, the reachable squares are ranked by a cheap
+  look at the square alone — its cover from the enemies in sight, its
+  distance from the centre and from its preferred range — and only the best
+  dozen, plus the squares it could attack an enemy from, are played out.
+- Line of sight and shot odds are remembered within a turn, since the same
+  pairs of squares are asked about again and again.
+- A turn is capped at four actions a character, more than its AP could ever
+  pay for, so it always ends.
+- *Target:* a warband's turn plans in under 250 ms on the Four-Gate Fort, and
+  a test holds it there. If it doesn't, the pruning is tightened before
+  anything else changes.
+
+**When something goes wrong**, the player's End turn still succeeds. An
+action the planner chose that `check` refuses ends that warband's turn there,
+and so does an error thrown while planning; both are logged. What it did
+before is kept and recorded, so a replay still matches.
+
+**Difficulty is points.** Each warband's budget is the players' budget times
+0.8 on Easy, 1 on Normal and 1.3 on Hard. The computer plays the same way at
+every difficulty: an enemy that plays worse on purpose is less fun to beat
+than one that has fewer characters.
+
+**Its squads.** Each warband is drawn when the battle is created, from a short
+table of warbands for the budget — at least one character that fights in
+melee and one that shoots — with any points left over spent on items. It's
+stored with the battle (`coop.warbands`), so a replay rebuilds it and a later
+change to the table touches no battle already made. The warbands are placed
+together in the enemy's zone with `readyMadeMuster`, and kept off the wire
+until the battle begins, like every squad (§17.2). The enemy is the Realm's
+own characters under another banner until there's a second faction (B6), and
+has no options, since nobody has earned it any (§23).
+
+### 29.6 Engine
+
+- **`coop`** on the state and the invitation: `{ difficulty, warbands }`,
+  absent in a free-for-all. Checked at setup — two or three players and a
+  difficulty that's one of the three — like everything a request sends.
+- **`ai.ts`**, beside `rules.ts`: `nextAction(view, owner, round): Action |
+  undefined`. Pure and browser-safe, reading only `rules.ts`. Everything in
+  §29.5 lives here.
+- **`RealmArenaMuster`**: when the last player has mustered, the warbands take
+  the field with everyone else, their ids after the players'.
+- **`handOff`** plays the next warband's turn between the player who ended and
+  the next player: `startTurn`, then `nextAction` and `act` until it returns
+  nothing or the battle is over, then `endTurn`. The warbands' rotation is
+  stored (`coop.nextWarband`). The rounds still count the players' seats;
+  `battleRounds` is read for the squads on the map, players and enemy, so
+  §13.8's table holds.
+- **`RealmArenaEndTurn`** records what the warband did on itself:
+  `recordedEnemyActions`, and its rolls in `recordedRolls` after the player's
+  own. On a replay, the recorded actions are applied and the planner never
+  runs.
+- **`CheckGameOver`** ends a co-op battle with `teamwin` or `teamloss`
+  (§29.3).
+- **What's told**: the enemy's turn is in the End turn's events, so every
+  viewer gets it through `stepOutcomeToModel`, cut to what their side saw
+  (§27.3). The End turn's own response to its sender goes through the same
+  cut — the warband's moves out of the team's sight aren't in it.
+- **Mastery and results** skip the warbands' owners: no XP row, and in the
+  battle record (§28) the enemy is one column, its warbands added together.
+- **No new command, no command version.** A co-op battle is a new kind of
+  battle, and nothing about a free-for-all changes.
+
+### 29.7 Screens
+
+- **Setup**: the mode and the difficulty, on the screen that already has fog
+  of war's switch, with `GameSetupLayout` as now.
+- **The board**: the enemy's characters in its own colour and named as the
+  enemy; the scoreboard shows the team's total against the enemy's, with each
+  player's share under it.
+- **The enemy's turn plays out** on the board as any other turn does (§26),
+  and the recap gives it its own rows, one per character, as it does a
+  player's (§17.3 PR 8): "The enemy's Archer moved, then shot Alice's Knight:
+  a hit for 3".
+- **The result**: "Victory" or "Defeat" for the whole team, the points race
+  with the team and the enemy as two lines, and the battle record as now.
+- **The guide** gains a short section on co-op; the tutorial is unchanged,
+  since a co-op turn is a turn.
+
+### 29.8 PRs
+
+| PR | What | Review |
+|---|---|---|
+| 1 | **Sides.** `sides`, `allied`, and every friend-or-foe rule read by side (§29.4). A free-for-all is unchanged, which the existing tests show; new tests put two owners on one side. This is the groundwork for teams (B3) too | `caveman`, `croupier` (sight) |
+| 2 | **The planner.** `ai.ts` and its tests (§29.9), not yet wired to anything | `caveman` |
+| 3 | **The engine.** `coop` from setup to state, the warbands drawn and mustered, the enemy's turn in `handOff`, recorded and replayed, the co-op ending, mastery and results skipping the enemy. The setup route takes `coop`; the screen doesn't offer it yet | `locksmith`, `gremlin`, `croupier` |
+| 4 | **The screens** (§29.7), the guide, and the one What's new line | `caveman`, `rulebook` |
+| Later | Solo against the computer (one player, on the Ruined Fort, as Fires Out's solo setup does); remembering where an enemy was last seen in fog; achievements for co-op | |
+
+### 29.9 Testing the computer
+
+- **Puzzles.** Small battles set up in a test, each with one right answer:
+  it shoots the flanked enemy rather than the one in full cover; it finishes a
+  wounded character; it heals a hurt ally; it moves into cover rather than
+  stopping in the open; it goes round an overwatch lane when a covered way
+  exists; it doesn't fireball a 3×3 with its own in it when another target
+  will do; it heads for the centre before it scores.
+- **It never cheats.** Moving an enemy it can't see anywhere else on the map
+  never changes its choice.
+- **It never breaks.** Whole battles, computer against computer on every map
+  with seeded rolls, run to the end without a refused action, inside the time
+  budget.
+- **It plays well.** Against a stand-in player that takes random legal
+  actions, it wins nearly every battle (19 of 20, seeded). That's a floor
+  that catches a change that makes it worse, not a measure of how good it is;
+  the playtest is that.
+- **Replay holds.** A recorded co-op battle replays to the same end with the
+  planner swapped for one that throws.
+
+### 29.10 Open questions
+
+- **Is Hold the Centre the right mission for co-op?** It needs nothing new,
+  which is why it's proposed. A mission made for co-op — survive the waves,
+  carry the relic out — could follow with the second mission (B7).
+- **Difficulty numbers.** 0.8, 1 and 1.3 are first guesses. The playtest
+  should watch whether Normal wins about half its battles.
+- **Teams on the same plan.** With sides built, teams of two (B3) is the
+  free-for-all with two sides of two, and could follow co-op closely.
+
 ---
 
 ## Appendix: Working title
@@ -2075,3 +2373,4 @@ Realm, its sibling in the same world.
 | 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |
 | 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). The crew's launch pass cuts a battle's ranks on the wire to the viewer's own (§23.3) and accepts a third player reading a shot's odds in fog (§27.2). |
 | 1.32 | Battle results (§28): the result page charts the points race round by round with each character downed marked on its owner's line, each squad's health, the damage each kind of character dealt and a table of everything each squad did, all read off the game-end replay. |
+| 1.33 | Co-op against the computer (§29), planned: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn. Built on sides (`allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result; its actions are recorded, so it can be improved without changing a battle already fought. Difficulty is points. |
