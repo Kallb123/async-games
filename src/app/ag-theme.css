@@ -2512,7 +2512,7 @@ button.ag-chat-gif { cursor: pointer; }
     padding-bottom: max(12px, calc(env(safe-area-inset-bottom) - var(--ag-banner-height)));
     pointer-events: none;
 }
-.ag-float-box {
+.ag-dock--float .ag-dock-pill {
     pointer-events: auto;
     background: var(--ag-dark);
     color: var(--ag-on-dark);
@@ -2521,9 +2521,9 @@ button.ag-chat-gif { cursor: pointer; }
     font: 700 13px var(--ag-font);
     box-shadow: var(--ag-shadow-lift);
 }
-.ag-float-box b { color: var(--ag-gold); font-weight: 800; }
-.ag-float-box--warn { background: var(--ag-danger); }
-.ag-float-box--warn b { color: inherit; }
+.ag-dock--float .ag-dock-pill b { color: var(--ag-gold); font-weight: 800; }
+.ag-dock--float .ag-dock-pill--warn { background: var(--ag-danger); }
+.ag-dock--float .ag-dock-pill--warn b { color: inherit; }
 .ag-review {
     margin: 12px 16px;
     background: var(--ag-dark);

@@ -38,10 +38,20 @@ interface RealmArenaMusterSheetProps {
  * through both steps (`PointsBox`), so they stay in view while the steppers
  * change them.
  */
-export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending }: RealmArenaMusterSheetProps) {
+export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps) {
+    // Beside the step rather than inside it, so it stays mounted from one step to the next.
+    return (
+        <>
+            <MusterStep {...props} />
+            <PointsBox pointsLeft={props.draft.pointsLeft} budget={props.budget} />
+        </>
+    );
+}
+
+/** Whichever step of the muster the player is on: picking the squad, or placing it. */
+function MusterStep({ draft, onMuster, pending }: RealmArenaMusterSheetProps) {
     const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
-    const points = <PointsBox pointsLeft={pointsLeft} budget={budget} />;
     // Over budget, the box already says why the muster can't go.
     const why = pointsLeft >= 0 && refusal && <p className="ag-hint">{refusal}</p>;
 
@@ -75,7 +85,6 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     onInfo={id => setInfo({ kind: 'item', id })}
                 />
                 {why}
-                {points}
                 <div className="ag-action-grid">
                     <button type="button" className="ag-btn ag-btn--primary" disabled={refusal !== undefined} onClick={draft.place}>
                         Place your squad
@@ -100,7 +109,6 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                 </>
             )}
             {why}
-            {points}
             <div className="ag-action-grid">
                 <button type="button" className="ag-btn ag-btn--light" disabled={pending} onClick={draft.unplace}>
                     Change squad
@@ -128,7 +136,7 @@ function PointsBox({ pointsLeft, budget }: PointsBoxProps) {
     const measure = useHeightVar('--ag-actions-dock-height');
     return (
         <div className="ag-dock ag-dock--float" ref={measure}>
-            <div className={`ag-float-box${pointsLeft < 0 ? ' ag-float-box--warn' : ''}`} role="status">
+            <div className={`ag-dock-pill${pointsLeft < 0 ? ' ag-dock-pill--warn' : ''}`} role="status">
                 {pointsLeft >= 0
                     ? <><b>{pointsLeft}</b> of {budget} points left</>
                     : <><b>{pluralize(-pointsLeft, 'point')}</b> over the budget of {budget}</>}
