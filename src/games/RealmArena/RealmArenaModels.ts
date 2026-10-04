@@ -13,7 +13,7 @@ import { userToken } from "@/utils/games/history";
 import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
-import { allied, areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { allied, areaAround, battleRounds, fighterById, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -382,12 +382,9 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
  */
 function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
-    const own = (id: number) => {
-        const owner = battle.fighters.find(fighter => fighter.id === id)?.owner;
-        return owner !== undefined && viewerId !== null && allied(battle, owner, viewerId);
-    };
+    const own = (id: number) => allied(battle, fighterById(battle, id)?.owner, viewerId);
     const inSight = (id: number) => {
-        const fighter = battle.fighters.find(one => one.id === id);
+        const fighter = fighterById(battle, id);
         return fighter !== undefined && (own(id) || seen(fighter.square));
     };
     return events.flatMap((event): BattleEvent[] => {

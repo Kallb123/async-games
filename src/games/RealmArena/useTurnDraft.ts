@@ -234,18 +234,19 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     // sent again from where it no longer stands.
     const key = fighter ? `${turnKey}:${fighter.id}:${fighter.square}:${fighter.ap}:${fighter.hp}` : turnKey;
     const [draft, setDraft] = useResettingState<Draft>(MOVE, key);
-    const { field, fighters } = battle;
+    // The pieces the searches read, sides among them, so a teammate is passed through as the server's `check` would (§29.6).
+    const { field, fighters, sides } = battle;
     const aim = draft.aim;
     // The reach is a search over every square of the map, so it's worked out
     // once per character and aim rather than on every render.
     const reach = useMemo(
-        () => fighter && isMoving(aim) ? reachOf({ field, fighters }, fighter, aim === "sneak") : null,
-        [field, fighters, fighter, aim],
+        () => fighter && isMoving(aim) ? reachOf({ field, fighters, sides }, fighter, aim === "sneak") : null,
+        [field, fighters, sides, fighter, aim],
     );
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
     // Aimed at anything else, the shading is where it could land instead: its range.
     const rangeKind = aim === "throw" ? (fighter ? itemOf(fighter)?.range : undefined) : RANGE[aim];
-    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters }, fighter, rangeKind) : null, [field, fighters, fighter, rangeKind]);
+    const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides }, fighter, rangeKind) : null, [field, fighters, sides, fighter, rangeKind]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;

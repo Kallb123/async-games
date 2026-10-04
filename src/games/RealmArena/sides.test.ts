@@ -172,15 +172,15 @@ describe("the centre, the end and the standings, by side (§13.7, §5.1)", () =>
 describe("the battle record, by side (§28)", () => {
     const seats = ["a", "x", "b"];
     const battle = (fighters: Fighter[]): IRealmArenaSpecificGameState => ({ ...buildInitialRealmArenaState(seats, {}), phase: "battle", fighters });
-    const act = (id: string, events: BattleEvent[]) => ({ command: { className: "RealmArenaAct", id } as never, outcome: { validMove: true, turnOver: false, events } });
+    const step = (id: string, events: BattleEvent[]) => ({ command: { className: "RealmArenaAct", id } as never, outcome: { validMove: true, turnOver: false, events } });
 
     it("counts a blast on a teammate as friendly fire, and credits no knock-out for one", () => {
         const mage = newFighter(0, "a", "mage", 0);
         const mate = newFighter(1, "b", "scout", 1);
         const enemy = newFighter(2, "x", "archer", 2);
         const recorder = battleRecorder(seats, SIDES);
-        recorder.observe(act("0", []), battle([mage, { ...mate, hp: 2 }, enemy]));
-        recorder.observe(act("1", [
+        recorder.observe(step("0", []), battle([mage, { ...mate, hp: 2 }, enemy]));
+        recorder.observe(step("1", [
             { kind: "fireball", fighter: mage.id, at: 1, targets: [mate.id, enemy.id], damage: 3 },
             { kind: "downed", fighter: mate.id, by: mage.id },
         ]), battle([mage, { ...mate, hp: 0 }, { ...enemy, hp: enemy.hp - 3 }]));

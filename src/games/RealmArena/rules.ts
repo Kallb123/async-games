@@ -186,11 +186,12 @@ export function sideOf(state: Pick<BattleState, "sides">, owner: string): string
 
 /**
  * Whether two owners fight on the same side (§29.6): every "is this an enemy?"
- * a rule asks. An owner is its own ally. "Whose character is this?" — the
- * actor is the player's own, its turn begins — stays an owner check.
+ * a rule asks. An owner is its own ally; nobody — a null viewer, a fighter
+ * not found — is nobody's. "Whose character is this?" — the actor is the
+ * player's own, its turn begins — stays an owner check.
  */
-export function allied(state: Pick<BattleState, "sides">, a: string, b: string): boolean {
-    return sideOf(state, a) === sideOf(state, b);
+export function allied(state: Pick<BattleState, "sides">, a: string | null | undefined, b: string | null | undefined): boolean {
+    return a != null && b != null && sideOf(state, a) === sideOf(state, b);
 }
 
 export type Action =
@@ -497,7 +498,7 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
  * answer, since a view asks about the same squares again and again.
  */
 export function squadSight(state: BattleState, player: string | null): (square: Square) => boolean {
-    const eyes = state.fighters.filter(fighter => player !== null && allied(state, fighter.owner, player) && isStanding(fighter));
+    const eyes = state.fighters.filter(fighter => allied(state, fighter.owner, player) && isStanding(fighter));
     const known = new Map<Square, boolean>();
     return square => {
         let seen = known.get(square);
@@ -527,7 +528,7 @@ export function squadSight(state: BattleState, player: string | null): (square: 
 export function viewOf(state: BattleState, player: string | null): BattleState {
     if (!state.fog) return state;
     const seen = squadSight(state, player);
-    const ours = (fighter: Fighter) => player !== null && allied(state, fighter.owner, player);
+    const ours = (fighter: Fighter) => allied(state, fighter.owner, player);
     const known = (fighter: Fighter) => ours(fighter) || seen(fighter.square);
     const inSight = (cloud: Square) => areaAround(state.field, cloud).some(seen);
     const hidden = state.fighters.filter(fighter => !known(fighter));
@@ -1150,8 +1151,8 @@ export function centreHolders(state: BattleState): string[] {
  */
 export function centrePoints(state: BattleState, player: string, round: number): number {
     if (round < CENTRE_SCORES_FROM_ROUND) return 0;
-    const holders = centreHolders(state);
-    return holders.length === 1 && holders[0] === sideOf(state, player) && inCentre(state).some(fighter => fighter.owner === player) ? CENTRE_POINTS : 0;
+    const there = inCentre(state);
+    return there.some(fighter => fighter.owner === player) && there.every(fighter => allied(state, fighter.owner, player)) ? CENTRE_POINTS : 0;
 }
 
 /**
@@ -1224,6 +1225,7 @@ export function standings(state: BattleState, players: readonly string[], scores
         return score(y) - score(x)
             || standingPoints(state, y) - standingPoints(state, x)
             || lastSeat(y) - lastSeat(x)
+            // Only teammates get this far: in a free-for-all the seat has decided it.
             || (scores[b] ?? 0) - (scores[a] ?? 0)
             || (seat.get(b) ?? 0) - (seat.get(a) ?? 0);
     });

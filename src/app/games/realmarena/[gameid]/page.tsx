@@ -360,6 +360,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             fighters={fighters}
                             unseen={unseen}
                             clouds={clouds}
+                            sides={battle.sides}
                             sealed={placement?.picks ?? gs.myMuster}
                             seats={seats}
                             colourFor={colourFor}

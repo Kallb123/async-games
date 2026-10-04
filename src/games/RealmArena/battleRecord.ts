@@ -90,6 +90,7 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
  */
 export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"]) {
     const lastRound = battleRounds(seats.length) - 1;
+    const sided = { sides };
     /** Everyone who has been on the battlefield, kept after a dropped player's squad has left it. */
     const known = new Map<number, Pick<Fighter, "owner" | "character">>();
     /** Each one's HP, and who set it burning, after the last step. */
@@ -121,8 +122,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             if (victim) victim.taken += taken;
             const attacker = recordOf(by);
             if (!attacker) return;
-            const [from, to] = [known.get(by!)?.owner, known.get(target)?.owner];
-            if (from !== undefined && to !== undefined && allied({ sides }, from, to)) attacker.friendlyFire += taken;
+            if (allied(sided, known.get(by!)?.owner, known.get(target)?.owner)) attacker.friendlyFire += taken;
             else attacker.dealt += taken;
         };
         for (const event of events) {
@@ -166,7 +166,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     if (!fallen) break;
                     recordOf(event.fighter)!.downed += 1;
                     const by = event.by === event.fighter ? undefined : known.get(event.by);
-                    const ally = by !== undefined && allied({ sides }, by.owner, fallen.owner);
+                    const ally = allied(sided, by?.owner, fallen.owner);
                     if (by && !ally) {
                         const downer = recordOf(event.by)!;
                         downer.knockouts += 1;
