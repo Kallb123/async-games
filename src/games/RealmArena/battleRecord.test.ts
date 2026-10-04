@@ -174,6 +174,18 @@ describe("the battle recorder (§28)", () => {
         )).toBe(4);
     });
 
+    it("keeps a dropped player's record, and holds their squad's health where they left (§17.4 B2)", () => {
+        const recorder = battleRecorder(PLAYERS);
+        recorder.observe(act("0", []), battle([knight, archer, mage]));
+        recorder.observe(act("1", [{ kind: "struck", fighter: knight.id, target: archer.id, damage: 2, reaction: false }]),
+            battle([knight, { ...archer, hp: archer.hp - 2 }, mage]));
+        recorder.observe({ command: { className: "PlayerDropped", id: "drop" } as never, outcome: { validMove: true, turnOver: false } }, battle([knight]));
+        const { fighting, squadHpPerRound } = recorder.result();
+        expect(fighting.find(row => row.character === "archer")).toMatchObject({ userId: "b", taken: 2 });
+        expect(squadHpPerRound.at(-1)!.get("b")).toBe(archer.hp - 2 + mage.hp);
+        expect(squadHpPerRound.at(-1)!.get("a")).toBe(knight.hp);
+    });
+
     it("has a row of nothing for a character that did nothing, and nothing at all before the battle", () => {
         const recorder = battleRecorder(PLAYERS);
         recorder.observe(act("0", []), { ...battle([cleric]), phase: "muster" });

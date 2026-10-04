@@ -217,7 +217,13 @@ export function battleRecorder(seats: readonly string[]) {
                 squadHpPerRound.push(squadHpPerRound[skipped - 1]);
             }
             pointsPerRound[index] = new Map(seats.map(userId => [userId, gs.scores?.[userId] ?? 0]));
-            squadHpPerRound[index] = new Map(seats.map(userId => [userId, fighters.reduce((sum, fighter) => sum + (fighter.owner === userId ? fighter.hp : 0), 0)]));
+            // A dropped player's squad leaves the battlefield (§17.4 B2): their
+            // line holds at what it had when they left, rather than reading as
+            // wiped out — a squad that was keeps its fallen on the field.
+            const left = (userId: string) => !fighters.some(fighter => fighter.owner === userId) && [...known.values()].some(fighter => fighter.owner === userId);
+            const before = squadHpPerRound[index] ?? squadHpPerRound[index - 1];
+            squadHpPerRound[index] = new Map(seats.map(userId => [userId, left(userId) ? before?.get(userId) ?? 0
+                : fighters.reduce((sum, fighter) => sum + (fighter.owner === userId ? fighter.hp : 0), 0)]));
             round = gs.roundsPlayed;
         },
 
