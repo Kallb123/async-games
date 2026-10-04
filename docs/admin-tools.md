@@ -3,7 +3,8 @@
 Support tooling for whoever runs the app, at `/admin`. Getting a guest back
 into their game when the link they were given is gone, a look at what
 platforms players are actually on, build-time editors for Race Cars circuits
-and Kingdom Builder tilesets, and a way to clear out Kingdom Builder worlds.
+and Kingdom Builder tilesets, a way to clear out Kingdom Builder worlds, and
+Realm Arena's balance sheet.
 
 ## The problem it solves
 
@@ -512,6 +513,28 @@ All three sit behind a confirm, and all go through
 `POST /api/admin/kingdombuilder-worlds` (body `{ worldId, action: "end" |
 "delete" | "boost" }`), which opens with `requireAdmin()` and logs the admin
 who asked, since each changes the world for every player in it.
+
+## Game tools: Realm Arena stats
+
+`/admin` → **Realm Arena stats** → `/admin/realmarena`
+
+Every character and item in Realm Arena at once, for balancing and for
+learning the game: a table of the characters' HP, movement per AP, sight,
+climb and points side by side, then each one's sheet — the same one the
+muster's ⓘ opens for a player (`RealmArenaUnitStats`) — with a row for its
+weapon, each ability and each mastery option, giving AP, damage, range, base
+chance to hit and cooldown, and a line for what else it does (its area, the
+effect it leaves, what it heals, the cover it blasts).
+
+Every number is read from `characters.ts` and the rules' constants by
+`src/games/RealmArena/stats.ts`, so retuning a character there retunes this
+screen and the muster's card with it. What the data can't say — that Cleave
+swings the character's own weapon, that Heal reaches only the square next
+door — is the rules' code, and `ABILITY_USE` in `stats.ts` writes it down;
+an ability added to `ABILITIES` won't type-check until it has a line there.
+
+It reads repo data and persists nothing, so there is no API route behind it,
+only `AdminPage`'s gate.
 
 ## Adding another admin tool
 

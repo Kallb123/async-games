@@ -115,7 +115,10 @@ out. A second copy is the signal to extract the first one.
   things — either side of a trade offer, a caravan's load — is
   `AmountSteppers`: one `ag-list` with a `Stepper` per row, shared by Kingdom
   Builder's trade board, Settlements & Cities' trade offers and Realm Arena's
-  muster.
+  muster. A name that opens more about itself wears an `InfoButton` — the round
+  "i" after it, which `AmountSteppers` draws per row given `onInfo` — and what
+  it opens is an `InfoModal`, which takes `children` for anything that isn't
+  headed copy (Realm Arena's stats tables).
   Every hover card on a result chart is a `ChartTooltip` — the round on a
   `LineChart`, a stacked bar's per-player breakdown on a `BarChart`.
   A game with undo ([`docs/undo.md`](./docs/undo.md)) shows it with `UndoButton`

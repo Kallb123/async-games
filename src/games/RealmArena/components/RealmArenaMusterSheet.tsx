@@ -1,5 +1,5 @@
 'use client'
-import React from 'react';
+import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
@@ -9,9 +9,11 @@ import { CHARACTERS, ITEM_IDS, ITEMS, MAX_OF_EACH, OPTIONS, type ItemId, type Op
 import type { Ranks } from '@/games/RealmArena/mastery';
 import type { MusterPick } from '@/games/RealmArena/rules';
 import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
+import type { UnitRef } from '@/games/RealmArena/stats';
 import { squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
 import { pluralize } from '@/utils/ui/text';
+import RealmArenaUnitInfo from './RealmArenaStats';
 import { SpriteImage } from './RealmArenaTerrain';
 
 interface RealmArenaMusterSheetProps {
@@ -29,10 +31,13 @@ interface RealmArenaMusterSheetProps {
  * character and each item with the points left, and then placing it on the
  * board before the sealed muster goes. While placing, the character picked up
  * is offered the options its rank has unlocked (§23.2) and the items bought,
- * to take from whoever carries one.
+ * to take from whoever carries one. Each character and item on the squad step
+ * has an `InfoButton` opening its stats (`RealmArenaUnitInfo`), so a player can see what
+ * the points buy before spending them.
  */
 export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending }: RealmArenaMusterSheetProps) {
     const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
+    const [info, setInfo] = useState<UnitRef>();
     const points = pointsLeft >= 0
         ? `${pointsLeft} of ${budget} points left.`
         : `${pluralize(-pointsLeft, 'point')} over the budget of ${budget}.`;
@@ -41,6 +46,7 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
         const squadSize = squadOf(counts).length;
         return (
             <Section label="Muster your squad">
+                {info && <RealmArenaUnitInfo unit={info} onClose={() => setInfo(undefined)} />}
                 <AmountSteppers
                     kinds={CHARACTER_IDS}
                     icon={id => CHARACTER_MARK[id]}
@@ -49,6 +55,7 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     amounts={counts}
                     max={() => MAX_OF_EACH}
                     onChange={setCounts}
+                    onInfo={id => setInfo({ kind: 'character', id })}
                 />
                 <p className="ag-hint ag-hint--tight">
                     Up to {MAX_OF_EACH} of each character, and items for them to carry into battle: one each, used once.
@@ -62,6 +69,7 @@ export default function RealmArenaMusterSheet({ draft, budget, onMuster, pending
                     amounts={items}
                     max={id => Math.max(squadSize, items[id])}
                     onChange={setItems}
+                    onInfo={id => setInfo({ kind: 'item', id })}
                 />
                 <p className="ag-hint">{pointsLeft >= 0 && refusal ? refusal : points}</p>
                 <div className="ag-action-grid">

@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 
@@ -11,7 +12,9 @@ export interface InfoSection {
 
 interface InfoModalProps {
     title: string;
-    sections: InfoSection[];
+    sections?: InfoSection[];
+    /** Anything a sheet shows that isn't headed copy — a row of stats, a table — above its sections. */
+    children?: ReactNode;
     onClose: () => void;
     /** The dismiss button's label. "Got it" unless a sheet wants its own word. */
     closeLabel?: string;
@@ -26,7 +29,7 @@ interface InfoModalProps {
  * `useCloseRequest` is what makes Android's back gesture close the sheet
  * instead of leaving the screen behind it.
  */
-export default function InfoModal({ title, sections, onClose, closeLabel = 'Got it' }: InfoModalProps) {
+export default function InfoModal({ title, sections = [], children, onClose, closeLabel = 'Got it' }: InfoModalProps) {
     useCloseRequest(true, onClose);
 
     return (
@@ -35,6 +38,7 @@ export default function InfoModal({ title, sections, onClose, closeLabel = 'Got 
                 <Modal.Title>{title}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
+                {children}
                 {sections.map((section) => (
                     <div className="ag-info-section" key={section.heading}>
                         <div className="ag-info-section-title">{section.heading}</div>

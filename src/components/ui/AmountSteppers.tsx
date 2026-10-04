@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from "react";
+import InfoButton from "@/components/ui/InfoButton";
 import ListRow from "@/components/ui/ListRow";
 import Stepper from "@/components/ui/Stepper";
 
@@ -19,6 +20,8 @@ interface AmountSteppersProps<K extends string> {
     sub?: (kind: K) => string;
     /** How far one press moves an amount. */
     step?: number;
+    /** Puts an `InfoButton` after each row's title, opening what there is to know about that kind. */
+    onInfo?: (kind: K) => void;
 }
 
 /**
@@ -28,11 +31,12 @@ interface AmountSteppersProps<K extends string> {
  * second caller, which is what moved it here. Realm Arena's muster buys its
  * squad and the squad's items with two of them.
  */
-export default function AmountSteppers<K extends string>({ kinds, icon, title, amounts, max, onChange, sub, step = 1 }: AmountSteppersProps<K>) {
+export default function AmountSteppers<K extends string>({ kinds, icon, title, amounts, max, onChange, sub, step = 1, onInfo }: AmountSteppersProps<K>) {
     return (
         <div className="ag-list">
             {kinds.filter(kind => max(kind) > 0).map(kind => (
-                <ListRow key={kind} icon={icon(kind)} title={title(kind)} sub={sub?.(kind)}
+                <ListRow key={kind} icon={icon(kind)} sub={sub?.(kind)}
+                    title={onInfo ? <>{title(kind)} <InfoButton label={`About the ${title(kind)}`} onClick={() => onInfo(kind)} /></> : title(kind)}
                     action={<Stepper value={amounts[kind]} min={0} max={max(kind)} step={step} label={title(kind).toLowerCase()}
                         onChange={amount => onChange({ ...amounts, [kind]: amount })} />} />
             ))}
