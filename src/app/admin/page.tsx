@@ -31,6 +31,9 @@ export default function Admin() {
                     <Link href="/admin/kingdombuilder-worlds" className="ag-btn ag-btn--light ag-btn--block">
                         Kingdom Builder worlds
                     </Link>
+                    <Link href="/admin/realmarena" className="ag-btn ag-btn--light ag-btn--block">
+                        Realm Arena stats
+                    </Link>
                 </div>
             </Section>
         </AdminPage>
