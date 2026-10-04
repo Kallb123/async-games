@@ -1495,9 +1495,11 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
   - **The muster is checked against the snapshot.** `musterRefusal` takes
     the player's own ranks from the battle's `mastery`, and refuses an option
     that isn't that character's, or that the rank hasn't unlocked. Nothing in
-    the request is read for a rank. The response carries the snapshot
-    (`mastery`) to every viewer, since ranks are public, so the muster screen
-    checks with the server's own rule.
+    the request is read for a rank. The response carries the viewer's
+    own ranks from the snapshot (`mastery`), so the muster screen checks with
+    the server's own rule. Since PR 10 it carries nobody else's: a profile's
+    ranks are for its owner and their friends, and a stranger can join a
+    battle.
   - **Each option is an `Act` of its own**: `shieldBash`, `cripplingShot`
     and `huntersMark` are aimed at a character, `demolish` at the square of
     cover, and `purify` needs nothing aimed. Frost bolt is the Mage's attack,
@@ -1923,9 +1925,12 @@ place — moving — what a player can be held to knowing.
 - **Hidden: a watch out of sight.** The log says a character went on watch,
   but a review doesn't tell a viewer the AP banked by one they can't see —
   how many reactions are waiting.
-- **Accepted: an overwatch shot's odds.** A shot from out of sight at one of
-  the viewer's characters is told with its chance to hit, as the sheet showed
-  it before the move: a hint at the cover between them, not a square.
+- **Accepted: a shot's odds.** A shot from out of sight at one of the
+  viewer's characters is told with its chance to hit, as the sheet showed it
+  before the move: a hint at the cover between them, not a square. In a
+  free-for-all the log tells a third player the odds of a shot between two
+  squads they can't see too ("shot X with Y (65%)"), which is the same hint
+  about two characters who aren't theirs (reviewed at PR 10, §17.3).
 - **Accepted: a shield wall out of sight.** A Knight's shield wall covers an
   ally beside it whether or not the shooter sees the Knight. The odds shown
   before a shot can't count a Knight the player can't see; the server does.
@@ -2013,4 +2018,4 @@ Realm, its sibling in the same world.
 | 1.28 | The muster's characters and items each have an ⓘ opening their stats — HP, movement, sight and points, and each weapon's, ability's, option's and item's AP, damage, range, chance to hit, cooldown and area — and `/admin/realmarena` shows every one at once, for balancing (docs/admin-tools.md). |
 | 1.29 | No cap on any one character: the budget is the only limit on a squad (§13.6). The muster heads its items "Consumables", and placing lists the squad as boxes that pick a character up and zoom the board to it (§21.3). |
 | 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |
-| 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). |
+| 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). The crew's launch pass cuts a battle's ranks on the wire to the viewer's own (§23.3) and accepts a third player reading a shot's odds in fog (§27.2). |

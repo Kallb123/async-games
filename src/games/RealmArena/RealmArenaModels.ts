@@ -305,7 +305,7 @@ export function gameStateToModel(
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(pickOf) : null,
-        mastery: ranksOnTheWire(gs.mastery ?? {}),
+        mastery: ranksOnTheWire(gs.mastery ?? {}, viewerId),
         scores: { ...gs.scores },
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
@@ -314,13 +314,16 @@ export function gameStateToModel(
 }
 
 /**
- * The battle's snapshot of ranks as every viewer gets it (§23.3): built key by
- * key rather than copied, so only a rank of 1–3 by a character's id reaches
- * the wire, whatever else a Mixed path might one day hold.
+ * The viewer's own ranks from the battle's snapshot (§23.3) — all the muster
+ * screen checks against. Nobody else's: a profile's mastery is shown only to
+ * its owner and their friends, and a battle can be joined by a stranger.
+ * Built key by key rather than copied, so only a rank of 1–3 by a character's
+ * id reaches the wire, whatever else a Mixed path might one day hold.
  */
-function ranksOnTheWire(mastery: MasterySnapshot): MasterySnapshot {
+function ranksOnTheWire(mastery: MasterySnapshot, viewerId: string | null): MasterySnapshot {
     const characterIds = Object.keys(CHARACTERS) as CharacterId[];
-    return Object.fromEntries(Object.entries(mastery).map(([userId, ranks]) => [userId, Object.fromEntries(characterIds.flatMap(id => {
+    const own = Object.entries(mastery).filter(([userId]) => userId === viewerId);
+    return Object.fromEntries(own.map(([userId, ranks]) => [userId, Object.fromEntries(characterIds.flatMap(id => {
         const rank = ranks?.[id];
         return rank === 1 || rank === 2 || rank === 3 ? [[id, rank]] : [];
     }))]));

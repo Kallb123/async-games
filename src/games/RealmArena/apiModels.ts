@@ -48,10 +48,10 @@ export interface IRealmArenaSpecificGameStateResponse {
     /** The viewer's own sealed squad, while the muster lasts; null once it's over, or for a viewer who hasn't mustered. */
     myMuster: MusterPick[] | null;
     /**
-     * Each player's rank with each character, as the battle snapshotted them
+     * The viewer's rank with each character, as the battle snapshotted it
      * when it was created (§23.3): what the muster's options are checked
-     * against. Public, like the rest of a profile — only the options picked
-     * are sealed, with the rest of the muster. Only ranks above 0.
+     * against. Keyed by userId, and holding only the viewer's own — a
+     * profile's ranks are for its owner and their friends. Only ranks above 0.
      */
     mastery: MasterySnapshot;
     /** Every player's score, by userId (§13.7). */

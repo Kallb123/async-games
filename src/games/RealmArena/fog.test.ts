@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
+import { buildTimeline } from "@/utils/games/replay";
 import { findPath, pathCost, pathTo } from "@/utils/games/battlefield/pathfinding";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
@@ -211,6 +212,16 @@ describe("the wire in fog of war (§27)", () => {
 
         game.complete = true;
         expect((await responseFor(game, "a")).specificGameState.fighters).toHaveLength(everyone);
+    });
+
+    it("puts nothing of a squad out of sight anywhere in a player's response or review", async () => {
+        const game = makeGame(undefined, undefined, true);
+        await musterAll(game);
+        for (const [viewer, other] of [["a", "b"], ["b", "a"], [null, "a"], [null, "b"]] as const) {
+            const wire = JSON.stringify([await responseFor(game, viewer), await buildTimeline(game, { a: "a", b: "b" }, [], undefined, viewer)]);
+            expect(wire, `${viewer} sees ${other}'s squad`).not.toContain(`"owner":"${other}"`);
+            if (viewer) expect(wire).toContain(`"owner":"${viewer}"`);
+        }
     });
 
     it("sends everyone everything in a battle without it", async () => {
