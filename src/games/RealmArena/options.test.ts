@@ -96,17 +96,19 @@ describe("mustering with options (§23.2)", () => {
         expect(fighters.filter(one => one.owner === "a").map(one => one.option)).toEqual(picks.map(pick => pick.option));
     });
 
-    it("sends every viewer the ranks the battle snapshotted, which are public", async () => {
+    it("sends each viewer their own ranks the battle snapshotted, and nobody else's", async () => {
         const game = makeGame(undefined, A_RANKED);
-        for (const viewer of ["a", "b", null]) {
-            expect((await responseFor(game, viewer)).specificGameState.mastery).toEqual(A_RANKED);
+        expect((await responseFor(game, "a")).specificGameState.mastery).toEqual(A_RANKED);
+        for (const viewer of ["b", null]) {
+            expect((await responseFor(game, viewer)).specificGameState.mastery).toEqual({});
         }
         expect((await responseFor(makeGame(), "a")).specificGameState.mastery).toEqual({});
     });
 
     it("sends only ranks of 1–3 by a character, whatever else the snapshot holds", async () => {
         const game = makeGame(undefined, { a: { knight: 2, archer: 0, dragon: 3, mage: 7, xp: 900 } as never, b: { cleric: 3 } });
-        expect((await responseFor(game, "b")).specificGameState.mastery).toEqual({ a: { knight: 2 }, b: { cleric: 3 } });
+        expect((await responseFor(game, "a")).specificGameState.mastery).toEqual({ a: { knight: 2 } });
+        expect((await responseFor(game, "b")).specificGameState.mastery).toEqual({ b: { cleric: 3 } });
     });
 });
 

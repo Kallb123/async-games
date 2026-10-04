@@ -6,9 +6,11 @@
 
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
+import { gameCommandVersion } from "@/utils/ui/games";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
 import { REALM, type PlayerCount } from "./characters";
 import { battlefieldById } from "./maps";
+import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
 import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
 import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData } from "./RealmArenaModels";
@@ -47,9 +49,13 @@ export async function responseFor(game: RealmArenaTestGame, viewer: string | nul
     return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
 }
 
-/** A command from `sender`, with `fields` set on it. */
+/**
+ * A command from `sender`, with `fields` set on it, stamped with the game's
+ * current command version as an up-to-date client stamps it
+ * (docs/command-versions.md) — so a replay accepts it.
+ */
 export function cmd<T extends IGameCommand>(Command: new () => T, sender: string, fields: Partial<T> = {}): T {
-    return Object.assign(new Command(), { gameId: "g", senderId: sender, senderUsername: sender }, fields);
+    return Object.assign(new Command(), { gameId: "g", senderId: sender, senderUsername: sender, version: gameCommandVersion(meta) }, fields);
 }
 
 /** Runs a command through the pipeline, as the command route does. */

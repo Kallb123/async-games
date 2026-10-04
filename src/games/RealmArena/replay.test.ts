@@ -60,6 +60,18 @@ describe("Realm Arena replay", () => {
         }
     });
 
+    it("refuses a playtest battle, recorded before the version the game launched at (§17.3 PR 10)", async () => {
+        for (const playtest of [1, undefined]) {
+            const game = makeGame();
+            await musterAll(game);
+            (game.gameState.commandHistory[0] as { version?: number }).version = playtest;
+            await expect(buildTimeline(game, NAMES)).rejects.toThrow(/this server replays/);
+            // …and so it goes without a recap, rather than failing the board or the push that reads one.
+            expect(await buildEventFeed(game, NAMES, "a")).toEqual({ hasRecap: false, events: [], summary: null, tip: null });
+            expect(await buildAllEvents(game, NAMES)).toEqual([]);
+        }
+    });
+
     it("replays a battle in fog of war to each viewer's own view of it, and lifts the fog at its end (§27)", async () => {
         const game = await playScriptedBattle(true);
         const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;

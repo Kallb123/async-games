@@ -8,8 +8,7 @@ import { meta } from '@/games/RealmArena/meta';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { partySizeErrorMessage } from '@/utils/ui/games';
 
-// docs/games/realm-arena.md §17.3 PR 4. Reachable by URL only while
-// `meta.available` is false (§17.1).
+// docs/games/realm-arena.md §17.3 PR 4.
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
 

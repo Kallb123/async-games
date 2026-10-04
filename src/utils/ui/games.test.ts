@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FIRST_COMMAND_VERSION, GAME_META, availableGames, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange, shareImageForGame } from './games';
 import { OG_IMAGE } from '@/utils/app';
 import { UNVERSIONED_COMMAND } from '@/utils/apiModels/gameCommand';
@@ -74,7 +74,7 @@ describe('shareImageForGame', () => {
     });
 
     it('falls back to the general Async Games card for a game with no card yet', () => {
-        expect(shareImageForGame('kingdombuilder', drawn)).toBe(OG_IMAGE);
+        expect(shareImageForGame('undrawn', drawn)).toBe(OG_IMAGE);
     });
 
     it('falls back to the general card when the game is unknown', () => {
@@ -94,9 +94,16 @@ describe('command versions', () => {
 });
 
 describe('availableGames', () => {
+    // A game of its own, so the test doesn't change meaning as real games ship.
+    beforeEach(() => {
+        GAME_META.unfinished = { ...GAME_META.realmarena, url: 'unfinished', available: false };
+    });
+    afterEach(() => {
+        delete GAME_META.unfinished;
+    });
+
     it('leaves out a game still being built, so nothing counts or lists it', () => {
-        expect(GAME_META.realmarena.available).toBe(false);
-        expect(availableGames()).not.toContain(GAME_META.realmarena);
+        expect(availableGames()).not.toContain(GAME_META.unfinished);
         expect(availableGames()).toEqual(Object.values(GAME_META).filter(game => game.available));
     });
 });

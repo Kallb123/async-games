@@ -36,6 +36,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🎲",
         items: [
             {
+                title: "Realm Arena",
+                detail: "Muster a squad of Knights, Archers, Mages, Clerics and more in secret, buy them items, then fight for the centre of a ruined fort one action at a time — climbing towers for the high ground, putting your fighters on watch to shoot whoever moves into sight, and setting each other alight. Two players duel; three or four fight a free-for-all on a fort of their own, with fog of war if the host wants it. Your characters earn mastery as they fight and unlock new ways to play.",
+                game: "realmarena",
+            },
+            {
                 title: "Kingdom Builder prototype",
                 detail: "Explore your generated world map, found more settlements at open sites, and move between your towns as wood, stone and iron arrive each hour.",
                 game: "kingdombuilder",
