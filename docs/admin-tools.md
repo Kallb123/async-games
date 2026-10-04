@@ -529,7 +529,7 @@ effect it leaves, what it heals, the cover it blasts).
 Every number is read from `characters.ts` and the rules' constants by
 `src/games/RealmArena/stats.ts`, so retuning a character there retunes this
 screen and the muster's card with it. What the data can't say — that Cleave
-swings the character's own weapon, that Heal reaches only the square next
+swings the character's own weapon, that Raise reaches only the square next
 door — is the rules' code, and `ABILITY_USE` in `stats.ts` writes it down;
 an ability added to `ABILITIES` won't type-check until it has a line there.
 

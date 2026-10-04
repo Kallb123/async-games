@@ -721,7 +721,8 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
  */
 function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean): string | undefined {
     if (!target || target.owner !== healer.owner || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
-    if (!draught && !inRange(state.field, healer.square, target.square, ABILITIES.heal.range)) return "Out of range or out of sight";
+    const far = draught ? undefined : aimRefusal(state, healer, target.square, ABILITIES.heal.range);
+    if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
     return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
 }
@@ -743,8 +744,8 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 
 /**
  * Who a Cleric's Purify would reach (§23.2): itself and every standing ally
- * next to it, as a healing draught reaches, that is hurt or afflicted — the ones it would
- * do anything for. Ids in battle order.
+ * next to it, as a healing draught reaches, that is hurt or afflicted — the
+ * ones it would do anything for. Ids in battle order.
  */
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
     return state.fighters.filter(ally => ally.owner === cleric.owner && isStanding(ally)

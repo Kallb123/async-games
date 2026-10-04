@@ -424,7 +424,7 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(check({ field: walled, fighters: blocked }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ refused: "Out of range or out of sight" });
     });
 
-    it("heal restores up to 4 HP to an ally next to the Cleric, but never past full", () => {
+    it("heal restores up to 4 HP to an ally, but never past full", () => {
         const fighters = [fighter(1, "a", "cleric", at(field, 1, 1)), fighter(2, "a", "knight", at(field, 2, 2), { hp: 10 })];
         const { byId, events } = run({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 2 });
         expect(byId(2).hp).toBe(12);
