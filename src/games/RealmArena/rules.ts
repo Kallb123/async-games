@@ -325,7 +325,7 @@ export function smokeSquares(state: BattleState): ReadonlySet<Square> {
 }
 
 /** Where each of these characters' smoke pots landed, while its cloud lasts (§21.2). */
-function landedSmoke(throwers: readonly Fighter[]): Square[] {
+export function landedSmoke(throwers: readonly Fighter[]): Square[] {
     return throwers.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []);
 }
 
@@ -470,7 +470,9 @@ export function squadSight(state: BattleState, player: string | null): (square: 
 /**
  * The battle as one player knows it under fog of war (§27): their own squad,
  * every other character — standing or fallen — on a square their squad sees,
- * and any smoke cloud they can see whose thrower they can't (`clouds`). The
+ * and every smoke cloud they can see: on its thrower when they see it too,
+ * and on its own (`clouds`) when they don't. A cloud they can't see isn't
+ * there, whoever threw it. The
  * whole battle when it isn't fogged. A player with nobody standing — or no
  * player at all — sees nobody else.
  *
@@ -482,11 +484,19 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
     if (!state.fog) return state;
     const seen = squadSight(state, player);
     const known = (fighter: Fighter) => fighter.owner === player || seen(fighter.square);
+    const inSight = (cloud: Square) => areaAround(state.field, cloud).some(seen);
     const hidden = state.fighters.filter(fighter => !known(fighter));
-    const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(at => areaAround(state.field, at).some(seen));
+    const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(inSight);
+    // A character in sight whose cloud isn't keeps it to itself: where it
+    // landed is somewhere the player can't see.
+    const shown = state.fighters.filter(known).map(fighter => {
+        if (fighter.owner === player || fighter.smoke === undefined || inSight(fighter.smoke)) return fighter;
+        const { smoke: _smoke, ...rest } = fighter;
+        return rest;
+    });
     return {
         field: state.field,
-        fighters: state.fighters.filter(known),
+        fighters: shown,
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
     };

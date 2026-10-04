@@ -1880,7 +1880,8 @@ place — moving — what a player can be held to knowing.
 - **Not hidden: the ground.** Cover blasted away is gone for everyone (§22):
   a blast is heard across the field, and the board and the rules read one
   battlefield. A smoke cloud is seen wherever any of its 3×3 is in sight,
-  whether or not its thrower is.
+  whether or not its thrower is, and not otherwise — even on a thrower in
+  sight. Spotting a new cloud counts as spotting an enemy for undo.
 - **Not hidden: the log.** The history every player reads tells who did what
   to whom, in words — "Bob's Archer fired on overwatch: a hit for 3" — and the
   scores. It has never said where anything happened, and fog keeps it that
@@ -1889,6 +1890,12 @@ place — moving — what a player can be held to knowing.
 - **Accepted: fighter ids.** Ids count from 0 in seat order (§17.2), so an id
   seen hints at how big the squads before it are. The log names every
   character that acts anyway.
+- **Hidden: a watch out of sight.** The log says a character went on watch,
+  but a review doesn't tell a viewer the AP banked by one they can't see —
+  how many reactions are waiting.
+- **Accepted: an overwatch shot's odds.** A shot from out of sight at one of
+  the viewer's characters is told with its chance to hit, as the sheet showed
+  it before the move: a hint at the cover between them, not a square.
 - **Accepted: a shield wall out of sight.** A Knight's shield wall covers an
   ally beside it whether or not the shooter sees the Knight. The odds shown
   before a shot can't count a Knight the player can't see; the server does.
@@ -1910,7 +1917,12 @@ place — moving — what a player can be held to knowing.
   someone else's move keeps the squares the viewer saw, and only when it ends
   on one — one that ends out of sight is told with no path, and the board
   loses the mover there. A fireball, a flask or a Demolish landing where the
-  viewer sees none of it, and hitting none of theirs, isn't told.
+  viewer sees none of it, and hitting none of theirs, isn't told — though the
+  cover it blasted is, since the ground is everyone's.
+- **What can't be seen isn't said to be empty.** The centre's readout and the
+  recap's tip say the centre is out of sight, not empty, when nobody is seen
+  there and the viewer's squad can't see all of it; and a recap row doesn't
+  count another squad's characters on watch.
 - **An action's own outcome** goes back to its sender whole: the only squares
   in it are the sender's own moves and aims, so it tells nothing the log
   doesn't. A character it names that the sender can't see is "a character out

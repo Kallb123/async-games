@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, fighterName, PLAYBACK_MS, unseenSquares } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, fighterName, PLAYBACK_MS, unseenSquares } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -276,8 +276,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         selected: !!actor,
     }, { active: nav.isLive && !complete });
 
-    const holders = centreHolders({ field, fighters });
-    const centre = holders.length === 0 ? 'Empty' : holders.length > 1 ? 'Contested' : playerName(holders[0]);
+    const holders = centreHolders(battle);
+    // In fog of war, nobody seen there isn't nobody there (§27).
+    const centre = holders.length === 0 ? (centreInSight(battle, myUserId) ? 'Empty' : 'Unseen') : holders.length > 1 ? 'Contested' : playerName(holders[0]);
 
     const menuOptions: GameOption[] = [
         ...(recap.hasRecap ? [{

@@ -17,6 +17,7 @@ import {
     check,
     endTurn,
     isBattleOver,
+    landedSmoke,
     musterRefusal,
     newFighter,
     pickOf,
@@ -199,15 +200,21 @@ function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonl
 
 /**
  * Whether an action showed its player an enemy their squad couldn't see
- * before it (§27): a move round a corner, cover blasted open, an ally raised.
+ * before it, or someone else's smoke cloud (§27): a move round a corner, cover
+ * blasted open, an ally raised.
  * What's been seen can't be unseen, so such an action can't be taken back —
  * or a player could step out, look, and step back for free. Never in a battle
  * without fog, where everyone is seen already.
  */
 function revealed(before: BattleState, after: BattleState, player: string): boolean {
     if (!after.fog) return false;
-    const seen = new Set(viewOf(before, player).fighters.map(fighter => fighter.id));
-    return viewOf(after, player).fighters.some(fighter => fighter.owner !== player && !seen.has(fighter.id));
+    const sighted = (state: BattleState) => {
+        const view = viewOf(state, player);
+        const others = view.fighters.filter(fighter => fighter.owner !== player);
+        return { ids: others.map(fighter => fighter.id), clouds: [...landedSmoke(others), ...view.clouds ?? []] };
+    };
+    const was = sighted(before), now = sighted(after);
+    return now.ids.some(id => !was.ids.includes(id)) || now.clouds.some(cloud => !was.clouds.includes(cloud));
 }
 
 /**

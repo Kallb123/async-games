@@ -101,6 +101,13 @@ describe("what a squad sees (§27)", () => {
         expect(smokeSquares(view).has(at(FIELD, 8, 2))).toBe(true);
     });
 
+    it("keeps a cloud it can't see from a thrower it can", () => {
+        const state = fogged([fighter(0, "a", at(FIELD, 0, 0)), fighter(1, "b", at(FIELD, 8, 4), { smoke: at(FIELD, 14, 1) })]);
+        const [, thrower] = viewOf(state, "a").fighters;
+        expect(thrower.id).toBe(1);
+        expect(thrower).not.toHaveProperty("smoke");
+    });
+
     it("dims every square the squad can't see, and none without fog", () => {
         const state = fogged([fighter(0, "a", at(FIELD, 0, 0))]);
         const unseen = unseenSquares(state, "a")!;
@@ -137,6 +144,21 @@ describe("moving into the fog (§27)", () => {
         const { fighters, events } = act(state, "a", { kind: "move", fighter: 0, path: walk }, fixedRolls([]));
         expect(fighters.find(one => one.id === 0)!.square).toBe(at(rubble, 21, 1));
         expect(events.map(event => event.kind)).toEqual(["moved", "blocked"]);
+    });
+
+    it("always sees an enemy on its first step, so a path into one is refused rather than cut short", () => {
+        // The mover is a's only standing character: whatever is beside it, it sees.
+        const state = fogged([mover, fighter(9, "a", at(FIELD, 0, 0), { hp: 0 }), fighter(1, "b", at(FIELD, 1, 4))]);
+        expect(check(state, "a", { kind: "move", fighter: 0, path: run(3) })).toEqual({ refused: "An enemy is in the way" });
+    });
+
+    it("stops a mover downed on the way before it ever reaches the enemy, and tells no blocked", () => {
+        // b's Archer on watch past SIGHT_RANGE: it shoots the mover once it comes into range, before the mover reaches the enemy.
+        const watcher = fighter(2, "b", at(FIELD, 21, 3), { banked: 4 });
+        const state = fogged([{ ...mover, hp: 1 }, watcher, hidden]);
+        const { fighters, events } = act(state, "a", long, fixedRolls([1]));
+        expect(fighters.find(one => one.id === 0)!.hp).toBe(0);
+        expect(events.map(event => event.kind)).not.toContain("blocked");
     });
 
     it("refuses the same path through an enemy it can see, and through anyone without fog", () => {

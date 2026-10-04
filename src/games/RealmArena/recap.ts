@@ -29,6 +29,7 @@ import type { IRealmArenaOutcome, RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import type { ItemId } from "./characters";
 import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
+import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
 
@@ -178,7 +179,10 @@ function toEvents(
             const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
             const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" ? event.points : 0), 0);
             if (points > 0) {
-                const watching = state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
+                // Counted off the squad as the feed's viewer sees it, so not
+                // at all in fog of war, where they may see none of it (§27).
+                const watching = state(next).fog ? 0
+                    : state(next).fighters.filter(fighter => fighter.owner === command.senderId && isStanding(fighter) && fighter.banked > 0).length;
                 rows.push({
                     ...base,
                     type: RA_CENTRE,
@@ -308,8 +312,10 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    const holders = centreHolders({ field: battlefieldOf(gs.map, gs.blasted), fighters: gs.fighters });
-    const centre = holders.length === 0 ? "the centre is empty"
+    const battle = { field: battlefieldOf(gs.map, gs.blasted), fighters: gs.fighters, fog: gs.fog };
+    const holders = centreHolders(battle);
+    // In fog of war, nobody seen there isn't nobody there (§27).
+    const centre = holders.length === 0 ? (centreInSight(battle, forUserId) ? "the centre is empty" : "you can't see all of the centre")
         : holders.length > 1 ? "the centre is contested"
         : holders[0] === forUserId ? "the centre is yours" : "the enemy holds the centre";
 

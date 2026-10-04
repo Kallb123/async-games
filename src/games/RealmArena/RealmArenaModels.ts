@@ -363,8 +363,10 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
  * it ends on one of them: one that ends out of sight is told with no path at
  * all, so the board loses the mover there rather than leaving it where it was
  * last seen. A fireball, a flask or a Demolish landing where the viewer sees
- * none of it, and hitting none of theirs, isn't told. Everything else carries
- * no square, and what it says the log says too.
+ * none of it, and hitting none of theirs, isn't told. Nor is a character out of
+ * sight going on watch: the log says it did, but not the AP it banked, which
+ * is how many reactions are waiting. Everything else carries no square, and
+ * what it says the log says too.
  *
  * Sight is read from the battle after the command. In anybody else's command
  * the viewer's squad doesn't move, so that's the sight it had all along — or
@@ -373,6 +375,10 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
 function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
     const own = (id: number) => battle.fighters.find(fighter => fighter.id === id)?.owner === viewerId && viewerId !== null;
+    const inSight = (id: number) => {
+        const fighter = battle.fighters.find(one => one.id === id);
+        return fighter !== undefined && (own(id) || seen(fighter.square));
+    };
     return events.flatMap((event): BattleEvent[] => {
         switch (event.kind) {
             case "moved": {
@@ -384,6 +390,8 @@ function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: s
             case "thrown":
             case "demolished":
                 return own(event.fighter) || event.targets.some(own) || areaAround(battle.field, event.at).some(seen) ? [event] : [];
+            case "watching":
+                return inSight(event.fighter) ? [event] : [];
             default:
                 return [event];
         }

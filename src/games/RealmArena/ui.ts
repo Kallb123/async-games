@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -288,6 +288,17 @@ export function unseenSquares(state: BattleState, player: string): ReadonlySet<S
     if (!state.fog) return null;
     const seen = squadSight(state, player);
     return new Set(state.field.tiles.flatMap((_, square) => seen(square) ? [] : [square]));
+}
+
+/**
+ * Whether a player's squad sees the whole of the centre (§13.7): always
+ * without fog. In fog of war (§27), an empty centre the squad can't wholly
+ * see may not be empty at all, so the screens that say who holds it ask.
+ */
+export function centreInSight(state: BattleState, player: string): boolean {
+    if (!state.fog) return true;
+    const seen = squadSight(state, player);
+    return (state.field.objectives[CENTRE] ?? []).every(seen);
 }
 
 /** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */

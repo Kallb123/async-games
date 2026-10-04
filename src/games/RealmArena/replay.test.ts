@@ -76,6 +76,15 @@ describe("Realm Arena replay", () => {
                 expect(state.fog).toBe(true);
                 if (viewer === null) expect(state.fighters).toEqual([]);
             }
+            // Nobody out of sight is told going on watch: the AP it banked is
+            // how many reactions are waiting.
+            timeline.snapshots.forEach(snapshot => {
+                if (viewer === null || snapshot.complete) return;
+                const shown = new Set((snapshot.specificGameState as IRealmArenaSpecificGameStateResponse).fighters.map(fighter => fighter.id));
+                for (const event of (snapshot.outcome as IRealmArenaStepOutcome | undefined)?.events ?? []) {
+                    if (event.kind === "watching") expect(shown.has(event.fighter)).toBe(true);
+                }
+            });
             // The squads deploy too far apart to see each other as the battle begins.
             const first = battleSteps[0];
             expect(first.fighters.every(fighter => fighter.owner === viewer)).toBe(true);
