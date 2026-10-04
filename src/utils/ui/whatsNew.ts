@@ -127,6 +127,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Taking back several moves in a row clears them all from the recap",
+                detail: "Undoing one move already left it out of the recap and your next-turn notification, but undoing two or three in a row only hid the last one — the earlier moves you took back still showed up as if you'd played them. Every move you undo now disappears, however many you take back.",
+            },
+            {
                 title: "Boards zoom onto the action from where you were looking",
                 detail: "When a board brings something into view by itself — your car and the spaces a roll lets it reach in Race Cars, or the fighter you select in Realm Arena — it used to snap to the new zoom first, often out at the corner of the map, and then slide across to the spot. It now zooms and pans in one smooth move, starting from exactly the part of the board you were already looking at.",
             },
@@ -165,10 +169,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Google and Microsoft sign-in work in the Android app",
                 detail: "Signing in to the app with Google or Microsoft dumped you into your phone's browser and left you there on an error instead of signing you in. Google now uses the phone's own account picker — tap the account you're already signed in to and you're in, no password and no browser — and Microsoft stays in the app where it belongs. Email and password were never affected. You'll need the latest version of the app from the Play Store.",
-            },
-            {
-                title: "The party size line no longer spills past the edge of the setup screen",
-                detail: "On a game's setup screen, the \"Party size N · supports X–Y players\" line sat flush against the left and right edges of the phone instead of lining up with the seats and turn-timer rows above it. It now sits inside the same margin as the rest of the page.",
             },
         ],
     },

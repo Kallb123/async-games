@@ -199,6 +199,32 @@ describe("Settlements & Cities — the undo anchor", () => {
         expect(gs.playerStates.get("u1")!.devCards.monopoly).toBe(0);
     });
 
+    it("doesn't let a later build revive a stale snapshot for a second undo to reach", async () => {
+        const { gs, edgeId } = mainBoardWithRoad({ resources: { brick: 2, lumber: 2 }, devCards: { monopoly: 1 } });
+        const game = makeGame(gs);
+        const vertexId = BOARD_TOPOLOGY.hexVertices[0][0];
+        const secondEdgeId = BOARD_TOPOLOGY.vertexEdges[vertexId][1];
+
+        const road = cmd(new SACBuildRoad());
+        road.edgeId = edgeId;
+        await run(game, road);
+        const monopoly = cmd(new SACPlayMonopoly());
+        monopoly.resource = "wool";
+        await run(game, monopoly);
+        const secondRoad = cmd(new SACBuildRoad());
+        secondRoad.edgeId = secondEdgeId;
+        await run(game, secondRoad);
+
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(true);
+        expect(gs.edges[secondEdgeId].hasRoad).toBe(false);
+
+        // The first road's snapshot predates the Monopoly, so reaching it would
+        // take the Monopoly back too. It went stale when the Monopoly was played.
+        expect((await run(game, cmd(new SACUndo()))).outcome.validMove).toBe(false);
+        expect(gs.edges[edgeId].hasRoad).toBe(true);
+        expect(gs.playerStates.get("u1")!.devCards.monopoly).toBe(0);
+    });
+
     it("refuses once the turn has passed, even with nothing else played on it", async () => {
         const { gs, edgeId } = mainBoardWithRoad();
         const game = makeGame(gs);
