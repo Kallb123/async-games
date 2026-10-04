@@ -1,7 +1,8 @@
-// Realm Arena's first faction as data (docs/games/realm-arena.md §13.6): the
-// six characters a squad is bought from, their weapons and abilities, the
-// options mastery unlocks for them (§23.2), the items they can carry (§21),
-// the points budget, and the ready-made squad a timed-out muster gets (§17.2).
+// Realm Arena's characters and factions as data (docs/games/realm-arena.md
+// §13.6, §29.3): every character a squad is bought from, their weapons and
+// abilities, the options mastery unlocks for them (§23.2), the items they can
+// carry (§21), the points budget, and each faction's roster and the
+// ready-made squad a timed-out muster gets (§17.2).
 // The numbers are §13's first guesses for playtesting, not balance — tuning
 // one is an edit here, and `rules.ts` reads them rather than repeating them.
 //
@@ -269,18 +270,46 @@ export function squadPoints(squad: readonly CharacterId[]): number {
     return squad.reduce((total, character) => total + CHARACTERS[character].points, 0);
 }
 
+/**
+ * A side's army (docs/games/realm-arena.md §29.3): the characters it can
+ * muster, its ready-made squads, and what it's called as the enemy in co-op.
+ * Character ids are unique across every faction, so a fighter needs only its
+ * `character` to be known, and every rule reads `CHARACTERS` whoever it's for.
+ */
 export interface Faction {
     name: string;
+    /** The characters it musters from, in the order the muster lists them; each in no other faction's roster. */
+    characters: readonly CharacterId[];
     /** The squad a muster that runs out of time gets, by player count — spending the whole budget (§17.2). */
     readyMade: Readonly<Record<PlayerCount, readonly CharacterId[]>>;
+    /**
+     * What its characters are called when the computer fields them in co-op
+     * (§29.3), as the log and the board name an owner: "the Renegades'
+     * Archer". Its own name, unless the players could be fighting as it too.
+     */
+    enemyName: string;
 }
 
-/** The human kingdom both games are named for, and the first faction (§13.6). */
-export const REALM: Faction = {
-    name: "The Realm",
-    readyMade: {
-        2: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
-        3: ["knight", "manAtArms", "archer", "scout"],
-        4: ["manAtArms", "manAtArms", "archer", "scout"],
+export type FactionId = "realm";
+
+/**
+ * Every faction, by the id a battle stores. An id, once used, is never
+ * renamed, as a map's isn't (§19.1).
+ */
+export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
+    // The human kingdom both games are named for, and the first faction (§13.6).
+    // The players fight as it, so as the enemy it's a band of deserters.
+    realm: {
+        name: "The Realm",
+        characters: ["manAtArms", "knight", "archer", "scout", "mage", "cleric"],
+        readyMade: {
+            2: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
+            3: ["knight", "manAtArms", "archer", "scout"],
+            4: ["manAtArms", "manAtArms", "archer", "scout"],
+        },
+        enemyName: "the Renegades",
     },
 };
+
+/** The Realm, which every player fights as until a squad can choose its faction (B6). */
+export const REALM = FACTIONS.realm;

@@ -526,7 +526,7 @@ describe("mustering", () => {
         for (const seat of [0, 1]) {
             const picks = readyMadeMuster(RUINED_FORT, seat, REALM.readyMade[2]);
             expect(picks.map(pick => pick.character)).toEqual(REALM.readyMade[2]);
-            expect(musterRefusal(RUINED_FORT, seat, picks, budget, {})).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, seat, picks, budget, {}, REALM)).toBeUndefined();
         }
     });
 
@@ -534,28 +534,29 @@ describe("mustering", () => {
         const narrow = buildBattlefield({ name: "Narrow", rows: ["...", "...", "..."], deployments: [{ col: 0, row: 0, width: 2, height: 3 }], objectives: {} });
         const squad = REALM.readyMade[2];
         const picks = readyMadeMuster(narrow, 0, squad);
-        expect(musterRefusal(narrow, 0, picks, budget, {})).toBeUndefined();
+        expect(musterRefusal(narrow, 0, picks, budget, {}, REALM)).toBeUndefined();
         expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
     });
 
     it("takes as many of any one character as the budget buys (§13.6)", () => {
         const sixMen = Array.from({ length: 6 }, (_, i) => ({ character: "manAtArms", square: zone[i] }));
-        expect(musterRefusal(RUINED_FORT, 0, sixMen, budget, {})).toBeUndefined();
-        expect(musterRefusal(RUINED_FORT, 0, [...sixMen, { character: "manAtArms", square: zone[6] }], budget, {}))
+        expect(musterRefusal(RUINED_FORT, 0, sixMen, budget, {}, REALM)).toBeUndefined();
+        expect(musterRefusal(RUINED_FORT, 0, [...sixMen, { character: "manAtArms", square: zone[6] }], budget, {}, REALM))
             .toBe("That squad costs 105 points, and the budget is 100");
     });
 
     it("refuses a squad that breaks the rules", () => {
         const pick = (character: string, i: number) => ({ character, square: zone[i] });
-        expect(musterRefusal(RUINED_FORT, 0, [], budget, {})).toBe("Muster at least one character");
-        expect(musterRefusal(RUINED_FORT, 0, "squad", budget, {})).toBe("Muster at least one character");
-        expect(musterRefusal(RUINED_FORT, 0, [pick("dragon", 0)], budget, {})).toBe("That isn't a character");
-        expect(musterRefusal(RUINED_FORT, 0, [null], budget, {})).toBe("That isn't a character");
-        expect(musterRefusal(RUINED_FORT, 0, ["mage", "mage", "knight", "knight"].map(pick), budget, {})).toBe("That squad costs 110 points, and the budget is 100");
-        expect(musterRefusal(RUINED_FORT, 0, [{ character: "scout", square: zone[0] }, { character: "mage", square: zone[0] }], budget, {}))
+        expect(musterRefusal(RUINED_FORT, 0, [], budget, {}, REALM)).toBe("Muster at least one character");
+        expect(musterRefusal(RUINED_FORT, 0, "squad", budget, {}, REALM)).toBe("Muster at least one character");
+        expect(musterRefusal(RUINED_FORT, 0, [pick("dragon", 0)], budget, {}, REALM)).toBe("That isn't a character");
+        expect(musterRefusal(RUINED_FORT, 0, [null], budget, {}, REALM)).toBe("That isn't a character");
+        expect(musterRefusal(RUINED_FORT, 0, [pick("scout", 0)], budget, {}, { ...REALM, characters: ["knight"] })).toBe("That character isn't in your faction");
+        expect(musterRefusal(RUINED_FORT, 0, ["mage", "mage", "knight", "knight"].map(pick), budget, {}, REALM)).toBe("That squad costs 110 points, and the budget is 100");
+        expect(musterRefusal(RUINED_FORT, 0, [{ character: "scout", square: zone[0] }, { character: "mage", square: zone[0] }], budget, {}, REALM))
             .toBe("Each character needs its own square in your deployment zone");
-        expect(musterRefusal(RUINED_FORT, 1, [pick("scout", 0)], budget, {})).toBe("Each character needs its own square in your deployment zone");
-        expect(musterRefusal(RUINED_FORT, 5, [pick("scout", 0)], budget, {})).toBe("Each character needs its own square in your deployment zone");
+        expect(musterRefusal(RUINED_FORT, 1, [pick("scout", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
+        expect(musterRefusal(RUINED_FORT, 5, [pick("scout", 0)], budget, {}, REALM)).toBe("Each character needs its own square in your deployment zone");
     });
 
     it("musters each character at full HP with nothing to spend until its owner's turn", () => {
@@ -572,19 +573,19 @@ describe("mustering", () => {
         it("counts each item's points against the budget with the characters", () => {
             // 25 + 25 + 30 + 15 = 95, so one 5-point item fits and a second doesn't.
             const squad = (["knight", "knight", "mage", "manAtArms"] as const).map((character, i) => pick(character, i));
-            expect(musterRefusal(RUINED_FORT, 0, squad, budget, {})).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, squad, budget, {}, REALM)).toBeUndefined();
             const one = [pick("knight", 0, "fireFlask"), ...squad.slice(1)];
             expect(musterPoints(one)).toBe(100);
-            expect(musterRefusal(RUINED_FORT, 0, one, budget, {})).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, one, budget, {}, REALM)).toBeUndefined();
             const two = [pick("knight", 0, "fireFlask"), pick("knight", 1, "smokePot"), ...squad.slice(2)];
-            expect(musterRefusal(RUINED_FORT, 0, two, budget, {})).toBe("That squad costs 105 points, and the budget is 100");
+            expect(musterRefusal(RUINED_FORT, 0, two, budget, {}, REALM)).toBe("That squad costs 105 points, and the budget is 100");
         });
 
         it("refuses anything but one item's id, and takes null for none", () => {
             for (const item of ["sword", ["fireFlask", "smokePot"], 5, { id: "fireFlask" }]) {
-                expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item }], budget, {}), JSON.stringify(item)).toBe("That isn't an item");
+                expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item }], budget, {}, REALM), JSON.stringify(item)).toBe("That isn't an item");
             }
-            expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item: null }], budget, {})).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [{ ...pick("scout", 0), item: null }], budget, {}, REALM)).toBeUndefined();
         });
 
         it("keeps a pick's item, and nothing else it carried", () => {
@@ -1026,24 +1027,24 @@ describe("options (§23.2)", () => {
         const pick = (character: CharacterId, option?: unknown): MusterPick => ({ character, square: zone[0], ...(option === undefined ? {} : { option }) } as MusterPick);
 
         it("needs the rank the battle snapshotted with that character", () => {
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, {})).toBe("That option isn't unlocked yet");
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { archer: 3 })).toBe("That option isn't unlocked yet");
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 1 })).toBeUndefined();
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 3 })).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, {}, REALM)).toBe("That option isn't unlocked yet");
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { archer: 3 }, REALM)).toBe("That option isn't unlocked yet");
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 1 }, REALM)).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", "demolish")], budget, { knight: 3 }, REALM)).toBeUndefined();
         });
 
         it("refuses another character's option, and anything that isn't one", () => {
             for (const option of ["shieldBash", "fireball", "cleave", "__proto__", "constructor", "toString", "", ["demolish"], 1, { id: "demolish" }]) {
-                expect(musterRefusal(RUINED_FORT, 0, [pick("knight", option)], budget, { knight: 3 }), JSON.stringify(option)).toBe("That isn't an option for that character");
+                expect(musterRefusal(RUINED_FORT, 0, [pick("knight", option)], budget, { knight: 3 }, REALM), JSON.stringify(option)).toBe("That isn't an option for that character");
             }
-            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", null)], budget, {})).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, [pick("knight", null)], budget, {}, REALM)).toBeUndefined();
         });
 
         it("costs what the kit it replaces does", () => {
             const squad = REALM.readyMade[2].map((character, i) => ({ character, square: zone[i] }));
             const options = squad.map(one => ({ ...one, option: (Object.keys(OPTIONS) as OptionId[]).find(id => OPTIONS[id].character === one.character) }));
             expect(musterPoints(options)).toBe(musterPoints(squad));
-            expect(musterRefusal(RUINED_FORT, 0, options, budget, { knight: 1, manAtArms: 1, archer: 1, cleric: 1 })).toBeUndefined();
+            expect(musterRefusal(RUINED_FORT, 0, options, budget, { knight: 1, manAtArms: 1, archer: 1, cleric: 1 }, REALM)).toBeUndefined();
         });
 
         it("is kept on the pick, and carried onto the battlefield", () => {

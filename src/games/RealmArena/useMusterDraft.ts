@@ -21,6 +21,7 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * them, and picks an option (§23.2) a rank has unlocked.
  */
 export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, ranks: Ranks, turnKey: string) {
+    // Every player fights as the Realm (§29.3).
     const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
     const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
     const [items, setItems] = useResettingState<ItemCounts>(NO_ITEMS, turnKey);
@@ -37,7 +38,7 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
     // characters: only a draft can buy them, and handing out would drop the rest.
     const refusal = squad.length > 0 && bought.length > squad.length
         ? `Your squad can carry ${pluralize(squad.length, "item")}, one each`
-        : musterRefusal(field, seat, picks, budget, ranks);
+        : musterRefusal(field, seat, picks, budget, ranks, REALM);
 
     // Changes what the character picked up goes into battle with.
     const outfit = (change: (picks: MusterPick[], selected: number) => MusterPick[]) => {
@@ -46,6 +47,8 @@ export function useMusterDraft(field: Battlefield, seat: number, playerCount: nu
     };
 
     return {
+        /** The characters the squad is bought from: its faction's roster, as the server holds it to. */
+        roster: REALM.characters,
         counts,
         setCounts,
         /** The items bought for the squad to carry. */

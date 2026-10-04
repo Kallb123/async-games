@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | PR 1, sides, built (§29.6) |
+| B8 | Co-op against the computer (§29) | PRs 1–2, sides, the battlefields and factions as data, built (§29.2, §29.3, §29.6) |
 
 **What B2 settled:**
 
@@ -2112,6 +2112,30 @@ has a battlefield for each size of team.
   beside `mapForPlayers`), and stored with the battle as now. Their ids join
   `REALM_ARENA_MAPS` and `DEPLOYMENT_NAMES`.
 
+**What PR 2 settled:**
+
+- Each map is fixed by a half turn, and by nothing else: its trees and rubble
+  outside the walls differ lane to lane, so teammates' approaches match only
+  in their walls, gates, towers and breaches. Every warband's matches a
+  player's exactly.
+- The deployments list the team's zones west to east, then the warbands'
+  west to east, so warband *k* stands directly opposite player *k*. The half
+  turn carries player *k*'s zone to the warband opposite the last player but
+  *k*.
+- The Three-Gate Fort's middle zone is 22 squares wide and its ends 21: 64
+  doesn't split in three, and the half turn needs the ends alike.
+- Each player has their own gate between two towers, with a rubble breach by
+  each tower: the breaches by an inner tower are the way across to a teammate,
+  and a player at an end has theirs in the side wall. The three checks every
+  map shares hold — every zone reaches the keep, nothing standable is sealed
+  off, every tower top looks into the keep — and so does the Ruined Fort's
+  own: the courtyard is reached only through the gates and the breaches.
+- The keep is the Ruined Fort's, square for square, so the middle of the
+  Three-Gate Fort walks to it as the Ruined Fort does (19 squares at the
+  quickest), and the ends five or so squares further.
+- `mapFor` is in place but nothing calls it with `coop` until PR 4a, so no
+  battle is fought on either fort yet.
+
 ### 29.3 The enemy's faction
 
 The enemy is a faction, chosen by the host, so that when there's a second
@@ -2186,6 +2210,16 @@ ready-made squads, and every character is the Realm's. A faction becomes:
   fighting the Realm, the faction's own name for any other. The log, the
   board's labels and the results name the enemy's characters by it — "the
   Renegades' Archer" — through `ownerToken` and `nameFor` (§29.6).
+
+**What PR 2 settled:** `FACTIONS` holds the Realm alone, with its six
+characters as its roster and "the Renegades" as its `enemyName`; `REALM` is
+`FACTIONS.realm`. A test holds every character to exactly one faction's
+roster, and every faction's ready-made squads to its own roster and the
+budget. `musterRefusal` is handed the faction and refuses a character outside
+its roster; the server and the muster screen both hand it the Realm, which
+every player fights as, and the muster lists the faction's roster. Reading a
+stored faction id, with an unknown one as the Realm, waits for PR 4a, which
+stores the first one.
 
 **What a second faction will bring**, which is B6's work, not this plan's:
 its characters and their abilities, its ready-made squads, and its figures
@@ -2643,3 +2677,4 @@ Realm, its sibling in the same world.
 | 1.32 | Battle results (§28): the result page charts the points race round by round with each character downed marked on its owner's line, each squad's health, the damage each kind of character dealt and a table of everything each squad did, all read off the game-end replay. |
 | 1.33 | Co-op against the computer (§29), planned and reviewed by the caveman: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn, on battlefields of its own — line battles, the team along one edge and a warband opposite each player, unchanged by a half turn (§29.2). The enemy is a faction the host picks, or Random, drawn as the battle is created and kept hidden — off the wire and unnamed in the log — until the team first sees one of its characters; factions become data, so a second one — monsters — can be fought with nothing new in the computer (§29.3). Built on sides (`sideOf`, `allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result with the board's own tactics helpers; its actions are recorded, so it can be improved without changing a battle already fought. Its warbands are its faction's ready-made squads. |
 | 1.34 | B8 PR 1 builds sides (§29.6): `sideOf`, `allied` and the one battle builder, `battleFrom`; every friend-or-foe question asked by side on the server and the board; the centre held by a side but scored by a player with their own in it, the battle over with one side standing, and standings ranked by side. |
+| 1.35 | B8 PR 2 builds the co-op battlefields (§29.2) — the Twin-Gate and Three-Gate Forts, unchanged by a half turn, a warband opposite each player, and `mapFor` — and factions as data (§29.3): `FACTIONS` with the Realm in it, a roster and an `enemyName` each, and the muster checked against its faction's roster. |
