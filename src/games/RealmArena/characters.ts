@@ -83,7 +83,7 @@ export interface Ability {
     oncePerBattle?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
-    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark). */
+    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark, Heal). */
     range?: number;
     /** What it does to each character it hits, in place of the weapon's (Fireball, Shield bash, Demolish). */
     damage?: number;
@@ -106,7 +106,7 @@ export const ABILITIES = {
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
-    heal: { name: "Heal", ap: 2, cooldown: 2, hp: 4, description: "Restore 4 HP to an ally next to them, and clear burning, slowed and stunned" },
+    heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to an ally it can see within 12 squares, and clear burning, slowed and stunned" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
     demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
@@ -213,7 +213,7 @@ export const THROW_RANGE = 6;
  * Something a character carries into battle, bought at muster and used once
  * (§21.1). A thrown one is aimed at a square in range and in sight, as a
  * fireball is, and never rolls; the healing draught is handed to an ally next
- * to the carrier, as a heal is, or drunk by the carrier itself.
+ * to the carrier, or drunk by the carrier itself.
  */
 export interface Item {
     name: string;

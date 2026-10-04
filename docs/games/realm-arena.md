@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.27. Split out of Defender of the Realm in its third round of
+**Status:** v1.30. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -683,7 +683,7 @@ games are named for. It would also be Defender of the Realm's first faction.
 | **Archer** | Long range; the overwatch specialist | 6 | 6 | Bow, 80%, range 20, 3 | **Aimed shot:** +20% to hit (3 AP, 2 turns) | 20 |
 | **Scout** | Fastest and fragile; the flanker | 8 | 6 | Knives, melee, 3 | **Sneak:** move without setting off reactions (2 AP a move, no cooldown) | 20 |
 | **Mage** | Fragile; hits an area | 6 | 5 | Bolt, 70%, range 10, 3 | **Fireball:** 3 damage to every character in a 3×3 area, friend or foe, up to 12 squares away, with no roll (3 AP, 3 turns) | 30 |
-| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally next to them (2 AP, 2 turns). **Raise:** once per battle (3 AP) | 25 |
+| **Cleric** | Support | 6 | 7 | Staff, melee, 2 | **Heal:** restore 4 HP to an ally they can see within 12 squares (2 AP, 2 turns). **Raise:** once per battle (3 AP) | 25 |
 
 **The budget:** 100 points each for two players, 80 for three, and 70 each for
 four (free-for-all or teams). That's 4–6 characters at two players and 3–4 at
@@ -698,8 +698,9 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
   reaches out in a circle. Overwatch needs the mover in range as well as in
   sight.
 - **"Next to" is touching, side or corner**, unless high cover fills both
-  corners between the two squares. It's what melee, guard, healing and raising
-  need.
+  corners between the two squares. It's what melee, guard, a healing draught
+  and raising need. A heal is aimed as a fireball is: at an ally in sight
+  within 12 squares.
 - **Flanking's +1 damage is for shots.** Melee always hits, with no cover to
   lose, so it doesn't get it.
 - **A graze does half damage, rounded up**, so it always does something. A
@@ -1252,8 +1253,8 @@ function of the ground.
   `Fighter.item` is the item a fighter carries, or none.
 - **Two new `Act` kinds.** A throw is `{ kind: "throw", fighter, at }`, aimed
   at a square like Fireball. A draught is `{ kind: "draught", fighter, target }`,
-  aimed at an ally like Heal. Its carrier can drink it, which Heal can't do
-  for the Cleric.
+  aimed at an ally like Heal, but only one next to its carrier. Its carrier
+  can drink it, which Heal can't do for the Cleric.
 - **Reused, not rebuilt.** `areaAround` (once `fireballArea`) is every 3×3.
   Heal and the draught share `healRefusal`, and with Purify (§23) one
   heal-and-clear resolver, `mend`. Fireball, the flasks and Demolish share
@@ -1506,7 +1507,7 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
     the board's preview reads too.
   - **Hunter's mark is aimed as a fireball is**, at an enemy in sight within
     12 squares, and told as a `marked` event, then the `effect`.
-  - **Purify reaches the Cleric and every ally next to it**, as a heal does,
+  - **Purify reaches the Cleric and every ally next to it**, as a draught does,
     and only those it would do something for: hurt or afflicted. "Every
     effect" means every affliction (burning, stunned, slowed and marked), not
     a stance an ally took itself, so a shield wall or hunkering down stands.
@@ -1630,8 +1631,9 @@ drawn.
   (§13.3). It's no longer only the tower top.
 - **Melee** — a strike, Cleave, and a guard reaction — needs the two
   characters within a quarter of each other's height (round 9), so nobody on
-  the ground strikes someone on a tower top beside them. Healing, raising
-  and the shield wall still only need them next to each other.
+  the ground strikes someone on a tower top beside them. A healing draught,
+  raising and the shield wall still only need them next to each other, and a
+  heal only needs its ally in range and in sight.
 - **Parapets.** The wall round a tower top is a parapet, standing half a
   height above the top, so whoever is up there has half cover from that
   side by its height alone (round 9). A side where the parapet is missing,
@@ -2001,3 +2003,4 @@ Realm, its sibling in the same world.
 | 1.27 | B5, fog of war (§8, §27): the host's choice at setup, on to start with. A character sees 20 squares where its sight is clear — an Archer or a Scout 25, a Knight 15 — at least as far as anything it can use reaches; a player sees their squad and whoever it sees, live and in a review, until the battle ends; a move that finds an enemy out of sight in its path goes round it, or as near to where it was sent as it can, paying for the way it went; an action that shows an enemy can't be undone. Fog hides where, and the log still tells what. |
 | 1.28 | The muster's characters and items each have an ⓘ opening their stats — HP, movement, sight and points, and each weapon's, ability's, option's and item's AP, damage, range, chance to hit, cooldown and area — and `/admin/realmarena` shows every one at once, for balancing (docs/admin-tools.md). |
 | 1.29 | No cap on any one character: the budget is the only limit on a squad (§13.6). The muster heads its items "Consumables", and placing lists the squad as boxes that pick a character up and zoom the board to it (§21.3). |
+| 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |

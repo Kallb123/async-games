@@ -71,7 +71,7 @@ const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     aimedShot: { reach: "weapon" },
     sneak: { reach: "move" },
     fireball: { reach: "aimed", note: AREA },
-    heal: { reach: "next" },
+    heal: { reach: "aimed" },
     raise: { reach: "next" },
     shieldBash: { reach: "next" },
     demolish: { reach: "next", note: "Everyone beside the cover but the Knight, friend or foe" },

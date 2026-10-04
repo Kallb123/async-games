@@ -282,7 +282,7 @@ describe("rangeSquares", () => {
         expect(named(field, rangeSquares({ field, fighters: [archer] }, archer, 6))).toEqual(["1,0", "2,0", "3,0", "4,0", "5,0", "6,0"]);
     });
 
-    it("draws a heal's range as the squares next to it", () => {
+    it("draws a raise's range as the squares next to it", () => {
         const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
         expect(named(OPEN, rangeSquares({ field: OPEN, fighters: [cleric] }, cleric, "nextTo"))).toEqual(["0,1", "1,0", "1,1"]);
     });
@@ -326,7 +326,8 @@ describe("targetsOf", () => {
         const cleric = ready(0, "a", "cleric", at(OPEN, 0, 0));
         const hurt = ready(1, "a", "knight", at(OPEN, 1, 0), { hp: 5 });
         const fine = ready(2, "a", "archer", at(OPEN, 0, 1));
-        expect(targetsOf({ field: OPEN, fighters: [cleric, hurt, fine] }, "a", cleric, "heal")).toEqual([1]);
+        const far = ready(3, "a", "mage", at(OPEN, 4, 0), { hp: 1 });
+        expect(targetsOf({ field: OPEN, fighters: [cleric, hurt, fine, far] }, "a", cleric, "heal")).toEqual([1, 3]);
     });
 });
 

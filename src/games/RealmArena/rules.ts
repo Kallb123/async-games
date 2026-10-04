@@ -255,7 +255,7 @@ export function fighterById(state: BattleState, id: unknown): Fighter | undefine
     return state.fighters.find(fighter => fighter.id === id);
 }
 
-/** Whether two characters touch, and nothing stands between them at the corner they share. Healing, raising and the shield wall need it; melee needs `inMeleeReach` too. */
+/** Whether two characters touch, and nothing stands between them at the corner they share. A healing draught, raising and the shield wall need it; melee needs `inMeleeReach` too. */
 export function nextTo(field: Battlefield, a: Square, b: Square): boolean {
     return isNeighbour(field, a, b) && canSee(field, a, b);
 }
@@ -268,7 +268,7 @@ export function inMeleeReach(field: Battlefield, a: Square, b: Square): boolean 
     return nextTo(field, a, b) && Math.abs(riseOf(field, a, b)) <= MELEE_RISE;
 }
 
-/** Whether one square is within `range` squares of another and can be seen from it: a ranged weapon's reach, and a fireball's (§13.3). */
+/** Whether one square is within `range` squares of another and can be seen from it: a ranged weapon's reach, and a fireball's or a heal's (§13.3). */
 export function inRange(field: Battlefield, from: Square, to: Square, range: number): boolean {
     return distance(field, from, to) <= range && canSee(field, from, to);
 }
@@ -714,13 +714,15 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
 }
 
 /**
- * Why a character can't heal `target`, or undefined when it can: an ally
- * next to it — or itself, for a healing draught (`self`) — that is hurt or has
- * something a heal clears (§20.2, §21.2).
+ * Why a character can't heal `target`, or undefined when it can: an ally that
+ * is hurt or has something a heal clears (§20.2, §21.2) — one it can see in
+ * Heal's range, or, for a healing draught (`draught`), one next to it or
+ * itself.
  */
-function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, self: boolean): string | undefined {
-    if (!target || target.owner !== healer.owner || !isStanding(target) || (target.id === healer.id && !self)) return "Pick an ally to heal";
-    if (target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
+function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean): string | undefined {
+    if (!target || target.owner !== healer.owner || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
+    if (!draught && !inRange(state.field, healer.square, target.square, ABILITIES.heal.range)) return "Out of range or out of sight";
+    if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
     return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
 }
 
@@ -741,7 +743,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
 
 /**
  * Who a Cleric's Purify would reach (§23.2): itself and every standing ally
- * next to it, as a heal reaches, that is hurt or afflicted — the ones it would
+ * next to it, as a healing draught reaches, that is hurt or afflicted — the ones it would
  * do anything for. Ids in battle order.
  */
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {

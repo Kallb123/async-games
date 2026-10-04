@@ -413,6 +413,17 @@ describe("abilities (§13.5, §13.6)", () => {
         expect(check({ field: wide, fighters: [mage] }, "a", { kind: "fireball", fighter: 1, at: at(wide, 13, 0) })).toEqual({ refused: "Out of range or out of sight" });
     });
 
+    it("heal reaches an ally the Cleric can see within 12 squares, not only one next to it", () => {
+        const wide = fieldOf(["..............."]);
+        const cleric = fighter(1, "a", "cleric", at(wide, 0, 0));
+        const heal = (x: number) => check({ field: wide, fighters: [cleric, fighter(2, "a", "knight", at(wide, x, 0), { hp: 5 })] }, "a", { kind: "heal", fighter: 1, target: 2 });
+        expect(heal(12)).toEqual({ ap: 2 });
+        expect(heal(13)).toEqual({ refused: "Out of range or out of sight" });
+        const walled = fieldOf(["...#..."]);
+        const blocked = [fighter(1, "a", "cleric", at(walled, 0, 0)), fighter(2, "a", "knight", at(walled, 6, 0), { hp: 5 })];
+        expect(check({ field: walled, fighters: blocked }, "a", { kind: "heal", fighter: 1, target: 2 })).toEqual({ refused: "Out of range or out of sight" });
+    });
+
     it("heal restores up to 4 HP to an ally next to the Cleric, but never past full", () => {
         const fighters = [fighter(1, "a", "cleric", at(field, 1, 1)), fighter(2, "a", "knight", at(field, 2, 2), { hp: 10 })];
         const { byId, events } = run({ field, fighters }, "a", { kind: "heal", fighter: 1, target: 2 });

@@ -254,16 +254,16 @@ export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean):
 
 /**
  * What decides where an aimed action can land: the character's weapon, the
- * squares next to it (a heal, a raise, a healing draught), the low cover next
- * to it (a Demolish), or — a number — how far something aimed at a square
- * reaches (a fireball, a thrown item, a Hunter's mark).
+ * squares next to it (a raise, a healing draught), the low cover next
+ * to it (a Demolish), or — a number — how far something aimed reaches (a
+ * fireball, a thrown item, a Hunter's mark, a heal).
  */
 export type RangeKind = "weapon" | "nextTo" | "cover" | number;
 
 /**
  * An aimed action's range from where a character stands: every square it
  * could be lined up on, were someone there to aim at. A weapon, a
- * heal or a raise is aimed at a character, so only a square one could stand on
+ * draught or a raise is aimed at a character, so only a square one could stand on
  * counts; a fireball or a throw can land on any square it can see in range.
  * Where the character stands isn't drawn. Read from the rules `check` itself
  * asks, so the shading and what the server allows can't drift apart.
