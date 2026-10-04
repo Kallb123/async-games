@@ -16,9 +16,8 @@ import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
 
-// docs/games/realm-arena.md §17.3 PR 4: reachable by URL only until the game
-// is turned on (§17.1). The party's size picks the map (§17.4 B2), so the
-// choices are who, how fast, and whether the battle is fought in fog of war
+// docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
+// (§17.4 B2), so the choices are who, how fast, and whether the battle is fought in fog of war
 // (§27).
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
