@@ -6,7 +6,7 @@ import { useCallback } from 'react';
  * document root, so ag-theme.css can hold that much space clear for it.
  *
  * This is for the app's fixed bottom furniture — the offer banner, the match
- * review dock, a game's own pinned action sheet. Each is fixed to the viewport
+ * review dock, a game's own pinned action sheet or floating box. Each is fixed to the viewport
  * (it has to be, to stay put through the game screens' own scrolling), so it
  * takes up no room in the flow and would otherwise sit on top of whatever the
  * page ends with. Its height is not a constant the stylesheet could hard-code:

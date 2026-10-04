@@ -75,7 +75,8 @@
     /* The same idea for a game whose own action sheet is pinned to the bottom
        of the screen — Race Cars' roll and destination picker, which a board
        zoomed in past one screen would otherwise push out of view entirely
-       rather than just further down the page. */
+       rather than just further down the page — or Realm Arena's floating
+       points box while mustering. */
     --ag-actions-dock-height: 0px;
 
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
@@ -1537,10 +1538,10 @@ a.ag-list-row, a.ag-list-row-main {
     min-height: calc(100vh - var(--ag-banner-height));
     /* Room for whichever pinned dock is mounted — the match-review one or a
        game's own pinned action sheet — so the board, the log and the chat can
-       all be scrolled clear of it. The two are never both mounted at once
-       (Race Cars' sheet is a live-game control; the review dock replaces it
-       the moment a player steps into review), so summing them is just 0px
-       plus whichever one is actually up. */
+       all be scrolled clear of it. Race Cars' sheet is a live-game control the
+       review dock replaces; Realm Arena's floating points box can stay up
+       under review, stacked on top of the review dock, so the sum is the room
+       the two take together. */
     padding-bottom: calc(var(--ag-review-dock-height) + var(--ag-actions-dock-height));
     background-color: var(--ag-bg);
     background-image: radial-gradient(circle at 50% 0%, var(--ag-surface), var(--ag-bg) 62%);
@@ -2497,6 +2498,32 @@ button.ag-chat-gif { cursor: pointer; }
     max-height: 70svh;
     overflow-y: auto;
 }
+/* A box floating over the page rather than a sheet across it — Realm Arena's
+   points left while mustering, which every tap on a stepper changes and which
+   would otherwise sit below the steppers, off screen on a phone exactly while
+   they're being tapped. The dock strip itself is click-through, so only the box
+   covers anything, and it stacks above the review dock should both be up.
+   `--ag-actions-dock-height` holds the page clear of it. */
+.ag-dock--float {
+    bottom: calc(var(--ag-banner-height) + var(--ag-review-dock-height));
+    display: flex;
+    justify-content: center;
+    padding-top: 8px;
+    padding-bottom: max(12px, calc(env(safe-area-inset-bottom) - var(--ag-banner-height)));
+    pointer-events: none;
+}
+.ag-dock--float .ag-dock-pill {
+    pointer-events: auto;
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font: 700 13px var(--ag-font);
+    box-shadow: var(--ag-shadow-lift);
+}
+.ag-dock--float .ag-dock-pill b { color: var(--ag-gold); font-weight: 800; }
+.ag-dock--float .ag-dock-pill--warn { background: var(--ag-danger); }
+.ag-dock--float .ag-dock-pill--warn b { color: inherit; }
 .ag-review {
     margin: 12px 16px;
     background: var(--ag-dark);
