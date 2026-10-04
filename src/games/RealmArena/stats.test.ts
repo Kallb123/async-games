@@ -58,6 +58,7 @@ describe("characterStats", () => {
             extras: ["3×3, friend or foe", "Burning: 1 damage a turn, 2 turns", "Blasts away low cover"],
         });
         expect(row("cleric", "Raise")).toMatchObject({ hit: "—", cooldown: "Once" });
+        expect(row("cleric", "Heal")).toMatchObject({ range: `${ABILITIES.heal.range}`, hit: "—", extras: [`Heals ${ABILITIES.heal.hp} HP`] });
         expect(row("scout", "Sneak")).toMatchObject({ ap: `${ABILITIES.sneak.ap}`, damage: "—", cooldown: "—", extras: [`${ABILITIES.sneak.ap} AP for each AP a move would cost`] });
         expect(row("mage", "Frost bolt")).toMatchObject({ damage: `${OPTIONS.frostBolt.weapon.damage}`, hit: `${OPTIONS.frostBolt.weapon.accuracy}%`, extras: ["On a hit: Slowed: half movement, 2 turns"] });
     });

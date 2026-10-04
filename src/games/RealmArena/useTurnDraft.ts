@@ -47,7 +47,7 @@ const RANGE: Partial<Record<Aim, RangeKind>> = {
     attack: "weapon",
     aimedShot: "weapon",
     cleave: "weapon",
-    heal: "nextTo",
+    heal: ABILITIES.heal.range,
     raise: "nextTo",
     draught: "nextTo",
     shieldBash: "weapon",

@@ -32,7 +32,7 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     aimedShot: 'Tap an enemy to see the odds.',
     cleave: 'Tap two enemies next to them.',
     fireball: 'Tap the square to centre the fireball on. It hits the 3×3 around it, friend or foe.',
-    heal: 'Tap a hurt ally next to them.',
+    heal: `Tap a hurt ally they can see within ${ABILITIES.heal.range} squares.`,
     raise: 'Tap a downed ally next to them.',
     throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
     draught: 'Tap them, or a hurt ally next to them, to give the draught.',

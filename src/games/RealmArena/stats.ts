@@ -3,7 +3,7 @@
 // balance screen print, every one read from characters.ts and the rules'
 // constants rather than restated, so tuning a number there retunes both.
 // What the data can't say — that a Cleave swings the character's own weapon,
-// that a Heal reaches only the square next door — is the rules' code, and
+// that a Raise reaches only the square next door — is the rules' code, and
 // `ABILITY_USE` writes it down once here.
 
 import { DEFAULT_CLIMB } from "@/utils/games/battlefield/pathfinding";
@@ -71,7 +71,7 @@ const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     aimedShot: { reach: "weapon" },
     sneak: { reach: "move" },
     fireball: { reach: "aimed", note: AREA },
-    heal: { reach: "next" },
+    heal: { reach: "aimed" },
     raise: { reach: "next" },
     shieldBash: { reach: "next" },
     demolish: { reach: "next", note: "Everyone beside the cover but the Knight, friend or foe" },
