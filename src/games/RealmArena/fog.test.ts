@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { pathTo } from "@/utils/games/battlefield/pathfinding";
+import { findPath, pathCost, pathTo } from "@/utils/games/battlefield/pathfinding";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
+import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { RealmArenaGameDataModel, stepOutcomeToModel } from "./RealmArenaModels";
 import { RealmArenaUndo } from "./RealmArenaLogic";
@@ -15,9 +15,9 @@ import {
 import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/games/realm-arena.md §27: fog of war. A player sees what their squad
-// sees — SIGHT_RANGE squares, wherever its line of sight is clear — and the
-// server sends them nothing else of anyone else's, live or in a review, until
-// the battle is over. It changes what's known, never what can be done, except
+// sees — each character as far as its `sightOf`, wherever its line of sight
+// is clear — and the server sends them nothing else of anyone else's, live or
+// in a review, until the battle is over. It changes what's known, never what can be done, except
 // that an enemy out of sight in a path is found, and the mover goes round it.
 
 vi.mock("@/utils/users/clerk", () => ({
@@ -165,6 +165,22 @@ describe("moving into the fog (§27)", () => {
         const moved = outcome.events.flatMap(event => event.kind === "moved" ? event.path : []);
         expect(moved.some(at => wall.some(enemy => enemy.square === at))).toBe(false);
         expect(outcome.fighters.find(one => one.id === 0)!.ap).toBeGreaterThanOrEqual(0);
+    });
+
+    it("sends a sneak round too, at a sneak's price for the way it went", () => {
+        const pocket = buildBattlefield({ name: "Pocket", rows: ["......#..", "......#..", "........."], deployments: [], objectives: {} });
+        const scout = { ...newFighter(0, "a", "scout", at(pocket, 0, 0)), ap: ACTION_POINTS };
+        // Behind the wall's end, where the Scout can't see.
+        const enemy = fighter(1, "b", at(pocket, 7, 0));
+        const state = fogged([scout, enemy], pocket);
+        expect(squadSight(state, "a")(enemy.square)).toBe(false);
+        const sent = findPath(pocket, scout.square, enemy.square)!.squares;
+        const outcome = act(state, "a", { kind: "sneak", fighter: 0, path: sent }, fixedRolls([]));
+        const walked = outcome.events.flatMap(event => event.kind === "moved" ? event.path : []);
+        expect(outcome.events[0]).toEqual({ kind: "spotted", fighter: 0, by: 1 });
+        expect(walked).not.toContain(enemy.square);
+        expect(walked.at(-1)).toBe(square(outcome));
+        expect(outcome.fighters.find(one => one.id === 0)!.ap).toBe(ACTION_POINTS - moveAp(scout, pathCost(pocket, walked, CHARACTERS.scout.climb)!, true));
     });
 
     it("always sees an enemy on its first step, so a path into one is refused rather than gone round", () => {

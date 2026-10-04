@@ -536,20 +536,35 @@ function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sne
         found.push(enemy);
         known.add(enemy.id);
         const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || one.owner === mover.owner) }, mover, sneaking);
-        const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal);
+        const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
         path = pathTo(reach, to)?.squares ?? [mover.square];
         ap = moveAp(mover, reach.costs[to], sneaking);
     }
     return { path, found, ap };
 }
 
-/** The square in reach nearest `goal`, the cheapest of those as near, then the first: never none, since where the mover stands is in reach. */
-function nearestTo(field: Battlefield, reach: Reach, goal: Square): Square {
+/**
+ * The square in reach nearest `goal` (§27): nearest to walk to it, ignoring
+ * who stands where, so the mover never loops round a wall for a square only
+ * a crow would call closer; then as the crow flies, for a goal nothing in
+ * reach can walk to; then the cheapest, then the first. Never none, since
+ * where the mover stands is in reach. Every measure is exact — walking costs
+ * are halves, and the crow's is squared — so a replay picks the same square.
+ */
+function nearestTo(field: Battlefield, reach: Reach, goal: Square, climb: number): Square {
+    const walk = reachFrom(field, goal, Infinity, { climb }).costs;
+    const { col, row } = coordsOf(field, goal);
+    const crow = (square: Square) => {
+        const at = coordsOf(field, square);
+        return (at.col - col) ** 2 + (at.row - row) ** 2;
+    };
+    const score = (square: Square) => [walk[square], crow(square), reach.costs[square]];
     let best = reach.from;
     reach.costs.forEach((cost, square) => {
         if (cost === Infinity) return;
-        const nearer = distance(field, square, goal) - distance(field, best, goal);
-        if (nearer < 0 || (nearer === 0 && cost < reach.costs[best])) best = square;
+        const [a, b] = [score(square), score(best)];
+        const first = a.findIndex((value, i) => value !== b[i]);
+        if (first >= 0 && a[first] < b[first]) best = square;
     });
     return best;
 }

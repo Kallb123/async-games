@@ -1864,8 +1864,11 @@ place — moving — what a player can be held to knowing.
   open with its AP spent, so it doesn't: it takes the cheapest way round to
   the square it was sent to, within the AP it has. When there's none — the
   enemy stands on that square, or the way round costs too much — it goes as
-  near to it as it can. Either way it pays for the path it walks, not the one
-  sent (`routed`). The way round keeps clear only of the enemies the player
+  near to it as it can — nearest to walk to, not as the crow flies, so it
+  never loops round a wall for a square only a crow would call closer. Either
+  way it pays for the path it walks, not the one sent (`routed`), which may be
+  more than the move's preview showed: the preview can only show the path as
+  sent. The way round keeps clear only of the enemies the player
   now knows of, so its shape gives nobody else away; one it crosses that it
   couldn't see is found and gone round too. Each is told as a `spotted`
   event, before the move: "their Scout found Bob's Knight in its way, and went
@@ -1897,6 +1900,10 @@ place — moving — what a player can be held to knowing.
   scores. It has never said where anything happened, and fog keeps it that
   way: fog hides *where*, and the log still tells *what*. The scoreboard shows
   how many of another squad the viewer can see, not how many stand.
+- **Accepted: who found whom.** A move that finds a hidden enemy is told to
+  everyone, as the log tells everything ("Alice's Scout found Bob's Knight in
+  its way"), so a third player learns the two are near each other, though not
+  where.
 - **Accepted: fighter ids.** Ids count from 0 in seat order (§17.2), so an id
   seen hints at how big the squads before it are. The log names every
   character that acts anyway.
