@@ -28,7 +28,7 @@ import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import type { IRealmArenaOutcome, RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import type { ItemId } from "./characters";
-import { centreHolders, isStanding, type BattleEvent, type Fighter } from "./rules";
+import { battleFrom, centreHolders, isStanding, sideOf, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -312,12 +312,12 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    const battle = { field: battlefieldOf(gs.map, gs.blasted), fighters: gs.fighters, fog: gs.fog };
+    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), gs);
     const holders = centreHolders(battle);
     // In fog of war, nobody seen there isn't nobody there (§27).
     const centre = holders.length === 0 ? (centreInSight(battle, forUserId) ? "the centre is empty" : "you can't see all of the centre")
         : holders.length > 1 ? "the centre is contested"
-        : holders[0] === forUserId ? "the centre is yours" : "the enemy holds the centre";
+        : holders[0] === sideOf(battle, forUserId) ? "the centre is yours" : "the enemy holds the centre";
 
     return { glyph: "🏰", text: `${score}, with ${squad.filter(isStanding).length} of ${squad.length} standing, and ${centre}.` };
 }

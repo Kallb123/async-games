@@ -153,6 +153,44 @@ export interface BattleState {
      * where every cloud is on its thrower.
      */
     clouds?: readonly Square[];
+    /**
+     * The side each owner fights on, by owner (§29.6): absent in a
+     * free-for-all, where every owner is a side of its own. Never stored or
+     * sent — `battleFrom` builds it from what the battle was created as, on
+     * the server, the board and the recap alike. Read only through `sideOf`.
+     */
+    sides?: Readonly<Record<string, string>>;
+}
+
+/** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
+export interface BattleSource {
+    fighters: readonly Fighter[];
+    fog?: boolean;
+    clouds?: readonly Square[];
+}
+
+/**
+ * The one way a `BattleState` is built (§29.6), so the board's previews and
+ * the recap read a battle exactly as the server does. A free-for-all — every
+ * battle so far — has no `sides`; co-op adds them here, from what the battle
+ * was created as, and nowhere else.
+ */
+export function battleFrom(field: Battlefield, { fighters, fog, clouds }: BattleSource): BattleState {
+    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}) };
+}
+
+/** The side an owner fights on (§29.6): its own, in a free-for-all. */
+export function sideOf(state: Pick<BattleState, "sides">, owner: string): string {
+    return state.sides && Object.hasOwn(state.sides, owner) ? state.sides[owner] : owner;
+}
+
+/**
+ * Whether two owners fight on the same side (§29.6): every "is this an enemy?"
+ * a rule asks. An owner is its own ally. "Whose character is this?" — the
+ * actor is the player's own, its turn begins — stays an owner check.
+ */
+export function allied(state: Pick<BattleState, "sides">, a: string, b: string): boolean {
+    return sideOf(state, a) === sideOf(state, b);
 }
 
 export type Action =
@@ -284,7 +322,7 @@ export function moveRules(state: BattleState, mover: Fighter): Required<MoveRule
     const blocked = new Set<Square>(), occupied = new Set<Square>();
     for (const other of state.fighters) {
         if (other.id === mover.id || !isStanding(other)) continue;
-        (other.owner === mover.owner ? occupied : blocked).add(other.square);
+        (allied(state, other.owner, mover.owner) ? occupied : blocked).add(other.square);
     }
     return { blocked, occupied, climb: CHARACTERS[mover.character].climb ?? DEFAULT_CLIMB };
 }
@@ -318,7 +356,7 @@ export interface ShotOdds {
 /** Whether a standing ally holds a shield wall next to this character (§13.6). */
 function shielded(state: BattleState, target: Fighter): boolean {
     return state.fighters.some(knight => hasEffect(knight, "shieldWall") && isStanding(knight) && knight.id !== target.id
-        && knight.owner === target.owner && nextTo(state.field, knight.square, target.square));
+        && allied(state, knight.owner, target.owner) && nextTo(state.field, knight.square, target.square));
 }
 
 /**
@@ -414,7 +452,7 @@ export interface Reaction {
  */
 export function reactionsTo(state: BattleState, mover: Fighter, path: readonly Square[]): Reaction[] {
     const watchers = state.fighters.filter(watcher =>
-        isStanding(watcher) && watcher.owner !== mover.owner && watcher.banked >= REACTION_COST);
+        isStanding(watcher) && !allied(state, watcher.owner, mover.owner) && watcher.banked >= REACTION_COST);
     const smoke = smokeSquares(state);
     const reacted = new Set<number>();
     const reactions: Reaction[] = [];
@@ -454,12 +492,12 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
 // sends the mover round it (`routed`).
 
 /**
- * Whether a player's squad sees a square: any of its standing characters
- * does. Remembers each answer, since a view asks about the same squares
- * again and again.
+ * Whether a player's side sees a square: any standing character of theirs or
+ * an ally's does, since a side shares its sight (§29.1). Remembers each
+ * answer, since a view asks about the same squares again and again.
  */
 export function squadSight(state: BattleState, player: string | null): (square: Square) => boolean {
-    const eyes = state.fighters.filter(fighter => fighter.owner === player && isStanding(fighter));
+    const eyes = state.fighters.filter(fighter => player !== null && allied(state, fighter.owner, player) && isStanding(fighter));
     const known = new Map<Square, boolean>();
     return square => {
         let seen = known.get(square);
@@ -473,29 +511,31 @@ export function squadSight(state: BattleState, player: string | null): (square: 
 }
 
 /**
- * The battle as one player knows it under fog of war (§27): their own squad,
- * every other character — standing or fallen — on a square their squad sees,
+ * The battle as one player knows it under fog of war (§27): their own side,
+ * every other character — standing or fallen — on a square their side sees,
  * and every smoke cloud they can see: on its thrower when they see it too,
  * and on its own (`clouds`) when they don't. A cloud they can't see isn't
  * there, whoever threw it. The
  * whole battle when it isn't fogged. A player with nobody standing — or no
- * player at all — sees nobody else.
+ * player at all — sees nobody else. Their allies are their own side's, so
+ * shown in full, smoke and all (§29.1).
  *
  * Applied to a view already, it changes nothing: sight is read off the
- * player's own squad and the ground, which a view keeps whole. So the board
+ * player's own side and the ground, which a view keeps whole. So the board
  * reads its own view with the same rules the server reads the battle with.
  */
 export function viewOf(state: BattleState, player: string | null): BattleState {
     if (!state.fog) return state;
     const seen = squadSight(state, player);
-    const known = (fighter: Fighter) => fighter.owner === player || seen(fighter.square);
+    const ours = (fighter: Fighter) => player !== null && allied(state, fighter.owner, player);
+    const known = (fighter: Fighter) => ours(fighter) || seen(fighter.square);
     const inSight = (cloud: Square) => areaAround(state.field, cloud).some(seen);
     const hidden = state.fighters.filter(fighter => !known(fighter));
     const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(inSight);
     // A character in sight whose cloud isn't keeps it to itself: where it
     // landed is somewhere the player can't see.
     const shown = state.fighters.filter(known).map(fighter => {
-        if (fighter.owner === player || fighter.smoke === undefined || inSight(fighter.smoke)) return fighter;
+        if (ours(fighter) || fighter.smoke === undefined || inSight(fighter.smoke)) return fighter;
         const { smoke: _smoke, ...rest } = fighter;
         return rest;
     });
@@ -504,6 +544,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         fighters: shown,
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
+        ...(state.sides ? { sides: state.sides } : {}),
     };
 }
 
@@ -527,7 +568,7 @@ export function sightOf(fighter: Pick<Fighter, "character">): number {
  */
 function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean): { path: Square[]; found: Fighter[]; ap?: number } {
     const known = new Set(viewOf(state, mover.owner).fighters.map(fighter => fighter.id));
-    const unknownOn = (square: Square) => state.fighters.find(other => other.owner !== mover.owner && isStanding(other) && other.square === square && !known.has(other.id));
+    const unknownOn = (square: Square) => state.fighters.find(other => !allied(state, other.owner, mover.owner) && isStanding(other) && other.square === square && !known.has(other.id));
     const goal = sent[sent.length - 1];
     const found: Fighter[] = [];
     let path = [...sent];
@@ -535,7 +576,7 @@ function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sne
     for (let enemy = path.slice(1).map(unknownOn).find(Boolean); enemy; enemy = path.slice(1).map(unknownOn).find(Boolean)) {
         found.push(enemy);
         known.add(enemy.id);
-        const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || one.owner === mover.owner) }, mover, sneaking);
+        const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || allied(state, one.owner, mover.owner)) }, mover, sneaking);
         const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
         path = pathTo(reach, to)?.squares ?? [mover.square];
         ap = moveAp(mover, reach.costs[to], sneaking);
@@ -597,12 +638,12 @@ function pathRefusal(state: BattleState, mover: Fighter, path: unknown): string 
     return pathCost(state.field, path, climb) ?? "That path can't be walked";
 }
 
-const isEnemy = (actor: Fighter, target: Fighter | undefined): target is Fighter =>
-    target !== undefined && isStanding(target) && target.owner !== actor.owner;
+const isEnemy = (state: BattleState, actor: Fighter, target: Fighter | undefined): target is Fighter =>
+    target !== undefined && isStanding(target) && !allied(state, target.owner, actor.owner);
 
 /** Why an attack can't be made, or undefined when it can. */
 function attackRefusal(state: BattleState, actor: Fighter, target: Fighter | undefined, kind: Exclude<ShotKind, "overwatch">): string | undefined {
-    if (!isEnemy(actor, target)) return "Pick an enemy";
+    if (!isEnemy(state, actor, target)) return "Pick an enemy";
     if (weaponOf(actor).kind === "melee") {
         if (weaponReaches(state, actor, target.square)) return undefined;
         return nextTo(state.field, actor.square, target.square) ? "Too far above or below to strike" : "Too far away to strike";
@@ -657,7 +698,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "cripplingShot":
             return ability("cripplingShot", () => attackRefusal(state, actor, target, "cripplingShot"));
         case "huntersMark":
-            return ability("huntersMark", () => isEnemy(actor, target)
+            return ability("huntersMark", () => isEnemy(state, actor, target)
                 ? aimRefusal(state, actor, target.square, ABILITIES.huntersMark.range)
                 : "Pick an enemy");
         case "hunker":
@@ -671,7 +712,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
             return ability("cleave", () => {
                 if (!Array.isArray(targets) || targets.length !== 2 || targets[0] === targets[1]) return "Pick two enemies";
                 const enemies = targets.map(one => fighterById(state, one));
-                if (!enemies.every((one): one is Fighter => isEnemy(actor, one))) return "Pick two enemies";
+                if (!enemies.every((one): one is Fighter => isEnemy(state, actor, one))) return "Pick two enemies";
                 return enemies.every(one => inMeleeReach(state.field, actor.square, one.square)) ? undefined : "Both enemies must be next to them, within a quarter of their height";
             });
         case "shieldWall":
@@ -686,7 +727,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
             return ability("heal", () => healRefusal(state, actor, target, false));
         case "raise":
             return ability("raise", () => {
-                if (!target || target.owner !== actor.owner || isStanding(target)) return "Pick a downed ally";
+                if (!target || !allied(state, target.owner, actor.owner) || isStanding(target)) return "Pick a downed ally";
                 if (!nextTo(state.field, actor.square, target.square)) return "Too far away to raise";
                 const clear = state.field.tiles[target.square].terrain.standable
                     && !state.fighters.some(other => isStanding(other) && other.square === target.square);
@@ -720,7 +761,7 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
  * itself.
  */
 function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean): string | undefined {
-    if (!target || target.owner !== healer.owner || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
+    if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
     const far = draught ? undefined : aimRefusal(state, healer, target.square, ABILITIES.heal.range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
@@ -748,7 +789,7 @@ export function afflictionsOn(fighter: Fighter): Affliction[] {
  * ones it would do anything for. Ids in battle order.
  */
 export function purified(state: BattleState, cleric: Fighter): Fighter[] {
-    return state.fighters.filter(ally => ally.owner === cleric.owner && isStanding(ally)
+    return state.fighters.filter(ally => allied(state, ally.owner, cleric.owner) && isStanding(ally)
         && (ally.id === cleric.id || nextTo(state.field, cleric.square, ally.square))
         && (ally.hp < CHARACTERS[ally.character].hp || afflictionsOn(ally).length > 0));
 }
@@ -814,8 +855,8 @@ function resolver(state: BattleState, roll: Roll) {
         // Its smoke goes with it, as a downed Knight's shield wall does (§21.2).
         delete target.smoke;
         events.push({ kind: "downed", fighter: target.id, by: by.id });
-        // Downing your own character — a fireball's, say — scores nobody anything.
-        if (by.owner !== target.owner) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
+        // Downing your own side's character — a fireball's, say — scores nobody anything.
+        if (!allied(battle, by.owner, target.owner)) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
     };
 
     const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
@@ -1088,17 +1129,29 @@ export function startTurn(state: BattleState, player: string): Outcome {
     return { fighters: run.fighters, events: run.events };
 }
 
-/** The players with someone standing in the centre: one of them holds it, two or more contest it (§13.7). */
-export function centreHolders(state: BattleState): string[] {
+/** The characters standing in the centre (§13.7). */
+function inCentre(state: BattleState): Fighter[] {
     const centre = new Set(state.field.objectives[CENTRE] ?? []);
-    return [...new Set(state.fighters.filter(fighter => isStanding(fighter) && centre.has(fighter.square)).map(fighter => fighter.owner))];
+    return state.fighters.filter(fighter => isStanding(fighter) && centre.has(fighter.square));
 }
 
-/** What holding the centre scores a player at the end of their own turn: some of theirs in it, and no enemy (§13.7). */
+/**
+ * The sides with someone standing in the centre: one of them holds it, two or
+ * more contest it (§13.7). In a free-for-all a side is a player (`sideOf`).
+ */
+export function centreHolders(state: BattleState): string[] {
+    return [...new Set(inCentre(state).map(fighter => sideOf(state, fighter.owner)))];
+}
+
+/**
+ * What holding the centre scores a player at the end of their own turn: some
+ * of theirs in it, and no enemy (§13.7). An ally beside them there is no
+ * enemy, and an ally's alone doesn't score for them (§29.1).
+ */
 export function centrePoints(state: BattleState, player: string, round: number): number {
     if (round < CENTRE_SCORES_FROM_ROUND) return 0;
     const holders = centreHolders(state);
-    return holders.length === 1 && holders[0] === player ? CENTRE_POINTS : 0;
+    return holders.length === 1 && holders[0] === sideOf(state, player) && inCentre(state).some(fighter => fighter.owner === player) ? CENTRE_POINTS : 0;
 }
 
 /**
@@ -1118,7 +1171,7 @@ export function endTurn(state: BattleState, player: string, round: number, keepS
         if (watching) events.push({ kind: "watching", fighter: fighter.id, banked: fighter.ap });
         return { ...fighter, ap: 0, banked: watching ? fighter.ap : fighter.banked };
     });
-    const points = centrePoints({ field: state.field, fighters }, player, round);
+    const points = centrePoints({ ...state, fighters }, player, round);
     if (points > 0) events.push({ kind: "scored", player, points, reason: "centre" });
     return { fighters, events };
 }
@@ -1131,33 +1184,49 @@ export function battleRounds(playerCount: number): number {
     return rounds;
 }
 
-/** The players, in seat order, who still have someone standing. */
+/** The players, in seat order, who still have someone of their own standing: whose turns there are still to take. */
 export function squadsStanding(state: BattleState, players: readonly string[]): string[] {
     return players.filter(player => state.fighters.some(fighter => fighter.owner === player && isStanding(fighter)));
 }
 
-/** Whether the battle is over: the turn limit has been played out, or at most one squad is left (§5.1). */
-export function isBattleOver(state: BattleState, players: readonly string[], roundsPlayed: number): boolean {
-    return roundsPlayed >= battleRounds(players.length) || squadsStanding(state, players).length <= 1;
+/** The sides with someone still standing (§29.6). In a free-for-all, the players who have. */
+export function sidesStanding(state: BattleState): string[] {
+    return [...new Set(state.fighters.filter(isStanding).map(fighter => sideOf(state, fighter.owner)))];
 }
 
-/** The points' worth of a player's squad still standing: the first tie-break. */
-export function standingPoints(state: BattleState, player: string): number {
-    return squadPoints(state.fighters.filter(fighter => fighter.owner === player && isStanding(fighter)).map(fighter => fighter.character));
+/** Whether the battle is over: the turn limit has been played out, or at most one side is left (§5.1). */
+export function isBattleOver(state: BattleState, players: readonly string[], roundsPlayed: number): boolean {
+    return roundsPlayed >= battleRounds(players.length) || sidesStanding(state).length <= 1;
+}
+
+/** The points' worth of a side still standing: the first tie-break. In a free-for-all, a player's squad (`sideOf`). */
+export function standingPoints(state: BattleState, side: string): number {
+    return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isStanding(fighter)).map(fighter => fighter.character));
 }
 
 /**
- * The players from first to last. The highest score wins; level scores go to
- * the one with more points' worth still standing, and if that's level too, to
- * the later seat, which makes up for the advantage of going early (§5.1). The
- * last link never ties, so every battle has a winner.
+ * The players from first to last, ranked by side (§29.6). The side with the
+ * highest score — its players' added together — wins; level scores go to the
+ * one with more points' worth still standing, and if that's level too, to
+ * the side with the later seat, which makes up for the advantage of going
+ * early (§5.1). Teammates rank together, by their own scores and then the
+ * later seat. The last link never ties, so every battle has a winner. In a
+ * free-for-all every side is one player, so it's that player's score, squad
+ * and seat.
  */
 export function standings(state: BattleState, players: readonly string[], scores: Readonly<Record<string, number>>): string[] {
     const seat = new Map(players.map((player, index) => [player, index]));
-    return [...players].sort((a, b) =>
-        (scores[b] ?? 0) - (scores[a] ?? 0)
-        || standingPoints(state, b) - standingPoints(state, a)
-        || (seat.get(b) ?? 0) - (seat.get(a) ?? 0));
+    const team = (side: string) => players.filter(player => sideOf(state, player) === side);
+    const score = (side: string) => team(side).reduce((total, player) => total + (scores[player] ?? 0), 0);
+    const lastSeat = (side: string) => Math.max(...team(side).map(player => seat.get(player) ?? 0));
+    return [...players].sort((a, b) => {
+        const [x, y] = [sideOf(state, a), sideOf(state, b)];
+        return score(y) - score(x)
+            || standingPoints(state, y) - standingPoints(state, x)
+            || lastSeat(y) - lastSeat(x)
+            || (scores[b] ?? 0) - (scores[a] ?? 0)
+            || (seat.get(b) ?? 0) - (seat.get(a) ?? 0);
+    });
 }
 
 // ─── Mustering (§5, §17.2) ──────────────────────────────────────────────────

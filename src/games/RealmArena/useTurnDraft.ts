@@ -3,7 +3,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, type Ability } from "./characters";
-import { blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
 import { attackOptions, hitChance, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -80,7 +80,7 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
     return candidates.flatMap((id): TargetOption[] => {
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (target.owner === fighter.owner) return [{ target }];
+        if (allied(battle, target.owner, fighter.owner)) return [{ target }];
         return [{ target, chance: hitChance(battle, fighter, target, shot) }];
     }).sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0));
 }
@@ -194,7 +194,7 @@ export function tapFighter(context: TapContext, id: number): TapResult {
     if (isAtSquare(aim)) return tapSquare(context, target.square);
     // Itself, only when it can be the aim's target: a draught it drinks.
     if (target.id === fighter.id && !candidates.includes(id)) return undefined;
-    const enemy = target.owner !== fighter.owner && isStanding(target);
+    const enemy = !allied(battle, target.owner, fighter.owner) && isStanding(target);
 
     if (aim === "cleave") {
         if (!candidates.includes(id)) return enemy ? draft : undefined;

@@ -13,7 +13,7 @@ import { userToken } from "@/utils/games/history";
 import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
-import { areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { allied, areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -365,23 +365,27 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
 
 /**
  * The events of a command in a fogged battle as one viewer may see them
- * played (§27). Their own characters' doings are theirs in full. Someone
- * else's move keeps only the squares the viewer's squad sees, and only when
- * it ends on one of them: one that ends out of sight is told with no path at
- * all, so the board loses the mover there rather than leaving it where it was
- * last seen. A fireball, a flask or a Demolish landing where the viewer sees
- * none of it, and hitting none of theirs, isn't told. Nor is a character out of
+ * played (§27). Their own side's doings are theirs in full — an ally's
+ * among them, since a side shares its sight (§29.1). An enemy's move keeps
+ * only the squares the viewer's side sees, and only when it ends on one of
+ * them: one that ends out of sight is told with no path at all, so the board
+ * loses the mover there rather than leaving it where it was last seen. A
+ * fireball, a flask or a Demolish landing where the viewer sees none of it,
+ * and hitting none of their side's, isn't told. Nor is a character out of
  * sight going on watch: the log says it did, but not the AP it banked, which
  * is how many reactions are waiting. Everything else carries no square, and
  * what it says the log says too.
  *
- * Sight is read from the battle after the command. In anybody else's command
- * the viewer's squad doesn't move, so that's the sight it had all along — or
+ * Sight is read from the battle after the command. In an enemy's command the
+ * viewer's side doesn't move, so that's the sight it had all along — or
  * less, if something downed one of them, which then hit one of theirs.
  */
 function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
-    const own = (id: number) => battle.fighters.find(fighter => fighter.id === id)?.owner === viewerId && viewerId !== null;
+    const own = (id: number) => {
+        const owner = battle.fighters.find(fighter => fighter.id === id)?.owner;
+        return owner !== undefined && viewerId !== null && allied(battle, owner, viewerId);
+    };
     const inSight = (id: number) => {
         const fighter = battle.fighters.find(one => one.id === id);
         return fighter !== undefined && (own(id) || seen(fighter.square));

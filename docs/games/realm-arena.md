@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | Planned |
+| B8 | Co-op against the computer (§29) | PR 1, sides, built (§29.6) |
 
 **What B2 settled:**
 
@@ -2289,6 +2289,24 @@ have different owners. Co-op needs it asked by side, and so will teams of two
   `ownerToken(owner)` in `RealmArenaLogic.ts` that writes the enemy's name as
   plain text.
 
+**What PR 1 settled:**
+
+- `sides` maps an owner to its side, and an owner it doesn't name is a side
+  of its own. It's never stored or sent: `battleFrom` builds every
+  `BattleState`, and no battle has sides until co-op (PR 4a) gives it some.
+- The centre is held by a side, and scores a player at the end of their turn
+  only when some of their own are in it: an ally's character alone holds it
+  for the side but scores nobody that turn.
+- The battle is over when at most one side has someone standing, read off the
+  fighters, so a side whose owners aren't seated — the warbands — counts.
+  `squadsStanding` stays per player: it says whose turns are left.
+- `standings` ranks sides by their players' scores added together, then
+  points' worth standing, then the side's latest seat; teammates rank
+  together, by their own scores and then the later seat.
+- A side's fog-of-war review tells an ally's doings in full, as its own.
+- The battle record credits friendly fire and knock-outs by side, and still
+  keeps a row per owner: the enemy as one column is PR 4b's.
+
 ### 29.7 How the computer plays
 
 **Principles.** These are what make the enemy fair, testable and safe to
@@ -2624,3 +2642,4 @@ Realm, its sibling in the same world.
 | 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). The crew's launch pass cuts a battle's ranks on the wire to the viewer's own (§23.3) and accepts a third player reading a shot's odds in fog (§27.2). |
 | 1.32 | Battle results (§28): the result page charts the points race round by round with each character downed marked on its owner's line, each squad's health, the damage each kind of character dealt and a table of everything each squad did, all read off the game-end replay. |
 | 1.33 | Co-op against the computer (§29), planned and reviewed by the caveman: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn, on battlefields of its own — line battles, the team along one edge and a warband opposite each player, unchanged by a half turn (§29.2). The enemy is a faction the host picks, or Random, drawn as the battle is created and kept hidden — off the wire and unnamed in the log — until the team first sees one of its characters; factions become data, so a second one — monsters — can be fought with nothing new in the computer (§29.3). Built on sides (`sideOf`, `allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result with the board's own tactics helpers; its actions are recorded, so it can be improved without changing a battle already fought. Its warbands are its faction's ready-made squads. |
+| 1.34 | B8 PR 1 builds sides (§29.6): `sideOf`, `allied` and the one battle builder, `battleFrom`; every friend-or-foe question asked by side on the server and the board; the centre held by a side but scored by a player with their own in it, the battle over with one side standing, and standings ranked by side. |
