@@ -128,7 +128,7 @@ describe("Realm Arena replay", () => {
             hunkered: ["fighter"],
             shieldWall: ["fighter"],
             watching: ["banked", "fighter"],
-            blocked: ["by", "fighter"],
+            spotted: ["by", "fighter"],
             effect: ["change", "effect", "fighter"],
             burned: ["damage", "fighter"],
             scored: ["player", "points", "reason"],

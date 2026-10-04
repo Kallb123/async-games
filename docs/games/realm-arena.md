@@ -1847,28 +1847,38 @@ place — moving — what a player can be held to knowing.
   (`fog`), so a replay plays it the same way, and every battle from before it
   is a battle without fog.
 - **A character sees 20 squares** (`SIGHT_RANGE`), wherever its line of sight
-  is clear (§25.2): the same line a shot needs, out to the bow's range. That
-  is as far as anything reaches — a bow, a fireball, a mark, a throw — so
-  anything a character could shoot, aim or throw at, it can see. Fog takes
-  nothing away from what can be done, only from what's known.
+  is clear (§25.2): the same line a shot needs. An Archer or a Scout, the
+  overwatch specialist and the scout, sees 25; a Knight, slow and buttoned up
+  in armour, sees 15 (`sight` on `CHARACTERS`, read by `sightOf`). Each sees
+  at least as far as anything it can use reaches — its weapon, its abilities
+  and its options, any item — so anything a character could shoot, aim or
+  throw at, it can see. Fog takes nothing away from what can be done, only
+  from what's known. A test holds every character to that.
 - **A player sees what their squad sees**: their own characters, wherever
   they are, and every other character, standing or fallen, on a square one of
   their standing characters can see. A fallen character sees nothing. In
   free-for-all every squad sees for itself; teams (B3) will share their sight.
-- **An enemy out of sight stops a move.** A path is checked against what its
-  player can see, so one may run through an enemy they can't. The mover walks
-  it as far as the square before that enemy — back to the last square it could
-  stop on, never low cover or an ally — and stops, its AP spent as sent, as
-  they would be if a reaction downed it. It's told as a `blocked` event:
-  "their Scout ran into Bob's Knight". Watchers out of sight react as ever, and
-  the path's preview can only flag the ones the player can see.
+- **An enemy out of sight in a move's path is found and gone round.** A path
+  is checked against what its player can see, so one may run through an enemy
+  they can't. Stopping short there would leave the mover stranded in the
+  open with its AP spent, so it doesn't: it takes the cheapest way round to
+  the square it was sent to, within the AP it has. When there's none — the
+  enemy stands on that square, or the way round costs too much — it goes as
+  near to it as it can. Either way it pays for the path it walks, not the one
+  sent (`routed`). The way round keeps clear only of the enemies the player
+  now knows of, so its shape gives nobody else away; one it crosses that it
+  couldn't see is found and gone round too. Each is told as a `spotted`
+  event, before the move: "their Scout found Bob's Knight in its way, and went
+  round". Watchers out of sight react as ever, along the path walked, and the
+  path's preview can only flag the ones the player can see.
 - **What's been seen can't be unseen.** An action after which the player's
   squad sees an enemy it didn't see before can't be undone (`revealed`), or a
   player could step round a corner, look and step back. Seeing nobody is taken
   back with the move, though: nearly every move changes what a squad sees, so
   refusing undo for any new ground would take undo out of fog altogether. A
   look that finds an empty corner — or a flask that lands on no one where the
-  player can't see — is a small gift, and an accepted one.
+  player can't see — is a small gift, and an accepted one. A move that finds an
+  enemy in its way never can be: it showed the player that enemy.
 - **The fog lifts when the battle ends.** The last state, and the results,
   show everyone.
 
@@ -1979,4 +1989,4 @@ Realm, its sibling in the same world.
 | 1.24 | The muster buys items on the squad step, beside the characters, so every point is spent on one screen; placing hands them out one each and lets the player pass them between characters (§21.3). |
 | 1.25 | Figures are drawn as character art in the owner's colour, facing the way they last stepped, lying down once downed (§26.5). Facing is only visual: no rule reads it. |
 | 1.26 | The recap tells everything one character did in a turn as one row (§17.3 PR 8). |
-| 1.27 | B5, fog of war (§8, §27): the host's choice at setup, on to start with. A character sees 20 squares where its sight is clear, as far as anything reaches; a player sees their squad and whoever it sees, live and in a review, until the battle ends; an enemy out of sight stops a move that runs into it; an action that shows an enemy can't be undone. Fog hides where, and the log still tells what. |
+| 1.27 | B5, fog of war (§8, §27): the host's choice at setup, on to start with. A character sees 20 squares where its sight is clear — an Archer or a Scout 25, a Knight 15 — at least as far as anything it can use reaches; a player sees their squad and whoever it sees, live and in a review, until the battle ends; a move that finds an enemy out of sight in its path goes round it, or as near to where it was sent as it can, paying for the way it went; an action that shows an enemy can't be undone. Fog hides where, and the log still tells what. |

@@ -461,8 +461,8 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ mark: EFFECT_ART.shieldWall, title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
-            case "blocked":
-                return [{ icon: "✋", title: `${Name(event.fighter)} ran into ${name(event.by)}`, sub: "Out of sight until then" }];
+            case "spotted":
+                return [{ icon: "👁", title: `${Name(event.fighter)} found ${name(event.by)} in its way`, sub: "Out of sight until then · went round" }];
             case "effect":
                 return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
             case "burned":
@@ -651,8 +651,8 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 else at.delete(event.fighter);
                 break;
             }
-            case "blocked":
-                text(event.fighter, beat(), "Blocked", "word");
+            case "spotted":
+                text(event.fighter, beat(), "Spotted", "word");
                 break;
             case "shot": {
                 // The Mage's bolt; anyone else who shoots has a bow.

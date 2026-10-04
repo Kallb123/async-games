@@ -1485,8 +1485,8 @@ action's kind but what the action set off.
   up decides. In fog of war (realm-arena.md §27) that is meant literally: an
   action after which the player's squad sees an enemy it didn't see before
   (`revealed`) stays done, or a player could step round a corner, look, and
-  step back for free — and a move an unseen enemy stopped short is never
-  peaceful anyway. And anything that isn't peaceful **empties the stack**, not just
+  step back for free — and a move that found an unseen enemy in its way, and
+  went round it, is never peaceful anyway. And anything that isn't peaceful **empties the stack**, not just
   moves the anchor: a move after an attack would otherwise push on top of the
   snapshots from before it, and undoing that move would put the anchor back in
   reach of a board from before the attack — a second go at its roll. None of

@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, ITEMS } from "./characters";
+import { ABILITIES, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
+import { CHARACTER_IDS } from "./roster";
 import { RealmArenaGameDataModel, stepOutcomeToModel } from "./RealmArenaModels";
 import { RealmArenaUndo } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { battleCues, eventLines, unseenSquares } from "./ui";
 import {
-    ACTION_POINTS, act, check, fixedRolls, moveAp, newFighter, reachOf, SIGHT_RANGE, smokeSquares, squadSight, viewOf,
+    ACTION_POINTS, act, check, fixedRolls, moveAp, newFighter, reachOf, SIGHT_RANGE, sightOf, smokeSquares, squadSight, viewOf,
     type BattleEvent, type BattleState, type Fighter,
 } from "./rules";
 import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGame, responseFor } from "./testFixtures";
@@ -17,7 +18,7 @@ import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGam
 // sees — SIGHT_RANGE squares, wherever its line of sight is clear — and the
 // server sends them nothing else of anyone else's, live or in a review, until
 // the battle is over. It changes what's known, never what can be done, except
-// that an enemy out of sight in a path stops the mover short of it.
+// that an enemy out of sight in a path is found, and the mover goes round it.
 
 vi.mock("@/utils/users/clerk", () => ({
     userIdListToNamesAndMap: async (ids: string[]) => ({ usernameList: ids, userIdNameMap: Object.fromEntries(ids.map(id => [id, id])) }),
@@ -37,21 +38,32 @@ const FIELD: Battlefield = buildBattlefield({
     objectives: {},
 });
 
+/** A Man-at-arms, who sees as far as most (`SIGHT_RANGE`), ready to act. */
 function fighter(id: number, owner: string, square: number, extra: Partial<Fighter> = {}): Fighter {
-    return { ...newFighter(id, owner, "archer", square), ap: ACTION_POINTS, ...extra };
+    return { ...newFighter(id, owner, "manAtArms", square), ap: ACTION_POINTS, ...extra };
 }
 
 const fogged = (fighters: Fighter[], field = FIELD): BattleState => ({ field, fighters, fog: true });
 const ids = (state: BattleState) => state.fighters.map(one => one.id);
 
 describe("what a squad sees (§27)", () => {
-    it("sees as far as anything reaches, so fog never takes away a shot, an aim or a throw", () => {
-        const ranges = [
-            ...Object.values(CHARACTERS).map(character => character.weapon.kind === "ranged" ? character.weapon.range : 1),
-            ...Object.values(ABILITIES).map(ability => ("range" in ability ? ability.range : undefined) ?? 0),
+    it("lets each character see as far as anything it can use reaches, so fog never takes away a shot, an aim or a throw", () => {
+        const reaches = (kit: Kit) => [
+            kit.weapon.kind === "ranged" ? kit.weapon.range : 1,
+            ...kit.abilities.map(id => { const ability: Ability = ABILITIES[id]; return ability.range ?? 0; }),
             ...Object.values(ITEMS).map(item => ("range" in item ? item.range : undefined) ?? 0),
         ];
-        expect(Math.max(...ranges)).toBeLessThanOrEqual(SIGHT_RANGE);
+        for (const character of CHARACTER_IDS) {
+            const kits = [kitOf(character), ...(Object.keys(OPTIONS) as OptionId[]).filter(id => OPTIONS[id].character === character).map(id => kitOf(character, id))];
+            expect(Math.max(...kits.flatMap(reaches)), character).toBeLessThanOrEqual(sightOf({ character }));
+        }
+    });
+
+    it("sees further from an Archer or a Scout, and less far from a Knight", () => {
+        const from = (character: CharacterId, col: number) => squadSight(fogged([{ ...newFighter(0, "a", character, at(FIELD, 0, 4)) }]), "a")(at(FIELD, col, 4));
+        expect([from("manAtArms", SIGHT_RANGE), from("manAtArms", SIGHT_RANGE + 1)]).toEqual([true, false]);
+        expect([from("archer", 24), from("scout", 24), from("knight", 15), from("knight", 16)]).toEqual([true, true, true, false]);
+        expect([sightOf({ character: "archer" }), sightOf({ character: "scout" }), sightOf({ character: "knight" })]).toEqual([25, 25, 15]);
     });
 
     it("is the whole battle without fog", () => {
@@ -127,38 +139,38 @@ describe("moving into the fog (§27)", () => {
     const hidden = fighter(1, "b", at(FIELD, 21, 4));
     const long = { kind: "move" as const, fighter: 0, path: run(23) };
 
-    it("lets a path run through an enemy out of sight, and stops the mover short of it", () => {
+    const square = (outcome: { fighters: Fighter[] }) => outcome.fighters.find(one => one.id === 0)!.square;
+
+    it("lets a path run through an enemy out of sight, and goes round it to the square it was sent to", () => {
         const state = fogged([mover, eye, hidden]);
         expect(check(state, "a", long)).not.toHaveProperty("refused");
-        const { fighters, events } = act(state, "a", long, fixedRolls([]));
-        expect(fighters.find(one => one.id === 0)!.square).toBe(at(FIELD, 20, 4));
-        expect(events.at(-1)).toEqual({ kind: "blocked", fighter: 0, by: 1 });
+        const outcome = act(state, "a", long, fixedRolls([]));
+        expect(square(outcome)).toBe(at(FIELD, 22, 4));
+        expect(outcome.events[0]).toEqual({ kind: "spotted", fighter: 0, by: 1 });
+        const moved = outcome.events.flatMap(event => event.kind === "moved" ? event.path : []);
+        expect(moved).not.toContain(hidden.square);
     });
 
-    it("stops on the last square it could stop on, never on low cover", () => {
-        const rubble = buildBattlefield({ name: "Rubble", rows: [".".repeat(25), "......................,.."], deployments: [], objectives: {} });
-        // A Scout, to get that far in a turn.
-        const scout = { ...newFighter(0, "a", "scout", at(rubble, 0, 1)), ap: ACTION_POINTS };
-        const state = fogged([scout, fighter(1, "b", at(rubble, 23, 1))], rubble);
-        const walk = Array.from({ length: 24 }, (_, col) => at(rubble, col, 1));
-        const { fighters, events } = act(state, "a", { kind: "move", fighter: 0, path: walk }, fixedRolls([]));
-        expect(fighters.find(one => one.id === 0)!.square).toBe(at(rubble, 21, 1));
-        expect(events.map(event => event.kind)).toEqual(["moved", "blocked"]);
+    it("goes as near as it can when the square it was sent to is the enemy's, and pays for the way it went", () => {
+        const onGoal = fighter(1, "b", at(FIELD, 22, 4));
+        const outcome = act(fogged([mover, eye, onGoal]), "a", long, fixedRolls([]));
+        expect(square(outcome)).toBe(at(FIELD, 21, 4));
+        expect(outcome.fighters.find(one => one.id === 0)!.ap).toBe(ACTION_POINTS - moveAp(mover, 21));
     });
 
-    it("always sees an enemy on its first step, so a path into one is refused rather than cut short", () => {
+    it("goes round another it finds going round the first, and never into one", () => {
+        const wall = [hidden, fighter(2, "b", at(FIELD, 21, 3))];
+        const outcome = act(fogged([mover, eye, ...wall]), "a", long, fixedRolls([]));
+        expect(outcome.events.flatMap(event => event.kind === "spotted" ? [event.by] : [])).toEqual([1, 2]);
+        const moved = outcome.events.flatMap(event => event.kind === "moved" ? event.path : []);
+        expect(moved.some(at => wall.some(enemy => enemy.square === at))).toBe(false);
+        expect(outcome.fighters.find(one => one.id === 0)!.ap).toBeGreaterThanOrEqual(0);
+    });
+
+    it("always sees an enemy on its first step, so a path into one is refused rather than gone round", () => {
         // The mover is a's only standing character: whatever is beside it, it sees.
         const state = fogged([mover, fighter(9, "a", at(FIELD, 0, 0), { hp: 0 }), fighter(1, "b", at(FIELD, 1, 4))]);
         expect(check(state, "a", { kind: "move", fighter: 0, path: run(3) })).toEqual({ refused: "An enemy is in the way" });
-    });
-
-    it("stops a mover downed on the way before it ever reaches the enemy, and tells no blocked", () => {
-        // b's Archer on watch past SIGHT_RANGE: it shoots the mover once it comes into range, before the mover reaches the enemy.
-        const watcher = fighter(2, "b", at(FIELD, 21, 3), { banked: 4 });
-        const state = fogged([{ ...mover, hp: 1 }, watcher, hidden]);
-        const { fighters, events } = act(state, "a", long, fixedRolls([1]));
-        expect(fighters.find(one => one.id === 0)!.hp).toBe(0);
-        expect(events.map(event => event.kind)).not.toContain("blocked");
     });
 
     it("refuses the same path through an enemy it can see, and through anyone without fog", () => {
@@ -293,10 +305,10 @@ describe("the board playing what it was told (§27)", () => {
         expect(battleCues(events, before)).toEqual([]);
     });
 
-    it("says who a move ran into, and marks the mover", () => {
-        const blocked = { kind: "blocked", fighter: 0, by: 1 } as const;
-        expect(battleCues([blocked], before)).toMatchObject([{ kind: "text", fighter: 0, value: "Blocked" }]);
-        expect(eventLines([blocked], before, "a", userId => userId === "b" ? "Bob" : userId)[0].title).toBe("Your Archer ran into Bob's Archer");
-        expect(eventLines([blocked], before.slice(0, 1), "a", () => "Bob")[0].title).toBe("Your Archer ran into a character out of sight");
+    it("says who a move found in its way, and marks the mover", () => {
+        const spotted = { kind: "spotted", fighter: 0, by: 1 } as const;
+        expect(battleCues([spotted], before)).toMatchObject([{ kind: "text", fighter: 0, value: "Spotted" }]);
+        expect(eventLines([spotted], before, "a", userId => userId === "b" ? "Bob" : userId)[0].title).toBe("Your Man-at-arms found Bob's Man-at-arms in its way");
+        expect(eventLines([spotted], before.slice(0, 1), "a", () => "Bob")[0].title).toBe("Your Man-at-arms found a character out of sight in its way");
     });
 });

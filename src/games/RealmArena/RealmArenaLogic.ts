@@ -315,7 +315,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
         case "watching": return `put ${name(event.fighter)} on watch`;
-        case "blocked": return `${name(event.fighter)} ran into ${name(event.by)}`;
+        case "spotted": return `${name(event.fighter)} found ${name(event.by)} in its way, and went round`;
         case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
         case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
