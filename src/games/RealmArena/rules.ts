@@ -30,7 +30,7 @@
 
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
-import { DEFAULT_CLIMB, pathCost, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
+import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, MAX_OF_EACH, OPTIONS, squadPoints,
@@ -65,6 +65,16 @@ export const CENTRE_POINTS = 5;
 export const CENTRE_SCORES_FROM_ROUND = 3;
 /** A knock-out scores the fallen character's points cost divided by this (§13.7). */
 export const KNOCKOUT_DIVISOR = 5;
+
+/**
+ * How far most characters see, in squares, wherever nothing blocks their
+ * sight — what fog of war leaves their owner able to see (§27). An Archer or a
+ * Scout sees further and a Knight less far (`sightOf`). Every character sees
+ * at least as far as anything it can use reaches, so anything it could shoot
+ * at, aim at or throw at, it can see: fog takes nothing away from what can be
+ * done, only from what's known.
+ */
+export const SIGHT_RANGE = 20;
 
 /** How many battle rounds a battle lasts, by player count (§13.8). */
 export const BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>> = { 2: 15, 3: 13, 4: 12 };
@@ -130,6 +140,19 @@ export interface BattleState {
     /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */
     field: Battlefield;
     fighters: readonly Fighter[];
+    /**
+     * Whether the battle is fought in fog of war (§27): a player acts on what
+     * their squad can see (`viewOf`), so an enemy out of sight can't be in
+     * the way of a path they send. Absent in a battle without it.
+     */
+    fog?: boolean;
+    /**
+     * Smoke clouds whose throwers are out of the viewer's sight, by the square
+     * each landed on (§27): a player's view of a fogged battle keeps a cloud
+     * it can see when it drops the thrower. Never set on the whole battle,
+     * where every cloud is on its thrower.
+     */
+    clouds?: readonly Square[];
 }
 
 export type Action =
@@ -166,6 +189,12 @@ export type BattleEvent =
     | { kind: "raised"; fighter: number; target: number; hp: number }
     | { kind: "hunkered" | "shieldWall"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
+    /**
+     * An enemy out of sight standing in a move's path, found by the mover, which
+     * went round it rather than stopping (§27): `by` is who it found. Told
+     * before the move it made instead.
+     */
+    | { kind: "spotted"; fighter: number; by: number }
     /** An effect put on a character, put on again (the longer count stands), or cleared by a heal. Not the stances, which have their own events, nor an effect running out. */
     | { kind: "effect"; fighter: number; effect: EffectId; change: "applied" | "refreshed" | "cleared" }
     /** Burning doing its damage at the start of its owner's turn. */
@@ -297,7 +326,12 @@ function shielded(state: BattleState, target: Fighter): boolean {
  * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
  */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
-    return new Set(state.fighters.flatMap(thrower => thrower.smoke !== undefined ? areaAround(state.field, thrower.smoke) : []));
+    return new Set([...landedSmoke(state.fighters), ...state.clouds ?? []].flatMap(at => areaAround(state.field, at)));
+}
+
+/** Where each of these characters' smoke pots landed, while its cloud lasts (§21.2). */
+export function landedSmoke(throwers: readonly Fighter[]): Square[] {
+    return throwers.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []);
 }
 
 /**
@@ -410,6 +444,131 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
     return area;
 }
 
+// ─── Fog of war (§27) ───────────────────────────────────────────────────────
+//
+// Fog changes what a player knows, never what can be done: a character sees
+// as far as its `sightOf` wherever its line of sight is clear, which is at
+// least as far as anything it can use reaches, so every attack, aim and throw
+// is at something seen. The one rule it touches is moving: a path is checked
+// against what its player can see, and an enemy out of sight standing in it
+// sends the mover round it (`routed`).
+
+/**
+ * Whether a player's squad sees a square: any of its standing characters
+ * does. Remembers each answer, since a view asks about the same squares
+ * again and again.
+ */
+export function squadSight(state: BattleState, player: string | null): (square: Square) => boolean {
+    const eyes = state.fighters.filter(fighter => fighter.owner === player && isStanding(fighter));
+    const known = new Map<Square, boolean>();
+    return square => {
+        let seen = known.get(square);
+        if (seen === undefined) {
+            // As a shot is in range: near enough, and nothing in the way.
+            seen = eyes.some(eye => inRange(state.field, eye.square, square, sightOf(eye)));
+            known.set(square, seen);
+        }
+        return seen;
+    };
+}
+
+/**
+ * The battle as one player knows it under fog of war (§27): their own squad,
+ * every other character — standing or fallen — on a square their squad sees,
+ * and every smoke cloud they can see: on its thrower when they see it too,
+ * and on its own (`clouds`) when they don't. A cloud they can't see isn't
+ * there, whoever threw it. The
+ * whole battle when it isn't fogged. A player with nobody standing — or no
+ * player at all — sees nobody else.
+ *
+ * Applied to a view already, it changes nothing: sight is read off the
+ * player's own squad and the ground, which a view keeps whole. So the board
+ * reads its own view with the same rules the server reads the battle with.
+ */
+export function viewOf(state: BattleState, player: string | null): BattleState {
+    if (!state.fog) return state;
+    const seen = squadSight(state, player);
+    const known = (fighter: Fighter) => fighter.owner === player || seen(fighter.square);
+    const inSight = (cloud: Square) => areaAround(state.field, cloud).some(seen);
+    const hidden = state.fighters.filter(fighter => !known(fighter));
+    const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(inSight);
+    // A character in sight whose cloud isn't keeps it to itself: where it
+    // landed is somewhere the player can't see.
+    const shown = state.fighters.filter(known).map(fighter => {
+        if (fighter.owner === player || fighter.smoke === undefined || inSight(fighter.smoke)) return fighter;
+        const { smoke: _smoke, ...rest } = fighter;
+        return rest;
+    });
+    return {
+        field: state.field,
+        fighters: shown,
+        fog: true,
+        ...(clouds.length > 0 ? { clouds } : {}),
+    };
+}
+
+/** How far a character sees in fog of war, in squares (§27): its character's own sight, or `SIGHT_RANGE`. */
+export function sightOf(fighter: Pick<Fighter, "character">): number {
+    return CHARACTERS[fighter.character].sight ?? SIGHT_RANGE;
+}
+
+/**
+ * The path a move takes, the enemies it found in its way, and the AP it costs
+ * (§27). That's the path sent, at what `check` charged, unless an enemy out of
+ * its player's sight stands in it — the only kind `check` lets a path cross.
+ * Then the mover doesn't stop there, stranded with its AP spent: it goes
+ * round, by the cheapest way to the square it was sent to that keeps clear of
+ * every enemy it now knows of, within the AP it has. When there's none — the
+ * square is the enemy's, or the way round costs too much — it goes as near to
+ * that square as it can. It pays for the path it walks. The way round keeps
+ * clear only of the enemies it knows of, so its shape gives nobody else away;
+ * if it crosses another it can't see, that one is found and gone round too.
+ * Without fog every enemy is known, so no path `check` allowed finds one.
+ */
+function routed(state: BattleState, mover: Fighter, sent: readonly Square[], sneaking: boolean): { path: Square[]; found: Fighter[]; ap?: number } {
+    const known = new Set(viewOf(state, mover.owner).fighters.map(fighter => fighter.id));
+    const unknownOn = (square: Square) => state.fighters.find(other => other.owner !== mover.owner && isStanding(other) && other.square === square && !known.has(other.id));
+    const goal = sent[sent.length - 1];
+    const found: Fighter[] = [];
+    let path = [...sent];
+    let ap: number | undefined;
+    for (let enemy = path.slice(1).map(unknownOn).find(Boolean); enemy; enemy = path.slice(1).map(unknownOn).find(Boolean)) {
+        found.push(enemy);
+        known.add(enemy.id);
+        const reach = reachOf({ ...state, fighters: state.fighters.filter(one => known.has(one.id) || one.owner === mover.owner) }, mover, sneaking);
+        const to = reach.costs[goal] !== Infinity ? goal : nearestTo(state.field, reach, goal, moveRules(state, mover).climb);
+        path = pathTo(reach, to)?.squares ?? [mover.square];
+        ap = moveAp(mover, reach.costs[to], sneaking);
+    }
+    return { path, found, ap };
+}
+
+/**
+ * The square in reach nearest `goal` (§27): nearest to walk to it, ignoring
+ * who stands where, so the mover never loops round a wall for a square only
+ * a crow would call closer; then as the crow flies, for a goal nothing in
+ * reach can walk to; then the cheapest, then the first. Never none, since
+ * where the mover stands is in reach. Every measure is exact — walking costs
+ * are halves, and the crow's is squared — so a replay picks the same square.
+ */
+function nearestTo(field: Battlefield, reach: Reach, goal: Square, climb: number): Square {
+    const walk = reachFrom(field, goal, Infinity, { climb }).costs;
+    const { col, row } = coordsOf(field, goal);
+    const crow = (square: Square) => {
+        const at = coordsOf(field, square);
+        return (at.col - col) ** 2 + (at.row - row) ** 2;
+    };
+    const score = (square: Square) => [walk[square], crow(square), reach.costs[square]];
+    let best = reach.from;
+    reach.costs.forEach((cost, square) => {
+        if (cost === Infinity) return;
+        const [a, b] = [score(square), score(best)];
+        const first = a.findIndex((value, i) => value !== b[i]);
+        if (first >= 0 && a[first] < b[first]) best = square;
+    });
+    return best;
+}
+
 export function knockoutPoints(character: CharacterId): number {
     return CHARACTERS[character].points / KNOCKOUT_DIVISOR;
 }
@@ -458,7 +617,10 @@ export type Check = { ap: number } | { refused: string };
  * they can't, why not. Total: `action` may be anything a client sent. Whose
  * turn it is is the caller's to check.
  */
-export function check(state: BattleState, player: string, action: unknown): Check {
+export function check(battle: BattleState, player: string, action: unknown): Check {
+    // Under fog, what the player can see (§27): an enemy out of sight is
+    // neither in the way nor there to be aimed at.
+    const state = viewOf(battle, player);
     const refused = (reason: string): Check => ({ refused: reason });
     if (typeof action !== "object" || action === null) return refused("That isn't an action");
     const { kind, fighter: id, target: targetId, targets, path, at } = action as Record<string, unknown>;
@@ -629,7 +791,7 @@ export function blastedIn(events: readonly BattleEvent[]): Square[] {
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
     const fighters = structuredClone(state.fighters) as Fighter[];
-    const battle: BattleState = { field: state.field, fighters };
+    const battle: BattleState = { ...state, fighters };
     const events: BattleEvent[] = [];
     const get = (id: number): Fighter => {
         const fighter = fighterById(battle, id);
@@ -760,7 +922,9 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
     const run = resolver(state, roll);
     const { events, get } = run;
     const actor = get(action.fighter);
-    actor.ap -= checked.ap;
+    // A move's AP waits on where it goes (`routed`, §27).
+    const moving = action.kind === "move" || action.kind === "sneak";
+    if (!moving) actor.ap -= checked.ap;
     if (Object.hasOwn(ABILITIES, action.kind)) {
         const id = action.kind as AbilityId;
         const ability: Ability = ABILITIES[id];
@@ -770,9 +934,15 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
 
     switch (action.kind) {
         case "move":
-        case "sneak":
-            walk(state, run, actor, action.path, action.kind === "sneak");
+        case "sneak": {
+            // An enemy out of sight in the way is found and gone round (§27).
+            const sneaking = action.kind === "sneak";
+            const { path, found, ap } = routed(state, actor, action.path, sneaking);
+            actor.ap -= ap ?? checked.ap;
+            for (const enemy of found) events.push({ kind: "spotted", fighter: actor.id, by: enemy.id });
+            walk(state, run, actor, path, sneaking);
             break;
+        }
         case "attack":
         case "aimedShot": {
             const target = get(action.target);

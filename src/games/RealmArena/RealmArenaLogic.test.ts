@@ -11,10 +11,7 @@ import {
     ACTION_POINTS, BATTLE_ROUNDS, blastedBy, centrePoints, check, isStanding, knockoutPoints,
     type Action, type Fighter,
 } from "./rules";
-import {
-    actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks, scriptedAction,
-    type RealmArenaTestGame,
-} from "./testFixtures";
+import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, musterAll, play, PLAYERS, readyMadePicks, type RealmArenaTestGame, responseFor, scriptedAction } from "./testFixtures";
 
 vi.mock("@/utils/users/clerk", () => ({
     userIdListToNamesAndMap: async (ids: string[]) => ({ usernameList: ids, userIdNameMap: Object.fromEntries(ids.map(id => [id, id])) }),
@@ -27,12 +24,6 @@ const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
  * was written, whose hours and minutes are numbers that can be a square's.
  */
 const untimed = (trace: string) => trace.replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, "");
-
-/** What the server sends `viewer`: the game's own `CreateDataResponse`, on a document built from the game in memory. */
-async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
-    const { markModified: _, ...data } = game;
-    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
-}
 
 const own = (game: RealmArenaTestGame, player: string) => game.specificGameState.fighters.filter(one => one.owner === player);
 

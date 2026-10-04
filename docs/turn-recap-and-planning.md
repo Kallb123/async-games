@@ -554,11 +554,13 @@ a difference of two states can't show what changed nothing — a missed shot.
 `IReplayAdapter.snapshotOutcome` is the opt-in for a board that plays each step
 as it's stepped to: it picks what of the command's outcome goes on the snapshot,
 as `outcome`, which the client reads as `nav.displayedOutcome`. An outcome is
-built for the player who sent the command, and this sends it to everybody, so
-only a game whose outcomes hide nothing opts in. Realm Arena is the one that
-does (its §26.2): a battle's events, less a shot's roll — which holds only for
-as long as the battle has no fog of war. A planned command's outcome is never
-asked for.
+built for the player who sent the command, so the adapter is asked for the
+timeline's viewer, with the state after the command and whether it ended the
+game — the same viewer `toResponseState` gets — and returns what that viewer
+may be told. Realm Arena is the one that opts in (its §26.2): a battle's
+events, less a shot's roll, and in fog of war (its §27) less every square of
+someone else's doings the viewer's squad couldn't see. A planned command's
+outcome is never asked for.
 
 Recap **events** are a different question and don't get the same latitude: they
 are written once and read by whoever the feed is built for, so a `toEvents`

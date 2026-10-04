@@ -122,6 +122,8 @@ export interface Character {
     movement: number;
     /** How far one step can climb up or down, in quarters, where it climbs better than `DEFAULT_CLIMB` (§25.2). */
     climb?: number;
+    /** How far it sees in fog of war, in squares, where it sees further or less far than most (`SIGHT_RANGE`, §27). */
+    sight?: number;
     hp: number;
     weapon: Weapon;
     abilities: readonly AbilityId[];
@@ -134,15 +136,15 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
         weapon: { name: "Sword", kind: "melee", damage: 4 }, abilities: ["cleave"], points: 15,
     },
     knight: {
-        name: "Knight", role: "Slow and very tough", movement: 4, hp: 12,
+        name: "Knight", role: "Slow and very tough", movement: 4, sight: 15, hp: 12,
         weapon: { name: "Mace", kind: "melee", damage: 4 }, abilities: ["shieldWall"], points: 25,
     },
     archer: {
-        name: "Archer", role: "Long range; the overwatch specialist", movement: 6, hp: 6,
+        name: "Archer", role: "Long range; the overwatch specialist", movement: 6, sight: 25, hp: 6,
         weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20 }, abilities: ["aimedShot"], points: 20,
     },
     scout: {
-        name: "Scout", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, hp: 6,
+        name: "Scout", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, sight: 25, hp: 6,
         weapon: { name: "Knives", kind: "melee", damage: 3 }, abilities: ["sneak"], points: 20,
     },
     mage: {

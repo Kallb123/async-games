@@ -12,7 +12,7 @@ import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
-import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/undo.md's eighth game, shaped like Fires Out's: a turn is a run of
 // actions and only End turn hands it on, so every action that rolls nothing
@@ -44,12 +44,6 @@ function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move" | "sne
         throw new Error(`${fighter.character} has nowhere to go`);
     }
     return { kind, fighter: fighter.id, path: pathTo(reach, best)!.squares };
-}
-
-/** What the server sends `viewer`: the game's own `CreateDataResponse`. */
-async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
-    const { markModified: _, ...data } = game;
-    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
 }
 
 /** A battle on a's first turn, a's squad with a Scout in it to sneak with. */

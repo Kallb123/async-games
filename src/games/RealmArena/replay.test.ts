@@ -29,9 +29,9 @@ async function noRandomness<T>(replay: () => Promise<T>): Promise<T> {
     }
 }
 
-/** A battle fought from the muster to its winner by the scripted squads. */
-async function playScriptedBattle(): Promise<RealmArenaTestGame> {
-    const game = makeGame();
+/** A battle fought from the muster to its winner by the scripted squads, in fog of war if `fog` says (§27). */
+async function playScriptedBattle(fog = false): Promise<RealmArenaTestGame> {
+    const game = makeGame(undefined, undefined, fog);
     await musterAll(game);
     for (let turn = 0; !game.complete; turn++) {
         if (turn > 100) throw new Error("the battle outlasted its turn limit");
@@ -60,6 +60,37 @@ describe("Realm Arena replay", () => {
         }
     });
 
+    it("replays a battle in fog of war to each viewer's own view of it, and lifts the fog at its end (§27)", async () => {
+        const game = await playScriptedBattle(true);
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        for (const viewer of [null, "a", "b"]) {
+            const timeline = await noRandomness(() => buildTimeline(game, NAMES, [], undefined, viewer));
+            const snapshots = timeline.snapshots.map(snapshot => snapshot.specificGameState as IRealmArenaSpecificGameStateResponse);
+            expect(snapshots.at(-1)).toEqual(gameStateToModel(game.specificGameState, viewer, lastId, true));
+            // Over, the whole battlefield is everyone's.
+            expect(snapshots.at(-1)!.fighters).toHaveLength(game.specificGameState.fighters.length);
+            // Before then, each step shows the viewer their own squad and only who it saw.
+            const battleSteps = snapshots.slice(0, -1).filter(state => state.phase === "battle");
+            expect(battleSteps.length).toBeGreaterThan(0);
+            for (const state of battleSteps) {
+                expect(state.fog).toBe(true);
+                if (viewer === null) expect(state.fighters).toEqual([]);
+            }
+            // Nobody out of sight is told going on watch: the AP it banked is
+            // how many reactions are waiting.
+            timeline.snapshots.forEach(snapshot => {
+                if (viewer === null || snapshot.complete) return;
+                const shown = new Set((snapshot.specificGameState as IRealmArenaSpecificGameStateResponse).fighters.map(fighter => fighter.id));
+                for (const event of (snapshot.outcome as IRealmArenaStepOutcome | undefined)?.events ?? []) {
+                    if (event.kind === "watching") expect(shown.has(event.fighter)).toBe(true);
+                }
+            });
+            // The squads deploy too far apart to see each other as the battle begins.
+            const first = battleSteps[0];
+            expect(first.fighters.every(fighter => fighter.owner === viewer)).toBe(true);
+        }
+    });
+
     it("would draw a roll the log is missing, which is how the test above knows none are", async () => {
         const game = await playScriptedBattle();
         const shooter = game.gameState.commandHistory.find(command => (command as { recordedRolls?: number[] }).recordedRolls?.length);
@@ -71,7 +102,7 @@ describe("Realm Arena replay", () => {
         const game = await playScriptedBattle();
         const [own, other, nobody] = await Promise.all(["a", "b", null].map(viewer => buildTimeline(game, NAMES, [], undefined, viewer)));
         const outcomes = own.snapshots.slice(1).map(snapshot => snapshot.outcome as IRealmArenaStepOutcome | undefined);
-        // An outcome is everybody's: nothing in it is built for whoever asked.
+        // Without fog, an outcome is everybody's: nothing in it is built for whoever asked.
         expect(other.snapshots.map(snapshot => snapshot.outcome)).toEqual(own.snapshots.map(snapshot => snapshot.outcome));
         expect(nobody.snapshots.map(snapshot => snapshot.outcome)).toEqual(own.snapshots.map(snapshot => snapshot.outcome));
         // The two musters: one sealed, and one that put both squads on the field.
@@ -80,7 +111,8 @@ describe("Realm Arena replay", () => {
         expect(outcomes.every(outcome => outcome === undefined || outcome.events.length > 0)).toBe(true);
 
         // Every field each event carries, so one added later has to be
-        // decided on here before it reaches every player (§8 has no fog).
+        // decided on here before it reaches every player — and, in fog of war,
+        // on what stepOutcomeToModel cuts from it for a viewer (§27).
         const fields: Record<ToldEvent["kind"], string[]> = {
             moved: ["fighter", "path", "sneaking"],
             shot: ["chance", "damage", "fighter", "reaction", "result", "target"],
@@ -96,6 +128,7 @@ describe("Realm Arena replay", () => {
             hunkered: ["fighter"],
             shieldWall: ["fighter"],
             watching: ["banked", "fighter"],
+            spotted: ["by", "fighter"],
             effect: ["change", "effect", "fighter"],
             burned: ["damage", "fighter"],
             scored: ["player", "points", "reason"],

@@ -28,7 +28,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "scoreboard",
             title: "The scores",
-            body: `Everyone's points, and how much of their squad is still standing. Holding the centre at the end of your turn scores ${CENTRE_POINTS}; knocking an enemy out scores more the more they cost.`,
+            body: `Everyone's points, and how much of their squad is still standing — in fog of war, how much of it you can see. Holding the centre at the end of your turn scores ${CENTRE_POINTS}; knocking an enemy out scores more the more they cost.`,
         },
         {
             anchor: "board",

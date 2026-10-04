@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -280,6 +280,27 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
     return new Set(field.tiles.flatMap((_, square) => reaches(square) ? [square] : []));
 }
 
+/**
+ * Every square a player's squad can't see, in fog of war (§27): what the board
+ * dims. Null in a battle without fog, where nothing is.
+ */
+export function unseenSquares(state: BattleState, player: string): ReadonlySet<Square> | null {
+    if (!state.fog) return null;
+    const seen = squadSight(state, player);
+    return new Set(state.field.tiles.flatMap((_, square) => seen(square) ? [] : [square]));
+}
+
+/**
+ * Whether a player's squad sees the whole of the centre (§13.7): always
+ * without fog. In fog of war (§27), an empty centre the squad can't wholly
+ * see may not be empty at all, so the screens that say who holds it ask.
+ */
+export function centreInSight(state: BattleState, player: string): boolean {
+    if (!state.fog) return true;
+    const seen = squadSight(state, player);
+    return (state.field.objectives[CENTRE] ?? []).every(seen);
+}
+
 /** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */
 export function fighterName(fighters: readonly Fighter[], fighter: Fighter): string {
     const name = CHARACTERS[fighter.character].name;
@@ -287,10 +308,14 @@ export function fighterName(fighters: readonly Fighter[], fighter: Fighter): str
     return same.length > 1 ? `${name} ${same.findIndex(one => one.id === fighter.id) + 1}` : name;
 }
 
-/** Whose a character is, from where the viewer sits: "your Knight", "Bob's Archer". */
+/**
+ * Whose a character is, from where the viewer sits: "your Knight", "Bob's
+ * Archer" — or, for one the viewer has no word of, in fog of war (§27) or
+ * gone with a dropped player's squad, "a character out of sight".
+ */
 export function whoseName(fighters: readonly Fighter[], id: number, viewerId: string, nameFor: (userId: string) => string): string {
     const fighter = fighters.find(one => one.id === id);
-    if (!fighter) return "a character";
+    if (!fighter) return "a character out of sight";
     const name = fighterName(fighters, fighter);
     return fighter.owner === viewerId ? `your ${name}` : `${nameFor(fighter.owner)}'s ${name}`;
 }
@@ -308,7 +333,7 @@ export function targetsOf(state: BattleState, player: string, fighter: Fighter, 
 /** The battle as it would stand with one character moved to another square: what a previewed move is read against. */
 export function standingAt(state: BattleState, fighter: Fighter, square: Square): { battle: BattleState; moved: Fighter } {
     const moved = { ...fighter, square };
-    return { battle: { field: state.field, fighters: state.fighters.map(one => one.id === fighter.id ? moved : one) }, moved };
+    return { battle: { ...state, fighters: state.fighters.map(one => one.id === fighter.id ? moved : one) }, moved };
 }
 
 /** One enemy a character's weapon could hit, and its chance to: a strike always hits. */
@@ -380,8 +405,9 @@ export type EventLine = {
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
  * broken up by the reactions it set off is told once. `fighters` names
- * everyone: nobody leaves the battlefield, so the state after the action
- * names everyone the action touched.
+ * everyone the viewer can see after the action, which without fog of war is
+ * everyone it touched; in fog (§27), one that shot from out of sight is "a
+ * character out of sight" (`whoseName`).
  */
 export function eventLines(events: readonly BattleEvent[], fighters: readonly Fighter[], viewerId: string, nameFor: (userId: string) => string): EventLine[] {
     const name = (id: number) => whoseName(fighters, id, viewerId, nameFor);
@@ -435,6 +461,8 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                 return [{ mark: EFFECT_ART.shieldWall, title: `${Name(event.fighter)} raised a shield wall` }];
             case "watching":
                 return [{ icon: "👁", title: `${Name(event.fighter)} is on watch`, sub: `${event.banked} AP banked` }];
+            case "spotted":
+                return [{ icon: "👁", title: `${Name(event.fighter)} found ${name(event.by)} in its way`, sub: "Out of sight until then · went round" }];
             case "effect":
                 return [{ mark: EFFECT_ART[event.effect], title: `${Name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}` }];
             case "burned":
@@ -617,10 +645,15 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
     for (const event of events) {
         switch (event.kind) {
             case "moved": {
+                // A move told with no path went out of the viewer's sight (§27): lost there, not left where it was last seen.
                 const end = event.path.at(-1);
                 if (end !== undefined) at.set(event.fighter, end);
+                else at.delete(event.fighter);
                 break;
             }
+            case "spotted":
+                text(event.fighter, beat(), "Spotted", "word");
+                break;
             case "shot": {
                 // The Mage's bolt; anyone else who shoots has a bow.
                 const missile = as.get(event.fighter)?.character === "mage" ? "bolt" : "arrow";

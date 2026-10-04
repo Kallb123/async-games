@@ -11,7 +11,8 @@ import { REALM, type PlayerCount } from "./characters";
 import { battlefieldById } from "./maps";
 import type { MasterySnapshot } from "./mastery";
 import { battleOf as battleOfState, RealmArenaAct, RealmArenaEndTurn, RealmArenaGameType, RealmArenaMuster } from "./RealmArenaLogic";
-import { buildInitialRealmArenaState, type IRealmArenaGameData } from "./RealmArenaModels";
+import { buildInitialRealmArenaState, RealmArenaGameDataModel, type IRealmArenaGameData } from "./RealmArenaModels";
+import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { pathTo } from "@/utils/games/battlefield/pathfinding";
 import { distance } from "@/utils/games/battlefield/terrain";
 import { areaAround, check, isStanding, moveAp, reachOf, readyMadeMuster, type Action, type BattleState, type Fighter, type MusterPick } from "./rules";
@@ -20,8 +21,8 @@ export const PLAYERS = ["a", "b"];
 
 export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
 
-/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says). */
-export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}): RealmArenaTestGame {
+/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says), in fog of war if `fog` says (§27). */
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -29,11 +30,21 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog),
         complete: false,
         winner: "",
         markModified: () => {},
     } as unknown as RealmArenaTestGame;
+}
+
+/**
+ * What the server sends `viewer`: the game's own `CreateDataResponse`, on a
+ * document built from the game in memory. A test file calling it mocks
+ * `@/utils/users/clerk`, which the response names players through.
+ */
+export async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
+    const { markModified: _, ...data } = game;
+    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
 }
 
 /** A command from `sender`, with `fields` set on it. */

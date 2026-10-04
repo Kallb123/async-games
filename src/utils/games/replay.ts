@@ -127,11 +127,12 @@ export interface IReplayAdapter {
     // a game whose board plays what each step did, which the difference
     // between two states can't show (a miss changes nothing). Off unless a game
     // opts in, since an outcome is built for the player who sent the command:
-    // only a game whose outcomes say nothing that player's opponents may not
-    // see belongs here. Whatever it returns goes to every viewer of the
-    // timeline. Never asked of a planned command, whose outcome is resolved
-    // against the real game.
-    snapshotOutcome?(outcome: ICommandOutcome): unknown;
+    // it's asked for `viewerId` — the timeline's viewer, as toResponseState is
+    // — with the game's state after the command and whether that ended it, so
+    // a game whose outcomes say things some viewer may not see (Realm Arena's
+    // fog of war) shapes what each one is told. Never asked of a planned
+    // command, whose outcome is resolved against the real game.
+    snapshotOutcome?(outcome: ICommandOutcome, viewerId: string | null, specificGameState: unknown, complete: boolean): unknown;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -317,22 +318,28 @@ registerReplayAdapter({
     // `turnOrder`, and every 1–100 roll a battle uses is recorded on the
     // `RealmArenaAct` that used it. The ranks the battle was created with are
     // read back from the live state, which never changes them (§23.3), so a
-    // muster is checked against the ranks it was checked against then.
+    // muster is checked against the ranks it was checked against then, and
+    // whether it's fought in fog of war likewise (§27).
     buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(
         gameData.gameState.turnOrder,
         (gameData as IRealmArenaGameData).specificGameState.mastery ?? {},
+        (gameData as IRealmArenaGameData).specificGameState.fog === true,
     ),
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad
     // and nobody else's, and a null viewer's carries none at all.
     // canUndo needs the anchor to still match the tail of commandHistory, not
     // just the stack's own owner — see gameStateToModel's lastCommandId.
-    toResponseState: (specificGameState, _userIdNameMap, viewerId, commandHistory) =>
-        realmArenaStateToModel(specificGameState as never, viewerId, commandHistory.at(-1)?.id ?? null),
+    // So does fog of war (§27): each snapshot is what the viewer's squad saw
+    // then, and a null viewer, with no squad, sees nobody until the battle is
+    // over.
+    toResponseState: (specificGameState, _userIdNameMap, viewerId, commandHistory, complete) =>
+        realmArenaStateToModel(specificGameState as never, viewerId, commandHistory.at(-1)?.id ?? null, complete),
     // What each action and End turn did, so a review can play it (§26.2): a
-    // miss changes nothing in the state. See stepOutcomeToModel for why it's
-    // everybody's to see.
-    snapshotOutcome: realmArenaStepOutcome,
+    // miss changes nothing in the state. See stepOutcomeToModel for what each
+    // viewer is told of it in fog of war.
+    snapshotOutcome: (outcome, viewerId, specificGameState, complete) =>
+        realmArenaStepOutcome(outcome, viewerId, specificGameState as never, complete),
     // Out by design: every attack worth planning needs a roll, and a planned
     // one would show a player a board they won't get. Nor is the hit chance
     // it would teach them anything the turn sheet doesn't already show before
@@ -447,7 +454,7 @@ export async function buildTimeline(
     const snapshots: ITurnSnapshot[] = [];
     let index = 0;
     const snapshot = (command: IGameCommand | null, planned: boolean, outcome?: ICommandOutcome) => {
-        const told = outcome && !planned ? adapter.snapshotOutcome?.(outcome) : undefined;
+        const told = outcome && !planned ? adapter.snapshotOutcome?.(outcome, viewerId, state.specificGameState, state.complete) : undefined;
         snapshots.push({
             index: index++,
             specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory, state.complete),

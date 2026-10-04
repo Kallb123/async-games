@@ -17,6 +17,7 @@ import {
     check,
     endTurn,
     isBattleOver,
+    landedSmoke,
     musterRefusal,
     newFighter,
     pickOf,
@@ -24,6 +25,7 @@ import {
     squadsStanding,
     standings,
     startTurn,
+    viewOf,
     storedFighter,
     type Action,
     type BattleEvent,
@@ -51,9 +53,13 @@ import { pluralize } from "@/utils/ui/text";
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
-/** The battle as rules.ts reads it: the map, with what has been blasted cleared from it (§22). */
-export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
-    return { field: battlefieldOf(gs.map, gs.blasted), fighters: (gs.fighters ?? []).map(storedFighter) };
+/**
+ * The battle as rules.ts reads it: the map, with what has been blasted cleared
+ * from it (§22), in fog of war if it's fought in it and not yet over — the fog
+ * lifts once the battle is (`complete`, §27).
+ */
+export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): BattleState {
+    return { field: battlefieldOf(gs.map, gs.blasted ?? []), fighters: (gs.fighters ?? []).map(storedFighter), fog: gs.fog === true && !complete };
 }
 
 /**
@@ -193,6 +199,25 @@ function peaceful(action: Action, events: readonly BattleEvent[], rolls: readonl
 }
 
 /**
+ * Whether an action showed its player an enemy their squad couldn't see
+ * before it, or someone else's smoke cloud (§27): a move round a corner, cover
+ * blasted open, an ally raised.
+ * What's been seen can't be unseen, so such an action can't be taken back —
+ * or a player could step out, look, and step back for free. Never in a battle
+ * without fog, where everyone is seen already.
+ */
+function revealed(before: BattleState, after: BattleState, player: string): boolean {
+    if (!after.fog) return false;
+    const sighted = (state: BattleState) => {
+        const view = viewOf(state, player);
+        const others = view.fighters.filter(fighter => fighter.owner !== player);
+        return { ids: others.map(fighter => fighter.id), clouds: [...landedSmoke(others), ...view.clouds ?? []] };
+    };
+    const was = sighted(before), now = sighted(after);
+    return now.ids.some(id => !was.ids.includes(id)) || now.clouds.some(cloud => !was.clouds.includes(cloud));
+}
+
+/**
  * The whole state, as plain objects the undo stack can keep and hand back.
  * Never nests a stack: a snapshot's own `undoStack` is empty, and restoring
  * one leaves the live stack where it is anyway.
@@ -204,6 +229,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         phase: gs.phase,
         roundsPlayed: gs.roundsPlayed,
         fighters: (gs.fighters ?? []).map(storedFighter),
+        ...(gs.fog ? { fog: true } : {}),
         blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
@@ -289,6 +315,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
         case "watching": return `put ${name(event.fighter)} on watch`;
+        case "spotted": return `${name(event.fighter)} found ${name(event.by)} in its way, and went round`;
         case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
         case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
@@ -520,7 +547,7 @@ export class RealmArenaAct implements IGameCommand {
         if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
         addScores(gs, events);
         data.gameState.history.unshift(playerHistory(this.senderId, narrate(events, battle.fighters, this.senderId)));
-        if (before && peaceful(action, events, used)) commitUndo(gs, this, before);
+        if (before && peaceful(action, events, used) && !revealed(battle, battleOf(gs), this.senderId)) commitUndo(gs, this, before);
         else clearUndo(gs);
         markDirty(gameData);
         return { validMove: true, turnOver: false, events } as IRealmArenaOutcome;

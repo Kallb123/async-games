@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.25. Split out of Defender of the Realm in its third round of
+**Status:** v1.27. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -11,7 +11,9 @@ is C4, battle visuals (§26): hit text, and the shots, the fireball, the flasks
 and the strikes played out on the board. So is C5, character mastery earned
 by what a character does (§23): mastery from results, the rank-1 options, and
 the screens that show them. Figures are drawn as character art, facing the
-way they last stepped (§26.5).
+way they last stepped (§26.5). From Milestone B, free-for-all (B1–B2) and fog
+of war (B5, §27) are built: a host can have a battle fought in fog, where each
+player sees only what their squad can.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -100,6 +102,7 @@ What's decided so far:
 | Progression is per character: playing a character widens what you can muster it with (§7, §23) | §11.7, answer 3 |
 | Mastery is earned by what a character does: a little for being there, more for every attack and ability (§23.1) | §11.10, answer 2 |
 | Battle visuals come next, before mastery: hit text, then the Archer's shot and the fireball in flight (§26) | §11.10, answer 3 |
+| Fog of war, as the host's choice when setting up a battle (§8, §27) | B5 |
 
 ---
 
@@ -263,10 +266,16 @@ The series could still come back later as a match format built on top.
 
 ---
 
-## 8. Fog of war (not decided)
+## 8. Fog of war
 
-Still open. Round 4 left it until after the first playable version, which has
-none (§11.4, answer 7; §10).
+*Decided in B5* (§27): **both.** The host chooses, when setting up a battle,
+whether it's fought in fog of war, and the setup screen starts with fog on.
+Without it, the middle ground below: line of sight still decides who can
+shoot whom, and everything else is in plain sight. What fog hides, and what
+it doesn't, is §27.
+
+Round 4 left it until after the first playable version, which has none
+(§11.4, answer 7; §10). The case for and against, as it stood:
 
 **For**
 - It's what makes overwatch, flanking and scouting matter. It's XCOM.
@@ -970,7 +979,7 @@ recap, a guide and a tutorial.
 | C4 | Battle visuals: hit text, then the shot and the fireball in flight (§26) | Built |
 | C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
-| B5 | Fog of war, if it's chosen (§8) | After C |
+| B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
 
@@ -1149,7 +1158,8 @@ a third and fourth.
 - **A knock-out by burning** scores for the owner of whoever set it alight.
   So burning remembers who caused it. Burning that downs your own character
   scores nobody anything, as a fireball's friendly fire doesn't (§13.6).
-- **Effects are public**, like everything else on the battlefield. Each
+- **Effects are public**, like everything else on the battlefield — on every
+  character the viewer can see, in fog of war (§27). Each
   figure shows its effects as small marks, and the unit's box spells them
   out.
 - **The hit chance shown includes Marked**, and the shaded reach includes
@@ -1210,7 +1220,7 @@ points budget, so an item always costs a body or an upgrade somewhere else.
   two or three items. The ready-made squad carries none, and still spends
   the whole budget.
 - **Carried items are public** once the battle starts, like everything else
-  on the battlefield. During the muster they're part of the sealed squad, so
+  on the battlefield (in fog of war, on every character the viewer can see, §27). During the muster they're part of the sealed squad, so
   `myMuster` carries them for their owner only (§17.2).
 
 ### 21.2 The first four items
@@ -1383,7 +1393,8 @@ first, so mastery moved from C4 to C5.
   is the starter character of §13.6.
 - **An option is a sidegrade.** It never adds HP, accuracy or AP outright.
   Anything it adds, it pays for by giving something else up.
-- **The options picked are public once the battle starts**, like items.
+- **The options picked are public once the battle starts**, like items (in
+  fog of war, on every character the viewer can see, §27).
   During the muster they're sealed with the rest of the squad.
 
 The rank-1 options, built from effects, items and blasting:
@@ -1407,7 +1418,8 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
   One helper in `RealmArenaLogic.ts` (`tallied`) counts them for each action:
   the action itself for the character taking it, and each reaction it set
   off, read from its events, for the watcher during another player's command. The tally is public, like the rest of the
-  battlefield, and undo restores it with the snapshot.
+  battlefield (in fog of war, that of every character the viewer can see,
+  §27), and undo restores it with the snapshot.
 - **Mastery is read from game results, not from a new collection.** C5 gives
   Realm Arena's `GameResult` stats of its own: a schema, its discriminator in
   `GameResultData.ts`, and a writer. For each player and kind of character
@@ -1752,7 +1764,8 @@ sends (`BattleEvent` in `rules.ts`).
   route already resolves every command to build its snapshot, so the replay
   adapter can opt in to sending that command's events with the snapshot. Only
   Realm Arena opts in. Its events are all public once the battle starts,
-  since the log tells every one of them. A muster's outcome carries none.
+  since the log tells every one of them — except, in fog of war, where they
+  happened (§27). A muster's outcome carries none.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
   a second game wants it (AGENTS.md's second-copy rule).
@@ -1774,7 +1787,7 @@ sends (`BattleEvent` in `rules.ts`).
      overwatch hit rises mid-path, where PR 2's arrow will land.
    - A replayed snapshot carries the events as `outcome` through the replay
      adapter's `snapshotOutcome`, less a shot's roll, which the log never
-     tells. Only Realm Arena opts in.
+     tells — and, in fog of war, built per viewer (§27.3). Only Realm Arena opts in.
    - The player's own playback is dropped once it has played, so leaving a
      review doesn't play it again.
 2. **The shot and the fireball.** *Built.* The arrow and the fireball with its
@@ -1818,6 +1831,121 @@ it last stepped (`Fighter.facing`, set as it walks); before its first move it
 faces the middle of the map. Facing is only for the eye: no rule reads it, so
 there's no flanking or facing bonus. A downed figure lies on its square, and a
 figure on watch stands in a dashed ring.
+
+---
+
+## 27. Fog of war (B5)
+
+*Built.* §8 weighed it; this is what was built. Every rule in §13–§26 still
+holds, in fog or out of it. Fog changes what each player is told and, in one
+place — moving — what a player can be held to knowing.
+
+### 27.1 The rules
+
+- **The host chooses.** The setup screen has a *Fog of war* switch, on to
+  start with. It's fixed when the battle is created and stored with it
+  (`fog`), so a replay plays it the same way, and every battle from before it
+  is a battle without fog.
+- **A character sees 20 squares** (`SIGHT_RANGE`), wherever its line of sight
+  is clear (§25.2): the same line a shot needs. An Archer or a Scout, the
+  overwatch specialist and the scout, sees 25; a Knight, slow and buttoned up
+  in armour, sees 15 (`sight` on `CHARACTERS`, read by `sightOf`). Each sees
+  at least as far as anything it can use reaches — its weapon, its abilities
+  and its options, any item — so anything a character could shoot, aim or
+  throw at, it can see. Fog takes nothing away from what can be done, only
+  from what's known. A test holds every character to that.
+- **A player sees what their squad sees**: their own characters, wherever
+  they are, and every other character, standing or fallen, on a square one of
+  their standing characters can see. A fallen character sees nothing. In
+  free-for-all every squad sees for itself; teams (B3) will share their sight.
+- **An enemy out of sight in a move's path is found and gone round.** A path
+  is checked against what its player can see, so one may run through an enemy
+  they can't. Stopping short there would leave the mover stranded in the
+  open with its AP spent, so it doesn't: it takes the cheapest way round to
+  the square it was sent to, within the AP it has. When there's none — the
+  enemy stands on that square, or the way round costs too much — it goes as
+  near to it as it can — nearest to walk to, not as the crow flies, so it
+  never loops round a wall for a square only a crow would call closer. Either
+  way it pays for the path it walks, not the one sent (`routed`), which may be
+  more than the move's preview showed: the preview can only show the path as
+  sent. The way round keeps clear only of the enemies the player
+  now knows of, so its shape gives nobody else away; one it crosses that it
+  couldn't see is found and gone round too. Each is told as a `spotted`
+  event, before the move: "their Scout found Bob's Knight in its way, and went
+  round". Watchers out of sight react as ever, along the path walked, and the
+  path's preview can only flag the ones the player can see.
+- **What's been seen can't be unseen.** An action after which the player's
+  squad sees an enemy it didn't see before can't be undone (`revealed`), or a
+  player could step round a corner, look and step back. Seeing nobody is taken
+  back with the move, though: nearly every move changes what a squad sees, so
+  refusing undo for any new ground would take undo out of fog altogether. A
+  look that finds an empty corner — or a flask that lands on no one where the
+  player can't see — is a small gift, and an accepted one. A move that finds an
+  enemy in its way never can be: it showed the player that enemy.
+- **The fog lifts when the battle ends.** The last state, and the results,
+  show everyone.
+
+### 27.2 What fog hides, and what it doesn't
+
+- **Hidden: where everyone else is, and the state they're in.** An enemy out
+  of sight isn't on the wire at all — not its square, its HP, its AP, its
+  effects, its item, not even that it's there.
+- **Not hidden: the ground.** Cover blasted away is gone for everyone (§22):
+  a blast is heard across the field, and the board and the rules read one
+  battlefield. A smoke cloud is seen wherever any of its 3×3 is in sight,
+  whether or not its thrower is, and not otherwise — even on a thrower in
+  sight. Spotting a new cloud counts as spotting an enemy for undo.
+- **Not hidden: the log.** The history every player reads tells who did what
+  to whom, in words — "Bob's Archer fired on overwatch: a hit for 3" — and the
+  scores. It has never said where anything happened, and fog keeps it that
+  way: fog hides *where*, and the log still tells *what*. The scoreboard shows
+  how many of another squad the viewer can see, not how many stand.
+- **Accepted: who found whom.** A move that finds a hidden enemy is told to
+  everyone, as the log tells everything ("Alice's Scout found Bob's Knight in
+  its way"), so a third player learns the two are near each other, though not
+  where.
+- **Accepted: fighter ids.** Ids count from 0 in seat order (§17.2), so an id
+  seen hints at how big the squads before it are. The log names every
+  character that acts anyway.
+- **Hidden: a watch out of sight.** The log says a character went on watch,
+  but a review doesn't tell a viewer the AP banked by one they can't see —
+  how many reactions are waiting.
+- **Accepted: an overwatch shot's odds.** A shot from out of sight at one of
+  the viewer's characters is told with its chance to hit, as the sheet showed
+  it before the move: a hint at the cover between them, not a square.
+- **Accepted: a shield wall out of sight.** A Knight's shield wall covers an
+  ally beside it whether or not the shooter sees the Knight. The odds shown
+  before a shot can't count a Knight the player can't see; the server does.
+
+### 27.3 Engine
+
+- **`viewOf(state, player)`** (`rules.ts`) is the battle as one player knows
+  it: their squad, everyone it sees, and the clouds it sees whose throwers it
+  doesn't (`clouds`). Without fog it's the battle itself. `check` reads the
+  player's view, so what can be done is decided by what can be seen; and a
+  view read again is itself, so the board, which only holds a view, checks
+  with the server's own rule.
+- **The response** (`gameStateToModel`) is the viewer's view while the battle
+  is fought, and everything once it's over. A viewer with no squad — a replay
+  built for nobody — sees no one. The muster's seal (§17.2) is untouched.
+- **A review** (§26.2) is told per viewer: `stepOutcomeToModel`, through the
+  replay adapter's `snapshotOutcome`, which is now asked for the timeline's
+  viewer. The events say what the log says, so only their squares are cut:
+  someone else's move keeps the squares the viewer saw, and only when it ends
+  on one — one that ends out of sight is told with no path, and the board
+  loses the mover there. A fireball, a flask or a Demolish landing where the
+  viewer sees none of it, and hitting none of theirs, isn't told — though the
+  cover it blasted is, since the ground is everyone's.
+- **What can't be seen isn't said to be empty.** The centre's readout and the
+  recap's tip say the centre is out of sight, not empty, when nobody is seen
+  there and the viewer's squad can't see all of it; and a recap row doesn't
+  count another squad's characters on watch.
+- **An action's own outcome** goes back to its sender whole: the only squares
+  in it are the sender's own moves and aims, so it tells nothing the log
+  doesn't. A character it names that the sender can't see is "a character out
+  of sight".
+- **The board** dims every square the viewer's squad can't see
+  (`unseenSquares`), raised or flat, under whatever else is shaded there.
 
 ---
 
@@ -1868,3 +1996,4 @@ Realm, its sibling in the same world.
 | 1.24 | The muster buys items on the squad step, beside the characters, so every point is spent on one screen; placing hands them out one each and lets the player pass them between characters (§21.3). |
 | 1.25 | Figures are drawn as character art in the owner's colour, facing the way they last stepped, lying down once downed (§26.5). Facing is only visual: no rule reads it. |
 | 1.26 | The recap tells everything one character did in a turn as one row (§17.3 PR 8). |
+| 1.27 | B5, fog of war (§8, §27): the host's choice at setup, on to start with. A character sees 20 squares where its sight is clear — an Archer or a Scout 25, a Knight 15 — at least as far as anything it can use reaches; a player sees their squad and whoever it sees, live and in a review, until the battle ends; a move that finds an enemy out of sight in its path goes round it, or as near to where it was sent as it can, paying for the way it went; an action that shows an enemy can't be undone. Fog hides where, and the log still tells what. |

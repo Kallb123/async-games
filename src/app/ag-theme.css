@@ -5373,6 +5373,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-turn button + button { border-left: 1px solid color-mix(in oklch, var(--ag-on-dark) 25%, transparent); }
 .ag-ra-path { fill: none; stroke: var(--ag-on-dark); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 2 1.2; pointer-events: none; }
 .ag-ra-path-end { fill: var(--ag-on-dark); pointer-events: none; }
+/* Fog of war (§27): every square the viewer's squad can't see, dimmed under
+   whatever else is shaded there. */
+.ag-ra-fog { fill: color-mix(in oklch, var(--ag-ink) 40%, transparent); pointer-events: none; }
 /* A smoke pot's cloud (§21.2): the squares under it greyed, and a puff of
    smoke over each, thin enough to see whoever stands in it. */
 .ag-ra-smoke { fill: color-mix(in oklch, var(--ag-ink-softer) 35%, transparent); pointer-events: none; }

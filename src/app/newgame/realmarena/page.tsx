@@ -7,6 +7,8 @@ import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import PartySizeHint from "@/components/ui/PartySizeHint";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
+import OptionSection from "@/components/ui/OptionSection";
+import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
@@ -15,8 +17,9 @@ import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
 
 // docs/games/realm-arena.md §17.3 PR 4: reachable by URL only until the game
-// is turned on (§17.1). The party's size picks the map (§17.4 B2), so the only
-// choices are who and how fast.
+// is turned on (§17.1). The party's size picks the map (§17.4 B2), so the
+// choices are who, how fast, and whether the battle is fought in fog of war
+// (§27).
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
@@ -24,6 +27,7 @@ function NewGameRealmArenaForm() {
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
+  const [fog, setFog] = useState(true);
   const gameMeta = GAME_META.realmarena;
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
     meta: gameMeta,
@@ -36,7 +40,8 @@ function NewGameRealmArenaForm() {
     e.preventDefault();
     const data: RealmArenaInvitationRequest = {
       userList: players,
-      turnTimer
+      turnTimer,
+      fog,
     };
     await submit(data);
   };
@@ -53,6 +58,15 @@ function NewGameRealmArenaForm() {
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint meta={gameMeta} total={partySize} />
+      <OptionSection label="Realm Arena options">
+        <OptionToggleRow
+          title="Fog of war"
+          description="Each player sees only what their squad can"
+          on={fog}
+          onToggle={() => setFog(v => !v)}
+          ariaLabel="Toggle fog of war"
+        />
+      </OptionSection>
       <FcmTokenComp />
     </GameSetupLayout>
   );
