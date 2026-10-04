@@ -120,8 +120,14 @@ function sacUpdateLargestArmy(sacData: ISettlementsAndCitiesGameData): void {
 // keep in sync with ISACSpecificGameState. Capped at UNDO_STACK_DEPTH; the
 // anchor is what makes an older entry unreachable the moment anything else is
 // played, so dropping the oldest only ever costs reach, never correctness.
+// A stale stack is dropped here rather than built on: otherwise a fresh push
+// would revive the anchor, and an undo chain could reach back past whatever
+// was played in between (a robber's steal, a dev card seen) and take it back
+// too. Execute runs before the pipeline records the command, so the tail of
+// commandHistory is still the command played before this one.
 function sacPushUndo(sacData: ISettlementsAndCitiesGameData, command: IGameCommand): void {
     const gs = sacData.specificGameState;
+    if (gs.undoAnchorId !== sacData.gameState.commandHistory.at(-1)?.id) gs.undoStack = [];
     gs.undoStack.push({ by: command.senderId, state: cloneSACState(gs, sacData.userIdList) });
     if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
     gs.undoAnchorId = command.id;

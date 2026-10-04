@@ -649,6 +649,10 @@ function raceCarsCommitUndo(
 ): void {
     if (arrival && (arrival.oilRolls.length > 0 || arrival.finished)) return;
     const gs = data.specificGameState;
+    // A stale stack is dropped rather than built on, as in `sacPushUndo`: a
+    // fresh push would otherwise revive the anchor and let an undo chain reach
+    // past the leg played in between.
+    if (gs.undoAnchorId !== data.gameState.commandHistory.at(-1)?.id) gs.undoStack = [];
     gs.undoStack.push({ by: command.senderId, state: preState });
     if (gs.undoStack.length > UNDO_STACK_DEPTH) gs.undoStack.shift();
     gs.undoAnchorId = command.id;

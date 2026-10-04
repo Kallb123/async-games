@@ -240,10 +240,19 @@ the stack carries an **anchor**:
   recorded yet, so that entry is the previous move.
 
 So a build followed immediately by an undo matches; a build followed by
-anything else does not, forever, and the stale stack simply becomes
-unreachable. Nothing has to be cleared, and a command added later cannot break
-the invariant by omission — it breaks it by existing, which is the safe
-direction.
+anything else does not, and the stale stack becomes unreachable. Nothing has
+to be cleared, and a command added later cannot break the invariant by
+omission — it breaks it by existing, which is the safe direction.
+
+The one place that does clear it is the push itself. A push sets the anchor
+again, so a push onto a stale stack would bring its old entries back within
+reach: road, Knight, road, undo, undo would pop the first road's snapshot and
+quietly reverse the Knight after all. So `sacPushUndo` (and Race Cars'
+`raceCarsCommitUndo`) starts a fresh stack whenever the anchor isn't the
+command just behind it. A chain of undos therefore only ever takes back
+commands that were played one straight after another, which is also what the
+shared recap engine relies on when it pairs each undo with the newest command
+still standing (§10).
 
 The anchor also does most of §6's work for it: an undo can only ever reach the
 command directly behind it, and only a command that pushed a snapshot ever sets
@@ -611,7 +620,9 @@ The gremlin's questions.
   state like any other, so it never fires for those.
 - **No recap event.** Replay retains `SACUndo`, but the shared recap engine
   treats undo as an edit: it suppresses the Undo and every event produced by
-  the command immediately before it. The recap therefore shows neither a
+  the newest command still standing — the one immediately before it, unless
+  that was itself an undo, in which case several undos in a row each take the
+  next command back off the same stack. The recap therefore shows neither a
   building that is no longer on the board nor a bookkeeping row about taking
   it back. The same rule serves every game that supports undo.
 - **Planning is unaffected.** `plannableCommands` does not list any of the four,
@@ -771,7 +782,8 @@ The §5 hold. *Review: caveman, croupier, gremlin.*
   a manual *End turn* routed through the same window when there is a snapshot
   to keep.
 - **`Recap omits an undo`** — the shared recap replay drops the Undo and the
-  immediately preceding command's events, covered once by the engine test.
+  events of the command it reversed (the newest one not already undone, so
+  undos in a row each reach one further back), covered once by the engine test.
 
 ---
 
@@ -1198,7 +1210,7 @@ action phase is random and none of it ends a turn.
   field by field, and its allowlist test now names `canUndo` and nothing else
   new. `canUndo` is the same expression Race Cars and Settlements & Cities use.
 - **Recap.** The shared recap engine removes an Undo together with every row
-  from the immediately preceding command. Plain moves and shore-ups were
+  from the command it reversed. Plain moves and shore-ups were
   already silent; an undone capture now disappears rather than leaving either
   the capture or a compensating row behind.
 - **The button.** Three games showing the same Undo button was the signal to
@@ -1249,7 +1261,7 @@ hand for the same reason the third was.
   `gameStateToModel` builds its return field by field and gains `canUndo`
   alone — the same expression the other three games use.
 - **Recap.** The shared recap engine removes an Undo together with every row
-  from the immediately preceding command. An undone cure, station or event
+  from the command it reversed. An undone cure, station or event
   card therefore disappears completely; a plain move remains silent as it was
   going forward.
 - **The button.** `UndoButton`, beside End turn once the actions are spent and

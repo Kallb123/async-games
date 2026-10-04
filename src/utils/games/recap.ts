@@ -131,27 +131,28 @@ async function replayEvents(
     // The commands played out of turn, by id — which an event carries, and
     // which survives a postProcess merge that a parallel array wouldn't.
     const outOfTurnCommandIds = new Set<string>();
-    let previousCommandId: string | null = null;
+    // The commands still standing, oldest first: an undo takes the newest off.
+    const liveCommandIds: string[] = [];
     for (const step of steps) {
         // Undo is an editing operation, not something that happened in the
         // game. Its row and every row produced by the command it reverses must
         // therefore disappear from both the recap and the turn notification.
-        // Every undo implementation is deliberately constrained to the last
-        // recorded command (docs/undo.md), so the command id immediately before
-        // it is the exact, game-agnostic target. Filtering here also covers an
-        // action that produced several rows without asking every recap adapter
-        // to independently reconstruct the same pairing.
+        // Every undo reverses the newest command still standing (docs/undo.md)
+        // — after one undo, the next reaches one further back, hence a stack.
+        // Filtering here also covers an action that produced several rows
+        // without every recap adapter reconstructing the same pairing.
         if (step.command.className.endsWith("Undo")) {
-            if (previousCommandId !== null) {
-                events = events.filter(event => event.commandId !== previousCommandId);
+            const undoneCommandId = liveCommandIds.pop();
+            if (undoneCommandId !== undefined) {
+                events = events.filter(event => event.commandId !== undoneCommandId);
             }
         } else {
             events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+            liveCommandIds.push(step.command.id);
         }
         if (isRecordedOutOfTurn(step.command)) {
             outOfTurnCommandIds.add(step.command.id);
         }
-        previousCommandId = step.command.id;
     }
     return { events: adapter.postProcess ? adapter.postProcess(events, { forFeed }) : events, timeline, outOfTurnCommandIds };
 }

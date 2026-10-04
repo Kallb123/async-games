@@ -186,4 +186,22 @@ describe("buildEventFeed", () => {
 
         expect(events.map(event => event.commandId)).toEqual(["a"]);
     });
+
+    it("excludes every command reversed by undos in a row", async () => {
+        const events = await buildAllEvents(
+            game([move("a", "u1"), move("b", "u2"), move("c", "u1"), undo("d", "u1"), undo("e", "u1")], "u2"),
+            names,
+        );
+
+        expect(events.map(event => event.commandId)).toEqual(["a"]);
+    });
+
+    it("pairs an undo with the newest command still standing after a fresh move", async () => {
+        const events = await buildAllEvents(
+            game([move("a", "u1"), move("b", "u2"), move("c", "u2"), undo("d", "u2"), move("e", "u2"), undo("f", "u2"), undo("g", "u2")], "u2"),
+            names,
+        );
+
+        expect(events.map(event => event.commandId)).toEqual(["a"]);
+    });
 });
