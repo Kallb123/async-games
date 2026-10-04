@@ -47,24 +47,19 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
         >
             <div className="ag-ra-units" data-tour="ra-units">
                 {squad.map(fighter => {
-                    const character = CHARACTERS[fighter.character];
                     const standing = isStanding(fighter);
                     const done = acting && standing && !canAct(fighter);
-                    const classes = ['ag-ra-unit'];
-                    if (fighter.id === selectedId) classes.push('ag-ra-unit--selected');
-                    if (done || !standing) classes.push('ag-ra-unit--done');
-                    const name = fighterName(fighters, fighter);
                     return (
-                        <button key={fighter.id} type="button" className={classes.join(' ')} onClick={() => onSelect(fighter.id)}>
-                            <span className="ag-ra-unit-head">
-                                <span className="ag-ra-unit-disc" style={{ background: standing ? colourFor(fighter.owner) : undefined }}>
-                                    {standing ? CHARACTER_MARK[fighter.character] : '✕'}
-                                </span>
-                                <span className="ag-ra-unit-name">
-                                    <b>{name}</b>
-                                    <span>{fighter.hp}/{character.hp} HP</span>
-                                </span>
-                            </span>
+                        <UnitBox
+                            key={fighter.id}
+                            mark={standing ? CHARACTER_MARK[fighter.character] : '✕'}
+                            colour={standing ? colourFor(fighter.owner) : undefined}
+                            name={fighterName(fighters, fighter)}
+                            sub={`${fighter.hp}/${CHARACTERS[fighter.character].hp} HP`}
+                            selected={fighter.id === selectedId}
+                            dim={done || !standing}
+                            onClick={() => onSelect(fighter.id)}
+                        >
                             <span className="ag-ra-unit-hp">
                                 <span style={{ width: `${hpFraction(fighter) * 100}%` }} />
                             </span>
@@ -73,11 +68,50 @@ export default function RealmArenaUnits({ battle, player, colourFor, acting, sho
                                 <UnitStatus fighter={fighter} acting={acting} done={done} />
                                 {standing && showReach && <TargetCount count={attackOptions(battle, fighter).length} />}
                             </span>
-                        </button>
+                        </UnitBox>
                     );
                 })}
             </div>
         </Section>
+    );
+}
+
+interface UnitBoxProps {
+    /** The character's mark, or what stands in for it. */
+    mark: React.ReactNode;
+    /** Its owner's colour behind the mark; none once it's down. */
+    colour?: string;
+    name: string;
+    /** The line under its name. */
+    sub: string;
+    selected: boolean;
+    /** Greyed: done for the turn, or down. */
+    dim?: boolean;
+    onClick: () => void;
+    /** What the box says under its head. */
+    children?: React.ReactNode;
+}
+
+/**
+ * One of the viewer's squad as a tappable box: its mark on its owner's colour
+ * and its name over a line, ringed when it's selected. The squad under the
+ * board in battle, and the squad being placed in the muster.
+ */
+export function UnitBox({ mark, colour, name, sub, selected, dim, onClick, children }: UnitBoxProps) {
+    const classes = ['ag-ra-unit'];
+    if (selected) classes.push('ag-ra-unit--selected');
+    if (dim) classes.push('ag-ra-unit--done');
+    return (
+        <button type="button" className={classes.join(' ')} aria-pressed={selected} onClick={onClick}>
+            <span className="ag-ra-unit-head">
+                <span className="ag-ra-unit-disc" style={{ background: colour }}>{mark}</span>
+                <span className="ag-ra-unit-name">
+                    <b>{name}</b>
+                    <span>{sub}</span>
+                </span>
+            </span>
+            {children}
+        </button>
     );
 }
 

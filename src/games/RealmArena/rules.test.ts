@@ -527,13 +527,19 @@ describe("mustering", () => {
         expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
     });
 
+    it("takes as many of any one character as the budget buys (§13.6)", () => {
+        const sixMen = Array.from({ length: 6 }, (_, i) => ({ character: "manAtArms", square: zone[i] }));
+        expect(musterRefusal(RUINED_FORT, 0, sixMen, budget, {})).toBeUndefined();
+        expect(musterRefusal(RUINED_FORT, 0, [...sixMen, { character: "manAtArms", square: zone[6] }], budget, {}))
+            .toBe("That squad costs 105 points, and the budget is 100");
+    });
+
     it("refuses a squad that breaks the rules", () => {
         const pick = (character: string, i: number) => ({ character, square: zone[i] });
         expect(musterRefusal(RUINED_FORT, 0, [], budget, {})).toBe("Muster at least one character");
         expect(musterRefusal(RUINED_FORT, 0, "squad", budget, {})).toBe("Muster at least one character");
         expect(musterRefusal(RUINED_FORT, 0, [pick("dragon", 0)], budget, {})).toBe("That isn't a character");
         expect(musterRefusal(RUINED_FORT, 0, [null], budget, {})).toBe("That isn't a character");
-        expect(musterRefusal(RUINED_FORT, 0, ["scout", "scout", "scout"].map(pick), budget, {})).toBe("No more than 2 of any one character");
         expect(musterRefusal(RUINED_FORT, 0, ["mage", "mage", "knight", "knight"].map(pick), budget, {})).toBe("That squad costs 110 points, and the budget is 100");
         expect(musterRefusal(RUINED_FORT, 0, [{ character: "scout", square: zone[0] }, { character: "mage", square: zone[0] }], budget, {}))
             .toBe("Each character needs its own square in your deployment zone");

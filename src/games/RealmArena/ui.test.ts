@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, placeTap, rangeSquares, reachFocus, reachShading, reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
+import { abilityWait, actionSquares, apPips, areaRect, attackOptions, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, rangeSquares, reachFocus, reachShading, reactionPreviews, squadCounts, squadOf, targetsOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -297,8 +297,13 @@ describe("rangeSquares", () => {
 describe("fighterName and whoseName", () => {
     const fighters = [ready(0, "a", "manAtArms", 0), ready(1, "a", "manAtArms", 1), ready(2, "b", "manAtArms", 2), ready(3, "b", "archer", 3)];
 
-    it("number a character only where its owner has two of it", () => {
+    it("number a character only where its owner has more than one of it", () => {
         expect(fighters.map(one => fighterName(fighters, one))).toEqual(["Man-at-arms 1", "Man-at-arms 2", "Man-at-arms", "Archer"]);
+    });
+
+    it("number a squad still being placed the same way, however many of one it has", () => {
+        const picks = (["manAtArms", "archer", "manAtArms", "manAtArms"] as const).map(character => ({ character }));
+        expect(picks.map((_, i) => numberedName(picks, i))).toEqual(["Man-at-arms 1", "Archer", "Man-at-arms 2", "Man-at-arms 3"]);
     });
 
     it("say whose a character is from where the viewer sits", () => {
