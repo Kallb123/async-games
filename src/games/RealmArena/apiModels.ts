@@ -6,9 +6,11 @@ import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
 
 // docs/games/realm-arena.md §17.2's state, on the wire. Once the battle has
-// begun every field of it goes to every player: there is no fog of war in the
-// first playable version (§8), so a squad on the battlefield is in plain sight,
-// HP, banked AP, cooldowns and all.
+// begun every field of it goes to every player — unless the host chose fog of
+// war (§27). Without it, a squad on the battlefield is in plain sight, HP,
+// banked AP, cooldowns and all. With it, each player is sent their own squad
+// and only the characters it can see, until the battle is over
+// (`gameStateToModel`).
 //
 // The one secret is the muster (§17.2): until the last player has mustered,
 // each player's squad is theirs alone. It isn't on the battlefield yet — it's
@@ -25,8 +27,20 @@ export interface IRealmArenaSpecificGameStateResponse {
     battleRounds: number;
     /** Each player's points to muster with (§13.6). */
     budget: number;
-    /** Everyone on the battlefield, standing or fallen. Empty until every squad has mustered. */
+    /** Whether the battle is fought in fog of war (§27). */
+    fog: boolean;
+    /**
+     * Everyone on the battlefield, standing or fallen — or, in fog of war, the
+     * viewer's own squad and everyone it can see. Empty until every squad has
+     * mustered.
+     */
     fighters: Fighter[];
+    /**
+     * In fog of war, the smoke clouds the viewer can see whose throwers it
+     * can't, by the square each landed on (§27); empty otherwise. The board
+     * reads them with the rules (`BattleState.clouds`).
+     */
+    clouds: Square[];
     /** The low cover blasted away so far (§22): the board reads the map with these cleared, as the rules do. */
     blasted: Square[];
     /** The players, in seat order, who have mustered. Whose turn it is already says who is mustering now. */

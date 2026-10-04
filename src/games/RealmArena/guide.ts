@@ -1,13 +1,13 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
 import { CHARACTERS, EFFECTS, ITEMS, MAX_OF_EACH, THROW_RANGE } from "./characters";
 import { RANK_XP } from "./mastery";
-import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST } from "./rules";
+import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
 // a player's first match (see useGameIntro). Five sections, as
 // docs/games/realm-arena.md §17.3 PR 9 lists them: the goal and the muster
-// (and mastery's options, §23), a turn, what AP buy (and the effects and
+// (and mastery's options, §23), a turn (and fog of war, §27), what AP buy (and the effects and
 // items, §20, §21), cover and flanking, and overwatch and guard.
 //
 // The options the goal names — an ability swapped, or the Mage's bolt — are
@@ -28,7 +28,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: `Every character of yours has ${ACTION_POINTS} action points (AP) to spend, in any order, and you can switch between them whenever you like. Tap one to select it: the board shades where it can get to for 1, 2, 3 or 4 AP. Tap a square or an enemy once to see what would happen — the path, the odds, who would react — and again to do it. Each result comes back before you choose the next. Undo takes back a move that rolled nothing and hurt nobody. When you're done, tap End turn.`,
+            body: `Every character of yours has ${ACTION_POINTS} action points (AP) to spend, in any order, and you can switch between them whenever you like. Tap one to select it: the board shades where it can get to for 1, 2, 3 or 4 AP. Tap a square or an enemy once to see what would happen — the path, the odds, who would react — and again to do it. Each result comes back before you choose the next. Undo takes back a move that rolled nothing and hurt nobody, and showed you nobody new. When you're done, tap End turn. If the battle is fought in fog of war, you see only the enemies your squad can: up to ${SIGHT_RANGE} squares from any of yours, wherever nothing blocks the view, and the rest of the map is shaded. An enemy you can't see still reacts to your moves, and one standing in your path stops you short of it. The fog lifts when the battle ends.`,
         },
         {
             heading: "Action points",

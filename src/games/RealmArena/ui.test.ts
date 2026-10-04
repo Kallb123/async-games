@@ -304,7 +304,7 @@ describe("fighterName and whoseName", () => {
     it("say whose a character is from where the viewer sits", () => {
         expect(whoseName(fighters, 1, "a", nameFor)).toBe("your Man-at-arms 2");
         expect(whoseName(fighters, 3, "a", nameFor)).toBe("Bob's Archer");
-        expect(whoseName(fighters, 9, "a", nameFor)).toBe("a character");
+        expect(whoseName(fighters, 9, "a", nameFor)).toBe("a character out of sight");
     });
 });
 

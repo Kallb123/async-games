@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, centreHolders, isStanding, type Action, type BattleEvent, type BattleState, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, fighterName, PLAYBACK_MS } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, fighterName, PLAYBACK_MS, unseenSquares } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -129,7 +129,19 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // A battle turn: a run of actions, one command each so every result is
     // seen before the next is chosen, then the end of the turn (§17.2).
     const battleTurn = !!gs && !mustering && isMyTurn;
-    const battle: BattleState = { field, fighters };
+    // In fog of war, the battle as the viewer's squad sees it (§27): the
+    // response holds only who it can see, and the clouds it can see whose
+    // throwers it can't. The fog lifts once the battle is over.
+    const fogged = !!gs?.fog && !complete;
+    const clouds = gs?.clouds ?? [];
+    const battle: BattleState = { field, fighters, ...(fogged ? { fog: true } : {}), ...(clouds.length > 0 ? { clouds } : {}) };
+    // Every square the viewer's squad can't see, dimmed on the board: a
+    // sweep of sight lines, so only redone when someone moves or cover goes.
+    const shown = gs?.fighters;
+    const unseen = useMemo(
+        () => fogged && !mustering && mySeat >= 0 ? unseenSquares({ field, fighters: shown ?? [], fog: true }, myUserId) : null,
+        [fogged, mustering, mySeat, field, shown, myUserId],
+    );
     const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
@@ -237,8 +249,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         ? scoreboardSeatOrder(gameData, myUserId).map((userId): ScoreEntry => {
             const squad = fighters.filter(fighter => fighter.owner === userId);
             // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
+            // In fog of war, all the viewer knows of anyone else's is who of it they can see (§27).
             const sub = mustering ? musterSub(userId)
                 : dropped.includes(userId) ? 'left the battle'
+                : fogged && userId !== myUserId ? `${squad.filter(isStanding).length} in sight`
                 : `${squad.filter(isStanding).length}/${squad.length} standing`;
             return {
                 id: userId,
@@ -338,6 +352,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <RealmArenaBoard
                             field={field}
                             fighters={fighters}
+                            unseen={unseen}
+                            clouds={clouds}
                             sealed={placement?.picks ?? gs.myMuster}
                             seats={seats}
                             colourFor={colourFor}

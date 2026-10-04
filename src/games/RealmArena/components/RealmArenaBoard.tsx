@@ -84,8 +84,12 @@ const VIEW = { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT };
 
 interface RealmArenaBoardProps {
     field: Battlefield;
-    /** Everyone on the battlefield, standing or fallen. */
+    /** Everyone on the battlefield, standing or fallen — in fog of war, everyone the viewer can see. */
     fighters: readonly Fighter[];
+    /** In fog of war, every square the viewer's squad can't see, dimmed (§27); null without it, or once the battle is over. */
+    unseen?: ReadonlySet<Square> | null;
+    /** Smoke clouds the viewer can see whose throwers it can't, by the square each landed on (§27). */
+    clouds?: readonly Square[];
     /** The viewer's own sealed squad, while the muster lasts: drawn where they stand, but not yet on the battlefield. */
     sealed?: readonly MusterPick[] | null;
     /** The players in seat order, so each deployment zone wears the colour of the squad that musters in it. */
@@ -497,6 +501,10 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * scorched ground in `field` itself, flat, and is drawn over the grass, a
  * square at a time.
  *
+ * In fog of war (§27) `fighters` is only who the viewer can see, and every
+ * square their squad can't see is dimmed (`unseen`), raised or flat, under
+ * anything else shaded there.
+ *
  * Every standing figure wears its status effects (§20) as a column of marks
  * down its left, drawn from their own sheet (`EFFECT_ART`), whoever's
  * turn it is: effects are public (§20.2). Its AP pips, on its owner's turn,
@@ -550,7 +558,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, unseen, clouds, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
     const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
     const { rotation } = turned;
@@ -611,10 +619,12 @@ export default function RealmArenaBoard({ field, fighters, sealed, seats, colour
     const centreSquares = field.objectives[CENTRE] ?? [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
-    // Everything shaded square by square, in the order it's painted: the
-    // smoke a smoke pot left first, under whatever is being aimed (§21.2).
-    const smoke = smokeSquares({ field, fighters });
+    // Everything shaded square by square, in the order it's painted: the fog
+    // over what the viewer can't see (§27), then the smoke a smoke pot left,
+    // under whatever is being aimed (§21.2).
+    const smoke = smokeSquares({ field, fighters, clouds });
     const shades: Shade[] = [];
+    if (unseen && unseen.size > 0) shades.push(square => unseen.has(square) ? 'ag-ra-fog' : undefined);
     if (smoke.size > 0) shades.push(square => smoke.has(square) ? 'ag-ra-smoke' : undefined);
     const reach = aiming?.reach;
     if (reach) shades.push(square => reach.has(square) ? `ag-ra-reach ag-ra-reach--${reach.get(square)}` : undefined);

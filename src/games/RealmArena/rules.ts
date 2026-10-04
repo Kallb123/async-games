@@ -66,6 +66,15 @@ export const CENTRE_SCORES_FROM_ROUND = 3;
 /** A knock-out scores the fallen character's points cost divided by this (§13.7). */
 export const KNOCKOUT_DIVISOR = 5;
 
+/**
+ * How far a character sees, in squares, wherever nothing blocks its sight —
+ * what fog of war leaves its owner able to see (§27). As far as the longest
+ * reach of any weapon or ability, so anything a character could shoot at, aim
+ * at or throw at, it can see: fog takes nothing away from what can be done,
+ * only from what's known.
+ */
+export const SIGHT_RANGE = 20;
+
 /** How many battle rounds a battle lasts, by player count (§13.8). */
 export const BATTLE_ROUNDS: Readonly<Record<PlayerCount, number>> = { 2: 15, 3: 13, 4: 12 };
 
@@ -130,6 +139,19 @@ export interface BattleState {
     /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */
     field: Battlefield;
     fighters: readonly Fighter[];
+    /**
+     * Whether the battle is fought in fog of war (§27): a player acts on what
+     * their squad can see (`viewOf`), so an enemy out of sight can't be in
+     * the way of a path they send. Absent in a battle without it.
+     */
+    fog?: boolean;
+    /**
+     * Smoke clouds whose throwers are out of the viewer's sight, by the square
+     * each landed on (§27): a player's view of a fogged battle keeps a cloud
+     * it can see when it drops the thrower. Never set on the whole battle,
+     * where every cloud is on its thrower.
+     */
+    clouds?: readonly Square[];
 }
 
 export type Action =
@@ -166,6 +188,8 @@ export type BattleEvent =
     | { kind: "raised"; fighter: number; target: number; hp: number }
     | { kind: "hunkered" | "shieldWall"; fighter: number }
     | { kind: "watching"; fighter: number; banked: number }
+    /** A move cut short by an enemy standing out of sight in its path (§27): the mover stopped where it last could, and `by` is who it ran into. */
+    | { kind: "blocked"; fighter: number; by: number }
     /** An effect put on a character, put on again (the longer count stands), or cleared by a heal. Not the stances, which have their own events, nor an effect running out. */
     | { kind: "effect"; fighter: number; effect: EffectId; change: "applied" | "refreshed" | "cleared" }
     /** Burning doing its damage at the start of its owner's turn. */
@@ -297,7 +321,8 @@ function shielded(state: BattleState, target: Fighter): boolean {
  * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
  */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
-    return new Set(state.fighters.flatMap(thrower => thrower.smoke !== undefined ? areaAround(state.field, thrower.smoke) : []));
+    const landed = [...state.fighters.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []), ...state.clouds ?? []];
+    return new Set(landed.flatMap(at => areaAround(state.field, at)));
 }
 
 /**
@@ -410,6 +435,83 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
     return area;
 }
 
+// ─── Fog of war (§27) ───────────────────────────────────────────────────────
+//
+// Fog changes what a player knows, never what can be done: a character sees
+// `SIGHT_RANGE` squares wherever its line of sight is clear, which is as far
+// as anything reaches, so every attack, aim and throw is at something seen.
+// The one rule it touches is moving: a path is checked against what its
+// player can see, and an enemy out of sight standing in it stops the mover
+// short (`act`).
+
+/** Whether a character standing on `from` sees the square `to` (§27): within `SIGHT_RANGE`, and nothing blocking its line of sight. */
+export function sees(field: Battlefield, from: Square, to: Square): boolean {
+    return distance(field, from, to) <= SIGHT_RANGE && canSee(field, from, to);
+}
+
+/**
+ * Whether a player's squad sees a square: any of its standing characters
+ * does. Remembers each answer, since a view asks about the same squares
+ * again and again.
+ */
+export function squadSight(state: BattleState, player: string | null): (square: Square) => boolean {
+    const eyes = state.fighters.filter(fighter => fighter.owner === player && isStanding(fighter)).map(fighter => fighter.square);
+    const known = new Map<Square, boolean>();
+    return square => {
+        let seen = known.get(square);
+        if (seen === undefined) {
+            seen = eyes.some(eye => sees(state.field, eye, square));
+            known.set(square, seen);
+        }
+        return seen;
+    };
+}
+
+/**
+ * The battle as one player knows it under fog of war (§27): their own squad,
+ * every other character — standing or fallen — on a square their squad sees,
+ * and any smoke cloud they can see whose thrower they can't (`clouds`). The
+ * whole battle when it isn't fogged. A player with nobody standing — or no
+ * player at all — sees nobody else.
+ *
+ * Applied to a view already, it changes nothing: sight is read off the
+ * player's own squad and the ground, which a view keeps whole. So the board
+ * reads its own view with the same rules the server reads the battle with.
+ */
+export function viewOf(state: BattleState, player: string | null): BattleState {
+    if (!state.fog) return state;
+    const seen = squadSight(state, player);
+    const known = (fighter: Fighter) => fighter.owner === player || seen(fighter.square);
+    const hidden = state.fighters.filter(fighter => !known(fighter));
+    const clouds = [
+        ...hidden.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []),
+        ...state.clouds ?? [],
+    ].filter(at => areaAround(state.field, at).some(seen));
+    return {
+        field: state.field,
+        fighters: state.fighters.filter(known),
+        fog: true,
+        ...(clouds.length > 0 ? { clouds } : {}),
+    };
+}
+
+/**
+ * A path as far as it can be walked before an enemy standing in it stops the
+ * mover, and who that is (§27): only an enemy out of its player's sight can
+ * be in a path `check` allowed. The mover stops on the last square before it
+ * that it could stop on — never on low cover, or on an ally — which may be
+ * where it started.
+ */
+function cutShort(state: BattleState, mover: Fighter, path: readonly Square[]): { path: Square[]; by?: Fighter } {
+    const enemyOn = (square: Square) => state.fighters.find(other => other.owner !== mover.owner && isStanding(other) && other.square === square);
+    const at = path.findIndex((square, step) => step > 0 && enemyOn(square) !== undefined);
+    if (at < 0) return { path: [...path] };
+    const { occupied } = moveRules(state, mover);
+    let stop = at - 1;
+    while (stop > 0 && (!state.field.tiles[path[stop]].terrain.standable || occupied.has(path[stop]))) stop--;
+    return { path: path.slice(0, stop + 1), by: enemyOn(path[at]) };
+}
+
 export function knockoutPoints(character: CharacterId): number {
     return CHARACTERS[character].points / KNOCKOUT_DIVISOR;
 }
@@ -458,7 +560,10 @@ export type Check = { ap: number } | { refused: string };
  * they can't, why not. Total: `action` may be anything a client sent. Whose
  * turn it is is the caller's to check.
  */
-export function check(state: BattleState, player: string, action: unknown): Check {
+export function check(battle: BattleState, player: string, action: unknown): Check {
+    // Under fog, what the player can see (§27): an enemy out of sight is
+    // neither in the way nor there to be aimed at.
+    const state = viewOf(battle, player);
     const refused = (reason: string): Check => ({ refused: reason });
     if (typeof action !== "object" || action === null) return refused("That isn't an action");
     const { kind, fighter: id, target: targetId, targets, path, at } = action as Record<string, unknown>;
@@ -629,7 +734,7 @@ export function blastedIn(events: readonly BattleEvent[]): Square[] {
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
     const fighters = structuredClone(state.fighters) as Fighter[];
-    const battle: BattleState = { field: state.field, fighters };
+    const battle: BattleState = { ...state, fighters };
     const events: BattleEvent[] = [];
     const get = (id: number): Fighter => {
         const fighter = fighterById(battle, id);
@@ -770,9 +875,14 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
 
     switch (action.kind) {
         case "move":
-        case "sneak":
-            walk(state, run, actor, action.path, action.kind === "sneak");
+        case "sneak": {
+            // An enemy out of sight in the way stops the mover short of it,
+            // its AP spent as sent, as a reaction that downs it would (§27).
+            const { path, by } = cutShort(state, actor, action.path);
+            walk(state, run, actor, path, action.kind === "sneak");
+            if (by && isStanding(actor)) events.push({ kind: "blocked", fighter: actor.id, by: by.id });
             break;
+        }
         case "attack":
         case "aimedShot": {
             const target = get(action.target);

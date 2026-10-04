@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   if ('error' in setup) {
     return setup.error;
   }
-  const { userId, host, invitees, turnTimer } = setup;
+  const { body, userId, host, invitees, turnTimer } = setup;
 
   // Two to four players (§17.4 B2); the sender is always one of them. Read
   // off `meta`, as the lobby routes are; a guard test holds `meta` to the
@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
     inviteId: randomUUID(),
     senderId: userId,
     userIdList: seatsFor(invitees),
+    // Fog of war (§27), only when the host turned it on.
+    fog: body.fog === true,
     turnTimer,
     timestamp: (new Date()).toISOString(),
     gameType: 'RealmArena',

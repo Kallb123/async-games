@@ -9,8 +9,8 @@ import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
-import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
-import { battleRounds, pickOf, storedFighter, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { battlefieldById, battlefieldOf, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
+import { areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 
@@ -20,7 +20,8 @@ import type { Square } from "@/utils/games/battlefield/terrain";
 //
 // docs/games/realm-arena.md §17.3 PR 3: a battle can be created, mustered and
 // fought by the commands in RealmArenaLogic.ts. §17.2 fixes the state this
-// file persists, and the one thing in it that's hidden: the muster.
+// file persists, and the one thing in it that's hidden: the muster — and, in
+// a battle fought in fog of war, whatever each player's squad can't see (§27).
 
 // ─── State (§17.2) ──────────────────────────────────────────────────────────
 
@@ -44,6 +45,13 @@ export interface IRealmArenaSpecificGameState {
      */
     seats: string[];
     phase: RealmArenaPhase;
+    /**
+     * Whether the battle is fought in fog of war (§27): each player sees only
+     * what their squad can. Chosen by the host and fixed when the battle is
+     * created, so a replay plays it the same way; absent in a battle without
+     * it, every battle from before it among them.
+     */
+    fog?: boolean;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -90,15 +98,23 @@ export interface IRealmArenaSpecificGameState {
 
 // ─── Invitation ─────────────────────────────────────────────────────────────
 
-export type RealmArenaInvitationRequest = IInvitationRequest;
+export interface RealmArenaInvitationRequest extends IInvitationRequest {
+    /** Fight the battle in fog of war (§27). Off unless sent as true. */
+    fog?: boolean;
+}
 
-export type IRealmArenaInvitationData = IInvitationData;
+export interface IRealmArenaInvitationData extends IInvitationData {
+    fog?: boolean;
+}
 
 export interface IRealmArenaInvitationDataDocument extends IRealmArenaInvitationData, IInvitationDataDocument {}
 
 export interface IRealmArenaInvitationDataModel extends Model<IRealmArenaInvitationDataDocument> {}
 
-var RealmArenaInvitationSchema = new Schema<IRealmArenaInvitationDataDocument>({}, { discriminatorKey: 'kind' });
+var RealmArenaInvitationSchema = new Schema<IRealmArenaInvitationDataDocument>({
+    // The host's choice on the setup screen (§27).
+    fog: Boolean,
+}, { discriminatorKey: 'kind' });
 RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmArenaInvitationData, userIdList: string[]) {
     console.log('CreateGame: Realm Arena game');
 
@@ -112,12 +128,13 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // whose module reaches back to this one through the replay adapters, and
     // a static import would make the two load each other.
     const { masterySnapshotOf } = await import("./masteryRecord");
-    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder));
+    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true);
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
     history.push({ text: `Setup: Hold the Centre on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
     history.push({ text: `Setup: ${turnOrder.map((userId, seat) => `${userToken(userId)} deploys ${zones[seat]}`).join(", ")}` });
+    if (specificGameState.fog) history.push({ text: "Setup: fought in fog of war, so each player sees only what their squad can" });
     history.push({ text: `Setup: each player musters ${POINTS_BUDGET[turnOrder.length as PlayerCount]} points' worth of characters, sealed until every player has` });
 
     const gameData: IRealmArenaGameData = {
@@ -149,11 +166,12 @@ export var RealmArenaInvitationModel =
 /**
  * The battle before anyone has mustered: the map for the party's size, no
  * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
- * battle was created. A pure function of those two, both persisted, so replay
- * rebuilds it rather than persisting a snapshot of the state (§17.1, §23.3).
- * Throws for a party the map has no deployment zone for.
+ * battle was created, in fog of war if the host chose it (§27). A pure
+ * function of those three, all persisted, so replay rebuilds it rather than
+ * persisting a snapshot of the state (§17.1, §23.3). Throws for a party the
+ * map has no deployment zone for.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false): IRealmArenaSpecificGameState {
     const map = mapForPlayers(turnOrder.length);
     const field = battlefieldById(map);
     if (turnOrder.length < 2 || turnOrder.length > field.deployments.length) {
@@ -162,6 +180,8 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
     return {
         map,
         seats: [...turnOrder],
+        // Only when it's on, so a battle without it looks as every one before it did.
+        ...(fog ? { fog: true } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -195,6 +215,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
         specificGameState: {
             map: String,
             seats: [String],
+            // Written once, as the battle is created (§27).
+            fog: Boolean,
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
@@ -229,16 +251,24 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         endReason: doc.endReason,
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToModel(doc.specificGameState, viewerId, doc.gameState.commandHistory.at(-1)?.id ?? null),
+        specificGameState: gameStateToModel(doc.specificGameState, viewerId, doc.gameState.commandHistory.at(-1)?.id ?? null, doc.complete),
     };
 };
 
 /**
  * The state on the wire, for one viewer (docs/new-game.md, "Don't leak hidden
- * information"). Everything on the battlefield is public. The sealed muster
- * isn't: until the last player has mustered, the viewer gets their own squad
- * and nobody else's — not hidden on screen but absent from the response, for
- * a null viewer (a replay) as much as for an opponent (§17.2).
+ * information"). The sealed muster is hidden: until the last player has
+ * mustered, the viewer gets their own squad and nobody else's — not hidden on
+ * screen but absent from the response, for a null viewer (a replay) as much
+ * as for an opponent (§17.2).
+ *
+ * So, in a battle fought in fog of war, is whatever the viewer's squad can't
+ * see (§27): `fighters` is their own squad and every other character on a
+ * square it sees, and nobody else's at all — not a count, not a fallen body —
+ * and a smoke cloud whose thrower is out of sight comes as the square it
+ * landed on, only when the viewer can see some of it. A null viewer has no
+ * squad and sees nobody. The fog lifts once the battle is over (`complete`),
+ * when everything on the battlefield is everyone's.
  *
  * Built field by field rather than spread, so a field added to the state later
  * reaches the wire only when someone writes it in here — the undo stack, a
@@ -252,18 +282,22 @@ export function gameStateToModel(
     gs: IRealmArenaSpecificGameState,
     viewerId: string | null,
     lastCommandId: string | null,
+    complete = false,
 ): IRealmArenaSpecificGameStateResponse {
     const seats = [...gs.seats];
     const rounds = battleRounds(seats.length);
     const musters = gs.musters ?? [];
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
+    const view = viewOf(fogOf(gs, complete), viewerId);
     return {
         map: gs.map,
         phase: gs.phase,
         round: gs.phase === "muster" ? 0 : Math.min(gs.roundsPlayed + 1, rounds),
         battleRounds: rounds,
         budget: POINTS_BUDGET[seats.length as PlayerCount],
-        fighters: (gs.fighters ?? []).map(storedFighter),
+        fog: gs.fog === true,
+        fighters: view.fighters.map(storedFighter),
+        clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
         myMuster: own ? own.picks.map(pickOf) : null,
@@ -272,6 +306,18 @@ export function gameStateToModel(
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
+    };
+}
+
+/**
+ * The battle as the rules read it, fogged when it's fought in fog of war and
+ * still being fought (§27): the fog lifts once the battle is over.
+ */
+function fogOf(gs: IRealmArenaSpecificGameState, complete: boolean): BattleState {
+    return {
+        field: battlefieldOf(gs.map, gs.blasted ?? []),
+        fighters: (gs.fighters ?? []).map(storedFighter),
+        ...(gs.fog && !complete ? { fog: true } : {}),
     };
 }
 
@@ -289,30 +335,67 @@ function ranksOnTheWire(mastery: MasterySnapshot): MasterySnapshot {
 }
 
 /**
- * What a replayed snapshot carries of the command behind it (§26.2): the
- * events an action or an End turn returned, for a review to play.
+ * What a replayed snapshot carries of the command behind it (§26.2), for one
+ * viewer: the events an action or an End turn returned, for a review to play.
  *
- * Every player is sent these, and everything in them is theirs to see: they
- * only exist once the battle has begun, when there is nothing hidden on the
- * battlefield (§8), and the log already tells each one — except a shot's roll,
- * which the log leaves out and so does this. A muster's outcome, where the one
- * secret is, carries no events at all, and gets nothing here.
+ * Everything in them is told by the log, which every player reads — who did
+ * what to whom, the damage, the knock-outs — except a shot's roll, which the
+ * log leaves out and so does this. A muster's outcome, where the one secret of
+ * a battle without fog is, carries no events at all, and gets nothing here.
  *
- * That rests on there being no fog of war (§8). If B5 brings it, an event
- * about a character some viewer can't see is a secret, and this has to be
- * built per viewer — replay.test.ts pins every event's fields so a new one
- * can't slip through unnoticed.
+ * What the log never tells is where anything happened, and in a battle fought
+ * in fog of war (§27) that is the secret: so for each viewer, in a battle not
+ * yet over, an event that would put something they can't see on the board is
+ * cut down to what they can (`toldTo`). `gs` is the battle after the command.
+ * replay.test.ts pins every event's fields, so a new one can't slip through
+ * without someone deciding what it tells.
  */
-export function stepOutcomeToModel(outcome: unknown): IRealmArenaStepOutcome | undefined {
+export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete = false): IRealmArenaStepOutcome | undefined {
     const events = (outcome as { events?: unknown } | null)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
+    const battle = fogOf(gs, complete);
+    const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId) : events as BattleEvent[];
     return {
-        events: (events as BattleEvent[]).map((event): ToldEvent => {
+        events: told.map((event): ToldEvent => {
             if (event.kind !== "shot") return event;
-            const { roll: _roll, ...told } = event;
-            return told;
+            const { roll: _roll, ...rest } = event;
+            return rest;
         }),
     };
+}
+
+/**
+ * The events of a command in a fogged battle as one viewer may see them
+ * played (§27). Their own characters' doings are theirs in full. Someone
+ * else's move keeps only the squares the viewer's squad sees, and only when
+ * it ends on one of them: one that ends out of sight is told with no path at
+ * all, so the board loses the mover there rather than leaving it where it was
+ * last seen. A fireball, a flask or a Demolish landing where the viewer sees
+ * none of it, and hitting none of theirs, isn't told. Everything else carries
+ * no square, and what it says the log says too.
+ *
+ * Sight is read from the battle after the command. In anybody else's command
+ * the viewer's squad doesn't move, so that's the sight it had all along — or
+ * less, if something downed one of them, which then hit one of theirs.
+ */
+function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
+    const seen = squadSight(battle, viewerId);
+    const own = (id: number) => battle.fighters.find(fighter => fighter.id === id)?.owner === viewerId && viewerId !== null;
+    return events.flatMap((event): BattleEvent[] => {
+        switch (event.kind) {
+            case "moved": {
+                if (own(event.fighter)) return [event];
+                const end = event.path.at(-1);
+                return [{ ...event, path: end !== undefined && seen(end) ? event.path.filter(seen) : [] }];
+            }
+            case "fireball":
+            case "thrown":
+            case "demolished":
+                return own(event.fighter) || event.targets.some(own) || areaAround(battle.field, event.at).some(seen) ? [event] : [];
+            default:
+                return [event];
+        }
+    });
 }
 
 export var RealmArenaGameDataModel =

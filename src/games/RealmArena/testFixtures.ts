@@ -20,8 +20,8 @@ export const PLAYERS = ["a", "b"];
 
 export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
 
-/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says). */
-export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}): RealmArenaTestGame {
+/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says), in fog of war if `fog` says (§27). */
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -29,7 +29,7 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog),
         complete: false,
         winner: "",
         markModified: () => {},
