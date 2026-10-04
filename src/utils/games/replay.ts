@@ -649,7 +649,11 @@ export function identityNameMap(userIdList: readonly string[]): { [userId: strin
 // final turn to lose a chart nobody has seen yet. Downgrading instead is the
 // same graceful no-op recap already makes for those games — but it's worth a
 // warning, since the other way to land here is a genuinely broken adapter.
-async function replayTurnByTurn(
+//
+// Exported for a game whose result reads more than a per-turn series can
+// carry — Realm Arena's battle record, which tallies what every event of every
+// step did — so it still costs the last move one replay.
+export async function replayTurnByTurn(
     gameData: IGameData,
     onStep: (step: IReplayStep, turnIndex: number, isFirstStepOfTurn: boolean, specificGameState: unknown) => void,
     what: string,

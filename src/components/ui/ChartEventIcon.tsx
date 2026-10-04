@@ -57,6 +57,14 @@ const ICON_ART: Record<GameResultEventIcon, ReactNode> = {
             <path d="M1.2 5.4 3.6 6l-.4 2.6z" />
         </>
     ),
+    // A knock-out: a skull, its eyes cut through — a character downed in
+    // Realm Arena, on its owner's line (docs/games/realm-arena.md §28).
+    knockout: (
+        <path
+            fillRule="evenodd"
+            d="M8 1C4.4 1 2 3.5 2 6.6c0 2 1 3.3 2.3 4.1v2.7c0 .9.7 1.6 1.6 1.6h4.2c.9 0 1.6-.7 1.6-1.6v-2.7C13 9.9 14 8.6 14 6.6 14 3.5 11.6 1 8 1z M4.1 7.9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M8.9 7.9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z"
+        />
+    ),
 };
 
 interface ChartEventIconProps {

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena battle results: the points race, damage by character and more",
+                detail: "A finished battle's results chart every player's score round by round, with a skull on their line wherever one of their characters fell, and each squad's health beside it. A bar chart shows the damage each kind of character dealt, split by whose it was, and a table sets out everything each squad did — knock-outs, damage dealt and taken, healing, shots landed, reactions on watch — with each player's top fighter named.",
+                game: "realmarena",
+            },
+            {
                 title: "Eleven more achievements for Settlements & Cities and Dice Cities",
                 detail: "Win Settlements & Cities without a city, without grain, or away from every 6 and 8 — or Dice Cities on restaurants alone, or spending your very last coin on the final landmark. And try holding one of every card in the Dice Cities market.",
             },
@@ -119,11 +124,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Pull down to refresh your games",
                 detail: "Drag the home screen down from the top and let go to check for new turns, invites and messages straight away, rather than waiting for it to catch up on its own.",
-            },
-            {
-                title: "Settlements & Cities: the points race, who rolled what, and who gathered what",
-                detail: "A finished game's results now chart every player's victory points round by round — hidden Victory Point cards revealed, and the dips when Longest Road or Largest Army changed hands — split every bar of the dice chart by who rolled it, and add a table of the resources each player gathered, the most of each in bold.",
-                game: "settlementsandcities",
             },
         ],
     },

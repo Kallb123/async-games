@@ -1967,6 +1967,58 @@ place — moving — what a player can be held to knowing.
 
 ---
 
+## 28. Battle results
+
+A finished battle's result page tells the battle, as Settlements & Cities'
+does its game: not only who won and each character's XP (§23.3), but how the
+points came, who did the damage and what each squad went through.
+
+### 28.1 What the result shows
+
+- **Points per round**: a line a player, their score at the end of every
+  battle round, with a skull on a player's line in the round each of their
+  characters was downed — so a jump in somebody else's line has its cause on
+  the chart.
+- **Squad health per round**: the HP each squad had standing at the end of
+  every round, which shows who was winning the fight when the points were
+  level.
+- **Damage by character**: a bar for each kind of character in the battle,
+  the damage it dealt to enemies, stacked by whose it was.
+- **Battle record**: a table, a column a player — points for the centre and
+  for knock-outs, enemies downed, their own characters downed, damage dealt
+  and taken, HP healed, shots taken and the share that landed (a graze
+  counts), reactions on watch, and friendly fire when anybody did some.
+- **Each player's lines**: their score and where it came from, knock-outs and
+  losses, damage and healing, their top fighter — the kind that dealt the most
+  — and each character's XP, as before.
+
+### 28.2 How it's read
+
+- **From the game-end replay, not from new state.** Nothing about the record
+  is kept as the battle is played. The result replays the battle once, and a
+  recorder (`battleRecorder`, `battleRecord.ts`) watches every step: the events
+  its command returned, and the state after it. Damage is the HP a hit actually
+  took, so a hit for 4 on a character with 2 left deals 2. Burning is credited
+  to whoever set it alight, as its knock-out is (§20.2). A blast landing on an
+  ally is friendly fire, not damage dealt.
+- **Rounds are the battle's own**, read off `roundsPlayed`, not the replay's
+  turns, so the muster isn't a round and a seat stepped past doesn't shift
+  them. A step counts towards the round it began in: an End turn that closes a
+  round, and burning as the next begins, are that round's.
+- **Undo is followed.** The only thing an undoable action can add to a record
+  is healing. The recorder keeps the record as it stood before each action the
+  game's own undo stack still holds, and puts it back when one is undone.
+- **A replay that drifts is left out.** If the replay doesn't end on the
+  scores the battle did, the result keeps the XP alone, as a result recorded
+  before the record did.
+- **Nothing in it is hidden.** Everything the record reads is told by the
+  log, and the fog has lifted by the time anybody reads it (§27). A shot's roll
+  is never read: only whether it hit, grazed or missed.
+- **A dropped player keeps their record**: the replay saw what their squad did
+  before it left, though their characters are gone from the final battlefield.
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -2019,3 +2071,4 @@ Realm, its sibling in the same world.
 | 1.29 | No cap on any one character: the budget is the only limit on a squad (§13.6). The muster heads its items "Consumables", and placing lists the squad as boxes that pick a character up and zoom the board to it (§21.3). |
 | 1.30 | A Cleric's Heal is aimed as a fireball is, at an ally in sight within 12 squares, rather than one next to it (§13.6). The healing draught still reaches only its carrier and an ally next to it (§21). |
 | 1.31 | PR 10 turns the game on (§17.3): it's in the game library with a share card and a What's new line, at command version 2, and no battle recorded before it replays (§25.5). The crew's launch pass cuts a battle's ranks on the wire to the viewer's own (§23.3) and accepts a third player reading a shot's odds in fog (§27.2). |
+| 1.32 | Battle results (§28): the result page charts the points race round by round with each character downed marked on its owner's line, each squad's health, the damage each kind of character dealt and a table of everything each squad did, all read off the game-end replay. |
