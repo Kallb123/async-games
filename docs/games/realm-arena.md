@@ -1158,7 +1158,8 @@ a third and fourth.
 - **A knock-out by burning** scores for the owner of whoever set it alight.
   So burning remembers who caused it. Burning that downs your own character
   scores nobody anything, as a fireball's friendly fire doesn't (§13.6).
-- **Effects are public**, like everything else on the battlefield. Each
+- **Effects are public**, like everything else on the battlefield — on every
+  character the viewer can see, in fog of war (§27). Each
   figure shows its effects as small marks, and the unit's box spells them
   out.
 - **The hit chance shown includes Marked**, and the shaded reach includes
@@ -1219,7 +1220,7 @@ points budget, so an item always costs a body or an upgrade somewhere else.
   two or three items. The ready-made squad carries none, and still spends
   the whole budget.
 - **Carried items are public** once the battle starts, like everything else
-  on the battlefield. During the muster they're part of the sealed squad, so
+  on the battlefield (in fog of war, on every character the viewer can see, §27). During the muster they're part of the sealed squad, so
   `myMuster` carries them for their owner only (§17.2).
 
 ### 21.2 The first four items
@@ -1392,7 +1393,8 @@ first, so mastery moved from C4 to C5.
   is the starter character of §13.6.
 - **An option is a sidegrade.** It never adds HP, accuracy or AP outright.
   Anything it adds, it pays for by giving something else up.
-- **The options picked are public once the battle starts**, like items.
+- **The options picked are public once the battle starts**, like items (in
+  fog of war, on every character the viewer can see, §27).
   During the muster they're sealed with the rest of the squad.
 
 The rank-1 options, built from effects, items and blasting:
@@ -1416,7 +1418,8 @@ Two already fit: a **second item slot** (the item still has to be paid for) and 
   One helper in `RealmArenaLogic.ts` (`tallied`) counts them for each action:
   the action itself for the character taking it, and each reaction it set
   off, read from its events, for the watcher during another player's command. The tally is public, like the rest of the
-  battlefield, and undo restores it with the snapshot.
+  battlefield (in fog of war, that of every character the viewer can see,
+  §27), and undo restores it with the snapshot.
 - **Mastery is read from game results, not from a new collection.** C5 gives
   Realm Arena's `GameResult` stats of its own: a schema, its discriminator in
   `GameResultData.ts`, and a writer. For each player and kind of character
@@ -1784,7 +1787,7 @@ sends (`BattleEvent` in `rules.ts`).
      overwatch hit rises mid-path, where PR 2's arrow will land.
    - A replayed snapshot carries the events as `outcome` through the replay
      adapter's `snapshotOutcome`, less a shot's roll, which the log never
-     tells. Only Realm Arena opts in.
+     tells — and, in fog of war, built per viewer (§27.3). Only Realm Arena opts in.
    - The player's own playback is dropped once it has played, so leaving a
      review doesn't play it again.
 2. **The shot and the fireball.** *Built.* The arrow and the fireball with its
@@ -1861,7 +1864,11 @@ place — moving — what a player can be held to knowing.
   the path's preview can only flag the ones the player can see.
 - **What's been seen can't be unseen.** An action after which the player's
   squad sees an enemy it didn't see before can't be undone (`revealed`), or a
-  player could step round a corner, look and step back.
+  player could step round a corner, look and step back. Seeing nobody is taken
+  back with the move, though: nearly every move changes what a squad sees, so
+  refusing undo for any new ground would take undo out of fog altogether. A
+  look that finds an empty corner — or a flask that lands on no one where the
+  player can't see — is a small gift, and an accepted one.
 - **The fog lifts when the battle ends.** The last state, and the results,
   show everyone.
 

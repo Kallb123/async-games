@@ -52,9 +52,13 @@ import { pluralize } from "@/utils/ui/text";
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
-/** The battle as rules.ts reads it: the map, with what has been blasted cleared from it (§22), in fog of war if it's fought in it (§27). */
-export function battleOf(gs: IRealmArenaSpecificGameState): BattleState {
-    return { field: battlefieldOf(gs.map, gs.blasted), fighters: (gs.fighters ?? []).map(storedFighter), ...(gs.fog ? { fog: true } : {}) };
+/**
+ * The battle as rules.ts reads it: the map, with what has been blasted cleared
+ * from it (§22), in fog of war if it's fought in it and not yet over — the fog
+ * lifts once the battle is (`complete`, §27).
+ */
+export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): BattleState {
+    return { field: battlefieldOf(gs.map, gs.blasted ?? []), fighters: (gs.fighters ?? []).map(storedFighter), fog: gs.fog === true && !complete };
 }
 
 /**

@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, SIGHT_RANGE, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -282,26 +282,12 @@ export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKi
 
 /**
  * Every square a player's squad can't see, in fog of war (§27): what the board
- * dims. Null in a battle without fog, where nothing is. Only the squares
- * within `SIGHT_RANGE` of a standing character of theirs are asked about, so
- * a whole map is a few thousand sight lines, not millions.
+ * dims. Null in a battle without fog, where nothing is.
  */
 export function unseenSquares(state: BattleState, player: string): ReadonlySet<Square> | null {
     if (!state.fog) return null;
-    const { field } = state;
     const seen = squadSight(state, player);
-    const unseen = new Set(field.tiles.map((_, square) => square));
-    for (const eye of state.fighters) {
-        if (eye.owner !== player || !isStanding(eye)) continue;
-        const { col, row } = coordsOf(field, eye.square);
-        for (let r = Math.max(0, row - SIGHT_RANGE); r <= Math.min(field.height - 1, row + SIGHT_RANGE); r++) {
-            for (let c = Math.max(0, col - SIGHT_RANGE); c <= Math.min(field.width - 1, col + SIGHT_RANGE); c++) {
-                const square = r * field.width + c;
-                if (unseen.has(square) && seen(square)) unseen.delete(square);
-            }
-        }
-    }
-    return unseen;
+    return new Set(state.field.tiles.flatMap((_, square) => seen(square) ? [] : [square]));
 }
 
 /** A character's name, numbered where its owner has two of it: "Man-at-arms 2". */

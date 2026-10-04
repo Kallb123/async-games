@@ -321,8 +321,12 @@ function shielded(state: BattleState, target: Fighter): boolean {
  * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
  */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
-    const landed = [...state.fighters.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []), ...state.clouds ?? []];
-    return new Set(landed.flatMap(at => areaAround(state.field, at)));
+    return new Set([...landedSmoke(state.fighters), ...state.clouds ?? []].flatMap(at => areaAround(state.field, at)));
+}
+
+/** Where each of these characters' smoke pots landed, while its cloud lasts (§21.2). */
+function landedSmoke(throwers: readonly Fighter[]): Square[] {
+    return throwers.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []);
 }
 
 /**
@@ -444,11 +448,6 @@ export function areaAround(field: Battlefield, at: Square): Square[] {
 // player can see, and an enemy out of sight standing in it stops the mover
 // short (`act`).
 
-/** Whether a character standing on `from` sees the square `to` (§27): within `SIGHT_RANGE`, and nothing blocking its line of sight. */
-export function sees(field: Battlefield, from: Square, to: Square): boolean {
-    return distance(field, from, to) <= SIGHT_RANGE && canSee(field, from, to);
-}
-
 /**
  * Whether a player's squad sees a square: any of its standing characters
  * does. Remembers each answer, since a view asks about the same squares
@@ -460,7 +459,8 @@ export function squadSight(state: BattleState, player: string | null): (square: 
     return square => {
         let seen = known.get(square);
         if (seen === undefined) {
-            seen = eyes.some(eye => sees(state.field, eye, square));
+            // As a shot is in range: near enough, and nothing in the way.
+            seen = eyes.some(eye => inRange(state.field, eye, square, SIGHT_RANGE));
             known.set(square, seen);
         }
         return seen;
@@ -483,10 +483,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
     const seen = squadSight(state, player);
     const known = (fighter: Fighter) => fighter.owner === player || seen(fighter.square);
     const hidden = state.fighters.filter(fighter => !known(fighter));
-    const clouds = [
-        ...hidden.flatMap(thrower => thrower.smoke !== undefined ? [thrower.smoke] : []),
-        ...state.clouds ?? [],
-    ].filter(at => areaAround(state.field, at).some(seen));
+    const clouds = [...landedSmoke(hidden), ...state.clouds ?? []].filter(at => areaAround(state.field, at).some(seen));
     return {
         field: state.field,
         fighters: state.fighters.filter(known),

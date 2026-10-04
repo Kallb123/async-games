@@ -6,7 +6,7 @@ import { RealmArenaUndo, tallied } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import type { MasterySnapshot } from "./mastery";
 import { areaAround, check, nextTo, readyMadeMuster, type MusterPick } from "./rules";
-import { actBy, battleOf, cmd, makeGame, muster, play, readyMadePicks, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, cmd, makeGame, muster, play, readyMadePicks, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/games/realm-arena.md §23.2–§23.3, C5 PR 2: the rank-1 options, picked
 // at muster and checked against the ranks the battle snapshotted when it was
@@ -26,11 +26,6 @@ const OPTION_OF = Object.fromEntries((Object.keys(OPTIONS) as OptionId[]).map(id
 /** a's ready-made squad, every one of it with its character's rank-1 option. */
 function optionPicks(game: RealmArenaTestGame): MusterPick[] {
     return readyMadePicks(game, 0).map(pick => ({ ...pick, option: OPTION_OF[pick.character] }));
-}
-
-async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
-    const { markModified: _, ...data } = game;
-    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
 }
 
 const own = (game: RealmArenaTestGame, player: string) => game.specificGameState.fighters.filter(one => one.owner === player);

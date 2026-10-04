@@ -5,11 +5,12 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
+import { battleOf } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { userToken } from "@/utils/games/history";
 import { CHARACTERS, POINTS_BUDGET, type CharacterId, type PlayerCount } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
-import { battlefieldById, battlefieldOf, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
+import { battlefieldById, DEPLOYMENT_NAMES, mapForPlayers, type RealmArenaMapId } from "./maps";
 import { areaAround, battleRounds, pickOf, squadSight, storedFighter, viewOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
@@ -112,8 +113,11 @@ export interface IRealmArenaInvitationDataDocument extends IRealmArenaInvitation
 export interface IRealmArenaInvitationDataModel extends Model<IRealmArenaInvitationDataDocument> {}
 
 var RealmArenaInvitationSchema = new Schema<IRealmArenaInvitationDataDocument>({
-    // The host's choice on the setup screen (§27).
-    fog: Boolean,
+    // The host's choice on the setup screen (§27). Only `true` is fog: the
+    // lobby route hands a game's own settings straight to the model, and
+    // anything else a body sent — "banana", {} — is no fog rather than a
+    // failed cast and a 500.
+    fog: { type: Boolean, set: (value: unknown) => value === true },
 }, { discriminatorKey: 'kind' });
 RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmArenaInvitationData, userIdList: string[]) {
     console.log('CreateGame: Realm Arena game');
@@ -288,7 +292,7 @@ export function gameStateToModel(
     const rounds = battleRounds(seats.length);
     const musters = gs.musters ?? [];
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
-    const view = viewOf(fogOf(gs, complete), viewerId);
+    const view = viewOf(battleOf(gs, complete), viewerId);
     return {
         map: gs.map,
         phase: gs.phase,
@@ -306,18 +310,6 @@ export function gameStateToModel(
         // Absent (`?? []`) on a game that predates the stack; false for every
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
-    };
-}
-
-/**
- * The battle as the rules read it, fogged when it's fought in fog of war and
- * still being fought (§27): the fog lifts once the battle is over.
- */
-function fogOf(gs: IRealmArenaSpecificGameState, complete: boolean): BattleState {
-    return {
-        field: battlefieldOf(gs.map, gs.blasted ?? []),
-        fighters: (gs.fighters ?? []).map(storedFighter),
-        ...(gs.fog && !complete ? { fog: true } : {}),
     };
 }
 
@@ -353,7 +345,7 @@ function ranksOnTheWire(mastery: MasterySnapshot): MasterySnapshot {
 export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete = false): IRealmArenaStepOutcome | undefined {
     const events = (outcome as { events?: unknown } | null)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
-    const battle = fogOf(gs, complete);
+    const battle = battleOf(gs, complete);
     const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId) : events as BattleEvent[];
     return {
         events: told.map((event): ToldEvent => {

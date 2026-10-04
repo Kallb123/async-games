@@ -11,7 +11,7 @@ import {
     ACTION_POINTS, act, check, fixedRolls, moveAp, newFighter, reachOf, SIGHT_RANGE, smokeSquares, squadSight, viewOf,
     type BattleEvent, type BattleState, type Fighter,
 } from "./rules";
-import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGame } from "./testFixtures";
+import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/games/realm-arena.md §27: fog of war. A player sees what their squad
 // sees — SIGHT_RANGE squares, wherever its line of sight is clear — and the
@@ -112,17 +112,18 @@ describe("what a squad sees (§27)", () => {
 });
 
 describe("moving into the fog (§27)", () => {
-    const path = (cols: number[]) => cols.map(col => at(FIELD, col, 4));
+    /** Along the open row from its first square, `length` squares long. */
+    const run = (length: number) => Array.from({ length }, (_, col) => at(FIELD, col, 4));
     const mover = fighter(0, "a", at(FIELD, 0, 4));
-    const eye = (extra: Partial<Fighter> = {}) => fighter(9, "a", at(FIELD, 0, 0), extra);
+    const eye = fighter(9, "a", at(FIELD, 0, 0));
+    // b stands 21 squares off down the open row: out of sight from where a starts.
+    const hidden = fighter(1, "b", at(FIELD, 21, 4));
+    const long = { kind: "move" as const, fighter: 0, path: run(23) };
 
     it("lets a path run through an enemy out of sight, and stops the mover short of it", () => {
-        // b stands 21 squares off down the open row: out of sight from where a starts.
-        const hidden = fighter(1, "b", at(FIELD, 21, 4));
-        const state = fogged([mover, eye(), hidden]);
-        const action = { kind: "move" as const, fighter: 0, path: path([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]) };
-        expect(check(state, "a", { ...action, fighter: 0 })).not.toHaveProperty("refused");
-        const { fighters, events } = act(state, "a", action, fixedRolls([]));
+        const state = fogged([mover, eye, hidden]);
+        expect(check(state, "a", long)).not.toHaveProperty("refused");
+        const { fighters, events } = act(state, "a", long, fixedRolls([]));
         expect(fighters.find(one => one.id === 0)!.square).toBe(at(FIELD, 20, 4));
         expect(events.at(-1)).toEqual({ kind: "blocked", fighter: 0, by: 1 });
     });
@@ -140,19 +141,10 @@ describe("moving into the fog (§27)", () => {
 
     it("refuses the same path through an enemy it can see, and through anyone without fog", () => {
         const seen = fighter(1, "b", at(FIELD, 3, 4));
-        const action = { kind: "move", fighter: 0, path: path([0, 1, 2, 3, 4]) };
-        expect(check(fogged([mover, seen]), "a", action)).toEqual({ refused: "An enemy is in the way" });
-        const hidden = fighter(1, "b", at(FIELD, 21, 4));
-        const long = { kind: "move", fighter: 0, path: path(Array.from({ length: 23 }, (_, col) => col)) };
+        expect(check(fogged([mover, seen]), "a", { kind: "move", fighter: 0, path: run(5) })).toEqual({ refused: "An enemy is in the way" });
         expect(check({ field: FIELD, fighters: [mover, hidden] }, "a", long)).toEqual({ refused: "An enemy is in the way" });
     });
 });
-
-/** What the server sends `viewer`: the game's own `CreateDataResponse`. */
-async function responseFor(game: RealmArenaTestGame, viewer: string | null) {
-    const { markModified: _, ...data } = game;
-    return new RealmArenaGameDataModel(structuredClone(data)).CreateDataResponse(viewer) as Promise<IRealmArenaGameDataResponse>;
-}
 
 describe("the wire in fog of war (§27)", () => {
     it("sends each player their own squad and nobody they can't see, and everyone once the battle is over", async () => {
