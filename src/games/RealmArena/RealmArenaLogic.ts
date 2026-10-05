@@ -50,7 +50,7 @@ import {
     type Roll,
 } from "@/games/RealmArena/rules";
 import { nextAction } from "@/games/RealmArena/ai";
-import { playerHistory, userToken, type IHistoryEntry } from "@/utils/games/history";
+import { playerHistory, tellEveryone, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
 import { endAsTeam } from "@/utils/games/endAsTeam";
 import { capitalise, pluralize, possessive } from "@/utils/ui/text";
@@ -368,8 +368,10 @@ function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IR
  */
 function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
     const name = (id: number) => whose(fighters, id, actor, coop, seen);
+    // Whom a blast hit, of the characters the line's reader saw (§27.2).
+    const hitIn = (targets: readonly number[]) => seen ? targets.filter(seen) : targets;
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
-    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name) : undefined;
+    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name, hitIn) : undefined;
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
@@ -382,7 +384,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
                 ? `${name(event.fighter)} struck on guard for ${event.damage}`
                 : `struck ${name(event.target)} with ${name(event.fighter)} for ${event.damage}`;
         case "fireball":
-            return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
+            return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
             const hp = event.hp > 0 ? ` for ${event.hp}` : "";
@@ -395,13 +397,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
             }
         }
         case "thrown": {
-            const hit = event.targets.length === 0 ? ""
-                : `, hitting ${pluralize(event.targets.length, "character")}${event.damage > 0 ? ` for ${event.damage}` : ""}`;
+            const hit = hitIn(event.targets).length === 0 ? ""
+                : `, hitting ${pluralize(hitIn(event.targets).length, "character")}${event.damage > 0 ? ` for ${event.damage}` : ""}`;
             return `threw a ${ITEMS[event.item].name.toLowerCase()} with ${name(event.fighter)}${hit}`;
         }
         case "blasted": return `blasted away ${pluralize(event.squares.length, "square")} of low cover`;
         case "demolished": {
-            const hit = event.targets.length === 0 ? "" : `, hitting ${pluralize(event.targets.length, "character")} for ${event.damage}`;
+            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
             return `used ${ABILITIES.demolish.name} with ${name(event.fighter)}${hit}`;
         }
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
@@ -425,8 +427,8 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
  * of character's, and a character's kind is its faction. Undefined for
  * anything that says nothing of the kind, told as `clause` tells it.
  */
-function veiledClause(event: BattleEvent, name: (id: number) => string): string | undefined {
-    const hit = (targets: readonly number[], damage: number) => targets.length === 0 ? "" : `, hitting ${pluralize(targets.length, "character")} for ${damage}`;
+function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (targets: readonly number[]) => readonly number[]): string | undefined {
+    const hit = (targets: readonly number[], damage: number) => hitIn(targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(targets).length, "character")} for ${damage}`;
     switch (event.kind) {
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
@@ -480,32 +482,16 @@ function writeLine(
     const line = write(events);
     if (!line) return undefined;
     const battle = battleOf(data.specificGameState);
-    let told: Told | undefined;
-    if (battle.fog) {
-        told = Object.fromEntries(data.gameState.turnOrder.map(viewer => [viewer, toldTo(events, battle, viewer)]));
-        line.perViewer = data.gameState.turnOrder.flatMap(viewer => {
-            const own = write(told![viewer], witnessed(events, battle, viewer));
-            return own ? [{ userId: viewer, text: own.text }] : [];
-        });
-    }
     data.gameState.history.unshift(line);
+    if (!battle.fog) return undefined;
+    const told: Told = Object.fromEntries(data.gameState.turnOrder.map(viewer => [viewer, toldTo(events, battle, viewer)]));
+    line.perViewer = data.gameState.turnOrder.flatMap(viewer => {
+        const own = write(told[viewer], witnessed(events, battle, viewer));
+        return own ? [{ userId: viewer, text: own.text }] : [];
+    });
     return told;
 }
 
-/**
- * The log as everyone reads it once the battle is over: the fog lifts
- * (§27.1), and with it every line told per player goes back to the whole of
- * it. Rebuilt field by field, never spread: live, these are subdocuments.
- */
-function liftFog(data: IRealmArenaGameData): void {
-    if (!data.specificGameState.fog) return;
-    data.gameState.history = data.gameState.history.map(({ text, actorId, commandId, createdAt }) => ({
-        text,
-        ...(actorId ? { actorId } : {}),
-        ...(commandId ? { commandId } : {}),
-        ...(createdAt ? { createdAt } : {}),
-    }));
-}
 
 /**
  * Notes a random enemy seen (§29.3) once any of its characters is in the
@@ -665,13 +651,13 @@ export class RealmArenaGameType implements IGameType {
         const order = data.gameState.turnOrder;
         const battle = battleOf(gs);
         if (!isBattleOver(battle, order, gs.roundsPlayed)) return false;
+        // The fog lifts as the battle ends (§27.1), on the log too.
+        tellEveryone(data.gameState);
         if (gs.coop) {
-            liftFog(data);
             endInCoop(data, battle, gs.coop);
             return true;
         }
 
-        liftFog(data);
         const ranked = standings(battle, order, gs.scores);
         const winner = ranked.find(userId => !isDropped(data, userId)) ?? ranked[0];
         data.complete = true;
@@ -981,7 +967,7 @@ export class RealmArenaAct implements IGameCommand {
         if (snapshot && peaceful(action, events, used) && !revealed(before, battleOf(gs), this.senderId)) commitUndo(gs, this, snapshot);
         else clearUndo(gs);
         markDirty(gameData);
-        return { validMove: true, turnOver: false, events, ...applied.told ? { recap: { told: applied.told } } : {} } as IRealmArenaOutcome;
+        return { validMove: true, turnOver: false, events, recap: { told: applied.told } } as IRealmArenaOutcome;
     }
 }
 
@@ -1086,7 +1072,7 @@ export class RealmArenaEndTurn implements IGameCommand {
             validMove: true,
             turnOver: true,
             events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
-            recap: { ...enemy ? { enemy } : {}, started, ...startedTold ? { startedTold } : {} },
+            recap: { enemy, started, startedTold },
         } as IRealmArenaOutcome;
     }
 }
@@ -1130,7 +1116,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
 
     const { events: started, told: startedTold } = beginTurn(data, owner);
-    const turn: EnemyTurn = { owner, started, ...startedTold ? { startedTold } : {}, steps: [] };
+    const turn: EnemyTurn = { owner, started, startedTold, steps: [] };
     const over = () => isBattleOver(battleOf(gs), order, gs.roundsPlayed);
     if (over()) return turn;
 
@@ -1155,7 +1141,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
             break;
         }
-        turn.steps.push({ action: applied.action, events: applied.events, ...applied.told ? { told: applied.told } : {} });
+        turn.steps.push({ action: applied.action, events: applied.events, told: applied.told });
     }
     if (!over()) turn.ended = applyEndTurn(data, owner, []);
     return turn;
@@ -1182,17 +1168,16 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): 
     const enemy = isBattleOver(battleOf(gs), order, gs.roundsPlayed) ? undefined : warbandTurn(data, moves);
     const started: BattleEvent[] = [];
     // In fog, what each player was told of it all, line by line (§27.2).
-    let startedTold: Told | undefined;
-    const done = () => ({ enemy, started, ...startedTold ? { startedTold } : {} });
+    const startedTold: Told | undefined = gs.fog ? Object.fromEntries(order.map(viewer => [viewer, []])) : undefined;
     for (let seat = from; ;) {
         const next = nextSeat(data, seat);
         if (order.indexOf(next) <= order.indexOf(seat)) gs.roundsPlayed += 1;
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return done();
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return { enemy, started, startedTold };
 
-        const begun = beginTurn(data, next);
-        started.push(...begun.events);
-        if (begun.told) startedTold = Object.fromEntries(order.map(viewer => [viewer, [...startedTold?.[viewer] ?? [], ...begun.told![viewer] ?? []]]));
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return done();
+        const { events, told } = beginTurn(data, next);
+        started.push(...events);
+        for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started, startedTold };
         seat = next;
     }
 }

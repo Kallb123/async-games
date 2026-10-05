@@ -361,7 +361,10 @@ export interface IGameDataResponse {
         // (see publicGameState). The count discloses nothing new even where a
         // command writes no history line (Train Time's EndTurn): the timeline
         // route already sends every seat one review snapshot per command, so
-        // a command that must stay secret needs hiding there first.
+        // a command that must stay secret needs hiding there first. Realm
+        // Arena's fog of war leaves an unseen action out of the review
+        // (IReplayAdapter.omitUntoldSteps) but not out of this count: a player
+        // can tell that something was done, never what (its GDD §27.2).
         commandCount: number,
     },
     complete: boolean,

@@ -5,6 +5,7 @@ import type { PushNotification } from '@/utils/firebase/pushNotification';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
+import { tellEveryone } from '@/utils/games/history';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { GameEndReason } from '@/utils/apiModels/GameDataApi';
 import { GAME_END_BUDGET_MS, judgeGameEnd, NO_UNLOCKS } from '@/utils/games/awardAchievements';
@@ -107,6 +108,9 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
     // whoever was mid-turn could otherwise keep playing a game that had already
     // written its result (see requireLiveGame).
     gameData.currentTurn = "";
+    // Whatever a player wasn't told while it was played is everyone's now
+    // (Realm Arena's fog of war, which its own CheckGameOver lifts too).
+    tellEveryone(gameData.gameState);
 
     // A player may have taken their turn while this request was deciding the
     // game was over — leave their move alone rather than clobbering it.

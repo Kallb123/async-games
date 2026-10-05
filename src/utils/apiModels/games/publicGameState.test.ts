@@ -106,7 +106,9 @@ describe("every CreateDataResponse", () => {
         // satisfy the guard.
         const assignment = /^[ \t]*gameState:[ \t]*(.*)$/m.exec(body![0]);
         expect(assignment, `no gameState assignment found in ${relativePath}`).not.toBeNull();
-        expect(assignment![1]).toMatch(/^publicGameState\(/);
+        // With the response's own viewer, so the log is resolved for them
+        // (IHistoryEntry.perViewer) rather than for nobody in particular.
+        expect(assignment![1]).toMatch(/^publicGameState\([^)]*, viewerId\),?$/);
     });
 
     // The other half of the same hole. IGameDataDocument declares

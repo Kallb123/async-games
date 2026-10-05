@@ -42,6 +42,8 @@ export interface IHistoryEntry {
      * `text`, and one who isn't listed, or nobody in particular, isn't told
      * the line at all. Absent on every line everyone reads the same, which is
      * nearly all of them. Never sent: resolveHistory picks the viewer's line.
+     * Dropped once the game is over (`tellEveryone`), when the whole of every
+     * line is everyone's.
      */
     perViewer?: { userId: string; text: string }[];
 }
@@ -124,17 +126,38 @@ export function resolveHistory(
     return history.flatMap(entry => {
         const told = entry.perViewer ? entry.perViewer.find(one => one.userId === viewerId)?.text : entry.text;
         if (told === undefined) return [];
-        const text = resolveTokens(told, userIdNameMap);
-        // Field by field, never `{ ...entry }`. These entries come off a live
-        // Mongoose document, and spreading a subdocument copies its internals
-        // rather than its fields — including `$__parent`, the whole game
-        // document, hidden state and all, straight into the response.
-        const resolved: IHistoryEntry = { text };
-        if (entry.actorId) resolved.actorId = entry.actorId;
-        if (entry.commandId) resolved.commandId = entry.commandId;
-        if (entry.createdAt) resolved.createdAt = toTheMinute(entry.createdAt);
+        const resolved = plainEntry(entry, resolveTokens(told, userIdNameMap));
+        if (resolved.createdAt) resolved.createdAt = toTheMinute(resolved.createdAt);
         return [resolved];
     });
+}
+
+/**
+ * A line as a plain object, with `text` in place of its own: its fields, and
+ * nothing else — not even `perViewer`, which is never sent.
+ *
+ * Field by field, never `{ ...entry }`. These entries come off a live
+ * Mongoose document, and spreading a subdocument copies its internals rather
+ * than its fields — including `$__parent`, the whole game document, hidden
+ * state and all, straight into the response.
+ */
+export function plainEntry(entry: IHistoryEntry, text = entry.text): IHistoryEntry {
+    const plain: IHistoryEntry = { text };
+    if (entry.actorId) plain.actorId = entry.actorId;
+    if (entry.commandId) plain.commandId = entry.commandId;
+    if (entry.createdAt) plain.createdAt = entry.createdAt;
+    return plain;
+}
+
+/**
+ * Every line told per viewer (IHistoryEntry.perViewer) back to the whole of
+ * it, for everyone: what a game over does to the log, however the game ended
+ * — by its own rules or by `finishGame`. Reassigned rather than edited in
+ * place, so a live document saves it; a log with no such line is left alone.
+ */
+export function tellEveryone(gameState: { history: IHistoryEntry[] }): void {
+    if (!gameState.history.some(entry => entry.perViewer)) return;
+    gameState.history = gameState.history.map(entry => plainEntry(entry));
 }
 
 /**

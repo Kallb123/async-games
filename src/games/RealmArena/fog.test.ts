@@ -6,7 +6,7 @@ import { findPath, pathCost, pathTo } from "@/utils/games/battlefield/pathfindin
 import { buildBattlefield, distance, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
-import { RealmArenaGameDataModel, stepOutcomeToModel } from "./RealmArenaModels";
+import { RealmArenaGameDataModel, stepOutcomeToModel, stepSummary } from "./RealmArenaModels";
 import { RealmArenaAct, RealmArenaUndo } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { battleCues, eventLines, unseenSquares } from "./ui";
@@ -418,6 +418,16 @@ describe("the log, the recap and the review in fog of war (§27.2)", () => {
         expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(true);
         expect((await texts(game, "a")).slice(0, 2)).toEqual(["a took back their last move", "a moved their Archer"]);
         expect(await texts(game, "b")).toEqual([]);
+    });
+
+    it("never names the action another side took in a review step, while the fog lasts", () => {
+        const game = ambush();
+        const shot = cmd(RealmArenaAct, "a", { action: { kind: "fireball", fighter: 0, at: 0 } });
+        expect(stepSummary(shot, "b", game.specificGameState)).toBe("acted");
+        expect(stepSummary(shot, null, game.specificGameState)).toBe("acted");
+        expect(stepSummary(shot, "a", game.specificGameState)).toBeUndefined();
+        expect(stepSummary(shot, "b", game.specificGameState, true)).toBeUndefined();
+        expect(stepSummary(endTurnBy("a"), "b", game.specificGameState)).toBeUndefined();
     });
 
     it("lifts the fog on the log as the battle ends, for everyone", async () => {

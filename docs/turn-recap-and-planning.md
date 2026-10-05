@@ -545,8 +545,10 @@ state is the same for everybody ignore the argument.
 `buildTimeline` takes it as a trailing parameter and passes it straight to the
 adapter. Both callers that know who is asking supply it: the timeline route
 passes the authenticated caller, and `buildEventFeed` passes the player the
-recap is for. `buildAllEvents` and `computePerTurnStat` pass `null`, since
-neither is built for anybody in particular. A snapshot therefore only ever
+recap is for. `buildAllEvents` takes a viewer too — the player reacting, or the
+player a reaction is shown to (see Recap **events** below) — and
+`computePerTurnStat` passes `null`, since it isn't built for anybody in
+particular. A snapshot therefore only ever
 carries the asking player's own secrets — everybody else stays a card count,
 exactly as in live play.
 
@@ -574,11 +576,11 @@ the one that does both.
 
 Recap **events** are a different question and don't get the same latitude: they
 are written once and read by whoever the feed is built for, so a `toEvents`
-must only ever describe what the whole table can already see — unless the
-adapter says its rows differ by viewer (`rowsPerViewer`), as Realm Arena's do
-in fog. Then `toEvents` is handed the viewer the snapshots were built for, and
-every row lookup names one: the recap's player, the player reacting, or the
-player a reaction is shown to.
+must describe what the whole table can already see — unless, like Realm
+Arena's in fog, they're told per viewer: `toEvents` is handed the viewer the
+snapshots were built for, and every row lookup names one — the recap's player,
+the player reacting, or the player a reaction is shown to (a reaction push
+quotes the move to its player as their own row tells it).
 
 ## Adding recap to a new game
 

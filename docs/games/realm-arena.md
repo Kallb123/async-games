@@ -1957,13 +1957,14 @@ place — moving — what a player can be held to knowing.
   who was knocked out or by whom. Points hint at a fallen character's cost.
 - **Not hidden: whose turn it is**, and that it ended, with the turn's
   timestamps. Nor how many commands have been played, which every response
-  carries as a count.
+  carries as a count (`commandCount`) for out-of-turn plays: a player who
+  watches it can tell that something was done out of sight, never what.
 - **Accepted: fighter ids.** Ids count from 0 in seat order (§17.2), so an id
   seen hints at how big the squads before it are. The log names every
-  character that acts anyway.
-- **Hidden: a watch out of sight.** The log says a character went on watch,
-  but a review doesn't tell a viewer the AP banked by one they can't see —
-  how many reactions are waiting.
+  character the viewer saw act anyway.
+- **Hidden: a watch out of sight.** Neither the log nor a review tells a
+  viewer that a character they can't see went on watch, let alone the AP it
+  banked — how many reactions are waiting.
 - **Accepted: a shot's odds.** A shot from out of sight at one of the
   viewer's characters is told with its chance to hit, as the sheet showed it
   before the move: a hint at the cover between them, not a square. A shot
@@ -1995,8 +1996,9 @@ place — moving — what a player can be held to knowing.
   picks the viewer's line for every response, review step and push
   (`resolveHistory`), so nobody else's ever reaches the wire, and nobody in
   particular is told none. An Undo is told to whoever was told the move it
-  takes back. As the battle ends the game type drops every `perViewer`
-  (`liftFog`): the fog lifts, and the whole log is everyone's.
+  takes back. As the battle ends every `perViewer` is dropped
+  (`tellEveryone`) — by the game type, and by `finishGame` for a battle
+  abandoned or ended by hand: the fog lifts, and the whole log is everyone's.
 - **A review** (§26.2) is told per viewer: `stepOutcomeToModel`, through the
   replay adapter's `snapshotOutcome`, asked for the timeline's viewer, keeps
   only what `toldTo` tells. Someone else's move keeps the squares the viewer
@@ -2004,15 +2006,19 @@ place — moving — what a player can be held to knowing.
   no path, and the board loses the mover there. A step that told the viewer
   nothing — no line of their log — is left out of their timeline
   (`omitUntoldSteps`), or its summary would say that something was done, and
-  what kind of thing.
+  what kind of thing. A step kept for the part of it the viewer saw — or for
+  the points it scored, or the cover it blasted — calls another side's action
+  only "acted" (`stepSummary`): its kind, a fireball say, would name the
+  character behind it. A blast's line counts only the characters it hit that
+  the viewer saw.
 - **The recap** is built for its viewer (the recap adapter's `toEvents` is
   handed them): each command's outcome carries what each player was told of
   it (`recap.told`, and for the enemy's turn each step's), never sent, so an
   action they were told nothing of has no row, and one they were told part
   of takes its kind, glyph and who it hurt from that part. A reaction is
   looked up among the rows the player reacting was told, and the push quotes
-  the move to its player as they were told it (`rowsPerViewer`), never as
-  the player reacting was.
+  the move to its player as they were told it, never as the player reacting
+  was.
 - **What can't be seen isn't said to be empty.** The centre's readout and the
   recap's tip say the centre is out of sight, not empty, when nobody is seen
   there and the viewer's squad can't see all of it; and a recap row doesn't
@@ -3050,9 +3056,9 @@ surviving the waves as the first co-op mission of its own. This is it.
   character stood in an enemy zone blocks those squares, which is a tactic,
   not a bug.
 - **A wave is told.** The log says "A fresh wave of the Renegades arrives"
-  (or "of the enemy", while a random enemy is unseen, §29.3), as the log tells
-  everything (§27.2). In fog the fresh characters are seen only if they're in
-  sight. Their fighter ids continue from the last, which hints at the wave's
+  (or "of the enemy", while a random enemy is unseen, §29.3), to everyone,
+  as a turn ending is (§27.2). In fog the fresh characters are seen only if
+  they're in sight. Their fighter ids continue from the last, which hints at the wave's
   size as ids always have (§27.2), and is accepted as it is there.
 - **Winning and losing.** The team wins if anyone of it is standing when the
   last round ends, and loses the moment nobody is. A warband wiped out

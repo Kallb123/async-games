@@ -230,7 +230,7 @@ interface IGameData {
     timerWarningNotificationSent: boolean;
     gameState: {
         turnOrder: string[];         // user IDs, decided at creation
-        history: IHistoryEntry[];    // newest-first log; { text, actorId? }
+        history: IHistoryEntry[];    // newest-first log; { text, actorId?, perViewer? }
                                      // (a CreateGame setup block is written
                                      //  oldest-first; startGameFromInvitation
                                      //  flips it — asStoredHistory())
@@ -284,7 +284,10 @@ is required rather than optional so that a new game has to answer the question;
 `src/utils/apiModels/games/` holds the guards (`publicGameState.test.ts` for the
 shared shape, `hiddenHands.test.ts` for the two games that redact per player).
 The same `viewerId` runs through `IReplayAdapter.toResponseState`, so recap and
-planning snapshots are redacted the same way the live response is.
+planning snapshots are redacted the same way the live response is — and through
+`publicGameState(gameState, userIdNameMap, viewerId)`, since a history line can
+be told differently to each player (`perViewer`, Realm Arena's fog of war), so
+the log is resolved for whoever the response is for.
 
 ### Match results (`GameResult`)
 

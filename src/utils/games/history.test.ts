@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asStoredHistory, playerHistory, resolveHistory, userToken } from "./history";
+import { asStoredHistory, playerHistory, resolveHistory, tellEveryone, userToken } from "./history";
 import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 
 const NAMES = { user_a: "Alice", user_b: "Bob" };
@@ -114,5 +114,27 @@ describe("asStoredHistory", () => {
         asStoredHistory(setup);
 
         expect(setup.map(entry => entry.text)).toEqual(["one", "two"]);
+    });
+});
+
+describe("tellEveryone", () => {
+    it("tells every line told per viewer to everyone, whole, once the game is over", () => {
+        const gameState = { history: [
+            { text: "{{user_b}} moved their Scout", actorId: "user_b", commandId: "c2", perViewer: [{ userId: "user_b", text: "{{user_b}} moved their Scout" }] },
+            { text: "{{user_a}} ended their turn", actorId: "user_a", commandId: "c1" },
+        ] };
+        tellEveryone(gameState);
+        expect(gameState.history).toEqual([
+            { text: "{{user_b}} moved their Scout", actorId: "user_b", commandId: "c2" },
+            { text: "{{user_a}} ended their turn", actorId: "user_a", commandId: "c1" },
+        ]);
+        expect(resolveHistory(gameState.history, NAMES, null).map(line => line.text)).toEqual(["Bob moved their Scout", "Alice ended their turn"]);
+    });
+
+    it("leaves a log nobody was told differently as it is", () => {
+        const history = [{ text: "x" }];
+        const gameState = { history };
+        tellEveryone(gameState);
+        expect(gameState.history).toBe(history);
     });
 });

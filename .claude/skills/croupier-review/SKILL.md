@@ -60,7 +60,7 @@ manufacture a finding by declaring a public field secret.
 `CreateDataResponse(viewerId)` / `CreateResponse()` build a DTO. Two specific
 hazards:
 
-- **`gameState`** must go through `publicGameState(gameState, history?)`
+- **`gameState`** must go through `publicGameState(gameState, userIdNameMap, viewerId)`
   (`src/utils/mongodb/GameData.ts`), which returns `{ turnOrder, history }` and
   drops `commandHistory`. That log holds every move ever played, secret fields
   and recorded RNG included. TypeScript cannot hold this line on its own —
@@ -196,7 +196,7 @@ CARDS FACE UP 🃏
   [...ps.hand] : undefined`.
 - src/games/TrainTime/TrainTimeModels.ts:190 — `gameState: doc.gameState`
   ships commandHistory, which holds every drawn card. Use
-  publicGameState(doc.gameState).
+  publicGameState(doc.gameState, userIdNameMap, viewerId).
 
 CROUPIER SQUINTS 👀
 - src/utils/apiModels/games/publicGameState.test.ts:16 — TrainTimeModels.ts

@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         if (!gameData) continue;
         const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
         // As the player reacted to was told it: a game may tell each player
-        // rows of their own (IRecapAdapter.rowsPerViewer).
+        // rows of their own (Realm Arena's fog of war).
         const events = await buildAllEvents(gameData, userIdNameMap, userId);
         eventTitlesByGame.set(gameId, new Map(events.map((e) => [e.id, { title: e.title, detail: e.detail }])));
     }

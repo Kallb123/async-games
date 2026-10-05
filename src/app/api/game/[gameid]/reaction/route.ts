@@ -1,12 +1,12 @@
 import { readJsonBody } from '@/utils/api/requestBody';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
 import { userIdListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { buildAllEvents, buildEventFeed, getRecapAdapter } from '@/utils/games/recap';
+import { buildAllEvents, buildEventFeed } from '@/utils/games/recap';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
@@ -26,8 +26,8 @@ export interface IGetReactionParams {
 // while `commandId` is looked up in the game's full, unwindowed event list as
 // the signed-in player is told it (match history has no "since last here"
 // window — any past line they were told, on a finished game included, is fair
-// game). Both paths mean the recipient (the
-// action's original actor) can't be spoofed.
+// game). Both paths mean the recipient (the action's original actor) can't be
+// spoofed.
 //
 // Each player gets their own reaction per action — one reacting first doesn't
 // use up the others' turn to react — so "already reacted" is scoped to the
@@ -120,26 +120,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // turn, which excludes their own), so this can now be a self-reaction.
     // Nobody needs a push telling them they reacted to themselves, and a row
     // nobody seated did — Realm Arena's enemy — has nobody to tell.
+    //
+    // After the response, and guarded: the reaction is stored by now, and
+    // nothing here — the replay that words the push, Clerk, the push itself —
+    // is anything the player reacting is waiting on, or may fail their request.
     if (event.actorId !== userId && gameData.userIdList.includes(event.actorId)) {
-        // The move is quoted to its player as they were told it. In a game
-        // that tells each player rows of their own (Realm Arena's fog of war),
-        // the reacting player's row would tell them what that player's squad
-        // could see; their own always has a row for their own move.
-        const title = getRecapAdapter(gameData.gameType.className)?.rowsPerViewer
-            ? (await buildAllEvents(gameData, userIdNameMap, event.actorId)).find((e) => e.commandId === event.commandId)?.title
-            : event.title;
-        const userList = await usersById([event.actorId]);
-        const recipient = userList.find(u => u.id === event.actorId);
-        if (recipient && title !== undefined) {
-            await sendPushToUsers([recipient], {
-                event: 'PlayerReaction',
-                gameId: gameid,
-                eventId: event.id,
-                link: gameNotificationLink(gameData.gameType.url, gameid)
-            }, buildReactionNotification(reactionDoc.actorUsername, reaction, title), {
-                channel: 'playerReaction'
-            });
-        }
+        const actorId = event.actorId;
+        after(async () => {
+            try {
+                // The move is quoted to its player as they were told it, never
+                // as the reacting player was: their row is built for them, and
+                // in a game whose players aren't all told the same (Realm
+                // Arena's fog of war) it would tell the player reacted to what
+                // the reacting player's side could see. A player always has a
+                // row for their own move; should they ever not, no push beats
+                // quoting somebody else's.
+                const title = (await buildAllEvents(gameData, userIdNameMap, actorId)).find((e) => e.commandId === event.commandId)?.title;
+                if (title === undefined) {
+                    console.warn(`Reaction on ${event.commandId} in game ${gameid}: no row for its player, so no push`);
+                    return;
+                }
+                const recipient = (await usersById([actorId])).find(u => u.id === actorId);
+                if (!recipient) return;
+                await sendPushToUsers([recipient], {
+                    event: 'PlayerReaction',
+                    gameId: gameid,
+                    eventId: event.id,
+                    link: gameNotificationLink(gameData.gameType.url, gameid)
+                }, buildReactionNotification(reactionDoc.actorUsername, reaction, title), {
+                    channel: 'playerReaction'
+                });
+            } catch (error) {
+                console.error(`Failed to push a reaction in game ${gameid}`, error);
+            }
+        });
     }
 
     return NextResponse.json({ success: true, reaction });

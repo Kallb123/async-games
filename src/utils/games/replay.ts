@@ -22,7 +22,7 @@ import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStat
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
-import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome, IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
+import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome, stepSummary as realmArenaStepSummary, IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -140,6 +140,13 @@ export interface IReplayAdapter {
     // that something happened, and its command's summary what kind of thing,
     // when the log keeps both from them. Every planned step stays.
     omitUntoldSteps?: boolean;
+    // Optional: what a step's summary calls its command, for the timeline's
+    // viewer — undefined for its own `myString()`. For a game where saying
+    // which kind of thing somebody did can tell a viewer more than the log
+    // does (Realm Arena's fog of war, where it names an ability, and so a
+    // character, out of sight). Asked with the state after the command and
+    // whether that ended the game, as `snapshotOutcome` is.
+    stepSummary?(command: IGameCommand, viewerId: string | null, specificGameState: unknown, complete: boolean): string | undefined;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -355,6 +362,11 @@ registerReplayAdapter({
     // told (§27.2), and a review that stepped through it anyway would say
     // something happened there, and what kind of action it was.
     omitUntoldSteps: true,
+    // And a step kept for what it scored or blasted, or the part of it the
+    // viewer saw, doesn't name the action another side took: "fireball" would
+    // name the character that threw it, which the log calls one out of sight.
+    stepSummary: (command, viewerId, specificGameState, complete) =>
+        realmArenaStepSummary(command, viewerId, specificGameState as never, complete),
     // Out by design: every attack worth planning needs a roll, and a planned
     // one would show a player a board they won't get. Nor is the hit chance
     // it would teach them anything the turn sheet doesn't already show before
@@ -486,7 +498,7 @@ export async function buildTimeline(
                       senderId: command.senderId,
                       senderUsername: command.senderUsername,
                       timestamp: toTheMinute(command.timestamp),
-                      summary: resolveTokens(command.myString(), historyNames),
+                      summary: resolveTokens((planned ? undefined : adapter.stepSummary?.(command, viewerId, state.specificGameState, state.complete)) ?? command.myString(), historyNames),
                   }
                 : null,
             planned,

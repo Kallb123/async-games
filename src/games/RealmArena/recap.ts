@@ -451,8 +451,6 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 export const realmArenaRecapAdapter: IRecapAdapter = {
     className: "RealmArenaGameType",
     toEvents,
-    // In fog of war, each player's rows are their own (§27.2).
-    rowsPerViewer: true,
     postProcess,
     summarize,
     tip,

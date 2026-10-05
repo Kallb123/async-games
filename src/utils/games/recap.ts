@@ -66,11 +66,6 @@ export interface IRecapAdapter {
         viewerId?: string | null
     ): IGameEvent[];
 
-    // Whether the rows differ from one viewer to the next (see toEvents), so a
-    // row built for one player is never shown to another as it stands — the
-    // title a reaction push quotes to the player reacted to, above all.
-    rowsPerViewer?: boolean;
-
     // The headline + subline at the top of the recap, from the viewer's POV.
     summarize(events: IGameEvent[], forUserId: string): IRecapSummary;
 
@@ -242,7 +237,7 @@ export async function buildEventFeed(
 //
 // `viewerId` is who the rows are for — the player reacting, or the player a
 // reaction is shown to — since a game may tell each player a row of their own
-// (IRecapAdapter.rowsPerViewer). Null is nobody in particular.
+// (IRecapAdapter.toEvents). Null is nobody in particular.
 export async function buildAllEvents(
     gameData: IGameData,
     userIdNameMap: { [key: string]: string },
