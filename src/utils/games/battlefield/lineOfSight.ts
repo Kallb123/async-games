@@ -3,11 +3,12 @@
 // nothing that blocks sight. Trees always do. Anything else does when it
 // stands a full height above both ends — a wall between two characters on the
 // ground, but not between a tower top and the ground beyond the wall. Low
-// cover and characters never do. The walk is exact integer arithmetic, so a
-// line comes out the same from either end and whether A sees B is always
-// whether B sees A.
+// cover and characters never do. A figure may look down the side of full
+// cover directly beside it: an angled line may leave through that first
+// square, but the same cover further away still blocks sight. The walk is
+// exact integer arithmetic, so it always chooses the same squares.
 
-import { coordsOf, towersOver, type Battlefield, type Square } from "./terrain";
+import { coordsOf, isNeighbour, towersOver, type Battlefield, type Square } from "./terrain";
 
 /** The squares a line between two squares' centres passes through, ends left out. */
 export interface SightLine {
@@ -58,5 +59,12 @@ export function sightLine(field: Battlefield, from: Square, to: Square): SightLi
 export function canSee(field: Battlefield, from: Square, to: Square): boolean {
     const blocks = (square: Square) => field.tiles[square].terrain.blocksSight || towersOver(field, square, from, to);
     const { crossed, grazed } = sightLine(field, from, to);
-    return !crossed.some(blocks) && !grazed.some(([one, other]) => blocks(one) && blocks(other));
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    const besideAtAnAngle = (square: Square) => {
+        if (!isNeighbour(field, from, square)) return false;
+        const cover = coordsOf(field, square);
+        return (cover.col - a.col) * (b.row - a.row) !== (cover.row - a.row) * (b.col - a.col);
+    };
+    return !crossed.some(square => blocks(square) && !besideAtAnAngle(square))
+        && !grazed.some(([one, other]) => blocks(one) && blocks(other));
 }
