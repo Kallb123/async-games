@@ -34,3 +34,10 @@ export function playerColourForId(userId: string | null | undefined, userIdList:
 export function playerChartSeries(players: string[], playerIds: string[]): GameResultChartSeries[] {
     return players.map((name, i) => ({ key: playerIds[i], name, color: playerColour(i) }));
 }
+
+// The players' series, then any a chart adds after them for someone who isn't
+// one (GameResultBarChart.extraSeries, GameResultTable.extraSeries): a stacked
+// bar's shares and a table's columns, in the order they're drawn.
+export function rosterChartSeries(players: string[], playerIds: string[], extra: GameResultChartSeries[] = []): GameResultChartSeries[] {
+    return [...playerChartSeries(players, playerIds), ...extra];
+}

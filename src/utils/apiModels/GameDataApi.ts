@@ -286,6 +286,10 @@ export interface GameResultBarChart {
     title: string;
     yLabel: string;
     bars: GameResultBarChartBucket[];
+    // Shares of a stacked bar that belong to no player, stacked above theirs
+    // in the colour each names — Realm Arena's enemy in co-op. Absent on a bar
+    // made only of players' shares, which is nearly all of them.
+    extraSeries?: GameResultChartSeries[];
 }
 
 // One row of a GameResultTable: what the row counts, and each player's count,
@@ -306,6 +310,10 @@ export interface GameResultTable {
     // The header over the row labels ("Resource").
     rowLabel: string;
     rows: GameResultTableRow[];
+    // Columns after the players', for what a row counts of someone who isn't
+    // one — Realm Arena's enemy in co-op, keyed as `values` are. Absent on a
+    // table of players alone.
+    extraSeries?: GameResultChartSeries[];
 }
 
 // Every shape a game's GAME_RESULT_STATS.charts entry can hand back: a

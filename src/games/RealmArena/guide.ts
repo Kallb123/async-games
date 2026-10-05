@@ -1,5 +1,5 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
-import { CHARACTERS, EFFECTS, ITEMS, THROW_RANGE } from "./characters";
+import { CHARACTERS, COOP_PLAYERS, EFFECTS, ITEMS, musterSize, POINTS_BUDGET, THROW_RANGE } from "./characters";
 import { RANK_XP } from "./mastery";
 import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE } from "./rules";
 
@@ -8,7 +8,9 @@ import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVE
 // a player's first match (see useGameIntro). Five sections, as
 // docs/games/realm-arena.md §17.3 PR 9 lists them: the goal and the muster
 // (and mastery's options, §23), a turn (and fog of war, §27), what AP buy (and the effects and
-// items, §20, §21), cover and flanking, and overwatch and guard.
+// items, §20, §21), cover and flanking, and overwatch and guard — and a sixth
+// for co-op against the computer (§29.9), which changes who is on whose side
+// but not how a turn is played.
 //
 // The options the goal names — an ability swapped, or the Mage's bolt — are
 // the rank-1 ones of characters.ts's OPTIONS: a new option of another kind
@@ -41,6 +43,10 @@ export const guide: GameGuide = {
         {
             heading: "Overwatch and guard",
             body: `When your turn ends, anyone with ${REACTION_COST} AP or more left goes on watch: overwatch for a bow or a bolt, guard for a blade. During the next player's turn they react to an enemy that moves where they can see — overwatch shoots, at −${OVERWATCH_PENALTY}%, and guard strikes anyone who steps next to them. Each reaction spends ${REACTION_COST} of the AP they kept, and a character reacts once to each move. Turn a character's switch off at End turn to keep them still instead. A Scout can sneak past without setting anyone off.`,
+        },
+        {
+            heading: "Co-op against the computer",
+            body: `If the host chose co-op, ${COOP_PLAYERS.min} or ${COOP_PLAYERS.max} of you fight as one team against warbands the game plays, one opposite each of you, on a battlefield with the team along one edge and the enemy along the other. Every squad musters ${POINTS_BUDGET[musterSize(COOP_PLAYERS.min, true)]} points. You still take your own turns, and straight after each one a warband takes its turn, by the same rules as yours. Teammates are allies: you share what you see in fog, heal and raise each other's characters, and nobody's overwatch fires at a teammate — but a fireball or a flask still hits whoever is under it. Each of you scores as usual, and the team wins if all your points added together beat the enemy's. Level on points, the side with more points' worth still standing wins, and if that's level too, the enemy holds the field. If the host chose a random enemy, you won't know whom you're fighting until one of its characters is seen.`,
         },
     ],
 };

@@ -5,13 +5,14 @@ import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
 import { FACTION_IDS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
 import { battlefieldById } from "./maps";
 import {
-    computeRealmArenaResultStats, coopInviteOf, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData,
+    computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
-import { battleRounds, ENEMY_SIDE, isWarband, readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
+import { battleRounds, ENEMY_SIDE, isWarband, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, type BattleEvent } from "./rules";
+import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
-    battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
+    battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
 } from "./testFixtures";
 
 // docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
@@ -469,5 +470,31 @@ describe("the battle record in co-op (§29.6)", () => {
         expect(stats.fighting).toBe(record!.fighting);
         const groups = formatRealmArenaResultStats(stats, new Map(Object.entries(NAMES)));
         expect(groups.map(group => group.username)).toEqual(["Alice", "Bob", "The enemy"]);
+
+        // The races are the team's line against the enemy's (§29.9), every
+        // character downed marked on its side's line.
+        const charts = formatRealmArenaCharts(stats);
+        const points = charts.find(chart => chart.title === "Points per round") as GameResultChart;
+        expect(points.series?.map(series => series.key)).toEqual([TEAM_SIDE, ENEMY_SIDE]);
+        const final = record!.pointsPerRound.at(-1)!;
+        expect(points.rounds.at(-1)).toEqual({ [TEAM_SIDE]: (final.get("a") ?? 0) + (final.get("b") ?? 0), [ENEMY_SIDE]: enemyScore });
+        expect(new Set(points.events?.map(event => event.seriesKey))).toEqual(new Set(record!.losses.map(loss => loss.seriesKey === ENEMY_SIDE ? ENEMY_SIDE : TEAM_SIDE)));
+        const health = charts.find(chart => chart.title === "Squad health per round") as GameResultChart;
+        expect(Object.keys(health.rounds[0])).toEqual([TEAM_SIDE, ENEMY_SIDE]);
+        // The damage and the table draw the enemy beside the players.
+        const damage = charts.find(chart => chart.kind === "bar") as GameResultBarChart;
+        expect(damage.extraSeries?.map(series => series.key)).toEqual([ENEMY_SIDE]);
+        const table = charts.find(chart => chart.kind === "table") as GameResultTable;
+        expect(table.extraSeries?.map(series => [series.key, series.name])).toEqual([[ENEMY_SIDE, "The enemy"]]);
+        expect(table.rows.every(row => ENEMY_SIDE in row.values)).toBe(true);
+    }, 60_000);
+
+    it("leaves a free-for-all's charts a line and a column a player", async () => {
+        seedRolls(11);
+        const game = await playScriptedBattle(false, ["a", "b"]);
+        const record = await recordBattle(game);
+        const charts = formatRealmArenaCharts(computeRealmArenaResultStats(game, record));
+        expect(charts).toHaveLength(4);
+        expect(charts.some(chart => ("series" in chart && chart.series) || ("extraSeries" in chart && chart.extraSeries))).toBe(false);
     }, 60_000);
 });

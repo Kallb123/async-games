@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES, CHARACTERS, FACTIONS, POINTS_BUDGET, squadPoints, type CharacterId, type PlayerCount } from "./characters";
+import { ABILITIES, CHARACTERS, enemyNameOf, FACTIONS, POINTS_BUDGET, squadPoints, UNKNOWN_ENEMY, type CharacterId, type PlayerCount } from "./characters";
 
 describe("the first faction's characters (§13.6)", () => {
     it("each have 5–12 HP and abilities that exist", () => {
@@ -26,5 +26,10 @@ describe("the factions (§29.3)", () => {
             expect(squadPoints(faction.readyMade[players])).toBe(POINTS_BUDGET[players]);
             expect(faction.readyMade[players].filter(character => !faction.characters.includes(character))).toEqual([]);
         });
+    });
+
+    it("name the enemy by its faction once it's known, and as the enemy until then", () => {
+        expect(enemyNameOf("realm")).toBe("the Renegades");
+        expect(enemyNameOf(undefined)).toBe(UNKNOWN_ENEMY);
     });
 });
