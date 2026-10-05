@@ -9,7 +9,8 @@ interface OptionSectionProps {
 }
 
 /**
- * The labelled card a setup screen puts its `OptionToggleRow`s in — the
+ * The labelled card a setup screen puts its `OptionToggleRow`s (or, via
+ * `OptionChoiceSection`, a radio group) in — the
  * "Expansions" / "House rules" block every game's New Game form shares.
  */
 export default function OptionSection({ label, children, footer }: OptionSectionProps) {

@@ -19,7 +19,8 @@ interface OptionChoiceSectionProps<T extends string> {
     label: string;
     /** Notes shown under the card but still inside the section, e.g. hints. */
     footer?: ReactNode;
-    value: T;
+    /** Undefined while nothing is chosen yet (a theme before its default arrives). */
+    value: T | undefined;
     choices: readonly OptionChoice<T>[];
     onChange: (id: T) => void;
     disabled?: boolean;
@@ -50,7 +51,7 @@ export default function OptionChoiceSection<T extends string>({
     disabled,
 }: OptionChoiceSectionProps<T>) {
     const rows = useRef<(HTMLButtonElement | null)[]>([]);
-    // A value that matches nothing (a theme not yet chosen) still needs a Tab stop.
+    // With nothing chosen yet the first row is the Tab stop.
     const tabStop = Math.max(choices.findIndex(choice => choice.id === value), 0);
 
     const handleKeyDown = (index: number) => (e: KeyboardEvent<HTMLButtonElement>) => {

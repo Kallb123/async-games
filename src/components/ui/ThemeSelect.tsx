@@ -33,8 +33,7 @@ export default function ThemeSelect({ gameUrl, value, onChange }: ThemeSelectPro
                     and the numbers are identical either way.
                 </p>
             }
-            // Nothing is chosen until the setup screen's default arrives.
-            value={value ?? ""}
+            value={value}
             onChange={onChange}
             choices={themes.map(theme => ({
                 id: theme.id,
