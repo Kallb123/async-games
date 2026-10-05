@@ -335,14 +335,12 @@ registerReplayAdapter({
     // muster is checked against the ranks it was checked against then, and
     // whether it's fought in fog of war likewise (§27), and in co-op whom
     // against (§29.3) — Random was drawn once, and stored as what it drew,
-    // and hidden as it was until it's seen again.
-    buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(
-        gameData.gameState.turnOrder,
-        (gameData as IRealmArenaGameData).specificGameState.mastery ?? {},
-        (gameData as IRealmArenaGameData).specificGameState.fog === true,
-        (gameData as IRealmArenaGameData).specificGameState.coop?.enemy,
-        (gameData as IRealmArenaGameData).specificGameState.coop?.random === true,
-    ),
+    // and hidden as it was until it's seen again — and the mission (§30.3),
+    // since Hold Out's waves are a rule a replay has to bring as it did.
+    buildInitialSpecificGameState: (gameData) => {
+        const gs = (gameData as IRealmArenaGameData).specificGameState;
+        return buildInitialRealmArenaState(gameData.gameState.turnOrder, gs.mastery ?? {}, gs.fog === true, gs.coop?.enemy, gs.coop?.random === true, gs.coop?.mission);
+    },
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad
     // and nobody else's, and a null viewer's carries none at all.

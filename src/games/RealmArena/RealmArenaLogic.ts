@@ -27,6 +27,7 @@ import {
     isStanding,
     isWarband,
     landedSmoke,
+    lastWaveRound,
     musterRefusal,
     newFighter,
     pickOf,
@@ -45,6 +46,7 @@ import {
     storedFighter,
     warbandOwner,
     warbandsFor,
+    waveArrives,
     type Action,
     type BattleEvent,
     type BattleState,
@@ -524,7 +526,8 @@ export function rememberFogSightings(gs: IRealmArenaSpecificGameState, events: r
         const path = moved.get(event.fighter) ?? [];
         moved.set(event.fighter, [...path, ...event.path.slice(path.at(-1) === event.path[0] ? 1 : 0)]);
     }
-    const viewers = gs.coop ? [...gs.seats, ...warbandsFor(gs.seats)] : gs.seats;
+    // Only Hold Out's warbands hunt by what they remember (§30.3), so only they keep it.
+    const viewers = gs.coop?.mission === "holdOut" ? [...gs.seats, ...warbandsFor(gs.seats)] : gs.seats;
     gs.sightings = Object.fromEntries(viewers.map(viewer => {
         const seen = squadSight(battle, viewer);
         const remembered = new Map((gs.sightings?.[viewer] ?? []).map(ghost => [ghost.id, ghost]));
@@ -730,12 +733,9 @@ export class RealmArenaGameType implements IGameType {
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
     if (coop.mission === "holdOut") {
-        const standing = sidesStanding(battle);
-        const won = standing.includes(TEAM_SIDE) && (gs.roundsPlayed >= battleRounds(gs.seats.length)
-            || (gs.roundsPlayed >= 12 && !standing.includes(ENEMY_SIDE)));
-        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, won
-            ? `held out for all ${battleRounds(gs.seats.length)} rounds`
-            : `overrun in round ${Math.min(gs.roundsPlayed + 1, battleRounds(gs.seats.length))}`);
+        // Only ever asked once the battle is over, which in Hold Out is when it has an ending.
+        const { won, detail } = holdOutEnding(gs)!;
+        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
         return;
     }
     const warbands = warbandsFor(gs.seats);
@@ -752,14 +752,25 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
     endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
 }
 
-/** Hold Out continues through a wiped-out enemy, until time expires or the team falls. */
+/** Whether the battle is over (§5.1). Hold Out goes on through an enemy wiped out between waves (§30.3). */
 function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
-    const battle = battleOf(gs);
-    if (gs.coop?.mission !== "holdOut") return isBattleOver(battle, gs.seats, gs.roundsPlayed);
-    const standing = sidesStanding(battle);
-    const finalWaveLanded = gs.roundsPlayed >= 12;
-    return gs.roundsPlayed >= battleRounds(gs.seats.length) || !standing.includes(TEAM_SIDE)
-        || (finalWaveLanded && !standing.includes(ENEMY_SIDE));
+    if (gs.coop?.mission !== "holdOut") return isBattleOver(battleOf(gs), gs.seats, gs.roundsPlayed);
+    return holdOutEnding(gs) !== undefined;
+}
+
+/**
+ * How a battle of Hold Out has ended, if it has (§30.3): lost the moment
+ * nobody of the team is standing; won once the last round is played, or once
+ * the last wave has landed and nobody of the enemy is standing.
+ */
+function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail: string } | undefined {
+    const rounds = battleRounds(gs.seats.length);
+    const standing = sidesStanding(battleOf(gs));
+    const round = Math.min(gs.roundsPlayed + 1, rounds);
+    if (!standing.includes(TEAM_SIDE)) return { won: false, detail: `overrun in round ${round}` };
+    if (gs.roundsPlayed >= rounds) return { won: true, detail: `held out for all ${rounds} rounds` };
+    if (round >= lastWaveRound(rounds) && !standing.includes(ENEMY_SIDE)) return { won: true, detail: `beat the last wave in round ${round}` };
+    return undefined;
 }
 
 /** The reinforcements one warband can place in its deployment zone this wave. */
@@ -785,7 +796,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string): Fighter
 
 function landWave(data: IRealmArenaGameData): void {
     const gs = data.specificGameState;
-    if (gs.coop?.mission !== "holdOut" || gs.roundsPlayed < 3 || gs.roundsPlayed % 3 !== 0) return;
+    if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRounds(gs.seats.length))) return;
     for (const owner of warbandsFor(gs.seats)) {
         const fresh = waveOf(gs, owner);
         if (fresh.length === 0) continue;
@@ -793,8 +804,7 @@ function landWave(data: IRealmArenaGameData): void {
     }
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
-    const foe = enemyKnown(gs.coop) ? enemyNameOf(gs.coop.enemy) : "enemy";
-    data.gameState.history.unshift({ text: `A fresh wave of the ${foe} arrives` });
+    data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined)} arrives` });
     noteSighting(gs);
 }
 

@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { enemyNameOf, musterSize } from "@/games/RealmArena/characters";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, nextWaveRound, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -283,7 +283,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         : standingLine(fighters.filter(fighter => fighter.owner === userId), fogged && userId !== myUserId);
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
-    const nextWave = gs?.mission === 'holdOut' ? gs.round + (3 - ((gs.round - 1) % 3)) : undefined;
+    const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
+    // In Hold Out the enemy's line also says when its next wave comes (§30.3).
+    const nextWave = gs?.mission === 'holdOut' ? nextWaveRound(gs.round, gs.battleRounds) : undefined;
+    const waveLine = nextWave === undefined ? 'final wave landed' : `next wave ${nextWave}`;
     // In co-op the strip is the team's total against the enemy's (§29.9), each
     // player's share under the team's, and how each one stands once it's opened.
     const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? [
@@ -300,9 +303,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             id: ENEMY_SIDE,
             name: capitalise(enemyName),
             color: ENEMY_COLOUR,
-            sub: mustering ? 'musters last' : gs.mission === 'holdOut'
-                ? `${standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged)} · ${nextWave && nextWave <= gs.battleRounds ? `next wave ${nextWave}` : 'final wave landed'}`
-                : standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged),
+            sub: mustering ? 'musters last' : gs.mission === 'holdOut' ? `${enemyStanding} · ${waveLine}` : enemyStanding,
             score: sideScore(battle, scores, ENEMY_SIDE),
         },
     ] : seatOrder.map(userId => ({

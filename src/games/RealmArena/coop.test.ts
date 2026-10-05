@@ -9,7 +9,9 @@ import {
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { RealmArenaGameType, waveOf, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
-import { battleRounds, ENEMY_SIDE, isWarband, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, type BattleEvent } from "./rules";
+import {
+    battleRounds, ENEMY_SIDE, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, type BattleEvent,
+} from "./rules";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
     battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
@@ -78,8 +80,8 @@ function enemyWon(game: RealmArenaTestGame): boolean {
  * timing each player's turn — the warband's turn that follows is nearly all
  * of it.
  */
-async function coopBattle(players: string[], enemy: FactionId, fog = false): Promise<{ game: RealmArenaTestGame; times: number[] }> {
-    const game = makeGame(players, {}, fog, enemy);
+async function coopBattle(players: string[], enemy: FactionId, fog = false, mission?: "holdOut"): Promise<{ game: RealmArenaTestGame; times: number[] }> {
+    const game = makeGame(players, {}, fog, enemy, false, mission);
     await musterAll(game);
     const times: number[] = [];
     for (let turn = 0; !game.complete; turn++) {
@@ -149,13 +151,55 @@ describe("Hold Out (§30.3)", () => {
         expect(game).toMatchObject({ endReason: "teamwin", endDetail: "held out for all 15 rounds" });
     });
 
-    it("ends when the final wave has been defeated", async () => {
+    it("comes every third round from round four, and not after the last", () => {
+        const rounds = (length: number) => Array.from({ length }, (_, k) => k + 1).filter(round => waveArrives(round, length));
+        expect(rounds(15)).toEqual([4, 7, 10, 13]);
+        expect(rounds(13)).toEqual([4, 7, 10, 13]);
+        expect([lastWaveRound(15), lastWaveRound(13), lastWaveRound(12)]).toEqual([13, 13, 10]);
+        expect([1, 3, 4, 12, 13, 15].map(round => nextWaveRound(round, 15))).toEqual([4, 4, 7, 13, undefined, undefined]);
+    });
+
+    it("lands no wave once the last round has been played", async () => {
         const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
         await musterAll(game);
-        game.specificGameState.roundsPlayed = 12;
+        game.specificGameState.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
+        game.specificGameState.roundsPlayed = battleRounds(2) - 1;
+        const fighters = game.specificGameState.fighters.length;
+        await play(game, endTurnBy("a"));
+        await play(game, endTurnBy("b"));
+        expect(game).toMatchObject({ complete: true, endReason: "teamwin", endDetail: "held out for all 15 rounds" });
+        expect(game.specificGameState.fighters).toHaveLength(fighters);
+        expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(false);
+    });
+
+    it("is told with the enemy named once, even when no warband finds room", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
+        const gs = game.specificGameState;
+        const field = battlefieldById(gs.map);
+        const template = gs.fighters.find(fighter => fighter.owner === "a")!;
+        gs.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+        gs.fighters.push(...warbandsOf(game).flatMap((_, k) => field.deployments[2 + k]).map((square, index) => ({
+            ...template, id: 10_000 + index, square,
+        })));
+        gs.roundsPlayed = 2;
+        await play(game, endTurnBy("a"));
+        await play(game, endTurnBy("b"));
+        expect(game.complete).toBe(false);
+        expect(gs.fighters.some(fighter => isWarband(fighter.owner) && fighter.hp > 0)).toBe(false);
+        expect(game.gameState.history.filter(entry => entry.text.includes("fresh wave")).map(entry => entry.text))
+            .toEqual([`A fresh wave of ${REALM.enemyName} arrives`]);
+    });
+
+    it("goes on through an enemy wiped out before the last wave, and ends when the last is beaten", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+        game.specificGameState.roundsPlayed = 11;
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(false);
+        game.specificGameState.roundsPlayed = 12;
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
-        expect(game.endReason).toBe("teamwin");
+        expect(game).toMatchObject({ endReason: "teamwin", endDetail: "beat the last wave in round 13" });
     });
 
     it("loses immediately when the whole team is down", async () => {
@@ -410,6 +454,43 @@ describe("the computer in whole battles (§29.11)", () => {
         }
         expect(won).toBeGreaterThanOrEqual(19);
     }, 120_000);
+
+    it("never breaks in Hold Out: both co-op battlefields, with and without fog, to an ending it words", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        let seed = 500;
+        for (const players of TEAMS) {
+            for (const fog of [false, true]) {
+                seedRolls(seed++);
+                const { game } = await coopBattle(players, "realm", fog, "holdOut");
+                expect(game.complete).toBe(true);
+                expect(["teamwin", "teamloss"]).toContain(game.endReason);
+                expect(game.endDetail).toMatch(game.endReason === "teamwin"
+                    ? /^(held out for all \d+ rounds|beat the last wave in round \d+)$/
+                    : /^overrun in round \d+$/);
+            }
+        }
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+    }, 120_000);
+
+    it("replays a battle of Hold Out, waves and all, to the same end without asking the planner", async () => {
+        seedRolls(11);
+        const { game } = await coopBattle(["a", "b"], "realm", true, "holdOut");
+        vi.restoreAllMocks();
+        planner.broken = true;
+        planner.calls = 0;
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        for (const viewer of [null, "a", "b"]) {
+            const timeline = await buildTimeline(game, { a: "Alice", b: "Bob" }, [], undefined, viewer);
+            const last = timeline.snapshots[timeline.currentIndex];
+            expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, viewer, lastId, true));
+            expect(last.complete).toBe(true);
+        }
+        expect(planner.calls).toBe(0);
+        // The battle it replayed lasted long enough for a wave to land.
+        expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(true);
+    }, 60_000);
 
     it("replays a recorded battle to the same end without asking the planner", async () => {
         seedRolls(7);

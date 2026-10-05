@@ -33,6 +33,12 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
   { id: RANDOM_ENEMY, label: 'Random', description: 'Drawn as the battle begins, and unknown until one of its characters is seen.' },
 ];
 
+// What a co-op team sets out to do (§30.3): the keep's points race, or surviving the waves.
+const MISSION_CHOICES: OptionChoice<Mission>[] = [
+  { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
+  { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
+];
+
 // docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
 // (§17.4 B2), so the choices are who, how fast, whether the battle is fought
 // in fog of war (§27), and whether it's a free-for-all or the players
@@ -92,15 +98,7 @@ function NewGameRealmArenaForm() {
         <OptionChoiceSection label="Enemy" value={enemy} onChange={setEnemy} choices={ENEMY_CHOICES} />
       )}
       {coop && (
-        <OptionChoiceSection
-          label="Mission"
-          value={mission}
-          onChange={setMission}
-          choices={[
-            { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
-            { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
-          ]}
-        />
+        <OptionChoiceSection label="Mission" value={mission} onChange={setMission} choices={MISSION_CHOICES} />
       )}
       <UserInviteList userList={userList} setItem={setItem} />
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />

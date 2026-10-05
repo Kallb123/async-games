@@ -109,6 +109,11 @@ function planFor(view: BattleState, owner: string, round: number, hunt?: readonl
     // planner asks from working that out again. It adds nothing it didn't see.
     const { fog: _fog, ...state } = view;
     const { field } = state;
+    // In Hold Out (`hunt` given) the Objective is the team rather than the
+    // keep (§30.3): the enemies it sees, else where it last saw them, else
+    // the keep after all. It keeps the keep's urgency, so a warband closes
+    // in gently in the first rounds and in earnest from round
+    // CENTRE_SCORES_FROM_ROUND on (`standingTerms`).
     const seenEnemies = state.fighters.filter(fighter => isStanding(fighter) && !allied(state, fighter.owner, owner));
     const hunted = hunt === undefined ? [] : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square) : hunt.map(ghost => ghost.square);
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
