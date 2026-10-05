@@ -36,9 +36,9 @@ import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, isStanding,
     moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, watchedSquares, weaponOf, weaponReaches,
-    type Action, type BattleEvent, type BattleState, type Fighter,
+    type Action, type BattleEvent, type BattleState, type Fighter, type ShotOdds,
 } from "./rules";
-import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, standingAt, targetsOf, type ActionKind, type TargetKind } from "./tactics";
+import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, standingAt, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
 /**
  * What each term of a battle's score is worth (§29.7): the same for every
@@ -162,26 +162,31 @@ function optionsFor(plan: Plan, fighter: Fighter): Action[] {
     return (Object.keys(ACTION_AIMS) as ActionKind[]).flatMap((kind): Action[] => {
         if (Object.hasOwn(ABILITIES, kind) && !abilitiesOf(fighter).includes(kind as AbilityId)) return [];
         const aim = ACTION_AIMS[kind];
-        const allowed = (actions: Action[]) => actions.filter(action => !("refused" in check(state, owner, action)));
+        const target = targetKindOf(kind);
         switch (aim.at) {
             case "path":
                 return movesFor(plan, fighter, kind as "move" | "sneak");
             case "self":
-                return allowed([{ kind, fighter: fighter.id } as Action]);
+                return allowed(plan, [{ kind, fighter: fighter.id } as Action]);
             case "enemy":
             case "ally":
-                return targetsOf(state, owner, fighter, kind as TargetKind).map(target => ({ kind, fighter: fighter.id, target }) as Action);
+                return target ? targetsOf(state, owner, fighter, target).map(id => ({ kind, fighter: fighter.id, target: id }) as Action) : [];
             case "enemies":
-                return allowed(groupsOf(targetsOf(state, owner, fighter, aim.each), aim.count)
+                return allowed(plan, groupsOf(target ? targetsOf(state, owner, fighter, target) : [], aim.count)
                     .map(targets => ({ kind, fighter: fighter.id, targets }) as Action));
             case "square": {
                 // Somewhere it would land on someone: a blast on empty ground does nothing a stop doesn't.
                 const someone = new Set(state.fighters.filter(isStanding).map(one => one.square));
                 const squares = [...rangeSquares(state, fighter, aim.range)].filter(at => areaAround(state.field, at).some(square => someone.has(square)));
-                return allowed(squares.map(at => ({ kind, fighter: fighter.id, at }) as Action));
+                return allowed(plan, squares.map(at => ({ kind, fighter: fighter.id, at }) as Action));
             }
         }
     });
+}
+
+/** The actions `check` allows. */
+function allowed({ state, owner }: Plan, actions: Action[]): Action[] {
+    return actions.filter(action => !("refused" in check(state, owner, action)));
 }
 
 /** Every way to pick `count` of a list, in order. */
@@ -201,7 +206,7 @@ function groupsOf<T>(list: readonly T[], count: number): T[][] {
  * in.
  */
 function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[] {
-    const { state, owner } = plan;
+    const { state } = plan;
     const sneaking = kind === "sneak";
     const reach = reachOf(state, fighter, sneaking);
     // A sneak sets nothing off, so has no way round to look for.
@@ -216,19 +221,16 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
     });
     ranked.sort((a, b) => b.value - a.value || a.square - b.square);
     const moves: Action[] = [];
-    const allowed = (path: Square[] | undefined): Action[] => {
-        const move: Action | undefined = path && { kind, fighter: fighter.id, path };
-        return move && !("refused" in check(state, owner, move)) ? [move] : [];
-    };
-    for (let i = 0, squares = 0; i < ranked.length && squares < MOVES_PLAYED_OUT; i++) {
-        const { square } = ranked[i];
-        const cheapest = allowed(pathTo(reach, square)?.squares);
-        if (cheapest.length === 0) continue;
+    const along = (path: Square[] | undefined): Action[] => path ? allowed(plan, [{ kind, fighter: fighter.id, path }]) : [];
+    let squares = 0;
+    for (const { square } of ranked) {
+        if (squares === MOVES_PLAYED_OUT) break;
+        const cheapest = pathTo(reach, square)?.squares;
+        const sent = along(cheapest);
+        if (sent.length === 0) continue;
         squares++;
-        moves.push(...cheapest);
-        if (covered && cheapest[0].kind === kind && "path" in cheapest[0] && cheapest[0].path.some(step => watched.has(step))) {
-            moves.push(...allowed(pathTo(covered, square)?.squares));
-        }
+        moves.push(...sent);
+        if (covered && cheapest?.some(step => watched.has(step))) moves.push(...along(pathTo(covered, square)?.squares));
     }
     return moves.sort((a, b) => lastSquare(a) - lastSquare(b));
 }
@@ -258,9 +260,7 @@ function judge(plan: Plan, action: Action): number {
     const mover = fighterById(state, action.fighter);
     if (!mover) return value;
     for (const reaction of reactionPreviews(state, mover, action.path)) {
-        if (reaction.kind !== "overwatch" || !reaction.odds) continue;
-        const { chance, grazeChance, damage, grazeDamage } = reaction.odds;
-        value -= WEIGHTS.strength * worthOf(mover, (chance * Math.min(damage, mover.hp) + grazeChance * Math.min(grazeDamage, mover.hp)) / ROLL_SIDES);
+        if (reaction.kind === "overwatch" && reaction.odds) value -= WEIGHTS.strength * worthOf(mover, expectedDamage(reaction.odds, mover.hp));
     }
     return value;
 }
@@ -343,7 +343,12 @@ function expectedHarm(battle: BattleState, attacker: Fighter, target: Fighter): 
     if (weapon.kind === "melee") return weaponReaches(battle, attacker, target.square) ? worthOf(target, Math.min(weapon.damage, target.hp)) : 0;
     const odds = shotOdds(battle, attacker, target);
     if (!odds) return 0;
-    return worthOf(target, (odds.chance * Math.min(odds.damage, target.hp) + odds.grazeChance * Math.min(odds.grazeDamage, target.hp)) / ROLL_SIDES);
+    return worthOf(target, expectedDamage(odds, target.hp));
+}
+
+/** The damage a shot could be expected to do a character with `hp` left, by its odds: never more than it has. */
+function expectedDamage({ chance, grazeChance, damage, grazeDamage }: ShotOdds, hp: number): number {
+    return (chance * Math.min(damage, hp) + grazeChance * Math.min(grazeDamage, hp)) / ROLL_SIDES;
 }
 
 /** What `hp` of a character is worth, in points: its cost, a share for each HP. */

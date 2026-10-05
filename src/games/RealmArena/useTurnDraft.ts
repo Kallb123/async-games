@@ -4,7 +4,7 @@ import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, type Ability } from "./characters";
 import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
-import { ACTION_AIMS, attackOptions, hitChance, rangeSquares, reactionPreviews, shotOf, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./tactics";
+import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
@@ -25,18 +25,6 @@ export interface Draft {
 }
 
 export const MOVE: Draft = { aim: "move", square: null, targets: [] };
-
-/** The `check` kind that says who a tap can line an aim up on: its own, or — for a cleave — each of its targets'. */
-function targetKindOf(aim: Aim): TargetKind | undefined {
-    const at = ACTION_AIMS[aim];
-    return at.at === "enemies" ? at.each : at.at === "enemy" || at.at === "ally" ? aim as TargetKind : undefined;
-}
-
-/** What an aim's range is read from, for the shading of where it could land. */
-function rangeKindOf(aim: Aim): RangeKind | undefined {
-    const at = ACTION_AIMS[aim];
-    return "range" in at ? at.range : undefined;
-}
 
 /** One character the armed aim could be lined up on, and its chance to land on an enemy. */
 export interface TargetOption {

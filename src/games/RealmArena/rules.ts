@@ -342,7 +342,8 @@ export function moveAp(fighter: Fighter, cost: number, sneaking = false): number
 export function reachOf(state: BattleState, fighter: Fighter, sneaking = false, avoiding: ReadonlySet<Square> = new Set()): Reach {
     const allowances = sneaking ? Math.floor(fighter.ap / ABILITIES.sneak.ap) : fighter.ap;
     const rules = moveRules(state, fighter);
-    const blocked = avoiding.size === 0 ? rules.blocked : new Set([...rules.blocked, ...[...avoiding].filter(square => square !== fighter.square)]);
+    const blocked = new Set(rules.blocked);
+    for (const square of avoiding) if (square !== fighter.square) blocked.add(square);
     return reachFrom(state.field, fighter.square, allowances * movementOf(fighter), { ...rules, blocked });
 }
 

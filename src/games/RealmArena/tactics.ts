@@ -78,6 +78,19 @@ export function shotOf(kind: ActionKind): Exclude<ShotKind, "overwatch"> | undef
     return aim.at === "enemy" ? aim.shot : undefined;
 }
 
+/** The `check` kind that says who an action can be aimed at: its own, or — for a cleave — each of its targets'. Undefined for one not aimed at a character. */
+export function targetKindOf(kind: ActionKind): TargetKind | undefined {
+    const aim = ACTION_AIMS[kind];
+    // Every kind aimed at one enemy or ally is a `TargetKind`, by the table above.
+    return aim.at === "enemies" ? aim.each : aim.at === "enemy" || aim.at === "ally" ? kind as TargetKind : undefined;
+}
+
+/** What a kind of action's range is read from, for where it could land: undefined for a move or one that goes at once. */
+export function rangeKindOf(kind: ActionKind): RangeKind | undefined {
+    const aim = ACTION_AIMS[kind];
+    return "range" in aim ? aim.range : undefined;
+}
+
 /**
  * An aimed action's range from where a character stands: every square it
  * could be lined up on, were someone there to aim at. A weapon, a
