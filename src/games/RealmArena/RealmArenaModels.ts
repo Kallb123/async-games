@@ -306,12 +306,13 @@ export interface RealmArenaSettings {
     fog?: boolean;
     /** The battle's size (§30.5). */
     size?: StoredBattleSize;
-    /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3) and the difficulty (§30.5). */
+    /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3), the difficulty (§30.5) and the battlefield picked for Hold Out (§30.9). */
     coop?: CoopSettings;
 }
 
 /**
- * The battle before anyone has mustered: the map for the party's size, no
+ * The battle before anyone has mustered: the map for the party's size (or
+ * the Sacked Fort, if the host picked it for Hold Out, §30.9), no
  * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
  * battle was created, with what the host chose (`settings`): fog of war
  * (§27), the battle's size (§30.5), and co-op against `enemy`'s warbands

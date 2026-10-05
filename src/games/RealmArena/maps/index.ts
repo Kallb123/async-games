@@ -56,6 +56,9 @@ export const DEPLOYMENT_NAMES: Readonly<Record<RealmArenaMapId, readonly string[
 export const COOP_MAPS = ["sackedFort"] as const;
 export type CoopMap = typeof COOP_MAPS[number];
 
+/** The Sacked Fort for each size of team it's built for. */
+const SACKED_FORT_FOR: Readonly<Record<number, RealmArenaMapId>> = { 2: "sackedFortTwo", 3: "sackedFortThree" };
+
 /** The map a party of this size fights on (§19.1): the Ruined Fort for two, the Ring Fort for three, the Four-Gate Fort for four. */
 export function mapForPlayers(playerCount: number): RealmArenaMapId {
     return playerCount <= 2 ? "ruinedFort" : playerCount === 3 ? "ringFort" : "fourGateFort";
@@ -70,7 +73,8 @@ export function mapForPlayers(playerCount: number): RealmArenaMapId {
  */
 export function mapFor(playerCount: number, coop: boolean, map?: CoopMap): RealmArenaMapId {
     if (!coop) return mapForPlayers(playerCount);
-    if (map === "sackedFort" && (playerCount === 2 || playerCount === 3)) return playerCount === 2 ? "sackedFortTwo" : "sackedFortThree";
+    const sacked = map === "sackedFort" ? SACKED_FORT_FOR[playerCount] : undefined;
+    if (sacked) return sacked;
     return playerCount <= 1 ? "ruinedFort" : playerCount === 2 ? "twinGateFort" : "threeGateFort";
 }
 

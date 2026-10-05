@@ -2167,6 +2167,9 @@ has a battlefield for each size of team.
 | **Three-Gate Fort** | 3 | 64 × 48 | about 21 × 3 each | 24 | 128 |
 | Four-Gate Fort (free-for-all, for comparison) | — | 48 × 48 | 8 × 8 each | 16 | 144 |
 
+Hold Out has a battlefield of its own as well, the Sacked Fort, with the
+team in the middle and the warbands round the edges (§30.9).
+
 - **The fort** is the Ruined Fort's, stretched: a curtain wall across the
   middle of the map with a gate facing each zone on each side, a tower between
   each pair of gates and at each end, rubble breaches beside the towers, and

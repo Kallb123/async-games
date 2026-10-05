@@ -61,7 +61,7 @@ const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
 ];
 
 // docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
-// (§17.4 B2), so the choices are who, how fast, whether the battle is fought
+// (§17.4 B2) — but for Hold Out's own battlefield (§30.9) — so the choices are who, how fast, whether the battle is fought
 // in fog of war (§27), and whether it's a free-for-all or the players
 // together against the computer (§29.9) — and, in co-op, whom they fight,
 // and in Hold Out on which battlefield (§30.9) —
