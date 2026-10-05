@@ -19,7 +19,13 @@ import { globSync } from 'node:fs';
 //
 // Raised again from 960,000 when the muster's unit and item stats card (and
 // its stats tables) took Realm Arena's board route to 941 KB.
-const limits = { routeJavaScript: 975_000, largestImage: 5_250_000 };
+//
+// Raised again from 975,000 when co-op against the computer (the enemy's turn
+// in the End turn, the team's ending, the hidden enemy) took Realm Arena's
+// board route to 960 KB: the board reads the battle with the same rules
+// module the server does, so the co-op rules ride along. Left room for the
+// co-op screens still to come (docs/games/realm-arena.md §29.10, PR 5).
+const limits = { routeJavaScript: 1_000_000, largestImage: 5_250_000 };
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;

@@ -4,17 +4,17 @@ import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
 import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
-import { pluralize } from "@/utils/ui/text";
+import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
-import { battleOf, toldTo } from "./RealmArenaLogic";
+import { battleOf, enemyHidden, toldTo, UNKNOWN_ENEMY } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { CHARACTERS, FACTION_IDS, factionById, isFactionId, musterSize, POINTS_BUDGET, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { battleRounds, pickOf, storedFighter, viewOf, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, viewOf, warbandOwner, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -40,6 +40,22 @@ export interface IRealmArenaCoop {
     enemy: FactionId;
     /** Which warband takes the enemy's next turn, counting from 0 (§29.4). */
     nextWarband: number;
+    /**
+     * The host chose Random (§29.3): the team musters not knowing whom it
+     * will face, and the faction stays hidden — off the wire and unnamed in
+     * the log — until `enemySeen`. Written once, as the battle is created, so
+     * a replay rebuilds it; absent when the host picked the faction, which
+     * the team knows from the start.
+     */
+    random?: true;
+    /**
+     * A random enemy has been seen (§29.3): set by the first command that put
+     * one of its characters in the team's view — the last muster without fog,
+     * otherwise an action, an End turn or the enemy's own turn — and never
+     * unset. An action that shows an enemy can't be undone (§27.1), so undo
+     * never takes it back.
+     */
+    enemySeen?: true;
 }
 
 /** One player's sealed squad, as they mustered it. */
@@ -190,7 +206,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // came out as (§29.3): a replay rebuilds the same enemy, and no client
     // chooses it.
     const enemy = coop && (coop.enemy === RANDOM_ENEMY ? FACTION_IDS[randomInt(FACTION_IDS.length)] : coop.enemy);
-    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy);
+    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy, coop?.enemy === RANDOM_ENEMY);
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
@@ -238,12 +254,13 @@ export var RealmArenaInvitationModel =
  * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
  * battle was created, in fog of war if the host chose it (§27), and in co-op
  * against `enemy`'s warbands if the host chose that (§29), with the first
- * warband to take the enemy's first turn. A pure function of those four, all
+ * warband to take the enemy's first turn — kept hidden until it's seen if it
+ * was drawn at `random` (§29.3). A pure function of those, all
  * persisted, so replay rebuilds it rather than persisting a snapshot of the
  * state (§17.1, §23.3). Throws for a party the map has no deployment zone for
  * — in co-op, a zone for each player and one for each warband.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false): IRealmArenaSpecificGameState {
     const coop = enemy !== undefined;
     const map = mapFor(turnOrder.length, coop);
     const field = battlefieldById(map);
@@ -256,7 +273,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         seats: [...turnOrder],
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
-        ...(coop ? { coop: { enemy, nextWarband: 0 } } : {}),
+        ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}) } } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -374,9 +391,11 @@ export function gameStateToModel(
         battleRounds: rounds,
         budget: POINTS_BUDGET[musterSize(seats.length, gs.coop !== undefined)],
         fog: gs.fog === true,
-        // Whom the team fights stays off the wire for now: a random enemy is
-        // kept hidden until it's seen (§29.3), which comes with PR 4b.
         coop: gs.coop !== undefined,
+        // A random enemy stays off the wire until it's seen (§29.3), and the
+        // fog lifts as the battle ends, the faction with it. Never a view with
+        // one of its characters in it and not the faction: that's a sighting.
+        ...(gs.coop && (!enemyHidden(gs.coop) || complete || view.fighters.some(fighter => isWarband(fighter.owner))) ? { enemy: gs.coop.enemy } : {}),
         fighters: view.fighters.map(storedFighter),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
@@ -426,7 +445,7 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
     const events = (outcome as { events?: unknown } | null)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
     const battle = battleOf(gs, complete);
-    const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId) : events as BattleEvent[];
+    const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId, enemyHidden(gs.coop)) : events as BattleEvent[];
     return {
         events: told.map((event): ToldEvent => {
             if (event.kind !== "shot") return event;
@@ -482,7 +501,10 @@ export const realmArenaGameResultStatsSchemaDef = {
  */
 function recordEndsWhereBattleDid(gs: IRealmArenaSpecificGameState, record: BattleRecord): boolean {
     const final = record.pointsPerRound.at(-1);
-    return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0));
+    // In co-op the enemy's column too, its warbands added together (§29.6).
+    const enemy = gs.seats.reduce((sum, _, k) => sum + (gs.scores[warbandOwner(k)] ?? 0), 0);
+    return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0))
+        && (!gs.coop || final.get(ENEMY_SIDE) === enemy);
 }
 
 /**
@@ -531,10 +553,11 @@ function squadRecords(stats: IRealmArenaGameResultStats): Map<string, SquadRecor
 }
 
 /**
- * One group a player: their score and where it came from, who they downed and
- * lost, the damage they dealt and the HP they healed, the character that did
- * the most of it (§28), then the XP each character they fought with earned in
- * this battle (§23.3). A result without the record has the XP alone.
+ * One group a player, and in co-op one for the enemy: their score and where
+ * it came from, who they downed and lost, the damage they dealt and the HP
+ * they healed, the character that did the most of it (§28), then the XP each
+ * character they fought with earned in this battle (§23.3). A result without
+ * the record has the XP alone.
  */
 export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
     const groups = new Map<string, string[]>();
@@ -558,7 +581,8 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         const { attacks, abilities, items } = row;
         linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
-    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? userId, lines }));
+    // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
+    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? capitalise(UNKNOWN_ENEMY) : userId), lines }));
 }
 
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */

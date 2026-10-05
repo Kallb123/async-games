@@ -9,7 +9,7 @@ import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed, IGameEvent } from '@/utils/games/recap';
 import { IReactionSummary } from '@/utils/reactions';
 import { metaForGame } from '@/utils/ui/games';
-import { playerColour } from '@/utils/ui/playerColours';
+import { playerColourForId } from '@/utils/ui/playerColours';
 
 export interface IGetRecapParams {
     gameid: string;
@@ -114,7 +114,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
         const reactionsByEventId = await reactionMapBy(gameid, 'eventId', feed.events.map((e) => e.id));
         const events: IRecapEventResponse[] = feed.events.map((event) => ({
             ...event,
-            dotColour: playerColour(gameData.userIdList.indexOf(event.actorId)),
+            // Neutral for a row nobody seated did: Realm Arena's enemy (§29.9).
+            dotColour: playerColourForId(event.actorId, gameData.userIdList),
             affectsMe: event.affectedIds?.includes(userId) ?? false,
             reactions: reactionsByEventId.get(event.id) ?? [],
         }));

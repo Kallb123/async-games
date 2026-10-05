@@ -6,7 +6,7 @@ import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
-import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
+import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
 import { ABILITIES, CHARACTERS, EFFECTS, factionById, ITEMS, musterSize, POINTS_BUDGET, REALM } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
@@ -19,6 +19,7 @@ import {
     blastedIn,
     check,
     endTurn,
+    ENEMY_SIDE,
     fighterById,
     isBattleOver,
     isStanding,
@@ -30,9 +31,12 @@ import {
     readyMadeMuster,
     ROLL_SIDES,
     squadSight,
+    sideScore,
     squadsStanding,
+    standingPoints,
     standings,
     startTurn,
+    TEAM_SIDE,
     viewOf,
     storedFighter,
     warbandOwner,
@@ -46,7 +50,8 @@ import {
 import { nextAction } from "@/games/RealmArena/ai";
 import { playerHistory, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
-import { pluralize } from "@/utils/ui/text";
+import { endAsTeam } from "@/utils/games/endAsTeam";
+import { capitalise, pluralize } from "@/utils/ui/text";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -284,21 +289,85 @@ function clearUndo(gs: IRealmArenaSpecificGameState): void {
 // name starts: "Alice moved their Knight; Bob's Archer fired on overwatch: a
 // hit for 3". Characters are named by owner and kind — every squad is public
 // once the battle has begun.
+//
+// In co-op the warbands are named by their faction (§29.6): "the Renegades'
+// Archer fired on overwatch". A random enemy isn't, until the team has seen
+// it (§29.3): a character's kind is its faction, so until then the log calls
+// the enemy "the enemy" and each of its characters "an enemy character". A
+// line is kept as it was written, so those lines stay as the team knew them.
 
-function whose(fighters: readonly Fighter[], id: number, actor: string): string {
+/**
+ * Whether the team knows whom it fights (§29.3): a faction the host picked,
+ * from the start, or a random one once it has been seen. Never in a
+ * free-for-all, which has no enemy.
+ */
+export function enemyKnown(coop: IRealmArenaCoop | undefined): boolean {
+    return coop !== undefined && !enemyHidden(coop);
+}
+
+/** Whether whom the team fights is still hidden from it: a random enemy not yet seen (§29.3). */
+export function enemyHidden(coop: IRealmArenaCoop | undefined): boolean {
+    return coop?.random === true && coop.enemySeen !== true;
+}
+
+/**
+ * Events as a hidden enemy's characters may be told (§29.3), on the wire and
+ * in the recap: anything one of them (`hidden`) did that says which kind of
+ * character did it — a sneak, a shield wall, a mark, a heal or a raise — and
+ * so which faction, isn't told, and a sneak is told as a move. A shot, a
+ * strike or a blast says only what it did to whom. A healing draught is an
+ * item, which any faction can carry.
+ */
+export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number) => boolean): BattleEvent[] {
+    return events.flatMap((event): BattleEvent[] => {
+        if (!("fighter" in event) || !hidden(event.fighter)) return [event];
+        switch (event.kind) {
+            case "moved": return [{ ...event, sneaking: false }];
+            case "shieldWall":
+            case "marked":
+            case "raised": return [];
+            case "healed": return event.via === "draught" ? [event] : [];
+            default: return [event];
+        }
+    });
+}
+
+/**
+ * How the log names an owner (§29.6): a player by their history token, which
+ * the shared resolver turns into their name; a warband by its faction's
+ * `enemyName`, as plain text — "the Renegades" — or, while a random enemy is
+ * hidden, "the enemy" (§29.3). The resolver would show a warband's token as
+ * an unknown player.
+ */
+export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined): string {
+    if (!isWarband(owner)) return userToken(owner);
+    return coop && enemyKnown(coop) ? factionById(coop.enemy).enemyName : UNKNOWN_ENEMY;
+}
+
+/** What the log calls a random enemy before it's seen (§29.3). */
+export const UNKNOWN_ENEMY = "the enemy";
+
+/** "Alice's", "the Renegades'". */
+const possessive = (name: string): string => name.endsWith("s") ? `${name}'` : `${name}'s`;
+
+function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined): string {
     const fighter = fighters.find(one => one.id === id);
     if (!fighter) return "a character";
+    const own = fighter.owner === actor;
+    if (isWarband(fighter.owner) && !enemyKnown(coop)) return own ? "one of its characters" : "an enemy character";
     const name = CHARACTERS[fighter.character].name;
-    return fighter.owner === actor ? `their ${name}` : `${userToken(fighter.owner)}'s ${name}`;
+    return own ? `their ${name}` : `${possessive(ownerToken(fighter.owner, coop))} ${name}`;
 }
 
 /**
  * What one event says. The acting player's own deeds start with a verb, so
  * they read straight on from the name; anyone else's start with who did it.
  */
-function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string): string {
-    const name = (id: number) => whose(fighters, id, actor);
+function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
+    const name = (id: number) => whose(fighters, id, actor, coop);
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
+    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name) : undefined;
+    if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
         case "shot":
@@ -341,26 +410,63 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string)
         case "effect": return `${name(event.fighter)} is ${event.change === "cleared" ? "no longer " : ""}${EFFECTS[event.effect].state}`;
         case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
-            const who = event.player === actor ? "scored" : `${userToken(event.player)} scored`;
+            const who = event.player === actor ? "scored" : `${ownerToken(event.player, coop)} scored`;
             return `${who} ${event.points} for ${event.reason === "centre" ? "holding the centre" : "the knock-out"}`;
         }
     }
 }
 
+/**
+ * What a hidden enemy's character did (§29.3), where the deed would name its
+ * kind: that it moved, or used an ability, never which — an ability is a kind
+ * of character's, and a character's kind is its faction. Undefined for
+ * anything that says nothing of the kind, told as `clause` tells it.
+ */
+function veiledClause(event: BattleEvent, name: (id: number) => string): string | undefined {
+    const hit = (targets: readonly number[], damage: number) => targets.length === 0 ? "" : `, hitting ${pluralize(targets.length, "character")} for ${damage}`;
+    switch (event.kind) {
+        case "moved": return `moved ${name(event.fighter)}`;
+        case "fireball":
+        case "demolished": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "marked":
+        case "shieldWall": return `used an ability with ${name(event.fighter)}`;
+        default: return undefined;
+    }
+}
+
 /** A move told once, however many times reactions broke it up. */
-function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string): string {
+function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
     return events
         .filter((event, index) => event.kind !== "moved" || events.findIndex(one => one.kind === "moved") === index)
-        .map(event => clause(event, before, actor))
+        .map(event => clause(event, before, actor, coop))
         .join("; ");
 }
 
 /**
- * The history line an owner's deed writes. A warband's carries no `actorId`:
- * nobody can react to the computer, or be pushed about a reaction from it.
+ * The history line an owner's deed writes, named by `ownerToken`. A warband's
+ * carries no `actorId`: nobody can react to the computer, or be pushed about
+ * a reaction from it.
  */
-function lineBy(owner: string, text: string): IHistoryEntry {
-    return isWarband(owner) ? { text: `${userToken(owner)} ${text}` } : playerHistory(owner, text);
+function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined): IHistoryEntry {
+    return isWarband(owner) ? { text: capitalise(`${ownerToken(owner, coop)} ${text}`) } : playerHistory(owner, text);
+}
+
+/**
+ * Notes a random enemy seen (§29.3) once any of its characters is in the
+ * team's view: the team shares its sight (§29.1), so any seat's view is the
+ * team's. Without fog that's the moment the squads take the field. Run after
+ * everything that can change what the team sees, so the line written by the
+ * command that showed it is the last to keep the enemy unnamed.
+ */
+function noteSighting(gs: IRealmArenaSpecificGameState): void {
+    const coop = gs.coop;
+    if (!enemyHidden(coop) || gs.phase !== "battle") return;
+    const battle = battleOf(gs);
+    // As `viewOf` reads a view, standing or fallen, without building one.
+    const seen = squadSight(battle, gs.seats[0]);
+    if (!battle.fog || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
 }
 
 // ─── What a viewer is told (§27) ────────────────────────────────────────────
@@ -384,17 +490,21 @@ function lineBy(owner: string, text: string): IHistoryEntry {
  * co-op an End turn holds the enemy's turn (§29.4), and its own player is
  * told it this way too, as their teammates are (`outcomeFor`).
  *
+ * While a random enemy is `hidden` (§29.3), what its characters did is told
+ * `unnamed` too.
+ *
  * Here beside the game type rather than with the response it shapes, so the
  * game type can cut the outcome a command returns its sender (`outcomeFor`).
  */
-export function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
+export function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null, hidden = false): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
     const own = (id: number) => allied(battle, fighterById(battle, id)?.owner, viewerId);
     const inSight = (id: number) => {
         const fighter = fighterById(battle, id);
         return fighter !== undefined && (own(id) || seen(fighter.square));
     };
-    return events.flatMap((event): BattleEvent[] => {
+    const told = hidden ? unnamed(events, id => isWarband(fighterById(battle, id)?.owner ?? "")) : events;
+    return told.flatMap((event): BattleEvent[] => {
         switch (event.kind) {
             case "moved": {
                 if (own(event.fighter)) return [event];
@@ -432,10 +542,12 @@ export class RealmArenaGameType implements IGameType {
      */
     outcomeFor(gameData: IGameData, outcome: ICommandOutcome, viewerId: string): ICommandOutcome {
         const data = gameData as IRealmArenaGameData;
-        const events = (outcome as Partial<IRealmArenaOutcome>).events;
+        // An End turn's parts are the recap's (§29.9), and the enemy's holds
+        // its actions whole: the board plays the turn from `events`.
+        const { recap: _recap, ...told } = outcome as IRealmArenaOutcome;
         const battle = battleOf(data.specificGameState, data.complete);
-        if (!battle.fog || !Array.isArray(events)) return outcome;
-        return { ...outcome, events: toldTo(events, battle, viewerId) } as IRealmArenaOutcome;
+        if (!battle.fog || !Array.isArray(told.events)) return told;
+        return { ...told, events: toldTo(told.events, battle, viewerId, enemyHidden(data.specificGameState.coop)) } as IRealmArenaOutcome;
     }
 
     /**
@@ -457,9 +569,10 @@ export class RealmArenaGameType implements IGameType {
 
     /**
      * The end of the battle (§5.1): the turn limit played out (§13.8), or at
-     * most one squad left standing. The winner is whoever the tie-break chain
+     * most one side left standing. The winner is whoever the tie-break chain
      * puts first, so there always is one — passing over anyone dropped, whose
-     * score stands in the final line but who wasn't there at the end.
+     * score stands in the final line but who wasn't there at the end. In
+     * co-op it's one ending for the whole team (§29.5, `endInCoop`).
      */
     CheckGameOver(gameData: IGameData): boolean {
         const data = gameData as IRealmArenaGameData;
@@ -468,6 +581,10 @@ export class RealmArenaGameType implements IGameType {
         const order = data.gameState.turnOrder;
         const battle = battleOf(gs);
         if (!isBattleOver(battle, order, gs.roundsPlayed)) return false;
+        if (gs.coop) {
+            endInCoop(data, battle, gs.coop);
+            return true;
+        }
 
         const ranked = standings(battle, order, gs.scores);
         const winner = ranked.find(userId => !isDropped(data, userId)) ?? ranked[0];
@@ -480,6 +597,31 @@ export class RealmArenaGameType implements IGameType {
         data.gameState.history.unshift(playerHistory(winner, "wins the battle"));
         return true;
     }
+}
+
+/**
+ * A co-op battle's ending (§29.5): the team wins if its score — its players'
+ * added together — beats the enemy's, which is `standings` read by side, with
+ * the warbands' seats after the players' so a battle level all the way goes
+ * to the enemy, holding the field. One ending for everybody, `teamwin` or
+ * `teamloss` (`endAsTeam`), with the final score as its detail. The fog lifts
+ * as the battle ends (§27.1), and a random enemy's faction with it (§29.3), so
+ * the final line names it.
+ */
+function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
+    const gs = data.specificGameState;
+    const warbands = gs.seats.map((_, k) => warbandOwner(k));
+    const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
+    const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
+    const foe = factionById(coop.enemy).enemyName;
+    data.gameState.history.unshift({
+        text: `The battle is over: the team ${pluralize(team, "point")} (${gs.seats.map(userId => `${userToken(userId)} ${gs.scores[userId] ?? 0}`).join(", ")}), ${foe} ${enemy}`,
+    });
+    // Level scores went to whoever had more left standing, then to the enemy.
+    const detail = team !== enemy ? `${pluralize(team, "point")} to ${enemy}`
+        : `${pluralize(team, "point")} each, ${standingPoints(battle, TEAM_SIDE) > standingPoints(battle, ENEMY_SIDE)
+            ? "with more of the team left standing" : "and the enemy held the field"}`;
+    endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
 }
 
 // ─── Commands ───────────────────────────────────────────────────────────────
@@ -536,6 +678,7 @@ export class RealmArenaMuster implements IGameCommand {
             // The first seat's turn begins. Nobody has an effect yet, so
             // nothing happens but fresh AP.
             gs.fighters = startTurn(battleOf(gs), order[0]).fighters;
+            noteSighting(gs);
         }
         markDirty(gameData);
         return { validMove: true, turnOver: true };
@@ -549,7 +692,41 @@ export class RealmArenaMuster implements IGameCommand {
  */
 export interface IRealmArenaOutcome extends ICommandOutcome {
     events: BattleEvent[];
+    /**
+     * An End turn's parts, for the recap's rows (§29.9): in co-op the
+     * warband's turn it held (§29.4), step by step, and what happened as the
+     * next turn began — burning (§20.2). Their events are in `events` too.
+     * Never sent: `outcomeFor` leaves it out of a command's own response, and
+     * a review reads only `events`.
+     */
+    recap?: { enemy?: EnemyTurn; started: BattleEvent[] };
 }
+
+/** One of a warband's actions, as it was checked, and what it did. */
+export interface EnemyStep {
+    action: Action;
+    events: BattleEvent[];
+}
+
+/**
+ * A warband's turn, as it was played (§29.4): what burning did as it began,
+ * each action it took, and what its End turn did — absent when the battle
+ * was over before it came to one. Each part that happened wrote the log a
+ * line of its own, in that order: the burning only when there was some, one
+ * line an action, and one for the End turn.
+ */
+export interface EnemyTurn {
+    owner: string;
+    started: BattleEvent[];
+    steps: EnemyStep[];
+    ended?: BattleEvent[];
+}
+
+/** Everything that happened in a warband's turn, in order. */
+export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started, ...turn.steps.flatMap(step => step.events), ...turn.ended ?? []];
+
+/** How many lines of the log a warband's turn wrote: one for its burning, if any, one an action, and one for its End turn. */
+export const enemyLineCount = (turn: EnemyTurn): number => (turn.started.length > 0 ? 1 : 0) + turn.steps.length + (turn.ended ? 1 : 0);
 
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
@@ -623,7 +800,8 @@ function applyAction(data: IRealmArenaGameData, owner: string, sent: unknown, ro
     const blasted = blastedIn(events);
     if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
     addScores(gs, events);
-    data.gameState.history.unshift(lineBy(owner, narrate(events, before.fighters, owner)));
+    data.gameState.history.unshift(lineBy(owner, narrate(events, before.fighters, owner, gs.coop), gs.coop));
+    noteSighting(gs);
     return { action, events, before };
 }
 
@@ -638,7 +816,8 @@ function beginTurn(data: IRealmArenaGameData, owner: string): BattleEvent[] {
     const { fighters, events } = startTurn(battle, owner);
     gs.fighters = fighters;
     addScores(gs, events);
-    if (events.length > 0) data.gameState.history.unshift({ text: narrate(events, battle.fighters, "") });
+    if (events.length > 0) data.gameState.history.unshift({ text: capitalise(narrate(events, battle.fighters, "", gs.coop)) });
+    noteSighting(gs);
     return events;
 }
 
@@ -653,7 +832,8 @@ function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: reado
     const { fighters, events } = endTurn(battle, owner, gs.roundsPlayed + 1, keepStill);
     gs.fighters = fighters;
     addScores(gs, events);
-    data.gameState.history.unshift(lineBy(owner, ["ended their turn", ...events.map(event => clause(event, battle.fighters, owner))].join("; ")));
+    data.gameState.history.unshift(lineBy(owner, ["ended their turn", ...events.map(event => clause(event, battle.fighters, owner, gs.coop))].join("; "), gs.coop));
+    noteSighting(gs);
     return events;
 }
 
@@ -796,11 +976,16 @@ export class RealmArenaEndTurn implements IGameCommand {
         const { enemy, started } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll });
         // Always a list in co-op, an empty one when no warband took a turn,
         // so a replay that comes to one never asks the planner.
-        if (gs.coop) this.recordedEnemyActions = enemy?.actions ?? [];
+        if (gs.coop) this.recordedEnemyActions = enemy?.steps.map(step => step.action) ?? [];
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
         markDirty(gameData);
-        return { validMove: true, turnOver: true, events: [...events, ...enemy?.events ?? [], ...started] } as IRealmArenaOutcome;
+        return {
+            validMove: true,
+            turnOver: true,
+            events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
+            recap: { ...enemy ? { enemy } : {}, started },
+        } as IRealmArenaOutcome;
     }
 }
 
@@ -808,12 +993,6 @@ export class RealmArenaEndTurn implements IGameCommand {
 interface WarbandMoves {
     recorded: readonly unknown[] | undefined;
     roll: Roll;
-}
-
-/** A warband's turn as it was played: the actions it took, to record, and everything that happened in it. */
-interface WarbandTurn {
-    actions: Action[];
-    events: BattleEvent[];
 }
 
 /**
@@ -836,7 +1015,7 @@ const WARBAND_DEADLINE_MS = 2_000;
  * (§29.7): what it did before is kept and recorded, so a replay matches.
  * Undefined in a free-for-all, and when there's no warband left to play.
  */
-function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): WarbandTurn | undefined {
+function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn | undefined {
     const gs = data.specificGameState;
     const coop = gs.coop;
     if (!coop) return undefined;
@@ -848,7 +1027,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): WarbandTur
     const owner = warbandOwner(k);
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
 
-    const turn: WarbandTurn = { actions: [], events: beginTurn(data, owner) };
+    const turn: EnemyTurn = { owner, started: beginTurn(data, owner), steps: [] };
     const over = () => isBattleOver(battleOf(gs), order, gs.roundsPlayed);
     if (over()) return turn;
 
@@ -873,10 +1052,9 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): WarbandTur
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
             break;
         }
-        turn.actions.push(applied.action);
-        turn.events.push(...applied.events);
+        turn.steps.push({ action: applied.action, events: applied.events });
     }
-    if (!over()) turn.events.push(...applyEndTurn(data, owner, []));
+    if (!over()) turn.ended = applyEndTurn(data, owner, []);
     return turn;
 }
 
@@ -895,7 +1073,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): WarbandTur
  * Returns the warband's turn, and everything that happened as the next
  * player's turn began.
  */
-function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: WarbandTurn; started: BattleEvent[] } {
+function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: EnemyTurn; started: BattleEvent[] } {
     const gs = data.specificGameState;
     const order = data.gameState.turnOrder;
     const enemy = isBattleOver(battleOf(gs), order, gs.roundsPlayed) ? undefined : warbandTurn(data, moves);

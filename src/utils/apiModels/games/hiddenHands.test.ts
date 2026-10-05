@@ -19,6 +19,25 @@ import { getReplayAdapter } from "@/utils/games/replay";
 import { buildInitialDiceCitiesState } from "@/games/DiceCities/DiceCitiesModels";
 import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
+import { buildTimeline } from "@/utils/games/replay";
+import { REALM } from "@/games/RealmArena/characters";
+import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
+import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
+import { buildAllEvents } from "@/utils/games/recap";
+import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
+import { isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
+import {
+    actBy as realmArenaAct,
+    battleOf as realmArenaBattle,
+    endTurnBy as realmArenaEndTurn,
+    makeGame as makeRealmArenaGame,
+    muster as realmArenaMuster,
+    musterAll as realmArenaMusterAll,
+    play as playRealmArena,
+    readyMadePicks as realmArenaPicks,
+    scriptedAction as realmArenaScriptedAction,
+    type RealmArenaTestGame,
+} from "@/games/RealmArena/testFixtures";
 
 // Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -551,3 +570,113 @@ describe("Dice Cities' response to a viewer with no seat", () => {
     });
 });
 
+
+// ─── Realm Arena ─────────────────────────────────────────────────────────────
+
+// A co-op enemy drawn at random (docs/games/realm-arena.md §29.3, §29.11): the
+// team musters not knowing whom it will face, so the faction stays off the
+// wire, unnamed in the log and out of every review step until the team first
+// sees one of its characters — and is everyone's from then on. A character's
+// kind is its faction, so before then the log calls them "an enemy character",
+// and the enemy's own "one of its characters", never "their Knight".
+
+describe("Realm Arena's random co-op enemy", () => {
+    const RA_NAMES = { a: "Alice", b: "Bob" };
+    const VIEWERS = ["a", "b", null];
+    // As the log writes it at the start of a line, too: "The Renegades moved…".
+    const ENEMY_NAME = new RegExp(REALM.enemyName.replace(/^the /, ""), "i");
+
+    /** One command of the fixtures' scripted turn: the current player's next action, or their End turn. */
+    async function step(game: RealmArenaTestGame): Promise<void> {
+        const player = game.currentTurn;
+        const action = realmArenaBattle(game).fighters
+            .filter(one => one.owner === player && isRealmArenaStanding(one))
+            .map(one => realmArenaScriptedAction(game, one))
+            .find(Boolean);
+        const { outcome } = await playRealmArena(game, action ? realmArenaAct(player, action) : realmArenaEndTurn(player));
+        if (!outcome.validMove) throw new Error(`${player}'s scripted command was refused`);
+    }
+
+    it("is hidden in fog of war until the team sees it, and named from then on", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true);
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        const hidden = () => {
+            for (const viewer of VIEWERS) expect(realmArenaStateToModel(gs, viewer, null)).not.toHaveProperty("enemy");
+            for (const { text } of game.gameState.history) {
+                expect(text).not.toMatch(ENEMY_NAME);
+                if (text.startsWith("The enemy")) expect(text).not.toMatch(/their [A-Z]/);
+            }
+        };
+        for (let command = 0; !gs.coop?.enemySeen; command++) {
+            if (game.complete || command > 200) throw new Error("the team never saw the enemy");
+            hidden();
+            await step(game);
+        }
+        // The command that saw it is the last one played.
+        const seenAt = game.gameState.commandHistory.length;
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(gs, viewer, null).enemy).toBe("realm");
+
+        // A review is built from the state at each step: none before the
+        // sighting carries it, and every one from it on does.
+        for (const viewer of VIEWERS) {
+            const { snapshots } = await buildTimeline(game, RA_NAMES, [], undefined, viewer);
+            for (const [index, snapshot] of snapshots.entries()) {
+                const wire = snapshot.specificGameState as IRealmArenaSpecificGameStateResponse;
+                if (index < seenAt) {
+                    expect(wire).not.toHaveProperty("enemy");
+                    expect(JSON.stringify(snapshot.history)).not.toMatch(ENEMY_NAME);
+                } else {
+                    expect(wire.enemy).toBe("realm");
+                }
+            }
+        }
+
+        // Lines written after the sighting name it; those before stay as they were.
+        while (!game.complete && !game.gameState.history.some(({ text }) => ENEMY_NAME.test(text))) await step(game);
+        expect(game.gameState.history.some(({ text }) => ENEMY_NAME.test(text))).toBe(true);
+    }, 60_000);
+
+    it("never says which of its characters did what out of sight: an ability names a kind of character, and so the faction", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true);
+        await realmArenaMusterAll(game);
+        // The first warband's Knight raises a shield wall where it stands, far
+        // out of the team's sight: its turn, as a replay plays it.
+        const knight = game.specificGameState.fighters.find(fighter => fighter.owner === warbandOwner(0) && fighter.character === "knight")!;
+        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "shieldWall", fighter: knight.id }] }) as RealmArenaEndTurn;
+        const { outcome } = await playRealmArena(game, ended);
+        expect(game.specificGameState.coop?.enemySeen).toBeUndefined();
+        expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "shieldWall")).toBe(true);
+
+        const lines = game.gameState.history.map(({ text }) => text);
+        expect(lines).toContain("The enemy used an ability with one of its characters");
+        // The team's own Knight is theirs to name.
+        expect(lines.filter(text => text.startsWith("The enemy")).join("\n")).not.toMatch(/shield|Knight|sneak/i);
+        expect(lines.join("\n")).not.toMatch(/shield/i);
+        for (const viewer of ["a", "b"]) {
+            const told = (new RealmArenaGameType().outcomeFor(game, outcome, viewer) as IRealmArenaOutcome).events;
+            expect(told.some(event => event.kind === "shieldWall")).toBe(false);
+        }
+        for (const viewer of VIEWERS) {
+            expect(realmArenaStepOutcome(outcome, viewer, game.specificGameState)?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
+        }
+        const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES));
+        expect(rows).not.toMatch(/shield/i);
+        expect(rows).not.toMatch(ENEMY_NAME);
+    });
+
+    it("is there from the moment the squads take the field without fog", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, false, "realm", true);
+        await realmArenaMusterAll(game);
+        expect(game.specificGameState.coop?.enemySeen).toBe(true);
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null).enemy).toBe("realm");
+    });
+
+    it("is never hidden when the host picked it, and never sent before the battle when it was drawn", async () => {
+        const picked = makeRealmArenaGame(["a", "b"], {}, true, "realm");
+        expect(realmArenaStateToModel(picked.specificGameState, "a", null).enemy).toBe("realm");
+        const drawn = makeRealmArenaGame(["a", "b"], {}, false, "realm", true);
+        await playRealmArena(drawn, realmArenaMuster("a", realmArenaPicks(drawn, 0)));
+        for (const viewer of VIEWERS) expect(realmArenaStateToModel(drawn.specificGameState, viewer, null)).not.toHaveProperty("enemy");
+    });
+});

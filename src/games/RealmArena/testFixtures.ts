@@ -26,9 +26,10 @@ export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
 /**
  * A battle before anyone has mustered, seats in `PLAYERS` order, created with
  * the ranks `mastery` gives (nobody ranked, unless it says), in fog of war if
- * `fog` says (§27), and in co-op against `enemy`'s warbands if it's given (§29).
+ * `fog` says (§27), and in co-op against `enemy`'s warbands if it's given (§29)
+ * — drawn at `random`, and so hidden until it's seen, if that says (§29.3).
  */
-export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false, enemy?: FactionId): RealmArenaTestGame {
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false, enemy?: FactionId, random = false): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -36,7 +37,7 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog, enemy),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog, enemy, random),
         complete: false,
         winner: "",
         markModified: () => {},

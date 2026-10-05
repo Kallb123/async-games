@@ -117,8 +117,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // Match history makes a player's own past moves reachable to react to
     // (recap never did — it only ever showed events since the viewer's last
     // turn, which excludes their own), so this can now be a self-reaction.
-    // Nobody needs a push telling them they reacted to themselves.
-    if (event.actorId !== userId) {
+    // Nobody needs a push telling them they reacted to themselves, and a row
+    // nobody seated did — Realm Arena's enemy — has nobody to tell.
+    if (event.actorId !== userId && gameData.userIdList.includes(event.actorId)) {
         const userList = await usersById([event.actorId]);
         const recipient = userList.find(u => u.id === event.actorId);
         if (recipient) {
