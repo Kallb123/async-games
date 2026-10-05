@@ -8,7 +8,7 @@ import type { Fighter } from "./rules";
 const seat = (outcome: FinishedSeat["outcome"]): FinishedSeat => ({ userId: "a", outcome, turns: 12 });
 
 function fighter(owner: string, hp = 5): Fighter {
-    return { id: 1, owner, character: "knight", square: 0, hp, ap: 0, banked: 0, effects: [], tally: {} } as Fighter;
+    return { id: 1, owner, character: "knight", square: 0, hp, ap: 0, banked: 0, effects: {}, cooldowns: {}, spent: [], item: null };
 }
 
 function view(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): IRealmArenaSpecificGameStateResponse {
