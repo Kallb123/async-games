@@ -405,6 +405,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             sides={battle.sides}
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
+                            viewerId={myUserId}
                             colourFor={colourFor}
                             nameFor={playerName}
                             selected={selected}
