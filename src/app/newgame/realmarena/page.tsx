@@ -21,6 +21,7 @@ import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTION
 type Mode = 'freeForAll' | 'coop';
 type Enemy = RealmArenaCoopInvite['enemy'];
 type Mission = NonNullable<RealmArenaCoopInvite['mission']> | 'holdCentre';
+type Battlefield = NonNullable<RealmArenaCoopInvite['map']> | 'line';
 
 // Co-op is for a team its battlefields are built for (§29.2), so the party's
 // limits are its own while it's chosen.
@@ -37,6 +38,12 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
 const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
   { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
+];
+
+// Where Hold Out is fought (§30.9): the fort built for it, or the line battle Hold the Centre is fought on.
+const BATTLEFIELD_CHOICES: OptionChoice<Battlefield>[] = [
+  { id: 'sackedFort', label: 'Sacked Fort', description: 'Start in the ruined keep in the middle, with the enemy closing in, and landing its waves, all round the edges.' },
+  { id: 'line', label: 'Gate Fort', description: 'The Twin- or Three-Gate Fort, as in Hold the Centre: start along one edge, with the enemy opposite.' },
 ];
 
 // How many points every squad musters (§30.5), for any mode.
@@ -56,7 +63,8 @@ const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
 // docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
 // (§17.4 B2), so the choices are who, how fast, whether the battle is fought
 // in fog of war (§27), and whether it's a free-for-all or the players
-// together against the computer (§29.9) — and, in co-op, whom they fight —
+// together against the computer (§29.9) — and, in co-op, whom they fight,
+// and in Hold Out on which battlefield (§30.9) —
 // and how big the battle is, and in co-op how strong the enemy (§30.5).
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
@@ -69,6 +77,7 @@ function NewGameRealmArenaForm() {
   const [mode, setMode] = useState<Mode>('freeForAll');
   const [enemy, setEnemy] = useState<Enemy>(FACTION_IDS[0]);
   const [mission, setMission] = useState<Mission>('holdCentre');
+  const [battlefield, setBattlefield] = useState<Battlefield>('sackedFort');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [size, setSize] = useState<BattleSize>('normal');
   const coop = mode === 'coop';
@@ -88,7 +97,11 @@ function NewGameRealmArenaForm() {
       turnTimer,
       fog,
       ...(size !== 'normal' ? { size } : {}),
-      ...(coop ? { coop: { enemy, ...(mission === 'holdOut' ? { mission } : {}), ...(difficulty !== 'normal' ? { difficulty } : {}) } } : {}),
+      ...(coop ? { coop: {
+        enemy,
+        ...(mission === 'holdOut' ? { mission, ...(battlefield !== 'line' ? { map: battlefield } : {}) } : {}),
+        ...(difficulty !== 'normal' ? { difficulty } : {}),
+      } } : {}),
     };
     await submit(data);
   };
@@ -117,6 +130,9 @@ function NewGameRealmArenaForm() {
       )}
       {coop && (
         <OptionChoiceSection label="Mission" value={mission} onChange={setMission} choices={MISSION_CHOICES} />
+      )}
+      {coop && mission === 'holdOut' && (
+        <OptionChoiceSection label="Battlefield" value={battlefield} onChange={setBattlefield} choices={BATTLEFIELD_CHOICES} />
       )}
       {coop && (
         <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_CHOICES} />

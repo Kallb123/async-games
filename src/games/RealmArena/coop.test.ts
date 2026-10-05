@@ -108,6 +108,14 @@ describe("co-op's setting (§29.8)", () => {
         expect(coopInviteOf({ enemy: "realm" })).toEqual({ enemy: "realm" });
     });
 
+    it("takes the Sacked Fort in Hold Out alone, and no other battlefield (§30.9)", () => {
+        expect(coopInviteOf({ enemy: "realm", mission: "holdOut", map: "sackedFort" })).toEqual({ enemy: "realm", mission: "holdOut", map: "sackedFort" });
+        expect(coopInviteOf({ enemy: "realm", map: "sackedFort" })).toBeUndefined();
+        for (const junk of ["twinGateFort", "ruinedFort", "constructor", "", 1, ["sackedFort"]]) {
+            expect(coopInviteOf({ enemy: "realm", mission: "holdOut", map: junk }), JSON.stringify(junk)).toBeUndefined();
+        }
+    });
+
     it("is kept on the invitation only as one, whatever a lobby's settings carried", () => {
         expect(new RealmArenaInvitationModel({ coop: { enemy: "realm", nextWarband: 9 } }).toObject().coop).toEqual({ enemy: "realm" });
         expect(new RealmArenaInvitationModel({ coop: { enemy: "orcs" } }).toObject().coop).toBeUndefined();
@@ -298,6 +306,19 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
             const setup = game.gameState.history.map(entry => entry.text).join("\n");
             expect(setup).toContain(`against ${REALM.enemyName}`);
             expect(setup).toContain(`each player musters ${musterBudget(2, true)} points' worth`);
+        }
+    });
+
+    it("puts a team on the Sacked Fort when the host picked it for Hold Out, the warbands round the edges (§30.9)", async () => {
+        for (const [players, map] of [[["a", "b"], "sackedFortTwo"], [["a", "b", "c"], "sackedFortThree"]] as const) {
+            const invite = { turnTimer: 0, coop: { enemy: "realm", mission: "holdOut", map: "sackedFort" } };
+            const game = await createGame.call(invite, invite, [...players]);
+            expect(game.specificGameState.map).toBe(map);
+            expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, mission: "holdOut", map: "sackedFort" });
+            const setup = game.gameState.history.map(entry => entry.text).join("\n");
+            expect(setup).toContain("Setup: Hold Out on the Sacked Fort");
+            expect(setup).toContain("a warband for each of them closing in from the edges");
+            expect(setup).toContain("deploys in the west of the keep");
         }
     });
 
@@ -529,14 +550,14 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(won).toBeGreaterThanOrEqual(19);
     }, 120_000);
 
-    it("never breaks in Hold Out: both co-op battlefields, with and without fog, to an ending it words", async () => {
+    it("never breaks in Hold Out: every co-op battlefield and the Sacked Fort, with and without fog, to an ending it words", async () => {
         const warn = vi.spyOn(console, "warn");
         const error = vi.spyOn(console, "error");
         let seed = 500;
         for (const players of TEAMS) {
-            for (const fog of [false, true]) {
+            for (const [fog, map] of [[false, undefined], [true, undefined], [false, "sackedFort"], [true, "sackedFort"]] as const) {
                 seedRolls(seed++);
-                const { game } = await coopBattle(players, { fog, coop: { enemy: "realm", mission: "holdOut" } });
+                const { game } = await coopBattle(players, { fog, coop: { enemy: "realm", mission: "holdOut", map } });
                 expect(game.complete).toBe(true);
                 expect(["teamwin", "teamloss"]).toContain(game.endReason);
                 expect(game.endDetail).toMatch(game.endReason === "teamwin"
@@ -601,6 +622,17 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(planner.calls).toBe(0);
         // The battle it replayed lasted long enough for a wave to land.
         expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(true);
+    }, 60_000);
+
+    it("replays a battle on the Sacked Fort to the same end, on the same battlefield, without asking the planner (§30.9)", async () => {
+        seedRolls(17);
+        const { game } = await coopBattle(["a", "b", "c"], { fog: true, coop: { enemy: "realm", mission: "holdOut", map: "sackedFort" } });
+        vi.restoreAllMocks();
+        planner.broken = true;
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        const timeline = await buildTimeline(game, { a: "Alice", b: "Bob", c: "Cat" }, [], undefined, "a");
+        expect((timeline.snapshots[0].specificGameState as { map: string }).map).toBe("sackedFortThree");
+        expect(timeline.snapshots[timeline.currentIndex].specificGameState).toEqual(gameStateToModel(game.specificGameState, "a", lastId, true));
     }, 60_000);
 
     it("replays a recorded battle to the same end without asking the planner", async () => {

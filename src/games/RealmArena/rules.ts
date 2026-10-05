@@ -1417,19 +1417,37 @@ export function storedFighter(fighter: Fighter): Fighter {
 /**
  * Where a ready-made squad stands (§17.2): spread evenly along the middle row
  * of the seat's deployment zone, or across the whole zone when the row is too
- * narrow. Every square of a zone can be stood on (`buildBattlefield` checks),
- * so the picks always pass `musterRefusal` — a timed-out muster runs on the
- * server and mustn't fail. It throws only for a zone with fewer squares than
- * the squad, which is a map that can't be played.
+ * narrow. A zone drawn as several areas — a warband closing in from every
+ * edge (§30.9) — has the squad dealt round them in turn instead, each area's
+ * share spread along the middle of its long side. Every square of a zone can
+ * be stood on (`buildBattlefield` checks), so the picks always pass
+ * `musterRefusal` — a timed-out muster runs on the server and mustn't fail.
+ * It throws only for a zone with fewer squares than the squad, which is a map
+ * that can't be played.
  */
 export function readyMadeMuster(field: Battlefield, seat: number, squad: readonly CharacterId[]): MusterPick[] {
     const zone = (field.deployments[seat] ?? []).map(square => coordsOf(field, square));
     if (zone.length === 0) throw new Error(`${field.name} has no deployment zone for seat ${seat}`);
-    const cols = zone.map(({ col }) => col), rows = zone.map(({ row }) => row);
-    const left = Math.min(...cols), width = Math.max(...cols) - left + 1;
-    const row = Math.floor((Math.min(...rows) + Math.max(...rows)) / 2);
     const spread = (count: number) => squad.map((_, i) => Math.floor(((i + 0.5) * count) / squad.length));
-    if (squad.length <= width) return spread(width).map((col, i) => ({ character: squad[i], square: row * field.width + left + col }));
+    const areas = field.deploymentAreas[seat];
+    if (areas.length === 1) {
+        const cols = zone.map(({ col }) => col), rows = zone.map(({ row }) => row);
+        const left = Math.min(...cols), width = Math.max(...cols) - left + 1;
+        const row = Math.floor((Math.min(...rows) + Math.max(...rows)) / 2);
+        if (squad.length <= width) return spread(width).map((col, i) => ({ character: squad[i], square: row * field.width + left + col }));
+    } else {
+        const dealt = squad.map((character, i) => {
+            const { col, row, width, height } = areas[i % areas.length];
+            const share = Math.ceil((squad.length - i % areas.length) / areas.length);
+            const along = Math.floor(((Math.floor(i / areas.length) + 0.5) * Math.max(width, height)) / share);
+            const square = width >= height
+                ? (row + Math.floor((height - 1) / 2)) * field.width + col + along
+                : (row + along) * field.width + col + Math.floor((width - 1) / 2);
+            return { character, square };
+        });
+        // Only short of room when an area's share is longer than the area.
+        if (new Set(dealt.map(pick => pick.square)).size === dealt.length) return dealt;
+    }
     const squares = field.deployments[seat];
     if (squad.length > squares.length) throw new Error(`${field.name}'s deployment zone ${seat} is too small for ${squad.length} characters`);
     return spread(squares.length).map((index, i) => ({ character: squad[i], square: squares[index] }));

@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Hold Out on the Sacked Fort",
+                detail: "Hold Out has a battlefield of its own. Your team starts in a ruined keep in the middle of the map, and the enemy closes in from every edge, where each fresh wave lands too. Its walls are full of gaps, so there's no corner to sit in. The host picks it, or the gate forts, when setting up.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: Hold Out and achievements",
                 detail: "Choose a new co-op mission and survive repeated enemy waves: fallen warband fighters return every third round, and your team wins by keeping anyone standing to the end. Realm Arena now has five achievements too, for veterans and co-op teams that win together, bring everybody home or survive Hold Out.",
                 game: "realmarena",
@@ -120,11 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "See the final board on a Settlements & Cities result",
                 detail: "A finished game's result page now shows the board as the game ended — every settlement, city and road in its owner's colour. Hover or press a bar in the dice roll chart to see how many of those rolls each player threw.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Dice Cities: play on the Outer Rim",
-                detail: "Pick the new Outer Rim theme when you set up a game and your city becomes a frontier outpost on a galactic trade lane: Moisture Farms and Spice Mines, cantinas that charge the pilot, credits from the Exchange, and a Docking Bay and Sensor Array to finish. Same rules and numbers as ever — only the names and the card art change.",
-                game: "dicecities",
             },
         ],
     },

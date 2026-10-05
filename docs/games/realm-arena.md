@@ -3056,7 +3056,8 @@ surviving the waves as the first co-op mission of its own. This is it.
   the Centre, so every battle fought so far is one.
 - **Same battlefields.** Hold Out is fought on the co-op forts (§29.2), the
   team along one edge and the warbands opposite, mustered as now. No new map
-  and no new art.
+  and no new art. (Since joined by a battlefield of its own, the Sacked Fort,
+  §30.9.)
 - **The enemy comes in waves.** The warbands take the field as now: that's
   the first wave. At the start of every third round (4, 7, 10, 13 …) the next
   wave arrives: each warband is brought back up to strength, a fresh
@@ -3296,10 +3297,9 @@ of one there).
 
 ### 30.8 Open questions
 
-- **Does Hold Out want its own battlefield?** It's planned on the co-op forts
-  so it needs no map. If the playtest finds the team simply walks to the keep
-  and waits, a deployment inside the walls, or a smaller fort, is the next
-  step.
+- ~~**Does Hold Out want its own battlefield?**~~ Yes: the Sacked Fort
+  (§30.9), picked by the host, with the team in the middle and the enemy
+  round the edges. The gate forts stay a choice.
 - **Do the waves want to grow?** A wave refills a warband and no more. If the
   later rounds are too easy, the next lever is one character more per wave
   after the second, held to the time budget.
@@ -3308,6 +3308,72 @@ of one there).
   board, they fade after a few rounds.
 - **Should difficulty reach free-for-all?** It's a co-op choice, since only
   co-op has a computer to tune.
+
+### 30.9 The Sacked Fort: a battlefield for Hold Out
+
+§30.8 asked whether Hold Out wants its own battlefield. On the gate forts the
+team walks to the keep and the enemy comes at it from one side, which turns
+the mission into a line to hold. The Sacked Fort turns it round: **the team
+starts in the middle, and the enemy closes in from every edge**, where its
+waves land too.
+
+**The host picks it.** Under Hold Out, the setup gains *Battlefield*: the
+Sacked Fort (the default there) or the gate fort for the team's size, as
+before. It's stored with the battle as `coop.map: "sackedFort"`, absent for
+the gate forts, so every battle fought so far is one, and `mapFor(players,
+coop, map)` turns it into the map for the team's size. The setup route, and
+the invitation's setter, take it only with Hold Out: on Hold the Centre a team
+mustered on the keep would hold the centre from round one.
+
+**The map.** 54 squares square, unchanged by a quarter turn, so no edge has the
+easier approach. It's the Ruined Fort's walls (§15) after the enemy has already
+been through them once, and it's built not to be held:
+
+- **The keep**, 12 × 12 in the middle, is a ring of low walls — half cover,
+  climbed over — with a broken wall pillar at each corner and four wide gaps.
+  The team musters inside it, side by side across its middle: the west and
+  east halves for two, three zones of 4 × 6 for three. The keep's centre still
+  scores as in any battle (§13.7), and the score still doesn't decide Hold Out.
+- **The curtain wall** round it has, on every side, a gate six squares wide
+  and, either side of it, a breach in the open and one over rubble: five ways
+  through each side. A wall can be held against one side; this one is
+  attacked from four.
+- **A tower at each corner**, climbed from inside, out where the enemy
+  arrives: whoever climbs one has left the keep to do it.
+- **The ground outside** is the gate forts': clumps of trees and rubble
+  between the walls and the edge.
+
+**The enemy's zones.** The edge, three squares deep, as four strips that turn
+into each other a quarter at a time (a pinwheel, so every edge square is in
+exactly one). For a team of two, one warband takes the north and south edges
+and the other the east and west; for three, every edge is cut in thirds and
+each warband takes one third of every edge — the second warband the thirds in
+the middle, facing every gate. So a warband is a zone in several parts, and
+two things learned that:
+
+- **A deployment zone may be several areas** (`BattlefieldMap.deployments`
+  takes one area or a list), kept as drawn (`Battlefield.deploymentAreas`)
+  so the board outlines each part.
+- **`readyMadeMuster` deals a squad round the parts** in turn, each part's
+  share spread along the middle of its long side, so the first wave comes from
+  every edge its warband has, and each later one refills the same squares
+  (`waveOf`). A zone of one area is spread exactly as before, so no battle
+  already fought musters differently.
+
+**Measured.** The quickest walk from any warband's zone to the team's is 19
+squares, past a scout's two moves and a strike (17); an archer can still
+shoot on the enemy's first turn where it has a line, which is the pressure the
+mission wants. The scripted team (§29.11) is overrun a round or so later than
+on the gate forts, and the planner's turns cost about what they do there: the
+slowest, a large battle on Hard for three, a little over a second.
+
+**Tests.** `maps/sackedFort.test.ts`: the quarter turn, the team in the keep
+round its centre, the warbands round the whole edge with every square once and
+each from more than one side, a ready-made warband on every side its zone
+reaches, the shared reach checks, the first-turn walk, and the wall's gaps.
+`coop.test.ts`: the setting (Hold Out only), the battle created on the right
+map with its setup lines, whole Hold Out battles on it for both teams with and
+without fog, and a replay on it.
 
 ---
 
