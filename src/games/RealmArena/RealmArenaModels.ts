@@ -2,23 +2,24 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultChartSeries, type GameResultStatGroup, type GameResultTable, type StoredGameResultEvent, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
-import { battleOf, enemyHidden, toldTo, UNKNOWN_ENEMY } from "./RealmArenaLogic";
+import { battleOf, enemyHidden, toldTo } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { CHARACTERS, FACTION_IDS, factionById, isFactionId, musterSize, POINTS_BUDGET, type CharacterId, type FactionId } from "./characters";
+import { CHARACTERS, COOP_PLAYERS, FACTION_IDS, factionById, fitsCoop, isFactionId, musterSize, POINTS_BUDGET, RANDOM_ENEMY, UNKNOWN_ENEMY, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, viewOf, warbandOwner, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
 import { CHARACTER_IDS } from "./roster";
+import { ENEMY_COLOUR, TEAM_COLOUR, TEAM_NAME } from "./ui";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -146,14 +147,6 @@ export interface RealmArenaInvitationRequest extends IInvitationRequest {
 export interface RealmArenaCoopInvite {
     enemy: FactionId | typeof RANDOM_ENEMY;
 }
-
-export const RANDOM_ENEMY = "random";
-
-/** How many players a co-op team can be (§29.1): one battlefield for each (§29.2). */
-export const COOP_PLAYERS = { min: 2, max: 3 } as const;
-
-/** Whether a party of this size can play co-op: a team its battlefields are built for. */
-export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.min && players <= COOP_PLAYERS.max;
 
 /**
  * A co-op setting as the host chose it, or undefined for anything else a
@@ -502,7 +495,7 @@ export const realmArenaGameResultStatsSchemaDef = {
 function recordEndsWhereBattleDid(gs: IRealmArenaSpecificGameState, record: BattleRecord): boolean {
     const final = record.pointsPerRound.at(-1);
     // In co-op the enemy's column too, its warbands added together (§29.6).
-    const enemy = gs.seats.reduce((sum, _, k) => sum + (gs.scores[warbandOwner(k)] ?? 0), 0);
+    const enemy = warbandsFor(gs.seats).reduce((sum, warband) => sum + (gs.scores[warband] ?? 0), 0);
     return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0))
         && (!gs.coop || final.get(ENEMY_SIDE) === enemy);
 }
@@ -582,7 +575,36 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
     // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
-    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? capitalise(UNKNOWN_ENEMY) : userId), lines }));
+    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? ENEMY_SERIES.name : userId), lines }));
+}
+
+/** The enemy, wherever the result draws it beside the players (§29.9): one column, its warbands added together. */
+const ENEMY_SERIES: GameResultChartSeries = { key: ENEMY_SIDE, name: capitalise(UNKNOWN_ENEMY), color: ENEMY_COLOUR };
+
+/** A co-op battle's two sides, as the result's race charts draw them (§29.9). */
+const SIDE_SERIES: GameResultChartSeries[] = [{ key: TEAM_SIDE, name: capitalise(TEAM_NAME), color: TEAM_COLOUR }, ENEMY_SERIES];
+
+/** Whether the record is a co-op battle's: it has a column for the enemy. */
+const isCoopRecord = (stats: IRealmArenaGameResultStats): boolean =>
+    stats.centrePoints ? mongoMap(stats.centrePoints).has(ENEMY_SIDE) : false;
+
+/** A round's columns as the two sides: the players added together as the team, and the enemy as it is. */
+function bySide(round: Map<string, number>): Map<string, number> {
+    const columns = mongoMap(round);
+    const team = [...columns].reduce((sum, [column, value]) => sum + (column === ENEMY_SIDE ? 0 : value), 0);
+    return new Map([[TEAM_SIDE, team], [ENEMY_SIDE, columns.get(ENEMY_SIDE) ?? 0]]);
+}
+
+/** A round-by-round race, a line a player — or in co-op the team's line against the enemy's (§29.9). */
+function formatRaceChart(stats: IRealmArenaGameResultStats, perRound: Map<string, number>[] | undefined, title: string, yLabel: string, events?: StoredGameResultEvent[]) {
+    // Each series is already a round apiece, so it's charted as one player's
+    // turns are: a playerCount of 1 collapses nothing.
+    if (!isCoopRecord(stats)) return formatPerTurnChart(perRound, title, yLabel, 1, undefined, events);
+    // A player's loss goes on the team's line. Read by name: a stored event is
+    // a Mongoose subdocument, and spreading one copies its internals.
+    const teamEvents = events?.map(({ turnIndex, icon, glyph, title, seriesKey }): StoredGameResultEvent =>
+        ({ turnIndex, icon, glyph, title, seriesKey: seriesKey && seriesKey !== ENEMY_SIDE ? TEAM_SIDE : seriesKey }));
+    return formatPerTurnChart(perRound?.map(bySide), title, yLabel, 1, SIDE_SERIES, teamEvents);
 }
 
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */
@@ -595,7 +617,8 @@ function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChar
         for (const row of kind) segments[row.userId] = (segments[row.userId] ?? 0) + row.dealt;
         return [{ label: CHARACTERS[character].name, value: kind.reduce((sum, row) => sum + row.dealt, 0), segments }];
     });
-    return bars.length > 0 ? { kind: "bar", title: "Damage by character", yLabel: "Damage", bars } : undefined;
+    if (bars.length === 0) return undefined;
+    return { kind: "bar", title: "Damage by character", yLabel: "Damage", bars, ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}) };
 }
 
 /** Everything each squad did, a row a count and a column a player. Friendly fire only when somebody did some. */
@@ -625,6 +648,7 @@ function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable |
             row("Reactions on watch", total => total.reactions),
             ...(friendlyFire ? [row("Friendly fire", total => total.friendlyFire)] : []),
         ],
+        ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}),
     };
 }
 
@@ -633,16 +657,16 @@ function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable |
  * with every character downed marked on its owner's line, and each squad's
  * health beside it; then the damage each kind of character dealt, and the
  * table of everything each squad did. None for a result without the record.
+ * In co-op the races are the team's line against the enemy's, and the damage
+ * and the table draw the enemy beside the players (§29.9).
  */
 export function formatRealmArenaCharts(stats: IRealmArenaGameResultStats): GameResultAnyChart[] {
     const damage = formatDamageChart(stats);
     const table = formatRecordTable(stats);
     return [
-        // Each series is already a round apiece, so it's charted as one
-        // player's turns are: a playerCount of 1 collapses nothing.
         ...compactCharts(
-            formatPerTurnChart(stats.pointsPerRound, "Points per round", "Points", 1, undefined, stats.losses),
-            formatPerTurnChart(stats.squadHpPerRound, "Squad health per round", "HP", 1),
+            formatRaceChart(stats, stats.pointsPerRound, "Points per round", "Points", stats.losses),
+            formatRaceChart(stats, stats.squadHpPerRound, "Squad health per round", "HP"),
         ),
         ...(damage ? [damage] : []),
         ...(table ? [table] : []),

@@ -166,7 +166,8 @@ Most also want a **game guide**: a `guide.ts` beside the game's `meta.ts`
 exporting a `GameGuide`, wired into `GAME_GUIDES` in
 `src/utils/ui/gameGuides.ts` and shown by the board screen through
 `useGameIntro`. It's the how-to-play popup a player gets on their first match
-and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`,
+and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`
+— and a sixth for a mode of play of its own, as Realm Arena's co-op has —
 in the player's language — match the existing guides rather than restating the
 GDD.
 

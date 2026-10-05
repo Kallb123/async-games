@@ -3,17 +3,28 @@
 // state the response already ships, never a rule: those are rules.ts's.
 
 import type { Rect } from "@/utils/ui/mapLabels";
-import { capitalise, pluralize } from "@/utils/ui/text";
+import { capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, squadSight, hasEffect, isStanding, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
 );
+
+/**
+ * The two sides of a co-op battle as they're drawn (§29.9): the enemy in one
+ * colour whichever warband, on the board and the result alike, and the team
+ * as one line against it on the result's charts. Neither is a player's: the
+ * team is at most three, who wear the palette's first three.
+ */
+export const TEAM_COLOUR = "var(--ag-gold)";
+/** What the players are called together, as the enemy is by `enemyNameOf`. */
+export const TEAM_NAME = "the team";
+export const ENEMY_COLOUR = "var(--ag-purple)";
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
 export function terrainLetter(field: Battlefield, square: Square): TerrainLetter {
@@ -275,7 +286,8 @@ export function centreInSight(state: BattleState, player: string): boolean {
 
 /** A character's name, numbered where its owner has more than one of it: "Man-at-arms 2". */
 export function fighterName(fighters: readonly Fighter[], fighter: Fighter): string {
-    const squad = fighters.filter(one => one.owner === fighter.owner);
+    // The enemy's warbands go by one name (§29.6), so they're numbered as one.
+    const squad = fighters.filter(one => one.owner === fighter.owner || (isWarband(one.owner) && isWarband(fighter.owner)));
     const index = squad.findIndex(one => one.id === fighter.id);
     return index < 0 ? CHARACTERS[fighter.character].name : numberedName(squad, index);
 }
@@ -297,7 +309,7 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
     const fighter = fighters.find(one => one.id === id);
     if (!fighter) return "a character out of sight";
     const name = fighterName(fighters, fighter);
-    return fighter.owner === viewerId ? `your ${name}` : `${nameFor(fighter.owner)}'s ${name}`;
+    return fighter.owner === viewerId ? `your ${name}` : `${possessive(nameFor(fighter.owner))} ${name}`;
 }
 
 /**

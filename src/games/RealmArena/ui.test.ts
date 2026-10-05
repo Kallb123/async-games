@@ -3,7 +3,7 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { ACTION_POINTS, newFighter, reachOf, type BattleEvent, type Fighter } from "./rules";
+import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
 import { abilityWait, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
@@ -268,6 +268,13 @@ describe("fighterName and whoseName", () => {
         expect(whoseName(fighters, 1, "a", nameFor)).toBe("your Man-at-arms 2");
         expect(whoseName(fighters, 3, "a", nameFor)).toBe("Bob's Archer");
         expect(whoseName(fighters, 9, "a", nameFor)).toBe("a character out of sight");
+    });
+
+    it("number the enemy's warbands as one squad, and name it as the enemy is named (§29.9)", () => {
+        const coop = [ready(0, "a", "archer", 0), ready(1, warbandOwner(0), "archer", 1), ready(2, warbandOwner(0), "knight", 2), ready(3, warbandOwner(1), "archer", 3)];
+        expect(coop.map(one => fighterName(coop, one))).toEqual(["Archer", "Archer 1", "Knight", "Archer 2"]);
+        const enemyFor = (owner: string) => isWarband(owner) ? "the Renegades" : nameFor(owner);
+        expect(whoseName(coop, 3, "a", enemyFor)).toBe("the Renegades' Archer 2");
     });
 });
 

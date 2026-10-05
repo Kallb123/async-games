@@ -326,6 +326,27 @@ export function factionById(id: unknown): Faction {
     return isFactionId(id) ? FACTIONS[id] : REALM;
 }
 
+/** What the team calls an enemy it hasn't seen yet: a random one, until one of its characters is (§29.3). */
+export const UNKNOWN_ENEMY = "the enemy";
+
+/**
+ * What the enemy is called (§29.3): its faction's `enemyName` — "the
+ * Renegades" — once the team knows it, and "the enemy" while it doesn't. The
+ * log, the board and the result all name it through this.
+ */
+export function enemyNameOf(enemy: FactionId | undefined): string {
+    return enemy === undefined ? UNKNOWN_ENEMY : factionById(enemy).enemyName;
+}
+
+/** What the host picks to fight an enemy drawn at random as the battle is created, rather than a faction (§29.3). */
+export const RANDOM_ENEMY = "random";
+
+/** How many players a co-op team can be (§29.1): one battlefield for each (§29.2). */
+export const COOP_PLAYERS = { min: 2, max: 3 } as const;
+
+/** Whether a party of this size can play co-op: a team its battlefields are built for. */
+export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.min && players <= COOP_PLAYERS.max;
+
 /**
  * The party size a squad is mustered for (§13.6): the battle's own, or in
  * co-op always three — every squad, a player's or a warband, musters the

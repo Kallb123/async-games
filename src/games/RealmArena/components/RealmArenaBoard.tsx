@@ -95,8 +95,12 @@ interface RealmArenaBoardProps {
     sides?: BattleState["sides"];
     /** The viewer's own sealed squad, while the muster lasts: drawn where they stand, but not yet on the battlefield. */
     sealed?: readonly MusterPick[] | null;
-    /** The players in seat order, so each deployment zone wears the colour of the squad that musters in it. */
-    seats: readonly string[];
+    /**
+     * Whose each deployment zone is, in the map's order — the players in seat
+     * order, then in co-op the warbands (§29.2) — so each zone, and every
+     * figure of the squad that musters in it, wears its owner's colour.
+     */
+    owners: readonly string[];
     colourFor: (userId: string) => string;
     nameFor: (userId: string) => string;
     selected: Fighter | undefined;
@@ -561,7 +565,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, seats, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, owners, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
     const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
     const { rotation } = turned;
@@ -596,9 +600,9 @@ export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides
     const { width, height } = view.size;
     const artId = useSvgId('ra');
     const facingFor: FacingFor = figure => facingOf(field, figure);
-    // Each player's characters wear their colour; anyone not seated keeps the art's grey.
+    // Each squad's characters wear its owner's colour; anyone else keeps the art's grey.
     const tintFor: TintFor = userId => {
-        const seat = seats.indexOf(userId);
+        const seat = owners.indexOf(userId);
         return seat < 0 ? undefined : tintId(artId, seat);
     };
 
@@ -741,14 +745,14 @@ export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides
                         <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
                     </g>
                     <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
-                    <TintDefs artId={artId} colours={seats.map(colourFor)} />
+                    <TintDefs artId={artId} colours={owners.map(colourFor)} />
                     <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
                     <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
                     {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
                     <path className="ag-ra-grid" d={ground.lines} />
 
                     {field.deployments.map((squares, seat) => {
-                        const owner = seats[seat];
+                        const owner = owners[seat];
                         return (
                             <polygon
                                 key={seat}

@@ -180,6 +180,9 @@ export interface BattleSource {
 export const warbandOwner = (k: number): string => `${WARBAND_PREFIX}${k}`;
 const WARBAND_PREFIX = "ai:";
 
+/** The computer's warbands in co-op, one opposite each player (§29.1), in the order they deploy. */
+export const warbandsFor = (seats: readonly string[]): string[] => seats.map((_, k) => warbandOwner(k));
+
 /** Whether an owner is one of the computer's warbands rather than a player. */
 export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PREFIX);
 
@@ -194,7 +197,7 @@ export const ENEMY_SIDE = "enemy";
  * for each of them (§29.1).
  */
 export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
-    const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...seats.map((_, k) => [warbandOwner(k), ENEMY_SIDE])]) : undefined;
+    const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
     return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
 }
 

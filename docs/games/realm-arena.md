@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.33. Split out of Defender of the Realm in its third round of
+**Status:** v1.39. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -16,9 +16,9 @@ of war (B5, §27) are built: a host can have a battle fought in fog, where each
 player sees only what their squad can. PR 10 turned it on: it's in the game
 library, at command version 2. A finished battle's result tells the battle
 (§28): the points race, each squad's health, the damage by character and a
-record of what each squad did. §29 plans co-op against the computer: the
-players as one team, and an enemy of the host's choosing, played by game AI,
-that takes a turn after each of theirs.
+record of what each squad did. Co-op against the computer (B8, §29) is built:
+the players as one team, and an enemy of the host's choosing, played by game
+AI, that takes a turn after each of theirs.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | PRs 1–4b, sides, the battlefields, factions as data, the planner, the enemy's turn and the end of it, built (§29.2–§29.8); the screens are next |
+| B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
 
 **What B2 settled:**
 
@@ -2025,7 +2025,7 @@ points came, who did the damage and what each squad went through.
 
 ## 29. Co-op against the computer (B8)
 
-*Proposal, reviewed by the caveman (§29.13).* The players fight together, as
+*Built; the proposal was reviewed by the caveman (§29.13).* The players fight together, as
 one team, against a squad the game plays itself. Turns stay individual: each
 player takes their own turn, as now, and the enemy moves straight after each
 one, inside the command that ended it — as the island floods after every turn
@@ -2669,7 +2669,7 @@ sure it is.
   the battle's is left out as a player's is. Burning lit and suffered in one
   step — an End turn now holds the enemy's turn and the next player's start —
   is credited to whoever lit it. The result's stat groups name it "The
-  enemy"; drawing it on the charts and in the table is PR 5's.
+  enemy", and PR 5 draws it on the charts and in the table (§29.9).
 - The co-op tests check each ending and its detail, the enemy named in the
   log, a row per enemy action in the recap and one per character in the feed,
   and the record's enemy column; `hiddenHands.test.ts` steps a battle in fog a
@@ -2697,6 +2697,39 @@ sure it is.
   now, the enemy as one column.
 - **The guide** gains a short section on co-op; the tutorial is unchanged,
   since a co-op turn is a turn.
+
+**What PR 5 settled:**
+
+- The setup screen's *Mode* is free-for-all or co-op, and co-op holds the
+  party to two or three while it's chosen — the invite list, the open seats
+  and the party-size line read it — so a lobby can no longer fill to four for
+  a co-op battle. Under it, *Enemy* lists every faction and Random, and hides
+  itself while there's one; the host fights the Realm's Renegades until then.
+  `COOP_PLAYERS`, `fitsCoop` and `RANDOM_ENEMY` move to `characters.ts`, so
+  the screen reads them without the server's models.
+- The enemy is named by `enemyNameOf` beside `FACTIONS` — its `enemyName`, or
+  "the enemy" while it's unknown — which `ownerToken` and the board both use.
+  The board names a warband's characters by it ("the Renegades' Archer"),
+  numbered across the warbands as one squad ("Archer 2"), and draws them, and
+  the warbands' deployment zones, in one colour (`ENEMY_COLOUR`): the board
+  is handed every owner in the map's deployment order, warbands
+  (`warbandsFor`) after the players.
+- The scoreboard is two pills: the team's total, each player's share under
+  it and each one's squad or muster when it's opened, and the enemy's, with
+  how many of it stand or are in sight. The centre names the side that holds
+  it. During the muster a line names whom the team will face, or says the
+  enemy was drawn at random and is still unknown.
+- A finished co-op battle's subtitle and banner are the team's, in
+  `finishedGameCopy`'s words with the score as its detail.
+- On the result, the points race and the squads' health are the team's line
+  against the enemy's (`TEAM_COLOUR`, `ENEMY_COLOUR`), each character downed
+  marked on its side's line. The damage by character stacks the enemy's
+  share over the players', and the battle record has the enemy's column after
+  theirs: a bar chart and a table can now name a series after the players
+  (`extraSeries`), which a free-for-all's never sends. The enemy is "The
+  enemy" there: the result keeps no faction.
+- The guide's sixth section is co-op. The one What's new line is left out of
+  this PR, at the owner's request.
 
 ### 29.10 PRs
 
@@ -2852,3 +2885,4 @@ Realm, its sibling in the same world.
 | 1.36 | B8 PR 3 builds the planner (§29.7): the board's tactics helpers move to `tactics.ts` with `ACTION_AIMS`, each kind of action's aim, which the board and the planner both read; `ai.ts`'s `nextAction` lists what a warband could do, plays each out with `act` and scores the battle it leaves; a move also goes round the squares a watcher would react on; the puzzles, the never-cheats test and the time budget hold it. Nothing calls it yet. |
 | 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
+| 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |

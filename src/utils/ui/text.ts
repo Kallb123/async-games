@@ -32,3 +32,8 @@ export function truncate(text: string, max: number): string {
 export function capitalise(text: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** A name as the owner of something: "Alice's", "the Renegades'". */
+export function possessive(name: string): string {
+    return name.endsWith("s") ? `${name}'` : `${name}'s`;
+}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { GameResultBarChart } from "@/utils/apiModels/GameDataApi";
-import { playerChartSeries } from "@/utils/ui/playerColours";
+import { rosterChartSeries } from "@/utils/ui/playerColours";
 import ChartLegend from "./ChartLegend";
 import ChartTooltip from "./ChartTooltip";
 
@@ -27,7 +27,8 @@ interface BarChartProps {
 // top of its own bar, so it can't take height off the one it labels.
 //
 // A bar that records its `segments` is stacked: each player's share in their
-// own colour, first seat at the bottom, with a legend underneath naming them.
+// own colour, first seat at the bottom, with a legend underneath naming them —
+// and above them any share the chart names in `extraSeries`.
 // The total on top is unchanged, so the stack only adds who rolled it.
 // Hovering one (or pressing it, on a phone) brings up its breakdown — each
 // player's count in that bar — in the same card LineChart shows for a round.
@@ -36,7 +37,7 @@ export default function BarChart({ chart, players, playerIds }: BarChartProps) {
     if (chart.bars.length === 0) return null;
     const maxValue = Math.max(1, ...chart.bars.map(b => b.value));
     const stacked = chart.bars.some(b => b.segments);
-    const series = stacked ? playerChartSeries(players, playerIds) : [];
+    const series = stacked ? rosterChartSeries(players, playerIds, chart.extraSeries) : [];
     const hovered = hoverIndex !== null ? chart.bars[hoverIndex] : null;
     const hover = (i: number) => () => setHoverIndex(chart.bars[i].segments ? i : null);
 

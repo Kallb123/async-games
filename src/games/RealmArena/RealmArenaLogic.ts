@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, EFFECTS, factionById, ITEMS, musterSize, POINTS_BUDGET, REALM } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, EFFECTS, enemyNameOf, factionById, ITEMS, musterSize, POINTS_BUDGET, REALM } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -40,6 +40,7 @@ import {
     viewOf,
     storedFighter,
     warbandOwner,
+    warbandsFor,
     type Action,
     type BattleEvent,
     type BattleState,
@@ -51,7 +52,7 @@ import { nextAction } from "@/games/RealmArena/ai";
 import { playerHistory, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
 import { endAsTeam } from "@/utils/games/endAsTeam";
-import { capitalise, pluralize } from "@/utils/ui/text";
+import { capitalise, pluralize, possessive } from "@/utils/ui/text";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -341,14 +342,9 @@ export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number
  */
 export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined): string {
     if (!isWarband(owner)) return userToken(owner);
-    return coop && enemyKnown(coop) ? factionById(coop.enemy).enemyName : UNKNOWN_ENEMY;
+    return enemyNameOf(coop && enemyKnown(coop) ? coop.enemy : undefined);
 }
 
-/** What the log calls a random enemy before it's seen (§29.3). */
-export const UNKNOWN_ENEMY = "the enemy";
-
-/** "Alice's", "the Renegades'". */
-const possessive = (name: string): string => name.endsWith("s") ? `${name}'` : `${name}'s`;
 
 function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined): string {
     const fighter = fighters.find(one => one.id === id);
@@ -610,10 +606,10 @@ export class RealmArenaGameType implements IGameType {
  */
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
-    const warbands = gs.seats.map((_, k) => warbandOwner(k));
+    const warbands = warbandsFor(gs.seats);
     const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
     const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
-    const foe = factionById(coop.enemy).enemyName;
+    const foe = enemyNameOf(coop.enemy);
     data.gameState.history.unshift({
         text: `The battle is over: the team ${pluralize(team, "point")} (${gs.seats.map(userId => `${userToken(userId)} ${gs.scores[userId] ?? 0}`).join(", ")}), ${foe} ${enemy}`,
     });
