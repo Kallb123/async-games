@@ -434,7 +434,7 @@ describe("the recap of the enemy's turn (§29.9)", () => {
         const ended = endTurnBy("a");
         await play(game, ended);
         const actions = (ended as RealmArenaEndTurn).recordedEnemyActions ?? [];
-        const rows = await buildAllEvents(game, NAMES);
+        const rows = await buildAllEvents(game, NAMES, "a");
         const enemy = rows.filter(row => /:enemy:\d+$/.test(row.id));
         expect(enemy).toHaveLength(actions.length);
         const capitalised = `${ENEMY.charAt(0).toUpperCase()}${ENEMY.slice(1)} `;

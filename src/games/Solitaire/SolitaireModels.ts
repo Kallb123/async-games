@@ -126,7 +126,7 @@ var SolitaireGameDataSchema = new Schema<ISolitaireGameDataDocument>({
     }
 }, { discriminatorKey: 'kind' });
 
-SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<ISolitaireGameDataResponse> {
+SolitaireGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<ISolitaireGameDataResponse> {
     console.log("CreateDataResponse: Solitaire game");
 
     const gameDataDocument: ISolitaireGameData = this as ISolitaireGameData;
@@ -139,7 +139,7 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap, viewerId),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState)

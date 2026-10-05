@@ -21,6 +21,12 @@
 // action did (§29.9). Those lines name the enemy in plain text (`ownerToken`),
 // and nobody can react to a line nobody acted.
 //
+// In fog of war (§27.2) every row is told to its viewer as their log tells it:
+// an action their side saw none of has no row at all, as it has no line, and
+// one it saw some of is told — its kind, its glyph, whom it hurt — from only
+// what they were told of it (`Told`, which each command's outcome carries for
+// its lines). The fog lifts as the battle ends, on the rows with the log.
+//
 // The muster stays sealed here as it does everywhere else (§17.2). A muster's
 // row says only that it happened. Nothing below reads the command's `picks`,
 // or the snapshot's `myMuster`, which holds the squad of whoever the feed is
@@ -31,7 +37,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { enemyLineCount, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
+import { unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import { enemyNameOf, UNKNOWN_ENEMY, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
@@ -85,9 +91,28 @@ function state(snapshot: ITurnSnapshot): RAState {
     return snapshot.specificGameState as RAState;
 }
 
-/** The lines this command added to the history, newest first. */
-function newLines(prev: ITurnSnapshot, next: ITurnSnapshot): IHistoryEntry[] {
-    return next.history.slice(0, Math.max(0, next.history.length - prev.history.length));
+/**
+ * The lines this command added to the history the viewer is told, newest
+ * first: every one stamped with its id, under the battle's end if it ended it,
+ * which the game type writes after it (`BATTLE_END_LINES`). Not counted off
+ * the length the history grew by, since the fog lifting at the battle's end
+ * brings back every line the viewer wasn't told before (§27.1).
+ */
+function newLines(prev: ITurnSnapshot, next: ITurnSnapshot, command: IGameCommand): IHistoryEntry[] {
+    let at = 0;
+    if (next.complete && !prev.complete) while (at < next.history.length && next.history[at].commandId === undefined) at++;
+    while (at < next.history.length && next.history[at].commandId === command.id) at++;
+    return next.history.slice(0, at);
+}
+
+/**
+ * What `viewerId` was told of some events (§27.2): their own share of `told`,
+ * in a battle fought in fog of war and not yet over — none for nobody in
+ * particular — and all of them otherwise.
+ */
+function toldOf(told: Told | undefined, events: readonly BattleEvent[], viewerId: string | null, next: ITurnSnapshot): readonly BattleEvent[] {
+    if (!told || next.complete) return events;
+    return viewerId === null ? [] : told[viewerId] ?? [];
 }
 
 /**
@@ -180,13 +205,24 @@ const centrePointsOf = (events: readonly BattleEvent[], owner: string): number =
     events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" && event.player === owner ? event.points : 0), 0);
 
 /**
+ * How many lines of the viewer's log a warband's turn wrote: one for its
+ * burning, one an action, each only when they were told of it (§27.2), and one
+ * for its End turn, which everyone is.
+ */
+function enemyLineCount(turn: EnemyTurn, said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): number {
+    return (said(turn.startedTold, turn.started).length > 0 ? 1 : 0)
+        + turn.steps.filter(step => said(step.told, step.events).length > 0).length
+        + (turn.ended ? 1 : 0);
+}
+
+/**
  * The rows of the enemy's turn inside an End turn (§29.4), from its lines of
  * the log, oldest first: what burning did as it began, a row for each of its
  * actions, built as a player's are, and one when its End turn held the
  * centre. Each is the warband's own row, keyed by the End turn's command, so
  * the board's dot and the feed's folding read it as the enemy's.
  */
-function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines: readonly IHistoryEntry[], next: RAState): IGameEvent[] {
+function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines: readonly IHistoryEntry[], next: RAState, said: (told: Told | undefined, events: readonly BattleEvent[]) => readonly BattleEvent[]): IGameEvent[] {
     // The enemy's name as its lines begin with it: "The enemy" while a random
     // enemy is hidden (§29.3), its faction's once it's known — and a turn can
     // see the one give way to the other.
@@ -203,12 +239,16 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
         : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "demolished"
             ? event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: event.damage, reaction: false }))
             : [event]);
+    // In fog, only the parts the viewer was told of wrote them a line (§27.2).
     let at = 0;
-    const rows: IGameEvent[] = burningRow(own, `${command.id}:enemy:burning`, turn.started.length > 0 ? lines.slice(at, ++at) : [], turn.started, next.fighters);
+    const started = said(turn.startedTold, turn.started);
+    const rows: IGameEvent[] = burningRow(own, `${command.id}:enemy:burning`, started.length > 0 ? lines.slice(at, ++at) : [], started, next.fighters);
     for (const [index, step] of turn.steps.entries()) {
+        const events = said(step.told, step.events);
+        if (events.length === 0) continue;
         const line = lines[at++];
         if (!line) break;
-        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, told(step.events), step.action.fighter, next.fighters));
+        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, told(events), step.action.fighter, next.fighters));
     }
     const points = turn.ended ? centrePointsOf(turn.ended, turn.owner) : 0;
     if (points > 0) {
@@ -217,12 +257,13 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     return rows;
 }
 
-/** Turns one replayed Realm Arena command into its recap rows. */
+/** Turns one replayed Realm Arena command into its recap rows, as `viewerId` is told them. */
 function toEvents(
     prev: ITurnSnapshot,
     next: ITurnSnapshot,
     command: IGameCommand,
     outcome: ICommandOutcome,
+    viewerId: string | null = null,
 ): IGameEvent[] {
     if (!outcome.validMove) return [];
     const name = command.senderUsername;
@@ -233,7 +274,8 @@ function toEvents(
         actorId: command.senderId,
         actorUsername: name,
     };
-    const lines = newLines(prev, next);
+    const lines = newLines(prev, next, command);
+    const said = (told: Told | undefined, events: readonly BattleEvent[]) => toldOf(told, events, viewerId, next);
     const rows: IGameEvent[] = [];
 
     switch (command.className) {
@@ -245,7 +287,10 @@ function toEvents(
             break;
         }
         case "RealmArenaAct": {
-            const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
+            const { events: all = [], recap } = outcome as Partial<IRealmArenaOutcome>;
+            // Nothing the viewer's side saw, so no line of their log and no row (§27.2).
+            const events = said(recap?.told, all);
+            if (events.length === 0) return [];
             // The oldest of its lines: one that ended the battle has the
             // winner's line above it, and that names an actor too.
             const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
@@ -283,9 +328,9 @@ function toEvents(
             // own window after the enemy's turn, and they'd never see it.
             const ended = next.complete && !prev.complete;
             const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
-            const enemyLines = enemy ? enemyLineCount(enemy) : 0;
-            if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next)));
-            rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), recap?.started ?? events, state(next).fighters));
+            const enemyLines = enemy ? enemyLineCount(enemy, said) : 0;
+            if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next), said));
+            rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), said(recap?.startedTold, recap?.started ?? events), state(next).fighters));
             break;
         }
         default:

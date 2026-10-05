@@ -310,7 +310,7 @@ describe("Realm Arena — replay and recap", () => {
         const undo = undoBy("a");
         await play(game, undo);
 
-        const ids = (await buildAllEvents(game, NAMES)).map(event => event.commandId);
+        const ids = (await buildAllEvents(game, NAMES, "a")).map(event => event.commandId);
         expect(ids).not.toContain(move.id);
         expect(ids).not.toContain(undo.id);
     });

@@ -6,7 +6,7 @@ import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameR
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
-import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
+import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
 import { battleOf, enemyHidden, toldTo } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
@@ -14,7 +14,7 @@ import { userToken } from "@/utils/games/history";
 import { CHARACTERS, COOP_PLAYERS, FACTION_IDS, factionById, fitsCoop, isFactionId, musterSize, POINTS_BUDGET, RANDOM_ENEMY, UNKNOWN_ENEMY, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -333,7 +333,7 @@ RealmArenaGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(doc.gameState, userIdNameMap),
+        gameState: publicGameState(doc.gameState, userIdNameMap, viewerId),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
@@ -449,6 +449,19 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
             return rest;
         }),
     };
+}
+
+/**
+ * What a review step calls its command, for one viewer (§27.2): in a battle
+ * fought in fog of war and not yet over, an action by another side is only
+ * "acted" — the step is kept for whatever of it the viewer was told, and its
+ * kind ("threw a fireball") could name a character the log calls one out of
+ * sight. Undefined, for the command's own words, otherwise.
+ */
+export function stepSummary(command: IGameCommand, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete = false): string | undefined {
+    if (command.className !== "RealmArenaAct") return undefined;
+    const battle = battleOf(gs, complete);
+    return battle.fog && !allied(battle, command.senderId, viewerId) ? "acted" : undefined;
 }
 
 export var RealmArenaGameDataModel =

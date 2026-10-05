@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asStoredHistory, playerHistory, resolveHistory, userToken } from "./history";
+import { asStoredHistory, playerHistory, resolveHistory, tellEveryone, userToken } from "./history";
 import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 
 const NAMES = { user_a: "Alice", user_b: "Bob" };
@@ -12,24 +12,24 @@ describe("userToken", () => {
 
 describe("resolveHistory", () => {
     it("swaps a token for its name and keeps the actor", () => {
-        expect(resolveHistory([{ text: "{{user_a}} drew a card", actorId: "user_a" }], NAMES))
+        expect(resolveHistory([{ text: "{{user_a}} drew a card", actorId: "user_a" }], NAMES, null))
             .toEqual([{ text: "Alice drew a card", actorId: "user_a" }]);
     });
 
     it("resolves every mention on a line", () => {
-        expect(resolveHistory([{ text: "{{user_a}} stole from {{user_b}}" }], NAMES))
+        expect(resolveHistory([{ text: "{{user_a}} stole from {{user_b}}" }], NAMES, null))
             .toEqual([{ text: "Alice stole from Bob" }]);
     });
 
     it("leaves a line nobody is named in alone", () => {
-        expect(resolveHistory([{ text: "Setup: re-roll on a 6 is enabled" }], NAMES))
+        expect(resolveHistory([{ text: "Setup: re-roll on a 6 is enabled" }], NAMES, null))
             .toEqual([{ text: "Setup: re-roll on a 6 is enabled" }]);
     });
 
     it("does not rescan a substituted name", () => {
         // Alice has renamed herself to something that looks like a token. A
         // resolver that ran a second pass would substitute it.
-        expect(resolveHistory([{ text: "{{user_a}} won" }], { user_a: "{{user_b}}", user_b: "Bob" }))
+        expect(resolveHistory([{ text: "{{user_a}} won" }], { user_a: "{{user_b}}", user_b: "Bob" }, null))
             .toEqual([{ text: "{{user_b}} won" }]);
     });
 
@@ -41,7 +41,7 @@ describe("resolveHistory", () => {
             { $__parent: { specificGameState: { secretCode: [3, 1, 4, 1] } } },
         );
 
-        const resolved = resolveHistory([stored], NAMES);
+        const resolved = resolveHistory([stored], NAMES, null);
 
         expect(resolved).toEqual([{ text: "Alice won", actorId: "user_a" }]);
         expect(JSON.stringify(resolved)).not.toContain("secretCode");
@@ -49,12 +49,12 @@ describe("resolveHistory", () => {
 
     it("names an id it cannot resolve rather than leaking it", () => {
         // A guest swept seven days after their last game.
-        expect(resolveHistory([{ text: "{{user_gone}} passed" }], NAMES))
+        expect(resolveHistory([{ text: "{{user_gone}} passed" }], NAMES, null))
             .toEqual([{ text: `${UNKNOWN_PLAYER_NAME} passed` }]);
     });
 
     it("carries a line's commandId through, so a reaction can still find it", () => {
-        expect(resolveHistory([{ text: "{{user_a}} rolled a 6", actorId: "user_a", commandId: "cmd-1" }], NAMES))
+        expect(resolveHistory([{ text: "{{user_a}} rolled a 6", actorId: "user_a", commandId: "cmd-1" }], NAMES, null))
             .toEqual([{ text: "Alice rolled a 6", actorId: "user_a", commandId: "cmd-1" }]);
     });
 });
@@ -76,13 +76,14 @@ describe("a history line's timestamp on the way out", () => {
         const resolved = resolveHistory(
             [{ text: "{{u1}} ended their turn", createdAt: "2026-09-15T10:00:37.412Z" }],
             { u1: "Alice" },
+            null,
         );
 
         expect(resolved[0].createdAt).toBe("2026-09-15T10:00:00.000Z");
     });
 
     it("leaves a stamp it can't read alone rather than dropping it", () => {
-        const resolved = resolveHistory([{ text: "x", createdAt: "not a date" }], {});
+        const resolved = resolveHistory([{ text: "x", createdAt: "not a date" }], {}, null);
 
         expect(resolved[0].createdAt).toBe("not a date");
     });
@@ -113,5 +114,27 @@ describe("asStoredHistory", () => {
         asStoredHistory(setup);
 
         expect(setup.map(entry => entry.text)).toEqual(["one", "two"]);
+    });
+});
+
+describe("tellEveryone", () => {
+    it("tells every line told per viewer to everyone, whole, once the game is over", () => {
+        const gameState = { history: [
+            { text: "{{user_b}} moved their Scout", actorId: "user_b", commandId: "c2", perViewer: [{ userId: "user_b", text: "{{user_b}} moved their Scout" }] },
+            { text: "{{user_a}} ended their turn", actorId: "user_a", commandId: "c1" },
+        ] };
+        tellEveryone(gameState);
+        expect(gameState.history).toEqual([
+            { text: "{{user_b}} moved their Scout", actorId: "user_b", commandId: "c2" },
+            { text: "{{user_a}} ended their turn", actorId: "user_a", commandId: "c1" },
+        ]);
+        expect(resolveHistory(gameState.history, NAMES, null).map(line => line.text)).toEqual(["Bob moved their Scout", "Alice ended their turn"]);
+    });
+
+    it("leaves a log nobody was told differently as it is", () => {
+        const history = [{ text: "x" }];
+        const gameState = { history };
+        tellEveryone(gameState);
+        expect(gameState.history).toBe(history);
     });
 });

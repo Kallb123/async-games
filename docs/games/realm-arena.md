@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.41. Split out of Defender of the Realm in its third round of
+**Status:** v1.42. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -1806,8 +1806,8 @@ sends (`BattleEvent` in `rules.ts`).
   route already resolves every command to build its snapshot, so the replay
   adapter can opt in to sending that command's events with the snapshot. Only
   Realm Arena opts in. Its events are all public once the battle starts,
-  since the log tells every one of them — except, in fog of war, where they
-  happened (§27). A muster's outcome carries none.
+  since the log tells every one of them — except, in fog of war, what the
+  viewer's squad didn't see (§27.2). A muster's outcome carries none.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
   a second game wants it (AGENTS.md's second-copy rule).
@@ -1924,8 +1924,8 @@ place — moving — what a player can be held to knowing.
   look that finds an empty corner — or a flask that lands on no one where the
   player can't see — is a small gift, and an accepted one. A move that finds an
   enemy in its way never can be: it showed the player that enemy.
-- **The fog lifts when the battle ends.** The last state, and the results,
-  show everyone.
+- **The fog lifts when the battle ends.** The last state, the results and
+  the whole log show everyone.
 
 ### 27.2 What fog hides, and what it doesn't
 
@@ -1937,27 +1937,40 @@ place — moving — what a player can be held to knowing.
   battlefield. A smoke cloud is seen wherever any of its 3×3 is in sight,
   whether or not its thrower is, and not otherwise — even on a thrower in
   sight. Spotting a new cloud counts as spotting an enemy for undo.
-- **Not hidden: the log.** The history every player reads tells who did what
-  to whom, in words — "Bob's Archer fired on overwatch: a hit for 3" — and the
-  scores. It has never said where anything happened, and fog keeps it that
-  way: fog hides *where*, and the log still tells *what*. The scoreboard shows
-  how many of another squad the viewer can see, not how many stand.
-- **Accepted: who found whom.** A move that finds a hidden enemy is told to
-  everyone, as the log tells everything ("Alice's Scout found Bob's Knight in
-  its way"), so a third player learns the two are near each other, though not
-  where.
+- **Hidden: what happened out of sight, in the log, the recap and the
+  review too.** A player is told what their side saw (`toldTo`): anything
+  their own side or an ally did, anything done to one of theirs, and of
+  everyone else only what a character of theirs saw — a shot or a blow whose
+  shooter or target was in sight, a character in sight going down, being
+  healed or going on watch, a move that crossed a square they see, a blast
+  landing where they see some of it. Something nobody of theirs saw isn't
+  told at all, not even that it happened: an enemy hunkering down out of
+  sight leaves no line in their log, no row in their recap and no step in
+  their review. Told part of something, they're told that part, and a
+  character in it they didn't see is "a character out of sight": a shot at
+  one of theirs from the fog says "Bob shot Alice's Knight with a character
+  out of sight (65%): a hit for 3" — that they were hit, and the odds, not
+  who fired. That a turn ended is everyone's, so an End turn's line is told to
+  all, less the characters going on watch that the viewer can't see. The
+  scoreboard shows how many of another squad the viewer can see, not how
+  many stand.
+- **Not hidden: the scores.** The scoreboard is everyone's, so a point scored
+  out of sight is told as the log's "scored 3 for the knock-out", though not
+  who was knocked out or by whom. Points hint at a fallen character's cost.
+- **Not hidden: whose turn it is**, and that it ended, with the turn's
+  timestamps. Nor how many commands have been played, which every response
+  carries as a count (`commandCount`) for out-of-turn plays: a player who
+  watches it can tell that something was done out of sight, never what.
 - **Accepted: fighter ids.** Ids count from 0 in seat order (§17.2), so an id
   seen hints at how big the squads before it are. The log names every
-  character that acts anyway.
-- **Hidden: a watch out of sight.** The log says a character went on watch,
-  but a review doesn't tell a viewer the AP banked by one they can't see —
-  how many reactions are waiting.
+  character the viewer saw act anyway.
+- **Hidden: a watch out of sight.** Neither the log nor a review tells a
+  viewer that a character they can't see went on watch, let alone the AP it
+  banked — how many reactions are waiting.
 - **Accepted: a shot's odds.** A shot from out of sight at one of the
   viewer's characters is told with its chance to hit, as the sheet showed it
-  before the move: a hint at the cover between them, not a square. In a
-  free-for-all the log tells a third player the odds of a shot between two
-  squads they can't see too ("shot X with Y (65%)"), which is the same hint
-  about two characters who aren't theirs (reviewed at PR 10, §17.3).
+  before the move: a hint at the cover between them, not a square. A shot
+  between two squads the viewer can't see isn't told at all.
 - **Accepted: a shield wall out of sight.** A Knight's shield wall covers an
   ally beside it whether or not the shooter sees the Knight. The odds shown
   before a shot can't count a Knight the player can't see; the server does.
@@ -1973,14 +1986,41 @@ place — moving — what a player can be held to knowing.
 - **The response** (`gameStateToModel`) is the viewer's view while the battle
   is fought, and everything once it's over. A viewer with no squad — a replay
   built for nobody — sees no one. The muster's seal (§17.2) is untouched.
+- **What a player is told** of a command is one rule, `toldTo`, read from
+  the battle after it: whom their side saw take part (`witnessed` — their
+  side, anyone on a square it sees, anyone whose move crossed one), and every
+  event about one of them. The log, the recap, the review and an action's own
+  outcome are all cut by it, so the four never disagree.
+- **The log** is written per player (`writeLine`): each line carries the
+  line as each player was told it (`IHistoryEntry.perViewer`) — narrated
+  from only their events, a character they didn't see named as one out of
+  sight — and a player it doesn't list isn't told it. The shared resolver
+  picks the viewer's line for every response, review step and push
+  (`resolveHistory`), so nobody else's ever reaches the wire, and nobody in
+  particular is told none. An Undo is told to whoever was told the move it
+  takes back. As the battle ends every `perViewer` is dropped
+  (`tellEveryone`) — by the game type, and by `finishGame` for a battle
+  abandoned or ended by hand: the fog lifts, and the whole log is everyone's.
 - **A review** (§26.2) is told per viewer: `stepOutcomeToModel`, through the
-  replay adapter's `snapshotOutcome`, which is now asked for the timeline's
-  viewer. The events say what the log says, so only their squares are cut:
-  someone else's move keeps the squares the viewer saw, and only when it ends
-  on one — one that ends out of sight is told with no path, and the board
-  loses the mover there. A fireball, a flask or a Demolish landing where the
-  viewer sees none of it, and hitting none of theirs, isn't told — though the
-  cover it blasted is, since the ground is everyone's.
+  replay adapter's `snapshotOutcome`, asked for the timeline's viewer, keeps
+  only what `toldTo` tells. Someone else's move keeps the squares the viewer
+  saw, and only when it ends on one — one that ends out of sight is told with
+  no path, and the board loses the mover there. A step that told the viewer
+  nothing — no line of their log — is left out of their timeline
+  (`omitUntoldSteps`), or its summary would say that something was done, and
+  what kind of thing. A step kept for the part of it the viewer saw — or for
+  the points it scored, or the cover it blasted — calls another side's action
+  only "acted" (`stepSummary`): its kind, a fireball say, would name the
+  character behind it. A blast's line counts only the characters it hit that
+  the viewer saw.
+- **The recap** is built for its viewer (the recap adapter's `toEvents` is
+  handed them): each command's outcome carries what each player was told of
+  it (`recap.told`, and for the enemy's turn each step's), never sent, so an
+  action they were told nothing of has no row, and one they were told part
+  of takes its kind, glyph and who it hurt from that part. A reaction is
+  looked up among the rows the player reacting was told, and the push quotes
+  the move to its player as they were told it, never as the player reacting
+  was.
 - **What can't be seen isn't said to be empty.** The centre's readout and the
   recap's tip say the centre is out of sight, not empty, when nobody is seen
   there and the viewer's squad can't see all of it; and a recap row doesn't
@@ -2199,9 +2239,9 @@ information, kept as a squad is during the muster (§17.2):
   `enemySeen` is set; before that, the board shows "an unknown enemy" on the
   scoreboard and the muster. A review is built from the state at each step,
   so a step before the sighting doesn't carry it either.
-- **The log doesn't give it away.** Fog's log tells *what* happened even out
-  of sight (§27.2) — "the Renegades' Archer moved" — and a character's kind
-  is its faction. So until the enemy is seen, `ownerToken` and `narrate` call
+- **The log doesn't give it away.** Fog's log tells what the team saw happen
+  (§27.2) — "the Renegades' Archer fired on overwatch" — and a character's
+  kind is its faction. So until the enemy is seen, `ownerToken` and `narrate` call
   the enemy "the enemy" and each of its characters "an enemy character":
   "an enemy character fired on overwatch at Alice's Knight". A history line
   is kept as it was written, so those lines stay as the team knew them; lines
@@ -3018,9 +3058,9 @@ surviving the waves as the first co-op mission of its own. This is it.
   character stood in an enemy zone blocks those squares, which is a tactic,
   not a bug.
 - **A wave is told.** The log says "A fresh wave of the Renegades arrives"
-  (or "of the enemy", while a random enemy is unseen, §29.3), as the log tells
-  everything (§27.2). In fog the fresh characters are seen only if they're in
-  sight. Their fighter ids continue from the last, which hints at the wave's
+  (or "of the enemy", while a random enemy is unseen, §29.3), to everyone,
+  as a turn ending is (§27.2). In fog the fresh characters are seen only if
+  they're in sight. Their fighter ids continue from the last, which hints at the wave's
   size as ids always have (§27.2), and is accepted as it is there.
 - **Winning and losing.** The team wins if anyone of it is standing when the
   last round ends, and loses the moment nobody is. A warband wiped out
@@ -3279,3 +3319,4 @@ Realm, its sibling in the same world.
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
 | 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
 | 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op. Every battle scores them, those already being fought too: none had done any damage. The battle record counts them, and the result shows them when anybody scored one (§28.1). |
+| 1.42 | Fog of war reaches the log, the recap and the review (§27.2–§27.3): a player is told only what their side saw, by one rule (`toldTo`); each line of the log is written per player (`perViewer`), naming a character they didn't see as one out of sight, and a line nobody of theirs saw isn't told at all; the recap and its reactions are built per viewer, and a review leaves out a step that told its viewer nothing. The fog lifts on the log as the battle ends. |

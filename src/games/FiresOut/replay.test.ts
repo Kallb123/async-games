@@ -140,7 +140,7 @@ describe("Fires Out replay", () => {
         await play(game, drive, gs.firefighters[0].ownerId);
 
         expect(gs.rescued).toBe(1);
-        const events = await buildAllEvents(game, { ...NAMES });
+        const events = await buildAllEvents(game, { ...NAMES }, null);
         expect(events.map(event => event.title)).toContain("Alice rescued a victim! (1/7)");
     });
 

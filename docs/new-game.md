@@ -295,7 +295,10 @@ the live document to fill the gap locally.
 
 Recap **events** are the one place this doesn't apply: they describe what
 happened to whoever reads the feed, so `toEvents` must stay to what the whole
-table can see (Train Time names a face-up card taken, never a blind draw).
+table can see (Train Time names a face-up card taken, never a blind draw) —
+unless it tells each viewer their own rows from the `viewerId` it's handed, as
+Realm Arena's fog of war does (see
+[`turn-recap-and-planning.md`](./turn-recap-and-planning.md)).
 
 **d. The adapters and the wiring.**
 

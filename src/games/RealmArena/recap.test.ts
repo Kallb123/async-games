@@ -6,7 +6,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import { battlefieldById } from "./maps";
-import { CENTRE, newFighter, type BattleEvent, type Fighter } from "./rules";
+import { CENTRE, newFighter, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 
 // docs/games/realm-arena.md §17.3 PR 8. Snapshot pairs and a command/outcome
 // handed to the adapter directly, the DiceCities/RaceCars style;
@@ -181,13 +181,52 @@ describe("Realm Arena recap rows", () => {
     });
 });
 
+describe("Realm Arena recap rows in fog of war (§27.2)", () => {
+    const fogged = (extra: Partial<IRealmArenaSpecificGameStateResponse> = {}) => state({ fog: true, fighters, ...extra });
+    const miss: BattleEvent = { kind: "shot", fighter: 0, target: 1, chance: 80, roll: 90, result: "miss", damage: 0, reaction: false };
+    const knockout: BattleEvent = { kind: "downed", fighter: 3, by: 0 };
+
+    it("gives a player no row for an action their side saw none of, and tells one it saw some of by what it saw", () => {
+        const outcome = { ...valid([miss, knockout]), recap: { told: { a: [miss, knockout], b: [miss], c: [] } } } as ICommandOutcome;
+        const shown = (viewer: string | null, text: string) => toEvents(snap(fogged()), snap(fogged(), text ? [line(text, "a")] : []), cmd("RealmArenaAct"), outcome, viewer);
+        expect(shown("a", "Alice shot Bob's Knight with their Archer (80%): a miss; Carol's Scout is down")).toMatchObject([{ type: "ra_knockout" }]);
+        expect(shown("b", "Alice shot Bob's Knight with their Archer (80%): a miss")).toMatchObject([{ type: "ra_miss" }]);
+        expect(shown("c", "")).toEqual([]);
+        expect(shown(null, "")).toEqual([]);
+        // The fog lifts as the battle ends.
+        expect(toEvents(snap(fogged()), snap(fogged(), [line("x", "a")], true), cmd("RealmArenaAct"), outcome, "c")).toMatchObject([{ type: "ra_knockout" }]);
+    });
+
+    it("gives the enemy's turn a row for each action the player was told of, against the line it wrote them", () => {
+        const owner = warbandOwner(0);
+        const seen: BattleEvent = { kind: "struck", fighter: 2, target: 0, damage: 2, reaction: false };
+        const enemy = {
+            owner,
+            started: [],
+            steps: [
+                { action: { kind: "hunker", fighter: 2 }, events: [{ kind: "hunkered", fighter: 2 }], told: { a: [] } },
+                { action: { kind: "attack", fighter: 2, target: 0 }, events: [seen], told: { a: [seen] } },
+            ],
+            ended: [],
+        };
+        const outcome = { ...valid([seen]), turnOver: true, recap: { enemy, started: [] } } as unknown as ICommandOutcome;
+        const lines = [line("The enemy ended their turn"), line("The enemy struck Alice's Archer with an enemy character for 2"), line("Alice ended their turn", "a")];
+        const coop = fogged({ coop: true, fighters: [...fighters, newFighter(2, owner, "knight", 30)] });
+        const rows = toEvents(snap(coop), snap(coop, lines), cmd("RealmArenaEndTurn"), outcome, "a");
+        expect(rows.map(row => [row.id, row.title])).toEqual([
+            ["c1", "Alice ended their turn"],
+            ["c1:enemy:1", "The enemy struck Alice's Archer with an enemy character for 2"],
+        ]);
+    });
+});
+
 describe("Realm Arena feed, a row per character per turn", () => {
     const shot = (damage: number): BattleEvent => ({ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 12, result: damage > 0 ? "hit" : "miss", damage, reaction: false });
     const moved: BattleEvent = { kind: "moved", fighter: 0, path: [1, 2], sneaking: false };
     /** One action's row, as `toEvents` writes it for command `id`. */
     const act = (id: string, fighter: number, text: string, events: BattleEvent[], sender = "a") => toEvents(
         snap(state({ fighters })),
-        snap(state({ fighters }), [line(text, sender)]),
+        snap(state({ fighters }), [{ ...line(text, sender), commandId: id }]),
         cmd("RealmArenaAct", { id, senderId: sender, senderUsername: sender === "a" ? "Alice" : "Bob", action: { kind: "move", fighter } }),
         valid(events),
     );

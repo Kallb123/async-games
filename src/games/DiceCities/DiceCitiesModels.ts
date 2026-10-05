@@ -340,7 +340,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(viewerId: s
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap, viewerId),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

@@ -172,7 +172,7 @@ describe("buildEventFeed", () => {
         const history = [move("a", "u1"), move("b", "u2")];
 
         const feed = await buildEventFeed(game(history, "u1"), names, "u1");
-        const all = await buildAllEvents(game(history, "u1"), names);
+        const all = await buildAllEvents(game(history, "u1"), names, null);
 
         expect(feed.events.map(event => event.title)).toEqual(["u2 TestRecapMove (feed)"]);
         expect(all.map(event => event.title)).toEqual(["u1 TestRecapMove", "u2 TestRecapMove"]);
@@ -182,6 +182,7 @@ describe("buildEventFeed", () => {
         const events = await buildAllEvents(
             game([move("a", "u1"), move("b", "u2"), undo("c", "u2")], "u2"),
             names,
+            null,
         );
 
         expect(events.map(event => event.commandId)).toEqual(["a"]);
@@ -191,6 +192,7 @@ describe("buildEventFeed", () => {
         const events = await buildAllEvents(
             game([move("a", "u1"), move("b", "u2"), move("c", "u1"), undo("d", "u1"), undo("e", "u1")], "u2"),
             names,
+            null,
         );
 
         expect(events.map(event => event.commandId)).toEqual(["a"]);
@@ -200,6 +202,7 @@ describe("buildEventFeed", () => {
         const events = await buildAllEvents(
             game([move("a", "u1"), move("b", "u2"), move("c", "u2"), undo("d", "u2"), move("e", "u2"), undo("f", "u2"), undo("g", "u2")], "u2"),
             names,
+            null,
         );
 
         expect(events.map(event => event.commandId)).toEqual(["a"]);

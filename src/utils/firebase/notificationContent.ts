@@ -82,7 +82,7 @@ async function describeWhatHappened(
 
     // Straight off the stored log, so the {{userId}} tokens in it still have to
     // be resolved — this copy is read by a player, not by the engine.
-    const latestHistory = resolveHistory(gameData.gameState.history.slice(0, 1), userIdNameMap)[0];
+    const latestHistory = resolveHistory(gameData.gameState.history.slice(0, 1), userIdNameMap, forUserId)[0];
     return latestHistory ? sentence(latestHistory.text) : null;
 }
 

@@ -35,6 +35,17 @@ export interface IHistoryEntry {
      * entries from old games predating this field.
      */
     createdAt?: string;
+    /**
+     * The line as each player is told it, for a line not everyone is told
+     * alike — written by a game whose players see different parts of the
+     * board (Realm Arena's fog of war). A player listed is told their own
+     * `text`, and one who isn't listed, or nobody in particular, isn't told
+     * the line at all. Absent on every line everyone reads the same, which is
+     * nearly all of them. Never sent: resolveHistory picks the viewer's line.
+     * Dropped once the game is over (`tellEveryone`), when the whole of every
+     * line is everyone's.
+     */
+    perViewer?: { userId: string; text: string }[];
 }
 
 /**
@@ -85,7 +96,6 @@ export function resolveTokens(text: string, userIdNameMap: { [key: string]: stri
     return text.replace(USER_TOKEN, (_match, userId: string) => userIdNameMap[userId] || UNKNOWN_PLAYER_NAME);
 }
 
-/** Swaps every `{{userId}}` token across a whole history log for that player's name. */
 /**
  * A stamp truncated to the minute it fell in. Every reader of one of these
  * renders it through formatRelativeTime — "just now", "5m ago" — so nothing on
@@ -101,22 +111,53 @@ export function toTheMinute(iso: string): string {
     return at.toISOString();
 }
 
+/**
+ * Swaps every `{{userId}}` token across a whole history log for that player's
+ * name, leaving out any line the viewer isn't told.
+ */
 export function resolveHistory(
     history: IHistoryEntry[],
     userIdNameMap: { [key: string]: string },
+    // Who the log is for: a line told per viewer (IHistoryEntry.perViewer)
+    // reaches only the players it lists, as their own text. Null is nobody in
+    // particular, who is told none of those lines.
+    viewerId: string | null,
 ): IHistoryEntry[] {
-    return history.map(entry => {
-        const text = resolveTokens(entry.text, userIdNameMap);
-        // Field by field, never `{ ...entry }`. These entries come off a live
-        // Mongoose document, and spreading a subdocument copies its internals
-        // rather than its fields — including `$__parent`, the whole game
-        // document, hidden state and all, straight into the response.
-        const resolved: IHistoryEntry = { text };
-        if (entry.actorId) resolved.actorId = entry.actorId;
-        if (entry.commandId) resolved.commandId = entry.commandId;
-        if (entry.createdAt) resolved.createdAt = toTheMinute(entry.createdAt);
-        return resolved;
+    return history.flatMap(entry => {
+        const told = entry.perViewer ? entry.perViewer.find(one => one.userId === viewerId)?.text : entry.text;
+        if (told === undefined) return [];
+        const resolved = plainEntry(entry, resolveTokens(told, userIdNameMap));
+        if (resolved.createdAt) resolved.createdAt = toTheMinute(resolved.createdAt);
+        return [resolved];
     });
+}
+
+/**
+ * A line as a plain object, with `text` in place of its own: its fields, and
+ * nothing else — not even `perViewer`, which is never sent.
+ *
+ * Field by field, never `{ ...entry }`. These entries come off a live
+ * Mongoose document, and spreading a subdocument copies its internals rather
+ * than its fields — including `$__parent`, the whole game document, hidden
+ * state and all, straight into the response.
+ */
+export function plainEntry(entry: IHistoryEntry, text = entry.text): IHistoryEntry {
+    const plain: IHistoryEntry = { text };
+    if (entry.actorId) plain.actorId = entry.actorId;
+    if (entry.commandId) plain.commandId = entry.commandId;
+    if (entry.createdAt) plain.createdAt = entry.createdAt;
+    return plain;
+}
+
+/**
+ * Every line told per viewer (IHistoryEntry.perViewer) back to the whole of
+ * it, for everyone: what a game over does to the log, however the game ended
+ * — by its own rules or by `finishGame`. Reassigned rather than edited in
+ * place, so a live document saves it; a log with no such line is left alone.
+ */
+export function tellEveryone(gameState: { history: IHistoryEntry[] }): void {
+    if (!gameState.history.some(entry => entry.perViewer)) return;
+    gameState.history = gameState.history.map(entry => plainEntry(entry));
 }
 
 /**

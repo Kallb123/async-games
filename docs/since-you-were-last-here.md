@@ -107,6 +107,7 @@ interface IRecapAdapter {
         next: ITurnSnapshot,
         command: IGameCommand,
         outcome: ICommandOutcome,
+        viewerId?: string | null,            // who the rows are for; most games ignore it
     ): IGameEvent[];
 
     // The headline + subline at the top of the card, from the viewer's POV.

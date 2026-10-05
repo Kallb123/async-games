@@ -133,8 +133,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Realm Arena remembers how you turned the battlefield",
-                detail: "Turn the battlefield to the angle you prefer and it now stays that way when the game updates or you come back later, remembered separately for each player on the device.",
+                title: "Realm Arena's fog of war covers the log, the recap and the review",
+                detail: "In a battle fought in fog of war the board hid what your squad couldn't see, but the match history, the recap and the match review still told you every move, shot and knock-out out there. Now they only tell you what your squad saw: an enemy hunkering down out of sight leaves no line at all, and a shot at you from the fog says you were hit, not who fired it. When the battle ends the fog lifts and the whole log is there for everyone.",
                 game: "realmarena",
             },
             {

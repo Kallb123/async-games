@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildTimeline } from "@/utils/games/replay";
+import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { findPath, pathCost, pathTo } from "@/utils/games/battlefield/pathfinding";
-import { buildBattlefield, type Battlefield } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, distance, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
-import { RealmArenaGameDataModel, stepOutcomeToModel } from "./RealmArenaModels";
-import { RealmArenaUndo } from "./RealmArenaLogic";
+import { RealmArenaGameDataModel, stepOutcomeToModel, stepSummary } from "./RealmArenaModels";
+import { RealmArenaAct, RealmArenaUndo } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { battleCues, eventLines, unseenSquares } from "./ui";
 import {
     ACTION_POINTS, act, check, fixedRolls, moveAp, newFighter, reachOf, SIGHT_RANGE, sightOf, smokeSquares, squadSight, viewOf,
     type BattleEvent, type BattleState, type Fighter,
 } from "./rules";
-import { actBy, battleOf, cmd, makeGame, musterAll, play, type RealmArenaTestGame, responseFor } from "./testFixtures";
+import { actBy, battleOf, cmd, endTurnBy, makeGame, musterAll, play, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/games/realm-arena.md §27: fog of war. A player sees what their squad
 // sees — each character as far as its `sightOf`, wherever its line of sight
@@ -315,9 +316,9 @@ describe("a review in fog of war (§27)", () => {
         expect(told([fireball(far, [])], gs, "a")).toHaveLength(1);
     });
 
-    it("tells a viewer with no squad nothing of where anything moved", () => {
+    it("tells a viewer with no squad nothing at all", () => {
         const { gs, inSight } = reviewState();
-        expect(told([{ kind: "moved", fighter: 1, path: inSight.slice(0, 3), sneaking: false }], gs, null)).toEqual([{ kind: "moved", fighter: 1, path: [], sneaking: false }]);
+        expect(told([{ kind: "moved", fighter: 1, path: inSight.slice(0, 3), sneaking: false }], gs, null)).toEqual([]);
     });
 });
 
@@ -337,5 +338,105 @@ describe("the board playing what it was told (§27)", () => {
         expect(battleCues([spotted], before)).toMatchObject([{ kind: "text", fighter: 0, value: "Spotted" }]);
         expect(eventLines([spotted], before, "a", userId => userId === "b" ? "Bob" : userId)[0].title).toBe("Your Man-at-arms found Bob's Man-at-arms in its way");
         expect(eventLines([spotted], before.slice(0, 1), "a", () => "Bob")[0].title).toBe("Your Man-at-arms found a character out of sight in its way");
+    });
+});
+
+describe("the log, the recap and the review in fog of war (§27.2)", () => {
+    const NAMES = { a: "a", b: "b" };
+    const texts = async (game: RealmArenaTestGame, viewer: string) => (await responseFor(game, viewer)).gameState.history.map(line => line.text);
+
+    /**
+     * A fogged battle on a's turn: a's Archer sees b's Knight, and the Knight,
+     * which sees less far, doesn't see the Archer. b's Man-at-arms stands
+     * where neither side sees the other, unless `alone` leaves the Knight b's
+     * only character — at 1 HP, so a's next hit ends the battle.
+     */
+    function ambush(alone = false) {
+        const game = makeGame(undefined, undefined, true);
+        const gs = game.specificGameState;
+        gs.phase = "battle";
+        const { field } = battleOf(game);
+        const free = field.tiles.flatMap((tile, square) => tile.terrain.standable ? [square] : []);
+        const ready = (fighter: Fighter): Fighter => ({ ...fighter, ap: ACTION_POINTS });
+        for (const knightAt of free.slice(Math.floor(free.length / 3))) {
+            for (const archerAt of free.filter(square => { const gap = distance(field, square, knightAt); return gap > 16 && gap <= 22; })) {
+                const archer = ready(newFighter(0, "a", "archer", archerAt));
+                const knight = ready({ ...newFighter(1, "b", "knight", knightAt), ...alone ? { hp: 1 } : {} });
+                const pair = { field, fighters: [archer, knight], fog: true };
+                if (squadSight(pair, "b")(archerAt) || "refused" in check(pair, "a", { kind: "attack", fighter: 0, target: 1 })) continue;
+                const far = free.find(square => !squadSight(pair, "a")(square) && distance(field, square, archerAt) > 30 && distance(field, square, knightAt) > 30);
+                if (far === undefined) continue;
+                gs.fighters = alone ? [archer, knight] : [archer, knight, ready(newFighter(2, "b", "manAtArms", far))];
+                return game;
+            }
+        }
+        throw new Error("nowhere to lay an ambush");
+    }
+    const shoot = (game: RealmArenaTestGame) => play(game, cmd(RealmArenaAct, "a", { action: { kind: "attack", fighter: 0, target: 1 }, recordedRolls: [1] }));
+
+    it("keeps an action a player's side saw none of out of their log, their review and their recap", async () => {
+        // As the squads take the field, nobody sees anybody.
+        const game = makeGame(undefined, undefined, true);
+        await musterAll(game);
+        const archer = battleOf(game).fighters.find(fighter => fighter.owner === "a")!;
+        const hunker = actBy("a", { kind: "hunker", fighter: archer.id });
+        expect((await play(game, hunker)).outcome.validMove).toBe(true);
+        const [line] = await texts(game, "a");
+        expect(line).toMatch(/^a hunkered their \S+ down$/);
+        expect(await texts(game, "b")).not.toContain(line);
+        expect((await texts(game, "b")).join("\n")).not.toMatch(/hunker/);
+
+        // Nor is there a step for it in b's review, where it would say that a did something, and what.
+        const summaries = async (viewer: string) => (await buildTimeline(game, NAMES, [], undefined, viewer)).snapshots.map(step => step.command?.summary ?? null);
+        expect(await summaries("a")).toEqual([null, "mustered their squad", "mustered their squad", "hunkered down"]);
+        expect(await summaries("b")).toEqual([null, "mustered their squad", "mustered their squad"]);
+
+        // Nor a row in their recap, nor one a reaction could find.
+        expect((await play(game, endTurnBy("a"))).outcome.validMove).toBe(true);
+        expect(JSON.stringify(await buildEventFeed(game, NAMES, "b"))).not.toMatch(/hunker/);
+        expect((await buildAllEvents(game, NAMES, "b")).map(event => event.commandId)).not.toContain(hunker.id);
+        expect((await buildAllEvents(game, NAMES, "a")).map(event => event.commandId)).toContain(hunker.id);
+    });
+
+    it("tells a shot from out of sight at one of theirs, but not who fired it", async () => {
+        const game = ambush();
+        expect((await shoot(game)).outcome.validMove).toBe(true);
+        const [mine] = await texts(game, "a");
+        const [theirs] = await texts(game, "b");
+        expect(mine).toMatch(/^a shot b's Knight with their Archer \(\d+%\): a hit for \d+$/);
+        expect(theirs).toMatch(/^a shot b's Knight with a character out of sight \(\d+%\): a hit for \d+$/);
+        expect((await responseFor(game, null)).gameState.history).toEqual([]);
+    });
+
+    it("tells taking a move back only to whoever was told the move", async () => {
+        const game = ambush();
+        const battle = battleOf(game);
+        const reach = reachOf(battle, battle.fighters[0]);
+        const unseen = squadSight(battle, "b");
+        const step = reach.costs.findIndex((cost, square) => cost > 0 && moveAp(battle.fighters[0], cost) <= 1 && !unseen(square));
+        expect((await play(game, actBy("a", { kind: "move", fighter: 0, path: pathTo(reach, step)!.squares }))).outcome.validMove).toBe(true);
+        expect((await play(game, cmd(RealmArenaUndo, "a"))).outcome.validMove).toBe(true);
+        expect((await texts(game, "a")).slice(0, 2)).toEqual(["a took back their last move", "a moved their Archer"]);
+        expect(await texts(game, "b")).toEqual([]);
+    });
+
+    it("never names the action another side took in a review step, while the fog lasts", () => {
+        const game = ambush();
+        const shot = cmd(RealmArenaAct, "a", { action: { kind: "fireball", fighter: 0, at: 0 } });
+        expect(stepSummary(shot, "b", game.specificGameState)).toBe("acted");
+        expect(stepSummary(shot, null, game.specificGameState)).toBe("acted");
+        expect(stepSummary(shot, "a", game.specificGameState)).toBeUndefined();
+        expect(stepSummary(shot, "b", game.specificGameState, true)).toBeUndefined();
+        expect(stepSummary(endTurnBy("a"), "b", game.specificGameState)).toBeUndefined();
+    });
+
+    it("lifts the fog on the log as the battle ends, for everyone", async () => {
+        const game = ambush(true);
+        await shoot(game);
+        expect(game.complete).toBe(true);
+        expect(game.gameState.history.some(line => line.perViewer)).toBe(false);
+        for (const viewer of ["a", "b", null]) {
+            expect((await responseFor(game, viewer)).gameState.history.map(line => line.text)).toContainEqual(expect.stringMatching(/^a shot b's Knight with their Archer/));
+        }
     });
 });

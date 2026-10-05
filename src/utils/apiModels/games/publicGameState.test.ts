@@ -46,7 +46,7 @@ describe("publicGameState", () => {
     it("drops commandHistory and keeps the public fields", () => {
         const state = makeGameState();
 
-        const result = publicGameState(state, NAMES);
+        const result = publicGameState(state, NAMES, "user-1");
 
         expect(result.turnOrder).toEqual(["user-1", "user-2"]);
         expect("commandHistory" in result).toBe(false);
@@ -59,7 +59,7 @@ describe("publicGameState", () => {
     it("resolves the player tokens in the history it sends", () => {
         const state = makeGameState();
 
-        const result = publicGameState(state, NAMES);
+        const result = publicGameState(state, NAMES, "user-1");
 
         expect(result.history).toEqual([{ text: "Alice rolled a 6", actorId: "user-1" }]);
     });
@@ -68,9 +68,25 @@ describe("publicGameState", () => {
         const state = makeGameState();
         state.history = [{ text: "{{user-gone}} rolled a 6" }];
 
-        const result = publicGameState(state, NAMES);
+        const result = publicGameState(state, NAMES, "user-1");
 
         expect(result.history).toEqual([{ text: "Unknown player rolled a 6" }]);
+    });
+
+    it("sends a line told per viewer as the viewer's own, and not at all to anyone it doesn't list", () => {
+        const state = makeGameState();
+        state.history = [
+            { text: "{{user-2}} shot {{user-1}}'s Knight with their Archer", actorId: "user-2", perViewer: [
+                { userId: "user-2", text: "{{user-2}} shot {{user-1}}'s Knight with their Archer" },
+                { userId: "user-1", text: "{{user-2}} shot {{user-1}}'s Knight with a character out of sight" },
+            ] },
+            { text: "{{user-2}} moved their Scout", actorId: "user-2", perViewer: [{ userId: "user-2", text: "{{user-2}} moved their Scout" }] },
+        ];
+
+        expect(publicGameState(state, NAMES, "user-1").history).toEqual([{ text: "Bob shot Alice's Knight with a character out of sight", actorId: "user-2" }]);
+        expect(publicGameState(state, NAMES, "user-2").history.map(line => line.text)).toEqual(["Bob shot Alice's Knight with their Archer", "Bob moved their Scout"]);
+        expect(publicGameState(state, NAMES, null).history).toEqual([]);
+        expect(JSON.stringify(publicGameState(state, NAMES, "user-1"))).not.toContain("perViewer");
     });
 });
 
@@ -90,7 +106,9 @@ describe("every CreateDataResponse", () => {
         // satisfy the guard.
         const assignment = /^[ \t]*gameState:[ \t]*(.*)$/m.exec(body![0]);
         expect(assignment, `no gameState assignment found in ${relativePath}`).not.toBeNull();
-        expect(assignment![1]).toMatch(/^publicGameState\(/);
+        // With the response's own viewer, so the log is resolved for them
+        // (IHistoryEntry.perViewer) rather than for nobody in particular.
+        expect(assignment![1]).toMatch(/^publicGameState\([^)]*, viewerId\),?$/);
     });
 
     // The other half of the same hole. IGameDataDocument declares

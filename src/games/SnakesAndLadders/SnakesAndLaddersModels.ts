@@ -102,7 +102,7 @@ var SnakesAndLaddersGameDataSchema = new Schema<ISnakesAndLaddersGameDataDocumen
     }
 }, { discriminatorKey: 'kind' });
 
-SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<ISnakesAndLaddersGameDataResponse> {
+SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<ISnakesAndLaddersGameDataResponse> {
     console.log("CreateDataResponse: Snakes and Ladders game");
 
     const gameDataDocument: ISnakesAndLaddersGameData = this as ISnakesAndLaddersGameData;
@@ -115,7 +115,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_view
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap, viewerId),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
