@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | PRs 1–3, sides, the battlefields, factions as data and the planner, built (§29.2, §29.3, §29.6, §29.7) |
+| B8 | Co-op against the computer (§29) | PRs 1–4a, sides, the battlefields, factions as data, the planner and the enemy's turn, built (§29.2–§29.4, §29.6–§29.8) |
 
 **What B2 settled:**
 
@@ -2556,6 +2556,60 @@ sure it is.
 - **No new command, no command version.** A co-op battle is a new kind of
   battle, and nothing about a free-for-all changes.
 
+**What PR 4a settled:**
+
+- `coop` on the invitation is `{ enemy }`, a faction id or `"random"`
+  (`coopInviteOf`), and anything else is no co-op: the invitation's schema
+  holds it to that, so a lobby's settings, which reach the model unread, are
+  held to it too. The setup route refuses anything else sent for it, and a
+  team that isn't two or three. A lobby can still fill to four; four play a
+  free-for-all, and the setup log says so.
+- On the battle it's `coop: { enemy, nextWarband }`, with Random drawn by
+  `CreateGame` and stored as what it drew. The setup log names a faction the
+  host picked and says only "an enemy drawn at random" for Random. A stored
+  id no release knows reads as the Realm (`factionById`).
+- `musterSize(players, coop)` is the party size a squad musters for — three
+  in co-op — and the budget, the ready-made squads (the warbands', a
+  timed-out player's, the muster screen's starting squad) and the response's
+  `budget` all read it.
+- `battleFrom` takes the seats and whether it's co-op, and builds the two
+  sides itself: every seat on one, and a warband for each seat (`ai:k`,
+  `warbandOwner`) on the other. The response carries `coop` as a flag, and
+  the board and the recap's tip hand it in with the seats. Whom the team
+  fights stays off the wire until PR 4b, which keeps a random enemy hidden.
+- The rotation steps past a warband with nobody standing as its turn would
+  begin, and a warband's turn is played only if the battle isn't over
+  already. It's capped at four actions a character it has standing, and
+  stops planning after two seconds — between actions: one call to the
+  planner isn't cut short. A refused action, or a planner or an action that
+  throws, ends it, logged, and its End turn still runs, so neither a player's
+  End turn nor the turn timer's can fail on it.
+- `RealmArenaEndTurn` keeps `recordedEnemyActions` in co-op whatever
+  happened — an empty list when no warband took an action, or no turn at
+  all — so a replay never asks the planner, and the warband's rolls in
+  `recordedRolls`, the player's End turn rolling none of its own. A replay
+  takes the recorded actions and stops where they do.
+- The outcome a command returns its own sender goes through the game type
+  (`IGameType.outcomeFor`), which the command route asks: Realm Arena cuts it
+  to what the sender's side saw while the fog lasts (`toldTo`, moved beside
+  the game type for it). Every other game sends its outcome whole, as before.
+  Rolls stay in the sender's, as before — the board's readout shows them,
+  and a roll once made hides nothing — and a review step still drops them.
+  The move is saved before this runs, so a game whose `outcomeFor` throws
+  tells its sender nothing of what the move did, rather than failing it.
+- A warband's lines in the log carry no `actorId`, so nobody can react to
+  the computer or be pushed about it, and name it by its owner token until
+  `ownerToken` (PR 4b). The End turn's outcome carries the enemy's events
+  among its own; the per-action `{ action, events }` comes with the recap's
+  rows in 4b. `CheckGameOver` still ranks the players alone until `endAsTeam`.
+  Until those rows, the recap's End turn row scores only its own player's
+  centre points, and folds the enemy's lines in with burning's; and its tip
+  still measures a player against the best score of anyone else, a warband's
+  or a teammate's. All three are 4b's.
+- The whole-battle tests seed the rolls, and time each player's turn with the
+  warband's after it: about 130 ms on average, under 300 at worst. The
+  scripted team wins none of the 20.
+
 ### 29.9 Screens
 
 - **Setup**: the mode as an `OptionChoiceSection`, as Banned Islet's and Fires
@@ -2730,3 +2784,4 @@ Realm, its sibling in the same world.
 | 1.34 | B8 PR 1 builds sides (§29.6): `sideOf`, `allied` and the one battle builder, `battleFrom`; every friend-or-foe question asked by side on the server and the board; the centre held by a side but scored by a player with their own in it, the battle over with one side standing, and standings ranked by side. |
 | 1.35 | B8 PR 2 builds the co-op battlefields (§29.2) — the Twin-Gate and Three-Gate Forts, unchanged by a half turn, a warband opposite each player, and `mapFor` — and factions as data (§29.3): `FACTIONS` with the Realm in it, a roster and an `enemyName` each, and the muster checked against its faction's roster. |
 | 1.36 | B8 PR 3 builds the planner (§29.7): the board's tactics helpers move to `tactics.ts` with `ACTION_AIMS`, each kind of action's aim, which the board and the planner both read; `ai.ts`'s `nextAction` lists what a warband could do, plays each out with `act` and scores the battle it leaves; a move also goes round the squares a watcher would react on; the puzzles, the never-cheats test and the time budget hold it. Nothing calls it yet. |
+| 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |

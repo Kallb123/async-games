@@ -313,3 +313,24 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
 
 /** The Realm, which every player fights as until a squad can choose its faction (B6). */
 export const REALM = FACTIONS.realm;
+
+/** Every faction's id: what Random is drawn from (§29.3). */
+export const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
+
+export function isFactionId(value: unknown): value is FactionId {
+    return typeof value === "string" && Object.hasOwn(FACTIONS, value);
+}
+
+/** The faction a stored id names: the Realm for an id no release knows, as an unknown map reads as the Ruined Fort (§29.3). */
+export function factionById(id: unknown): Faction {
+    return isFactionId(id) ? FACTIONS[id] : REALM;
+}
+
+/**
+ * The party size a squad is mustered for (§13.6): the battle's own, or in
+ * co-op always three — every squad, a player's or a warband, musters the
+ * three-player budget, whatever the size of the team (§29.1).
+ */
+export function musterSize(playerCount: number, coop: boolean): PlayerCount {
+    return coop ? 3 : playerCount as PlayerCount;
+}

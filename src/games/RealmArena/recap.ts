@@ -175,9 +175,10 @@ function toEvents(
             // Always a row, since it closes the turn's window; only the centre
             // scoring makes it news, so a bare one is `quiet`. Read off the
             // events rather than the score, which a knock-out by burning as
-            // the next turn begins can add to as well (§20.2).
+            // the next turn begins can add to as well (§20.2) — and only the
+            // sender's own, not a warband's in the enemy's turn after it (§29.4).
             const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
-            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" ? event.points : 0), 0);
+            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" && event.player === command.senderId ? event.points : 0), 0);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not
                 // at all in fog of war, where they may see none of it (§27).
@@ -312,7 +313,8 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), gs);
+    // Once the battle has begun, every seat has mustered.
+    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });
     const holders = centreHolders(battle);
     // In fog of war, nobody seen there isn't nobody there (§27).
     const centre = holders.length === 0 ? (centreInSight(battle, forUserId) ? "the centre is empty" : "you can't see all of the centre")

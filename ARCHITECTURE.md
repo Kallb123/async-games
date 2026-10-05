@@ -627,8 +627,15 @@ interface IGameType {
     CheckEndTurn(gameData, commandOutcome): void;   // decide/advance whose turn is next
     CheckGameOver(gameData): boolean;               // set complete/winner (and, for a co-op
                                                     // game, endReason) if finished
+    outcomeFor?(gameData, outcome, viewerId): ICommandOutcome; // optional: the outcome as
+                                                    // its sender is told it
 }
 ```
+
+`outcomeFor` is for a game whose outcome can carry what its own sender
+mustn't see: Realm Arena's End turn holds the enemy's turn, which in fog of
+war is cut to what the sender's side saw. The command route sends every other
+game's outcome whole.
 
 `CheckEndTurn` typically advances `currentTurn` around `turnOrder`, but games can
 override the flow (e.g. Smartthink hands the turn permanently to the codebreaker
@@ -689,7 +696,7 @@ regardless of game:
 13. after the save, if the move ended the turn (turnOver or timerRestarts): judge
     turnEnd achievements beside the 'YourTurn' push (turnOver only), in
     Promise.all, under a 5 s budget, pushing each `notify` unlock's earner
-14. return { outcome, gameData: CreateDataResponse() + reactions + unlockedHere }
+14. return { outcome (as gameType.outcomeFor tells it), gameData: CreateDataResponse() + reactions + unlockedHere }
 ```
 
 Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with

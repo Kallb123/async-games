@@ -308,6 +308,20 @@ export async function POST(request: NextRequest) {
   if (!commandOutcome.validMove) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
+  // What the sender is told the command did: the game's to cut, where an
+  // outcome can carry what they mustn't see (IGameType.outcomeFor). Read as
+  // each response is built, so a game that has just ended tells it all.
+  // The move is saved by the time this runs, so a game that can't work out
+  // what to tell its sender tells them nothing rather than failing a move
+  // that stands — and never the whole outcome, which may be what it hides.
+  const toldToSender = (outcome: ICommandOutcome): ICommandOutcome => {
+    try {
+      return gameType.outcomeFor?.(gameData, outcome, userId) ?? outcome;
+    } catch (error) {
+      console.error(`Couldn't tell ${userId} what their move did in game ${gameData.gameId}`, error);
+      return { validMove: outcome.validMove, turnOver: outcome.turnOver };
+    }
+  };
 
   // They acted within their turn window, so they haven't missed this one —
   // clear any run of expiries the turntimer cron had counted against them.
@@ -334,7 +348,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response: ICommandResponse = {
-      outcome: serializeOutcomeMaps(commandOutcome),
+      outcome: serializeOutcomeMaps(toldToSender(commandOutcome)),
       gameData: await dataResponseWithReactions(gameData, userId)
     }
 
@@ -367,7 +381,7 @@ export async function POST(request: NextRequest) {
   }
 
   const response: ICommandResponse = {
-    outcome: serializeOutcomeMaps(commandOutcome),
+    outcome: serializeOutcomeMaps(toldToSender(commandOutcome)),
     gameData: await dataResponseWithReactions(gameData, userId)
   }
 

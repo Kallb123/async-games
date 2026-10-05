@@ -29,6 +29,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     budget: number;
     /** Whether the battle is fought in fog of war (§27). */
     fog: boolean;
+    /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */
+    coop: boolean;
     /**
      * Everyone on the battlefield, standing or fallen — or, in fog of war, the
      * viewer's own squad and everyone it can see. Empty until every squad has

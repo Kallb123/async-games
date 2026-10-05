@@ -167,16 +167,31 @@ export interface BattleSource {
     fighters: readonly Fighter[];
     fog?: boolean;
     clouds?: readonly Square[];
+    /** The players in seat order, and whether they fight together against the computer's warbands (§29): what the sides are read from. */
+    seats?: readonly string[];
+    coop?: boolean;
 }
+
+/**
+ * The owner of the computer's `k`th warband in co-op, counting from 0 (§29.6):
+ * `ai:0`, `ai:1`, …, which no Clerk id can ever be. Warband `k` deploys
+ * opposite player `k`.
+ */
+export const warbandOwner = (k: number): string => `${WARBAND_PREFIX}${k}`;
+const WARBAND_PREFIX = "ai:";
+
+/** Whether an owner is one of the computer's warbands rather than a player. */
+export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PREFIX);
 
 /**
  * The one way a `BattleState` is built (§29.6), so the board's previews and
  * the recap read a battle exactly as the server does. A free-for-all — every
- * battle so far — has no `sides`; co-op adds them here, from what the battle
- * was created as, and nowhere else.
+ * battle so far — has no `sides`. Co-op has two: the players, and a warband
+ * for each of them (§29.1).
  */
-export function battleFrom(field: Battlefield, { fighters, fog, clouds }: BattleSource): BattleState {
-    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}) };
+export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
+    const sides = coop ? Object.fromEntries([...seats.map(player => [player, "team"]), ...seats.map((_, k) => [warbandOwner(k), "enemy"])]) : undefined;
+    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
 }
 
 /** The side an owner fights on (§29.6): its own, in a free-for-all. */
