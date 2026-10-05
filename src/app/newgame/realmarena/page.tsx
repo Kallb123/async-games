@@ -114,6 +114,10 @@ function NewGameRealmArenaForm() {
       actionDisabled={!canSubmit}
       footnote={footnote}
     >
+      <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
+      <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={partyMeta} total={partySize} />
       <OptionChoiceSection
         label="Mode"
         value={mode}
@@ -138,10 +142,6 @@ function NewGameRealmArenaForm() {
         <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_CHOICES} />
       )}
       <OptionChoiceSection label="Battle size" value={size} onChange={setSize} choices={SIZE_CHOICES} />
-      <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
-      <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint meta={partyMeta} total={partySize} />
       <OptionSection label="Realm Arena options">
         <OptionToggleRow
           title="Fog of war"
