@@ -49,7 +49,7 @@ import {
     shoreUpsPerAction,
 } from "@/games/BannedIslet/rules";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // docs/games/banned-islet.md §21.6 PR 4: the board screen, first pass — enough
 // of the island on screen to play §8's action phase by hand, so every PR after
@@ -278,6 +278,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
+    const teamEnding = gameData ? finishedGameCopy(gameData) : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
@@ -412,7 +413,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                     // generic line is only the fallback for a
                                     // game that ended before one was recorded.
                                     ? gameData.endDetail
-                                        ? `The team lost — ${gameData.endDetail}.`
+                                        ? `${teamEnding}.`
                                         : 'The sea took the island.'
                                     : 'Four relics off a sinking island, and everyone aboard! 🎉'}
                             gameId={gameId}

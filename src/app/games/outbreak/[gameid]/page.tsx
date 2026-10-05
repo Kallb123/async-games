@@ -35,7 +35,7 @@ import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } fro
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, outOfTurnEventsHeld, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS, roleDef } from "@/games/Outbreak/board";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -242,6 +242,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);
+    const teamEnding = gameData ? finishedGameCopy(gameData) : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
@@ -386,7 +387,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             // fallback for a game that ended before the
                             // reason was recorded.
                             ? gameData.endDetail
-                                ? `The team lost — ${gameData.endDetail}.`
+                                ? `${teamEnding}.`
                                 : 'The outbreak overwhelmed the team.'
                             : 'The team cured every disease! 🎉'}
                     gameId={gameId}

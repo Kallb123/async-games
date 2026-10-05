@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { edgeBetween, ENGINE_START, exteriorTopSpace, INTERIOR_SPACE_COUNT, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
+import { edgeBetween, ENGINE_START, exteriorTopSpace, INTERIOR_SPACE_COUNT, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "./board";
 import { AP_COSTS, AP_PER_TURN, poiCountOnBoard } from "./rules";
 import { baseState, burnAllExcept, experiencedState } from "./testFixtures";
 
@@ -559,6 +559,19 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
 
         expect(gameType.CheckGameOver(game)).toBe(true);
         expect(game.endReason).toBe('teamloss');
+        expect(game.endDetail).toBe('the building collapsed');
+        expect(game.endDetail).not.toContain('{{');
+    });
+
+    it("says when too many victims were lost", () => {
+        const state = baseState(["u1"]);
+        state.lost = VICTIMS_LOST_TO_LOSE;
+        const game = makeGame(state, ["u1"]);
+
+        expect(new FiresOutGameType().CheckGameOver(game)).toBe(true);
+        expect(game.endReason).toBe('teamloss');
+        expect(game.endDetail).toBe('too many victims were lost');
+        expect(game.endDetail).not.toContain('{{');
     });
 
     it("refills the next figure's AP from their specialist in the Experienced game", async () => {
