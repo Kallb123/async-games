@@ -33,7 +33,7 @@ import { capitalise, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import { enemyLineCount, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
-import { factionById, UNKNOWN_ENEMY, type ItemId } from "./characters";
+import { enemyNameOf, UNKNOWN_ENEMY, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
@@ -190,7 +190,7 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // The enemy's name as its lines begin with it: "The enemy" while a random
     // enemy is hidden (§29.3), its faction's once it's known — and a turn can
     // see the one give way to the other.
-    const names = [UNKNOWN_ENEMY, ...next.enemy ? [factionById(next.enemy).enemyName] : []].map(capitalise);
+    const names = [UNKNOWN_ENEMY, ...next.enemy ? [enemyNameOf(next.enemy)] : []].map(capitalise);
     // "The Renegades moved…", and "The Renegades' Archer burned…" as well.
     const nameOf = (text: string) => names.find(name => text.startsWith(name)) ?? names[0];
     // Named as its latest line names it, which is the last to see a sighting.

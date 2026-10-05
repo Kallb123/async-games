@@ -22,6 +22,8 @@ const LETTER_OF = new Map<Terrain, TerrainLetter>(
  * team is at most three, who wear the palette's first three.
  */
 export const TEAM_COLOUR = "var(--ag-gold)";
+/** What the players are called together, as the enemy is by `enemyNameOf`. */
+export const TEAM_NAME = "the team";
 export const ENEMY_COLOUR = "var(--ag-purple)";
 
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */

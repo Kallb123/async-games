@@ -19,7 +19,7 @@ import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse,
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
 import { CHARACTER_IDS } from "./roster";
-import { ENEMY_COLOUR, TEAM_COLOUR } from "./ui";
+import { ENEMY_COLOUR, TEAM_COLOUR, TEAM_NAME } from "./ui";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  REALM ARENA
@@ -582,7 +582,7 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
 const ENEMY_SERIES: GameResultChartSeries = { key: ENEMY_SIDE, name: capitalise(UNKNOWN_ENEMY), color: ENEMY_COLOUR };
 
 /** A co-op battle's two sides, as the result's race charts draw them (§29.9). */
-const SIDE_SERIES: GameResultChartSeries[] = [{ key: TEAM_SIDE, name: "The team", color: TEAM_COLOUR }, ENEMY_SERIES];
+const SIDE_SERIES: GameResultChartSeries[] = [{ key: TEAM_SIDE, name: capitalise(TEAM_NAME), color: TEAM_COLOUR }, ENEMY_SERIES];
 
 /** Whether the record is a co-op battle's: it has a column for the enemy. */
 const isCoopRecord = (stats: IRealmArenaGameResultStats): boolean =>

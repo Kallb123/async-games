@@ -19,7 +19,7 @@ import { enemyNameOf, musterSize } from "@/games/RealmArena/characters";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, unseenSquares } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -115,7 +115,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // enemy's name and in one colour whichever it is, or in co-op a side.
     const playerName = (owner?: string): string => {
         if (owner === myUserId) return 'You';
-        if (owner === TEAM_SIDE) return 'the team';
+        if (owner === TEAM_SIDE) return TEAM_NAME;
         if (owner === ENEMY_SIDE || (owner && isWarband(owner))) return enemyName;
         return nameForUserId(gameData, owner);
     };
@@ -125,7 +125,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const winnerName = nameForUserId(gameData, nav.displayedWinner);
     // A co-op battle ends for the whole team (§29.5), in the words every co-op result uses.
     const teamWon = gameData?.endReason === 'teamwin';
-    const teamEnding = finishedGameCopy({ winner: '', endReason: gameData?.endReason, endDetail: gameData?.endDetail });
+    const teamEnding = (endDetail?: string) => finishedGameCopy({ winner: '', endReason: gameData?.endReason, endDetail });
     const currentUserWon = complete && !!myUserId && myUserId === nav.displayedWinner;
     const mustering = gs?.phase === 'muster';
     const fighters = gs?.fighters ?? [];
@@ -249,7 +249,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete && coop) {
-            subtitle = teamWon ? '🏆 The team won' : 'The team lost';
+            subtitle = `${teamWon ? '🏆 ' : ''}${teamEnding()}`;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${winnerName} won`;
         } else if (mustering) {
@@ -271,19 +271,38 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         return userId === currentTurn ? 'mustering' : 'waiting';
     };
     const dropped = gameData?.gameState?.droppedPlayers ?? [];
+    // How many of a squad stand — or, in fog of war, all the viewer knows of
+    // anyone else's: how many of it they can see (§27).
+    const standingLine = (squad: Fighter[], hidden: boolean): string => hidden
+        ? `${squad.filter(isStanding).length} in sight`
+        : `${squad.filter(isStanding).length}/${squad.length} standing`;
     // What the strip says under a player: how their muster or their squad stands.
-    const squadSub = (userId: string): string => {
-        const squad = fighters.filter(fighter => fighter.owner === userId);
-        // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
-        // In fog of war, all the viewer knows of anyone else's is who of it they can see (§27).
-        return mustering ? musterSub(userId)
-            : dropped.includes(userId) ? 'left the battle'
-            : fogged && userId !== myUserId ? `${squad.filter(isStanding).length} in sight`
-            : `${squad.filter(isStanding).length}/${squad.length} standing`;
-    };
+    // A dropped player's squad has left the battlefield; their score stands (§17.4 B2).
+    const squadSub = (userId: string): string => mustering ? musterSub(userId)
+        : dropped.includes(userId) ? 'left the battle'
+        : standingLine(fighters.filter(fighter => fighter.owner === userId), fogged && userId !== myUserId);
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
-    const playerEntries = (): ScoreEntry[] => seatOrder.map(userId => ({
+    // In co-op the strip is the team's total against the enemy's (§29.9), each
+    // player's share under the team's, and how each one stands once it's opened.
+    const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? [
+        {
+            id: TEAM_SIDE,
+            name: capitalise(TEAM_NAME),
+            color: TEAM_COLOUR,
+            sub: seatOrder.map(userId => `${playerName(userId)} ${scores[userId] ?? 0}`).join(' · '),
+            detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId)}</div>),
+            score: sideScore(battle, scores, TEAM_SIDE),
+            isMe: true,
+        },
+        {
+            id: ENEMY_SIDE,
+            name: capitalise(enemyName),
+            color: ENEMY_COLOUR,
+            sub: mustering ? 'musters last' : standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged),
+            score: sideScore(battle, scores, ENEMY_SIDE),
+        },
+    ] : seatOrder.map(userId => ({
         id: userId,
         name: playerName(userId),
         color: colourFor(userId),
@@ -292,32 +311,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         isMe: userId === myUserId,
         isActive: userId === currentTurn && !complete,
     }));
-    // In co-op the strip is the team's total against the enemy's (§29.9), each
-    // player's share under the team's, and how each one stands once it's opened.
-    const sideEntries = (): ScoreEntry[] => {
-        const enemy = fighters.filter(fighter => isWarband(fighter.owner));
-        return [
-            {
-                id: TEAM_SIDE,
-                name: 'The team',
-                color: TEAM_COLOUR,
-                sub: seatOrder.map(userId => `${playerName(userId)} ${scores[userId] ?? 0}`).join(' · '),
-                detail: seatOrder.map(userId => <div key={userId}>{playerName(userId)} · {scores[userId] ?? 0} · {squadSub(userId)}</div>),
-                score: sideScore(battle, scores, TEAM_SIDE),
-                isMe: true,
-            },
-            {
-                id: ENEMY_SIDE,
-                name: capitalise(enemyName),
-                color: ENEMY_COLOUR,
-                sub: mustering ? 'musters last'
-                    : fogged ? `${enemy.filter(isStanding).length} in sight`
-                    : `${enemy.filter(isStanding).length}/${enemy.length} standing`,
-                score: sideScore(battle, scores, ENEMY_SIDE),
-            },
-        ];
-    };
-    const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? sideEntries() : playerEntries();
 
     // The tour's signals (src/games/RealmArena/tutorial.ts says what each one
     // means), frozen on whichever hold when it opens.
@@ -390,7 +383,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 <GameFinishBanner
                     message={abandoned
                         ? abandoned.message
-                        : coop ? `${teamEnding}${teamWon ? ' 🎉' : '.'}`
+                        : coop ? `${teamEnding(gameData?.endDetail)}${teamWon ? ' 🎉' : '.'}`
                         : currentUserWon ? 'You held the field! 🎉' : `${winnerName} held the field.`}
                     gameId={gameId}
                     gameUrl="realmarena"
