@@ -5,7 +5,7 @@ import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, POINTS_BUDGET, REALM, THR
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
     abilitiesOf, ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
-    newFighter, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter, weaponOf,
+    newFighter, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
@@ -356,6 +356,35 @@ describe("reactions (§13.4)", () => {
         const steps = [3, 4, 5, 6].map(col => at(rubble, col, 1));
         expect(reactionsTo({ field: rubble, fighters: [knight, scout] }, scout, steps)).toEqual([{ watcher: 1, step: 3 }]);
         expect(run({ field: rubble, fighters: [knight, scout] }, "a", { kind: "move", fighter: 2, path: steps }).byId(2)).toMatchObject({ hp: 0, square: steps[3] });
+    });
+
+    it("come from every square watchedSquares names, and no other: what a way round keeps out of", () => {
+        // A guard reaches the squares beside it; an Archer on overwatch the column it sees down, and nobody stops on low cover.
+        const walled = fieldOf(["..o.#.....", "....#.....", "....#.....", "..........", ".........."]);
+        const knight = fighter(1, "b", "knight", at(walled, 8, 1), { banked: 4 });
+        const archer = fighter(3, "b", "archer", at(walled, 0, 0), { banked: 2 });
+        const spent = fighter(4, "b", "mage", at(walled, 9, 4), { banked: 1 });
+        const ally = fighter(5, "a", "archer", at(walled, 5, 4), { banked: 4 });
+        const mover = fighter(2, "a", "scout", at(walled, 9, 0));
+        const state = { field: walled, fighters: [knight, archer, spent, ally, mover] };
+        const watched = watchedSquares(state, mover);
+        walled.tiles.forEach((_, square) => {
+            expect(watched.has(square)).toBe(reactionsTo(state, mover, [mover.square, square]).length > 0);
+        });
+        expect(watched.has(at(walled, 9, 2))).toBe(true);
+        expect(watched.has(at(walled, 2, 0))).toBe(false);
+        expect(watchedSquares({ field: walled, fighters: [spent, ally, mover] }, mover).size).toBe(0);
+    });
+
+    it("are kept clear of by a reach avoiding the squares watched, which goes round them", () => {
+        const knight = fighter(1, "b", "knight", at(field, 5, 2), { banked: 4 });
+        const mover = fighter(2, "a", "manAtArms", at(field, 4, 2), { ap: 1 });
+        const state = { field, fighters: [knight, mover] };
+        // Its own square is watched, and it can still leave it.
+        const round = reachOf(state, mover, false, watchedSquares(state, mover));
+        expect(round.costs[at(field, 3, 2)]).toBe(1);
+        expect(round.costs[at(field, 4, 1)]).toBe(Infinity);
+        expect(reachOf(state, mover).costs[at(field, 4, 1)]).toBe(1);
     });
 
     it("aren't set off by a sneaking Scout", () => {

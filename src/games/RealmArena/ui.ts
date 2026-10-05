@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, squadSight, check, coverNextTo, fighterById, hasEffect, inRange, isStanding, moveAp, nextTo, pickOf, reachOf, reactionsTo, shotOdds, weaponOf, weaponReaches, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotKind, type ShotOdds, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, squadSight, hasEffect, isStanding, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -253,34 +253,6 @@ export function reachShading(fighter: Fighter, reach: Reach, sneaking: boolean):
 }
 
 /**
- * What decides where an aimed action can land: the character's weapon, the
- * squares next to it (a raise, a healing draught), the low cover next
- * to it (a Demolish), or — a number — how far something aimed reaches (a
- * fireball, a thrown item, a Hunter's mark, a heal).
- */
-export type RangeKind = "weapon" | "nextTo" | "cover" | number;
-
-/**
- * An aimed action's range from where a character stands: every square it
- * could be lined up on, were someone there to aim at. A weapon, a
- * draught or a raise is aimed at a character, so only a square one could stand on
- * counts; a fireball or a throw can land on any square it can see in range.
- * Where the character stands isn't drawn. Read from the rules `check` itself
- * asks, so the shading and what the server allows can't drift apart.
- */
-export function rangeSquares(state: BattleState, fighter: Fighter, kind: RangeKind): ReadonlySet<Square> {
-    const { field } = state;
-    const reaches = (square: Square): boolean => {
-        if (square === fighter.square) return false;
-        if (typeof kind === "number") return inRange(field, fighter.square, square, kind);
-        if (kind === "cover") return coverNextTo(field, fighter.square, square);
-        if (!field.tiles[square].terrain.standable) return false;
-        return kind === "weapon" ? weaponReaches(state, fighter, square) : nextTo(field, fighter.square, square);
-    };
-    return new Set(field.tiles.flatMap((_, square) => reaches(square) ? [square] : []));
-}
-
-/**
  * Every square a player's squad can't see, in fog of war (§27): what the board
  * dims. Null in a battle without fog, where nothing is.
  */
@@ -326,76 +298,6 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
     if (!fighter) return "a character out of sight";
     const name = fighterName(fighters, fighter);
     return fighter.owner === viewerId ? `your ${name}` : `${nameFor(fighter.owner)}'s ${name}`;
-}
-
-/** The actions aimed at one character. */
-export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark";
-
-/** The characters an action could be aimed at now, by the server's own `check`. */
-export function targetsOf(state: BattleState, player: string, fighter: Fighter, kind: TargetKind): number[] {
-    return state.fighters
-        .filter(one => !("refused" in check(state, player, { kind, fighter: fighter.id, target: one.id })))
-        .map(one => one.id);
-}
-
-/** The battle as it would stand with one character moved to another square: what a previewed move is read against. */
-export function standingAt(state: BattleState, fighter: Fighter, square: Square): { battle: BattleState; moved: Fighter } {
-    const moved = { ...fighter, square };
-    return { battle: { ...state, fighters: state.fighters.map(one => one.id === fighter.id ? moved : one) }, moved };
-}
-
-/** One enemy a character's weapon could hit, and its chance to: a strike always hits. */
-export interface AttackOption {
-    target: Fighter;
-    /** Percent to hit, 0–100. */
-    chance: number;
-}
-
-/**
- * Every enemy a character's main weapon could hit from a square — where it
- * stands, or where a previewed move would take it — likeliest first. Who is
- * in reach is the server's own `check`, read as if it had the AP to attack:
- * what's in reach is a matter of where it stands, not what it has left.
- */
-export function attackOptions(state: BattleState, fighter: Fighter, square: Square = fighter.square): AttackOption[] {
-    const { battle, moved } = standingAt(state, { ...fighter, ap: ACTION_POINTS }, square);
-    return targetsOf(battle, fighter.owner, moved, "attack").flatMap(id => {
-        const target = fighterById(battle, id);
-        return target ? [{ target, chance: hitChance(battle, moved, target) }] : [];
-    }).sort((a, b) => b.chance - a.chance);
-}
-
-/** A character's chance to hit an enemy, 0–100: a shot's odds, or — for a strike, or with no shot at all — every time. */
-export function hitChance(state: BattleState, fighter: Fighter, target: Fighter, shot: ShotKind | undefined = "attack"): number {
-    return (shot && shotOdds(state, fighter, target, shot)?.chance) ?? 100;
-}
-
-/** One reaction a move would set off, and what it would do to the mover (§13.4). */
-export interface ReactionPreview {
-    watcher: Fighter;
-    kind: "overwatch" | "guard";
-    /** An overwatch shot's odds against the mover on the square it comes at. */
-    odds?: ShotOdds;
-    /** What it does on a hit; a guard always hits. */
-    damage: number;
-}
-
-/**
- * Every reaction a move along this path would set off, in the order they'd
- * come, with the odds of each overwatch shot at the mover from the square
- * it's on when the shot comes. Like `reactionsTo`, it assumes the mover
- * survives them all.
- */
-export function reactionPreviews(state: BattleState, mover: Fighter, path: readonly Square[]): ReactionPreview[] {
-    return reactionsTo(state, mover, path).flatMap(({ watcher: id, step }): ReactionPreview[] => {
-        const watcher = fighterById(state, id);
-        if (!watcher) return [];
-        const weapon = weaponOf(watcher);
-        if (weapon.kind === "melee") return [{ watcher, kind: "guard", damage: weapon.damage }];
-        const { battle: there, moved } = standingAt(state, mover, path[step]);
-        const odds = shotOdds(there, watcher, moved, "overwatch");
-        return [{ watcher, kind: "overwatch", odds, damage: odds?.damage ?? weapon.damage }];
-    });
 }
 
 /**

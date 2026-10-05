@@ -5,7 +5,8 @@ import { CHARACTERS } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, isStanding, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import RealmArenaCrosshair from './RealmArenaCrosshair';
 import { RealmArenaStatusList } from './RealmArenaEffects';
-import { apPips, attackOptions, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
+import { apPips, canAct, effectsOn, fighterName, hpFraction, watchStatus } from '@/games/RealmArena/ui';
+import { attackOptions } from '@/games/RealmArena/tactics';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 interface RealmArenaUnitsProps {

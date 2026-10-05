@@ -336,10 +336,14 @@ export function moveAp(fighter: Fighter, cost: number, sneaking = false): number
 /**
  * Everywhere a character could move to with the AP it has left, for the
  * board's shading: `moveAp` of a square's cost is the band it's shaded in.
+ * Kept out of the squares it's `avoiding`, as out of an enemy's: the
+ * computer's way round the overwatch (`watchedSquares`).
  */
-export function reachOf(state: BattleState, fighter: Fighter, sneaking = false): Reach {
+export function reachOf(state: BattleState, fighter: Fighter, sneaking = false, avoiding: ReadonlySet<Square> = new Set()): Reach {
     const allowances = sneaking ? Math.floor(fighter.ap / ABILITIES.sneak.ap) : fighter.ap;
-    return reachFrom(state.field, fighter.square, allowances * movementOf(fighter), moveRules(state, fighter));
+    const rules = moveRules(state, fighter);
+    const blocked = avoiding.size === 0 ? rules.blocked : new Set([...rules.blocked, ...[...avoiding].filter(square => square !== fighter.square)]);
+    return reachFrom(state.field, fighter.square, allowances * movementOf(fighter), { ...rules, blocked });
 }
 
 export interface ShotOdds {
@@ -452,8 +456,7 @@ export interface Reaction {
  * move is sent.
  */
 export function reactionsTo(state: BattleState, mover: Fighter, path: readonly Square[]): Reaction[] {
-    const watchers = state.fighters.filter(watcher =>
-        isStanding(watcher) && !allied(state, watcher.owner, mover.owner) && watcher.banked >= REACTION_COST);
+    const watchers = watchersOf(state, mover);
     const smoke = smokeSquares(state);
     const reacted = new Set<number>();
     const reactions: Reaction[] = [];
@@ -468,6 +471,22 @@ export function reactionsTo(state: BattleState, mover: Fighter, path: readonly S
             });
     }
     return reactions;
+}
+
+/** The enemies watching that could react to a move by this character: standing, with a reaction's AP banked (§13.4). */
+function watchersOf(state: BattleState, mover: Fighter): Fighter[] {
+    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, mover.owner) && watcher.banked >= REACTION_COST);
+}
+
+/**
+ * Every square a move by this character would set off a reaction on, from
+ * whoever is watching now (§13.4): what a path keeps out of to set off none.
+ */
+export function watchedSquares(state: BattleState, mover: Fighter): ReadonlySet<Square> {
+    const watchers = watchersOf(state, mover);
+    if (watchers.length === 0) return new Set();
+    const smoke = smokeSquares(state);
+    return new Set(state.field.tiles.flatMap((_, square) => watchers.some(watcher => setsOff(state, watcher, square, smoke)) ? [square] : []));
 }
 
 /** The 3×3 around a square, as far as the map goes: what a fireball, a thunder flask or a smoke pot centred there covers. */
