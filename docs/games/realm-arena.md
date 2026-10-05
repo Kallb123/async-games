@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.39. Split out of Defender of the Realm in its third round of
+**Status:** v1.40. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -18,7 +18,10 @@ library, at command version 2. A finished battle's result tells the battle
 (§28): the points race, each squad's health, the damage by character and a
 record of what each squad did. Co-op against the computer (B8, §29) is built:
 the players as one team, and an enemy of the host's choosing, played by game
-AI, that takes a turn after each of theirs.
+AI, that takes a turn after each of theirs. §30 plans what comes after it:
+Banned Islet, Outbreak and Fires Out on co-op's shared ending, remembering
+where an enemy was last seen, a wave-survival mission, achievements,
+difficulty and solo play.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -995,6 +998,7 @@ recap, a guide and a tutorial.
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
+| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Planned |
 
 **What B2 settled:**
 
@@ -2039,8 +2043,8 @@ an action. No language model is involved, and nothing leaves the server.
 
 - **The host chooses the mode.** The setup screen gains *Free-for-all* or
   *Co-op against the computer*. Co-op is for two or three players. Solo (one
-  player against the computer) comes after it (§29.10). There is one
-  difficulty to start with; more wait for the playtest (§29.12).
+  player against the computer) comes after it (§30.6). There is one
+  difficulty to start with; more come with §30.5.
 - **The host chooses whom they fight**: a faction, or *Random* (§29.3). The
   players fight as the Realm; the enemy can be any faction, so once there's a
   second one (B6) it can be humans against monsters.
@@ -2741,7 +2745,7 @@ sure it is.
 | 4a | **The enemy's turn.** `coop` from setup to state, Random drawn, `applyAction` and `applyEndTurn` out of the commands, the warbands mustered, their turn in `handOff`, recorded and replayed, and the whole-battle tests (§29.11). The setup route takes `coop`; the screen doesn't offer it yet | `caveman`, `locksmith`, `gremlin`, `croupier` |
 | 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, the recap's rows for the enemy's turn, and a random enemy kept hidden until it's seen (§29.3) | `caveman`, `croupier` |
 | 5 | **The screens** (§29.9), the enemy's faction picker among them, the guide, and the one What's new line | `caveman`, `rulebook` |
-| Later | Solo against the computer (one player, on the Ruined Fort, as Fires Out's solo setup does); difficulty; remembering where an enemy was last seen in fog; achievements for co-op; Banned Islet, Outbreak and Fires Out moved onto `endAsTeam` | |
+| Later | Planned in §30: Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
 
 ### 29.11 Testing the computer
 
@@ -2773,10 +2777,12 @@ sure it is.
 
 - **Is Hold the Centre the right mission for co-op?** It needs nothing new,
   which is why it's proposed. A mission made for co-op — survive the waves,
-  carry the relic out — could follow with the second mission (B7).
+  carry the relic out — could follow with the second mission (B7). *Survive
+  the waves is planned, as Hold Out (§30.3).*
 - **Difficulty.** One level to start. If the playtest wants more, the simplest
   lever is the warbands' size — the ready-made squad, one character more or
-  one fewer — chosen with the same `OptionChoiceSection`.
+  one fewer — chosen with the same `OptionChoiceSection`. *Planned (§30.5),
+  with the existing ready-made squads as the three sizes.*
 - **Does the enemy want a Mage and a Cleric?** The ready-made squad for 80
   points has neither, so the enemy wouldn't fireball or heal.
   If the playtest misses them, the answer is a second ready-made list for the
@@ -2823,6 +2829,371 @@ The caveman reviewed the first draft of this plan. What changed:
 - The tests use the scripted player the fixtures already have, and the
   whole-battle tests move to PR 4a, which has the turn loop they need. PR 4
   is split, and the caveman reviews it.
+
+## 30. After co-op: the next six PRs (B9)
+
+*Planned.* Co-op against the computer (§29) is built. What comes next is the
+work §29.10 left for later, plus a second mission for co-op, broken into PRs
+in the order they're built. Each one is a branch of its own, passes the gates
+(`build`, `tsc`, `lint`, `test`), and gets the crew listed beside it (§30.7).
+Every player-visible PR adds its one What's new line. PR 1 adds none: the
+only change it makes that a player could see is to Fires Out, which nobody
+has played yet (§30.1).
+
+| PR | What | Depends on |
+|---|---|---|
+| 1 | Banned Islet, Outbreak and Fires Out end through `endAsTeam` (§30.1) | — |
+| 2 | Remembering where an enemy was last seen, in fog (§30.2) | — |
+| 3 | *Hold Out*, a wave-survival mission for co-op (§30.3) | 2 |
+| 4 | Realm Arena's first achievements, co-op's among them (§30.4) | 3 |
+| 5 | Difficulty (§30.5) | 3, 4 |
+| 6 | Solo against the computer (§30.6) | 5 |
+
+PR 1 touches no Realm Arena code and can be built alongside any of the
+others. The rest go in order: the waves hunt the team by where it was last
+seen (PR 2), the achievements reward holding out (PR 3), difficulty adds one
+achievement and sizes the waves (PRs 3–4), and solo is offered with every
+choice the others add already on its setup screen.
+
+### 30.1 PR 1: Banned Islet, Outbreak and Fires Out on the shared ending
+
+Co-op's ending was written once, as `endAsTeam` (`src/utils/games/endAsTeam.ts`,
+§29.5), so that the co-ops that came before it could move onto it. Banned
+Islet, Outbreak and Fires Out each still write `complete`, `winner`,
+`endReason`, `currentTurn` and the closing history line by hand — Banned
+Islet and Outbreak `endDetail` too, in two functions each that are line for
+line the same as each other's.
+
+- **The wins.** Banned Islet's `endInEscape` and Outbreak's win in
+  `CheckGameOver` become `endAsTeam(data, "teamwin", line)`, with the line
+  each writes today.
+- **Fires Out** ends in one place, its `CheckGameOver`, in a win and two
+  losses. Each becomes `endAsTeam` with the line it writes today. The two
+  losses also gain a detail, as Banned Islet's and Outbreak's have: "the
+  building collapsed" or "too many victims were lost". Today a Fires Out loss
+  doesn't say which it was, so the banner, the result page and the push all
+  read the same for both. `FiresOutModels` already forwards `endDetail`, so
+  the detail reaches all three with nothing more on the wire.
+- **The losses.** Each game's `endInTeamLoss(data, reason, detail = reason)`
+  becomes `endAsTeam(data, "teamloss", \`The team loses — ${reason}.\`, detail)`.
+  The `reason`/`detail` split stays exactly as it is — `endDetail` must never
+  carry a `{{userId}}` token — and so do the comments that say why. Whether
+  the two one-line wrappers survive is the caveman's call; the shared part is
+  `endAsTeam`.
+- **The screens.** Banned Islet's and Outbreak's boards word a defeat by hand ("💀 The team lost",
+  "The team lost — {detail}."). Those read `finishedGameCopy`
+  (`src/utils/ui/players.ts`), as Realm Arena's board does, so the subtitle,
+  the banner, the home page and the result page can't word one ending four
+  ways. Each game keeps its own win line ("Four relics off a sinking island,
+  and everyone aboard!") and the fallback for a game that ended before a
+  reason was recorded. Fires Out's banner does the same: its loss reads
+  `finishedGameCopy` with the detail, falling back to "The crew couldn't make
+  it out in time." for a game that ended before one was recorded, and its win
+  keeps "The crew rescued everyone!".
+- **Nothing changes for a Banned Islet or Outbreak player.** Every log line,
+  `endDetail` and banner reads as it did, so stored games and replays are
+  untouched and no command version is needed. Those games' existing ending
+  tests are the proof, and pass unchanged. Fires Out's log lines are
+  unchanged too, so its replays are as well. Its new detail is a test per
+  loss, holding each to its clause and to no `{{userId}}` token.
+- **No What's new line.** Fires Out's loss detail and banner are the only
+  changes a player could see, and nobody has played Fires Out yet, so there's
+  nobody to tell.
+- **`endAsTeam`'s comment** stops naming the three as writing theirs by
+  hand: every co-op ends through it.
+
+### 30.2 PR 2: where an enemy was last seen
+
+In fog (§27), an enemy that steps out of sight vanishes from the board as if
+it had never been there. A player has to remember where the Archer ducked
+behind the wall; the computer can't remember at all, so a warband that loses
+sight of a character forgets it existed and walks out in front of it. Both
+get a memory.
+
+**The rules.**
+
+- **A side remembers each enemy it has seen**: the square it was last seen
+  on, its kind, its owner, whether it was standing or down, and the round.
+  Nothing else — not its HP, its AP or its effects, which will have changed.
+- **Seen again, the memory moves with it.** While an enemy is in sight its
+  memory is simply where it stands.
+- **Looked at and gone, the memory is dropped.** When the square an enemy was
+  last seen on comes into sight and it isn't there, the side knows it has
+  moved, and stops remembering it. So a remembered enemy always means "last
+  seen here, and nobody has looked since".
+- **A side, not a player.** In co-op the team remembers together, as it sees
+  together (§29.1); in a free-for-all every player remembers for themselves.
+- **Only in fog.** Without fog there's nothing to remember. The fog lifts at
+  the end of the battle (§27.1), and the memories with it.
+- **No rule reads it.** `check`, `act` and every friend-or-foe question go on
+  reading the view (`viewOf`). A memory is a note, not a sighting: aiming at a
+  remembered enemy is still aiming at a square the player can't see.
+
+**What the player sees.** A remembered enemy is drawn where it was last seen,
+faded and ringed as a sealed squad is during the muster (§17.3 PR 5), with
+"last seen in round N" on its unit box. Tapping it selects nothing it could
+act on. The centre's readout and the scoreboard's "in sight" counts are
+unchanged: a memory isn't a sighting.
+
+**What the computer does with it.** The planner is handed its side's
+memories beside its view (`nextAction(view, owner, round, memory)`). In Hold
+the Centre, an enemy it saw this round or last counts towards Exposure (§29.7)
+as though it still stood there, at half weight — so a warband no longer walks
+into the open in front of an Archer that has just stepped back behind a wall.
+It still plans from the view: a memory is only what its own side saw.
+Hold Out (PR 3) uses the memories to hunt.
+
+**Engine.**
+
+- **Stored on the state**, `lastSeen`, keyed by side (`sideOf`) and then
+  fighter id, in a `Schema.Types.Mixed` field like the squads. It's noted by
+  the same function that notes a random enemy's first sighting
+  (`noteSighting`, which becomes `noteSightings`), already run after every
+  command that can change what anyone sees: each action, a turn's start, an
+  End turn, a warband's turn and the last muster. A dropped player's squad
+  leaves the memories as it leaves the battlefield.
+- **Undo needs nothing.** An action that shows a new enemy already can't be
+  undone (§27.1), and an undo restores the whole state, memories included.
+- **Replay needs nothing.** The memories are rebuilt by the commands, as
+  every other part of the state is. The planner reads them, but a replay
+  never runs the planner (§29.7), so no command version is needed, and a
+  battle fought before this PR gains its memories when it's next replayed.
+- **On the wire**: the response carries the viewer's side's memories of the
+  enemies it can't now see (`lastSeen`), and nothing of anyone else's. A
+  warband's memories never leave the server: they'd tell a player whether
+  they had been seen. A review step carries the memories as they were at that
+  step, built from the state there.
+
+**Tests.** A memory moves, is dropped when its square is seen empty, and is
+shared by a co-op team but not by free-for-all players; an undone move leaves
+it as it was. A new puzzle (§29.11): the warband won't step into the open in
+front of an Archer it saw last round behind the wall. The never-cheats test
+grows a second half: moving an enemy the warband neither sees nor remembers
+changes nothing. `hiddenHands.test.ts` holds every other side's memories —
+the warbands' above all — off every response and review step.
+
+### 30.3 PR 3: *Hold Out*, surviving the waves
+
+§29.12 asked whether Hold the Centre is the right mission for co-op, and named
+surviving the waves as the first co-op mission of its own. This is it.
+
+**The rules.**
+
+- **The host picks the mission** in co-op: *Hold the Centre*, as now, or
+  *Hold Out*. It's stored with the battle (`coop.mission`), absent for Hold
+  the Centre, so every battle fought so far is one.
+- **Same battlefields.** Hold Out is fought on the co-op forts (§29.2), the
+  team along one edge and the warbands opposite, mustered as now. No new map
+  and no new art.
+- **The enemy comes in waves.** The warbands take the field as now: that's
+  the first wave. At the start of every third round (4, 7, 10, 13 …) the next
+  wave arrives: each warband is brought back up to strength, a fresh
+  character standing in its deployment zone for each of its own that is down.
+  So the enemy never outnumbers its starting strength, which keeps the board
+  and the planner's time (§29.7) where they are; every knock-out still buys
+  the team time until the next wave.
+- **Where a wave stands.** Each fresh character is placed as its warband's
+  ready-made squad is (`readyMadeMuster`), on the first free standable square
+  of the zone; one with no free square waits for the next wave. A team
+  character stood in an enemy zone blocks those squares, which is a tactic,
+  not a bug.
+- **A wave is told.** The log says "A fresh wave of the Renegades arrives"
+  (or "of the enemy", while a random enemy is unseen, §29.3), as the log tells
+  everything (§27.2). In fog the fresh characters are seen only if they're in
+  sight. Their fighter ids continue from the last, which hints at the wave's
+  size as ids always have (§27.2), and is accepted as it is there.
+- **Winning and losing.** The team wins if anyone of it is standing when the
+  last round ends, and loses the moment nobody is. A warband wiped out
+  between waves doesn't end the battle: its turn is stepped past until the
+  next wave refills it (§29.4's rotation already does). The enemy having
+  nobody standing ends it only after the last wave. The ending is
+  `endAsTeam`'s, with "held out for all 13 rounds" or "overrun in round 9" as
+  its detail.
+- **The score still counts.** The keep and knock-outs score as in any battle
+  (§13.7), so the result's points race, the team's score and each player's
+  share all still mean something, and the keep, walled and central, is where
+  a team means to hold out anyway. The score doesn't decide the result.
+- **How long.** As long as Hold the Centre for the same team (§29.1): 15
+  rounds for two, 13 for three. The every-third-round spacing and the length
+  are the first numbers the playtest tunes.
+
+**The computer hunts.** In Hold the Centre a warband's Objective is the keep
+(§29.7). In Hold Out it's the team: the walk to the nearest team character it
+can see, or failing that the nearest it remembers (PR 2), and only with
+neither the keep, where the team is likeliest to be. A wave arriving out of
+sight of everyone still finds the team. The walk is a search from the team's
+squares made once a plan, rather than the keep's search made once a
+battlefield (§29.7, *What PR 3 settled*), and the time-budget test holds it.
+
+**Engine.**
+
+- `coop.mission` from the invitation to the state, checked by the setup route
+  like everything a request sends, named in the setup log, and on the wire
+  for every viewer (`mission`).
+- The wave lands in `handOff` as a round begins (where `roundsPlayed`
+  goes up), before the next seat's `startTurn`, so the fresh characters stand
+  with full AP for the warband's next turn. A small pure helper
+  (`waveOf(state, warband)`) says who arrives and where, beside the warbands'
+  muster in `RealmArenaLogic.ts`.
+- **A wave is a rule, not the planner's.** It draws nothing, so nothing is
+  recorded: a replay brings the same wave at the same moment. That also means
+  changing when or how a wave arrives changes battles already fought, so it
+  takes a command version (`docs/command-versions.md`), unlike improving the
+  planner.
+- `isBattleOver` learns the mission: in Hold Out, the enemy with nobody
+  standing ends the battle only once no wave is left to come.
+- Mastery (§23.1), the battle record (§28) and the recap (§29.9) need
+  nothing: fresh characters are fighters like any other, their knock-outs
+  score and earn as any do, and a wave is a log line the recap already tells.
+- **Screens.** The setup gains *Mission*, an `OptionChoiceSection` under co-op,
+  as the enemy's is. The board's scoreboard shows the round the next wave
+  comes in. The guide's co-op section gains a paragraph.
+
+**Tests.** A wave refills each warband to its squad and no further, stands
+where `readyMadeMuster` would, waits with no room, and is told; a battle with
+the enemy wiped out goes on to the next wave and ends after the last; the
+endings and their details; whole battles of Hold Out on both co-op forts
+never break, and replay to the same end with the planner swapped for one that
+throws (§29.11). The scripted team (`playScriptedBattle`) is expected to lose
+most of them, which is a floor, as in §29.11, not a measure.
+
+### 30.4 PR 4: achievements
+
+Realm Arena launched without achievements (§17.3 PR 10). This PR gives it its
+first, written to `docs/achievements.md` §11's checklist: an
+`achievements.ts` beside `meta.ts`, typed
+`GameAchievement<IRealmArenaSpecificGameStateResponse>[]`, one line in
+`GAME_ACHIEVEMENTS`, browser-safe, and its null view pinned in
+`hiddenHands.test.ts` in the same commit.
+
+| Id | Title | Earned by | Kind |
+|---|---|---|---|
+| `realmarena.recruit` | Recruit | Play 5 battles | career |
+| `realmarena.warlord` | Warlord | Win 5 battles | career |
+| `realmarena.shoulder-to-shoulder` | Shoulder to Shoulder | Win a battle against the computer | match, `end` |
+| `realmarena.none-left-behind` | None Left Behind | Win a battle against the computer with every one of the team's characters standing at the end | match, `end` |
+| `realmarena.last-stand` | Last Stand | Win a battle of Hold Out | match, `end` |
+
+The titles may change; the ids never do (§11). PR 5 adds a sixth.
+
+- **Every match check is an `end` check.** In fog, the null viewer sees
+  nobody on the battlefield while the battle is fought (§27.3), so a
+  `turnEnd` check could only read the scores. Once the battle is over the fog
+  lifts for every viewer, so an `end` check reads every fighter, the mode and
+  the mission.
+- **What they read, all on the wire for every viewer:** `coop`, `mission`
+  (on the wire since PR 3, whose scoreboard reads it), `fighters` and the
+  seat's `outcome`. A co-op team's win is a win for every seat, which
+  `outcomeFor` already says (docs/achievements.md §3.2), so "win" needs
+  nothing co-op-specific.
+- **Free-for-all** gets the two career rungs. Match achievements that reward a
+  way of fighting a free-for-all are left for a later PR.
+- **The null view's pin** is its exact key set, including `lastSeen` empty
+  and the enemy absent until the battle is over, and it's the first for
+  Realm Arena: the random enemy's test (§29.11) holds the faction off every
+  viewer's response, the null viewer's included, but doesn't pin its keys.
+
+### 30.5 PR 5: difficulty
+
+§29.12 named the lever: the warbands' size. The existing ready-made squads
+already come in three sizes (§13.6), so difficulty needs no new squad:
+
+| Difficulty | Each warband | Points |
+|---|---|---:|
+| Easy | the four-player ready-made squad | 70 |
+| Normal | the three-player ready-made squad, as now | 80 |
+| Hard | the duel's ready-made squad, five characters with a Cleric | 100 |
+
+- **The players still muster 80 points**, whatever the difficulty. The
+  muster's line says what the enemy fields: "The Renegades field 100 points a
+  warband."
+- **It applies to both missions.** In Hold Out each wave refills a warband to
+  its difficulty's squad.
+- **The planner plays its best at every difficulty.** A computer told to
+  play badly reads as a broken one; a smaller enemy is fair and legible.
+  *Considered and set aside:* switching off Exposure, or the move ranking's
+  dozen, on Easy.
+- **Engine.** `coop.difficulty`, absent for Normal, so every battle so far is
+  Normal; checked by the setup route and named in the setup log; the
+  warbands' muster reads `factionById(enemy).readyMade[sizeFor(difficulty)]`.
+  It's on the wire for every viewer (`difficulty`), since the host picked it
+  in the open. A replay reads it from the state. No command version: nothing
+  about a Normal battle changes.
+- **Screens.** *Difficulty*, an `OptionChoiceSection` under co-op, as Banned
+  Islet's and Fires Out's are; the setup line and the result name it.
+- **One achievement**: `realmarena.against-the-odds`, *Against the Odds*, win
+  a battle against the computer on Hard. `difficulty` joins the null view's
+  pin.
+- **Tests.** Each difficulty musters its squad for every warband and every
+  wave; an old battle with no `difficulty` is Normal; the setup route refuses
+  anything else; the whole-battle tests run at all three.
+
+### 30.6 PR 6: solo against the computer
+
+One player against one warband, on the Ruined Fort (§29.2 already maps a team
+of one there).
+
+- **The setup screen's *Mode* gains *Solo*.** Solo hides the invite list,
+  the party size and the turn timer, and keeps fog, the enemy, the mission and
+  the difficulty. It starts the battle with `useStartSoloGame`, as Solitaire
+  and Fires Out's solitaire mode do: an invitation with nobody in it, accepted
+  at once (`docs/new-game.md`, solo games). `meta.ts`'s players become 1–4,
+  so the library reads "1–4 players", and the setup route still holds a
+  free-for-all to two or more.
+- **Engine: co-op with a team of one.** `COOP_PLAYERS.min` becomes 1, so the
+  battle is a co-op battle in every rule: one side, one warband opposite,
+  `endAsTeam`'s ending. The battle lasts a duel's 15 rounds, a round being one
+  player's turn and one warband's as a duel's is two players'
+  (`battleRounds` reads two for one).
+- **The turn never leaves the player.** With one seat, the muster and the
+  End turn hand the turn to the seat that ended it. As Fires Out found
+  (fires-out-gdd.md §17.6 step 12), that's no hand-off: they return
+  `turnOver` only with more than one seat, and `timerRestarts` always, so
+  nobody is pushed "your move" a moment after their own, and turn-end
+  achievements are still judged. The undo stack is cleared at the End turn
+  itself rather than in `CheckEndTurn`, which only runs on `turnOver`: an
+  undo across the enemy's turn would undo the enemy's turn.
+- **The timer is unlimited** (`UNLIMITED_TURN_TIMER`), as Solitaire's: there's
+  nobody to time out against, so a solo battle is never swept, warned or
+  dropped, and simply waits.
+- **Mastery is earned as in any battle** (§29.5). A player could farm it
+  against the computer; it buys sidegrades only (§23), so that's accepted for
+  now and is the first thing to revisit if the playtest finds it.
+- **What needs checking rather than changing:** the recap (nothing happens
+  while a solo player is away, and the enemy's turn plays out on the board as
+  the End turn's outcome), the result page and stats with one seat, and that
+  `countsAsPlayed` treats an abandoned solo battle as it does any solo game
+  (docs/achievements.md §8).
+- **Tests.** A solo battle from setup to its end: the muster and every End
+  turn keep the turn with the player without a push, the warband plays after
+  every turn, the timer is unlimited, and the whole-battle and replay tests
+  run on the Ruined Fort.
+
+### 30.7 Review
+
+| PR | Review |
+|---|---|
+| 1 | `caveman`, `rulebook` |
+| 2 | `caveman`, `croupier` (the memories on the wire), `gremlin` |
+| 3 | `caveman`, `locksmith` (the setup route's new field), `gremlin`, `croupier` (a wave in fog) |
+| 4 | `rulebook`, `croupier` (the null view) |
+| 5 | `caveman`, `locksmith`, `rulebook` |
+| 6 | `caveman`, `locksmith`, `gremlin`, `rulebook` |
+
+### 30.8 Open questions
+
+- **Does Hold Out want its own battlefield?** It's planned on the co-op forts
+  so it needs no map. If the playtest finds the team simply walks to the keep
+  and waits, a deployment inside the walls, or a smaller fort, is the next
+  step.
+- **Do the waves want to grow?** A wave refills a warband and no more. If the
+  later rounds are too easy, the next lever is one character more per wave
+  after the second, held to the time budget.
+- **Is the memory too generous?** A remembered enemy is kept until its square
+  is seen empty, however long ago it was seen. If old ghosts clutter the
+  board, they fade after a few rounds.
+- **Should difficulty reach free-for-all?** It's a co-op choice, since only
+  co-op has a computer to tune.
 
 ---
 
@@ -2886,3 +3257,4 @@ Realm, its sibling in the same world.
 | 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
+| 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
