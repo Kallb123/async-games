@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | PRs 1–4a, sides, the battlefields, factions as data, the planner and the enemy's turn, built (§29.2–§29.4, §29.6–§29.8) |
+| B8 | Co-op against the computer (§29) | PRs 1–4b, sides, the battlefields, factions as data, the planner, the enemy's turn and the end of it, built (§29.2–§29.8); the screens are next |
 
 **What B2 settled:**
 
@@ -2610,6 +2610,54 @@ sure it is.
   warband's after it: about 130 ms on average, under 300 at worst. The
   scripted team wins none of the 20.
 
+**What PR 4b settled:**
+
+- `endAsTeam(data, reason, line, detail?)` is in `src/utils/games/endAsTeam.ts`,
+  pure, beside `finishGame`, so a game's rules can import it. `CheckGameOver`
+  ends a co-op battle through it (`endInCoop`): the winning side is
+  `standings` over the seats and then the warbands, so a battle level on
+  points and points' worth standing goes to the enemy. The log's last two
+  lines are the score — "The battle is over: the team 7 points (Alice 3, Bob
+  4), the Renegades 5" — and "The team wins the battle" or "loses" above it;
+  `endDetail` is "7 points to 5", or on level scores "5 points each, with
+  more of the team left standing" or "…, and the enemy held the field".
+- A random enemy is `coop.random`, written as the battle is created so a
+  replay rebuilds it, and `coop.enemySeen`, set by the first command after
+  which any seat's view (`viewOf`, which a side shares) holds a warband
+  character: every action, a turn's start, an End turn and the last muster
+  ask, a player's and a warband's alike. A faction the host picked has no
+  `random`, so it's known from the start (`enemyKnown`). The response carries
+  `enemy` once it's known, or once the battle is over; a review step is built
+  from the state then, so one before the sighting doesn't.
+- `ownerToken(owner, coop)` names a player by their token and a warband by
+  its faction's `enemyName` in plain text, or "the enemy" while it's hidden.
+  A warband's characters are "the Renegades' Archer", or "an enemy character"
+  while it's hidden — and, in the enemy's own lines, "one of its characters"
+  rather than "their Archer", since the kind is the faction. A line written
+  before the sighting keeps what it said; the line of the command that saw
+  the enemy is the last one not to name it.
+- The End turn's outcome carries the enemy's turn as `enemy`: what burning did
+  as it began, each `{ action, events }`, and what its End turn did — each part
+  one line of the log, which is how the recap pairs them — and `started`, what
+  happened as the next player's turn began. Both are the recap's: `outcomeFor`
+  leaves them out of the sender's response, and a review reads `events` only.
+- The recap's action row is one builder (`actionRow`), a player's or the
+  enemy's. The enemy's rows are the warband's own (`actorId` its owner), keyed
+  by the End turn's command, so the feed folds what each of its characters did
+  into one row as it does a player's; a row when its End turn held the centre;
+  and its burning a row of its own, apart from the next player's. The recap's
+  dot is neutral for a row nobody seated did, and a reaction to one pushes
+  nobody. The tip measures the team's score against the enemy's.
+- The battle record has a column a player and, in co-op, one more for the
+  enemy, keyed `enemy` (`ENEMY_SIDE`): the warbands' rows, scores, centre
+  points, HP and losses added together. The result's stat groups name it "The
+  enemy"; drawing it on the charts and in the table is PR 5's.
+- The co-op tests check each ending and its detail, the enemy named in the
+  log, a row per enemy action in the recap and one per character in the feed,
+  and the record's enemy column; `hiddenHands.test.ts` steps a battle in fog a
+  command at a time and holds the faction off every response, review step and
+  line before the sighting.
+
 ### 29.9 Screens
 
 - **Setup**: the mode as an `OptionChoiceSection`, as Banned Islet's and Fires
@@ -2785,3 +2833,4 @@ Realm, its sibling in the same world.
 | 1.35 | B8 PR 2 builds the co-op battlefields (§29.2) — the Twin-Gate and Three-Gate Forts, unchanged by a half turn, a warband opposite each player, and `mapFor` — and factions as data (§29.3): `FACTIONS` with the Realm in it, a roster and an `enemyName` each, and the muster checked against its faction's roster. |
 | 1.36 | B8 PR 3 builds the planner (§29.7): the board's tactics helpers move to `tactics.ts` with `ACTION_AIMS`, each kind of action's aim, which the board and the planner both read; `ai.ts`'s `nextAction` lists what a warband could do, plays each out with `act` and scores the battle it leaves; a move also goes round the squares a watcher would react on; the puzzles, the never-cheats test and the time budget hold it. Nothing calls it yet. |
 | 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |
+| 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |

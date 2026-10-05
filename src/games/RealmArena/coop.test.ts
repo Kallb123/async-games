@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
+import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
 import { FACTION_IDS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
 import { battlefieldById } from "./maps";
-import { coopInviteOf, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData } from "./RealmArenaModels";
+import {
+    computeRealmArenaResultStats, coopInviteOf, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData,
+} from "./RealmArenaModels";
+import { recordBattle } from "./recordBattle";
 import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
-import { isWarband, readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
+import { battleRounds, ENEMY_SIDE, isWarband, readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
 import {
     battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
 } from "./testFixtures";
@@ -13,7 +17,10 @@ import {
 // docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
 // to the state, the warbands mustered, a warband's turn inside each player's
 // End turn, recorded and replayed — and the whole-battle tests of §29.11: it
-// never breaks, it plays well, and replay holds.
+// never breaks, it plays well, and replay holds. PR 4b: the end of it — the
+// team's ending, the enemy named in the log, the recap's rows for its turn,
+// and the battle record by side. A random enemy kept hidden until it's seen
+// is hiddenHands.test.ts's.
 
 vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
 
@@ -277,8 +284,8 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         expect(enemyMoves(nobody as BattleEvent[]).every(event => event.kind === "moved" && event.path.length === 0)).toBe(true);
     });
 
-    it("never carries whom the team fights: only that it's co-op", async () => {
-        const game = makeGame(["a", "b"], {}, true, "realm");
+    it("never carries whom the team fights while a random enemy is unseen: only that it's co-op", async () => {
+        const game = makeGame(["a", "b"], {}, true, "realm", true);
         await musterAll(game);
         for (const viewer of ["a", "b", null]) {
             const wire = gameStateToModel(game.specificGameState, viewer, null);
@@ -291,7 +298,11 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         const game = makeGame(["a", "b"], {}, false, "realm");
         await musterAll(game);
         const { outcome } = await play(game, endTurnBy("a"));
-        expect(new RealmArenaGameType().outcomeFor(game, outcome, "a")).toBe(outcome);
+        // All but the End turn's parts, which are the recap's (§29.9).
+        const { enemy, started, ...told } = outcome as IRealmArenaOutcome;
+        expect(enemy?.steps.length).toBeGreaterThan(0);
+        expect(started).toEqual([]);
+        expect(new RealmArenaGameType().outcomeFor(game, outcome, "a")).toEqual(told);
     });
 });
 
@@ -308,6 +319,9 @@ describe("the computer in whole battles (§29.11)", () => {
                     const battle = await coopBattle(players, enemy, fog);
                     times.push(...battle.times);
                     expect(battle.game.complete).toBe(true);
+                    // One ending for the whole team (§29.5).
+                    expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
+                    expect(battle.game.winner).toBe("");
                     // Every warband fought: each took turns, and the rotation came round.
                     const recorded = battle.game.gameState.commandHistory.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
                     const owners = new Set(recorded.map(action => battleOf(battle.game).fighters[action.fighter].owner));
@@ -328,6 +342,8 @@ describe("the computer in whole battles (§29.11)", () => {
         for (let seed = 0; seed < 20; seed++) {
             seedRolls(100 + seed);
             const { game } = await coopBattle(TEAMS[seed % 2], "realm");
+            // The ending says what the standings do.
+            expect(game.endReason).toBe(enemyWon(game) ? "teamloss" : "teamwin");
             if (enemyWon(game)) won++;
         }
         expect(won).toBeGreaterThanOrEqual(19);
@@ -349,5 +365,109 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(planner.calls).toBe(0);
         // The battle it replayed was a real one: the enemy fought in it.
         expect(game.gameState.commandHistory.some(command => (command as RealmArenaEndTurn).recordedEnemyActions?.length)).toBe(true);
+    }, 60_000);
+});
+
+const NAMES: Record<string, string> = { a: "Alice", b: "Bob" };
+const ENEMY = REALM.enemyName;
+
+/** A co-op battle mustered and given these scores, with every warband downed unless the enemy is to be left standing. */
+async function scored(scores: Record<string, number>, enemyStanding = false): Promise<RealmArenaTestGame> {
+    const game = makeGame(["a", "b"], {}, false, "realm");
+    await musterAll(game);
+    const gs = game.specificGameState;
+    gs.scores = { ...gs.scores, ...scores };
+    if (!enemyStanding) gs.fighters = gs.fighters.map(fighter => isWarband(fighter.owner) ? { ...fighter, hp: 0 } : fighter);
+    return game;
+}
+
+describe("the co-op ending (§29.5)", () => {
+    it("is the team's win when its score beats the enemy's, one ending for everybody", async () => {
+        const game = await scored({ a: 3, b: 4, [warbandOwner(0)]: 2, [warbandOwner(1)]: 3 });
+        await play(game, endTurnBy("a"));
+        expect(game).toMatchObject({ complete: true, winner: "", endReason: "teamwin", endDetail: "7 points to 5", currentTurn: "" });
+        const [won, final] = game.gameState.history.map(entry => entry.text);
+        expect(won).toBe("The team wins the battle");
+        expect(final).toBe(`The battle is over: the team 7 points ({{a}} 3, {{b}} 4), ${ENEMY} 5`);
+        // The detail is read back where no token is resolved.
+        expect(game.endDetail).not.toMatch(/\{\{/);
+    });
+
+    it("is the team's loss when the enemy's beats it, even with nobody of the enemy's left", async () => {
+        const game = await scored({ a: 1, [warbandOwner(1)]: 6 });
+        await play(game, endTurnBy("a"));
+        expect(game).toMatchObject({ complete: true, winner: "", endReason: "teamloss", endDetail: "1 point to 6" });
+        expect(game.gameState.history[0].text).toBe("The team loses the battle");
+    });
+
+    it("goes to the side with more left standing on level scores, and to the enemy, holding the field, if that's level too", async () => {
+        const ahead = await scored({ a: 5, [warbandOwner(0)]: 5 });
+        await play(ahead, endTurnBy("a"));
+        expect(ahead).toMatchObject({ endReason: "teamwin", endDetail: "5 points each, with more of the team left standing" });
+
+        // The turn limit, with every squad whole: the same points' worth a side.
+        const level = await scored({}, true);
+        level.specificGameState.roundsPlayed = battleRounds(2);
+        expect(new RealmArenaGameType().CheckGameOver(level)).toBe(true);
+        expect(level).toMatchObject({ endReason: "teamloss", endDetail: "0 points each, and the enemy held the field" });
+    });
+});
+
+describe("the enemy in the log (§29.6)", () => {
+    it("is named by its faction, its characters by its name, and never as a player", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        await play(game, endTurnBy("a"));
+        const lines = game.gameState.history.map(entry => entry.text);
+        const enemy = game.gameState.history.filter(entry => entry.actorId === undefined && entry.text.startsWith(`${ENEMY.charAt(0).toUpperCase()}${ENEMY.slice(1)} `));
+        expect(enemy.length).toBeGreaterThan(0);
+        expect(enemy.some(entry => /their (Knight|Archer|Scout|Mage|Cleric|Warrior)/.test(entry.text))).toBe(true);
+        expect(lines.join("\n")).not.toContain("{{ai:");
+    });
+});
+
+describe("the recap of the enemy's turn (§29.9)", () => {
+    it("gives each of its actions a row, built as a player's is, and folds none of them in with burning", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        const ended = endTurnBy("a");
+        await play(game, ended);
+        const actions = (ended as RealmArenaEndTurn).recordedEnemyActions ?? [];
+        const rows = await buildAllEvents(game, NAMES);
+        const enemy = rows.filter(row => /:enemy:\d+$/.test(row.id));
+        expect(enemy).toHaveLength(actions.length);
+        const capitalised = `${ENEMY.charAt(0).toUpperCase()}${ENEMY.slice(1)} `;
+        expect(enemy.every(row => row.actorId === warbandOwner(0) && row.title.startsWith(capitalised))).toBe(true);
+        expect(rows.some(row => row.type === "ra_burning")).toBe(false);
+        // Alice's own row is still hers, and still a bare End turn.
+        expect(rows.find(row => row.id === ended.id)).toMatchObject({ actorId: "a", title: "Alice ended their turn" });
+
+        // The feed folds what each of its characters did into one row, as it does a player's.
+        const feed = await buildEventFeed(game, NAMES, "b");
+        const folded = feed.events.filter(row => row.actorId === warbandOwner(0));
+        const characters = new Set(actions.map(action => action.fighter));
+        expect(folded.length).toBe(characters.size);
+        // The team's score against the enemy's, not Bob's against his teammate's.
+        expect(feed.tip?.text).toMatch(/^(The team is \d+ points? (ahead|behind)|The scores are level)/);
+    });
+});
+
+describe("the battle record in co-op (§29.6)", () => {
+    it("keeps the enemy as one column, its warbands added together", async () => {
+        seedRolls(11);
+        const { game } = await coopBattle(["a", "b"], "realm");
+        const record = await recordBattle(game);
+        expect(record).toBeDefined();
+        const columns = new Set(record!.fighting.map(row => row.userId));
+        expect(columns).toEqual(new Set(["a", "b", ENEMY_SIDE]));
+        const gs = game.specificGameState;
+        const enemyScore = warbandsOf(game).reduce((sum, owner) => sum + (gs.scores[owner] ?? 0), 0);
+        expect(record!.pointsPerRound.at(-1)?.get(ENEMY_SIDE)).toBe(enemyScore);
+        expect([...record!.squadHpPerRound.at(-1)!.keys()]).toEqual(["a", "b", ENEMY_SIDE]);
+        // It reaches the result whole, and the result names it.
+        const stats = computeRealmArenaResultStats(game, record);
+        expect(stats.fighting).toBe(record!.fighting);
+        const groups = formatRealmArenaResultStats(stats, new Map(Object.entries(NAMES)));
+        expect(groups.map(group => group.username)).toEqual(["Alice", "Bob", "The enemy"]);
     }, 60_000);
 });

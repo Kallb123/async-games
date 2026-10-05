@@ -18,7 +18,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { CHARACTERS, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { allied, battleRounds, knockoutPoints, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, isWarband, knockoutPoints, sideOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -61,16 +61,21 @@ export interface FightingRow extends FightingRecord {
     character: CharacterId;
 }
 
+/**
+ * A battle's record, by column: a column a player, and in co-op one more for
+ * the enemy (`ENEMY_SIDE`), its warbands added together (§29.6) — the team
+ * reads its players one by one, and the enemy as the one squad it fights.
+ */
 export interface BattleRecord {
-    /** A row for every kind of character each player fought with, in seat order and then the muster's. */
+    /** A row for every kind of character each column fought with, in seat order — the enemy last — and then the muster's. */
     fighting: FightingRow[];
-    /** Each player's points from holding the centre; the rest of their score is knock-outs. */
+    /** Each column's points from holding the centre; the rest of its score is knock-outs. */
     centrePoints: Map<string, number>;
-    /** Each player's score at the end of every battle round. */
+    /** Each column's score at the end of every battle round. */
     pointsPerRound: Map<string, number>[];
-    /** The HP each squad had standing at the end of every battle round. */
+    /** The HP each column had standing at the end of every battle round. */
     squadHpPerRound: Map<string, number>[];
-    /** Every character downed, on its owner's line, in the round it fell: `turnIndex` is that round's index. */
+    /** Every character downed, on its column's line, in the round it fell: `turnIndex` is that round's index. */
     losses: GameResultEvent[];
 }
 
@@ -81,7 +86,8 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
 /**
  * Watches a battle's replay, a step at a time, and keeps its record. `seats`
  * is the turn order, and `sides` the battle's (`battleFrom`, §29.6): who is
- * whose ally, for friendly fire and knock-outs. Absent in a free-for-all.
+ * whose ally, for friendly fire and knock-outs, and in co-op the warbands'
+ * one column. Absent in a free-for-all.
  *
  * Undo: the one thing an undoable action can add to a record is healing — it
  * hurts nobody and rolls nothing (docs/undo.md). So the recorder keeps the
@@ -91,13 +97,16 @@ const copyOf = (records: ReadonlyMap<string, FightingRecord>) => new Map([...rec
 export function battleRecorder(seats: readonly string[], sides?: BattleState["sides"]) {
     const lastRound = battleRounds(seats.length) - 1;
     const sided = { sides };
+    /** The record's columns, and the one an owner's deeds go in. */
+    const columns = sides ? [...seats, ENEMY_SIDE] : [...seats];
+    const columnOf = (owner: string) => isWarband(owner) ? sideOf(sided, owner) : owner;
     /** Everyone who has been on the battlefield, kept after a dropped player's squad has left it. */
     const known = new Map<number, Pick<Fighter, "owner" | "character">>();
     /** Each one's HP, and who set it burning, after the last step. */
     let last = new Map<number, Pick<Fighter, "hp" | "burnedBy">>();
     let records = new Map<string, FightingRecord>();
     let undoable: Map<string, FightingRecord>[] = [];
-    const centrePoints = new Map(seats.map(userId => [userId, 0]));
+    const centrePoints = new Map(columns.map(column => [column, 0]));
     const pointsPerRound: Map<string, number>[] = [];
     const squadHpPerRound: Map<string, number>[] = [];
     const losses: GameResultEvent[] = [];
@@ -107,7 +116,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
     const recordOf = (id: number | undefined): FightingRecord | undefined => {
         const fighter = id === undefined ? undefined : known.get(id);
         if (!fighter) return undefined;
-        const key = keyOf(fighter.owner, fighter.character);
+        const key = keyOf(columnOf(fighter.owner), fighter.character);
         const record = records.get(key) ?? { ...NO_RECORD };
         records.set(key, record);
         return record;
@@ -173,11 +182,11 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                         downer.knockoutPoints += knockoutPoints(fallen.character);
                     }
                     const how = !by ? "" : ` by ${by.owner === fallen.owner ? "its own" : ally ? "an allied" : "an enemy"} ${CHARACTERS[by.character].name}`;
-                    losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: fallen.owner });
+                    losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: columnOf(fallen.owner) });
                     break;
                 }
                 case "scored":
-                    if (event.reason === "centre") centrePoints.set(event.player, (centrePoints.get(event.player) ?? 0) + event.points);
+                    if (event.reason === "centre") centrePoints.set(columnOf(event.player), (centrePoints.get(columnOf(event.player)) ?? 0) + event.points);
                     break;
             }
         }
@@ -219,20 +228,22 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 pointsPerRound.push(pointsPerRound[skipped - 1]);
                 squadHpPerRound.push(squadHpPerRound[skipped - 1]);
             }
-            pointsPerRound[index] = new Map(seats.map(userId => [userId, gs.scores?.[userId] ?? 0]));
+            const score = (column: string) => Object.entries(gs.scores ?? {}).reduce((sum, [owner, points]) => sum + (columnOf(owner) === column ? points : 0), 0);
+            pointsPerRound[index] = new Map(columns.map(column => [column, score(column)]));
             // A dropped player's squad leaves the battlefield (§17.4 B2): their
             // line holds at what it had when they left, rather than reading as
             // wiped out — a squad that was keeps its fallen on the field.
-            const left = (userId: string) => !fighters.some(fighter => fighter.owner === userId) && [...known.values()].some(fighter => fighter.owner === userId);
+            const ours = (column: string) => (fighter: Pick<Fighter, "owner">) => columnOf(fighter.owner) === column;
+            const left = (column: string) => !fighters.some(ours(column)) && [...known.values()].some(ours(column));
             const before = squadHpPerRound[index] ?? squadHpPerRound[index - 1];
-            squadHpPerRound[index] = new Map(seats.map(userId => [userId, left(userId) ? before?.get(userId) ?? 0
-                : fighters.reduce((sum, fighter) => sum + (fighter.owner === userId ? fighter.hp : 0), 0)]));
+            squadHpPerRound[index] = new Map(columns.map(column => [column, left(column) ? before?.get(column) ?? 0
+                : fighters.filter(ours(column)).reduce((sum, fighter) => sum + fighter.hp, 0)]));
             round = gs.roundsPlayed;
         },
 
         result(): BattleRecord {
             return {
-                fighting: seats.flatMap(userId => CHARACTER_IDS.flatMap(character => {
+                fighting: columns.flatMap(userId => CHARACTER_IDS.flatMap(character => {
                     const record = records.get(keyOf(userId, character));
                     return record ? [{ userId, character, ...record }] : [];
                 })),

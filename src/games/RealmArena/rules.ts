@@ -183,6 +183,10 @@ const WARBAND_PREFIX = "ai:";
 /** Whether an owner is one of the computer's warbands rather than a player. */
 export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PREFIX);
 
+/** The two sides of a co-op battle (§29.6): the players, and the computer's warbands. */
+export const TEAM_SIDE = "team";
+export const ENEMY_SIDE = "enemy";
+
 /**
  * The one way a `BattleState` is built (§29.6), so the board's previews and
  * the recap read a battle exactly as the server does. A free-for-all — every
@@ -190,7 +194,7 @@ export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PR
  * for each of them (§29.1).
  */
 export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
-    const sides = coop ? Object.fromEntries([...seats.map(player => [player, "team"]), ...seats.map((_, k) => [warbandOwner(k), "enemy"])]) : undefined;
+    const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...seats.map((_, k) => [warbandOwner(k), ENEMY_SIDE])]) : undefined;
     return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
 }
 

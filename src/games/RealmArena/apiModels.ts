@@ -4,6 +4,7 @@ import type { Fighter, MusterPick, ToldEvent } from "./rules";
 import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
+import type { FactionId } from "./characters";
 
 // docs/games/realm-arena.md §17.2's state, on the wire. Once the battle has
 // begun every field of it goes to every player — unless the host chose fog of
@@ -31,6 +32,13 @@ export interface IRealmArenaSpecificGameStateResponse {
     fog: boolean;
     /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */
     coop: boolean;
+    /**
+     * Whom the team fights, in co-op (§29.3), once the team knows: a faction
+     * the host picked from the start, one drawn at random once one of its
+     * characters has been seen — or the battle is over. Absent until then,
+     * and in a free-for-all.
+     */
+    enemy?: FactionId;
     /**
      * Everyone on the battlefield, standing or fallen — or, in fog of war, the
      * viewer's own squad and everyone it can see. Empty until every squad has

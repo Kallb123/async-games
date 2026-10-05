@@ -15,6 +15,12 @@
 // `buildAllEvents` lookup), so folding a run of moves into one row there
 // would leave the rest of the run unreactable.
 //
+// In co-op the enemy's turn is inside each player's End turn (§29.4), and its
+// row comes with a row for each of the enemy's actions, built as a player's
+// action's is (`actionRow`) from the line the warband wrote and what the
+// action did (§29.9). Those lines name the enemy in plain text (`ownerToken`),
+// and nobody can react to a line nobody acted.
+//
 // The muster stays sealed here as it does everywhere else (§17.2). A muster's
 // row says only that it happened. Nothing below reads the command's `picks`,
 // or the snapshot's `myMuster`, which holds the squad of whoever the feed is
@@ -25,10 +31,11 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import type { IRealmArenaOutcome, RealmArenaAct } from "./RealmArenaLogic";
+import { UNKNOWN_ENEMY, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
-import type { ItemId } from "./characters";
-import { battleFrom, centreHolders, isStanding, sideOf, type BattleEvent, type Fighter } from "./rules";
+import { factionById, type ItemId } from "./characters";
+import { battleFrom, centreHolders, isStanding, isWarband, sideOf, type BattleEvent, type Fighter } from "./rules";
+import { capitalise } from "@/utils/ui/text";
 import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -127,6 +134,83 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
     return [...new Set(ids.flatMap(id => fighters.find(fighter => fighter.id === id)?.owner ?? []))];
 }
 
+type RowBase = Omit<IGameEvent, "type" | "title">;
+
+/**
+ * An action's row, a player's or the enemy's (§29.9): its line of the log as
+ * the title, the kind and glyph of the most telling thing it did, whom it
+ * hurt, and — for `byCharacter` — the character that took it, what happened,
+ * and the line without the name `name` it starts with.
+ */
+function actionRow(base: RowBase, name: string, title: string, events: readonly BattleEvent[], fighter: number | undefined, fighters: readonly Fighter[]): RAEvent {
+    return {
+        ...base,
+        ...actionKind(events),
+        title,
+        affectedIds: hurt(events, fighters),
+        fighter,
+        battle: events,
+        clause: title.startsWith(`${name} `) ? title.slice(name.length + 1) : title,
+    };
+}
+
+/**
+ * The rows for what burning did as a turn began (§20.3), from the lines it
+ * wrote for it: one row however many, never quiet — it hurt somebody, and it
+ * may have knocked them out.
+ */
+function burningRow(base: RowBase, id: string, lines: readonly IHistoryEntry[], events: readonly BattleEvent[], fighters: readonly Fighter[]): IGameEvent[] {
+    if (lines.length === 0) return [];
+    const knockout = events.some(event => event.kind === "downed");
+    return [{
+        ...base,
+        id,
+        type: knockout ? RA_KNOCKOUT : RA_BURNING,
+        glyph: knockout ? "✕" : "🔥",
+        title: lines.map(entry => entry.text).join("; "),
+        affectedIds: hurt(events, fighters),
+    }];
+}
+
+/**
+ * The centre points an End turn scored its own `owner`, read off its events
+ * rather than the score, which a knock-out by burning as the next turn begins
+ * can add to as well (§20.2).
+ */
+const centrePointsOf = (events: readonly BattleEvent[], owner: string): number =>
+    events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" && event.player === owner ? event.points : 0), 0);
+
+/**
+ * The rows of the enemy's turn inside an End turn (§29.4), from its lines of
+ * the log, oldest first: what burning did as it began, a row for each of its
+ * actions, built as a player's are, and one when its End turn held the
+ * centre. Each is the warband's own row, keyed by the End turn's command, so
+ * the board's dot and the feed's folding read it as the enemy's.
+ */
+function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines: readonly IHistoryEntry[], next: RAState): IGameEvent[] {
+    // The enemy's name as its lines begin with it: "The enemy" while a random
+    // enemy is hidden (§29.3), its faction's once it's known — and a turn can
+    // see the one give way to the other.
+    const names = [UNKNOWN_ENEMY, ...next.enemy ? [factionById(next.enemy).enemyName] : []].map(capitalise);
+    const nameOf = (text: string) => names.find(name => text.startsWith(`${name} `)) ?? names[0];
+    const own = { ...base, actorId: turn.owner, actorUsername: nameOf(lines[0]?.text ?? "") };
+    let at = 0;
+    const rows: IGameEvent[] = burningRow(own, `${command.id}:enemy:burning`, turn.started.length > 0 ? lines.slice(at, ++at) : [], turn.started, next.fighters);
+    for (const [index, step] of turn.steps.entries()) {
+        const line = lines[at++];
+        if (!line) break;
+        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, step.events, step.action.fighter, next.fighters));
+    }
+    const points = turn.ended ? centrePointsOf(turn.ended, turn.owner) : 0;
+    if (points > 0) {
+        rows.push({ ...own, id: `${command.id}:enemy:centre`, type: RA_CENTRE, glyph: "★", title: `${nameOf(lines[at]?.text ?? "")} ended their turn holding the centre, for ${pluralize(points, "point")}` });
+    }
+    return rows;
+}
+
+/** How many lines of the log the enemy's turn wrote: one for its burning, if any, one an action, and one for its End turn. */
+const enemyLineCount = (turn: EnemyTurn): number => (turn.started.length > 0 ? 1 : 0) + turn.steps.length + (turn.ended ? 1 : 0);
+
 /** Turns one replayed Realm Arena command into its recap rows. */
 function toEvents(
     prev: ITurnSnapshot,
@@ -159,26 +243,15 @@ function toEvents(
             // The oldest of its lines: one that ended the battle has the
             // winner's line above it, and that names an actor too.
             const title = [...lines].reverse().find(entry => entry.actorId === command.senderId)?.text ?? `${name} ${command.myString()}`;
-            const row: RAEvent = {
-                ...base,
-                ...actionKind(events),
-                title,
-                affectedIds: hurt(events, state(next).fighters),
-                fighter: (command as Partial<RealmArenaAct>).action?.fighter,
-                battle: events,
-                clause: title.startsWith(`${name} `) ? title.slice(name.length + 1) : title,
-            };
-            rows.push(row);
+            rows.push(actionRow(base, name, title, events, (command as Partial<RealmArenaAct>).action?.fighter, state(next).fighters));
             break;
         }
         case "RealmArenaEndTurn": {
             // Always a row, since it closes the turn's window; only the centre
-            // scoring makes it news, so a bare one is `quiet`. Read off the
-            // events rather than the score, which a knock-out by burning as
-            // the next turn begins can add to as well (§20.2) — and only the
+            // scoring makes it news, so a bare one is `quiet` — and only the
             // sender's own, not a warband's in the enemy's turn after it (§29.4).
-            const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
-            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" && event.player === command.senderId ? event.points : 0), 0);
+            const { events = [], enemy, started } = outcome as Partial<IRealmArenaOutcome>;
+            const points = centrePointsOf(events, command.senderId);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not
                 // at all in fog of war, where they may see none of it (§27).
@@ -194,24 +267,16 @@ function toEvents(
             } else {
                 rows.push({ ...base, type: RA_END_TURN, glyph: "⏳", title: `${name} ended their turn`, quiet: true });
             }
-            // What burning did as the next turn began, told in the line the
-            // hand-off wrote for it (§20.3) — more than one where it burned a
-            // squad out and passed on. Those are the lines nobody acted, under
-            // the battle's end if the burning ended it. Never quiet: it hurt
-            // somebody, and it may have knocked them out.
+            // The rest of its lines, oldest first, under the battle's end if
+            // this ended it: the enemy's turn, in co-op, then what burning did
+            // as the next turn began, told in the line the hand-off wrote for
+            // it (§20.3) — more than one where it burned a squad out and passed
+            // on. None of them is anybody's to react to.
             const ended = next.complete && !prev.complete;
-            const burning = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
-            if (burning.length > 0) {
-                const knockout = events.some(event => event.kind === "downed");
-                rows.push({
-                    ...base,
-                    id: `${command.id}:burning`,
-                    type: knockout ? RA_KNOCKOUT : RA_BURNING,
-                    glyph: knockout ? "✕" : "🔥",
-                    title: burning.map(entry => entry.text).join("; "),
-                    affectedIds: hurt(events, state(next).fighters),
-                });
-            }
+            const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
+            const enemyLines = enemy ? enemyLineCount(enemy) : 0;
+            if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next)));
+            rows.push(...burningRow(base, `${command.id}:burning`, rest.slice(enemyLines), started ?? events, state(next).fighters));
             break;
         }
         default:
@@ -308,10 +373,14 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const squad = gs.fighters.filter(fighter => fighter.owner === forUserId);
     if (squad.length === 0) return null;
 
-    const mine = gs.scores[forUserId] ?? 0;
-    const best = Math.max(0, ...Object.entries(gs.scores).filter(([userId]) => userId !== forUserId).map(([, score]) => score));
+    // In co-op it's the team's score against the enemy's (§29.5); otherwise
+    // the viewer's against the best of anyone else's.
+    const total = (match: (owner: string) => boolean) => Object.entries(gs.scores).reduce((sum, [owner, points]) => sum + (match(owner) ? points : 0), 0);
+    const [mine, best] = gs.coop
+        ? [total(owner => !isWarband(owner)), total(isWarband)]
+        : [gs.scores[forUserId] ?? 0, Math.max(0, ...Object.entries(gs.scores).filter(([userId]) => userId !== forUserId).map(([, score]) => score))];
     const gap = mine - best;
-    const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
+    const score = gap === 0 ? "The scores are level" : `${gs.coop ? "The team is" : "You're"} ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
     // Once the battle has begun, every seat has mustered.
     const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });

@@ -353,7 +353,9 @@ Key properties:
   player deck run dry), and the finish banner, the result page and the "your
   team lost" push all want to name which. Only the rules know, so the game's
   own logic writes it as it ends the game (`endInTeamLoss` in
-  `OutbreakLogic.ts`) — `finishGame` never sets it. Absent for every ending
+  `OutbreakLogic.ts`, or the shared `endAsTeam` in
+  `src/utils/games/endAsTeam.ts`, which Realm Arena's co-op ending goes
+  through and the older co-op games can move onto) — `finishGame` never sets it. Absent for every ending
   that only happens one way. `finishedGameCopy()` in `utils/ui/players.ts` is
   the one place it is appended to an outcome line, and a builder that forwards
   `endReason` must forward it too (`publicGameState.test.ts` holds them to
@@ -634,7 +636,8 @@ interface IGameType {
 
 `outcomeFor` is for a game whose outcome can carry what its own sender
 mustn't see: Realm Arena's End turn holds the enemy's turn, which in fog of
-war is cut to what the sender's side saw. The command route sends every other
+war is cut to what the sender's side saw, and leaves out the turn step by step
+that its outcome keeps for the recap. The command route sends every other
 game's outcome whole.
 
 `CheckEndTurn` typically advances `currentTurn` around `turnOrder`, but games can
