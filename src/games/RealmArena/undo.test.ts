@@ -9,7 +9,7 @@ import { undoableCommandsIn } from "@/utils/testing/undoableCommands";
 import { CHARACTERS, REALM } from "./characters";
 import { battlefieldById } from "./maps";
 import { RealmArenaGameDataModel } from "./RealmArenaModels";
-import { RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
+import { cloneRealmArenaState, RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
 import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame, responseFor } from "./testFixtures";
@@ -76,6 +76,14 @@ function guardAtTheEnd(game: RealmArenaTestGame, action: Action & { path: number
 }
 
 describe("Realm Arena — undoing an action", () => {
+    it("snapshots fog sightings deeply so undo can restore what each player knew", async () => {
+        const game = await battle();
+        game.specificGameState.sightings = { a: [{ id: 9, owner: "b", character: "knight", square: 4 }] };
+        const snapshot = cloneRealmArenaState(game.specificGameState);
+        game.specificGameState.sightings.a[0].square = 8;
+        expect(snapshot.sightings).toEqual({ a: [{ id: 9, owner: "b", character: "knight", square: 4 }] });
+    });
+
     it("takes a move back: the square, the AP and a log line saying so", async () => {
         const game = await battle();
         const mover = own(game, "a")[0];

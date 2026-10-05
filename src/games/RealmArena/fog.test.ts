@@ -3,11 +3,11 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildTimeline } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { findPath, pathCost, pathTo } from "@/utils/games/battlefield/pathfinding";
-import { buildBattlefield, distance, type Battlefield } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, distance, facingTowards, type Battlefield } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, type Ability, type CharacterId, type Kit, type OptionId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { RealmArenaGameDataModel, stepOutcomeToModel, stepSummary } from "./RealmArenaModels";
-import { RealmArenaAct, RealmArenaUndo } from "./RealmArenaLogic";
+import { RealmArenaAct, RealmArenaUndo, rememberFogSightings } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { battleCues, eventLines, unseenSquares } from "./ui";
 import {
@@ -199,6 +199,109 @@ describe("moving into the fog (§27)", () => {
 });
 
 describe("the wire in fog of war (§27)", () => {
+    /**
+     * A fogged battle with a's lone eye in the corner, and a run of squares a
+     * step apart each in or out of its sight as `pattern` says — turning on
+     * the last step, when `turning`.
+     */
+    async function sightingsBattle(pattern: boolean[], turning = false) {
+        const game = makeGame(undefined, undefined, true);
+        await musterAll(game);
+        const field = battleOf(game).field;
+        const eye = fighter(0, "a", 0);
+        game.specificGameState.fighters = [eye];
+        const seen = squadSight(battleOf(game), "a");
+        const extend = (path: number[]): number[] | undefined => {
+            if (path.length === pattern.length) return path;
+            const last = path.at(-1)!;
+            for (let next = 0; next < field.tiles.length; next++) {
+                if (distance(field, last, next) !== 1 || path.includes(next) || seen(next) !== pattern[path.length]) continue;
+                if (turning && path.length === pattern.length - 1 && facingTowards(field, path.at(-2)!, last) === facingTowards(field, last, next)) continue;
+                const found = extend([...path, next]);
+                if (found) return found;
+            }
+            return undefined;
+        };
+        const path = field.tiles.map((_, square) => square).filter(square => seen(square) === pattern[0]).map(square => extend([square])).find(Boolean);
+        expect(path).toBeDefined();
+        return { game, field, eye, path: path! };
+    }
+
+    it("remembers where an enemy entered fog, then removes the ghost when that square is revealed", async () => {
+        const { game, field, eye, path: [visible, hidden] } = await sightingsBattle([true, false]);
+        const enemy = fighter(1, "b", visible);
+        game.specificGameState.fighters.push(enemy);
+        rememberFogSightings(game.specificGameState);
+        enemy.square = hidden;
+        // Reactions can split one move into several events, so the crossing
+        // need not be in the final segment.
+        rememberFogSightings(game.specificGameState, [
+            { kind: "moved", fighter: enemy.id, path: [visible, hidden], sneaking: false },
+            { kind: "moved", fighter: enemy.id, path: [hidden], sneaking: false },
+        ]);
+
+        const foggedResponse = (await responseFor(game, "a")).specificGameState;
+        expect(foggedResponse.fighters.map(one => one.id)).not.toContain(enemy.id);
+        expect(foggedResponse.ghosts).toEqual([{ id: enemy.id, owner: "b", character: enemy.character, square: hidden, facing: facingTowards(field, visible, hidden) }]);
+        expect((await responseFor(game, "b")).specificGameState.ghosts).not.toContainEqual(expect.objectContaining({ id: enemy.id }));
+        // Another player's sightings are theirs alone.
+        game.specificGameState.sightings!.b = [{ id: 99, owner: "a", character: "scout", square: hidden }];
+        expect((await responseFor(game, "a")).specificGameState.ghosts).not.toContainEqual(expect.objectContaining({ id: 99 }));
+        expect((await responseFor(game, null)).specificGameState.ghosts).toEqual([]);
+        game.complete = true;
+        expect((await responseFor(game, "a")).specificGameState.ghosts).toEqual([]);
+        game.complete = false;
+
+        eye.square = hidden;
+        rememberFogSightings(game.specificGameState);
+        expect((await responseFor(game, "a")).specificGameState.ghosts).toEqual([]);
+    });
+
+    it("never leaves a fallen enemy standing in the fog", async () => {
+        const { game, eye, path: [lying, away] } = await sightingsBattle([true, false]);
+        const enemy = fighter(1, "b", away);
+        game.specificGameState.fighters.push(enemy);
+        game.specificGameState.sightings = { a: [{ id: enemy.id, owner: "b", character: enemy.character, square: away }] };
+        // Seen lying down: down, not somewhere to look for it.
+        enemy.square = lying;
+        enemy.hp = 0;
+        rememberFogSightings(game.specificGameState);
+        expect(game.specificGameState.sightings.a).toEqual([]);
+
+        // So looking away from it leaves nothing behind.
+        eye.square = battleOf(game).field.tiles.findIndex((_, square) => !squadSight({ ...battleOf(game), fighters: [{ ...eye, square }] }, "a")(lying));
+        expect(eye.square).toBeGreaterThanOrEqual(0);
+        rememberFogSightings(game.specificGameState);
+        expect((await responseFor(game, "a")).specificGameState.ghosts).toEqual([]);
+    });
+
+    it("faces the ghost the way it stepped into the fog, not any way it turned out there", async () => {
+        const { game, field, path } = await sightingsBattle([true, false, false], true);
+        const [visible, entry, end] = path;
+        const enemy = fighter(1, "b", visible);
+        game.specificGameState.fighters.push(enemy);
+        rememberFogSightings(game.specificGameState);
+        Object.assign(enemy, { square: end, facing: facingTowards(field, entry, end) });
+        rememberFogSightings(game.specificGameState, [{ kind: "moved", fighter: enemy.id, path, sneaking: false }]);
+        expect((await responseFor(game, "a")).specificGameState.ghosts).toEqual([
+            { id: enemy.id, owner: "b", character: enemy.character, square: entry, facing: facingTowards(field, visible, entry) },
+        ]);
+    });
+
+    it("remembers an enemy first seen crossing its sight on the way back into the fog", async () => {
+        const { game, field, path } = await sightingsBattle([false, true, false]);
+        const [, visible, entry] = path;
+        const enemy = fighter(1, "b", path[0]);
+        game.specificGameState.fighters.push(enemy);
+        rememberFogSightings(game.specificGameState);
+        expect(game.specificGameState.sightings!.a).toEqual([]);
+        enemy.square = entry;
+        rememberFogSightings(game.specificGameState, [{ kind: "moved", fighter: enemy.id, path, sneaking: false }]);
+        expect((await responseFor(game, "a")).specificGameState.ghosts).toEqual([
+            { id: enemy.id, owner: "b", character: enemy.character, square: entry, facing: facingTowards(field, visible, entry) },
+        ]);
+    });
+
     it("sends each player their own squad and nobody they can't see, and everyone once the battle is over", async () => {
         const game = makeGame(undefined, undefined, true);
         await musterAll(game);

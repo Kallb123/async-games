@@ -21,6 +21,7 @@ import {
     endTurn,
     ENEMY_SIDE,
     fighterById,
+    fogGhost,
     isBattleOver,
     isStanding,
     isWarband,
@@ -49,6 +50,7 @@ import {
     type MusterPick,
     type Roll,
 } from "@/games/RealmArena/rules";
+import { facingTowards, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { nextAction } from "@/games/RealmArena/ai";
 import { playerHistory, tellEveryone, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
@@ -257,6 +259,7 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         phase: gs.phase,
         roundsPlayed: gs.roundsPlayed,
         fighters: (gs.fighters ?? []).map(storedFighter),
+        ...(gs.sightings ? { sightings: Object.fromEntries(Object.entries(gs.sightings).map(([viewer, ghosts]) => [viewer, ghosts.map(ghost => ({ ...ghost }))])) } : {}),
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.coop ? { coop: { ...gs.coop } } : {}),
         blasted: [...(gs.blasted ?? [])],
@@ -500,13 +503,54 @@ function writeLine(
  * everything that can change what the team sees, so the line written by the
  * command that showed it is the last to keep the enemy unnamed.
  */
-function noteSighting(gs: IRealmArenaSpecificGameState): void {
+function noteSighting(gs: IRealmArenaSpecificGameState, events: readonly BattleEvent[] = []): void {
+    rememberFogSightings(gs, events);
     const coop = gs.coop;
     if (!enemyHidden(coop) || gs.phase !== "battle") return;
     const battle = battleOf(gs);
     // As `viewOf` reads a view, standing or fallen, without building one.
     const seen = squadSight(battle, gs.seats[0]);
     if (!battle.fog || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
+}
+
+/** Refresh every player's last known enemy positions after the battlefield changes. */
+export function rememberFogSightings(gs: IRealmArenaSpecificGameState, events: readonly BattleEvent[] = []): void {
+    if (!gs.fog || gs.phase !== "battle") return;
+    const battle = battleOf(gs);
+    const moved = new Map<number, Square[]>();
+    for (const event of events) if (event.kind === "moved") {
+        const path = moved.get(event.fighter) ?? [];
+        moved.set(event.fighter, [...path, ...event.path.slice(path.at(-1) === event.path[0] ? 1 : 0)]);
+    }
+    gs.sightings = Object.fromEntries(gs.seats.map(viewer => {
+        const seen = squadSight(battle, viewer);
+        const remembered = new Map((gs.sightings?.[viewer] ?? []).map(ghost => [ghost.id, ghost]));
+
+        // Seeing the remembered square proves that stale marker wrong.
+        for (const [id, ghost] of remembered) if (seen(ghost.square)) remembered.delete(id);
+        for (const fighter of battle.fighters) {
+            if (allied(battle, fighter.owner, viewer)) continue;
+            if (seen(fighter.square)) {
+                // One seen lying down is down, not somewhere to be looked for.
+                if (isStanding(fighter)) remembered.set(fighter.id, fogGhost(fighter));
+                else remembered.delete(fighter.id);
+                continue;
+            }
+            // A move may finish out of sight. Remember the first hidden
+            // square after its last visible step: where it entered fog, not
+            // its now-secret destination, and never a square in sight, where
+            // it would stand beside whoever is really there. It faces the
+            // step it was seen take into the fog, not any it took after.
+            const path = moved.get(fighter.id);
+            if (!path) continue;
+            let entry: { square: Square; facing: Facing } | undefined;
+            for (let index = 1; index < path.length; index++) {
+                if (seen(path[index - 1]) && !seen(path[index])) entry = { square: path[index], facing: facingTowards(battle.field, path[index - 1], path[index]) };
+            }
+            if (entry !== undefined) remembered.set(fighter.id, { ...fogGhost(fighter), ...entry });
+        }
+        return [viewer, [...remembered.values()]];
+    }));
 }
 
 // ─── What a viewer is told (§27) ────────────────────────────────────────────
@@ -883,7 +927,7 @@ function applyAction(data: IRealmArenaGameData, owner: string, sent: unknown, ro
     if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
     addScores(gs, events);
     const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : lineBy(owner, narrate(said, before.fighters, owner, gs.coop, seen), gs.coop));
-    noteSighting(gs);
+    noteSighting(gs, events);
     return { action, events, before, told };
 }
 

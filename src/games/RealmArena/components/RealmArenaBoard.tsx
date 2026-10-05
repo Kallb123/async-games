@@ -13,7 +13,7 @@ import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type BattleState, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
@@ -88,6 +88,8 @@ interface RealmArenaBoardProps {
     field: Battlefield;
     /** Everyone on the battlefield, standing or fallen — in fog of war, everyone the viewer can see. */
     fighters: readonly Fighter[];
+    /** Stale enemy sightings, drawn in the fog without controls or live statistics. */
+    fogGhosts?: readonly FogGhost[];
     /** In fog of war, every square the viewer's squad can't see, dimmed (§27); null without it, or once the battle is over. */
     unseen?: ReadonlySet<Square> | null;
     /** Smoke clouds the viewer can see whose throwers it can't, by the square each landed on (§27). */
@@ -567,7 +569,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, owners, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -667,6 +669,16 @@ export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides
     const items: DepthItem[] = ground.blocks.map(block => ({
         depth: block.depth,
         node: <RaisedSquare key={`block-${block.square}`} id={artId} block={block} shades={shades} />,
+    }));
+
+    fogGhosts.forEach(ghost => items.push({
+        depth: isoDepth(view, ghost.square) + 0.45,
+        node: (
+            <g key={`fog-ghost-${ghost.id}`} className="ag-ra-fog-ghost">
+                <title>{`${CHARACTERS[ghost.character].name} · ${nameFor(ghost.owner)} · last seen here`}</title>
+                <Figure artId={artId} view={view} square={ghost.square} character={ghost.character} facing={facingFor(ghost)} tint={tintFor(ghost.owner)} ghost />
+            </g>
+        ),
     }));
 
     // The cloud stands over the ground and anything on it, under the figure on the square.

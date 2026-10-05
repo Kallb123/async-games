@@ -14,7 +14,7 @@ import { userToken } from "@/utils/games/history";
 import { CHARACTERS, COOP_PLAYERS, FACTION_IDS, factionById, fitsCoop, isFactionId, musterSize, POINTS_BUDGET, RANDOM_ENEMY, UNKNOWN_ENEMY, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { allied, battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -99,6 +99,8 @@ export interface IRealmArenaSpecificGameState {
      * away the size of a squad still sealed.
      */
     fighters: Fighter[];
+    /** Each player's last sighting of enemy units, keyed by viewer id. Never sent wholesale. */
+    sightings?: Record<string, FogGhost[]>;
     /**
      * The low cover blasted away so far, in the order it went (§22). The map
      * stays code and this is all that's stored of what happened to it: every
@@ -308,6 +310,7 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
+            sightings: Schema.Types.Mixed,
             blasted: [Number],
             musters: Schema.Types.Mixed,
             scores: Schema.Types.Mixed,
@@ -393,6 +396,7 @@ export function gameStateToModel(
         // the board has no use for it, and in fog it would name whose blast
         // hurt a character the viewer couldn't see being hit.
         fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, ...fighter }) => fighter),
+        ghosts: fogGhostsFor(gs, viewerId, complete),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
@@ -403,6 +407,17 @@ export function gameStateToModel(
         // viewer but the actor, and for a viewerless replay.
         canUndo: viewerId !== null && (gs.undoStack ?? []).at(-1)?.by === viewerId && gs.undoAnchorId === lastCommandId,
     };
+}
+
+/** Only the requesting player's stale sightings whose remembered square is still hidden. */
+function fogGhostsFor(gs: IRealmArenaSpecificGameState, viewerId: string | null, complete: boolean): FogGhost[] {
+    if (!gs.fog || complete || viewerId === null || gs.phase !== "battle") return [];
+    const battle = battleOf(gs);
+    const seen = squadSight(battle, viewerId);
+    const visible = new Set(viewOf(battle, viewerId).fighters.map(fighter => fighter.id));
+    return (gs.sightings?.[viewerId] ?? [])
+        .filter(ghost => !visible.has(ghost.id) && !seen(ghost.square))
+        .map(fogGhost);
 }
 
 /**
