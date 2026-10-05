@@ -20,9 +20,10 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * player only moves the ones they want elsewhere, passes the items between
  * them, and picks an option (§23.2) a rank has unlocked.
  */
-export function useMusterDraft(field: Battlefield, seat: number, playerCount: number, budget: number, ranks: Ranks, turnKey: string) {
-    // Every player fights as the Realm (§29.3).
-    const readyMade = REALM.readyMade[playerCount as PlayerCount] ?? [];
+export function useMusterDraft(field: Battlefield, seat: number, size: PlayerCount, budget: number, ranks: Ranks, turnKey: string) {
+    // Every player fights as the Realm (§29.3), and starts from its squad for
+    // the party size squads muster for (`musterSize`).
+    const readyMade = REALM.readyMade[size] ?? [];
     const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
     const [items, setItems] = useResettingState<ItemCounts>(NO_ITEMS, turnKey);
     const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);

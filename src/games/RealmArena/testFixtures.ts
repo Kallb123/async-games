@@ -8,7 +8,7 @@ import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { runCommand } from "@/utils/games/commandPipeline";
 import { gameCommandVersion } from "@/utils/ui/games";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
-import { REALM, type PlayerCount } from "./characters";
+import { musterSize, REALM, type FactionId } from "./characters";
 import { battlefieldById } from "./maps";
 import { meta } from "./meta";
 import type { MasterySnapshot } from "./mastery";
@@ -23,8 +23,12 @@ export const PLAYERS = ["a", "b"];
 
 export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
 
-/** A battle before anyone has mustered, seats in `PLAYERS` order, created with the ranks `mastery` gives (nobody ranked, unless it says), in fog of war if `fog` says (§27). */
-export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false): RealmArenaTestGame {
+/**
+ * A battle before anyone has mustered, seats in `PLAYERS` order, created with
+ * the ranks `mastery` gives (nobody ranked, unless it says), in fog of war if
+ * `fog` says (§27), and in co-op against `enemy`'s warbands if it's given (§29).
+ */
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false, enemy?: FactionId): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -32,7 +36,7 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog, enemy),
         complete: false,
         winner: "",
         markModified: () => {},
@@ -69,7 +73,7 @@ export const endTurnBy = (sender: string, keepStill: number[] = []) => cmd(Realm
 
 /** The ready-made squad for a seat, where a timed-out muster would put it. */
 export function readyMadePicks(game: RealmArenaTestGame, seat: number): MusterPick[] {
-    const squad = REALM.readyMade[game.gameState.turnOrder.length as PlayerCount];
+    const squad = REALM.readyMade[musterSize(game.gameState.turnOrder.length, game.specificGameState.coop !== undefined)];
     return readyMadeMuster(battlefieldById(game.specificGameState.map), seat, squad);
 }
 
@@ -153,9 +157,13 @@ export async function playScriptedTurn(game: RealmArenaTestGame): Promise<void> 
     if (!game.complete && !(await play(game, endTurnBy(player))).outcome.validMove) throw new Error(`${player}'s End turn was refused`);
 }
 
-/** A battle fought from the muster to its winner by the scripted squads, in fog of war if `fog` says (§27). */
-export async function playScriptedBattle(fog = false): Promise<RealmArenaTestGame> {
-    const game = makeGame(undefined, undefined, fog);
+/**
+ * A battle fought from the muster to its end by the scripted squads, in fog of
+ * war if `fog` says (§27) — or in co-op, when `enemy` is given, the scripted
+ * squads as the team against the computer's warbands (§29).
+ */
+export async function playScriptedBattle(fog = false, players: string[] = PLAYERS, enemy?: FactionId): Promise<RealmArenaTestGame> {
+    const game = makeGame(players, undefined, fog, enemy);
     await musterAll(game);
     for (let turn = 0; !game.complete; turn++) {
         if (turn > 100) throw new Error("the battle outlasted its turn limit");

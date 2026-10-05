@@ -312,7 +312,8 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `You're ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), gs);
+    // Once the battle has begun, every seat has mustered.
+    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });
     const holders = centreHolders(battle);
     // In fog of war, nobody seen there isn't nobody there (§27).
     const centre = holders.length === 0 ? (centreInSight(battle, forUserId) ? "the centre is empty" : "you can't see all of the centre")

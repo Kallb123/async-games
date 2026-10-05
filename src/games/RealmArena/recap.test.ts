@@ -23,6 +23,7 @@ function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): I
         battleRounds: 15,
         budget: 100,
         fog: false,
+        coop: false,
         fighters: [],
         clouds: [],
         blasted: [],

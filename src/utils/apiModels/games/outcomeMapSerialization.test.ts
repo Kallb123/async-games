@@ -39,6 +39,7 @@ describe("serializeOutcomeMaps", () => {
 // NextResponse.json - a refactor that drops one would silently ship "{}"
 // again for that response shape (the game-over branch and the ordinary one
 // take different code paths after runCommand, so both need their own call).
+// Each converts the outcome as the game tells it to its sender (`toldToSender`).
 describe("the command route", () => {
     const routeSource = readFileSync(
         path.join(srcRoot, "app/api/game/command/route.ts"),
@@ -46,7 +47,7 @@ describe("the command route", () => {
     );
 
     it("serializes the command outcome's Maps in every response it builds", () => {
-        const calls = routeSource.match(/serializeOutcomeMaps\(commandOutcome\)/g) ?? [];
+        const calls = routeSource.match(/serializeOutcomeMaps\(toldToSender\(commandOutcome\)\)/g) ?? [];
         expect(calls.length).toBe(2);
     });
 });

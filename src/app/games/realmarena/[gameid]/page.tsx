@@ -15,6 +15,7 @@ import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
+import { musterSize } from "@/games/RealmArena/characters";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, isStanding, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
@@ -93,7 +94,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const isMyTurn = isPlayersTurn(nav.isLive, user, currentTurn) && !complete;
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
-    const seats = gameData?.gameState?.turnOrder ?? [];
+    const turnOrder = gameData?.gameState?.turnOrder;
+    // Held still between renders, as the sight sweep below is kept by it.
+    const seats = useMemo(() => turnOrder ?? [], [turnOrder]);
     // The map with whatever has been blasted cleared from it (§22), as the
     // rules read it. Keyed on the squares rather than the array, which is a
     // new one on every refresh, so it's rebuilt — and the board lays its
@@ -116,7 +119,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, seats.length, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
+    const draft = useMusterDraft(field, mySeat, musterSize(seats.length, !!gs?.coop), gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.
@@ -139,13 +142,15 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // throwers it can't. The fog lifts once the battle is over.
     const fogged = !!gs?.fog && !complete;
     const clouds = gs?.clouds ?? [];
-    const battle = battleFrom(field, { fighters, fog: fogged, clouds });
+    // In co-op the players are one side (§29.6).
+    const coop = !!gs?.coop;
+    const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop });
     // Every square the viewer's squad can't see, dimmed on the board: a
     // sweep of sight lines, so only redone when someone moves or cover goes.
     const shown = gs?.fighters;
     const unseen = useMemo(
-        () => fogged && !mustering && mySeat >= 0 ? unseenSquares(battleFrom(field, { fighters: shown ?? [], fog: true }), myUserId) : null,
-        [fogged, mustering, mySeat, field, shown, myUserId],
+        () => fogged && !mustering && mySeat >= 0 ? unseenSquares(battleFrom(field, { fighters: shown ?? [], fog: true, seats, coop }), myUserId) : null,
+        [fogged, mustering, mySeat, field, shown, myUserId, seats, coop],
     );
     const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);

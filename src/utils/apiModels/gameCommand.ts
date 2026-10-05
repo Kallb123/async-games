@@ -93,6 +93,13 @@ export interface IGameType {
 
     CheckEndTurn: (gameData: IGameData, commandOutcome: ICommandOutcome) => void;
     CheckGameOver: (gameData: IGameData) => boolean;
+    /**
+     * The outcome as the command route sends it back to the player who sent
+     * the command, for a game whose outcome can hold what that player
+     * mustn't see — Realm Arena's enemy turn in fog of war. Without it, the
+     * outcome goes back whole.
+     */
+    outcomeFor?: (gameData: IGameData, outcome: ICommandOutcome, viewerId: string) => ICommandOutcome;
 }
 
 /** The version of a command recorded before commands carried one. */

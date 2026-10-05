@@ -319,11 +319,13 @@ registerReplayAdapter({
     // `RealmArenaAct` that used it. The ranks the battle was created with are
     // read back from the live state, which never changes them (§23.3), so a
     // muster is checked against the ranks it was checked against then, and
-    // whether it's fought in fog of war likewise (§27).
+    // whether it's fought in fog of war likewise (§27), and in co-op whom
+    // against (§29.3) — Random was drawn once, and stored as what it drew.
     buildInitialSpecificGameState: (gameData) => buildInitialRealmArenaState(
         gameData.gameState.turnOrder,
         (gameData as IRealmArenaGameData).specificGameState.mastery ?? {},
         (gameData as IRealmArenaGameData).specificGameState.fog === true,
+        (gameData as IRealmArenaGameData).specificGameState.coop?.enemy,
     ),
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad

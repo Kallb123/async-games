@@ -1,0 +1,324 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildTimeline } from "@/utils/games/replay";
+import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
+import { FACTIONS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
+import { battlefieldById } from "./maps";
+import { coopInviteOf, gameStateToModel, RealmArenaInvitationModel, type IRealmArenaGameData } from "./RealmArenaModels";
+import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
+import {
+    battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
+} from "./testFixtures";
+
+// docs/games/realm-arena.md §29, PR 4a: the enemy's turn. Co-op from the setup
+// to the state, the warbands mustered, a warband's turn inside each player's
+// End turn, recorded and replayed — and the whole-battle tests of §29.11: it
+// never breaks, it plays well, and replay holds.
+
+vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
+
+// The planner, as the turn loop calls it: the real one unless a test breaks
+// it, and counted, so a replay can be shown never to ask it.
+const planner = vi.hoisted(() => ({ broken: false, calls: 0 }));
+vi.mock("./ai", async importOriginal => {
+    const real = await importOriginal<typeof import("./ai")>();
+    return {
+        ...real,
+        nextAction: (...args: Parameters<typeof real.nextAction>) => {
+            planner.calls++;
+            if (planner.broken) throw new Error("the planner ran");
+            return real.nextAction(...args);
+        },
+    };
+});
+
+afterEach(() => {
+    planner.broken = false;
+    planner.calls = 0;
+    vi.restoreAllMocks();
+});
+
+const TEAMS = [["a", "b"], ["a", "b", "c"]];
+const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
+
+/** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
+function seedRolls(seed: number): void {
+    let state = seed >>> 0;
+    vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+        const values = array as unknown as Uint32Array;
+        for (let i = 0; i < values.length; i++) {
+            state = (state + 0x6d2b79f5) >>> 0;
+            let t = state;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            values[i] = (t ^ (t >>> 14)) >>> 0;
+        }
+        return array;
+    });
+}
+
+/** The warbands of a co-op battle, by owner. */
+const warbandsOf = (game: RealmArenaTestGame) => game.gameState.turnOrder.map((_, k) => warbandOwner(k));
+
+/** Whether the enemy won: the sides ranked as §29.5 ranks them, with the warbands' seats last, so a battle level all the way goes to them. */
+function enemyWon(game: RealmArenaTestGame): boolean {
+    const ranked = standings(battleOf(game), [...game.gameState.turnOrder, ...warbandsOf(game)], game.specificGameState.scores);
+    return ranked[0].startsWith("ai:");
+}
+
+/**
+ * A co-op battle fought to its end, the team played by the fixtures' script,
+ * timing each player's turn — the warband's turn that follows is nearly all
+ * of it.
+ */
+async function coopBattle(players: string[], enemy: FactionId, fog = false): Promise<{ game: RealmArenaTestGame; times: number[] }> {
+    const game = makeGame(players, {}, fog, enemy);
+    await musterAll(game);
+    const times: number[] = [];
+    for (let turn = 0; !game.complete; turn++) {
+        if (turn > 100) throw new Error("the battle outlasted its turn limit");
+        const start = performance.now();
+        await playScriptedTurn(game);
+        times.push(performance.now() - start);
+    }
+    return { game, times };
+}
+
+describe("co-op's setting (§29.8)", () => {
+    it("is an enemy that is a faction or Random, and nothing else a request could send", () => {
+        expect(coopInviteOf({ enemy: "realm" })).toEqual({ enemy: "realm" });
+        expect(coopInviteOf({ enemy: "random", extra: 1 })).toEqual({ enemy: "random" });
+        for (const junk of [undefined, null, true, "realm", {}, { enemy: "orcs" }, { enemy: "constructor" }, { enemy: ["realm"] }]) {
+            expect(coopInviteOf(junk)).toBeUndefined();
+        }
+    });
+
+    it("is kept on the invitation only as one, whatever a lobby's settings carried", () => {
+        expect(new RealmArenaInvitationModel({ coop: { enemy: "realm", nextWarband: 9 } }).toObject().coop).toEqual({ enemy: "realm" });
+        expect(new RealmArenaInvitationModel({ coop: { enemy: "orcs" } }).toObject().coop).toBeUndefined();
+    });
+});
+
+describe("a co-op battle's creation (§29.2, §29.3)", () => {
+    const createGame = RealmArenaInvitationModel.schema.methods.CreateGame as
+        (this: unknown, invite: unknown, userIdList: string[]) => Promise<IRealmArenaGameData>;
+
+    it("puts a team of two on the Twin-Gate Fort and three on the Three-Gate Fort, against the faction the host picked", async () => {
+        for (const [players, map] of [[["a", "b"], "twinGateFort"], [["a", "b", "c"], "threeGateFort"]] as const) {
+            const invite = { turnTimer: 0, coop: { enemy: "realm" } };
+            const game = await createGame.call(invite, invite, [...players]);
+            expect(game.specificGameState.map).toBe(map);
+            expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0 });
+            const setup = game.gameState.history.map(entry => entry.text).join("\n");
+            expect(setup).toContain(`against ${REALM.enemyName}`);
+            expect(setup).toContain(`each player musters ${POINTS_BUDGET[3]} points' worth`);
+        }
+    });
+
+    it("draws Random as the battle is created, stores what it drew, and doesn't name it", async () => {
+        const invite = { turnTimer: 0, coop: { enemy: "random" } };
+        const game = await createGame.call(invite, invite, ["a", "b"]);
+        expect(FACTION_IDS).toContain(game.specificGameState.coop?.enemy);
+        const setup = game.gameState.history.map(entry => entry.text).join("\n");
+        expect(setup).toContain("an enemy drawn at random");
+        expect(setup).not.toContain(REALM.enemyName);
+    });
+
+    it("plays a free-for-all for a party its battlefields aren't built for", async () => {
+        const invite = { turnTimer: 0, coop: { enemy: "realm" } };
+        const game = await createGame.call(invite, invite, ["a", "b", "c", "d"]);
+        expect(game.specificGameState.coop).toBeUndefined();
+        expect(game.specificGameState.map).toBe("fourGateFort");
+    });
+});
+
+describe("the muster in co-op (§29.1, §29.7)", () => {
+    it("holds every squad to 80 points, whatever the size of the team", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        const field = battlefieldById(game.specificGameState.map);
+        // The two-player squad spends 100.
+        const { outcome } = await play(game, muster("a", readyMadeMuster(field, 0, REALM.readyMade[2])));
+        expect(outcome.validMove).toBe(false);
+        expect((await play(game, muster("a", readyMadePicks(game, 0)))).outcome.validMove).toBe(true);
+        expect(gameStateToModel(game.specificGameState, "a", null).budget).toBe(80);
+    });
+
+    it("musters a warband opposite each player as the last player does, its ids after theirs", async () => {
+        for (const players of TEAMS) {
+            const game = makeGame(players, {}, false, "realm");
+            await musterAll(game);
+            const gs = game.specificGameState;
+            const field = battlefieldById(gs.map);
+            const squad = REALM.readyMade[3];
+            const owners = gs.fighters.map(fighter => fighter.owner);
+            expect(owners).toEqual([...players, ...warbandsOf(game)].flatMap(owner => squad.map(() => owner)));
+            for (const [k, owner] of warbandsOf(game).entries()) {
+                const band = gs.fighters.filter(fighter => fighter.owner === owner);
+                expect(band.map(fighter => fighter.character)).toEqual([...squad]);
+                expect(band.every(fighter => field.deployments[players.length + k].includes(fighter.square))).toBe(true);
+            }
+            // The players are one side and the warbands the other (§29.6).
+            const { sides } = battleOf(game);
+            expect(new Set(players.map(player => sides?.[player])).size).toBe(1);
+            expect(new Set(warbandsOf(game).map(owner => sides?.[owner])).size).toBe(1);
+            expect(sides?.[players[0]]).not.toBe(sides?.["ai:0"]);
+            // The warbands aren't seated: the turn goes from one player to the next.
+            expect(game.currentTurn).toBe(players[0]);
+            expect(game.gameState.turnOrder).toEqual(players);
+        }
+    });
+});
+
+describe("the enemy's turn (§29.4)", () => {
+    it("follows each player's, one warband after each in turn, recorded on the End turn", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        const ended = endTurnBy("a");
+        const { outcome } = await play(game, ended);
+        expect(outcome.validMove).toBe(true);
+        expect(game.currentTurn).toBe("b");
+        const actions = (ended as RealmArenaEndTurn).recordedEnemyActions ?? [];
+        expect(actions.length).toBeGreaterThan(0);
+        expect(actions.every(action => battleOf(game).fighters.find(fighter => fighter.id === action.fighter)?.owner === "ai:0")).toBe(true);
+        // It acted, and ended its turn as a player does: AP spent, on watch.
+        const events = (outcome as IRealmArenaOutcome).events;
+        expect(events.some(event => event.kind === "moved" && battleOf(game).fighters[event.fighter].owner === "ai:0")).toBe(true);
+        const band = (owner: string) => battleOf(game).fighters.filter(fighter => fighter.owner === owner);
+        expect(band("ai:0").every(fighter => fighter.ap === 0)).toBe(true);
+        expect(band("ai:1").every(fighter => fighter.ap === 0 && fighter.banked === 0)).toBe(true);
+        expect(game.specificGameState.coop?.nextWarband).toBe(1);
+
+        const deployed = band("ai:1").map(fighter => fighter.square);
+        await play(game, endTurnBy("b"));
+        expect(band("ai:1").map(fighter => fighter.square)).not.toEqual(deployed);
+        expect(game.specificGameState.coop?.nextWarband).toBe(0);
+        // A round is still the players' seats: the warbands add no hand-offs.
+        expect(game.specificGameState.roundsPlayed).toBe(1);
+        expect(game.currentTurn).toBe("a");
+    });
+
+    it("steps past a warband with nobody standing", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => fighter.owner === "ai:0" ? { ...fighter, hp: 0 } : fighter);
+        const ended = endTurnBy("a");
+        await play(game, ended);
+        expect((ended as RealmArenaEndTurn).recordedEnemyActions?.every(action => battleOf(game).fighters[action.fighter].owner === "ai:1")).toBe(true);
+        expect(game.specificGameState.coop?.nextWarband).toBe(0);
+    });
+
+    it("ends there when the planner throws, and the player's End turn still stands", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        planner.broken = true;
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const ended = endTurnBy("a");
+        expect((await play(game, ended)).outcome.validMove).toBe(true);
+        expect(error).toHaveBeenCalledOnce();
+        expect((ended as RealmArenaEndTurn).recordedEnemyActions).toEqual([]);
+        // It did nothing, so it went on watch where it stood.
+        expect(battleOf(game).fighters.filter(fighter => fighter.owner === "ai:0").every(fighter => fighter.banked > 0)).toBe(true);
+        expect(game.currentTurn).toBe("b");
+    });
+
+    it("never takes its moves from a request: the recorded ones are stripped, as every recorded roll is", () => {
+        const sent = Object.assign(endTurnBy("a"), { recordedEnemyActions: [{ kind: "hunker", fighter: 8 }], recordedRolls: [1] });
+        stripRecordedRandomness(sent);
+        expect(sent).not.toHaveProperty("recordedEnemyActions");
+        expect(sent).not.toHaveProperty("recordedRolls");
+    });
+
+    it("isn't there in a free-for-all", async () => {
+        const game = makeGame();
+        await musterAll(game);
+        const ended = endTurnBy("a");
+        await play(game, ended);
+        expect(ended).not.toHaveProperty("recordedEnemyActions");
+        expect(battleOf(game).sides).toBeUndefined();
+    });
+});
+
+describe("what a player is told of the enemy's turn in fog of war (§29.8)", () => {
+    it("is only what their side saw, in the End turn's own response as in a review", async () => {
+        const game = makeGame(["a", "b"], {}, true, "realm");
+        await musterAll(game);
+        const { outcome } = await play(game, endTurnBy("a"));
+        const all = (outcome as IRealmArenaOutcome).events;
+        const told = (new RealmArenaGameType().outcomeFor(game, outcome, "a") as IRealmArenaOutcome).events;
+        const battle = battleOf(game);
+        const seen = squadSight(battle, "a");
+        const enemyMoves = (events: BattleEvent[]) => events.filter(event => event.kind === "moved" && battle.fighters[event.fighter].owner === "ai:0");
+        // The warbands deploy too far off to be seen, so it moved out of sight.
+        expect(enemyMoves(all).some(event => event.kind === "moved" && event.path.length > 0)).toBe(true);
+        for (const event of enemyMoves(told)) {
+            if (event.kind === "moved") expect(event.path.every(seen)).toBe(true);
+        }
+        expect(told).not.toEqual(all);
+        // A teammate is told it the same.
+        expect((new RealmArenaGameType().outcomeFor(game, outcome, "b") as IRealmArenaOutcome).events).toEqual(told);
+    });
+
+    it("is everything once the fog has lifted, and everything without it", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        const { outcome } = await play(game, endTurnBy("a"));
+        expect(new RealmArenaGameType().outcomeFor(game, outcome, "a")).toBe(outcome);
+    });
+});
+
+describe("the computer in whole battles (§29.11)", () => {
+    it("never breaks: every co-op battlefield, every faction, with and without fog, to the end within its time", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        const times: number[] = [];
+        let seed = 1;
+        for (const players of TEAMS) {
+            for (const enemy of FACTION_IDS) {
+                for (const fog of [false, true]) {
+                    seedRolls(seed++);
+                    const battle = await coopBattle(players, enemy, fog);
+                    times.push(...battle.times);
+                    expect(battle.game.complete).toBe(true);
+                    // Every warband fought: each took turns, and the rotation came round.
+                    const recorded = battle.game.gameState.commandHistory.flatMap(command => (command as RealmArenaEndTurn).recordedEnemyActions ?? []);
+                    const owners = new Set(recorded.map(action => battleOf(battle.game).fighters[action.fighter].owner));
+                    expect(owners).toEqual(new Set(warbandsOf(battle.game)));
+                }
+            }
+        }
+        // Nothing it chose was refused, and the planner never threw.
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+        // On average, with room for a slow turn on a busy test runner (§29.7).
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
+        expect(Math.max(...times)).toBeLessThan(1_000);
+    }, 120_000);
+
+    it("plays well: it beats the scripted team in at least 19 battles of 20", async () => {
+        let won = 0;
+        for (let seed = 0; seed < 20; seed++) {
+            seedRolls(100 + seed);
+            const { game } = await coopBattle(TEAMS[seed % 2], "realm");
+            if (enemyWon(game)) won++;
+        }
+        expect(won).toBeGreaterThanOrEqual(19);
+    }, 120_000);
+
+    it("replays a recorded battle to the same end without asking the planner", async () => {
+        seedRolls(7);
+        const { game } = await coopBattle(["a", "b"], "realm", true);
+        vi.restoreAllMocks();
+        planner.broken = true;
+        planner.calls = 0;
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        for (const viewer of [null, "a", "b"]) {
+            const timeline = await buildTimeline(game, { a: "Alice", b: "Bob" }, [], undefined, viewer);
+            const last = timeline.snapshots[timeline.currentIndex];
+            expect(last.specificGameState).toEqual(gameStateToModel(game.specificGameState, viewer, lastId, true));
+            expect(last.complete).toBe(true);
+        }
+        expect(planner.calls).toBe(0);
+        // The battle it replayed was a real one: the enemy fought in it.
+        expect(game.gameState.commandHistory.some(command => (command as RealmArenaEndTurn).recordedEnemyActions?.length)).toBe(true);
+    }, 60_000);
+});

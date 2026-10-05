@@ -18,7 +18,7 @@ import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
 import { RealmArenaEndTurn, RealmArenaMuster } from "@/games/RealmArena/RealmArenaLogic";
 import { IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
-import { REALM, type PlayerCount } from "@/games/RealmArena/characters";
+import { musterSize, REALM } from "@/games/RealmArena/characters";
 import { battlefieldById } from "@/games/RealmArena/maps";
 import { readyMadeMuster } from "@/games/RealmArena/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
@@ -295,7 +295,7 @@ registerTurnTimeoutAdapter({
         if (gs.phase === "battle") return new RealmArenaEndTurn();
         const muster = new RealmArenaMuster();
         try {
-            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, REALM.readyMade[data.gameState.turnOrder.length as PlayerCount]);
+            muster.picks = readyMadeMuster(battlefieldById(gs.map), seat, REALM.readyMade[musterSize(data.gameState.turnOrder.length, gs.coop !== undefined)]);
         } catch {
             // Only a party or a map with no room for the squad, which can't be played:
             // declined, so the missed turn still counts towards abandoning it.
