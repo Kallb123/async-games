@@ -35,7 +35,7 @@ import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } fro
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, outOfTurnEventsHeld, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS, roleDef } from "@/games/Outbreak/board";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -242,13 +242,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);
+    const teamEnding = gameData ? finishedGameCopy(gameData) : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
-            subtitle = gameData?.endReason === 'teamloss' ? '💀 The team lost' : '🎉 The team won!';
+            subtitle = gameData?.endReason === 'teamloss' ? `💀 ${teamEnding ?? 'The team lost'}` : '🎉 The team won!';
         } else if (isMyTurn && gs.phase === 'discard') {
             subtitle = <span className="ag-hi">Discard down to {HAND_LIMIT}</span>;
         } else if (isMyTurn && gs.phase === 'forecast') {
@@ -385,8 +386,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             // names none — that generic line is only the
                             // fallback for a game that ended before the
                             // reason was recorded.
-                            ? gameData.endDetail
-                                ? `The team lost — ${gameData.endDetail}.`
+                            ? teamEnding
+                                ? `${teamEnding}.`
                                 : 'The outbreak overwhelmed the team.'
                             : 'The team cured every disease! 🎉'}
                     gameId={gameId}

@@ -51,6 +51,7 @@ import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
+import { endAsTeam } from "@/utils/games/endAsTeam";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  BANNED ISLET
@@ -440,13 +441,7 @@ function floodPhaseOutcome(turnOver: boolean, floodLog: IBannedIsletFloodLogEntr
  * 'teamwin' as one shared ending for the whole roster.
  */
 function endInEscape(data: IBannedIsletGameData): void {
-    data.complete = true;
-    data.winner = '';
-    data.endReason = 'teamwin';
-    data.currentTurn = '';
-    data.gameState.history.unshift({
-        text: `All four treasures are off the island and the whole team is off ${tileName(PIER_TILE)} — they win!`,
-    });
+    endAsTeam(data, 'teamwin', `All four treasures are off the island and the whole team is off ${tileName(PIER_TILE)} — they win!`);
 }
 
 /**
@@ -465,12 +460,7 @@ function endInEscape(data: IBannedIsletGameData): void {
  * endInTeamLoss.
  */
 function endInTeamLoss(data: IBannedIsletGameData, reason: string, detail: string = reason): void {
-    data.complete = true;
-    data.winner = '';
-    data.endReason = 'teamloss';
-    data.endDetail = detail;
-    data.currentTurn = '';
-    data.gameState.history.unshift({ text: `The team loses — ${reason}.` });
+    endAsTeam(data, 'teamloss', `The team loses — ${reason}.`, detail);
 }
 
 /**

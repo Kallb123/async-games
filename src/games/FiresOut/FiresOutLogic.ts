@@ -46,6 +46,7 @@ import {
 import { playerHistory } from "@/utils/games/history";
 import { activeTurnOrder, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { endAsTeam } from "@/utils/games/endAsTeam";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  FIRES OUT
@@ -141,19 +142,16 @@ export class FiresOutGameType implements IGameType {
         const outcome = checkOutcome(gs.rescued, gs.lost, gs.edges);
         if (!outcome) return false;
 
-        fo.complete = true;
-        fo.winner = '';
-        fo.currentTurn = '';
         if (outcome === 'win') {
-            fo.endReason = 'teamwin';
-            fo.gameState.history.unshift({ text: `${VICTIMS_TO_WIN} victims rescued — the crew wins!` });
+            endAsTeam(fo, 'teamwin', `${VICTIMS_TO_WIN} victims rescued — the crew wins!`);
         } else {
-            fo.endReason = 'teamloss';
-            fo.gameState.history.unshift({
-                text: outcome === 'buildingCollapsed'
-                    ? 'The building has collapsed — the crew loses.'
-                    : 'Too many victims have been lost — the crew loses.',
-            });
+            const buildingCollapsed = outcome === 'buildingCollapsed';
+            endAsTeam(
+                fo,
+                'teamloss',
+                buildingCollapsed ? 'The building has collapsed — the crew loses.' : 'Too many victims have been lost — the crew loses.',
+                buildingCollapsed ? 'the building collapsed' : 'too many victims were lost',
+            );
         }
         return true;
     }

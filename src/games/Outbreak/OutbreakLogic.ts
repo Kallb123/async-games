@@ -53,6 +53,7 @@ import { pluralize } from "@/utils/ui/text";
 import { onTurnOfClause, playerHistory, userToken } from "@/utils/games/history";
 import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
+import { endAsTeam } from "@/utils/games/endAsTeam";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -433,11 +434,7 @@ export class OutbreakGameType implements IGameType {
         // board — a co-op result, so no single id can be the winner (§21.6
         // step 1's finishGame handles 'teamwin'/'teamloss' as one shared
         // ending for the whole roster).
-        outbreakData.complete = true;
-        outbreakData.winner = '';
-        outbreakData.endReason = 'teamwin';
-        outbreakData.currentTurn = '';
-        outbreakData.gameState.history.unshift({ text: 'All four diseases are cured — the team wins!' });
+        endAsTeam(outbreakData, 'teamwin', 'All four diseases are cured — the team wins!');
         return true;
     }
 }
@@ -627,12 +624,7 @@ function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfecti
 // push would be rendered raw. OutbreakLogic.test.ts holds every defeat to
 // that.
 function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string, detail: string = reason): void {
-    outbreakData.complete = true;
-    outbreakData.winner = '';
-    outbreakData.endReason = 'teamloss';
-    outbreakData.endDetail = detail;
-    outbreakData.currentTurn = '';
-    outbreakData.gameState.history.unshift({ text: `The team loses — ${reason}.` });
+    endAsTeam(outbreakData, 'teamloss', `The team loses — ${reason}.`, detail);
 }
 
 // Writes a resolved cube placement back onto game state — cities, cubesLeft,

@@ -49,7 +49,7 @@ import {
     shoreUpsPerAction,
 } from "@/games/BannedIslet/rules";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // docs/games/banned-islet.md §21.6 PR 4: the board screen, first pass — enough
 // of the island on screen to play §8's action phase by hand, so every PR after
@@ -278,13 +278,14 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
+    const teamEnding = gameData ? finishedGameCopy(gameData) : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
-            subtitle = gameData?.endReason === 'teamloss' ? '💀 The team lost' : '🎉 The team escaped!';
+            subtitle = gameData?.endReason === 'teamloss' ? `💀 ${teamEnding ?? 'The team lost'}` : '🎉 The team escaped!';
         } else if (isMyTurn && gs.phase === 'discard') {
             subtitle = <span className="ag-hi">Discard down to {HAND_LIMIT}</span>;
         } else if (isMyTurn) {
@@ -411,8 +412,8 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                     // the words the game logged it in. The
                                     // generic line is only the fallback for a
                                     // game that ended before one was recorded.
-                                    ? gameData.endDetail
-                                        ? `The team lost — ${gameData.endDetail}.`
+                                    ? teamEnding
+                                        ? `${teamEnding}.`
                                         : 'The sea took the island.'
                                     : 'Four relics off a sinking island, and everyone aboard! 🎉'}
                             gameId={gameId}

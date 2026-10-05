@@ -14,8 +14,8 @@ import type { IGameData } from "@/utils/mongodb/GameData";
  * only the history is run through `resolveHistory`, so a token there would be
  * rendered raw.
  *
- * Realm Arena's co-op ending is the first to come through here; Banned Islet,
- * Outbreak and Fires Out each still write theirs by hand.
+ * Every co-op game uses this helper so its stored result, history and shared
+ * finish copy are kept in step.
  */
 export function endAsTeam(data: IGameData, reason: "teamwin" | "teamloss", line: string, detail?: string): void {
     data.complete = true;

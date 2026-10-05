@@ -45,7 +45,7 @@ import {
     totalDamage,
     VehicleId,
 } from "@/games/FiresOut/rules";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderAllByIds, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, reorderAllByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // fires-out-gdd.md §17.6 step 5 (board), step 11 (turn recap). The crew
 // planner is still a later step (13) — useTurnNavigation is wired with
@@ -306,6 +306,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const showBoard = !!gs && !recap.loading;
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
+    const teamEnding = gameData ? finishedGameCopy(gameData) : null;
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gameData) {
@@ -423,7 +424,9 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                         <GameFinishBanner
                             message={abandoned
                                 ? abandoned.message
-                                : gameData?.endReason === 'teamwin' ? 'The crew rescued everyone! 🎉' : "The crew couldn't make it out in time."}
+                                : gameData?.endReason === 'teamwin'
+                                    ? 'The crew rescued everyone! 🎉'
+                                    : teamEnding ? `${teamEnding}.` : "The crew couldn't make it out in time."}
                             gameId={gameId}
                             gameUrl="firesout"
                             usernameList={usernameList}
