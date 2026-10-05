@@ -2836,8 +2836,9 @@ The caveman reviewed the first draft of this plan. What changed:
 work §29.10 left for later, plus a second mission for co-op, broken into PRs
 in the order they're built. Each one is a branch of its own, passes the gates
 (`build`, `tsc`, `lint`, `test`), and gets the crew listed beside it (§30.7).
-Every player-visible PR adds its one What's new line; PR 1 changes nothing a
-player sees, so it adds none.
+Every player-visible PR adds its one What's new line. PR 1 adds none: the
+only change it makes that a player could see is to Fires Out, which nobody
+has played yet (§30.1).
 
 | PR | What | Depends on |
 |---|---|---|
@@ -2867,11 +2868,12 @@ line the same as each other's.
   `CheckGameOver` become `endAsTeam(data, "teamwin", line)`, with the line
   each writes today.
 - **Fires Out** ends in one place, its `CheckGameOver`, in a win and two
-  losses (the building collapsed, too many victims lost). Each becomes
-  `endAsTeam` with the line it writes today and no detail, as now. Giving its
-  two losses a detail, as Banned Islet's and Outbreak's have, would tell the
-  banner, the result page and the push which loss it was; that's a change a
-  player would see, so it's left for a PR of its own.
+  losses. Each becomes `endAsTeam` with the line it writes today. The two
+  losses also gain a detail, as Banned Islet's and Outbreak's have: "the
+  building collapsed" or "too many victims were lost". Today a Fires Out loss
+  doesn't say which it was, so the banner, the result page and the push all
+  read the same for both. `FiresOutModels` already forwards `endDetail`, so
+  the detail reaches all three with nothing more on the wire.
 - **The losses.** Each game's `endInTeamLoss(data, reason, detail = reason)`
   becomes `endAsTeam(data, "teamloss", \`The team loses — ${reason}.\`, detail)`.
   The `reason`/`detail` split stays exactly as it is — `endDetail` must never
@@ -2884,12 +2886,19 @@ line the same as each other's.
   the banner, the home page and the result page can't word one ending four
   ways. Each game keeps its own win line ("Four relics off a sinking island,
   and everyone aboard!") and the fallback for a game that ended before a
-  reason was recorded. Fires Out's board words no ending of its own beyond its
-  win and loss lines, and is untouched.
-- **Nothing changes for a player.** Every log line, `endDetail` and banner
-  reads as it did, so stored games and replays are untouched and no command
-  version is needed. The games' existing ending tests are the proof, and pass
-  unchanged.
+  reason was recorded. Fires Out's banner does the same: its loss reads
+  `finishedGameCopy` with the detail, falling back to "The crew couldn't make
+  it out in time." for a game that ended before one was recorded, and its win
+  keeps "The crew rescued everyone!".
+- **Nothing changes for a Banned Islet or Outbreak player.** Every log line,
+  `endDetail` and banner reads as it did, so stored games and replays are
+  untouched and no command version is needed. Those games' existing ending
+  tests are the proof, and pass unchanged. Fires Out's log lines are
+  unchanged too, so its replays are as well. Its new detail is a test per
+  loss, holding each to its clause and to no `{{userId}}` token.
+- **No What's new line.** Fires Out's loss detail and banner are the only
+  changes a player could see, and nobody has played Fires Out yet, so there's
+  nobody to tell.
 - **`endAsTeam`'s comment** stops naming the three as writing theirs by
   hand: every co-op ends through it.
 
@@ -3248,4 +3257,4 @@ Realm, its sibling in the same world.
 | 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
-| 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam`, and Banned Islet and Outbreak word a defeat with `finishedGameCopy`; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
+| 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
