@@ -133,6 +133,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Realm Arena's fog of war covers the log, the recap and the review",
+                detail: "In a battle fought in fog of war the board hid what your squad couldn't see, but the match history, the recap and the match review still told you every move, shot and knock-out out there. Now they only tell you what your squad saw: an enemy hunkering down out of sight leaves no line at all, and a shot at you from the fog says you were hit, not who fired it. When the battle ends the fog lifts and the whole log is there for everyone.",
+                game: "realmarena",
+            },
+            {
                 title: "Taking back several moves in a row clears them all from the recap",
                 detail: "Undoing one move already left it out of the recap and your next-turn notification, but undoing two or three in a row only hid the last one — the earlier moves you took back still showed up as if you'd played them. Every move you undo now disappears, however many you take back.",
             },
@@ -171,10 +176,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Signing in with Google no longer leaves the form tappable underneath",
                 detail: "In the app, tapping Continue with Google could sit for a moment while your account was checked and our side of the handshake finished — and until now the sign-in card underneath stayed fully clickable the whole time, so a stray tap could fight the sign-in already under way. It's now covered by a pulsing loading bar and locked until the check is done.",
-            },
-            {
-                title: "Google and Microsoft sign-in work in the Android app",
-                detail: "Signing in to the app with Google or Microsoft dumped you into your phone's browser and left you there on an error instead of signing you in. Google now uses the phone's own account picker — tap the account you're already signed in to and you're in, no password and no browser — and Microsoft stays in the app where it belongs. Email and password were never affected. You'll need the latest version of the app from the Play Store.",
             },
         ],
     },

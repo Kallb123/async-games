@@ -54,12 +54,22 @@ export interface IRecapAdapter {
 
     // Turn one replayed turn — the diff between two consecutive snapshots plus
     // the command/outcome that produced it — into zero or more display events.
+    // `viewerId` is who the rows are for, as the snapshots were built for them
+    // (null for nobody in particular), so a game whose players aren't all told
+    // the same things (Realm Arena's fog of war) tells each one theirs. Most
+    // games ignore it, and their tests leave it out.
     toEvents(
         prev: ITurnSnapshot,
         next: ITurnSnapshot,
         command: IGameCommand,
-        outcome: ICommandOutcome
+        outcome: ICommandOutcome,
+        viewerId?: string | null
     ): IGameEvent[];
+
+    // Whether the rows differ from one viewer to the next (see toEvents), so a
+    // row built for one player is never shown to another as it stands — the
+    // title a reaction push quotes to the player reacted to, above all.
+    rowsPerViewer?: boolean;
 
     // The headline + subline at the top of the recap, from the viewer's POV.
     summarize(events: IGameEvent[], forUserId: string): IRecapSummary;
@@ -147,7 +157,7 @@ async function replayEvents(
                 events = events.filter(event => event.commandId !== undoneCommandId);
             }
         } else {
-            events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+            events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome, viewerId));
             liveCommandIds.push(step.command.id);
         }
         if (isRecordedOutOfTurn(step.command)) {
@@ -229,16 +239,21 @@ export async function buildEventFeed(
 // on), which can be well behind the game's live state by the time it's read
 // back. Returns an empty list rather than throwing when the game has no
 // adapter or can't be replayed (e.g. older Settlements & Cities games).
+//
+// `viewerId` is who the rows are for — the player reacting, or the player a
+// reaction is shown to — since a game may tell each player a row of their own
+// (IRecapAdapter.rowsPerViewer). Null is nobody in particular.
 export async function buildAllEvents(
     gameData: IGameData,
-    userIdNameMap: { [key: string]: string }
+    userIdNameMap: { [key: string]: string },
+    viewerId: string | null
 ): Promise<IGameEvent[]> {
     const adapter = getRecapAdapter(gameData.gameType.className);
     if (!adapter) {
         return [];
     }
     try {
-        const { events } = await replayEvents(gameData, userIdNameMap, adapter, null, false);
+        const { events } = await replayEvents(gameData, userIdNameMap, adapter, viewerId, false);
         return events;
     } catch {
         return [];

@@ -347,7 +347,13 @@ export function ownerToken(owner: string, coop: IRealmArenaCoop | undefined): st
 }
 
 
-function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined): string {
+/**
+ * How the log names a character: "their Knight", "Bob's Archer" — or, in a
+ * line written for a player whose side didn't see it (`seen`, §27.2), "a
+ * character out of sight", as the board names one.
+ */
+function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
+    if (seen && !seen(id)) return "a character out of sight";
     const fighter = fighters.find(one => one.id === id);
     if (!fighter) return "a character";
     const own = fighter.owner === actor;
@@ -360,8 +366,8 @@ function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IR
  * What one event says. The acting player's own deeds start with a verb, so
  * they read straight on from the name; anyone else's start with who did it.
  */
-function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
-    const name = (id: number) => whose(fighters, id, actor, coop);
+function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
+    const name = (id: number) => whose(fighters, id, actor, coop, seen);
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
     const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name) : undefined;
     if (veiled !== undefined) return veiled;
@@ -434,10 +440,10 @@ function veiledClause(event: BattleEvent, name: (id: number) => string): string 
 }
 
 /** A move told once, however many times reactions broke it up. */
-function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
+function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined, seen?: (id: number) => boolean): string {
     return events
         .filter((event, index) => event.kind !== "moved" || events.findIndex(one => one.kind === "moved") === index)
-        .map(event => clause(event, before, actor, coop))
+        .map(event => clause(event, before, actor, coop, seen))
         .join("; ");
 }
 
@@ -448,6 +454,57 @@ function narrate(events: readonly BattleEvent[], before: readonly Fighter[], act
  */
 function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined): IHistoryEntry {
     return isWarband(owner) ? { text: capitalise(`${ownerToken(owner, coop)} ${text}`) } : playerHistory(owner, text);
+}
+
+/**
+ * What each player was told of a run of events in a battle fought in fog of
+ * war (§27.2), by userId: the events their line of the log was written from
+ * (`toldTo`) — none for a player who wasn't told the line at all.
+ */
+export type Told = Record<string, BattleEvent[]>;
+
+/**
+ * Writes the line `write` makes of some events to the log — and, in a battle
+ * fought in fog of war, the line as each player's side saw them (§27.2):
+ * written from only the events they were told (`toldTo`), naming every
+ * character they didn't see as one out of sight (`seen`). `write` gives
+ * nothing for a player it has nothing to say to, who isn't told the line at
+ * all, and nothing at all for no events. Read from the battle as the events
+ * left it, as a review reads it. Returns what each player was told, in fog.
+ */
+function writeLine(
+    data: IRealmArenaGameData,
+    events: readonly BattleEvent[],
+    write: (events: readonly BattleEvent[], seen?: (id: number) => boolean) => IHistoryEntry | undefined,
+): Told | undefined {
+    const line = write(events);
+    if (!line) return undefined;
+    const battle = battleOf(data.specificGameState);
+    let told: Told | undefined;
+    if (battle.fog) {
+        told = Object.fromEntries(data.gameState.turnOrder.map(viewer => [viewer, toldTo(events, battle, viewer)]));
+        line.perViewer = data.gameState.turnOrder.flatMap(viewer => {
+            const own = write(told![viewer], witnessed(events, battle, viewer));
+            return own ? [{ userId: viewer, text: own.text }] : [];
+        });
+    }
+    data.gameState.history.unshift(line);
+    return told;
+}
+
+/**
+ * The log as everyone reads it once the battle is over: the fog lifts
+ * (§27.1), and with it every line told per player goes back to the whole of
+ * it. Rebuilt field by field, never spread: live, these are subdocuments.
+ */
+function liftFog(data: IRealmArenaGameData): void {
+    if (!data.specificGameState.fog) return;
+    data.gameState.history = data.gameState.history.map(({ text, actorId, commandId, createdAt }) => ({
+        text,
+        ...(actorId ? { actorId } : {}),
+        ...(commandId ? { commandId } : {}),
+        ...(createdAt ? { createdAt } : {}),
+    }));
 }
 
 /**
@@ -469,17 +526,33 @@ function noteSighting(gs: IRealmArenaSpecificGameState): void {
 // ─── What a viewer is told (§27) ────────────────────────────────────────────
 
 /**
- * The events of a command in a fogged battle as one viewer may see them
- * played (§27). Their own side's doings are theirs in full — an ally's
- * among them, since a side shares its sight (§29.1). An enemy's move keeps
- * only the squares the viewer's side sees, and only when it ends on one of
- * them: one that ends out of sight is told with no path at all, so the board
- * loses the mover there rather than leaving it where it was last seen. A
- * fireball, a flask or a Demolish landing where the viewer sees none of it,
- * and hitting none of their side's, isn't told. Nor is a character out of
- * sight going on watch: the log says it did, but not the AP it banked, which
- * is how many reactions are waiting. Everything else carries no square, and
- * what it says the log says too.
+ * Which characters a viewer's side saw take part in a command in a fogged
+ * battle (§27): their own side's, anyone on a square it sees as the command
+ * left the battle, and anyone whose move crossed one — so an enemy that
+ * stepped into sight, or out of it, was seen.
+ */
+export function witnessed(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): (id: number) => boolean {
+    const seen = squadSight(battle, viewerId);
+    const saw = new Set(battle.fighters.filter(fighter => allied(battle, fighter.owner, viewerId) || seen(fighter.square)).map(fighter => fighter.id));
+    for (const event of events) if (event.kind === "moved" && event.path.some(seen)) saw.add(event.fighter);
+    return id => saw.has(id);
+}
+
+/**
+ * The events of a command in a fogged battle as one viewer is told them
+ * (§27.2) — in their log, their recap and their review. Their own side's
+ * doings are theirs in full — an ally's among them, since a side shares its
+ * sight (§29.1) — and so is anything done to one of their side, though who
+ * did it may be out of sight. Of anyone else, only what the viewer's side saw
+ * (`witnessed`): a shot or a blow whose shooter or target it saw, a character
+ * it saw going down, healed, marked or on watch. Nothing it didn't see is
+ * told at all, not even that it happened. An enemy's move keeps only the
+ * squares the viewer's side sees, and only when it ends on one of them: one
+ * that ends out of sight is told with no path at all, so the board loses the
+ * mover there rather than leaving it where it was last seen. A fireball, a
+ * flask or a Demolish is told where the viewer sees some of it land. What's
+ * told regardless is what's everyone's: cover blasted away, which is gone for
+ * everyone (§22), and points scored, which the scoreboard shows.
  *
  * Sight is read from the battle after the command. In an enemy's command the
  * viewer's side doesn't move, so that's the sight it had all along — or
@@ -491,30 +564,44 @@ function noteSighting(gs: IRealmArenaSpecificGameState): void {
  * `unnamed` too.
  *
  * Here beside the game type rather than with the response it shapes, so the
- * game type can cut the outcome a command returns its sender (`outcomeFor`).
+ * game type can cut the outcome a command returns its sender (`outcomeFor`)
+ * and write each player's line of the log (`writeLine`).
  */
 export function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null, hidden = false): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
     const own = (id: number) => allied(battle, fighterById(battle, id)?.owner, viewerId);
-    const inSight = (id: number) => {
-        const fighter = fighterById(battle, id);
-        return fighter !== undefined && (own(id) || seen(fighter.square));
-    };
+    const saw = witnessed(events, battle, viewerId);
     const told = hidden ? unnamed(events, id => isWarband(fighterById(battle, id)?.owner ?? "")) : events;
     return told.flatMap((event): BattleEvent[] => {
+        const keep = (yes: boolean) => yes ? [event] : [];
         switch (event.kind) {
             case "moved": {
                 if (own(event.fighter)) return [event];
+                if (!saw(event.fighter)) return [];
                 const end = event.path.at(-1);
                 return [{ ...event, path: end !== undefined && seen(end) ? event.path.filter(seen) : [] }];
             }
             case "fireball":
             case "thrown":
             case "demolished":
-                return own(event.fighter) || event.targets.some(own) || areaAround(battle.field, event.at).some(seen) ? [event] : [];
+                return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
+            case "shot":
+            case "struck":
+            case "healed":
+            case "raised":
+            case "marked":
+                return keep(saw(event.fighter) || saw(event.target));
+            case "spotted":
+                return keep(saw(event.fighter) || saw(event.by));
+            case "downed":
+            case "hunkered":
+            case "shieldWall":
             case "watching":
-                return inSight(event.fighter) ? [event] : [];
-            default:
+            case "effect":
+            case "burned":
+                return keep(saw(event.fighter));
+            case "blasted":
+            case "scored":
                 return [event];
         }
     });
@@ -579,10 +666,12 @@ export class RealmArenaGameType implements IGameType {
         const battle = battleOf(gs);
         if (!isBattleOver(battle, order, gs.roundsPlayed)) return false;
         if (gs.coop) {
+            liftFog(data);
             endInCoop(data, battle, gs.coop);
             return true;
         }
 
+        liftFog(data);
         const ranked = standings(battle, order, gs.scores);
         const winner = ranked.find(userId => !isDropped(data, userId)) ?? ranked[0];
         data.complete = true;
@@ -690,19 +779,28 @@ export class RealmArenaMuster implements IGameCommand {
 export interface IRealmArenaOutcome extends ICommandOutcome {
     events: BattleEvent[];
     /**
-     * An End turn's parts, for the recap's rows (§29.9): in co-op the
-     * warband's turn it held (§29.4), step by step, and what happened as the
-     * next turn began — burning (§20.2). Their events are in `events` too.
-     * Never sent: `outcomeFor` leaves it out of a command's own response, and
-     * a review reads only `events`.
+     * What the recap's rows need beyond `events`: an End turn's parts (§29.9)
+     * — in co-op the warband's turn it held (§29.4), step by step, and what
+     * happened as the next turn began, burning (§20.2), their events in
+     * `events` too — and, in fog of war, what each player was told of it all
+     * (§27.2). Never sent: `outcomeFor` leaves it out of a command's own
+     * response, and a review reads only `events`.
      */
-    recap?: { enemy?: EnemyTurn; started: BattleEvent[] };
+    recap?: {
+        enemy?: EnemyTurn;
+        started?: BattleEvent[];
+        /** In fog, what each player was told of what happened as the next turn began (§27.2). */
+        startedTold?: Told;
+        /** In fog, what each player was told of an action (§27.2): the events its line of the log for them was written from. */
+        told?: Told;
+    };
 }
 
-/** One of a warband's actions, as it was checked, and what it did. */
+/** One of a warband's actions, as it was checked, what it did, and in fog what each player was told of it. */
 export interface EnemyStep {
     action: Action;
     events: BattleEvent[];
+    told?: Told;
 }
 
 /**
@@ -710,20 +808,20 @@ export interface EnemyStep {
  * each action it took, and what its End turn did — absent when the battle
  * was over before it came to one. Each part that happened wrote the log a
  * line of its own, in that order: the burning only when there was some, one
- * line an action, and one for the End turn.
+ * line an action, and one for the End turn — in fog, the burning and each
+ * action only for the players told of it (§27.2).
  */
 export interface EnemyTurn {
     owner: string;
     started: BattleEvent[];
+    /** In fog, what each player was told of the burning as it began (§27.2). */
+    startedTold?: Told;
     steps: EnemyStep[];
     ended?: BattleEvent[];
 }
 
 /** Everything that happened in a warband's turn, in order. */
 export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started, ...turn.steps.flatMap(step => step.events), ...turn.ended ?? []];
-
-/** How many lines of the log a warband's turn wrote: one for its burning, if any, one an action, and one for its End turn. */
-export const enemyLineCount = (turn: EnemyTurn): number => (turn.started.length > 0 ? 1 : 0) + turn.steps.length + (turn.ended ? 1 : 0);
 
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
@@ -773,11 +871,12 @@ function cleanAction(action: Action): Action {
     }
 }
 
-/** What `applyAction` did: the action as it was checked, what happened, and the battle before it. */
+/** What `applyAction` did: the action as it was checked, what happened, the battle before it, and in fog what each player was told of it. */
 interface Applied {
     action: Action;
     events: BattleEvent[];
     before: BattleState;
+    told?: Told;
 }
 
 /**
@@ -797,25 +896,25 @@ function applyAction(data: IRealmArenaGameData, owner: string, sent: unknown, ro
     const blasted = blastedIn(events);
     if (blasted.length > 0) gs.blasted = [...(gs.blasted ?? []), ...blasted];
     addScores(gs, events);
-    data.gameState.history.unshift(lineBy(owner, narrate(events, before.fighters, owner, gs.coop), gs.coop));
+    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : lineBy(owner, narrate(said, before.fighters, owner, gs.coop, seen), gs.coop));
     noteSighting(gs);
-    return { action, events, before };
+    return { action, events, before, told };
 }
 
 /**
  * The start of `owner`'s turn, a player's or a warband's: fresh AP, and
  * burning, which can down a character (§20.2) — told in a line of its own
- * (§20.3). Returns what happened.
+ * (§20.3). Returns what happened, and in fog what each player was told of it.
  */
-function beginTurn(data: IRealmArenaGameData, owner: string): BattleEvent[] {
+function beginTurn(data: IRealmArenaGameData, owner: string): { events: BattleEvent[]; told?: Told } {
     const gs = data.specificGameState;
     const battle = battleOf(gs);
     const { fighters, events } = startTurn(battle, owner);
     gs.fighters = fighters;
     addScores(gs, events);
-    if (events.length > 0) data.gameState.history.unshift({ text: capitalise(narrate(events, battle.fighters, "", gs.coop)) });
+    const told = writeLine(data, events, (said, seen) => said.length === 0 ? undefined : { text: capitalise(narrate(said, battle.fighters, "", gs.coop, seen)) });
     noteSighting(gs);
-    return events;
+    return { events, told };
 }
 
 /**
@@ -829,7 +928,8 @@ function applyEndTurn(data: IRealmArenaGameData, owner: string, keepStill: reado
     const { fighters, events } = endTurn(battle, owner, gs.roundsPlayed + 1, keepStill);
     gs.fighters = fighters;
     addScores(gs, events);
-    data.gameState.history.unshift(lineBy(owner, ["ended their turn", ...events.map(event => clause(event, battle.fighters, owner, gs.coop))].join("; "), gs.coop));
+    // Told to everyone, whatever they saw of it: that a turn ended is no secret.
+    writeLine(data, events, (said, seen) => lineBy(owner, ["ended their turn", ...said.map(event => clause(event, battle.fighters, owner, gs.coop, seen))].join("; "), gs.coop));
     noteSighting(gs);
     return events;
 }
@@ -881,7 +981,7 @@ export class RealmArenaAct implements IGameCommand {
         if (snapshot && peaceful(action, events, used) && !revealed(before, battleOf(gs), this.senderId)) commitUndo(gs, this, snapshot);
         else clearUndo(gs);
         markDirty(gameData);
-        return { validMove: true, turnOver: false, events } as IRealmArenaOutcome;
+        return { validMove: true, turnOver: false, events, ...applied.told ? { recap: { told: applied.told } } : {} } as IRealmArenaOutcome;
     }
 }
 
@@ -921,7 +1021,12 @@ export class RealmArenaUndo implements IGameCommand {
         gs.undoAnchorId = this.id;
 
         // No `currentTurn` to put back: nothing undoable here ever ends a turn.
-        data.gameState.history.unshift(playerHistory(this.senderId, this.myString()));
+        // In fog, told to whoever was told the move it takes back, and nobody
+        // else: to them, there was no move to take back (§27.2).
+        const line = playerHistory(this.senderId, this.myString());
+        const undone = data.gameState.history.find(entry => entry.commandId === lastCommand.id)?.perViewer;
+        if (undone) line.perViewer = undone.map(({ userId }) => ({ userId, text: line.text }));
+        data.gameState.history.unshift(line);
         markDirty(gameData);
         return { validMove: true, turnOver: false };
     }
@@ -970,7 +1075,7 @@ export class RealmArenaEndTurn implements IGameCommand {
 
         const events = applyEndTurn(data, this.senderId, this.keepStill);
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
-        const { enemy, started } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll });
+        const { enemy, started, startedTold } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll });
         // Always a list in co-op, an empty one when no warband took a turn,
         // so a replay that comes to one never asks the planner.
         if (gs.coop) this.recordedEnemyActions = enemy?.steps.map(step => step.action) ?? [];
@@ -981,7 +1086,7 @@ export class RealmArenaEndTurn implements IGameCommand {
             validMove: true,
             turnOver: true,
             events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
-            recap: { ...enemy ? { enemy } : {}, started },
+            recap: { ...enemy ? { enemy } : {}, started, ...startedTold ? { startedTold } : {} },
         } as IRealmArenaOutcome;
     }
 }
@@ -1024,7 +1129,8 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
     const owner = warbandOwner(k);
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
 
-    const turn: EnemyTurn = { owner, started: beginTurn(data, owner), steps: [] };
+    const { events: started, told: startedTold } = beginTurn(data, owner);
+    const turn: EnemyTurn = { owner, started, ...startedTold ? { startedTold } : {}, steps: [] };
     const over = () => isBattleOver(battleOf(gs), order, gs.roundsPlayed);
     if (over()) return turn;
 
@@ -1049,7 +1155,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
             break;
         }
-        turn.steps.push({ action: applied.action, events: applied.events });
+        turn.steps.push({ action: applied.action, events: applied.events, ...applied.told ? { told: applied.told } : {} });
     }
     if (!over()) turn.ended = applyEndTurn(data, owner, []);
     return turn;
@@ -1070,18 +1176,23 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
  * Returns the warband's turn, and everything that happened as the next
  * player's turn began.
  */
-function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: EnemyTurn; started: BattleEvent[] } {
+function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: EnemyTurn; started: BattleEvent[]; startedTold?: Told } {
     const gs = data.specificGameState;
     const order = data.gameState.turnOrder;
     const enemy = isBattleOver(battleOf(gs), order, gs.roundsPlayed) ? undefined : warbandTurn(data, moves);
     const started: BattleEvent[] = [];
+    // In fog, what each player was told of it all, line by line (§27.2).
+    let startedTold: Told | undefined;
+    const done = () => ({ enemy, started, ...startedTold ? { startedTold } : {} });
     for (let seat = from; ;) {
         const next = nextSeat(data, seat);
         if (order.indexOf(next) <= order.indexOf(seat)) gs.roundsPlayed += 1;
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return { enemy, started };
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return done();
 
-        started.push(...beginTurn(data, next));
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started };
+        const begun = beginTurn(data, next);
+        started.push(...begun.events);
+        if (begun.told) startedTold = Object.fromEntries(order.map(viewer => [viewer, [...startedTold?.[viewer] ?? [], ...begun.told![viewer] ?? []]]));
+        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return done();
         seat = next;
     }
 }

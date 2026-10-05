@@ -559,13 +559,26 @@ built for the player who sent the command, so the adapter is asked for the
 timeline's viewer, with the state after the command and whether it ended the
 game — the same viewer `toResponseState` gets — and returns what that viewer
 may be told. Realm Arena is the one that opts in (its §26.2): a battle's
-events, less a shot's roll, and in fog of war (its §27) less every square of
-someone else's doings the viewer's squad couldn't see. A planned command's
-outcome is never asked for.
+events, less a shot's roll, and in fog of war (its §27.2) less everything the
+viewer's squad didn't see. A planned command's outcome is never asked for.
+
+A game whose players don't all see the same board can write a history line
+per player (`IHistoryEntry.perViewer`): each player listed reads their own
+text, and anyone else isn't told the line at all. `resolveHistory` picks the
+viewer's line wherever a log is resolved — the response, every review step,
+the push — so the others never reach the wire. Such a game can also set
+`IReplayAdapter.omitUntoldSteps`, which leaves out of a viewer's timeline
+every step that wrote no line they're told: otherwise its summary would say
+that something happened, and what kind of thing. Realm Arena's fog of war is
+the one that does both.
 
 Recap **events** are a different question and don't get the same latitude: they
 are written once and read by whoever the feed is built for, so a `toEvents`
-must only ever describe what the whole table can already see.
+must only ever describe what the whole table can already see — unless the
+adapter says its rows differ by viewer (`rowsPerViewer`), as Realm Arena's do
+in fog. Then `toEvents` is handed the viewer the snapshots were built for, and
+every row lookup names one: the recap's player, the player reacting, or the
+player a reaction is shown to.
 
 ## Adding recap to a new game
 

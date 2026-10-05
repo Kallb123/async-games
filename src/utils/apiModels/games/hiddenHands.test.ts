@@ -613,14 +613,18 @@ describe("Realm Arena's random co-op enemy", () => {
             hidden();
             await step(game);
         }
-        // The command that saw it is the last one played.
-        const seenAt = game.gameState.commandHistory.length;
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(gs, viewer, null).enemy).toBe("realm");
 
         // A review is built from the state at each step: none before the
-        // sighting carries it, and every one from it on does.
-        for (const viewer of VIEWERS) {
+        // sighting carries it, and every one from it on does. The command that
+        // saw it is the last one played, so its step is the review's last —
+        // and in fog a review leaves out every step its viewer was told
+        // nothing of (§27.2), so that's counted from the end. Only a player
+        // is ever served one: nobody in particular is told nothing in fog,
+        // the sighting included.
+        for (const viewer of ["a", "b"]) {
             const { snapshots } = await buildTimeline(game, RA_NAMES, [], undefined, viewer);
+            const seenAt = snapshots.length - 1;
             for (const [index, snapshot] of snapshots.entries()) {
                 const wire = snapshot.specificGameState as IRealmArenaSpecificGameStateResponse;
                 if (index < seenAt) {
@@ -660,9 +664,11 @@ describe("Realm Arena's random co-op enemy", () => {
         for (const viewer of VIEWERS) {
             expect(realmArenaStepOutcome(outcome, viewer, game.specificGameState)?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
         }
-        const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES));
-        expect(rows).not.toMatch(/shield/i);
-        expect(rows).not.toMatch(ENEMY_NAME);
+        for (const viewer of VIEWERS) {
+            const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer));
+            expect(rows).not.toMatch(/shield/i);
+            expect(rows).not.toMatch(ENEMY_NAME);
+        }
     });
 
     it("is there from the moment the squads take the field without fog", async () => {

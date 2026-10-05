@@ -33,13 +33,18 @@ export interface IGameState {
 // {{userId}} tokens in place of names (utils/games/history.ts): a response built
 // without it would ship the raw ids. Every CreateDataResponse already resolves
 // its players, so there is nothing extra to fetch.
+//
+// The viewer is required for the same reason: a line can be told differently
+// to each player (IHistoryEntry.perViewer — Realm Arena's fog of war), so the
+// log is resolved for whoever the response is for.
 export function publicGameState(
     gameState: IGameState,
-    userIdNameMap: { [key: string]: string }
+    userIdNameMap: { [key: string]: string },
+    viewerId: string | null,
 ): IGameDataResponse['gameState'] {
     return {
         turnOrder: gameState.turnOrder,
-        history: resolveHistory(gameState.history, userIdNameMap),
+        history: resolveHistory(gameState.history, userIdNameMap, viewerId),
         droppedPlayers: gameState.droppedPlayers ?? [],
         commandCount: gameState.commandHistory?.length ?? 0,
     };
@@ -131,7 +136,12 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
         turnOrder: [String],
         // _id: false — a log line is identified by its position, and giving
         // every one of them an ObjectId only pads the document.
-        history: [{ _id: false, text: String, actorId: String, commandId: String, createdAt: String }],
+        // `perViewer` defaults to undefined rather than Mongoose's empty
+        // array: an empty list is a line nobody is told (history.ts).
+        history: [{
+            _id: false, text: String, actorId: String, commandId: String, createdAt: String,
+            perViewer: { type: [{ _id: false, userId: String, text: String }], default: undefined },
+        }],
         commandHistory: [
             Schema.Types.Mixed
             // {
@@ -203,7 +213,7 @@ GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGam
             : undefined
     }
 };
-GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IGameDataResponse> {
+GameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<IGameDataResponse> {
     console.log("CreateDataResponse: Generic game");
 
     const gameDataDocument: IGameData = this as IGameData;
@@ -216,7 +226,7 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap, viewerId),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

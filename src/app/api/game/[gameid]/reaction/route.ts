@@ -6,7 +6,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
 import { userIdListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { buildAllEvents, buildEventFeed } from '@/utils/games/recap';
+import { buildAllEvents, buildEventFeed, getRecapAdapter } from '@/utils/games/recap';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
@@ -23,9 +23,10 @@ export interface IGetReactionParams {
 // the same underlying event and land in the same store. Either way the
 // target is re-derived server-side (rather than trusted from the request):
 // `eventId` is checked against the recap feed the client was actually shown,
-// while `commandId` is looked up in the game's full, unwindowed event list
-// (match history has no "since last here" window — any past line, on a
-// finished game included, is fair game). Both paths mean the recipient (the
+// while `commandId` is looked up in the game's full, unwindowed event list as
+// the signed-in player is told it (match history has no "since last here"
+// window — any past line they were told, on a finished game included, is fair
+// game). Both paths mean the recipient (the
 // action's original actor) can't be spoofed.
 //
 // Each player gets their own reaction per action — one reacting first doesn't
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
 
     const event = eventId && typeof eventId === 'string'
         ? (await buildEventFeed(gameData, userIdNameMap, userId)).events.find((e) => e.id === eventId)
-        : (await buildAllEvents(gameData, userIdNameMap)).find((e) => e.commandId === commandId);
+        : (await buildAllEvents(gameData, userIdNameMap, userId)).find((e) => e.commandId === commandId);
     if (!event) {
         return NextResponse.json({}, { status: 404, statusText: "Action not found" });
     }
@@ -120,15 +121,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // Nobody needs a push telling them they reacted to themselves, and a row
     // nobody seated did — Realm Arena's enemy — has nobody to tell.
     if (event.actorId !== userId && gameData.userIdList.includes(event.actorId)) {
+        // The move is quoted to its player as they were told it. In a game
+        // that tells each player rows of their own (Realm Arena's fog of war),
+        // the reacting player's row would tell them what that player's squad
+        // could see; their own always has a row for their own move.
+        const title = getRecapAdapter(gameData.gameType.className)?.rowsPerViewer
+            ? (await buildAllEvents(gameData, userIdNameMap, event.actorId)).find((e) => e.commandId === event.commandId)?.title
+            : event.title;
         const userList = await usersById([event.actorId]);
         const recipient = userList.find(u => u.id === event.actorId);
-        if (recipient) {
+        if (recipient && title !== undefined) {
             await sendPushToUsers([recipient], {
                 event: 'PlayerReaction',
                 gameId: gameid,
                 eventId: event.id,
                 link: gameNotificationLink(gameData.gameType.url, gameid)
-            }, buildReactionNotification(reactionDoc.actorUsername, reaction, event.title), {
+            }, buildReactionNotification(reactionDoc.actorUsername, reaction, title), {
                 channel: 'playerReaction'
             });
         }

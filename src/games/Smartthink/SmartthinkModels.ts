@@ -253,7 +253,7 @@ SmartthinkGameDataSchema.methods.CreateResponse = function(directory: UserDirect
     };
 };
 
-SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<ISmartthinkGameDataResponse> {
+SmartthinkGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<ISmartthinkGameDataResponse> {
     console.log("CreateDataResponse: Smartthink game");
 
     const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;
@@ -266,7 +266,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap, viewerId),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

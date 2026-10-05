@@ -57,7 +57,7 @@ describe("Realm Arena replay", () => {
             await expect(buildTimeline(game, NAMES)).rejects.toThrow(/this server replays/);
             // …and so it goes without a recap, rather than failing the board or the push that reads one.
             expect(await buildEventFeed(game, NAMES, "a")).toEqual({ hasRecap: false, events: [], summary: null, tip: null });
-            expect(await buildAllEvents(game, NAMES)).toEqual([]);
+            expect(await buildAllEvents(game, NAMES, null)).toEqual([]);
         }
     });
 
@@ -284,7 +284,7 @@ describe("Realm Arena recap", () => {
 
     it("ends a whole battle's events on its winner", async () => {
         const game = await playScriptedBattle();
-        const events = await noRandomness(() => buildAllEvents(game, NAMES));
+        const events = await noRandomness(() => buildAllEvents(game, NAMES, null));
         expect(events.at(-1)?.type).toBe("ra_won");
         expect(events.at(-1)?.title).toBe(`${NAMES[game.winner]} wins the battle`);
         // Every row's title is resolved: no history token reaches a reader.

@@ -133,6 +133,13 @@ export interface IReplayAdapter {
     // fog of war) shapes what each one is told. Never asked of a planned
     // command, whose outcome is resolved against the real game.
     snapshotOutcome?(outcome: ICommandOutcome, viewerId: string | null, specificGameState: unknown, complete: boolean): unknown;
+    // Optional: leave out of the viewer's timeline every step that told them
+    // nothing — one that wrote no line of the log they're told (see
+    // IHistoryEntry.perViewer). For a game whose players don't all see what
+    // each other do (Realm Arena's fog of war), where a step left in would say
+    // that something happened, and its command's summary what kind of thing,
+    // when the log keeps both from them. Every planned step stays.
+    omitUntoldSteps?: boolean;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -344,6 +351,10 @@ registerReplayAdapter({
     // viewer is told of it in fog of war.
     snapshotOutcome: (outcome, viewerId, specificGameState, complete) =>
         realmArenaStepOutcome(outcome, viewerId, specificGameState as never, complete),
+    // In fog of war, a step out of the viewer's sight wrote no line they're
+    // told (§27.2), and a review that stepped through it anyway would say
+    // something happened there, and what kind of action it was.
+    omitUntoldSteps: true,
     // Out by design: every attack worth planning needs a roll, and a planned
     // one would show a player a board they won't get. Nor is the hit chance
     // it would teach them anything the turn sheet doesn't already show before
@@ -465,7 +476,7 @@ export async function buildTimeline(
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
-            history: resolveHistory(state.gameState.history, historyNames),
+            history: resolveHistory(state.gameState.history, historyNames, viewerId),
             // Tokenised the same way a history line is (see userToken /
             // resolveTokens, utils/games/history.ts), so a command's
             // myString() can name a player without needing a userIdNameMap
@@ -605,7 +616,7 @@ export async function buildTimeline(
     // beyond what the replayed commands produced. Append them to every snapshot
     // so the setup steps stay visible throughout recap/planning.
     const persistedHistory = gameData.gameState.history ?? [];
-    const setupHistory = resolveHistory(persistedHistory.slice(state.gameState.history.length), historyNames);
+    const setupHistory = resolveHistory(persistedHistory.slice(state.gameState.history.length), historyNames, viewerId);
 
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {
@@ -614,6 +625,16 @@ export async function buildTimeline(
 
     if (setupHistory.length) {
         snapshots.forEach((s) => s.history.push(...setupHistory));
+    }
+
+    // Left out only once every step has been built and observed above, so
+    // `onStep` saw the replay whole, each step against the one really before it.
+    // A step that told the viewer nothing changed nothing they can see, so if
+    // the live one goes, the last step they were told stands for it.
+    if (adapter.omitUntoldSteps) {
+        const told = snapshots.filter((s, i) => i === 0 || s.planned || s.history.length > snapshots[i - 1].history.length);
+        told.forEach((s, i) => { s.index = i; });
+        return { currentIndex: told.filter(s => !s.planned).length - 1, snapshots: told, resolvedPlannedCommands };
     }
 
     return { currentIndex, snapshots, resolvedPlannedCommands };
