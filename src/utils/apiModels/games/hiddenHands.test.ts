@@ -598,7 +598,7 @@ describe("Realm Arena's random co-op enemy", () => {
     }
 
     it("is hidden in fog of war until the team sees it, and named from then on", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true);
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true } });
         await realmArenaMusterAll(game);
         const gs = game.specificGameState;
         const hidden = () => {
@@ -642,7 +642,7 @@ describe("Realm Arena's random co-op enemy", () => {
     }, 60_000);
 
     it("never says which of its characters did what out of sight: an ability names a kind of character, and so the faction", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true);
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true } });
         await realmArenaMusterAll(game);
         // The first warband's Knight raises a shield wall where it stands, far
         // out of the team's sight: its turn, as a replay plays it.
@@ -672,30 +672,32 @@ describe("Realm Arena's random co-op enemy", () => {
     });
 
     it("is there from the moment the squads take the field without fog", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, false, "realm", true);
+        const game = makeRealmArenaGame(["a", "b"], {}, { coop: { enemy: "realm", random: true } });
         await realmArenaMusterAll(game);
         expect(game.specificGameState.coop?.enemySeen).toBe(true);
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(game.specificGameState, viewer, null).enemy).toBe("realm");
     });
 
     it("is never hidden when the host picked it, and never sent before the battle when it was drawn", async () => {
-        const picked = makeRealmArenaGame(["a", "b"], {}, true, "realm");
+        const picked = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm" } });
         expect(realmArenaStateToModel(picked.specificGameState, "a", null).enemy).toBe("realm");
-        const drawn = makeRealmArenaGame(["a", "b"], {}, false, "realm", true);
+        const drawn = makeRealmArenaGame(["a", "b"], {}, { coop: { enemy: "realm", random: true } });
         await playRealmArena(drawn, realmArenaMuster("a", realmArenaPicks(drawn, 0)));
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(drawn.specificGameState, viewer, null)).not.toHaveProperty("enemy");
     });
 
     it("pins the viewerless response used to judge achievements", async () => {
-        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true, "holdOut");
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, size: "large", coop: { enemy: "realm", random: true, mission: "holdOut", difficulty: "hard" } });
         await realmArenaMusterAll(game);
 
         const hidden = realmArenaStateToModel(game.specificGameState, null, null);
         expect(Object.keys(hidden).sort()).toEqual([
             "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
-            "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
-            "myMuster", "phase", "round", "scores",
+            "difficulty", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
+            "myMuster", "phase", "round", "scores", "size",
         ]);
+        // What the host chose in the open: every viewer's, the null viewer's included.
+        expect(hidden).toMatchObject({ difficulty: "hard", size: "large" });
         expect(hidden).not.toHaveProperty("enemy");
         expect(hidden.fighters).toEqual([]);
         expect(hidden.ghosts).toEqual([]);

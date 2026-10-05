@@ -3,13 +3,14 @@ import { randomUUID } from 'crypto';
 import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { coopInviteOf, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
+import { battleSizeOf, coopInviteOf, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
 import { COOP_PLAYERS, fitsCoop } from '@/games/RealmArena/characters';
 import { meta } from '@/games/RealmArena/meta';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { partySizeErrorMessage } from '@/utils/ui/games';
 
-// docs/games/realm-arena.md §17.3 PR 4, and co-op's setting (§29.8).
+// docs/games/realm-arena.md §17.3 PR 4, co-op's setting (§29.8), and the
+// battle's size and difficulty (§30.5).
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -28,15 +29,21 @@ export async function POST(request: NextRequest) {
   }
 
   // Co-op against the computer (§29.8), when the request asks for it: an
-  // enemy that is a faction or Random, and a team of two or three, which its
-  // battlefields are built for. Anything else it sent for `coop` is refused
+  // enemy that is a faction or Random, a known mission and difficulty, and a
+  // team of two or three, which its battlefields are built for. Anything else it sent for `coop` is refused
   // rather than read as a free-for-all the host didn't choose.
   const coop = coopInviteOf(body.coop);
   if (body.coop != null && !coop) {
-    return NextResponse.json({}, { status: 400, statusText: "Unknown enemy" });
+    return NextResponse.json({}, { status: 400, statusText: "Unknown co-op setting" });
   }
   if (coop && !fitsCoop(invitees.length + 1)) {
     return NextResponse.json({}, { status: 400, statusText: `Co-op is for ${COOP_PLAYERS.min}–${COOP_PLAYERS.max} players` });
+  }
+  // The battle's size (§30.5): small or large when sent, normal when absent,
+  // and anything else refused rather than read as a size the host didn't choose.
+  const size = battleSizeOf(body.size);
+  if (body.size != null && !size) {
+    return NextResponse.json({}, { status: 400, statusText: "Unknown battle size" });
   }
 
   await dbConnect();
@@ -48,6 +55,7 @@ export async function POST(request: NextRequest) {
     // Fog of war (§27), only when the host turned it on.
     fog: body.fog === true,
     coop,
+    size,
     turnTimer,
     timestamp: (new Date()).toISOString(),
     gameType: 'RealmArena',

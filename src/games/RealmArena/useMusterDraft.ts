@@ -1,7 +1,7 @@
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { REALM, squadPoints, type ItemId, type OptionId, type PlayerCount } from "./characters";
+import { readyMadeSquad, REALM, squadPoints, type ItemId, type OptionId } from "./characters";
 import type { Ranks } from "./mastery";
 import { itemsPoints, musterRefusal, pickOf, readyMadeMuster, type MusterPick } from "./rules";
 import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, type ItemCounts, type Placement, type SquadCounts } from "./ui";
@@ -20,10 +20,9 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * player only moves the ones they want elsewhere, passes the items between
  * them, and picks an option (§23.2) a rank has unlocked.
  */
-export function useMusterDraft(field: Battlefield, seat: number, size: PlayerCount, budget: number, ranks: Ranks, turnKey: string) {
-    // Every player fights as the Realm (§29.3), and starts from its squad for
-    // the party size squads muster for (`musterSize`).
-    const readyMade = REALM.readyMade[size] ?? [];
+export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, turnKey: string) {
+    // Every player fights as the Realm (§29.3), and starts from its squad for the budget.
+    const readyMade = readyMadeSquad(REALM, budget);
     const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
     const [items, setItems] = useResettingState<ItemCounts>(NO_ITEMS, turnKey);
     const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);

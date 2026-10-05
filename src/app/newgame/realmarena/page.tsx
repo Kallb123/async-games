@@ -16,7 +16,7 @@ import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META, partySizeRange } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
-import { COOP_PLAYERS, FACTION_IDS, FACTIONS, RANDOM_ENEMY } from "@/games/RealmArena/characters";
+import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RANDOM_ENEMY, type BattleSize, type Difficulty } from "@/games/RealmArena/characters";
 
 type Mode = 'freeForAll' | 'coop';
 type Enemy = RealmArenaCoopInvite['enemy'];
@@ -39,10 +39,25 @@ const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
 ];
 
+// How many points every squad musters (§30.5), for any mode.
+const SIZE_CHOICES: OptionChoice<BattleSize>[] = [
+  { id: 'small', label: BATTLE_SIZE_NAMES.small, description: 'Fewer points for every squad: smaller squads and quicker turns.' },
+  { id: 'normal', label: BATTLE_SIZE_NAMES.normal, description: 'The usual points for the number of players.' },
+  { id: 'large', label: BATTLE_SIZE_NAMES.large, description: 'More points for every squad: bigger squads and longer turns.' },
+];
+
+// How strong the computer's warbands are (§30.5): their size against the team's.
+const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
+  { id: 'easy', label: DIFFICULTY_NAMES.easy, description: 'Each warband musters fewer points than each of you.' },
+  { id: 'normal', label: DIFFICULTY_NAMES.normal, description: 'Each warband musters as many points as each of you.' },
+  { id: 'hard', label: DIFFICULTY_NAMES.hard, description: 'Each warband musters more points than each of you.' },
+];
+
 // docs/games/realm-arena.md §17.3 PR 4. The party's size picks the map
 // (§17.4 B2), so the choices are who, how fast, whether the battle is fought
 // in fog of war (§27), and whether it's a free-for-all or the players
-// together against the computer (§29.9) — and, in co-op, whom they fight.
+// together against the computer (§29.9) — and, in co-op, whom they fight —
+// and how big the battle is, and in co-op how strong the enemy (§30.5).
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
@@ -54,6 +69,8 @@ function NewGameRealmArenaForm() {
   const [mode, setMode] = useState<Mode>('freeForAll');
   const [enemy, setEnemy] = useState<Enemy>(FACTION_IDS[0]);
   const [mission, setMission] = useState<Mission>('holdCentre');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [size, setSize] = useState<BattleSize>('normal');
   const coop = mode === 'coop';
   const gameMeta = GAME_META.realmarena;
   const partyMeta = coop ? COOP_PARTY : gameMeta;
@@ -70,7 +87,8 @@ function NewGameRealmArenaForm() {
       userList: players,
       turnTimer,
       fog,
-      ...(coop ? { coop: { enemy, ...(mission === 'holdOut' ? { mission } : {}) } } : {}),
+      ...(size !== 'normal' ? { size } : {}),
+      ...(coop ? { coop: { enemy, ...(mission === 'holdOut' ? { mission } : {}), ...(difficulty !== 'normal' ? { difficulty } : {}) } } : {}),
     };
     await submit(data);
   };
@@ -100,6 +118,10 @@ function NewGameRealmArenaForm() {
       {coop && (
         <OptionChoiceSection label="Mission" value={mission} onChange={setMission} choices={MISSION_CHOICES} />
       )}
+      {coop && (
+        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_CHOICES} />
+      )}
+      <OptionChoiceSection label="Battle size" value={size} onChange={setSize} choices={SIZE_CHOICES} />
       <UserInviteList userList={userList} setItem={setItem} />
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />

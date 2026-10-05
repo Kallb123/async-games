@@ -55,7 +55,7 @@ describe("mustering with options (§23.2)", () => {
 
     it("leaves the ready-made squad a timed-out muster gets with none", () => {
         const field = battlefieldById(makeGame().specificGameState.map);
-        expect(readyMadeMuster(field, 0, REALM.readyMade[2]).every(pick => pick.option === undefined)).toBe(true);
+        expect(readyMadeMuster(field, 0, REALM.readyMade[100]).every(pick => pick.option === undefined)).toBe(true);
     });
 
     it("refuses one the player hasn't unlocked, whoever else has", async () => {

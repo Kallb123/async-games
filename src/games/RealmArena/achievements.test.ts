@@ -63,4 +63,12 @@ describe("Realm Arena achievements", () => {
         expect(check("realmarena.last-stand", view(), "win")).toBe(false);
         expect(check("realmarena.last-stand", view({ coop: false, mission: "holdOut" }), "win")).toBe(false);
     });
+
+    it("awards Against the Odds only for winning against the computer on Hard", () => {
+        expect(check("realmarena.against-the-odds", view({ difficulty: "hard" }), "win")).toBe(true);
+        expect(check("realmarena.against-the-odds", view({ difficulty: "hard" }), "loss")).toBe(false);
+        expect(check("realmarena.against-the-odds", view(), "win")).toBe(false);
+        expect(check("realmarena.against-the-odds", view({ difficulty: "easy" }), "win")).toBe(false);
+        expect(check("realmarena.against-the-odds", view({ coop: false, difficulty: "hard" }), "win")).toBe(false);
+    });
 });

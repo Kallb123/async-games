@@ -65,4 +65,15 @@ export const achievements: GameAchievement<IRealmArenaSpecificGameStateResponse>
             check: (view, { outcome }) => view.coop && view.mission === "holdOut" && outcome === "win",
         },
     },
+    {
+        id: "realmarena.against-the-odds",
+        title: "Against the Odds",
+        icon: "⚖️",
+        description: "Win a battle against the computer on Hard.",
+        criteria: {
+            kind: "match",
+            at: "end",
+            check: (view, { outcome }) => view.coop && view.difficulty === "hard" && outcome === "win",
+        },
+    },
 ];

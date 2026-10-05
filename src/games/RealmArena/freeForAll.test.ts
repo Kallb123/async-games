@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { canDropPlayer, PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
-import { CHARACTERS, POINTS_BUDGET, REALM } from "./characters";
-import { gameStateToModel } from "./RealmArenaModels";
+import { CHARACTERS, musterBudget, readyMadeSquad, REALM } from "./characters";
+import { battleSizeOf, gameStateToModel, RealmArenaInvitationModel, type IRealmArenaGameData } from "./RealmArenaModels";
 import { ACTION_POINTS, BATTLE_ROUNDS, isStanding, type MusterPick } from "./rules";
 import {
     cmd, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
@@ -12,6 +12,8 @@ import {
 // on the battlefield for the party's size (§19.1), the budgets and battle lengths for each party
 // size, and a dropout adapter, so a player who stops turning up has their
 // squad leave while their score stands.
+
+vi.mock("./masteryRecord", () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
 
 const THREE = ["a", "b", "c"];
 const FOUR = ["a", "b", "c", "d"];
@@ -33,11 +35,11 @@ describe("setting up a free-for-all", () => {
         const game = makeGame([...seats]);
         expect(game.specificGameState.map).toBe(map);
         const view = gameStateToModel(game.specificGameState, "a", null);
-        expect(view).toMatchObject({ budget: POINTS_BUDGET[count], battleRounds: BATTLE_ROUNDS[count] });
+        expect(view).toMatchObject({ budget: musterBudget(count, false), battleRounds: BATTLE_ROUNDS[count] });
 
         await musterAll(game);
         expect(game.specificGameState.phase).toBe("battle");
-        expect(game.specificGameState.fighters.map(one => one.character)).toEqual(seats.flatMap(() => REALM.readyMade[count]));
+        expect(game.specificGameState.fighters.map(one => one.character)).toEqual(seats.flatMap(() => readyMadeSquad(REALM, musterBudget(count, false))));
         expect(game.currentTurn).toBe("a");
     });
 
@@ -138,7 +140,7 @@ describe("a player who stops turning up (the dropout adapter)", () => {
         expect(gameOver).toBe(false);
 
         expect(own(game, "c")).toEqual([]);
-        expect(game.specificGameState.fighters).toHaveLength(REALM.readyMade[4].length * 3);
+        expect(game.specificGameState.fighters).toHaveLength(REALM.readyMade[70].length * 3);
         expect(game.specificGameState.scores.c).toBe(7);
         expect(game.currentTurn).toBe("d");
 
@@ -245,4 +247,60 @@ describe("the sealed muster with three or four seats (§17.2)", () => {
             }
         }
     });
+});
+
+describe("a battle's size (§30.5)", () => {
+    const createGame = RealmArenaInvitationModel.schema.methods.CreateGame as
+        (this: unknown, invite: unknown, userIdList: string[]) => Promise<IRealmArenaGameData>;
+
+    it("is small or large as sent, and normal for anything else a request could send", () => {
+        expect(["small", "large"].map(battleSizeOf)).toEqual(["small", "large"]);
+        for (const junk of [undefined, null, "normal", "huge", 2, {}, ["small"]]) expect(battleSizeOf(junk)).toBeUndefined();
+        expect(new RealmArenaInvitationModel({ size: "large" }).toObject().size).toBe("large");
+        expect(new RealmArenaInvitationModel({ size: "huge" }).toObject().size).toBeUndefined();
+    });
+
+    it("is stored, named in the setup log, and on the wire, and left absent when normal", async () => {
+        const large = { turnTimer: 0, size: "large" };
+        const game = await createGame.call(large, large, [...THREE]);
+        expect(game.specificGameState.size).toBe("large");
+        expect(game.gameState.history.map(entry => entry.text))
+            .toContain(`Setup: a large battle, so each player musters ${musterBudget(3, false, "large")} points' worth of characters, sealed until every player has`);
+        expect(gameStateToModel(game.specificGameState, "a", null)).toMatchObject({ size: "large", budget: 100 });
+
+        const normal = { turnTimer: 0 };
+        const plain = await createGame.call(normal, normal, [...THREE]);
+        expect(plain.specificGameState).not.toHaveProperty("size");
+        expect(gameStateToModel(plain.specificGameState, "a", null)).not.toHaveProperty("size");
+    });
+
+    it.each([["small", [80, 60, 50]], ["large", [120, 100, 90]]] as const)("musters every party's %s budget with its ready-made squad", async (size, budgets) => {
+        for (const [index, seats] of [["a", "b"], THREE, FOUR].entries()) {
+            const game = makeGame([...seats], {}, { size });
+            expect(gameStateToModel(game.specificGameState, "a", null).budget).toBe(budgets[index]);
+            // A timed-out seat musters the size's squad, which the muster accepts.
+            for (const player of seats) expect(await resolveStalledTurn(game, player, player)).toBe("advanced");
+            expect(game.specificGameState.phase).toBe("battle");
+            expect(own(game, "a").map(one => one.character)).toEqual(readyMadeSquad(REALM, budgets[index]));
+        }
+    });
+
+    it("refuses a squad over a small battle's budget that a normal one would take", async () => {
+        const game = makeGame(["a", "b"], {}, { size: "small" });
+        const normal = makeGame(["a", "b"]);
+        const picks = readyMadePicks(normal, 0);
+        expect((await play(game, muster("a", picks))).outcome.validMove).toBe(false);
+        expect((await play(normal, muster("a", picks))).outcome.validMove).toBe(true);
+    });
+
+    it("fights a large free-for-all of four to its end", async () => {
+        const game = makeGame([...FOUR], {}, { size: "large" });
+        await musterAll(game);
+        expect(game.specificGameState.fighters).toHaveLength(4 * REALM.readyMade[90].length);
+        for (let turn = 0; !game.complete; turn++) {
+            if (turn > 200) throw new Error("the battle outlasted its turn limit");
+            await playScriptedTurn(game);
+        }
+        expect(game.complete).toBe(true);
+    }, 60_000);
 });

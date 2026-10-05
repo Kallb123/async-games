@@ -62,7 +62,7 @@ describe("Realm Arena replay", () => {
     });
 
     it("replays a battle in fog of war to each viewer's own view of it, and lifts the fog at its end (§27)", async () => {
-        const game = await playScriptedBattle(true);
+        const game = await playScriptedBattle({ fog: true });
         const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
         for (const viewer of [null, "a", "b"]) {
             const timeline = await noRandomness(() => buildTimeline(game, NAMES, [], undefined, viewer));

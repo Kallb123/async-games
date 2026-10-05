@@ -5,6 +5,7 @@ import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
 import type { FactionId } from "./characters";
+import type { StoredBattleSize, StoredDifficulty } from "./RealmArenaModels";
 
 // docs/games/realm-arena.md §17.2's state, on the wire. Once the battle has
 // begun every field of it goes to every player — unless the host chose fog of
@@ -26,14 +27,18 @@ export interface IRealmArenaSpecificGameStateResponse {
     round: number;
     /** How many battle rounds the battle lasts (§13.8). */
     battleRounds: number;
-    /** Each player's points to muster with (§13.6). */
+    /** Each player's points to muster with (§13.6, §30.5). */
     budget: number;
+    /** How big the battle is (§30.5); absent is normal. */
+    size?: StoredBattleSize;
     /** Whether the battle is fought in fog of war (§27). */
     fog: boolean;
     /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */
     coop: boolean;
     /** The co-op mission; absent is Hold the Centre. */
     mission?: "holdOut";
+    /** How strong the co-op warbands are (§30.5); absent is Normal. */
+    difficulty?: StoredDifficulty;
     /**
      * Whom the team fights, in co-op (§29.3), once the team knows: a faction
      * the host picked from the start, one drawn at random once one of its

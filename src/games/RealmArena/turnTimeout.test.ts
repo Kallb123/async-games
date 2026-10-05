@@ -17,7 +17,7 @@ describe("a timed-out turn", () => {
 
         expect(await resolveStalledTurn(game, "b", "b")).toBe("advanced");
         expect(game.specificGameState.phase).toBe("battle");
-        expect(game.specificGameState.fighters.map(one => one.character)).toEqual([...REALM.readyMade[2], ...REALM.readyMade[2]]);
+        expect(game.specificGameState.fighters.map(one => one.character)).toEqual([...REALM.readyMade[100], ...REALM.readyMade[100]]);
     });
 
     it("after an opponent's own muster, still musters the second seat", async () => {

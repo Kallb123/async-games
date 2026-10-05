@@ -7,11 +7,11 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, enemyHidden, toldTo } from "./RealmArenaLogic";
+import { battleOf, budgetOf, enemyHidden, toldTo, warbandBudgetOf } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { CHARACTERS, COOP_PLAYERS, FACTION_IDS, factionById, fitsCoop, isFactionId, musterSize, POINTS_BUDGET, RANDOM_ENEMY, UNKNOWN_ENEMY, type CharacterId, type FactionId } from "./characters";
+import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, fitsCoop, isFactionId, RANDOM_ENEMY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
 import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
@@ -43,6 +43,8 @@ export interface IRealmArenaCoop {
     nextWarband: number;
     /** The wave-survival mission (§30.3). Absent means Hold the Centre. */
     mission?: "holdOut";
+    /** How strong the warbands are (§30.5). Absent means Normal, as every battle before it was. */
+    difficulty?: StoredDifficulty;
     /**
      * The host chose Random (§29.3): the team musters not knowing whom it
      * will face, and the faction stays hidden — off the wire and unnamed in
@@ -92,6 +94,12 @@ export interface IRealmArenaSpecificGameState {
      * before it among them.
      */
     coop?: IRealmArenaCoop;
+    /**
+     * How big the battle is (§30.5), which moves every squad's budget. Chosen
+     * by the host and fixed when the battle is created; absent for a normal
+     * one, every battle from before it among them.
+     */
+    size?: StoredBattleSize;
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -140,9 +148,25 @@ export interface IRealmArenaSpecificGameState {
 
 // ─── Invitation ─────────────────────────────────────────────────────────────
 
+/** A battle size other than normal, as a battle stores it: absent is normal (§30.5). */
+export type StoredBattleSize = Exclude<BattleSize, "normal">;
+/** A difficulty other than normal, as a battle stores it: absent is normal (§30.5). */
+export type StoredDifficulty = Exclude<Difficulty, "normal">;
+
+/**
+ * A battle size as the host chose it, or undefined for normal and for
+ * anything else a request could send: what the setup route checks and the
+ * invitation stores.
+ */
+export function battleSizeOf(value: unknown): StoredBattleSize | undefined {
+    return value === "small" || value === "large" ? value : undefined;
+}
+
 export interface RealmArenaInvitationRequest extends IInvitationRequest {
     /** Fight the battle in fog of war (§27). Off unless sent as true. */
     fog?: boolean;
+    /** How big the battle is (§30.5). Normal when absent. */
+    size?: StoredBattleSize;
     /** Fight together against the computer (§29), and whom. A free-for-all when absent. */
     coop?: RealmArenaCoopInvite;
 }
@@ -152,23 +176,28 @@ export interface RealmArenaCoopInvite {
     enemy: FactionId | typeof RANDOM_ENEMY;
     /** Absent is the original Hold the Centre mission. */
     mission?: "holdOut";
+    /** Absent is Normal (§30.5). */
+    difficulty?: StoredDifficulty;
 }
 
 /**
  * A co-op setting as the host chose it, or undefined for anything else a
- * request could send: only an enemy that is a faction, or Random. What the
- * setup route checks and the invitation stores, so a lobby invitation, whose
- * settings reach the model unread, is held to it as well.
+ * request could send: only an enemy that is a faction, or Random, a mission
+ * that is Hold Out and a difficulty that is Easy or Hard, each when sent.
+ * What the setup route checks and the invitation stores, so a lobby
+ * invitation, whose settings reach the model unread, is held to it as well.
  */
 export function coopInviteOf(value: unknown): RealmArenaCoopInvite | undefined {
-    const enemy = (value as { enemy?: unknown } | null | undefined)?.enemy;
-    const mission = (value as { mission?: unknown } | null | undefined)?.mission;
+    const { enemy, mission, difficulty } = (value ?? {}) as { enemy?: unknown, mission?: unknown, difficulty?: unknown };
     if (mission !== undefined && mission !== "holdOut") return undefined;
-    return enemy === RANDOM_ENEMY || isFactionId(enemy) ? { enemy, ...(mission === "holdOut" ? { mission } : {}) } : undefined;
+    if (difficulty !== undefined && difficulty !== "easy" && difficulty !== "hard") return undefined;
+    if (enemy !== RANDOM_ENEMY && !isFactionId(enemy)) return undefined;
+    return { enemy, ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}) };
 }
 
 export interface IRealmArenaInvitationData extends IInvitationData {
     fog?: boolean;
+    size?: StoredBattleSize;
     coop?: RealmArenaCoopInvite;
 }
 
@@ -185,6 +214,8 @@ var RealmArenaInvitationSchema = new Schema<IRealmArenaInvitationDataDocument>({
     // Co-op (§29), likewise held to what it can be: anything but a faction or
     // Random is a free-for-all.
     coop: { type: Schema.Types.Mixed, set: coopInviteOf },
+    // The battle's size (§30.5), likewise: anything but small or large is normal.
+    size: { type: String, set: battleSizeOf },
 }, { discriminatorKey: 'kind' });
 RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmArenaInvitationData, userIdList: string[]) {
     console.log('CreateGame: Realm Arena game');
@@ -207,7 +238,11 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // came out as (§29.3): a replay rebuilds the same enemy, and no client
     // chooses it.
     const enemy = coop && (coop.enemy === RANDOM_ENEMY ? FACTION_IDS[randomInt(FACTION_IDS.length)] : coop.enemy);
-    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy, coop?.enemy === RANDOM_ENEMY, coop?.mission);
+    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), {
+        fog: this.fog === true,
+        size: battleSizeOf(this.size),
+        ...(coop && enemy ? { coop: { enemy, random: coop.enemy === RANDOM_ENEMY, mission: coop.mission, difficulty: coop.difficulty } } : {}),
+    });
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
@@ -222,7 +257,12 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     }
     history.push({ text: `Setup: ${turnOrder.map((userId, seat) => `${userToken(userId)} deploys ${zones[seat]}`).join(", ")}` });
     if (specificGameState.fog) history.push({ text: "Setup: fought in fog of war, so each player sees only what their squad can" });
-    history.push({ text: `Setup: each player musters ${POINTS_BUDGET[musterSize(turnOrder.length, !!coop)]} points' worth of characters, sealed until every player has` });
+    const size = specificGameState.size ?? "normal";
+    const sized = size === "normal" ? "" : `a ${BATTLE_SIZE_NAMES[size].toLowerCase()} battle, so `;
+    history.push({ text: `Setup: ${sized}each player musters ${budgetOf(specificGameState)} points' worth of characters, sealed until every player has` });
+    if (specificGameState.coop) {
+        history.push({ text: `Setup: on ${DIFFICULTY_NAMES[specificGameState.coop.difficulty ?? "normal"]}, each warband musters ${warbandBudgetOf(specificGameState)} points' worth` });
+    }
 
     const gameData: IRealmArenaGameData = {
         gameId: uuidv4() as uuidString,
@@ -250,19 +290,31 @@ export var RealmArenaInvitationModel =
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
+/** What the host chose for a battle, as it's created and as a replay rebuilds it. Every one absent is the default. */
+export interface RealmArenaSettings {
+    /** In fog of war (§27). */
+    fog?: boolean;
+    /** The battle's size (§30.5). */
+    size?: StoredBattleSize;
+    /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3) and the difficulty (§30.5). */
+    coop?: { enemy: FactionId, random?: boolean, mission?: "holdOut", difficulty?: StoredDifficulty };
+}
+
 /**
  * The battle before anyone has mustered: the map for the party's size, no
  * squads, nobody scored, and each seat's ranks as `mastery` gave them when the
- * battle was created, in fog of war if the host chose it (§27), and in co-op
- * against `enemy`'s warbands if the host chose that (§29), with the first
- * warband to take the enemy's first turn — kept hidden until it's seen if it
- * was drawn at `random` (§29.3). A pure function of those, all
- * persisted, so replay rebuilds it rather than persisting a snapshot of the
- * state (§17.1, §23.3). Throws for a party the map has no deployment zone for
- * — in co-op, a zone for each player and one for each warband.
+ * battle was created, with what the host chose (`settings`): fog of war
+ * (§27), the battle's size (§30.5), and co-op against `enemy`'s warbands
+ * (§29), with the first warband to take the enemy's first turn — kept hidden
+ * until it's seen if it was drawn at `random` (§29.3). A pure function of
+ * those, all persisted, so replay rebuilds it rather than persisting a
+ * snapshot of the state (§17.1, §23.3). Throws for a party the map has no
+ * deployment zone for — in co-op, a zone for each player and one for each
+ * warband.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false, mission?: "holdOut"): IRealmArenaSpecificGameState {
-    const coop = enemy !== undefined;
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, settings: RealmArenaSettings = {}): IRealmArenaSpecificGameState {
+    const { fog, size } = settings;
+    const coop = settings.coop !== undefined;
     const map = mapFor(turnOrder.length, coop);
     const field = battlefieldById(map);
     const seated = coop ? field.deployments.length / 2 : field.deployments.length;
@@ -274,7 +326,8 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         seats: [...turnOrder],
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
-        ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}), ...(mission ? { mission } : {}) } } : {}),
+        ...(size ? { size } : {}),
+        ...(settings.coop ? { coop: coopState(settings.coop) } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -284,6 +337,20 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         mastery: { ...mastery },
         undoStack: [],
         undoAnchorId: null,
+    };
+}
+
+function coopState({ enemy, random, mission, difficulty }: NonNullable<RealmArenaSettings["coop"]>): IRealmArenaCoop {
+    return { enemy, nextWarband: 0, ...(random ? { random: true } : {}), ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}) };
+}
+
+/** What a battle's settings are, read back off its state: what a replay rebuilds it from. */
+export function settingsOf(gs: IRealmArenaSpecificGameState): RealmArenaSettings {
+    const { coop } = gs;
+    return {
+        fog: gs.fog === true,
+        size: gs.size,
+        ...(coop ? { coop: { enemy: coop.enemy, random: coop.random === true, mission: coop.mission, difficulty: coop.difficulty } } : {}),
     };
 }
 
@@ -391,10 +458,12 @@ export function gameStateToModel(
         phase: gs.phase,
         round: gs.phase === "muster" ? 0 : Math.min(gs.roundsPlayed + 1, rounds),
         battleRounds: rounds,
-        budget: POINTS_BUDGET[musterSize(seats.length, gs.coop !== undefined)],
+        budget: budgetOf(gs),
         fog: gs.fog === true,
         coop: gs.coop !== undefined,
+        ...(gs.size ? { size: gs.size } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
+        ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
         // fog lifts as the battle ends, the faction with it. Never a view with
         // one of its characters in it and not the faction: that's a sighting.

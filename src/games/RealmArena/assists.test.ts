@@ -136,7 +136,7 @@ describe("assists in a battle", () => {
 
     it("are worked out on the server: who hurt a character is never sent, in fog or out of it, during the battle or after", async () => {
         for (const fog of [false, true]) {
-            const game = makeGame(["a", "b", "c"], {}, fog);
+            const game = makeGame(["a", "b", "c"], {}, { fog });
             await musterAll(game);
             for (const fighter of game.specificGameState.fighters) fighter.woundedBy = ["a", "b", "c"].filter(owner => owner !== fighter.owner);
             for (const viewer of ["a", "b", null]) {
@@ -165,7 +165,7 @@ describe("assists in a battle", () => {
     });
 
     it("are told by the battle record, and add up with the centre and the knock-outs to every score (§28)", async () => {
-        const game = await playScriptedBattle(false, ["a", "b", "c"]);
+        const game = await playScriptedBattle({}, ["a", "b", "c"]);
         const gs = game.specificGameState;
         const record = await recordBattle(game);
         if (!record) throw new Error("the replay failed");

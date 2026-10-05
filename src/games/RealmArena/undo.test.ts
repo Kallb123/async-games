@@ -50,7 +50,7 @@ function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move" | "sne
 async function battle(): Promise<RealmArenaTestGame> {
     const game = makeGame();
     const field = battlefieldById(game.specificGameState.map);
-    for (const [seat, squad] of [REALM.readyMade[3], REALM.readyMade[2]].entries()) {
+    for (const [seat, squad] of [REALM.readyMade[80], REALM.readyMade[100]].entries()) {
         const { outcome } = await play(game, muster(PLAYERS[seat], readyMadeMuster(field, seat, squad)));
         if (!outcome.validMove) throw new Error(`seat ${seat}'s muster was refused`);
     }

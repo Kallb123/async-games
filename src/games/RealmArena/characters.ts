@@ -258,8 +258,50 @@ export function isItemId(value: unknown): value is ItemId {
 
 export type PlayerCount = 2 | 3 | 4;
 
-/** Each player's points to muster with, which shrinks as players are added (§13.6). */
-export const POINTS_BUDGET: Record<PlayerCount, number> = { 2: 100, 3: 80, 4: 70 };
+/**
+ * Every budget a squad can be mustered with, smallest first (§30.5): each
+ * faction has a ready-made squad for each. A battle's size and a co-op
+ * battle's difficulty each move a squad up or down this ladder.
+ */
+export const BUDGETS = [50, 60, 70, 80, 90, 100, 110, 120] as const;
+export type Budget = (typeof BUDGETS)[number];
+
+/** How big a battle is, as the host chose it (§30.5): what every squad in it musters. */
+export type BattleSize = "small" | "normal" | "large";
+/** How strong the computer's warbands are in co-op, as the host chose it (§30.5). */
+export type Difficulty = "easy" | "normal" | "hard";
+
+export const BATTLE_SIZE_NAMES: Readonly<Record<BattleSize, string>> = { small: "Small", normal: "Normal", large: "Large" };
+export const DIFFICULTY_NAMES: Readonly<Record<Difficulty, string>> = { easy: "Easy", normal: "Normal", hard: "Hard" };
+
+/** Each player's points to muster with in a normal-sized battle, which shrinks as players are added (§13.6). */
+const NORMAL_BUDGET: Readonly<Record<PlayerCount, Budget>> = { 2: 100, 3: 80, 4: 70 };
+
+/** How many rungs of `BUDGETS` a battle's size moves every squad in it from a normal battle's. */
+const SIZE_RUNGS: Readonly<Record<BattleSize, number>> = { small: -2, normal: 0, large: 2 };
+
+/** How many rungs of `BUDGETS` a warband stands from the players' budget, by difficulty (§30.5). */
+const DIFFICULTY_RUNGS: Readonly<Record<Difficulty, number>> = { easy: -1, normal: 0, hard: 2 };
+
+const rung = (budget: Budget, steps: number): Budget => BUDGETS[BUDGETS.indexOf(budget) + steps];
+
+/** Each player's points to muster with (§13.6, §30.5): the party's normal budget, moved by the battle's size. */
+export function musterBudget(playerCount: number, coop: boolean, size: BattleSize = "normal"): Budget {
+    return rung(NORMAL_BUDGET[musterSize(playerCount, coop)], SIZE_RUNGS[size]);
+}
+
+/**
+ * Each co-op warband's points (§30.5): the players' budget, moved by the
+ * difficulty. A warband always musters its faction's ready-made squad for it.
+ */
+export function warbandBudget(playerCount: number, size: BattleSize = "normal", difficulty: Difficulty = "normal"): Budget {
+    return rung(musterBudget(playerCount, true, size), DIFFICULTY_RUNGS[difficulty]);
+}
+
+/** A faction's ready-made squad for a budget: none for one off the ladder, which only a client could hold. */
+export function readyMadeSquad(faction: Faction, budget: number): readonly CharacterId[] {
+    return faction.readyMade[budget as Budget] ?? [];
+}
 
 export function isCharacterId(value: unknown): value is CharacterId {
     return typeof value === "string" && Object.hasOwn(CHARACTERS, value);
@@ -280,8 +322,13 @@ export interface Faction {
     name: string;
     /** The characters it musters from, in the order the muster lists them; each in no other faction's roster. */
     characters: readonly CharacterId[];
-    /** The squad a muster that runs out of time gets, by player count — spending the whole budget (§17.2). */
-    readyMade: Readonly<Record<PlayerCount, readonly CharacterId[]>>;
+    /**
+     * The squad a muster that runs out of time gets, and every warband
+     * musters, by budget — each spending the whole of it (§17.2, §30.5). The
+     * 70-, 80- and 100-point squads are what every battle before battle sizes
+     * mustered, so they never change: a replay musters them again.
+     */
+    readyMade: Readonly<Record<Budget, readonly CharacterId[]>>;
     /**
      * What its characters are called when the computer fields them in co-op
      * (§29.3), as the log and the board name an owner: "the Renegades'
@@ -303,9 +350,14 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
         name: "The Realm",
         characters: ["manAtArms", "knight", "archer", "scout", "mage", "cleric"],
         readyMade: {
-            2: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
-            3: ["knight", "manAtArms", "archer", "scout"],
-            4: ["manAtArms", "manAtArms", "archer", "scout"],
+            50: ["manAtArms", "manAtArms", "archer"],
+            60: ["knight", "manAtArms", "archer"],
+            70: ["manAtArms", "manAtArms", "archer", "scout"],
+            80: ["knight", "manAtArms", "archer", "scout"],
+            90: ["knight", "manAtArms", "archer", "mage"],
+            100: ["knight", "manAtArms", "manAtArms", "archer", "cleric"],
+            110: ["knight", "manAtArms", "archer", "scout", "mage"],
+            120: ["knight", "archer", "scout", "mage", "cleric"],
         },
         enemyName: "the Renegades",
     },
@@ -349,9 +401,9 @@ export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.mi
 
 /**
  * The party size a squad is mustered for (§13.6): the battle's own, or in
- * co-op always three — every squad, a player's or a warband, musters the
- * three-player budget, whatever the size of the team (§29.1).
+ * co-op always three — every player's squad musters the three-player budget,
+ * whatever the size of the team (§29.1).
  */
-export function musterSize(playerCount: number, coop: boolean): PlayerCount {
+function musterSize(playerCount: number, coop: boolean): PlayerCount {
     return coop ? 3 : playerCount as PlayerCount;
 }

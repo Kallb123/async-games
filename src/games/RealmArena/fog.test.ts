@@ -205,7 +205,7 @@ describe("the wire in fog of war (§27)", () => {
      * the last step, when `turning`.
      */
     async function sightingsBattle(pattern: boolean[], turning = false) {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         const field = battleOf(game).field;
         const eye = fighter(0, "a", 0);
@@ -303,7 +303,7 @@ describe("the wire in fog of war (§27)", () => {
     });
 
     it("sends each player their own squad and nobody they can't see, and everyone once the battle is over", async () => {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         const everyone = game.specificGameState.fighters.length;
         for (const viewer of ["a", "b"]) {
@@ -319,7 +319,7 @@ describe("the wire in fog of war (§27)", () => {
     });
 
     it("puts nothing of a squad out of sight anywhere in a player's response or review", async () => {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         for (const [viewer, other] of [["a", "b"], ["b", "a"], [null, "a"], [null, "b"]] as const) {
             const wire = JSON.stringify([await responseFor(game, viewer), await buildTimeline(game, { a: "a", b: "b" }, [], undefined, viewer)]);
@@ -344,7 +344,7 @@ describe("undo in fog of war (§27)", () => {
      * sees it yet. Returns that move.
      */
     async function lookout() {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         const battle = battleOf(game);
         const scout = battle.fighters.find(one => one.owner === "a")!;
@@ -371,7 +371,7 @@ describe("undo in fog of war (§27)", () => {
     });
 
     it("still takes back one that showed nobody new", async () => {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         const battle = battleOf(game);
         const scout = battle.fighters.find(one => one.owner === "a")!;
@@ -386,7 +386,7 @@ describe("undo in fog of war (§27)", () => {
 describe("a review in fog of war (§27)", () => {
     /** A fogged battle under way, b's eye at (0, 4) of the Ruined Fort's columns and a's mover somewhere past it. */
     function reviewState() {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         const gs = game.specificGameState;
         gs.phase = "battle";
         const field = battleOf(game).field;
@@ -455,7 +455,7 @@ describe("the log, the recap and the review in fog of war (§27.2)", () => {
      * only character — at 1 HP, so a's next hit ends the battle.
      */
     function ambush(alone = false) {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         const gs = game.specificGameState;
         gs.phase = "battle";
         const { field } = battleOf(game);
@@ -479,7 +479,7 @@ describe("the log, the recap and the review in fog of war (§27.2)", () => {
 
     it("keeps an action a player's side saw none of out of their log, their review and their recap", async () => {
         // As the squads take the field, nobody sees anybody.
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         const archer = battleOf(game).fighters.find(fighter => fighter.owner === "a")!;
         const hunker = actBy("a", { kind: "hunker", fighter: archer.id });

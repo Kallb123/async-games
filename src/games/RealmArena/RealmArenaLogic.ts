@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, EFFECTS, enemyNameOf, factionById, ITEMS, musterSize, POINTS_BUDGET, REALM } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, ITEMS, musterBudget, readyMadeSquad, REALM, warbandBudget, type Budget, type CharacterId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -94,6 +94,21 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         seats: gs.seats,
         coop: gs.coop !== undefined,
     });
+}
+
+/** Each player's points to muster with (§13.6): the party's, moved by the battle's size (§30.5). */
+export function budgetOf(gs: IRealmArenaSpecificGameState): Budget {
+    return musterBudget(gs.seats.length, gs.coop !== undefined, gs.size);
+}
+
+/** Each co-op warband's points (§30.5): the players', moved by the difficulty. */
+export function warbandBudgetOf(gs: IRealmArenaSpecificGameState): Budget {
+    return warbandBudget(gs.seats.length, gs.size, gs.coop?.difficulty);
+}
+
+/** The squad every warband musters, and each wave refills it to (§29.7, §30.3): its faction's ready-made squad for its budget. */
+function warbandSquad(gs: IRealmArenaSpecificGameState): readonly CharacterId[] {
+    return readyMadeSquad(factionById(gs.coop?.enemy), warbandBudgetOf(gs));
 }
 
 /**
@@ -726,16 +741,18 @@ export class RealmArenaGameType implements IGameType {
  * added together — beats the enemy's, which is `standings` read by side, with
  * the warbands' seats after the players' so a battle level all the way goes
  * to the enemy, holding the field. One ending for everybody, `teamwin` or
- * `teamloss` (`endAsTeam`), with the final score as its detail. The fog lifts
+ * `teamloss` (`endAsTeam`), with the final score as its detail — and the
+ * difficulty, when it wasn't Normal (§30.5). The fog lifts
  * as the battle ends (§27.1), and a random enemy's faction with it (§29.3), so
  * the final line names it.
  */
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
+    const onDifficulty = coop.difficulty ? `, on ${DIFFICULTY_NAMES[coop.difficulty]}` : "";
     if (coop.mission === "holdOut") {
         // Only ever asked once the battle is over, which in Hold Out is when it has an ending.
         const { won, detail } = holdOutEnding(gs)!;
-        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
+        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
         return;
     }
     const warbands = warbandsFor(gs.seats);
@@ -749,7 +766,7 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
     const detail = team !== enemy ? `${pluralize(team, "point")} to ${enemy}`
         : `${pluralize(team, "point")} each, ${standingPoints(battle, TEAM_SIDE) > standingPoints(battle, ENEMY_SIDE)
             ? "with more of the team left standing" : "and the enemy held the field"}`;
-    endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
+    endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
 }
 
 /** Whether the battle is over (§5.1). Hold Out goes on through an enemy wiped out between waves (§30.3). */
@@ -779,8 +796,7 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string): Fighter
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
     const field = battlefieldById(gs.map);
-    const squad = factionById(gs.coop.enemy).readyMade[musterSize(gs.seats.length, true)];
-    const planned = readyMadeMuster(field, gs.seats.length + warband, squad);
+    const planned = readyMadeMuster(field, gs.seats.length + warband, warbandSquad(gs));
     const missing = [...planned];
     for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one))) {
         const index = missing.findIndex(pick => pick.character === fighter.character);
@@ -834,11 +850,10 @@ export class RealmArenaMuster implements IGameCommand {
         // Seat order, one turn each, so a player's seat is the next muster.
         if (seat !== musters.length) return INVALID;
         const field = battlefieldById(gs.map);
-        const size = musterSize(order.length, gs.coop !== undefined);
         // Held to the ranks the battle was created with, never to anything sent (§23.3),
         // and to the Realm's roster, which every player fights as (§29.3).
         const ranks = gs.mastery?.[this.senderId] ?? {};
-        if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[size], ranks, REALM) !== undefined) return INVALID;
+        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, REALM) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
@@ -848,9 +863,9 @@ export class RealmArenaMuster implements IGameCommand {
 
         if (musters.length === order.length) {
             // In co-op the warbands muster last, each the enemy's ready-made
-            // squad in the zone opposite its player's (§29.7).
+            // squad for the difficulty in the zone opposite its player's (§29.7, §30.5).
             if (gs.coop) {
-                const squad = factionById(gs.coop.enemy).readyMade[size];
+                const squad = warbandSquad(gs);
                 musters.push(...order.map((_, k) => ({ owner: warbandOwner(k), picks: readyMadeMuster(field, order.length + k, squad) })));
             }
             // Every squad joins the battlefield at once, ids in seat order, the warbands' last.
