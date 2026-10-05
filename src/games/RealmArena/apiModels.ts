@@ -1,6 +1,6 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RealmArenaMapId } from "./maps";
-import type { Fighter, MusterPick, ToldEvent } from "./rules";
+import type { Fighter, FogGhost, MusterPick, ToldEvent } from "./rules";
 import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import type { RealmArenaPhase } from "./RealmArenaModels";
@@ -45,6 +45,8 @@ export interface IRealmArenaSpecificGameStateResponse {
      * mustered.
      */
     fighters: Fighter[];
+    /** Enemy units at the last place the viewer saw them enter the fog. */
+    ghosts: FogGhost[];
     /**
      * In fog of war, the smoke clouds the viewer can see whose throwers it
      * can't, by the square each landed on (§27); empty otherwise. The board

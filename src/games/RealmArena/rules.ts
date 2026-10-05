@@ -144,6 +144,9 @@ export interface Fighter {
     tally?: Tally;
 }
 
+/** The deliberately small, stale picture of an enemy remembered in fog. */
+export type FogGhost = Pick<Fighter, "id" | "owner" | "character" | "square" | "facing">;
+
 /** What every rule reads: the ground, and everyone on it. */
 export interface BattleState {
     /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */

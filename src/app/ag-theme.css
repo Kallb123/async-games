@@ -5302,6 +5302,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* A standing character hidden behind something in front of it, drawn again
    over it, faint, in its owner's colour, and tappable like the figure. */
 .ag-ra-ghost { opacity: 0.5; }
+/* A stale enemy sighting in fog: fainter than the accessibility ghost used
+   for a real figure hidden by isometric terrain, and never interactive. */
+.ag-ra-fog-ghost { opacity: 0.32; filter: grayscale(0.7); pointer-events: none; }
 /* The dashed ring round a character's feet: banked AP on overwatch or guard,
    so a watcher is plain at a glance, or the viewer's squad still sealed. */
 .ag-ra-marker { fill: none; stroke-width: 0.7; stroke-dasharray: 1.2 0.8; pointer-events: none; }

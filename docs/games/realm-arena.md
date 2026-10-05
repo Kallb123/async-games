@@ -1924,14 +1924,20 @@ place — moving — what a player can be held to knowing.
   look that finds an empty corner — or a flask that lands on no one where the
   player can't see — is a small gift, and an accepted one. A move that finds an
   enemy in its way never can be: it showed the player that enemy.
+- **The board remembers the last sighting.** When an enemy leaves a player's
+  sight, a translucent figure stays on the first hidden square of its path —
+  where it entered the fog. It is only a stale marker, not the enemy's current
+  position or state. As soon as that square is visible again the marker goes;
+  the real character is shown if it is there, otherwise the square is empty.
 - **The fog lifts when the battle ends.** The last state, the results and
   the whole log show everyone.
 
 ### 27.2 What fog hides, and what it doesn't
 
 - **Hidden: where everyone else is, and the state they're in.** An enemy out
-  of sight isn't on the wire at all — not its square, its HP, its AP, its
-  effects, its item, not even that it's there.
+  of sight isn't on the wire as a live character — not its current square,
+  HP, AP, effects or item. Its viewer-specific last sighting is sent only as
+  the small stale marker described above.
 - **Not hidden: the ground.** Cover blasted away is gone for everyone (§22):
   a blast is heard across the field, and the board and the rules read one
   battlefield. A smoke cloud is seen wherever any of its 3×3 is in sight,

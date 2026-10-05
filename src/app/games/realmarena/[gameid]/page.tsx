@@ -400,6 +400,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <RealmArenaBoard
                             field={field}
                             fighters={fighters}
+                            fogGhosts={gs.ghosts}
                             unseen={unseen}
                             clouds={clouds}
                             sides={battle.sides}

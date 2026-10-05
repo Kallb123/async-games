@@ -25,6 +25,7 @@ function state(overrides: Partial<IRealmArenaSpecificGameStateResponse> = {}): I
         fog: false,
         coop: false,
         fighters: [],
+        ghosts: [],
         clouds: [],
         blasted: [],
         mustered: ["a", "b"],
