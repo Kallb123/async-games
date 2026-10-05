@@ -16,6 +16,7 @@ import {
     allied,
     areaAround,
     battleFrom,
+    battleRounds,
     blastedIn,
     check,
     endTurn,
@@ -34,6 +35,7 @@ import {
     SCORED_FOR,
     squadSight,
     sideScore,
+    sidesStanding,
     squadsStanding,
     standingPoints,
     standings,
@@ -522,7 +524,8 @@ export function rememberFogSightings(gs: IRealmArenaSpecificGameState, events: r
         const path = moved.get(event.fighter) ?? [];
         moved.set(event.fighter, [...path, ...event.path.slice(path.at(-1) === event.path[0] ? 1 : 0)]);
     }
-    gs.sightings = Object.fromEntries(gs.seats.map(viewer => {
+    const viewers = gs.coop ? [...gs.seats, ...warbandsFor(gs.seats)] : gs.seats;
+    gs.sightings = Object.fromEntries(viewers.map(viewer => {
         const seen = squadSight(battle, viewer);
         const remembered = new Map((gs.sightings?.[viewer] ?? []).map(ghost => [ghost.id, ghost]));
 
@@ -694,7 +697,7 @@ export class RealmArenaGameType implements IGameType {
         if (gs.phase !== "battle") return false;
         const order = data.gameState.turnOrder;
         const battle = battleOf(gs);
-        if (!isBattleOver(battle, order, gs.roundsPlayed)) return false;
+        if (!battleIsOver(gs)) return false;
         // The fog lifts as the battle ends (§27.1), on the log too.
         tellEveryone(data.gameState);
         if (gs.coop) {
@@ -726,6 +729,15 @@ export class RealmArenaGameType implements IGameType {
  */
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
+    if (coop.mission === "holdOut") {
+        const standing = sidesStanding(battle);
+        const won = standing.includes(TEAM_SIDE) && (gs.roundsPlayed >= battleRounds(gs.seats.length)
+            || (gs.roundsPlayed >= 12 && !standing.includes(ENEMY_SIDE)));
+        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, won
+            ? `held out for all ${battleRounds(gs.seats.length)} rounds`
+            : `overrun in round ${Math.min(gs.roundsPlayed + 1, battleRounds(gs.seats.length))}`);
+        return;
+    }
     const warbands = warbandsFor(gs.seats);
     const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
     const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
@@ -738,6 +750,52 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
         : `${pluralize(team, "point")} each, ${standingPoints(battle, TEAM_SIDE) > standingPoints(battle, ENEMY_SIDE)
             ? "with more of the team left standing" : "and the enemy held the field"}`;
     endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, detail);
+}
+
+/** Hold Out continues through a wiped-out enemy, until time expires or the team falls. */
+function battleIsOver(gs: IRealmArenaSpecificGameState): boolean {
+    const battle = battleOf(gs);
+    if (gs.coop?.mission !== "holdOut") return isBattleOver(battle, gs.seats, gs.roundsPlayed);
+    const standing = sidesStanding(battle);
+    const finalWaveLanded = gs.roundsPlayed >= 12;
+    return gs.roundsPlayed >= battleRounds(gs.seats.length) || !standing.includes(TEAM_SIDE)
+        || (finalWaveLanded && !standing.includes(ENEMY_SIDE));
+}
+
+/** The reinforcements one warband can place in its deployment zone this wave. */
+export function waveOf(gs: IRealmArenaSpecificGameState, owner: string): Fighter[] {
+    if (gs.coop?.mission !== "holdOut") return [];
+    const warband = warbandsFor(gs.seats).indexOf(owner);
+    if (warband < 0) return [];
+    const field = battlefieldById(gs.map);
+    const squad = factionById(gs.coop.enemy).readyMade[musterSize(gs.seats.length, true)];
+    const planned = readyMadeMuster(field, gs.seats.length + warband, squad);
+    const missing = [...planned];
+    for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one))) {
+        const index = missing.findIndex(pick => pick.character === fighter.character);
+        if (index >= 0) missing.splice(index, 1);
+    }
+    const occupied = new Set(gs.fighters.filter(isStanding).map(fighter => fighter.square));
+    const preferred = planned.map(pick => pick.square);
+    const zone = [...preferred, ...field.deployments[gs.seats.length + warband].filter(square => !preferred.includes(square))]
+        .filter(square => !occupied.has(square));
+    let nextId = Math.max(-1, ...gs.fighters.map(fighter => fighter.id)) + 1;
+    return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option));
+}
+
+function landWave(data: IRealmArenaGameData): void {
+    const gs = data.specificGameState;
+    if (gs.coop?.mission !== "holdOut" || gs.roundsPlayed < 3 || gs.roundsPlayed % 3 !== 0) return;
+    for (const owner of warbandsFor(gs.seats)) {
+        const fresh = waveOf(gs, owner);
+        if (fresh.length === 0) continue;
+        gs.fighters.push(...fresh);
+    }
+    // The scheduled wave is public even when every deployment square is
+    // blocked; its line must not reveal which hidden warbands found room.
+    const foe = enemyKnown(gs.coop) ? enemyNameOf(gs.coop.enemy) : "enemy";
+    data.gameState.history.unshift({ text: `A fresh wave of the ${foe} arrives` });
+    noteSighting(gs);
 }
 
 // ─── Commands ───────────────────────────────────────────────────────────────
@@ -1161,7 +1219,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
 
     const { events: started, told: startedTold } = beginTurn(data, owner);
     const turn: EnemyTurn = { owner, started, startedTold, steps: [] };
-    const over = () => isBattleOver(battleOf(gs), order, gs.roundsPlayed);
+    const over = () => battleIsOver(gs);
     if (over()) return turn;
 
     const cap = ACTION_POINTS * battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isStanding(fighter)).length;
@@ -1174,7 +1232,10 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
         // every sweep. `applyAction` changes nothing until the action has
         // been worked out, so the battle stands as the last one left it.
         try {
-            action = moves.recorded ? moves.recorded[step] : nextAction(viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1);
+            action = moves.recorded ? moves.recorded[step] : nextAction(
+                viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1,
+                gs.coop?.mission === "holdOut" ? gs.sightings?.[owner] ?? [] : undefined,
+            );
             if (action === undefined) break;
             applied = applyAction(data, owner, action, moves.roll);
         } catch (error) {
@@ -1209,19 +1270,22 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
 function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: EnemyTurn; started: BattleEvent[]; startedTold?: Told } {
     const gs = data.specificGameState;
     const order = data.gameState.turnOrder;
-    const enemy = isBattleOver(battleOf(gs), order, gs.roundsPlayed) ? undefined : warbandTurn(data, moves);
+    const enemy = battleIsOver(gs) ? undefined : warbandTurn(data, moves);
     const started: BattleEvent[] = [];
     // In fog, what each player was told of it all, line by line (§27.2).
     const startedTold: Told | undefined = gs.fog ? Object.fromEntries(order.map(viewer => [viewer, []])) : undefined;
     for (let seat = from; ;) {
         const next = nextSeat(data, seat);
-        if (order.indexOf(next) <= order.indexOf(seat)) gs.roundsPlayed += 1;
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return { enemy, started, startedTold };
+        if (order.indexOf(next) <= order.indexOf(seat)) {
+            gs.roundsPlayed += 1;
+            landWave(data);
+        }
+        if (battleIsOver(gs)) return { enemy, started, startedTold };
 
         const { events, told } = beginTurn(data, next);
         started.push(...events);
         for (const viewer of order) startedTold?.[viewer].push(...told?.[viewer] ?? []);
-        if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started, startedTold };
+        if (battleIsOver(gs) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started, startedTold };
         seat = next;
     }
 }

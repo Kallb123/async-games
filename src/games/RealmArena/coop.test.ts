@@ -8,7 +8,7 @@ import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { RealmArenaGameType, waveOf, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import { battleRounds, ENEMY_SIDE, isWarband, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, type BattleEvent } from "./rules";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
@@ -100,9 +100,70 @@ describe("co-op's setting (§29.8)", () => {
         }
     });
 
+    it("accepts Hold Out and keeps Hold the Centre absent for old battles", () => {
+        expect(coopInviteOf({ enemy: "realm", mission: "holdOut", extra: 1 })).toEqual({ enemy: "realm", mission: "holdOut" });
+        expect(coopInviteOf({ enemy: "realm", mission: "siege" })).toBeUndefined();
+        expect(coopInviteOf({ enemy: "realm" })).toEqual({ enemy: "realm" });
+    });
+
     it("is kept on the invitation only as one, whatever a lobby's settings carried", () => {
         expect(new RealmArenaInvitationModel({ coop: { enemy: "realm", nextWarband: 9 } }).toObject().coop).toEqual({ enemy: "realm" });
         expect(new RealmArenaInvitationModel({ coop: { enemy: "orcs" } }).toObject().coop).toBeUndefined();
+    });
+});
+
+describe("Hold Out (§30.3)", () => {
+    it("refills a warband only to its ready-made strength, using fresh ids and free deployment squares", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
+        const owner = warbandOwner(0);
+        const original = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
+        original[0].hp = 0;
+        const fresh = waveOf(game.specificGameState, owner);
+        expect(fresh).toHaveLength(1);
+        expect(fresh[0].character).toBe(original[0].character);
+        expect(fresh[0].id).toBeGreaterThan(Math.max(...game.specificGameState.fighters.map(fighter => fighter.id)));
+        const field = battlefieldById(game.specificGameState.map);
+        expect(fresh[0].square).toBe(readyMadeMuster(field, 2, REALM.readyMade[3])[0].square);
+
+        game.specificGameState.fighters.push(...field.deployments[2].map((square, index) => ({
+            ...original[1], id: 10_000 + index, owner: "a", square,
+        })));
+        expect(waveOf(game.specificGameState, owner)).toHaveLength(0);
+    });
+
+    it("continues after the enemy is wiped out, lands round four's wave, and wins by surviving the last round", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
+        game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+        game.specificGameState.roundsPlayed = 2;
+        await play(game, endTurnBy("a"));
+        await play(game, endTurnBy("b"));
+        expect(game.complete).toBe(false);
+        expect(game.specificGameState.roundsPlayed).toBe(3);
+        expect(game.specificGameState.fighters.some(fighter => isWarband(fighter.owner) && fighter.hp > 0)).toBe(true);
+        expect(game.gameState.history.some(entry => entry.text.includes("fresh wave"))).toBe(true);
+
+        game.specificGameState.roundsPlayed = battleRounds(2);
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game).toMatchObject({ endReason: "teamwin", endDetail: "held out for all 15 rounds" });
+    });
+
+    it("ends when the final wave has been defeated", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
+        game.specificGameState.roundsPlayed = 12;
+        game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game.endReason).toBe("teamwin");
+    });
+
+    it("loses immediately when the whole team is down", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        await musterAll(game);
+        game.specificGameState.fighters.forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
+        expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
+        expect(game).toMatchObject({ endReason: "teamloss", endDetail: "overrun in round 1" });
     });
 });
 

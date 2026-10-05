@@ -18,7 +18,7 @@ export const meta: GameMeta = {
     // with no version at all, so none of them can be replayed faithfully.
     // Refusing them leaves a playtest battle without a recap rather than with
     // a wrong one (docs/command-versions.md).
-    commandVersion: 2,
+    commandVersion: 3,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

@@ -20,6 +20,7 @@ import { COOP_PLAYERS, FACTION_IDS, FACTIONS, RANDOM_ENEMY } from "@/games/Realm
 
 type Mode = 'freeForAll' | 'coop';
 type Enemy = RealmArenaCoopInvite['enemy'];
+type Mission = NonNullable<RealmArenaCoopInvite['mission']> | 'holdCentre';
 
 // Co-op is for a team its battlefields are built for (§29.2), so the party's
 // limits are its own while it's chosen.
@@ -46,6 +47,7 @@ function NewGameRealmArenaForm() {
   const [fog, setFog] = useState(true);
   const [mode, setMode] = useState<Mode>('freeForAll');
   const [enemy, setEnemy] = useState<Enemy>(FACTION_IDS[0]);
+  const [mission, setMission] = useState<Mission>('holdCentre');
   const coop = mode === 'coop';
   const gameMeta = GAME_META.realmarena;
   const partyMeta = coop ? COOP_PARTY : gameMeta;
@@ -62,7 +64,7 @@ function NewGameRealmArenaForm() {
       userList: players,
       turnTimer,
       fog,
-      ...(coop ? { coop: { enemy } } : {}),
+      ...(coop ? { coop: { enemy, ...(mission === 'holdOut' ? { mission } : {}) } } : {}),
     };
     await submit(data);
   };
@@ -88,6 +90,17 @@ function NewGameRealmArenaForm() {
           section appears the day a second is added. */}
       {coop && FACTION_IDS.length > 1 && (
         <OptionChoiceSection label="Enemy" value={enemy} onChange={setEnemy} choices={ENEMY_CHOICES} />
+      )}
+      {coop && (
+        <OptionChoiceSection
+          label="Mission"
+          value={mission}
+          onChange={setMission}
+          choices={[
+            { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
+            { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
+          ]}
+        />
       )}
       <UserInviteList userList={userList} setItem={setItem} />
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />

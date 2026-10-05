@@ -283,6 +283,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         : standingLine(fighters.filter(fighter => fighter.owner === userId), fogged && userId !== myUserId);
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
+    const nextWave = gs?.mission === 'holdOut' ? gs.round + (3 - ((gs.round - 1) % 3)) : undefined;
     // In co-op the strip is the team's total against the enemy's (§29.9), each
     // player's share under the team's, and how each one stands once it's opened.
     const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? [
@@ -299,7 +300,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             id: ENEMY_SIDE,
             name: capitalise(enemyName),
             color: ENEMY_COLOUR,
-            sub: mustering ? 'musters last' : standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged),
+            sub: mustering ? 'musters last' : gs.mission === 'holdOut'
+                ? `${standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged)} · ${nextWave && nextWave <= gs.battleRounds ? `next wave ${nextWave}` : 'final wave landed'}`
+                : standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged),
             score: sideScore(battle, scores, ENEMY_SIDE),
         },
     ] : seatOrder.map(userId => ({

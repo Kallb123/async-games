@@ -29,7 +29,7 @@ export type RealmArenaTestGame = IRealmArenaGameData & IGameDataDocument;
  * `fog` says (§27), and in co-op against `enemy`'s warbands if it's given (§29)
  * — drawn at `random`, and so hidden until it's seen, if that says (§29.3).
  */
-export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false, enemy?: FactionId, random = false): RealmArenaTestGame {
+export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot = {}, fog = false, enemy?: FactionId, random = false, mission?: "holdOut"): RealmArenaTestGame {
     return {
         gameId: "g",
         gameType: new RealmArenaGameType(),
@@ -37,7 +37,7 @@ export function makeGame(turnOrder: string[] = PLAYERS, mastery: MasterySnapshot
         userIdList: [...turnOrder],
         turnTimer: "unlimited",
         gameState: { turnOrder: [...turnOrder], history: [], commandHistory: [] },
-        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog, enemy, random),
+        specificGameState: buildInitialRealmArenaState(turnOrder, mastery, fog, enemy, random, mission),
         complete: false,
         winner: "",
         markModified: () => {},

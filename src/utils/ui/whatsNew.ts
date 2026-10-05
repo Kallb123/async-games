@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: Hold Out",
+                detail: "Choose a new co-op mission and survive repeated enemy waves: fallen warband fighters return every third round, and your team wins by keeping anyone standing to the end.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena: points for an assist",
                 detail: "In a free-for-all, wounding a character is worth it even when somebody else finishes it off: whoever downs it still scores the knock-out, and every other player who hurt it since it last stood up scores half that, rounded up.",
                 game: "realmarena",
@@ -120,11 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Dice Cities: play on the Outer Rim",
                 detail: "Pick the new Outer Rim theme when you set up a game and your city becomes a frontier outpost on a galactic trade lane: Moisture Farms and Spice Mines, cantinas that charge the pilot, credits from the Exchange, and a Docking Bay and Sensor Array to finish. Same rules and numbers as ever — only the names and the card art change.",
                 game: "dicecities",
-            },
-            {
-                title: "Kingdom Builder's world map has new badges",
-                detail: "Towns, barbarian camps, open sites, forests, quarries and mines each wear a round painted badge. Every town's ring is its owner's colour, your own towns show their town centre level, and each barbarian camp shows how tough it is, from I to III.",
-                game: "kingdombuilder",
             },
         ],
     },
