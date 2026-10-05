@@ -389,6 +389,9 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             // The enemy is written once, as the battle is created; the rotation
             // moves on with every enemy turn (§29.4).
             coop: Schema.Types.Mixed,
+            // Written once, as the battle is created (§30.5). Without this
+            // path the save dropped it, and every battle mustered at normal.
+            size: { type: String, set: battleSizeOf },
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,

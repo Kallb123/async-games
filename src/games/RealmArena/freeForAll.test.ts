@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { canDropPlayer, PlayerDropped } from "@/utils/games/playerDropout";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { CHARACTERS, musterBudget, readyMadeSquad, REALM } from "./characters";
-import { battleSizeOf, gameStateToModel, RealmArenaInvitationModel, type IRealmArenaGameData } from "./RealmArenaModels";
+import { battleSizeOf, gameStateToModel, RealmArenaGameDataModel, RealmArenaInvitationModel, type IRealmArenaGameData } from "./RealmArenaModels";
 import { ACTION_POINTS, BATTLE_ROUNDS, isStanding, type MusterPick } from "./rules";
 import {
     cmd, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
@@ -272,6 +272,17 @@ describe("a battle's size (§30.5)", () => {
         const plain = await createGame.call(normal, normal, [...THREE]);
         expect(plain.specificGameState).not.toHaveProperty("size");
         expect(gameStateToModel(plain.specificGameState, "a", null)).not.toHaveProperty("size");
+    });
+
+    it("survives the battle being saved, with everything else the battle starts with", async () => {
+        const large = { turnTimer: 0, size: "large", fog: true };
+        const game = await createGame.call(large, large, [...THREE]);
+        // What the database would hand back: the schema keeps only the paths
+        // it names. (`minimize` aside, which drops an empty mastery snapshot.)
+        const saved = new RealmArenaGameDataModel(game).toObject({ minimize: false }).specificGameState;
+        expect(saved.size).toBe("large");
+        expect(Object.keys(saved)).toEqual(expect.arrayContaining(Object.keys(game.specificGameState)));
+        expect(gameStateToModel(saved, "a", null).budget).toBe(musterBudget(3, false, "large"));
     });
 
     it.each([["small", [80, 60, 50]], ["large", [120, 100, 90]]] as const)("musters every party's %s budget with its ready-made squad", async (size, budgets) => {
