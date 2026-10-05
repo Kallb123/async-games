@@ -5430,7 +5430,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-smoke { fill: color-mix(in oklch, var(--ag-ink-softer) 35%, transparent); pointer-events: none; }
 .ag-ra-smoke-puff { opacity: 0.6; pointer-events: none; }
 .ag-ra-blast { fill: color-mix(in oklch, var(--ag-danger) 30%, transparent); stroke: var(--ag-danger); stroke-width: 0.5; pointer-events: none; }
-.ag-ra-roll { margin-bottom: 8px; }
+/* The blocks under the board stack at one gap (`ag-stack`): a hint or a stat
+   row in one brings no margin or padding of its own, so the space between any
+   two of them — buttons, odds, a list — is the same. */
+.ag-game--realmarena .ag-stack > :is(.ag-hint, .ag-stat-row) { margin: 0; padding: 0; }
 /* A character's AP left on its owner's turn, beside its figure: lit for each
    one unspent, hollow for each spent. The units strip below draws the same. */
 .ag-ra-ap { fill: rgba(0, 0, 0, 0.35); stroke: var(--ag-on-dark); stroke-width: 0.25; pointer-events: none; }

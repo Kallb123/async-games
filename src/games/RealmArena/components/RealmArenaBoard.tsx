@@ -22,9 +22,11 @@ const SLAB_DEPTH = 3;
 /**
  * The least the board's height may be as a fraction of its width: an
  * isometric map is twice as wide as it's tall, which fitted to a phone would
- * leave a strip of a frame to pan around in once zoomed.
+ * leave a strip of a frame to pan around in once zoomed. Raised from 0.62 for
+ * a little more battlefield on a phone; much more and the controls under it
+ * fall off the first screen.
  */
-const MIN_ASPECT = 0.62;
+const MIN_ASPECT = 0.7;
 
 /**
  * A figure stands on its square as its character's art (`CHARACTER_ART`),

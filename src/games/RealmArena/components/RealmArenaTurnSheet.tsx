@@ -84,28 +84,47 @@ interface RealmArenaTurnSheetProps {
     draft: TurnDraft;
     battle: BattleState;
     player: string;
-    nameFor: (userId: string) => string;
     /** The `target` of the command in flight, so only what was tapped spins. */
     pendingTarget: string | null;
+}
+
+interface RealmArenaAimProps extends RealmArenaTurnSheetProps {
+    nameFor: (userId: string) => string;
     /** Brings the board's view to a character picked from the list of targets. */
     onFocus: (fighter: Fighter) => void;
 }
 
 /**
- * What the selected character can do, on its owner's turn
- * (docs/games/realm-arena.md §17.3 PR 7): whatever is lined up on the board,
- * with its cost and what it would set off or the odds, and a `BuildRow` for
- * each action it has. A row that needs aiming arms the board; hunkering down,
- * going on watch and a shield wall go the moment they're tapped. While one is
- * armed for a character, everyone it could be aimed at is listed above the
- * actions, and picking one there lines it up and brings the board to them.
+ * What's lined up for the selected character, on its owner's turn, at the top
+ * of the controls under the board (docs/games/realm-arena.md §17.3 PR 7): its
+ * Cancel and send buttons first, then its cost and what it would set off or
+ * the odds — or, until something is, what to tap — and everyone the armed
+ * action could be aimed at. Picking one there lines it up and brings the board
+ * to them. It sits above the squad and the actions so that aiming never needs
+ * a scroll past them.
  */
-export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pendingTarget, onFocus }: RealmArenaTurnSheetProps) {
+export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, onFocus }: RealmArenaAimProps) {
+    const busy = pendingTarget !== null;
+    const name = (id: number) => whoseName(battle.fighters, id, player, nameFor);
+    return (
+        <>
+            <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
+            <TargetList draft={draft} name={name} disabled={busy} onFocus={onFocus} />
+        </>
+    );
+}
+
+/**
+ * What the selected character can do, on its owner's turn (§17.3 PR 7): a
+ * `BuildRow` for each action it has. A row that needs aiming arms the board,
+ * and `RealmArenaAim` shows what that lines up; hunkering down, going on watch
+ * and a shield wall go the moment they're tapped.
+ */
+export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarget }: RealmArenaTurnSheetProps) {
     const { fighter, aim } = draft;
     const character = CHARACTERS[fighter.character];
     const weapon = weaponOf(fighter);
     const busy = pendingTarget !== null;
-    const name = (id: number) => whoseName(battle.fighters, id, player, nameFor);
     const needs = (ap: number) => fighter.ap < ap ? `Needs ${ap} AP` : undefined;
     const reachable = (kind: TargetKind, least = 1) =>
         targetsOf(battle, player, fighter, kind).length >= least ? undefined : 'Nobody in reach';
@@ -142,29 +161,25 @@ export default function RealmArenaTurnSheet({ draft, battle, player, nameFor, pe
     };
 
     return (
-        <>
-            <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
-            <TargetList draft={draft} name={name} disabled={busy} onFocus={onFocus} />
-            <div className="ag-build-list">
-                {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
-                {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
-                    needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
-                {abilitiesOf(fighter).map(id => {
-                    const ability = ABILITIES[id];
-                    const { icon, tag } = ABILITY_ROW[id];
-                    const per = id === 'sneak' ? ` per ${character.movement} squares` : '';
-                    const wait = abilityWait(fighter, id) ?? needs(ability.ap) ?? blocked(id);
-                    return row(id, icon, ability.name, `${ability.ap} AP${per} · ${ability.description}`, wait, tag);
-                })}
-                {/* Its one item (§21.1): thrown at a square, or a draught handed to whoever needs it. */}
-                {fighter.item && item && row(thrown ? 'throw' : 'draught', <SpriteImage sprite={ITEM_ART[fighter.item]} />, item.name,
-                    `${item.ap} AP · ${item.description}`, needs(item.ap) ?? (thrown ? undefined : reachable('draught')), thrown ? 'Throw' : 'Aim')}
-                {row('hunker', '⛨', 'Hunker down', `${HUNKER_AP} AP · doubles its cover against shots until your next turn, and ends its turn`, needs(HUNKER_AP), 'Hunker')}
-                {row('watch', '👁', weapon.kind === 'ranged' ? 'Go on overwatch' : 'Go on guard',
-                    `All ${fighter.ap} AP left · ${pluralize(Math.floor(fighter.ap / REACTION_COST), 'reaction')} before your next turn`,
-                    needs(REACTION_COST), 'Watch')}
-            </div>
-        </>
+        <div className="ag-build-list">
+            {row('move', '👣', 'Move', `1 AP per ${character.movement} squares`, needs(1), 'Move')}
+            {row('attack', weaponMark(fighter.character, fighter.option), weapon.name, `${ATTACK_AP} AP · ${weaponLine(weapon)}`,
+                needs(ATTACK_AP) ?? reachable('attack'), 'Attack')}
+            {abilitiesOf(fighter).map(id => {
+                const ability = ABILITIES[id];
+                const { icon, tag } = ABILITY_ROW[id];
+                const per = id === 'sneak' ? ` per ${character.movement} squares` : '';
+                const wait = abilityWait(fighter, id) ?? needs(ability.ap) ?? blocked(id);
+                return row(id, icon, ability.name, `${ability.ap} AP${per} · ${ability.description}`, wait, tag);
+            })}
+            {/* Its one item (§21.1): thrown at a square, or a draught handed to whoever needs it. */}
+            {fighter.item && item && row(thrown ? 'throw' : 'draught', <SpriteImage sprite={ITEM_ART[fighter.item]} />, item.name,
+                `${item.ap} AP · ${item.description}`, needs(item.ap) ?? (thrown ? undefined : reachable('draught')), thrown ? 'Throw' : 'Aim')}
+            {row('hunker', '⛨', 'Hunker down', `${HUNKER_AP} AP · doubles its cover against shots until your next turn, and ends its turn`, needs(HUNKER_AP), 'Hunker')}
+            {row('watch', '👁', weapon.kind === 'ranged' ? 'Go on overwatch' : 'Go on guard',
+                `All ${fighter.ap} AP left · ${pluralize(Math.floor(fighter.ap / REACTION_COST), 'reaction')} before your next turn`,
+                needs(REACTION_COST), 'Watch')}
+        </div>
     );
 }
 
@@ -218,8 +233,8 @@ interface LinedUpProps {
 }
 
 /**
- * What's lined up on the board, before it's sent: a move's AP and every
- * watcher it would set off, an attack's chance to hit, graze and damage, or
+ * What's lined up on the board, before it's sent: Cancel and the send button,
+ * then a move's AP and every watcher it would set off, an attack's chance to hit, graze and damage, or
  * who a fireball would catch and the cover it would blast (§17.3 PR 7, §22). Until something is, what to tap.
  */
 function LinedUp({ draft, battle, name, pending, disabled }: LinedUpProps) {
@@ -234,9 +249,6 @@ function LinedUp({ draft, battle, name, pending, disabled }: LinedUpProps) {
 
     return (
         <>
-            {refusal
-                ? <p className="ag-hint">{target ? `${capitalise(name(target.id))}: ` : ''}{refusal}.</p>
-                : <Detail draft={draft} battle={battle} name={name} ap={ap ?? 0} target={target} />}
             <div className="ag-action-grid">
                 <button type="button" className="ag-btn ag-btn--light" disabled={disabled} onClick={draft.clear}>
                     Cancel
@@ -251,6 +263,9 @@ function LinedUp({ draft, battle, name, pending, disabled }: LinedUpProps) {
                     {SEND_LABEL[aim]}{ap !== undefined ? ` · ${ap} AP` : ''}
                 </ActionButton>
             </div>
+            {refusal
+                ? <p className="ag-hint">{target ? `${capitalise(name(target.id))}: ` : ''}{refusal}.</p>
+                : <Detail draft={draft} battle={battle} name={name} ap={ap ?? 0} target={target} />}
         </>
     );
 }

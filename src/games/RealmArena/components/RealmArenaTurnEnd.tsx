@@ -3,18 +3,12 @@ import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import OptionSection from '@/components/ui/OptionSection';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
-import Section from '@/components/ui/Section';
 import UndoButton from '@/components/ui/UndoButton';
 import { isStanding, REACTION_COST, weaponOf, type Fighter } from '@/games/RealmArena/rules';
 import { fighterName } from '@/games/RealmArena/ui';
 import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 interface RealmArenaTurnEndProps {
-    fighters: readonly Fighter[];
-    player: string;
-    /** Ids of the player's characters to keep still rather than go on watch. */
-    keepStill: readonly number[];
-    onKeepStill: (keepStill: number[]) => void;
     onEndTurn: () => void;
     /** The player's last action can still be taken back (docs/undo.md). */
     canUndo: boolean;
@@ -28,14 +22,13 @@ interface RealmArenaTurnEndProps {
 }
 
 /**
- * The end of a battle turn (docs/games/realm-arena.md §17.3 PR 7): a switch for
- * each character with AP enough to go on watch — on, as a timed-out turn would
- * leave it (§17.2), or off to keep it still — and End turn, with Undo beside it
- * while the last action can still be taken back.
+ * End turn, with Undo beside it while the last action can still be taken back
+ * (docs/games/realm-arena.md §17.3 PR 7): the first row under the board, so a
+ * turn ends without a scroll past the squad. Who goes on watch as it does is
+ * `RealmArenaWatchSwitches`, further down.
  */
-export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepStill, onEndTurn, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
-    const watchers = fighters.filter(fighter => fighter.owner === player && isStanding(fighter) && fighter.ap >= REACTION_COST);
-    const endTurn = (
+export default function RealmArenaTurnEnd({ onEndTurn, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
+    return (
         <div className="ag-action-grid" data-tour="ra-turn-end">
             {canUndo && <UndoButton pending={undoPending} disabled={disabled} onClick={onUndo} />}
             <ActionButton className="ag-btn ag-btn--primary" pending={pending} pendingLabel="Ending turn…" disabled={disabled} onClick={onEndTurn}>
@@ -43,18 +36,29 @@ export default function RealmArenaTurnEnd({ fighters, player, keepStill, onKeepS
             </ActionButton>
         </div>
     );
-    if (watchers.length === 0) {
-        return <Section label="End your turn">{endTurn}</Section>;
-    }
+}
 
-    const footer = (
-        <>
-            <p className="ag-hint">Anyone with {REACTION_COST} AP or more left goes on watch when the turn ends, unless you keep them still.</p>
-            {endTurn}
-        </>
-    );
+interface RealmArenaWatchSwitchesProps {
+    fighters: readonly Fighter[];
+    player: string;
+    /** Ids of the player's characters to keep still rather than go on watch. */
+    keepStill: readonly number[];
+    onKeepStill: (keepStill: number[]) => void;
+    /** Something is in flight. */
+    disabled: boolean;
+}
+
+/**
+ * Who goes on watch when the turn ends: a switch for each character with AP
+ * enough to — on, as a timed-out turn would leave it (§17.2), or off to keep
+ * it still. Nothing at all while nobody has the AP.
+ */
+export function RealmArenaWatchSwitches({ fighters, player, keepStill, onKeepStill, disabled }: RealmArenaWatchSwitchesProps) {
+    const watchers = fighters.filter(fighter => fighter.owner === player && isStanding(fighter) && fighter.ap >= REACTION_COST);
+    if (watchers.length === 0) return null;
+    const footer = <p className="ag-hint">Anyone with {REACTION_COST} AP or more left goes on watch when the turn ends, unless you keep them still.</p>;
     return (
-        <OptionSection label="End your turn" footer={footer}>
+        <OptionSection label="When your turn ends" footer={footer}>
             {watchers.map(fighter => {
                 const still = keepStill.includes(fighter.id);
                 const stance = weaponOf(fighter).kind === 'ranged' ? 'overwatch' : 'guard';
