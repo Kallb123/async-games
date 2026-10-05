@@ -3,9 +3,8 @@ import type { RealmArenaMapId } from "./maps";
 import type { Fighter, FogGhost, MusterPick, ToldEvent } from "./rules";
 import type { MasterySnapshot } from "./mastery";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import type { RealmArenaPhase } from "./RealmArenaModels";
+import type { RealmArenaPhase, StoredBattleSize, StoredDifficulty } from "./RealmArenaModels";
 import type { FactionId } from "./characters";
-import type { StoredBattleSize, StoredDifficulty } from "./RealmArenaModels";
 
 // docs/games/realm-arena.md §17.2's state, on the wire. Once the battle has
 // begun every field of it goes to every player — unless the host chose fog of

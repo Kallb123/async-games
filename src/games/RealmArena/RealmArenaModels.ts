@@ -241,7 +241,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), {
         fog: this.fog === true,
         size: battleSizeOf(this.size),
-        ...(coop && enemy ? { coop: { enemy, random: coop.enemy === RANDOM_ENEMY, mission: coop.mission, difficulty: coop.difficulty } } : {}),
+        ...(coop && enemy ? { coop: { ...coop, enemy, ...(coop.enemy === RANDOM_ENEMY ? { random: true as const } : {}) } } : {}),
     });
 
     const field = battlefieldById(specificGameState.map);
@@ -290,6 +290,9 @@ export var RealmArenaInvitationModel =
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
+/** What the host chose for a co-op battle: its state without what the battle itself moves on. */
+type CoopSettings = Omit<IRealmArenaCoop, "nextWarband" | "enemySeen">;
+
 /** What the host chose for a battle, as it's created and as a replay rebuilds it. Every one absent is the default. */
 export interface RealmArenaSettings {
     /** In fog of war (§27). */
@@ -297,7 +300,7 @@ export interface RealmArenaSettings {
     /** The battle's size (§30.5). */
     size?: StoredBattleSize;
     /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3) and the difficulty (§30.5). */
-    coop?: { enemy: FactionId, random?: boolean, mission?: "holdOut", difficulty?: StoredDifficulty };
+    coop?: CoopSettings;
 }
 
 /**
@@ -340,18 +343,16 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
     };
 }
 
-function coopState({ enemy, random, mission, difficulty }: NonNullable<RealmArenaSettings["coop"]>): IRealmArenaCoop {
-    return { enemy, nextWarband: 0, ...(random ? { random: true } : {}), ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}) };
+/** A co-op battle's state as it starts: only the settings that were chosen, so one without them looks as every battle before it did. */
+function coopState({ enemy, random, mission, difficulty }: CoopSettings): IRealmArenaCoop {
+    return { enemy, nextWarband: 0, ...(random ? { random } : {}), ...(mission ? { mission } : {}), ...(difficulty ? { difficulty } : {}) };
 }
 
 /** What a battle's settings are, read back off its state: what a replay rebuilds it from. */
 export function settingsOf(gs: IRealmArenaSpecificGameState): RealmArenaSettings {
-    const { coop } = gs;
-    return {
-        fog: gs.fog === true,
-        size: gs.size,
-        ...(coop ? { coop: { enemy: coop.enemy, random: coop.random === true, mission: coop.mission, difficulty: coop.difficulty } } : {}),
-    };
+    if (!gs.coop) return { fog: gs.fog === true, size: gs.size };
+    const { nextWarband: _turn, enemySeen: _seen, ...coop } = gs.coop;
+    return { fog: gs.fog === true, size: gs.size, coop };
 }
 
 // ─── Game data interfaces ───────────────────────────────────────────────────

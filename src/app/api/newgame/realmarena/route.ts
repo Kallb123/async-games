@@ -30,8 +30,9 @@ export async function POST(request: NextRequest) {
 
   // Co-op against the computer (§29.8), when the request asks for it: an
   // enemy that is a faction or Random, a known mission and difficulty, and a
-  // team of two or three, which its battlefields are built for. Anything else it sent for `coop` is refused
-  // rather than read as a free-for-all the host didn't choose.
+  // team of two or three, which its battlefields are built for. Anything else
+  // it sent for `coop` is refused rather than read as a free-for-all the host
+  // didn't choose.
   const coop = coopInviteOf(body.coop);
   if (body.coop != null && !coop) {
     return NextResponse.json({}, { status: 400, statusText: "Unknown co-op setting" });

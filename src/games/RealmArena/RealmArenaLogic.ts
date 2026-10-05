@@ -748,13 +748,17 @@ export class RealmArenaGameType implements IGameType {
  */
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
-    const onDifficulty = coop.difficulty ? `, on ${DIFFICULTY_NAMES[coop.difficulty]}` : "";
-    if (coop.mission === "holdOut") {
+    const { won, detail } = coop.mission === "holdOut"
         // Only ever asked once the battle is over, which in Hold Out is when it has an ending.
-        const { won, detail } = holdOutEnding(gs)!;
-        endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
-        return;
-    }
+        ? holdOutEnding(gs)!
+        : holdTheCentreEnding(data, battle, coop);
+    const onDifficulty = coop.difficulty ? `, on ${DIFFICULTY_NAMES[coop.difficulty]}` : "";
+    endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
+}
+
+/** How a battle of Hold the Centre has ended (§29.5), once it's over, with its final line written. */
+function holdTheCentreEnding(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): { won: boolean; detail: string } {
+    const gs = data.specificGameState;
     const warbands = warbandsFor(gs.seats);
     const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
     const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
@@ -766,7 +770,7 @@ function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmA
     const detail = team !== enemy ? `${pluralize(team, "point")} to ${enemy}`
         : `${pluralize(team, "point")} each, ${standingPoints(battle, TEAM_SIDE) > standingPoints(battle, ENEMY_SIDE)
             ? "with more of the team left standing" : "and the enemy held the field"}`;
-    endAsTeam(data, won ? "teamwin" : "teamloss", `The team ${won ? "wins" : "loses"} the battle`, `${detail}${onDifficulty}`);
+    return { won, detail };
 }
 
 /** Whether the battle is over (§5.1). Hold Out goes on through an enemy wiped out between waves (§30.3). */

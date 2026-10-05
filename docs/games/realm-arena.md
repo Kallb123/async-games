@@ -2644,7 +2644,9 @@ sure it is.
 - `musterSize(players, coop)` is the party size a squad musters for — three
   in co-op — and the budget, the ready-made squads (the warbands', a
   timed-out player's, the muster screen's starting squad) and the response's
-  `budget` all read it.
+  `budget` all read it. (Since §30.5 they read `budgetOf` and
+  `warbandBudgetOf`, which move it by the battle's size and the difficulty,
+  and `readyMadeSquad`, keyed by points.)
 - `battleFrom` takes the seats and whether it's co-op, and builds the two
   sides itself: every seat on one, and a warband for each seat (`ai:k`,
   `warbandOwner`) on the other. The response carries `coop` as a flag, and
@@ -2915,14 +2917,15 @@ has played yet (§30.1).
 | 2 | Remembering where an enemy was last seen, in fog (§30.2) | — |
 | 3 | *Hold Out*, a wave-survival mission for co-op (§30.3) | 2 |
 | 4 | Realm Arena's first achievements, co-op's among them (§30.4) | 3 |
-| 5 | Difficulty (§30.5) | 3, 4 |
+| 5 | Difficulty and battle size (§30.5) | 3, 4 |
 | 6 | Solo against the computer (§30.6) | 5 |
 
 PR 1 touches no Realm Arena code and can be built alongside any of the
 others. The rest go in order: the waves hunt the team by where it was last
 seen (PR 2), the achievements reward holding out (PR 3), difficulty adds one
-achievement and sizes the waves (PRs 3–4), and solo is offered with every
-choice the others add already on its setup screen.
+achievement and sizes the waves (PRs 3–4) — battle size comes with it — and
+solo is offered with every choice the others add already on its setup
+screen.
 
 ### 30.1 PR 1: Banned Islet, Outbreak and Fires Out on the shared ending
 
@@ -3162,10 +3165,12 @@ The titles may change; the ids never do (§11). PR 5 adds a sixth.
   Realm Arena: the random enemy's test (§29.11) holds the faction off every
   viewer's response, the null viewer's included, but doesn't pin its keys.
 
-### 30.5 PR 5: difficulty
+### 30.5 PR 5: difficulty and battle size
 
-§29.12 named the lever: the warbands' size. The existing ready-made squads
-already come in three sizes (§13.6), so difficulty needs no new squad:
+*As planned, before battle size joined it; what was built is under* What PR
+5 settled *below, which wins where the two differ.* §29.12 named the lever:
+the warbands' size. The existing ready-made squads already come in three
+sizes (§13.6), so difficulty needs no new squad:
 
 | Difficulty | Each warband | Points |
 |---|---|---:|
@@ -3192,7 +3197,7 @@ already come in three sizes (§13.6), so difficulty needs no new squad:
   Islet's and Fires Out's are; the setup line and the result name it.
 - **One achievement**: `realmarena.against-the-odds`, *Against the Odds*, win
   a battle against the computer on Hard. `difficulty` joins the null view's
-  pin.
+  pin (and, as built, `size`).
 - **Tests.** Each difficulty musters its squad for every warband and every
   wave; an old battle with no `difficulty` is Normal; the setup route refuses
   anything else; the whole-battle tests run at all three.
