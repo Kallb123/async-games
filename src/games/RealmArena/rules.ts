@@ -1245,6 +1245,11 @@ export function standingPoints(state: BattleState, side: string): number {
     return squadPoints(state.fighters.filter(fighter => sideOf(state, fighter.owner) === side && isStanding(fighter)).map(fighter => fighter.character));
 }
 
+/** A side's score: its owners' added together (§29.6). In a free-for-all, a player's own. */
+export function sideScore(state: Pick<BattleState, "sides">, scores: Readonly<Record<string, number>>, side: string): number {
+    return Object.entries(scores).reduce((total, [owner, points]) => total + (sideOf(state, owner) === side ? points : 0), 0);
+}
+
 /**
  * The players from first to last, ranked by side (§29.6). The side with the
  * highest score — its players' added together — wins; level scores go to the

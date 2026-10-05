@@ -31,6 +31,7 @@ import {
     readyMadeMuster,
     ROLL_SIDES,
     squadSight,
+    sideScore,
     squadsStanding,
     standingPoints,
     standings,
@@ -487,11 +488,10 @@ export class RealmArenaGameType implements IGameType {
         const data = gameData as IRealmArenaGameData;
         // An End turn's parts are the recap's (§29.9), and the enemy's holds
         // its actions whole: the board plays the turn from `events`.
-        const { enemy: _enemy, started: _started, ...told } = outcome as Partial<IRealmArenaOutcome>;
-        const events = told.events;
+        const { recap: _recap, ...told } = outcome as IRealmArenaOutcome;
         const battle = battleOf(data.specificGameState, data.complete);
-        if (!battle.fog || !Array.isArray(events)) return told as ICommandOutcome;
-        return { ...told, events: toldTo(events, battle, viewerId) } as IRealmArenaOutcome;
+        if (!battle.fog || !Array.isArray(told.events)) return told;
+        return { ...told, events: toldTo(told.events, battle, viewerId) } as IRealmArenaOutcome;
     }
 
     /**
@@ -555,8 +555,7 @@ export class RealmArenaGameType implements IGameType {
 function endInCoop(data: IRealmArenaGameData, battle: BattleState, coop: IRealmArenaCoop): void {
     const gs = data.specificGameState;
     const warbands = gs.seats.map((_, k) => warbandOwner(k));
-    const total = (owners: readonly string[]) => owners.reduce((sum, owner) => sum + (gs.scores[owner] ?? 0), 0);
-    const [team, enemy] = [total(gs.seats), total(warbands)];
+    const [team, enemy] = [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)];
     const won = !isWarband(standings(battle, [...gs.seats, ...warbands], gs.scores)[0]);
     const foe = factionById(coop.enemy).enemyName;
     data.gameState.history.unshift({
@@ -638,14 +637,13 @@ export class RealmArenaMuster implements IGameCommand {
 export interface IRealmArenaOutcome extends ICommandOutcome {
     events: BattleEvent[];
     /**
-     * In co-op, the warband's turn an End turn held (§29.4), step by step, for
-     * the recap to give a row each (§29.9). Its events are in `events` too.
+     * An End turn's parts, for the recap's rows (§29.9): in co-op the
+     * warband's turn it held (§29.4), step by step, and what happened as the
+     * next turn began — burning (§20.2). Their events are in `events` too.
      * Never sent: `outcomeFor` leaves it out of a command's own response, and
      * a review reads only `events`.
      */
-    enemy?: EnemyTurn;
-    /** In an End turn, what happened as the next turn began — burning (§20.2) — for the recap's row of it. Never sent, as `enemy` isn't. */
-    started?: BattleEvent[];
+    recap?: { enemy?: EnemyTurn; started: BattleEvent[] };
 }
 
 /** One of a warband's actions, as it was checked, and what it did. */
@@ -670,6 +668,9 @@ export interface EnemyTurn {
 
 /** Everything that happened in a warband's turn, in order. */
 export const enemyEvents = (turn: EnemyTurn): BattleEvent[] => [...turn.started, ...turn.steps.flatMap(step => step.events), ...turn.ended ?? []];
+
+/** How many lines of the log a warband's turn wrote: one for its burning, if any, one an action, and one for its End turn. */
+export const enemyLineCount = (turn: EnemyTurn): number => (turn.started.length > 0 ? 1 : 0) + turn.steps.length + (turn.ended ? 1 : 0);
 
 const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     move: "moved",
@@ -923,9 +924,12 @@ export class RealmArenaEndTurn implements IGameCommand {
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
         markDirty(gameData);
-        const outcome: IRealmArenaOutcome = { validMove: true, turnOver: true, events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started], started };
-        if (enemy) outcome.enemy = enemy;
-        return outcome;
+        return {
+            validMove: true,
+            turnOver: true,
+            events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
+            recap: { ...enemy ? { enemy } : {}, started },
+        } as IRealmArenaOutcome;
     }
 }
 

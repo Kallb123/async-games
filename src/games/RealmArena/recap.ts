@@ -29,13 +29,12 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IHistoryEntry } from "@/utils/games/history";
-import { pluralize } from "@/utils/ui/text";
+import { capitalise, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { UNKNOWN_ENEMY, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
+import { enemyLineCount, UNKNOWN_ENEMY, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import { factionById, type ItemId } from "./characters";
-import { battleFrom, centreHolders, isStanding, isWarband, sideOf, type BattleEvent, type Fighter } from "./rules";
-import { capitalise } from "@/utils/ui/text";
+import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -208,9 +207,6 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     return rows;
 }
 
-/** How many lines of the log the enemy's turn wrote: one for its burning, if any, one an action, and one for its End turn. */
-const enemyLineCount = (turn: EnemyTurn): number => (turn.started.length > 0 ? 1 : 0) + turn.steps.length + (turn.ended ? 1 : 0);
-
 /** Turns one replayed Realm Arena command into its recap rows. */
 function toEvents(
     prev: ITurnSnapshot,
@@ -250,7 +246,8 @@ function toEvents(
             // Always a row, since it closes the turn's window; only the centre
             // scoring makes it news, so a bare one is `quiet` — and only the
             // sender's own, not a warband's in the enemy's turn after it (§29.4).
-            const { events = [], enemy, started } = outcome as Partial<IRealmArenaOutcome>;
+            const { events = [], recap } = outcome as Partial<IRealmArenaOutcome>;
+            const enemy = recap?.enemy;
             const points = centrePointsOf(events, command.senderId);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not
@@ -276,7 +273,7 @@ function toEvents(
             const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
             const enemyLines = enemy ? enemyLineCount(enemy) : 0;
             if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next)));
-            rows.push(...burningRow(base, `${command.id}:burning`, rest.slice(enemyLines), started ?? events, state(next).fighters));
+            rows.push(...burningRow(base, `${command.id}:burning`, rest.slice(enemyLines), recap?.started ?? events, state(next).fighters));
             break;
         }
         default:
@@ -373,17 +370,16 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const squad = gs.fighters.filter(fighter => fighter.owner === forUserId);
     if (squad.length === 0) return null;
 
+    // Once the battle has begun, every seat has mustered.
+    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });
     // In co-op it's the team's score against the enemy's (§29.5); otherwise
     // the viewer's against the best of anyone else's.
-    const total = (match: (owner: string) => boolean) => Object.entries(gs.scores).reduce((sum, [owner, points]) => sum + (match(owner) ? points : 0), 0);
     const [mine, best] = gs.coop
-        ? [total(owner => !isWarband(owner)), total(isWarband)]
+        ? [sideScore(battle, gs.scores, TEAM_SIDE), sideScore(battle, gs.scores, ENEMY_SIDE)]
         : [gs.scores[forUserId] ?? 0, Math.max(0, ...Object.entries(gs.scores).filter(([userId]) => userId !== forUserId).map(([, score]) => score))];
     const gap = mine - best;
     const score = gap === 0 ? "The scores are level" : `${gs.coop ? "The team is" : "You're"} ${pluralize(Math.abs(gap), "point")} ${gap > 0 ? "ahead" : "behind"}`;
 
-    // Once the battle has begun, every seat has mustered.
-    const battle = battleFrom(battlefieldOf(gs.map, gs.blasted), { ...gs, seats: gs.mustered });
     const holders = centreHolders(battle);
     // In fog of war, nobody seen there isn't nobody there (§27).
     const centre = holders.length === 0 ? (centreInSight(battle, forUserId) ? "the centre is empty" : "you can't see all of the centre")

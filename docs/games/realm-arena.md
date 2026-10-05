@@ -2636,11 +2636,12 @@ sure it is.
   rather than "their Archer", since the kind is the faction. A line written
   before the sighting keeps what it said; the line of the command that saw
   the enemy is the last one not to name it.
-- The End turn's outcome carries the enemy's turn as `enemy`: what burning did
-  as it began, each `{ action, events }`, and what its End turn did — each part
-  one line of the log, which is how the recap pairs them — and `started`, what
-  happened as the next player's turn began. Both are the recap's: `outcomeFor`
-  leaves them out of the sender's response, and a review reads `events` only.
+- The End turn's outcome carries its parts for the recap as `recap`: the
+  enemy's turn — what burning did as it began, each `{ action, events }`, and
+  what its End turn did, each part one line of the log (`enemyLineCount`),
+  which is how the recap pairs them — and `started`, what happened as the next
+  player's turn began. `outcomeFor` leaves it out of the sender's response,
+  and a review reads `events` only.
 - The recap's action row is one builder (`actionRow`), a player's or the
   enemy's. The enemy's rows are the warband's own (`actorId` its owner), keyed
   by the End turn's command, so the feed folds what each of its characters did
@@ -2648,6 +2649,8 @@ sure it is.
   and its burning a row of its own, apart from the next player's. The recap's
   dot is neutral for a row nobody seated did, and a reaction to one pushes
   nobody. The tip measures the team's score against the enemy's.
+- A side's score is `sideScore`, its owners' added together: the ending and
+  the tip read it.
 - The battle record has a column a player and, in co-op, one more for the
   enemy, keyed `enemy` (`ENEMY_SIDE`): the warbands' rows, scores, centre
   points, HP and losses added together. The result's stat groups name it "The

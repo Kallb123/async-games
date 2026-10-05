@@ -4,10 +4,10 @@ import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
 import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef, type GameResultAnyChart, type GameResultBarChart, type GameResultStatGroup, type GameResultTable, type uuidString } from "@/utils/apiModels/GameDataApi";
 import { mongoMap } from "@/utils/games/mongoMaps";
-import { pluralize } from "@/utils/ui/text";
+import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
-import { battleOf, enemyKnown, toldTo } from "./RealmArenaLogic";
+import { battleOf, enemyKnown, toldTo, UNKNOWN_ENEMY } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
@@ -578,7 +578,7 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
     // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
-    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? "The enemy" : userId), lines }));
+    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? capitalise(UNKNOWN_ENEMY) : userId), lines }));
 }
 
 /** The damage each kind of character dealt, a bar each in the muster's order, stacked by whose it was. */

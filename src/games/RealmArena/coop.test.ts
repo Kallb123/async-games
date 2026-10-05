@@ -299,9 +299,9 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         await musterAll(game);
         const { outcome } = await play(game, endTurnBy("a"));
         // All but the End turn's parts, which are the recap's (§29.9).
-        const { enemy, started, ...told } = outcome as IRealmArenaOutcome;
-        expect(enemy?.steps.length).toBeGreaterThan(0);
-        expect(started).toEqual([]);
+        const { recap, ...told } = outcome as IRealmArenaOutcome;
+        expect(recap?.enemy?.steps.length).toBeGreaterThan(0);
+        expect(recap?.started).toEqual([]);
         expect(new RealmArenaGameType().outcomeFor(game, outcome, "a")).toEqual(told);
     });
 });
