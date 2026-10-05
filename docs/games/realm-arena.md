@@ -2025,7 +2025,7 @@ points came, who did the damage and what each squad went through.
 
 ## 29. Co-op against the computer (B8)
 
-*Proposal, reviewed by the caveman (§29.13).* The players fight together, as
+*Built; the proposal was reviewed by the caveman (§29.13).* The players fight together, as
 one team, against a squad the game plays itself. Turns stay individual: each
 player takes their own turn, as now, and the enemy moves straight after each
 one, inside the command that ended it — as the island floods after every turn
@@ -2669,7 +2669,7 @@ sure it is.
   the battle's is left out as a player's is. Burning lit and suffered in one
   step — an End turn now holds the enemy's turn and the next player's start —
   is credited to whoever lit it. The result's stat groups name it "The
-  enemy"; drawing it on the charts and in the table is PR 5's.
+  enemy", and PR 5 draws it on the charts and in the table (§29.9).
 - The co-op tests check each ending and its detail, the enemy named in the
   log, a row per enemy action in the recap and one per character in the feed,
   and the record's enemy column; `hiddenHands.test.ts` steps a battle in fog a

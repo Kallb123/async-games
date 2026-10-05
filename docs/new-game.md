@@ -162,7 +162,8 @@ then bump it and keep the old rule behind `commandVersion(this)` in `Execute`
   in `GAME_GUIDES`. The board screen's `useGameIntro('<game>')` call and its
   `guide`/`intro` props on `GameShell` do the rest — no per-page modal or menu
   row to write. Keep it to five sections, `Goal` first, then `Your turn`,
-  matching the existing guides.
+  matching the existing guides — and a sixth for a mode of play of its own,
+  as Realm Arena's co-op has.
 - `src/games/<Game>/tutorial.ts` *(optional)* — a `GameTutorial`: an ordered
   list of steps spotlighting the game's own board, shown once in place of the
   guide's auto-show. Registered in `GAME_TUTORIALS` in
