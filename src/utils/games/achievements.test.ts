@@ -51,7 +51,7 @@ import { reachableFrom, runtimeImports, SRC_ROOT } from "@/utils/testing/moduleG
  * that is about `canUndo` and replay parity, not about what the table can see,
  * so they're not here until their pin is written.
  */
-const NULL_VIEW_PINNED = ["traintime", "worlddomination", "settlementsandcities", "firesout", "racecars", "dicecities"];
+const NULL_VIEW_PINNED = ["traintime", "worlddomination", "settlementsandcities", "firesout", "racecars", "dicecities", "realmarena"];
 
 const GAMES_ROOT = path.join(SRC_ROOT, "games");
 

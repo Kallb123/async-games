@@ -685,4 +685,30 @@ describe("Realm Arena's random co-op enemy", () => {
         await playRealmArena(drawn, realmArenaMuster("a", realmArenaPicks(drawn, 0)));
         for (const viewer of VIEWERS) expect(realmArenaStateToModel(drawn.specificGameState, viewer, null)).not.toHaveProperty("enemy");
     });
+
+    it("pins the viewerless response used to judge achievements", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true, "holdOut");
+        await realmArenaMusterAll(game);
+
+        const hidden = realmArenaStateToModel(game.specificGameState, null, null);
+        expect(Object.keys(hidden).sort()).toEqual([
+            "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
+            "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
+            "myMuster", "phase", "round", "scores",
+        ]);
+        expect(hidden).not.toHaveProperty("enemy");
+        expect(hidden.fighters).toEqual([]);
+        expect(hidden.ghosts).toEqual([]);
+        expect(hidden.mastery).toEqual({});
+        expect(hidden.myMuster).toBeNull();
+        expect(hidden.canUndo).toBe(false);
+
+        // Match achievements run only after the battle ends. Completion lifts
+        // the fog for the null viewer, revealing the enemy and every fighter.
+        const complete = realmArenaStateToModel(game.specificGameState, null, null, true);
+        expect(Object.keys(complete).sort()).toEqual([...Object.keys(hidden), "enemy"].sort());
+        expect(complete.enemy).toBe("realm");
+        expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
+        expect(complete.ghosts).toEqual([]);
+    });
 });

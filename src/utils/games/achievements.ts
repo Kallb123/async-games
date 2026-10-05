@@ -19,6 +19,7 @@
 import type { IGameStats, MatchOutcome } from "@/utils/mongodb/GameResultData";
 import { achievements as diceCitiesAchievements } from "@/games/DiceCities/achievements";
 import { achievements as raceCarsAchievements } from "@/games/RaceCars/achievements";
+import { achievements as realmArenaAchievements } from "@/games/RealmArena/achievements";
 import { achievements as settlementsAndCitiesAchievements } from "@/games/SettlementsAndCities/achievements";
 
 // ─── The shape of one achievement ────────────────────────────────────────────
@@ -120,6 +121,7 @@ export interface FinishedSeat extends Seat {
 export const GAME_ACHIEVEMENTS: Record<string, GameAchievement<any>[]> = {
     dicecities: diceCitiesAchievements,
     racecars: raceCarsAchievements,
+    realmarena: realmArenaAchievements,
     settlementsandcities: settlementsAndCitiesAchievements,
 };
 
