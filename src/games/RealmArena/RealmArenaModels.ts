@@ -84,6 +84,14 @@ export interface IRealmArenaSpecificGameState {
      */
     fog?: boolean;
     /**
+     * Whether a knock-out also scores an assist for every other enemy who hurt
+     * the fallen (§13.7). Fixed when the battle is created, on in every battle
+     * since assists were, so a battle already being fought keeps the scoring
+     * it began with and a replay scores it the same way; absent on one created
+     * before them.
+     */
+    assists?: boolean;
+    /**
      * Co-op against the computer (§29): the players fight as one team against
      * a warband each, played by the game. Chosen by the host and fixed when
      * the battle is created; absent in a free-for-all, every battle from
@@ -248,12 +256,13 @@ export var RealmArenaInvitationModel =
  * battle was created, in fog of war if the host chose it (§27), and in co-op
  * against `enemy`'s warbands if the host chose that (§29), with the first
  * warband to take the enemy's first turn — kept hidden until it's seen if it
- * was drawn at `random` (§29.3). A pure function of those, all
+ * was drawn at `random` (§29.3), scoring assists unless it was created before
+ * them (§13.7). A pure function of those, all
  * persisted, so replay rebuilds it rather than persisting a snapshot of the
  * state (§17.1, §23.3). Throws for a party the map has no deployment zone for
  * — in co-op, a zone for each player and one for each warband.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false, assists = true): IRealmArenaSpecificGameState {
     const coop = enemy !== undefined;
     const map = mapFor(turnOrder.length, coop);
     const field = battlefieldById(map);
@@ -267,6 +276,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
         ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}) } } : {}),
+        ...(assists ? { assists: true } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -302,6 +312,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             seats: [String],
             // Written once, as the battle is created (§27).
             fog: Boolean,
+            // Written once, as the battle is created (§13.7).
+            assists: Boolean,
             // The enemy is written once, as the battle is created; the rotation
             // moves on with every enemy turn (§29.4).
             coop: Schema.Types.Mixed,
@@ -389,7 +401,10 @@ export function gameStateToModel(
         // fog lifts as the battle ends, the faction with it. Never a view with
         // one of its characters in it and not the faction: that's a sighting.
         ...(gs.coop && (!enemyHidden(gs.coop) || complete || view.fighters.some(fighter => isWarband(fighter.owner))) ? { enemy: gs.coop.enemy } : {}),
-        fighters: view.fighters.map(storedFighter),
+        // Who has hurt each one is the server's, for scoring assists (§13.7):
+        // the board has no use for it, and in fog it would name whose blast
+        // hurt a character the viewer couldn't see being hit.
+        fighters: view.fighters.map(storedFighter).map(({ woundedBy: _woundedBy, ...fighter }) => fighter),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
         mustered: gs.phase === "muster" ? musters.map(muster => muster.owner) : seats,
@@ -481,6 +496,7 @@ export const realmArenaGameResultStatsSchemaDef = {
     // as having none, rather than as a battle in which nobody did anything.
     fighting: { type: [{ _id: false, userId: String, character: String, ...Object.fromEntries(RECORD_KEYS.map(key => [key, Number])) }], default: undefined },
     centrePoints: { type: Schema.Types.Map, of: Number, default: undefined },
+    assistPoints: { type: Schema.Types.Map, of: Number, default: undefined },
     pointsPerRound: [{ type: Schema.Types.Map, of: Number }],
     squadHpPerRound: [{ type: Schema.Types.Map, of: Number }],
     losses: [gameResultEventSchemaDef],
@@ -545,6 +561,12 @@ function squadRecords(stats: IRealmArenaGameResultStats): Map<string, SquadRecor
     return squads;
 }
 
+/** A column's points from a stored per-column map — the centre's or the assists' — and 0 for a result recorded before it. */
+function pointsOf(map: Map<string, number> | undefined): (column: string) => number {
+    const read = map ? mongoMap(map) : undefined;
+    return column => read?.get(column) ?? 0;
+}
+
 /**
  * One group a player, and in co-op one for the enemy: their score and where
  * it came from, who they downed and lost, the damage they dealt and the HP
@@ -560,11 +582,13 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         return lines;
     };
     const finalScores = stats.pointsPerRound?.length ? mongoMap(stats.pointsPerRound[stats.pointsPerRound.length - 1]) : undefined;
-    const centre = stats.centrePoints ? mongoMap(stats.centrePoints) : undefined;
+    const centre = pointsOf(stats.centrePoints);
+    const assists = pointsOf(stats.assistPoints);
     for (const [userId, { total, top }] of squadRecords(stats)) {
         const lines = linesOf(userId);
         const score = finalScores?.get(userId) ?? 0;
-        lines.push(`${pluralize(score, "point")}: ${centre?.get(userId) ?? 0} for the centre, ${total.knockoutPoints} for knock-outs`);
+        const assisted = assists(userId);
+        lines.push(`${pluralize(score, "point")}: ${centre(userId)} for the centre, ${total.knockoutPoints} for knock-outs${assisted > 0 ? `, ${assisted} for assists` : ""}`);
         lines.push(`Downed ${pluralize(total.knockouts, "enemy", "enemies")}, lost ${pluralize(total.downed, "character")}`);
         lines.push(`Dealt ${total.dealt} damage, healed ${total.healed} HP`);
         if (top) lines.push(`Top fighter: ${CHARACTERS[top.character]?.name ?? top.character}, with ${top.dealt} damage`);
@@ -621,11 +645,12 @@ function formatDamageChart(stats: IRealmArenaGameResultStats): GameResultBarChar
     return { kind: "bar", title: "Damage by character", yLabel: "Damage", bars, ...(isCoopRecord(stats) ? { extraSeries: [ENEMY_SERIES] } : {}) };
 }
 
-/** Everything each squad did, a row a count and a column a player. Friendly fire only when somebody did some. */
+/** Everything each squad did, a row a count and a column a player. Assists and friendly fire only when somebody had some. */
 function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable | undefined {
     const squads = [...squadRecords(stats)];
     if (squads.length === 0) return undefined;
-    const centre = stats.centrePoints ? mongoMap(stats.centrePoints) : undefined;
+    const centre = pointsOf(stats.centrePoints);
+    const assists = pointsOf(stats.assistPoints);
     const row = (label: string, value: (total: FightingRecord, userId: string) => number) => ({
         label,
         values: Object.fromEntries(squads.map(([userId, { total }]) => [userId, value(total, userId)])),
@@ -636,8 +661,9 @@ function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable |
         title: "Battle record",
         rowLabel: "Stat",
         rows: [
-            row("Points for the centre", (_total, userId) => centre?.get(userId) ?? 0),
+            row("Points for the centre", (_total, userId) => centre(userId)),
             row("Points for knock-outs", total => total.knockoutPoints),
+            ...(squads.some(([userId]) => assists(userId) > 0) ? [row("Points for assists", (_total, userId) => assists(userId))] : []),
             row("Enemies downed", total => total.knockouts),
             row("Own characters downed", total => total.downed),
             row("Damage dealt", total => total.dealt),

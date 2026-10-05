@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.40. Split out of Defender of the Realm in its third round of
+**Status:** v1.41. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -746,6 +746,22 @@ As proposed in v0.3 (default taken):
   does, you score 5. Scoring on your own turn gives every seat the same
   number of chances, rather than favouring whoever moves last in a round.
 - **A knock-out** scores the fallen character's points cost ÷ 5 (3–6 points).
+- **An assist** scores every other enemy who took HP off the fallen since it
+  last stood up — by any attack, a blast, or burning they set — half the
+  knock-out, rounded up (2–3 points), once each however often they hurt it.
+  Without it, a free-for-all only paid the player who landed the last blow,
+  so nobody wanted to soften up a character a third player could finish.
+  The downer's own side never scores one, since the knock-out already scores
+  for it, so in a duel and in co-op — where only one side can hurt a
+  character — there are none, and an assist is only ever beside a knock-out:
+  a character downed by its own side, or by a fire whose setter has left,
+  scores nobody. A character downed forgets who hurt it, so one raised starts
+  owing nobody, though a heal doesn't; a player who drops scores none for the
+  hurt their squad did before it left. Who hurt a character stays on the
+  server: it's never sent. Fixed as a battle is created: a battle begun
+  before assists keeps scoring the knock-out alone, and replays that way. So
+  no command version: no command means anything different, and an older
+  battle replays with the flag as it was stored.
 
 It brings squads together early, and works the same in free-for-all and in
 teams.
@@ -1993,10 +2009,11 @@ points came, who did the damage and what each squad went through.
   level.
 - **Damage by character**: a bar for each kind of character in the battle,
   the damage it dealt to enemies, stacked by whose it was.
-- **Battle record**: a table, a column a player — points for the centre and
-  for knock-outs, enemies downed, their own characters downed, damage dealt
-  and taken, HP healed, shots taken and the share that landed (a graze
-  counts), reactions on watch, and friendly fire when anybody did some.
+- **Battle record**: a table, a column a player — points for the centre,
+  for knock-outs and, when anybody scored one, for assists (§13.7), enemies
+  downed, their own characters downed, damage dealt and taken, HP healed,
+  shots taken and the share that landed (a graze counts), reactions on
+  watch, and friendly fire when anybody did some.
 - **Each player's lines**: their score and where it came from, knock-outs and
   losses, damage and healing, their top fighter — the kind that dealt the most
   — and each character's XP, as before.
@@ -2066,7 +2083,8 @@ an action. No language model is involved, and nothing leaves the server.
   a flask still hits whoever is under it, as now.
 - **Each player still scores**, for the centre and for knock-outs, and the
   team's score is the sum. Downing a teammate's character scores nobody, as
-  downing your own doesn't (§13.6).
+  downing your own doesn't (§13.6). Nobody scores an assist (§13.7): only
+  the knock-out's own side can have hurt a character.
 
 ### 29.2 The battlefields
 
@@ -3258,3 +3276,4 @@ Realm, its sibling in the same world.
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
 | 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
+| 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op; fixed as a battle is created, so one already being fought keeps scoring the knock-out alone. The battle record counts them, and the result shows them when anybody scored one (§28.1). |

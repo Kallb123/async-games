@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Realm Arena: points for an assist",
+                detail: "In a free-for-all, wounding a character is worth it even when somebody else finishes it off: whoever downs it still scores the knock-out, and every other player who hurt it since it last stood up scores half that, rounded up. New battles only — one already being fought keeps the scoring it began with.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena battle results: the points race, damage by character and more",
                 detail: "A finished battle's results chart every player's score round by round, with a skull on their line wherever one of their characters fell, and each squad's health beside it. A bar chart shows the damage each kind of character dealt, split by whose it was, and a table sets out everything each squad did — knock-outs, damage dealt and taken, healing, shots landed, reactions on watch — with each player's top fighter named.",
                 game: "realmarena",
@@ -120,10 +125,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder's world map has new badges",
                 detail: "Towns, barbarian camps, open sites, forests, quarries and mines each wear a round painted badge. Every town's ring is its owner's colour, your own towns show their town centre level, and each barbarian camp shows how tough it is, from I to III.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Pull down to refresh your games",
-                detail: "Drag the home screen down from the top and let go to check for new turns, invites and messages straight away, rather than waiting for it to catch up on its own.",
             },
         ],
     },

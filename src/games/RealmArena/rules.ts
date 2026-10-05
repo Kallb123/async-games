@@ -65,6 +65,8 @@ export const CENTRE_POINTS = 5;
 export const CENTRE_SCORES_FROM_ROUND = 3;
 /** A knock-out scores the fallen character's points cost divided by this (§13.7). */
 export const KNOCKOUT_DIVISOR = 5;
+/** An assist scores the knock-out's points divided by this, rounded up (§13.7). */
+export const ASSIST_DIVISOR = 2;
 
 /**
  * How far most characters see, in squares, wherever nothing blocks their
@@ -112,6 +114,13 @@ export interface Fighter {
     effects: Partial<Record<EffectId, number>>;
     /** The character that set it burning, whose owner a knock-out by the burning scores for (§20.2). Only while it burns. */
     burnedBy?: number;
+    /**
+     * The enemies who have taken HP off it since it last stood up, in the
+     * order they first did, each of whom but the one who downs it scores an
+     * assist when it's downed (§13.7). Only in a battle with assists, and
+     * absent until one of them hurts it; gone once it's down.
+     */
+    woundedBy?: string[];
     /** Turns until each ability on cooldown can be used again; absent means ready. */
     cooldowns: Partial<Record<AbilityId, number>>;
     /** Once-per-battle abilities it has used. */
@@ -160,6 +169,12 @@ export interface BattleState {
      * the server, the board and the recap alike. Read only through `sideOf`.
      */
     sides?: Readonly<Record<string, string>>;
+    /**
+     * Whether a knock-out also scores an assist for every other enemy who hurt
+     * the fallen (§13.7): every battle created since assists were, and absent
+     * on one created before them, which keeps scoring the knock-out alone.
+     */
+    assists?: boolean;
 }
 
 /** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
@@ -170,6 +185,7 @@ export interface BattleSource {
     /** The players in seat order, and whether they fight together against the computer's warbands (§29): what the sides are read from. */
     seats?: readonly string[];
     coop?: boolean;
+    assists?: boolean;
 }
 
 /**
@@ -196,9 +212,12 @@ export const ENEMY_SIDE = "enemy";
  * battle so far — has no `sides`. Co-op has two: the players, and a warband
  * for each of them (§29.1).
  */
-export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
+export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, assists }: BattleSource): BattleState {
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
-    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
+    return {
+        field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
+        ...(assists ? { assists: true } : {}),
+    };
 }
 
 /** The side an owner fights on (§29.6): its own, in a free-for-all. */
@@ -260,7 +279,14 @@ export type BattleEvent =
     | { kind: "effect"; fighter: number; effect: EffectId; change: "applied" | "refreshed" | "cleared" }
     /** Burning doing its damage at the start of its owner's turn. */
     | { kind: "burned"; fighter: number; damage: number }
-    | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" };
+    | { kind: "scored"; player: string; points: number; reason: "centre" | "knockout" | "assist" };
+
+/** What a player scored for, as the log and the board say it (§13.7). */
+export const SCORED_FOR: Readonly<Record<Extract<BattleEvent, { kind: "scored" }>["reason"], string>> = {
+    centre: "holding the centre",
+    knockout: "the knock-out",
+    assist: "the assist",
+};
 
 /**
  * An event as a review sends it to every player (§26.2): a shot without the
@@ -589,6 +615,7 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
+        ...(state.assists ? { assists: true } : {}),
     };
 }
 
@@ -656,6 +683,11 @@ function nearestTo(field: Battlefield, reach: Reach, goal: Square, climb: number
 
 export function knockoutPoints(character: CharacterId): number {
     return CHARACTERS[character].points / KNOCKOUT_DIVISOR;
+}
+
+/** What an assist on knocking out this character scores: half the knock-out, rounded up (§13.7). */
+export function assistPoints(character: CharacterId): number {
+    return Math.ceil(knockoutPoints(character) / ASSIST_DIVISOR);
 }
 
 // ─── Checking an action ─────────────────────────────────────────────────────
@@ -889,18 +921,29 @@ function resolver(state: BattleState, roll: Roll) {
 
     /**
      * Takes HP off a character; at 0 it's down, losing every effect, and an
-     * enemy who downed it scores (§13.5, §13.7, §20.2).
+     * enemy who downed it scores (§13.5, §13.7, §20.2). So, in a battle with
+     * assists, does every other enemy who hurt it since it last stood up —
+     * all but the downer's own side, which the knock-out already scores for.
+     * An assist is only ever beside a knock-out: a character downed by its own
+     * side, or by a fire whose setter has left, scores nobody anything. In a
+     * duel or in co-op, only the downer's side can have hurt it, so assists
+     * come only in a free-for-all.
      */
     const wound = (by: Pick<Fighter, "id" | "owner">, target: Fighter, damage: number) => {
+        const enemy = !allied(battle, by.owner, target.owner);
+        if (battle.assists && enemy && damage > 0 && !target.woundedBy?.includes(by.owner)) target.woundedBy = [...target.woundedBy ?? [], by.owner];
         target.hp = Math.max(0, target.hp - damage);
         if (isStanding(target)) return;
+        const assists = enemy ? (target.woundedBy ?? []).filter(owner => !allied(battle, owner, by.owner)) : [];
         Object.assign(target, { ap: 0, banked: 0, effects: {} });
         delete target.burnedBy;
+        delete target.woundedBy;
         // Its smoke goes with it, as a downed Knight's shield wall does (§21.2).
         delete target.smoke;
         events.push({ kind: "downed", fighter: target.id, by: by.id });
         // Downing your own side's character — a fireball's, say — scores nobody anything.
-        if (!allied(battle, by.owner, target.owner)) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
+        if (enemy) events.push({ kind: "scored", player: by.owner, points: knockoutPoints(target.character), reason: "knockout" });
+        for (const player of assists) events.push({ kind: "scored", player, points: assistPoints(target.character), reason: "assist" });
     };
 
     const afflict = (by: Fighter, target: Fighter, effect: Affliction) => {
@@ -1351,8 +1394,9 @@ export function newFighter(id: number, owner: string, character: CharacterId, sq
 export function storedFighter(fighter: Fighter): Fighter {
     return {
         ...fighter, effects: { ...fighter.effects }, cooldowns: { ...fighter.cooldowns }, spent: [...(fighter.spent ?? [])], item: fighter.item ?? null,
-        // Copied, so an undo snapshot never shares it with the live fighter.
+        // Copied, so an undo snapshot never shares them with the live fighter.
         ...(fighter.tally ? { tally: addTally(fighter.tally, NO_TALLY) } : {}),
+        ...(fighter.woundedBy ? { woundedBy: [...fighter.woundedBy] } : {}),
     };
 }
 
