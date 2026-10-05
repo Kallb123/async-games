@@ -994,7 +994,7 @@ recap, a guide and a tutorial.
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
-| B8 | Co-op against the computer (§29) | PRs 1–2, sides, the battlefields and factions as data, built (§29.2, §29.3, §29.6) |
+| B8 | Co-op against the computer (§29) | PRs 1–3, sides, the battlefields, factions as data and the planner, built (§29.2, §29.3, §29.6, §29.7) |
 
 **What B2 settled:**
 
@@ -2463,6 +2463,57 @@ the rules — their weapons, abilities and AP — and every action through
 needs told is what a new kind of action is aimed at (§29.3), and a test makes
 sure it is.
 
+**What PR 3 settled:**
+
+- `tactics.ts` holds the six helpers and `shotOf`, and `ACTION_AIMS`: each
+  kind of action's aim — a path, nothing, one enemy, one ally, several
+  enemies (a cleave: two, each where an attack could be aimed), or a square —
+  with the range it's aimed in. A throw's range is the item's own. The
+  board's taps and shading read it, as the planner does, and a test fails
+  for an ability without one.
+- The weights: a point scored is worth 1, and so is a point's worth of
+  strength; Exposure and Threat are worth half, and a character with no
+  attack's AP left keeps a quarter of its Threat; the Objective is 1 for each
+  AP of walking to the centre, scaled by the round over the round the centre
+  scores from, until it does.
+- Exposure and Threat read each pair's odds once (`shotOdds`, a weapon's
+  reach) rather than through `attackOptions`, which asks `check` about every
+  character on the battlefield for each.
+- The planner drops the view's fog: a view seen again is the same view, so it
+  learns nothing, and every `check` it asks is spared working that out.
+- A fireball or a throw is listed at each square in range with anyone in its
+  3×3, its own side included, so a smoke pot can cover its own.
+- Each of the dozen squares is played out the cheapest way there, and, where
+  that sets off a reaction, the cheapest way that keeps out of every square a
+  watcher it can see would react on (`watchedSquares`, and `reachOf`
+  `avoiding` them). The cheapest way to a square never goes round an
+  overwatch lane; this is how the planner does.
+- The walk from each square to the centre is a search of the whole map, made
+  once per battlefield and kept. It isn't the cache of sight and odds held in
+  reserve above.
+- The squares a watcher would react on are worked out once a plan, for every
+  character of the warband, and the way round them only for a character whose
+  cheapest way to one of its dozen squares crosses them.
+- The dozen stays a dozen. Eight was quicker but missed the covered way: the
+  squares beside a watcher outrank the rest before their overwatch is counted.
+- A warband's turn on the Four-Gate Fort, against three squads on watch,
+  plans in about 130–220 ms on average; the slowest turn reaches about
+  250–450, and the Three-Gate Fort, three warbands against three squads, is
+  quicker a warband. The test holds the average under 250 ms and every turn
+  under 500, so one slow turn on a busy test runner doesn't fail it. If the
+  slowest turns matter in a real request, the cache of sight and odds within
+  a turn is next.
+- For the turn loop (PR 4a): the cap of four actions a character is its, but
+  every action costs at least 1 AP, so the planner can't loop on its own. An
+  action the battle refuses should end the warband's turn rather than be
+  asked for again: the same view gets the same action. A deadline on the
+  loop, ending the warband's turn once it's passed, is a cheap guard on the
+  request's time.
+- A round that isn't one is read as round 1, rather than scoring every battle
+  NaN, which nothing beats.
+- The puzzle of the flanked enemy sets it against one in half cover: on flat
+  ground, the wall that gives full cover blocks the shot too.
+
 ### 29.8 Engine
 
 - **`coop: { enemy }`** on the invitation and the state, absent in a
@@ -2678,3 +2729,4 @@ Realm, its sibling in the same world.
 | 1.33 | Co-op against the computer (§29), planned and reviewed by the caveman: two or three players as one team against warbands played by game AI, one taking a turn after each player's, inside the End turn, on battlefields of its own — line battles, the team along one edge and a warband opposite each player, unchanged by a half turn (§29.2). The enemy is a faction the host picks, or Random, drawn as the battle is created and kept hidden — off the wire and unnamed in the log — until the team first sees one of its characters; factions become data, so a second one — monsters — can be fought with nothing new in the computer (§29.3). Built on sides (`sideOf`, `allied`), which teams (B3) will share. The computer plays by the same rules, view and dice as a player, one action at a time, judging each by playing it out and scoring the result with the board's own tactics helpers; its actions are recorded, so it can be improved without changing a battle already fought. Its warbands are its faction's ready-made squads. |
 | 1.34 | B8 PR 1 builds sides (§29.6): `sideOf`, `allied` and the one battle builder, `battleFrom`; every friend-or-foe question asked by side on the server and the board; the centre held by a side but scored by a player with their own in it, the battle over with one side standing, and standings ranked by side. |
 | 1.35 | B8 PR 2 builds the co-op battlefields (§29.2) — the Twin-Gate and Three-Gate Forts, unchanged by a half turn, a warband opposite each player, and `mapFor` — and factions as data (§29.3): `FACTIONS` with the Realm in it, a roster and an `enemyName` each, and the muster checked against its faction's roster. |
+| 1.36 | B8 PR 3 builds the planner (§29.7): the board's tactics helpers move to `tactics.ts` with `ACTION_AIMS`, each kind of action's aim, which the board and the planner both read; `ai.ts`'s `nextAction` lists what a warband could do, plays each out with `act` and scores the battle it leaves; a move also goes round the squares a watcher would react on; the puzzles, the never-cheats test and the time budget hold it. Nothing calls it yet. |

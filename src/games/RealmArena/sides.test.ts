@@ -9,7 +9,7 @@ import {
     reactionsTo, shotOdds, sideOf, squadSight, standings, viewOf,
     type BattleEvent, type BattleState, type Fighter,
 } from "./rules";
-import { targetsOf } from "./ui";
+import { targetsOf } from "./tactics";
 import { MOVE, tapFighter, targetOptions } from "./useTurnDraft";
 
 // docs/games/realm-arena.md §29.6: sides. Every "is this an enemy?" is asked

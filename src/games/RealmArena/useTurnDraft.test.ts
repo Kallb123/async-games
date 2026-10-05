@@ -3,7 +3,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
 import { ACTION_POINTS, newFighter, reachOf, shotOdds, type BattleState, type Fighter } from "./rules";
-import { targetsOf } from "./ui";
+import { targetsOf } from "./tactics";
 import { afterMove, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):

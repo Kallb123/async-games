@@ -3,8 +3,9 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, type Ability } from "./characters";
-import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter, type ShotKind } from "./rules";
-import { attackOptions, hitChance, rangeSquares, reachShading, reactionPreviews, targetsOf, type AttackOption, type RangeKind, type TargetKind } from "./ui";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
+import { reachShading } from "./ui";
 
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
@@ -24,43 +25,6 @@ export interface Draft {
 }
 
 export const MOVE: Draft = { aim: "move", square: null, targets: [] };
-
-/** The aims a tap on one character lines up, and the `check` kind that says who it can be. */
-const TARGETED: Partial<Record<Aim, TargetKind>> = {
-    attack: "attack",
-    aimedShot: "aimedShot",
-    heal: "heal",
-    raise: "raise",
-    draught: "draught",
-    shieldBash: "shieldBash",
-    cripplingShot: "cripplingShot",
-    huntersMark: "huntersMark",
-    // Cleave strikes where an attack could: within the Man-at-arms's melee reach.
-    cleave: "attack",
-};
-
-/** The aims at an enemy: one tapped out of reach is lined up anyway, so the sheet can say why it can't be. */
-const AT_ENEMY: ReadonlySet<Aim> = new Set(["attack", "aimedShot", "shieldBash", "cripplingShot", "huntersMark"]);
-
-/** What each aim's range is read from, for the shading of where it could land: a throw's is the item's own. */
-const RANGE: Partial<Record<Aim, RangeKind>> = {
-    attack: "weapon",
-    aimedShot: "weapon",
-    cleave: "weapon",
-    heal: ABILITIES.heal.range,
-    raise: "nextTo",
-    draught: "nextTo",
-    shieldBash: "weapon",
-    cripplingShot: "weapon",
-    huntersMark: ABILITIES.huntersMark.range,
-    demolish: "cover",
-    fireball: ABILITIES.fireball.range,
-};
-
-/** The shot an aim takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy always lands. */
-export function shotOf(aim: Aim): Exclude<ShotKind, "overwatch"> | undefined {
-    return aim === "attack" || aim === "aimedShot" || aim === "cripplingShot" ? aim : undefined;
-}
 
 /** One character the armed aim could be lined up on, and its chance to land on an enemy. */
 export interface TargetOption {
@@ -85,11 +49,11 @@ export function targetOptions(battle: BattleState, fighter: Fighter, aim: Aim, c
     }).sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0));
 }
 
-const isMoving = (aim: Aim) => aim === "move" || aim === "sneak";
+const isMoving = (aim: Aim) => ACTION_AIMS[aim].at === "path";
 type AtSquare = "fireball" | "throw" | "demolish";
 
 /** A fireball, a throw or a Demolish is aimed at a square, whoever stands on it. */
-const isAtSquare = (aim: Aim): aim is AtSquare => aim === "fireball" || aim === "throw" || aim === "demolish";
+const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "square";
 
 /**
  * Every square what's aimed at `at` lands on: the 3×3 for a fireball or an
@@ -207,7 +171,8 @@ export function tapFighter(context: TapContext, id: number): TapResult {
         if (!isStanding(target)) return tapSquare(context, target.square);
         return undefined;
     }
-    if ((enemy && AT_ENEMY.has(aim)) || candidates.includes(id)) {
+    // An enemy tapped out of reach is lined up anyway, so the sheet can say why it can't be.
+    if ((enemy && ACTION_AIMS[aim].at === "enemy") || candidates.includes(id)) {
         return lineUp({ ...draft, targets: [id] }, targets[0] === id);
     }
     return undefined;
@@ -245,14 +210,14 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     );
     const shading = useMemo(() => fighter && reach ? reachShading(fighter, reach, aim === "sneak") : null, [fighter, reach, aim]);
     // Aimed at anything else, the shading is where it could land instead: its range.
-    const rangeKind = aim === "throw" ? (fighter ? itemOf(fighter)?.range : undefined) : RANGE[aim];
+    const rangeKind = rangeKindOf(aim);
     const range = useMemo(() => fighter && rangeKind ? rangeSquares({ field, fighters, sides }, fighter, rangeKind) : null, [field, fighters, sides, fighter, rangeKind]);
     if (!fighter) return null;
 
     const path = reach && draft.square !== null ? pathTo(reach, draft.square)?.squares : undefined;
     const action = actionOf(fighter, draft, path);
     const verdict: Check | null = action ? check(battle, player, action) : null;
-    const targetKind = TARGETED[aim];
+    const targetKind = targetKindOf(aim);
     const candidates = targetKind ? targetsOf(battle, player, fighter, targetKind) : [];
     const context: TapContext = { battle, fighter, draft, reach, candidates };
 
