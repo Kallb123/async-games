@@ -152,6 +152,17 @@ describe("the battle recorder (§28)", () => {
         expect(Object.fromEntries(pointsPerRound[0])).toEqual({ a: 0, b: knockoutPoints("knight") });
     });
 
+    it("credits burning lit and suffered in one step to whoever lit it: an End turn holds the enemy's turn and the next one's start (§29.4)", () => {
+        const recorder = battleRecorder(PLAYERS);
+        recorder.observe(act("0", []), battle([knight, mage]));
+        recorder.observe(act("1", [
+            { kind: "fireball", fighter: mage.id, at: knight.square, targets: [knight.id], damage: 2 },
+            { kind: "effect", fighter: knight.id, effect: "burning", change: "applied" },
+            { kind: "burned", fighter: knight.id, damage: 1 },
+        ]), battle([{ ...knight, hp: knight.hp - 3, burnedBy: mage.id }, mage]));
+        expect(recorder.result().fighting.find(row => row.character === "mage")).toMatchObject({ dealt: 3 });
+    });
+
     it("takes back the healing of an action that was undone, and keeps it once the undo stack lets it go", () => {
         const hurt = { ...knight, hp: 3 };
         const heal: BattleEvent = { kind: "healed", fighter: cleric.id, target: knight.id, hp: 4 };

@@ -124,6 +124,12 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
 
     function tell(events: readonly BattleEvent[]) {
         const hp = new Map([...last].map(([id, fighter]) => [id, fighter.hp]));
+        // Who set each one burning, as the step goes: an End turn holds the
+        // enemy's turn and the next player's start (§29.4), so a fire can be
+        // lit and burn in one step. An effect is told straight after the
+        // attack that put it on.
+        const burnedBy = new Map([...last].map(([id, fighter]) => [id, fighter.burnedBy]));
+        let attacker: number | undefined;
         const wound = (by: number | undefined, target: number, damage: number) => {
             const taken = Math.min(damage, hp.get(target) ?? 0);
             hp.set(target, (hp.get(target) ?? 0) - taken);
@@ -135,7 +141,11 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             else attacker.dealt += taken;
         };
         for (const event of events) {
+            if (event.kind === "shot" || event.kind === "struck" || event.kind === "fireball" || event.kind === "thrown" || event.kind === "demolished") attacker = event.fighter;
             switch (event.kind) {
+                case "effect":
+                    if (event.effect === "burning") burnedBy.set(event.fighter, event.change === "cleared" ? undefined : attacker);
+                    break;
                 case "shot": {
                     const shooter = recordOf(event.fighter);
                     if (shooter) {
@@ -159,7 +169,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     break;
                 case "burned":
                     // Credited to whoever set it alight, as its knock-out is (§20.2).
-                    wound(last.get(event.fighter)?.burnedBy, event.fighter, event.damage);
+                    wound(burnedBy.get(event.fighter), event.fighter, event.damage);
                     break;
                 case "healed": {
                     const healer = recordOf(event.fighter);

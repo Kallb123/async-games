@@ -302,7 +302,34 @@ function clearUndo(gs: IRealmArenaSpecificGameState): void {
  * free-for-all, which has no enemy.
  */
 export function enemyKnown(coop: IRealmArenaCoop | undefined): boolean {
-    return coop !== undefined && (coop.random !== true || coop.enemySeen === true);
+    return coop !== undefined && !enemyHidden(coop);
+}
+
+/** Whether whom the team fights is still hidden from it: a random enemy not yet seen (§29.3). */
+export function enemyHidden(coop: IRealmArenaCoop | undefined): boolean {
+    return coop?.random === true && coop.enemySeen !== true;
+}
+
+/**
+ * Events as a hidden enemy's characters may be told (§29.3), on the wire and
+ * in the recap: anything one of them (`hidden`) did that says which kind of
+ * character did it — a sneak, a shield wall, a mark, a heal or a raise — and
+ * so which faction, isn't told, and a sneak is told as a move. A shot, a
+ * strike or a blast says only what it did to whom. A healing draught is an
+ * item, which any faction can carry.
+ */
+export function unnamed(events: readonly BattleEvent[], hidden: (fighter: number) => boolean): BattleEvent[] {
+    return events.flatMap((event): BattleEvent[] => {
+        if (!("fighter" in event) || !hidden(event.fighter)) return [event];
+        switch (event.kind) {
+            case "moved": return [{ ...event, sneaking: false }];
+            case "shieldWall":
+            case "marked":
+            case "raised": return [];
+            case "healed": return event.via === "draught" ? [event] : [];
+            default: return [event];
+        }
+    });
 }
 
 /**
@@ -339,6 +366,8 @@ function whose(fighters: readonly Fighter[], id: number, actor: string, coop: IR
 function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
     const name = (id: number) => whose(fighters, id, actor, coop);
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
+    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name) : undefined;
+    if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
         case "shot":
@@ -387,6 +416,26 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     }
 }
 
+/**
+ * What a hidden enemy's character did (§29.3), where the deed would name its
+ * kind: that it moved, or used an ability, never which — an ability is a kind
+ * of character's, and a character's kind is its faction. Undefined for
+ * anything that says nothing of the kind, told as `clause` tells it.
+ */
+function veiledClause(event: BattleEvent, name: (id: number) => string): string | undefined {
+    const hit = (targets: readonly number[], damage: number) => targets.length === 0 ? "" : `, hitting ${pluralize(targets.length, "character")} for ${damage}`;
+    switch (event.kind) {
+        case "moved": return `moved ${name(event.fighter)}`;
+        case "fireball":
+        case "demolished": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
+        case "marked":
+        case "shieldWall": return `used an ability with ${name(event.fighter)}`;
+        default: return undefined;
+    }
+}
+
 /** A move told once, however many times reactions broke it up. */
 function narrate(events: readonly BattleEvent[], before: readonly Fighter[], actor: string, coop: IRealmArenaCoop | undefined): string {
     return events
@@ -413,8 +462,11 @@ function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined):
  */
 function noteSighting(gs: IRealmArenaSpecificGameState): void {
     const coop = gs.coop;
-    if (!coop || enemyKnown(coop) || gs.phase !== "battle") return;
-    if (viewOf(battleOf(gs), gs.seats[0]).fighters.some(fighter => isWarband(fighter.owner))) gs.coop = { ...coop, enemySeen: true };
+    if (!enemyHidden(coop) || gs.phase !== "battle") return;
+    const battle = battleOf(gs);
+    // As `viewOf` reads a view, standing or fallen, without building one.
+    const seen = squadSight(battle, gs.seats[0]);
+    if (!battle.fog || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
 }
 
 // ─── What a viewer is told (§27) ────────────────────────────────────────────
@@ -438,17 +490,21 @@ function noteSighting(gs: IRealmArenaSpecificGameState): void {
  * co-op an End turn holds the enemy's turn (§29.4), and its own player is
  * told it this way too, as their teammates are (`outcomeFor`).
  *
+ * While a random enemy is `hidden` (§29.3), what its characters did is told
+ * `unnamed` too.
+ *
  * Here beside the game type rather than with the response it shapes, so the
  * game type can cut the outcome a command returns its sender (`outcomeFor`).
  */
-export function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null): BattleEvent[] {
+export function toldTo(events: readonly BattleEvent[], battle: BattleState, viewerId: string | null, hidden = false): BattleEvent[] {
     const seen = squadSight(battle, viewerId);
     const own = (id: number) => allied(battle, fighterById(battle, id)?.owner, viewerId);
     const inSight = (id: number) => {
         const fighter = fighterById(battle, id);
         return fighter !== undefined && (own(id) || seen(fighter.square));
     };
-    return events.flatMap((event): BattleEvent[] => {
+    const told = hidden ? unnamed(events, id => isWarband(fighterById(battle, id)?.owner ?? "")) : events;
+    return told.flatMap((event): BattleEvent[] => {
         switch (event.kind) {
             case "moved": {
                 if (own(event.fighter)) return [event];
@@ -491,7 +547,7 @@ export class RealmArenaGameType implements IGameType {
         const { recap: _recap, ...told } = outcome as IRealmArenaOutcome;
         const battle = battleOf(data.specificGameState, data.complete);
         if (!battle.fog || !Array.isArray(told.events)) return told;
-        return { ...told, events: toldTo(told.events, battle, viewerId) } as IRealmArenaOutcome;
+        return { ...told, events: toldTo(told.events, battle, viewerId, enemyHidden(data.specificGameState.coop)) } as IRealmArenaOutcome;
     }
 
     /**

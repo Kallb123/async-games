@@ -2636,6 +2636,16 @@ sure it is.
   rather than "their Archer", since the kind is the faction. A line written
   before the sighting keeps what it said; the line of the command that saw
   the enemy is the last one not to name it.
+- Nor does a hidden enemy's deed name its kind: an ability is a kind of
+  character's, so the log says it "used an ability" — a fireball, a Demolish,
+  a heal, a raise, a mark, a shield wall — and "moved" for a sneak. On the
+  wire and in the recap the same deeds are told `unnamed`: a sneak as a move,
+  and a shield wall, a mark, a heal or a raise not at all (`toldTo`'s
+  `hidden`); the recap tells a blast as the hits it made. Accepted: a fireball
+  or a flask that lands on the team is told, as it is in any fog, and the
+  team sees it land; a shot is told apart from a strike; an effect on the
+  team's own characters shows. The response names the enemy whenever a view
+  holds one of its characters, whatever the flag says.
 - The End turn's outcome carries its parts for the recap as `recap`: the
   enemy's turn — what burning did as it began, each `{ action, events }`, and
   what its End turn did, each part one line of the log (`enemyLineCount`),
@@ -2646,14 +2656,19 @@ sure it is.
   enemy's. The enemy's rows are the warband's own (`actorId` its owner), keyed
   by the End turn's command, so the feed folds what each of its characters did
   into one row as it does a player's; a row when its End turn held the centre;
-  and its burning a row of its own, apart from the next player's. The recap's
-  dot is neutral for a row nobody seated did, and a reaction to one pushes
-  nobody. The tip measures the team's score against the enemy's.
+  and its burning a row of its own, apart from the next player's — which is
+  nobody's, or as the sender's it would close their recap's window after the
+  enemy's turn. The recap's dot is neutral for a row nobody seated did, and a
+  reaction to one pushes nobody. The tip measures the team's score against
+  the enemy's.
 - A side's score is `sideScore`, its owners' added together: the ending and
   the tip read it.
 - The battle record has a column a player and, in co-op, one more for the
   enemy, keyed `enemy` (`ENEMY_SIDE`): the warbands' rows, scores, centre
-  points, HP and losses added together. The result's stat groups name it "The
+  points, HP and losses added together, and a record whose enemy score isn't
+  the battle's is left out as a player's is. Burning lit and suffered in one
+  step — an End turn now holds the enemy's turn and the next player's start —
+  is credited to whoever lit it. The result's stat groups name it "The
   enemy"; drawing it on the charts and in the table is PR 5's.
 - The co-op tests check each ending and its detail, the enemy named in the
   log, a row per enemy action in the recap and one per character in the feed,

@@ -21,9 +21,11 @@ import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 import { buildTimeline } from "@/utils/games/replay";
 import { REALM } from "@/games/RealmArena/characters";
-import { gameStateToModel as realmArenaStateToModel } from "@/games/RealmArena/RealmArenaModels";
+import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome } from "@/games/RealmArena/RealmArenaModels";
+import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
+import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { isStanding as isRealmArenaStanding } from "@/games/RealmArena/rules";
+import { isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -581,6 +583,8 @@ describe("Dice Cities' response to a viewer with no seat", () => {
 describe("Realm Arena's random co-op enemy", () => {
     const RA_NAMES = { a: "Alice", b: "Bob" };
     const VIEWERS = ["a", "b", null];
+    // As the log writes it at the start of a line, too: "The Renegades moved…".
+    const ENEMY_NAME = new RegExp(REALM.enemyName.replace(/^the /, ""), "i");
 
     /** One command of the fixtures' scripted turn: the current player's next action, or their End turn. */
     async function step(game: RealmArenaTestGame): Promise<void> {
@@ -600,7 +604,7 @@ describe("Realm Arena's random co-op enemy", () => {
         const hidden = () => {
             for (const viewer of VIEWERS) expect(realmArenaStateToModel(gs, viewer, null)).not.toHaveProperty("enemy");
             for (const { text } of game.gameState.history) {
-                expect(text).not.toContain(REALM.enemyName);
+                expect(text).not.toMatch(ENEMY_NAME);
                 if (text.startsWith("The enemy")) expect(text).not.toMatch(/their [A-Z]/);
             }
         };
@@ -621,7 +625,7 @@ describe("Realm Arena's random co-op enemy", () => {
                 const wire = snapshot.specificGameState as IRealmArenaSpecificGameStateResponse;
                 if (index < seenAt) {
                     expect(wire).not.toHaveProperty("enemy");
-                    expect(JSON.stringify(snapshot.history)).not.toContain(REALM.enemyName);
+                    expect(JSON.stringify(snapshot.history)).not.toMatch(ENEMY_NAME);
                 } else {
                     expect(wire.enemy).toBe("realm");
                 }
@@ -629,9 +633,37 @@ describe("Realm Arena's random co-op enemy", () => {
         }
 
         // Lines written after the sighting name it; those before stay as they were.
-        while (!game.complete && !game.gameState.history.some(({ text }) => text.includes(REALM.enemyName))) await step(game);
-        expect(game.gameState.history.some(({ text }) => text.includes(REALM.enemyName))).toBe(true);
+        while (!game.complete && !game.gameState.history.some(({ text }) => ENEMY_NAME.test(text))) await step(game);
+        expect(game.gameState.history.some(({ text }) => ENEMY_NAME.test(text))).toBe(true);
     }, 60_000);
+
+    it("never says which of its characters did what out of sight: an ability names a kind of character, and so the faction", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, true, "realm", true);
+        await realmArenaMusterAll(game);
+        // The first warband's Knight raises a shield wall where it stands, far
+        // out of the team's sight: its turn, as a replay plays it.
+        const knight = game.specificGameState.fighters.find(fighter => fighter.owner === warbandOwner(0) && fighter.character === "knight")!;
+        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "shieldWall", fighter: knight.id }] }) as RealmArenaEndTurn;
+        const { outcome } = await playRealmArena(game, ended);
+        expect(game.specificGameState.coop?.enemySeen).toBeUndefined();
+        expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "shieldWall")).toBe(true);
+
+        const lines = game.gameState.history.map(({ text }) => text);
+        expect(lines).toContain("The enemy used an ability with one of its characters");
+        // The team's own Knight is theirs to name.
+        expect(lines.filter(text => text.startsWith("The enemy")).join("\n")).not.toMatch(/shield|Knight|sneak/i);
+        expect(lines.join("\n")).not.toMatch(/shield/i);
+        for (const viewer of ["a", "b"]) {
+            const told = (new RealmArenaGameType().outcomeFor(game, outcome, viewer) as IRealmArenaOutcome).events;
+            expect(told.some(event => event.kind === "shieldWall")).toBe(false);
+        }
+        for (const viewer of VIEWERS) {
+            expect(realmArenaStepOutcome(outcome, viewer, game.specificGameState)?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
+        }
+        const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES));
+        expect(rows).not.toMatch(/shield/i);
+        expect(rows).not.toMatch(ENEMY_NAME);
+    });
 
     it("is there from the moment the squads take the field without fog", async () => {
         const game = makeRealmArenaGame(["a", "b"], {}, false, "realm", true);

@@ -137,6 +137,9 @@ describe("Realm Arena recap rows", () => {
             ["ra_burning", "Bob's Knight burned for 1", undefined],
         ]);
         expect(rows[1].affectedIds).toEqual(["b"]);
+        // Nobody's: as Alice's, it would close her recap's window after
+        // anything told between the two — the enemy's turn, in co-op (§29.9).
+        expect(rows[1].actorId).toBe("");
         expect(new Set(rows.map(row => row.id)).size).toBe(2);
     });
 

@@ -31,10 +31,10 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IHistoryEntry } from "@/utils/games/history";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
-import { enemyLineCount, UNKNOWN_ENEMY, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
+import { enemyLineCount, UNKNOWN_ENEMY, unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
 import { factionById, type ItemId } from "./characters";
-import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
+import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
@@ -191,14 +191,24 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // enemy is hidden (§29.3), its faction's once it's known — and a turn can
     // see the one give way to the other.
     const names = [UNKNOWN_ENEMY, ...next.enemy ? [factionById(next.enemy).enemyName] : []].map(capitalise);
-    const nameOf = (text: string) => names.find(name => text.startsWith(`${name} `)) ?? names[0];
-    const own = { ...base, actorId: turn.owner, actorUsername: nameOf(lines[0]?.text ?? "") };
+    // "The Renegades moved…", and "The Renegades' Archer burned…" as well.
+    const nameOf = (text: string) => names.find(name => text.startsWith(name)) ?? names[0];
+    // Named as its latest line names it, which is the last to see a sighting.
+    const own = { ...base, actorId: turn.owner, actorUsername: nameOf(lines.at(-1)?.text ?? "") };
+    // While it's hidden, its rows tell what its characters did as the wire
+    // does (`unnamed`), and a blast as the hit it was: a fireball or a Demolish
+    // names the kind of character that did it.
+    const notTeam = (id: number) => !next.fighters.some(fighter => fighter.id === id && !isWarband(fighter.owner));
+    const told = (events: readonly BattleEvent[]): readonly BattleEvent[] => next.enemy ? events
+        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "demolished"
+            ? event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: event.damage, reaction: false }))
+            : [event]);
     let at = 0;
     const rows: IGameEvent[] = burningRow(own, `${command.id}:enemy:burning`, turn.started.length > 0 ? lines.slice(at, ++at) : [], turn.started, next.fighters);
     for (const [index, step] of turn.steps.entries()) {
         const line = lines[at++];
         if (!line) break;
-        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, step.events, step.action.fighter, next.fighters));
+        rows.push(actionRow({ ...own, id: `${command.id}:enemy:${index}` }, nameOf(line.text), line.text, told(step.events), step.action.fighter, next.fighters));
     }
     const points = turn.ended ? centrePointsOf(turn.ended, turn.owner) : 0;
     if (points > 0) {
@@ -268,12 +278,14 @@ function toEvents(
             // this ended it: the enemy's turn, in co-op, then what burning did
             // as the next turn began, told in the line the hand-off wrote for
             // it (§20.3) — more than one where it burned a squad out and passed
-            // on. None of them is anybody's to react to.
+            // on. None of them is anybody's to react to, and the next turn's
+            // burning is nobody's at all: as the sender's, it would close their
+            // own window after the enemy's turn, and they'd never see it.
             const ended = next.complete && !prev.complete;
             const rest = lines.slice(ended ? BATTLE_END_LINES : 0).filter(entry => entry.actorId === undefined).reverse();
             const enemyLines = enemy ? enemyLineCount(enemy) : 0;
             if (enemy) rows.push(...enemyRows(base, command, enemy, rest.slice(0, enemyLines), state(next)));
-            rows.push(...burningRow(base, `${command.id}:burning`, rest.slice(enemyLines), recap?.started ?? events, state(next).fighters));
+            rows.push(...burningRow({ ...base, actorId: "", actorUsername: "" }, `${command.id}:burning`, rest.slice(enemyLines), recap?.started ?? events, state(next).fighters));
             break;
         }
         default:

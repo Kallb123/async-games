@@ -7,14 +7,14 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType } from "@/utils/apiModels/GameLogic";
-import { battleOf, enemyKnown, toldTo, UNKNOWN_ENEMY } from "./RealmArenaLogic";
+import { battleOf, enemyHidden, toldTo, UNKNOWN_ENEMY } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { CHARACTERS, FACTION_IDS, factionById, isFactionId, musterSize, POINTS_BUDGET, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { battleRounds, ENEMY_SIDE, pickOf, storedFighter, viewOf, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
+import { battleRounds, ENEMY_SIDE, isWarband, pickOf, storedFighter, viewOf, warbandOwner, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -393,8 +393,9 @@ export function gameStateToModel(
         fog: gs.fog === true,
         coop: gs.coop !== undefined,
         // A random enemy stays off the wire until it's seen (§29.3), and the
-        // fog lifts as the battle ends, the faction with it.
-        ...(gs.coop && (enemyKnown(gs.coop) || complete) ? { enemy: gs.coop.enemy } : {}),
+        // fog lifts as the battle ends, the faction with it. Never a view with
+        // one of its characters in it and not the faction: that's a sighting.
+        ...(gs.coop && (!enemyHidden(gs.coop) || complete || view.fighters.some(fighter => isWarband(fighter.owner))) ? { enemy: gs.coop.enemy } : {}),
         fighters: view.fighters.map(storedFighter),
         clouds: [...view.clouds ?? []],
         blasted: [...(gs.blasted ?? [])],
@@ -444,7 +445,7 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
     const events = (outcome as { events?: unknown } | null)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
     const battle = battleOf(gs, complete);
-    const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId) : events as BattleEvent[];
+    const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId, enemyHidden(gs.coop)) : events as BattleEvent[];
     return {
         events: told.map((event): ToldEvent => {
             if (event.kind !== "shot") return event;
@@ -500,7 +501,10 @@ export const realmArenaGameResultStatsSchemaDef = {
  */
 function recordEndsWhereBattleDid(gs: IRealmArenaSpecificGameState, record: BattleRecord): boolean {
     const final = record.pointsPerRound.at(-1);
-    return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0));
+    // In co-op the enemy's column too, its warbands added together (§29.6).
+    const enemy = gs.seats.reduce((sum, _, k) => sum + (gs.scores[warbandOwner(k)] ?? 0), 0);
+    return final !== undefined && gs.seats.every(userId => final.get(userId) === (gs.scores[userId] ?? 0))
+        && (!gs.coop || final.get(ENEMY_SIDE) === enemy);
 }
 
 /**
