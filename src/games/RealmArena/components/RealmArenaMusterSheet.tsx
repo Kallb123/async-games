@@ -8,7 +8,7 @@ import { ITEM_ART } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import type { MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_IDS, CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
+import { CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { numberedName, squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
@@ -58,7 +58,7 @@ export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps)
 
 /** Whichever step of the muster the player is on: picking the squad, or placing it. */
 function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmArenaMusterSheetProps) {
-    const { counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
+    const { roster, counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
     // Over budget, the box already says why the muster can't go.
     const why = pointsLeft >= 0 && refusal && <p className="ag-hint">{refusal}</p>;
@@ -73,7 +73,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmA
                         goes as high as the whole budget would buy, and over it the
                         points box turns red. */}
                     <AmountSteppers
-                        kinds={CHARACTER_IDS}
+                        kinds={roster}
                         icon={id => CHARACTER_MARK[id]}
                         title={id => CHARACTERS[id].name}
                         sub={id => `${CHARACTERS[id].points} points · ${CHARACTERS[id].role}${ranks[id] ? ` · Rank ${ranks[id]}` : ''}`}

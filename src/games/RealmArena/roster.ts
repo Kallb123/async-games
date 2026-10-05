@@ -23,7 +23,7 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
     cleric: "✚",
 };
 
-/** The six characters in the order the muster lists them: §13.6's table's. */
+/** Every character, in §13.6's table's order. */
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 /** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */

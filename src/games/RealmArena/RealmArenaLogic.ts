@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, type PlayerCount } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, POINTS_BUDGET, REALM, type PlayerCount } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -416,9 +416,10 @@ export class RealmArenaMuster implements IGameCommand {
         // Seat order, one turn each, so a player's seat is the next muster.
         if (seat !== musters.length) return INVALID;
         const field = battlefieldById(gs.map);
-        // Held to the ranks the battle was created with, never to anything sent (§23.3).
+        // Held to the ranks the battle was created with, never to anything sent (§23.3),
+        // and to the Realm's roster, which every player fights as (§29.3).
         const ranks = gs.mastery?.[this.senderId] ?? {};
-        if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[order.length as PlayerCount], ranks) !== undefined) return INVALID;
+        if (musterRefusal(field, seat, this.picks, POINTS_BUDGET[order.length as PlayerCount], ranks, REALM) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
