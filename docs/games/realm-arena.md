@@ -1016,7 +1016,7 @@ recap, a guide and a tutorial.
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
-| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Planned |
+| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built to PR 5, with battle size beside difficulty; solo next (§30.6) |
 
 **What B2 settled:**
 
@@ -2644,7 +2644,9 @@ sure it is.
 - `musterSize(players, coop)` is the party size a squad musters for — three
   in co-op — and the budget, the ready-made squads (the warbands', a
   timed-out player's, the muster screen's starting squad) and the response's
-  `budget` all read it.
+  `budget` all read it. (Since §30.5 they read `budgetOf` and
+  `warbandBudgetOf`, which move it by the battle's size and the difficulty,
+  and `readyMadeSquad`, keyed by points.)
 - `battleFrom` takes the seats and whether it's co-op, and builds the two
   sides itself: every seat on one, and a warband for each seat (`ai:k`,
   `warbandOwner`) on the other. The response carries `coop` as a flag, and
@@ -2915,14 +2917,15 @@ has played yet (§30.1).
 | 2 | Remembering where an enemy was last seen, in fog (§30.2) | — |
 | 3 | *Hold Out*, a wave-survival mission for co-op (§30.3) | 2 |
 | 4 | Realm Arena's first achievements, co-op's among them (§30.4) | 3 |
-| 5 | Difficulty (§30.5) | 3, 4 |
+| 5 | Difficulty and battle size (§30.5) | 3, 4 |
 | 6 | Solo against the computer (§30.6) | 5 |
 
 PR 1 touches no Realm Arena code and can be built alongside any of the
 others. The rest go in order: the waves hunt the team by where it was last
 seen (PR 2), the achievements reward holding out (PR 3), difficulty adds one
-achievement and sizes the waves (PRs 3–4), and solo is offered with every
-choice the others add already on its setup screen.
+achievement and sizes the waves (PRs 3–4) — battle size comes with it — and
+solo is offered with every choice the others add already on its setup
+screen.
 
 ### 30.1 PR 1: Banned Islet, Outbreak and Fires Out on the shared ending
 
@@ -3162,10 +3165,12 @@ The titles may change; the ids never do (§11). PR 5 adds a sixth.
   Realm Arena: the random enemy's test (§29.11) holds the faction off every
   viewer's response, the null viewer's included, but doesn't pin its keys.
 
-### 30.5 PR 5: difficulty
+### 30.5 PR 5: difficulty and battle size
 
-§29.12 named the lever: the warbands' size. The existing ready-made squads
-already come in three sizes (§13.6), so difficulty needs no new squad:
+*As planned, before battle size joined it; what was built is under* What PR
+5 settled *below, which wins where the two differ.* §29.12 named the lever:
+the warbands' size. The existing ready-made squads already come in three
+sizes (§13.6), so difficulty needs no new squad:
 
 | Difficulty | Each warband | Points |
 |---|---|---:|
@@ -3192,10 +3197,50 @@ already come in three sizes (§13.6), so difficulty needs no new squad:
   Islet's and Fires Out's are; the setup line and the result name it.
 - **One achievement**: `realmarena.against-the-odds`, *Against the Odds*, win
   a battle against the computer on Hard. `difficulty` joins the null view's
-  pin.
+  pin (and, as built, `size`).
 - **Tests.** Each difficulty musters its squad for every warband and every
   wave; an old battle with no `difficulty` is Normal; the setup route refuses
   anything else; the whole-battle tests run at all three.
+
+**What PR 5 settled:**
+
+- **Battle size joins difficulty**, for every mode: *Small*, *Normal* (every
+  battle so far) or *Large*, an `OptionChoiceSection` on the setup screen,
+  stored as `size`, absent for Normal, checked by the setup route (anything
+  but `small` or `large` is refused), named in the setup log ("a large
+  battle, so each player musters 100 points' worth") and on the wire for
+  every viewer. It moves every squad's budget, the players' and the
+  warbands' alike.
+- **Budgets are a ladder** (`BUDGETS`): 50, 60 … 120 points, a rung apart,
+  and every faction has a ready-made squad for each rung, keyed by points
+  rather than party size. A battle's size moves every squad two rungs from
+  the party's normal budget (§13.6); a difficulty then moves a warband from
+  the players' — Easy one rung down, Hard two up — so Normal-sized battles
+  give the 70, 80 and 100 above.
+
+  | Size | Duel | Three | Four | Co-op team | Easy | Normal | Hard |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | Small | 80 | 60 | 50 | 60 | 50 | 60 | 80 |
+  | Normal | 100 | 80 | 70 | 80 | 70 | 80 | 100 |
+  | Large | 120 | 100 | 90 | 100 | 90 | 100 | 120 |
+
+- **The new squads** are 50 (two Men-at-arms and an Archer), 60 (a Knight, a
+  Man-at-arms and an Archer), 90 (a Knight, a Man-at-arms, an Archer and a
+  Mage), 110 (a Knight, a Man-at-arms, an Archer, a Scout and a Mage) and 120
+  (a Knight, an Archer, a Scout, a Mage and a Cleric). The 70-, 80- and
+  100-point squads are the ones every battle before mustered, unchanged, so a
+  replay musters them again; a test holds them.
+- **No squad has more than five characters.** A six-character 120 made a
+  large battle on Hard's slowest warband turns take over a second; at five,
+  the slowest is about three-quarters of one and the average across every
+  size and difficulty stays under 250 ms. The whole-battle test holds every
+  turn under 1.5 s. If a large battle's turns matter in a real request, the
+  cache of sight and odds (§29.7) is next.
+- **The ending names the difficulty** unless it's Normal ("12 points to 8, on
+  Hard"), so the banner, the result and the push all say it.
+- `buildInitialRealmArenaState` takes what the host chose as one settings
+  object (`RealmArenaSettings`), and a replay reads it back off the state
+  (`settingsOf`).
 
 ### 30.6 PR 6: solo against the computer
 
@@ -3329,3 +3374,4 @@ Realm, its sibling in the same world.
 | 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
 | 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op. Every battle scores them, those already being fought too: none had done any damage. The battle record counts them, and the result shows them when anybody scored one (§28.1). |
 | 1.42 | Fog of war reaches the log, the recap and the review (§27.2–§27.3): a player is told only what their side saw, by one rule (`toldTo`); each line of the log is written per player (`perViewer`), naming a character they didn't see as one out of sight, and a line nobody of theirs saw isn't told at all; the recap and its reactions are built per viewer, and a review leaves out a step that told its viewer nothing. The fog lifts on the log as the battle ends. |
+| 1.43 | B9 PR 5 builds difficulty and battle size (§30.5): Easy, Normal or Hard warbands, and Small, Normal or Large battles in every mode, from a ladder of budgets 50–120 points with a ready-made squad of at most five characters for each; *Against the Odds* for a win on Hard. |

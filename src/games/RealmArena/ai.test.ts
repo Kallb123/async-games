@@ -174,7 +174,7 @@ describe("nextAction's pace (§29.7)", () => {
         const team = ["a", "b", "c"];
         const owners = [...team, AI];
         let id = 0;
-        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS.realm.readyMade[3])
+        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS.realm.readyMade[80])
             .map(pick => newFighter(id++, owner, pick.character, pick.square)));
         let state: BattleState = { field: FOUR_GATE_FORT, fighters, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
         const turn = (owner: string, round: number) => {

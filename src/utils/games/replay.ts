@@ -22,7 +22,7 @@ import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStat
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
-import { buildInitialRealmArenaState, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome, stepSummary as realmArenaStepSummary, IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
+import { buildInitialRealmArenaState, settingsOf as realmArenaSettingsOf, gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realmArenaStepOutcome, stepSummary as realmArenaStepSummary, IRealmArenaGameData } from "@/games/RealmArena/RealmArenaModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -336,10 +336,11 @@ registerReplayAdapter({
     // whether it's fought in fog of war likewise (§27), and in co-op whom
     // against (§29.3) — Random was drawn once, and stored as what it drew,
     // and hidden as it was until it's seen again — and the mission (§30.3),
-    // since Hold Out's waves are a rule a replay has to bring as it did.
+    // since Hold Out's waves are a rule a replay has to bring as it did, and
+    // the battle's size and difficulty (§30.5), which set every budget.
     buildInitialSpecificGameState: (gameData) => {
         const gs = (gameData as IRealmArenaGameData).specificGameState;
-        return buildInitialRealmArenaState(gameData.gameState.turnOrder, gs.mastery ?? {}, gs.fog === true, gs.coop?.enemy, gs.coop?.random === true, gs.coop?.mission);
+        return buildInitialRealmArenaState(gameData.gameState.turnOrder, gs.mastery ?? {}, realmArenaSettingsOf(gs));
     },
     // The sealed muster holds in a replay as it does live (§17.2): a snapshot
     // taken before the last player has mustered carries the viewer's own squad

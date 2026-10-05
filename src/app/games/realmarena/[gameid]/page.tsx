@@ -15,7 +15,7 @@ import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
-import { enemyNameOf, musterSize } from "@/games/RealmArena/characters";
+import { enemyNameOf } from "@/games/RealmArena/characters";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, nextWaveRound, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
@@ -135,7 +135,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, musterSize(seats.length, coop), gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
+    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.

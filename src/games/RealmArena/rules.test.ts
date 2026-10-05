@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, CHARACTERS, ITEMS, kitOf, OPTIONS, POINTS_BUDGET, REALM, THROW_RANGE, type CharacterId, type ItemId, type OptionId } from "./characters";
+import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THROW_RANGE, type CharacterId, type ItemId, type OptionId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
     abilitiesOf, ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
@@ -558,20 +558,20 @@ describe("the end of the battle (§5.1)", () => {
 });
 
 describe("mustering", () => {
-    const budget = POINTS_BUDGET[2];
+    const budget = musterBudget(2, false);
     const zone = RUINED_FORT.deployments[0];
 
     it("places the ready-made squad legally for either seat on the Ruined Fort", () => {
         for (const seat of [0, 1]) {
-            const picks = readyMadeMuster(RUINED_FORT, seat, REALM.readyMade[2]);
-            expect(picks.map(pick => pick.character)).toEqual(REALM.readyMade[2]);
+            const picks = readyMadeMuster(RUINED_FORT, seat, REALM.readyMade[100]);
+            expect(picks.map(pick => pick.character)).toEqual(REALM.readyMade[100]);
             expect(musterRefusal(RUINED_FORT, seat, picks, budget, {}, REALM)).toBeUndefined();
         }
     });
 
     it("spreads a ready-made squad over the whole zone when one row is too narrow", () => {
         const narrow = buildBattlefield({ name: "Narrow", rows: ["...", "...", "..."], deployments: [{ col: 0, row: 0, width: 2, height: 3 }], objectives: {} });
-        const squad = REALM.readyMade[2];
+        const squad = REALM.readyMade[100];
         const picks = readyMadeMuster(narrow, 0, squad);
         expect(musterRefusal(narrow, 0, picks, budget, {}, REALM)).toBeUndefined();
         expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
@@ -633,7 +633,7 @@ describe("mustering", () => {
         });
 
         it("leaves the ready-made squad carrying none, and spending the whole budget still", () => {
-            const picks = readyMadeMuster(RUINED_FORT, 0, REALM.readyMade[2]);
+            const picks = readyMadeMuster(RUINED_FORT, 0, REALM.readyMade[100]);
             expect(picks.every(one => one.item === undefined)).toBe(true);
             expect(musterPoints(picks)).toBe(budget);
         });
@@ -1062,7 +1062,7 @@ describe("options (§23.2)", () => {
 
     describe("mustering with one", () => {
         const zone = RUINED_FORT.deployments[0];
-        const budget = POINTS_BUDGET[2];
+        const budget = musterBudget(2, false);
         const pick = (character: CharacterId, option?: unknown): MusterPick => ({ character, square: zone[0], ...(option === undefined ? {} : { option }) } as MusterPick);
 
         it("needs the rank the battle snapshotted with that character", () => {
@@ -1080,7 +1080,7 @@ describe("options (§23.2)", () => {
         });
 
         it("costs what the kit it replaces does", () => {
-            const squad = REALM.readyMade[2].map((character, i) => ({ character, square: zone[i] }));
+            const squad = REALM.readyMade[100].map((character, i) => ({ character, square: zone[i] }));
             const options = squad.map(one => ({ ...one, option: (Object.keys(OPTIONS) as OptionId[]).find(id => OPTIONS[id].character === one.character) }));
             expect(musterPoints(options)).toBe(musterPoints(squad));
             expect(musterRefusal(RUINED_FORT, 0, options, budget, { knight: 1, manAtArms: 1, archer: 1, cleric: 1 }, REALM)).toBeUndefined();

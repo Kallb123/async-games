@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
-import { FACTION_IDS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
+import { FACTION_IDS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
 import { battlefieldById } from "./maps";
 import {
-    computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData,
+    computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
 import { RealmArenaGameType, waveOf, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
@@ -80,8 +80,8 @@ function enemyWon(game: RealmArenaTestGame): boolean {
  * timing each player's turn — the warband's turn that follows is nearly all
  * of it.
  */
-async function coopBattle(players: string[], enemy: FactionId, fog = false, mission?: "holdOut"): Promise<{ game: RealmArenaTestGame; times: number[] }> {
-    const game = makeGame(players, {}, fog, enemy, false, mission);
+async function coopBattle(players: string[], settings: RealmArenaSettings): Promise<{ game: RealmArenaTestGame; times: number[] }> {
+    const game = makeGame(players, {}, settings);
     await musterAll(game);
     const times: number[] = [];
     for (let turn = 0; !game.complete; turn++) {
@@ -116,7 +116,7 @@ describe("co-op's setting (§29.8)", () => {
 
 describe("Hold Out (§30.3)", () => {
     it("refills a warband only to its ready-made strength, using fresh ids and free deployment squares", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const owner = warbandOwner(0);
         const original = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
@@ -126,7 +126,7 @@ describe("Hold Out (§30.3)", () => {
         expect(fresh[0].character).toBe(original[0].character);
         expect(fresh[0].id).toBeGreaterThan(Math.max(...game.specificGameState.fighters.map(fighter => fighter.id)));
         const field = battlefieldById(game.specificGameState.map);
-        expect(fresh[0].square).toBe(readyMadeMuster(field, 2, REALM.readyMade[3])[0].square);
+        expect(fresh[0].square).toBe(readyMadeMuster(field, 2, REALM.readyMade[80])[0].square);
 
         game.specificGameState.fighters.push(...field.deployments[2].map((square, index) => ({
             ...original[1], id: 10_000 + index, owner: "a", square,
@@ -135,7 +135,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("continues after the enemy is wiped out, lands round four's wave, and wins by surviving the last round", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         game.specificGameState.roundsPlayed = 2;
@@ -160,7 +160,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("lands no wave once the last round has been played", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
         game.specificGameState.roundsPlayed = battleRounds(2) - 1;
@@ -173,7 +173,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("is told with the enemy named once, even when no warband finds room", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const gs = game.specificGameState;
         const field = battlefieldById(gs.map);
@@ -192,7 +192,7 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("goes on through an enemy wiped out before the last wave, and ends when the last is beaten", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
         game.specificGameState.roundsPlayed = 11;
@@ -203,11 +203,85 @@ describe("Hold Out (§30.3)", () => {
     });
 
     it("loses immediately when the whole team is down", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm", false, "holdOut");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         game.specificGameState.fighters.forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
         expect(new RealmArenaGameType().CheckGameOver(game)).toBe(true);
         expect(game).toMatchObject({ endReason: "teamloss", endDetail: "overrun in round 1" });
+    });
+});
+
+describe("difficulty (§30.5)", () => {
+    const createGame = RealmArenaInvitationModel.schema.methods.CreateGame as
+        (this: unknown, invite: unknown, userIdList: string[]) => Promise<IRealmArenaGameData>;
+    const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
+    const SIZES: BattleSize[] = ["small", "normal", "large"];
+    const stored = <T extends string>(value: T) => value === "normal" ? undefined : value as Exclude<T, "normal">;
+
+    it("is Easy or Hard as sent, absent for Normal, and refused as anything else", () => {
+        expect(coopInviteOf({ enemy: "realm", difficulty: "hard" })).toEqual({ enemy: "realm", difficulty: "hard" });
+        expect(coopInviteOf({ enemy: "random", mission: "holdOut", difficulty: "easy" })).toEqual({ enemy: "random", mission: "holdOut", difficulty: "easy" });
+        for (const junk of ["normal", "brutal", 3, {}]) expect(coopInviteOf({ enemy: "realm", difficulty: junk })).toBeUndefined();
+        expect(new RealmArenaInvitationModel({ coop: { enemy: "realm", difficulty: "hard" } }).toObject().coop).toEqual({ enemy: "realm", difficulty: "hard" });
+    });
+
+    it("is stored with the battle, named in the setup log, and on the wire for every viewer", async () => {
+        const invite = { turnTimer: 0, coop: { enemy: "realm", difficulty: "hard" } };
+        const game = await createGame.call(invite, invite, ["a", "b"]);
+        expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0, difficulty: "hard" });
+        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: on Hard, each warband musters 100 points' worth");
+        for (const viewer of [null, "a", "b"]) expect(gameStateToModel(game.specificGameState, viewer, null).difficulty).toBe("hard");
+    });
+
+    it("is Normal for a battle that never stored one, as every battle before it", async () => {
+        const invite = { turnTimer: 0, coop: { enemy: "realm" } };
+        const game = await createGame.call(invite, invite, ["a", "b"]);
+        expect(game.specificGameState.coop).not.toHaveProperty("difficulty");
+        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: on Normal, each warband musters 80 points' worth");
+        expect(gameStateToModel(game.specificGameState, "a", null)).not.toHaveProperty("difficulty");
+    });
+
+    it("musters every warband its squad for each size and difficulty, and holds the players to theirs", async () => {
+        for (const size of SIZES) {
+            for (const difficulty of DIFFICULTIES) {
+                for (const players of TEAMS) {
+                    const game = makeGame(players, {}, { size: stored(size), coop: { enemy: "realm", difficulty: stored(difficulty) } });
+                    expect(gameStateToModel(game.specificGameState, "a", null).budget).toBe(musterBudget(players.length, true, size));
+                    await musterAll(game);
+                    const squad = REALM.readyMade[warbandBudget(players.length, size, difficulty)];
+                    for (const owner of warbandsOf(game)) {
+                        expect(game.specificGameState.fighters.filter(fighter => fighter.owner === owner).map(fighter => fighter.character), `${size}, ${difficulty}`)
+                            .toEqual([...squad]);
+                    }
+                }
+            }
+        }
+    });
+
+    it("refills each warband to its difficulty's squad in Hold Out, and no further", async () => {
+        for (const difficulty of ["easy", "hard"] as const) {
+            const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", difficulty } });
+            await musterAll(game);
+            const owner = warbandOwner(0);
+            expect(waveOf(game.specificGameState, owner)).toEqual([]);
+            const band = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
+            band.forEach(fighter => { fighter.hp = 0; });
+            expect(waveOf(game.specificGameState, owner).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
+        }
+    });
+
+    it("names the difficulty in a co-op ending, but not Normal's", async () => {
+        const hard = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", difficulty: "hard" } });
+        await musterAll(hard);
+        hard.specificGameState.fighters.forEach(fighter => { if (!isWarband(fighter.owner)) fighter.hp = 0; });
+        expect(new RealmArenaGameType().CheckGameOver(hard)).toBe(true);
+        expect(hard).toMatchObject({ endReason: "teamloss", endDetail: "overrun in round 1, on Hard" });
+
+        const easy = makeGame(["a", "b"], {}, { coop: { enemy: "realm", difficulty: "easy" } });
+        await musterAll(easy);
+        easy.specificGameState.roundsPlayed = battleRounds(2);
+        expect(new RealmArenaGameType().CheckGameOver(easy)).toBe(true);
+        expect(easy.endDetail).toMatch(/, on Easy$/);
     });
 });
 
@@ -223,7 +297,7 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
             expect(game.specificGameState.coop).toEqual({ enemy: "realm", nextWarband: 0 });
             const setup = game.gameState.history.map(entry => entry.text).join("\n");
             expect(setup).toContain(`against ${REALM.enemyName}`);
-            expect(setup).toContain(`each player musters ${POINTS_BUDGET[3]} points' worth`);
+            expect(setup).toContain(`each player musters ${musterBudget(2, true)} points' worth`);
         }
     });
 
@@ -248,10 +322,10 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
 
 describe("the muster in co-op (§29.1, §29.7)", () => {
     it("holds every squad to 80 points, whatever the size of the team", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         const field = battlefieldById(game.specificGameState.map);
         // The two-player squad spends 100.
-        const { outcome } = await play(game, muster("a", readyMadeMuster(field, 0, REALM.readyMade[2])));
+        const { outcome } = await play(game, muster("a", readyMadeMuster(field, 0, REALM.readyMade[100])));
         expect(outcome.validMove).toBe(false);
         expect((await play(game, muster("a", readyMadePicks(game, 0)))).outcome.validMove).toBe(true);
         expect(gameStateToModel(game.specificGameState, "a", null).budget).toBe(80);
@@ -259,11 +333,11 @@ describe("the muster in co-op (§29.1, §29.7)", () => {
 
     it("musters a warband opposite each player as the last player does, its ids after theirs", async () => {
         for (const players of TEAMS) {
-            const game = makeGame(players, {}, false, "realm");
+            const game = makeGame(players, {}, { coop: { enemy: "realm" } });
             await musterAll(game);
             const gs = game.specificGameState;
             const field = battlefieldById(gs.map);
-            const squad = REALM.readyMade[3];
+            const squad = REALM.readyMade[80];
             const owners = gs.fighters.map(fighter => fighter.owner);
             expect(owners).toEqual([...players, ...warbandsOf(game)].flatMap(owner => squad.map(() => owner)));
             for (const [k, owner] of warbandsOf(game).entries()) {
@@ -286,7 +360,7 @@ describe("the muster in co-op (§29.1, §29.7)", () => {
 describe("the enemy's turn (§29.4)", () => {
     it("follows each player's, one warband after each in turn, recorded on the End turn", async () => {
         const [first, second] = [warbandOwner(0), warbandOwner(1)];
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         const ended = endTurnBy("a");
         const { outcome } = await play(game, ended);
@@ -314,7 +388,7 @@ describe("the enemy's turn (§29.4)", () => {
 
     it("steps past a warband with nobody standing", async () => {
         const [first, second] = [warbandOwner(0), warbandOwner(1)];
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => fighter.owner === first ? { ...fighter, hp: 0 } : fighter);
         const ended = endTurnBy("a");
@@ -324,7 +398,7 @@ describe("the enemy's turn (§29.4)", () => {
     });
 
     it("records that no warband took a turn when the battle is over first, so a replay never plans one", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => isWarband(fighter.owner) ? { ...fighter, hp: 0 } : fighter);
         const ended = endTurnBy("a");
@@ -335,7 +409,7 @@ describe("the enemy's turn (§29.4)", () => {
 
     it("ends there when the planner throws, and the player's End turn still stands", async () => {
         const first = warbandOwner(0);
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         planner.broken = true;
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -367,7 +441,7 @@ describe("the enemy's turn (§29.4)", () => {
 
 describe("what a player is told of the enemy's turn in fog of war (§29.8)", () => {
     it("is only what their side saw, in the End turn's own response as in a review", async () => {
-        const game = makeGame(["a", "b"], {}, true, "realm");
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm" } });
         await musterAll(game);
         const { outcome } = await play(game, endTurnBy("a"));
         const all = (outcome as IRealmArenaOutcome).events;
@@ -391,7 +465,7 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
     });
 
     it("never carries whom the team fights while a random enemy is unseen: only that it's co-op", async () => {
-        const game = makeGame(["a", "b"], {}, true, "realm", true);
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", random: true } });
         await musterAll(game);
         for (const viewer of ["a", "b", null]) {
             const wire = gameStateToModel(game.specificGameState, viewer, null);
@@ -401,7 +475,7 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
     });
 
     it("is everything once the fog has lifted, and everything without it", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         const { outcome } = await play(game, endTurnBy("a"));
         // All but the End turn's parts, which are the recap's (§29.9).
@@ -422,7 +496,7 @@ describe("the computer in whole battles (§29.11)", () => {
             for (const enemy of FACTION_IDS) {
                 for (const fog of [false, true]) {
                     seedRolls(seed++);
-                    const battle = await coopBattle(players, enemy, fog);
+                    const battle = await coopBattle(players, { fog, coop: { enemy } });
                     times.push(...battle.times);
                     expect(battle.game.complete).toBe(true);
                     // One ending for the whole team (§29.5).
@@ -447,7 +521,7 @@ describe("the computer in whole battles (§29.11)", () => {
         let won = 0;
         for (let seed = 0; seed < 20; seed++) {
             seedRolls(100 + seed);
-            const { game } = await coopBattle(TEAMS[seed % 2], "realm");
+            const { game } = await coopBattle(TEAMS[seed % 2], { coop: { enemy: "realm" } });
             // The ending says what the standings do.
             expect(game.endReason).toBe(enemyWon(game) ? "teamloss" : "teamwin");
             if (enemyWon(game)) won++;
@@ -462,7 +536,7 @@ describe("the computer in whole battles (§29.11)", () => {
         for (const players of TEAMS) {
             for (const fog of [false, true]) {
                 seedRolls(seed++);
-                const { game } = await coopBattle(players, "realm", fog, "holdOut");
+                const { game } = await coopBattle(players, { fog, coop: { enemy: "realm", mission: "holdOut" } });
                 expect(game.complete).toBe(true);
                 expect(["teamwin", "teamloss"]).toContain(game.endReason);
                 expect(game.endDetail).toMatch(game.endReason === "teamwin"
@@ -474,9 +548,46 @@ describe("the computer in whole battles (§29.11)", () => {
         expect(error).not.toHaveBeenCalled();
     }, 120_000);
 
+    it("never breaks at any difficulty or battle size, in either mission", async () => {
+        const warn = vi.spyOn(console, "warn");
+        const error = vi.spyOn(console, "error");
+        const times: number[] = [];
+        let seed = 900;
+        for (const size of ["small", undefined, "large"] as const) {
+            for (const difficulty of ["easy", undefined, "hard"] as const) {
+                seedRolls(seed);
+                const mission = seed % 2 === 0 ? "holdOut" as const : undefined;
+                const battle = await coopBattle(TEAMS[seed % 2], { fog: seed % 3 === 0, size, coop: { enemy: "realm", mission, difficulty } });
+                seed++;
+                times.push(...battle.times);
+                expect(battle.game.complete).toBe(true);
+                expect(["teamwin", "teamloss"]).toContain(battle.game.endReason);
+            }
+        }
+        expect(warn).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
+        // Within the budget on average (§29.7). A large battle on Hard fields
+        // the most characters on both sides, and its slowest turns take about
+        // three-quarters of a second, so the slowest is held to more (§30.5).
+        expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
+        expect(Math.max(...times)).toBeLessThan(1_500);
+    }, 180_000);
+
+    it("replays a large battle on Hard to the same end without asking the planner", async () => {
+        seedRolls(13);
+        const { game } = await coopBattle(["a", "b"], { fog: true, size: "large", coop: { enemy: "realm", mission: "holdOut", difficulty: "hard" } });
+        vi.restoreAllMocks();
+        planner.broken = true;
+        const lastId = game.gameState.commandHistory.at(-1)?.id ?? null;
+        for (const viewer of [null, "a"]) {
+            const timeline = await buildTimeline(game, { a: "Alice", b: "Bob" }, [], undefined, viewer);
+            expect(timeline.snapshots[timeline.currentIndex].specificGameState).toEqual(gameStateToModel(game.specificGameState, viewer, lastId, true));
+        }
+    }, 60_000);
+
     it("replays a battle of Hold Out, waves and all, to the same end without asking the planner", async () => {
         seedRolls(11);
-        const { game } = await coopBattle(["a", "b"], "realm", true, "holdOut");
+        const { game } = await coopBattle(["a", "b"], { fog: true, coop: { enemy: "realm", mission: "holdOut" } });
         vi.restoreAllMocks();
         planner.broken = true;
         planner.calls = 0;
@@ -494,7 +605,7 @@ describe("the computer in whole battles (§29.11)", () => {
 
     it("replays a recorded battle to the same end without asking the planner", async () => {
         seedRolls(7);
-        const { game } = await coopBattle(["a", "b"], "realm", true);
+        const { game } = await coopBattle(["a", "b"], { fog: true, coop: { enemy: "realm" } });
         vi.restoreAllMocks();
         planner.broken = true;
         planner.calls = 0;
@@ -516,7 +627,7 @@ const ENEMY = REALM.enemyName;
 
 /** A co-op battle mustered and given these scores, with every warband downed unless the enemy is to be left standing. */
 async function scored(scores: Record<string, number>, enemyStanding = false): Promise<RealmArenaTestGame> {
-    const game = makeGame(["a", "b"], {}, false, "realm");
+    const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
     await musterAll(game);
     const gs = game.specificGameState;
     gs.scores = { ...gs.scores, ...scores };
@@ -558,7 +669,7 @@ describe("the co-op ending (§29.5)", () => {
 
 describe("the enemy in the log (§29.6)", () => {
     it("is named by its faction, its characters by its name, and never as a player", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         await play(game, endTurnBy("a"));
         const lines = game.gameState.history.map(entry => entry.text);
@@ -571,7 +682,7 @@ describe("the enemy in the log (§29.6)", () => {
 
 describe("the recap of the enemy's turn (§29.9)", () => {
     it("gives each of its actions a row, built as a player's is, and folds none of them in with burning", async () => {
-        const game = makeGame(["a", "b"], {}, false, "realm");
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);
         const ended = endTurnBy("a");
         await play(game, ended);
@@ -598,7 +709,7 @@ describe("the recap of the enemy's turn (§29.9)", () => {
 describe("the battle record in co-op (§29.6)", () => {
     it("keeps the enemy as one column, its warbands added together", async () => {
         seedRolls(11);
-        const { game } = await coopBattle(["a", "b"], "realm");
+        const { game } = await coopBattle(["a", "b"], { coop: { enemy: "realm" } });
         const record = await recordBattle(game);
         expect(record).toBeDefined();
         const columns = new Set(record!.fighting.map(row => row.userId));
@@ -633,7 +744,7 @@ describe("the battle record in co-op (§29.6)", () => {
 
     it("leaves a free-for-all's charts a line and a column a player", async () => {
         seedRolls(11);
-        const game = await playScriptedBattle(false, ["a", "b"]);
+        const game = await playScriptedBattle({}, ["a", "b"]);
         const record = await recordBattle(game);
         const charts = formatRealmArenaCharts(computeRealmArenaResultStats(game, record));
         expect(charts).toHaveLength(4);

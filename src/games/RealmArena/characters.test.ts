@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES, CHARACTERS, enemyNameOf, FACTIONS, POINTS_BUDGET, squadPoints, UNKNOWN_ENEMY, type CharacterId, type PlayerCount } from "./characters";
+import { ABILITIES, BUDGETS, CHARACTERS, enemyNameOf, FACTIONS, musterBudget, squadPoints, UNKNOWN_ENEMY, warbandBudget, type BattleSize, type CharacterId, type Difficulty } from "./characters";
 
 describe("the first faction's characters (§13.6)", () => {
     it("each have 5–12 HP and abilities that exist", () => {
@@ -21,15 +21,57 @@ describe("the factions (§29.3)", () => {
         expect([...rosters].sort()).toEqual((Object.keys(CHARACTERS) as CharacterId[]).sort());
     });
 
-    describe.each(Object.values(FACTIONS))("$name's ready-made squads (§17.2)", faction => {
-        it.each([2, 3, 4] as PlayerCount[])("spend the whole %i-player budget, from its own roster", players => {
-            expect(squadPoints(faction.readyMade[players])).toBe(POINTS_BUDGET[players]);
-            expect(faction.readyMade[players].filter(character => !faction.characters.includes(character))).toEqual([]);
+    describe.each(Object.values(FACTIONS))("$name's ready-made squads (§17.2, §30.5)", faction => {
+        it.each([...BUDGETS])("spend the whole %i-point budget, from its own roster", budget => {
+            expect(squadPoints(faction.readyMade[budget])).toBe(budget);
+            expect(faction.readyMade[budget].filter(character => !faction.characters.includes(character))).toEqual([]);
         });
+    });
+
+    it("keep the Realm's squads every battle before battle sizes mustered, which a replay musters again", () => {
+        expect(FACTIONS.realm.readyMade[70]).toEqual(["manAtArms", "manAtArms", "archer", "scout"]);
+        expect(FACTIONS.realm.readyMade[80]).toEqual(["knight", "manAtArms", "archer", "scout"]);
+        expect(FACTIONS.realm.readyMade[100]).toEqual(["knight", "manAtArms", "manAtArms", "archer", "cleric"]);
     });
 
     it("name the enemy by its faction once it's known, and as the enemy until then", () => {
         expect(enemyNameOf("realm")).toBe("the Renegades");
         expect(enemyNameOf(undefined)).toBe(UNKNOWN_ENEMY);
+    });
+});
+
+describe("budgets (§13.6, §30.5)", () => {
+    const SIZES: BattleSize[] = ["small", "normal", "large"];
+    const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
+
+    it("are what every battle before battle sizes mustered, at normal size and difficulty", () => {
+        expect([2, 3, 4].map(players => musterBudget(players, false))).toEqual([100, 80, 70]);
+        expect([2, 3].map(players => musterBudget(players, true))).toEqual([80, 80]);
+        expect([2, 3].map(players => warbandBudget(players))).toEqual([80, 80]);
+    });
+
+    it("give the plan's warbands at a normal size: 70, 80 or 100 points", () => {
+        expect(DIFFICULTIES.map(difficulty => warbandBudget(2, "normal", difficulty))).toEqual([70, 80, 100]);
+    });
+
+    it("land on a rung with a ready-made squad, for every party, size and difficulty", () => {
+        for (const size of SIZES) {
+            for (const players of [2, 3, 4]) expect(BUDGETS, `${players} players, ${size}`).toContain(musterBudget(players, false, size));
+            for (const difficulty of DIFFICULTIES) expect(BUDGETS, `co-op, ${size}, ${difficulty}`).toContain(warbandBudget(2, size, difficulty));
+        }
+    });
+
+    it("grow with the battle's size, and the warbands with the difficulty", () => {
+        for (const players of [2, 3, 4]) {
+            const [small, normal, large] = SIZES.map(size => musterBudget(players, false, size));
+            expect(small).toBeLessThan(normal);
+            expect(large).toBeGreaterThan(normal);
+        }
+        for (const size of SIZES) {
+            const [easy, normal, hard] = DIFFICULTIES.map(difficulty => warbandBudget(2, size, difficulty));
+            expect(easy).toBeLessThan(normal);
+            expect(normal).toBe(musterBudget(2, true, size));
+            expect(hard).toBeGreaterThan(normal);
+        }
     });
 });

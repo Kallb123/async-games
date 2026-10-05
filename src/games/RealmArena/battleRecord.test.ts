@@ -103,7 +103,7 @@ describe("the battle record, read off a whole battle (§28)", () => {
     });
 
     it("isn't read off a battle still being fought, whose replay would see through the fog", async () => {
-        const game = makeGame(undefined, undefined, true);
+        const game = makeGame(undefined, undefined, { fog: true });
         await musterAll(game);
         await playScriptedTurn(game);
         expect(await recordBattle(game)).toBeUndefined();
