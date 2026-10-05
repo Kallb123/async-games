@@ -32,6 +32,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     fog: boolean;
     /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */
     coop: boolean;
+    /** The co-op mission; absent is Hold the Centre. */
+    mission?: "holdOut";
     /**
      * Whom the team fights, in co-op (§29.3), once the team knows: a faction
      * the host picked from the start, one drawn at random once one of its

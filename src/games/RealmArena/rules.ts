@@ -1266,6 +1266,25 @@ export function battleRounds(playerCount: number): number {
     return rounds;
 }
 
+/** Hold Out's waves come every this many rounds, the first at the start of round 4 (§30.3). */
+const WAVE_EVERY = 3;
+
+/** Whether a fresh Hold Out wave arrives as `round` (counted from 1) begins, in a battle `rounds` long (§30.3). */
+export function waveArrives(round: number, rounds: number): boolean {
+    return round > 1 && round <= rounds && (round - 1) % WAVE_EVERY === 0;
+}
+
+/** The round the next Hold Out wave arrives in after `round`, or undefined once the last has landed (§30.3). */
+export function nextWaveRound(round: number, rounds: number): number | undefined {
+    const next = round + WAVE_EVERY - (round - 1) % WAVE_EVERY;
+    return next <= rounds ? next : undefined;
+}
+
+/** The round the last Hold Out wave arrives in, in a battle `rounds` long (§30.3). */
+export function lastWaveRound(rounds: number): number {
+    return rounds - (rounds - 1) % WAVE_EVERY;
+}
+
 /** The players, in seat order, who still have someone of their own standing: whose turns there are still to take. */
 export function squadsStanding(state: BattleState, players: readonly string[]): string[] {
     return players.filter(player => state.fighters.some(fighter => fighter.owner === player && isStanding(fighter)));

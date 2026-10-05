@@ -41,6 +41,8 @@ export interface IRealmArenaCoop {
     enemy: FactionId;
     /** Which warband takes the enemy's next turn, counting from 0 (§29.4). */
     nextWarband: number;
+    /** The wave-survival mission (§30.3). Absent means Hold the Centre. */
+    mission?: "holdOut";
     /**
      * The host chose Random (§29.3): the team musters not knowing whom it
      * will face, and the faction stays hidden — off the wire and unnamed in
@@ -148,6 +150,8 @@ export interface RealmArenaInvitationRequest extends IInvitationRequest {
 /** Whom a co-op team fights, as the host chose it: a faction, or one drawn at random as the battle is created (§29.3). */
 export interface RealmArenaCoopInvite {
     enemy: FactionId | typeof RANDOM_ENEMY;
+    /** Absent is the original Hold the Centre mission. */
+    mission?: "holdOut";
 }
 
 /**
@@ -158,7 +162,9 @@ export interface RealmArenaCoopInvite {
  */
 export function coopInviteOf(value: unknown): RealmArenaCoopInvite | undefined {
     const enemy = (value as { enemy?: unknown } | null | undefined)?.enemy;
-    return enemy === RANDOM_ENEMY || isFactionId(enemy) ? { enemy } : undefined;
+    const mission = (value as { mission?: unknown } | null | undefined)?.mission;
+    if (mission !== undefined && mission !== "holdOut") return undefined;
+    return enemy === RANDOM_ENEMY || isFactionId(enemy) ? { enemy, ...(mission === "holdOut" ? { mission } : {}) } : undefined;
 }
 
 export interface IRealmArenaInvitationData extends IInvitationData {
@@ -201,11 +207,11 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // came out as (§29.3): a replay rebuilds the same enemy, and no client
     // chooses it.
     const enemy = coop && (coop.enemy === RANDOM_ENEMY ? FACTION_IDS[randomInt(FACTION_IDS.length)] : coop.enemy);
-    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy, coop?.enemy === RANDOM_ENEMY);
+    const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy, coop?.enemy === RANDOM_ENEMY, coop?.mission);
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
-    history.push({ text: `Setup: Hold the Centre on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
+    history.push({ text: `Setup: ${coop?.mission === "holdOut" ? "Hold Out" : "Hold the Centre"} on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
     if (invited && !coop) {
         history.push({ text: `Setup: co-op is for ${COOP_PLAYERS.min}–${COOP_PLAYERS.max} players, so this is a free-for-all` });
     }
@@ -255,7 +261,7 @@ export var RealmArenaInvitationModel =
  * state (§17.1, §23.3). Throws for a party the map has no deployment zone for
  * — in co-op, a zone for each player and one for each warband.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false, mission?: "holdOut"): IRealmArenaSpecificGameState {
     const coop = enemy !== undefined;
     const map = mapFor(turnOrder.length, coop);
     const field = battlefieldById(map);
@@ -268,7 +274,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         seats: [...turnOrder],
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
-        ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}) } } : {}),
+        ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}), ...(mission ? { mission } : {}) } } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -388,6 +394,7 @@ export function gameStateToModel(
         budget: POINTS_BUDGET[musterSize(seats.length, gs.coop !== undefined)],
         fog: gs.fog === true,
         coop: gs.coop !== undefined,
+        ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
         // fog lifts as the battle ends, the faction with it. Never a view with
         // one of its characters in it and not the faction: that's a sighting.

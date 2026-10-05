@@ -36,7 +36,7 @@ import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
     abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, isStanding,
     moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, watchedSquares, weaponOf, weaponReaches,
-    type Action, type BattleEvent, type BattleState, type Fighter, type ShotOdds,
+    type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
 import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, standingAt, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
@@ -85,9 +85,9 @@ interface Plan {
  * `view` is the battle as `owner`'s side sees it (`viewOf`), and `round` the
  * battle round, counted from 1. Never anything `check` refuses.
  */
-export function nextAction(view: BattleState, owner: string, round: number): Action | undefined {
+export function nextAction(view: BattleState, owner: string, round: number, hunt?: readonly FogGhost[]): Action | undefined {
     // A round that isn't one would score every battle NaN, which nothing beats.
-    const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1);
+    const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, hunt);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
     const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter) && fighter.ap > 0).sort((a, b) => a.id - b.id);
@@ -103,16 +103,32 @@ export function nextAction(view: BattleState, owner: string, round: number): Act
     return best;
 }
 
-function planFor(view: BattleState, owner: string, round: number): Plan {
+function planFor(view: BattleState, owner: string, round: number, hunt?: readonly FogGhost[]): Plan {
     // A view is already only what its side can see, and seeing it again
     // changes nothing (`viewOf`): dropping the fog spares every `check` the
     // planner asks from working that out again. It adds nothing it didn't see.
     const { fog: _fog, ...state } = view;
     const { field } = state;
-    const centre = new Set(field.objectives[CENTRE] ?? []);
+    // In Hold Out (`hunt` given) the Objective is the team rather than the
+    // keep (§30.3): the enemies it sees, else where it last saw them, else
+    // the keep after all. It keeps the keep's urgency, so a warband closes
+    // in gently in the first rounds and in earnest from round
+    // CENTRE_SCORES_FROM_ROUND on (`standingTerms`).
+    const seenEnemies = state.fighters.filter(fighter => isStanding(fighter) && !allied(state, fighter.owner, owner));
+    const hunted = hunt === undefined ? [] : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square) : hunt.map(ghost => ghost.square);
+    const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
+    const centre = new Set(objective);
+    const huntWalks = new Map<number, Float64Array>();
     const toCentre = (fighter: Fighter): number => {
         if (centre.size === 0 || centre.has(fighter.square)) return 0;
-        const cost = centreWalk(field, CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB)[fighter.square];
+        const climb = CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB;
+        let costs = huntWalks.get(climb);
+        if (hunted.length > 0 && !costs) {
+            const walks = objective.map(square => reachFrom(field, square, Infinity, { climb }).costs);
+            costs = Float64Array.from({ length: field.tiles.length }, (_, square) => Math.min(...walks.map(walk => walk[square])));
+            huntWalks.set(climb, costs);
+        }
+        const cost = hunted.length > 0 ? costs![fighter.square] : centreWalk(field, climb)[fighter.square];
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
     let watched: ReadonlySet<Square> | undefined;
