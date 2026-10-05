@@ -19,9 +19,9 @@ library, at command version 2. A finished battle's result tells the battle
 record of what each squad did. Co-op against the computer (B8, §29) is built:
 the players as one team, and an enemy of the host's choosing, played by game
 AI, that takes a turn after each of theirs. §30 plans what comes after it:
-Banned Islet and Outbreak on co-op's shared ending, remembering where an
-enemy was last seen, a wave-survival mission, achievements, difficulty and
-solo play.
+Banned Islet, Outbreak and Fires Out on co-op's shared ending, remembering
+where an enemy was last seen, a wave-survival mission, achievements,
+difficulty and solo play.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
 **Players:** 2–4, free-for-all or two teams of two
@@ -998,7 +998,7 @@ recap, a guide and a tutorial.
 | B6 | More factions | After C |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
-| B9 | After co-op: the shared ending for Banned Islet and Outbreak, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Planned |
+| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Planned |
 
 **What B2 settled:**
 
@@ -2745,7 +2745,7 @@ sure it is.
 | 4a | **The enemy's turn.** `coop` from setup to state, Random drawn, `applyAction` and `applyEndTurn` out of the commands, the warbands mustered, their turn in `handOff`, recorded and replayed, and the whole-battle tests (§29.11). The setup route takes `coop`; the screen doesn't offer it yet | `caveman`, `locksmith`, `gremlin`, `croupier` |
 | 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, the recap's rows for the enemy's turn, and a random enemy kept hidden until it's seen (§29.3) | `caveman`, `croupier` |
 | 5 | **The screens** (§29.9), the enemy's faction picker among them, the guide, and the one What's new line | `caveman`, `rulebook` |
-| Later | Planned in §30: Banned Islet and Outbreak moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer. Fires Out's move onto `endAsTeam` is left out | |
+| Later | Planned in §30: Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
 
 ### 29.11 Testing the computer
 
@@ -2841,7 +2841,7 @@ player sees, so it adds none.
 
 | PR | What | Depends on |
 |---|---|---|
-| 1 | Banned Islet and Outbreak end through `endAsTeam` (§30.1) | — |
+| 1 | Banned Islet, Outbreak and Fires Out end through `endAsTeam` (§30.1) | — |
 | 2 | Remembering where an enemy was last seen, in fog (§30.2) | — |
 | 3 | *Hold Out*, a wave-survival mission for co-op (§30.3) | 2 |
 | 4 | Realm Arena's first achievements, co-op's among them (§30.4) | 3 |
@@ -2854,37 +2854,44 @@ seen (PR 2), the achievements reward holding out (PR 3), difficulty adds one
 achievement and sizes the waves (PRs 3–4), and solo is offered with every
 choice the others add already on its setup screen.
 
-### 30.1 PR 1: Banned Islet and Outbreak on the shared ending
+### 30.1 PR 1: Banned Islet, Outbreak and Fires Out on the shared ending
 
 Co-op's ending was written once, as `endAsTeam` (`src/utils/games/endAsTeam.ts`,
 §29.5), so that the co-ops that came before it could move onto it. Banned
-Islet and Outbreak each still write `complete`, `winner`, `endReason`,
-`endDetail`, `currentTurn` and the closing history line by hand, in two
-functions each that are line for line the same as each other's.
+Islet, Outbreak and Fires Out each still write `complete`, `winner`,
+`endReason`, `currentTurn` and the closing history line by hand — Banned
+Islet and Outbreak `endDetail` too, in two functions each that are line for
+line the same as each other's.
 
 - **The wins.** Banned Islet's `endInEscape` and Outbreak's win in
   `CheckGameOver` become `endAsTeam(data, "teamwin", line)`, with the line
   each writes today.
+- **Fires Out** ends in one place, its `CheckGameOver`, in a win and two
+  losses (the building collapsed, too many victims lost). Each becomes
+  `endAsTeam` with the line it writes today and no detail, as now. Giving its
+  two losses a detail, as Banned Islet's and Outbreak's have, would tell the
+  banner, the result page and the push which loss it was; that's a change a
+  player would see, so it's left for a PR of its own.
 - **The losses.** Each game's `endInTeamLoss(data, reason, detail = reason)`
   becomes `endAsTeam(data, "teamloss", \`The team loses — ${reason}.\`, detail)`.
   The `reason`/`detail` split stays exactly as it is — `endDetail` must never
   carry a `{{userId}}` token — and so do the comments that say why. Whether
   the two one-line wrappers survive is the caveman's call; the shared part is
   `endAsTeam`.
-- **The screens.** Both boards word a defeat by hand ("💀 The team lost",
+- **The screens.** Banned Islet's and Outbreak's boards word a defeat by hand ("💀 The team lost",
   "The team lost — {detail}."). Those read `finishedGameCopy`
   (`src/utils/ui/players.ts`), as Realm Arena's board does, so the subtitle,
   the banner, the home page and the result page can't word one ending four
   ways. Each game keeps its own win line ("Four relics off a sinking island,
   and everyone aboard!") and the fallback for a game that ended before a
-  reason was recorded.
+  reason was recorded. Fires Out's board words no ending of its own beyond its
+  win and loss lines, and is untouched.
 - **Nothing changes for a player.** Every log line, `endDetail` and banner
   reads as it did, so stored games and replays are untouched and no command
   version is needed. The games' existing ending tests are the proof, and pass
   unchanged.
-- **`endAsTeam`'s comment** stops naming the two as writing theirs by hand.
-  Fires Out is the one co-op still doing so, and is left as it is: it isn't
-  in this plan.
+- **`endAsTeam`'s comment** stops naming the three as writing theirs by
+  hand: every co-op ends through it.
 
 ### 30.2 PR 2: where an enemy was last seen
 
@@ -3241,4 +3248,4 @@ Realm, its sibling in the same world.
 | 1.37 | B8 PR 4a builds the enemy's turn (§29.4, §29.8): `coop` from the setup route to the state, Random drawn as the battle is created; every squad mustered at 80 points and a warband opposite each player as the last one musters; `applyAction` and `applyEndTurn` out of the commands; the next warband's turn inside each player's End turn, recorded there and replayed without the planner; the End turn's own response cut to what the sender's side saw in fog. The whole-battle tests: it never breaks, it plays well, and replay holds. |
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
-| 1.40 | The next six PRs after co-op (§30, B9): Banned Islet and Outbreak end through `endAsTeam`, and word a defeat with `finishedGameCopy`; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
+| 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam`, and Banned Islet and Outbreak word a defeat with `finishedGameCopy`; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
