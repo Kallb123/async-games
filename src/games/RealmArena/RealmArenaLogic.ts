@@ -21,6 +21,7 @@ import {
     endTurn,
     ENEMY_SIDE,
     fighterById,
+    fogGhost,
     isBattleOver,
     isStanding,
     isWarband,
@@ -46,11 +47,10 @@ import {
     type BattleEvent,
     type BattleState,
     type Fighter,
-    type FogGhost,
     type MusterPick,
     type Roll,
 } from "@/games/RealmArena/rules";
-import type { Square } from "@/utils/games/battlefield/terrain";
+import { facingTowards, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import { nextAction } from "@/games/RealmArena/ai";
 import { playerHistory, tellEveryone, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
@@ -525,33 +525,33 @@ export function rememberFogSightings(gs: IRealmArenaSpecificGameState, events: r
     gs.sightings = Object.fromEntries(gs.seats.map(viewer => {
         const seen = squadSight(battle, viewer);
         const remembered = new Map((gs.sightings?.[viewer] ?? []).map(ghost => [ghost.id, ghost]));
-        const previouslyKnown = new Set(remembered.keys());
 
         // Seeing the remembered square proves that stale marker wrong.
         for (const [id, ghost] of remembered) if (seen(ghost.square)) remembered.delete(id);
         for (const fighter of battle.fighters) {
             if (allied(battle, fighter.owner, viewer)) continue;
             if (seen(fighter.square)) {
-                remembered.set(fighter.id, fogGhost(fighter));
+                // One seen lying down is down, not somewhere to be looked for.
+                if (isStanding(fighter)) remembered.set(fighter.id, fogGhost(fighter));
+                else remembered.delete(fighter.id);
                 continue;
             }
             // A move may finish out of sight. Remember the first hidden
-            // square after its last visible step: where it entered fog,
-            // not its now-secret destination.
+            // square after its last visible step: where it entered fog, not
+            // its now-secret destination, and never a square in sight, where
+            // it would stand beside whoever is really there. It faces the
+            // step it was seen take into the fog, not any it took after.
             const path = moved.get(fighter.id);
-            if (!path || !previouslyKnown.has(fighter.id)) continue;
-            let entry: Square | undefined;
+            if (!path) continue;
+            let entry: { square: Square; facing: Facing } | undefined;
             for (let index = 1; index < path.length; index++) {
-                if (seen(path[index - 1]) && !seen(path[index])) entry = path[index];
+                if (seen(path[index - 1]) && !seen(path[index])) entry = { square: path[index], facing: facingTowards(battle.field, path[index - 1], path[index]) };
             }
-            if (entry !== undefined) remembered.set(fighter.id, { ...fogGhost(fighter), square: entry });
+            if (entry !== undefined) remembered.set(fighter.id, { ...fogGhost(fighter), ...entry });
         }
         return [viewer, [...remembered.values()]];
     }));
 }
-
-/** Nothing mutable or secret about a fighter belongs in a stale sighting. */
-const fogGhost = ({ id, owner, character, square, facing }: Fighter): FogGhost => ({ id, owner, character, square, ...(facing === undefined ? {} : { facing }) });
 
 // ─── What a viewer is told (§27) ────────────────────────────────────────────
 

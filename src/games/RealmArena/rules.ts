@@ -147,6 +147,9 @@ export interface Fighter {
 /** The deliberately small, stale picture of an enemy remembered in fog. */
 export type FogGhost = Pick<Fighter, "id" | "owner" | "character" | "square" | "facing">;
 
+/** A fighter, or a sighting read back from a Mixed path, cut to a sighting: nothing mutable or secret about it. */
+export const fogGhost = ({ id, owner, character, square, facing }: FogGhost): FogGhost => ({ id, owner, character, square, ...(facing === undefined ? {} : { facing }) });
+
 /** What every rule reads: the ground, and everyone on it. */
 export interface BattleState {
     /** The map with whatever has been blasted away so far already cleared from it (`battlefieldWith`, §22). */

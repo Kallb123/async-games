@@ -14,7 +14,7 @@ import { userToken } from "@/utils/games/history";
 import { CHARACTERS, COOP_PLAYERS, FACTION_IDS, factionById, fitsCoop, isFactionId, musterSize, POINTS_BUDGET, RANDOM_ENEMY, UNKNOWN_ENEMY, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
-import { allied, battleRounds, ENEMY_SIDE, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
@@ -417,7 +417,7 @@ function fogGhostsFor(gs: IRealmArenaSpecificGameState, viewerId: string | null,
     const visible = new Set(viewOf(battle, viewerId).fighters.map(fighter => fighter.id));
     return (gs.sightings?.[viewerId] ?? [])
         .filter(ghost => !visible.has(ghost.id) && !seen(ghost.square))
-        .map(({ id, owner, character, square, facing }) => ({ id, owner, character, square, ...(facing === undefined ? {} : { facing }) }));
+        .map(fogGhost);
 }
 
 /**

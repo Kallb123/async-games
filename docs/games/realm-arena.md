@@ -1926,9 +1926,12 @@ place — moving — what a player can be held to knowing.
   enemy in its way never can be: it showed the player that enemy.
 - **The board remembers the last sighting.** When an enemy leaves a player's
   sight, a translucent figure stays on the first hidden square of its path —
-  where it entered the fog. It is only a stale marker, not the enemy's current
-  position or state. As soon as that square is visible again the marker goes;
-  the real character is shown if it is there, otherwise the square is empty.
+  where it entered the fog, facing the way it stepped in — never on a square in
+  sight, where it would stand beside whoever is really there. It is only a
+  stale marker, not the enemy's current position or state. As soon as that
+  square is visible again the marker goes; the real character is shown if it
+  is there, otherwise the square is empty. An enemy seen lying down leaves no
+  marker.
 - **The fog lifts when the battle ends.** The last state, the results and
   the whole log show everyone.
 
