@@ -69,8 +69,13 @@ export interface FightingRow extends FightingRecord {
 export interface BattleRecord {
     /** A row for every kind of character each column fought with, in seat order — the enemy last — and then the muster's. */
     fighting: FightingRow[];
-    /** Each column's points from holding the centre; the rest of its score is knock-outs. */
+    /** Each column's points from holding the centre; the rest of its score is knock-outs and assists. */
     centrePoints: Map<string, number>;
+    /**
+     * Each column's points from assists (§13.7). Absent on a result recorded
+     * before them, and every column 0 in a battle that had none.
+     */
+    assistPoints: Map<string, number>;
     /** Each column's score at the end of every battle round. */
     pointsPerRound: Map<string, number>[];
     /** The HP each column had standing at the end of every battle round. */
@@ -107,6 +112,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
     let records = new Map<string, FightingRecord>();
     let undoable: Map<string, FightingRecord>[] = [];
     const centrePoints = new Map(columns.map(column => [column, 0]));
+    const assistPoints = new Map(columns.map(column => [column, 0]));
     const pointsPerRound: Map<string, number>[] = [];
     const squadHpPerRound: Map<string, number>[] = [];
     const losses: GameResultEvent[] = [];
@@ -195,9 +201,11 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: columnOf(fallen.owner) });
                     break;
                 }
-                case "scored":
-                    if (event.reason === "centre") centrePoints.set(columnOf(event.player), (centrePoints.get(columnOf(event.player)) ?? 0) + event.points);
+                case "scored": {
+                    const points = event.reason === "centre" ? centrePoints : event.reason === "assist" ? assistPoints : undefined;
+                    points?.set(columnOf(event.player), (points.get(columnOf(event.player)) ?? 0) + event.points);
                     break;
+                }
             }
         }
     }
@@ -258,6 +266,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     return record ? [{ userId, character, ...record }] : [];
                 })),
                 centrePoints: new Map(centrePoints),
+                assistPoints: new Map(assistPoints),
                 pointsPerRound: [...pointsPerRound],
                 squadHpPerRound: [...squadHpPerRound],
                 losses: [...losses],

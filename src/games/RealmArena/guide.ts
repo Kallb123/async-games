@@ -1,7 +1,7 @@
 import type { GameGuide } from "@/utils/ui/gameGuides";
 import { CHARACTERS, COOP_PLAYERS, EFFECTS, ITEMS, musterSize, POINTS_BUDGET, THROW_RANGE } from "./characters";
 import { RANK_XP } from "./mastery";
-import { ACTION_POINTS, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE } from "./rules";
+import { ACTION_POINTS, ASSIST_DIVISOR, ATTACK_AP, CENTRE_POINTS, CENTRE_SCORES_FROM_ROUND, COVER_PENALTY, FLANK_BONUS, GRAZE_BAND, HIGH_GROUND_BONUS, HUNKER_AP, KNOCKOUT_DIVISOR, OVERWATCH_PENALTY, REACTION_COST, SIGHT_RANGE } from "./rules";
 
 // The how-to-play primer shown from the game-options menu, and the reference
 // text behind the guided tour (tutorial.ts), which takes the guide's place on
@@ -26,7 +26,7 @@ export const guide: GameGuide = {
     sections: [
         {
             heading: "Goal",
-            body: `Score the most points by the last battle round. End your own turn with your squad holding the centre — someone of yours in the marked square in the middle, and no enemy — for ${CENTRE_POINTS} points, from round ${CENTRE_SCORES_FROM_ROUND}. Knocking an enemy out scores what they cost to muster ÷ ${KNOCKOUT_DIVISOR}. First you muster: spend your points on a squad, as many of any one character as they buy, and on items for it to carry, one each, then place it in your deployment zone. While you place it, tap a character to choose which of your items it carries. Every battle a character fights in earns it experience, and each attack, ability and item it uses earns more: at ${RANK_XP[0]} XP you reach rank 1 with it, which unlocks an option — swap one of its abilities, or the Mage's bolt, for another at the same cost — and your profile shows how far each is from its next rank. Nobody sees anyone's squad until every player has mustered.`,
+            body: `Score the most points by the last battle round. End your own turn with your squad holding the centre — someone of yours in the marked square in the middle, and no enemy — for ${CENTRE_POINTS} points, from round ${CENTRE_SCORES_FROM_ROUND}. Knocking an enemy out scores what they cost to muster ÷ ${KNOCKOUT_DIVISOR}. In a free-for-all, everyone else who hurt them since they last stood up scores an assist: the knock-out's points ÷ ${ASSIST_DIVISOR}, rounded up. First you muster: spend your points on a squad, as many of any one character as they buy, and on items for it to carry, one each, then place it in your deployment zone. While you place it, tap a character to choose which of your items it carries. Every battle a character fights in earns it experience, and each attack, ability and item it uses earns more: at ${RANK_XP[0]} XP you reach rank 1 with it, which unlocks an option — swap one of its abilities, or the Mage's bolt, for another at the same cost — and your profile shows how far each is from its next rank. Nobody sees anyone's squad until every player has mustered.`,
         },
         {
             heading: "Your turn",

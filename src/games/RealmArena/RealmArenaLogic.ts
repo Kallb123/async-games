@@ -30,6 +30,7 @@ import {
     pickOf,
     readyMadeMuster,
     ROLL_SIDES,
+    SCORED_FOR,
     squadSight,
     sideScore,
     squadsStanding,
@@ -407,7 +408,7 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
         case "burned": return `${name(event.fighter)} burned for ${event.damage}`;
         case "scored": {
             const who = event.player === actor ? "scored" : `${ownerToken(event.player, coop)} scored`;
-            return `${who} ${event.points} for ${event.reason === "centre" ? "holding the centre" : "the knock-out"}`;
+            return `${who} ${event.points} for ${SCORED_FOR[event.reason]}`;
         }
     }
 }
@@ -1089,7 +1090,8 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): 
 // turning up has their squad leave the battlefield, and their score stands
 // (§4). Their characters are taken off rather than downed, so nobody scores a
 // knock-out for them and nobody can raise them, and none of them is left on
-// watch; the rotation steps past the seat (`nextSeat`). A duel isn't carried
+// watch; the rotation steps past the seat (`nextSeat`). Nor does the player
+// score an assist for a character their squad hurt before it left (§13.7). A duel isn't carried
 // on: two seats is `minPlayers`, so dropping one of them abandons the game, as
 // it always has.
 //
@@ -1108,6 +1110,11 @@ registerPlayerDropoutAdapter({
     dropPlayer(gameData, userId) {
         const gs = (gameData as IRealmArenaGameData).specificGameState;
         gs.fighters = (gs.fighters ?? []).map(storedFighter).filter(fighter => fighter.owner !== userId);
+        for (const fighter of gs.fighters) {
+            if (!fighter.woundedBy) continue;
+            fighter.woundedBy = fighter.woundedBy.filter(owner => owner !== userId);
+            if (fighter.woundedBy.length === 0) delete fighter.woundedBy;
+        }
         clearUndo(gs);
     },
 });
