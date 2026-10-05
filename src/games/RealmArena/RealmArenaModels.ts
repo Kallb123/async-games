@@ -84,14 +84,6 @@ export interface IRealmArenaSpecificGameState {
      */
     fog?: boolean;
     /**
-     * Whether a knock-out also scores an assist for every other enemy who hurt
-     * the fallen (§13.7). Fixed when the battle is created, on in every battle
-     * since assists were, so a battle already being fought keeps the scoring
-     * it began with and a replay scores it the same way; absent on one created
-     * before them.
-     */
-    assists?: boolean;
-    /**
      * Co-op against the computer (§29): the players fight as one team against
      * a warband each, played by the game. Chosen by the host and fixed when
      * the battle is created; absent in a free-for-all, every battle from
@@ -256,13 +248,12 @@ export var RealmArenaInvitationModel =
  * battle was created, in fog of war if the host chose it (§27), and in co-op
  * against `enemy`'s warbands if the host chose that (§29), with the first
  * warband to take the enemy's first turn — kept hidden until it's seen if it
- * was drawn at `random` (§29.3), scoring assists unless it was created before
- * them (§13.7). A pure function of those, all
+ * was drawn at `random` (§29.3). A pure function of those, all
  * persisted, so replay rebuilds it rather than persisting a snapshot of the
  * state (§17.1, §23.3). Throws for a party the map has no deployment zone for
  * — in co-op, a zone for each player and one for each warband.
  */
-export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false, assists = true): IRealmArenaSpecificGameState {
+export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, fog = false, enemy?: FactionId, random = false): IRealmArenaSpecificGameState {
     const coop = enemy !== undefined;
     const map = mapFor(turnOrder.length, coop);
     const field = battlefieldById(map);
@@ -276,7 +267,6 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
         ...(coop ? { coop: { enemy, nextWarband: 0, ...(random ? { random: true } : {}) } } : {}),
-        ...(assists ? { assists: true } : {}),
         phase: "muster",
         roundsPlayed: 0,
         fighters: [],
@@ -312,8 +302,6 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             seats: [String],
             // Written once, as the battle is created (§27).
             fog: Boolean,
-            // Written once, as the battle is created (§13.7).
-            assists: Boolean,
             // The enemy is written once, as the battle is created; the rotation
             // moves on with every enemy turn (§29.4).
             coop: Schema.Types.Mixed,

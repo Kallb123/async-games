@@ -117,8 +117,8 @@ export interface Fighter {
     /**
      * The enemies who have taken HP off it since it last stood up, in the
      * order they first did, each of whom but the one who downs it scores an
-     * assist when it's downed (§13.7). Only in a battle with assists, and
-     * absent until one of them hurts it; gone once it's down.
+     * assist when it's downed (§13.7). Absent until one of them hurts it;
+     * gone once it's down.
      */
     woundedBy?: string[];
     /** Turns until each ability on cooldown can be used again; absent means ready. */
@@ -169,12 +169,6 @@ export interface BattleState {
      * the server, the board and the recap alike. Read only through `sideOf`.
      */
     sides?: Readonly<Record<string, string>>;
-    /**
-     * Whether a knock-out also scores an assist for every other enemy who hurt
-     * the fallen (§13.7): every battle created since assists were, and absent
-     * on one created before them, which keeps scoring the knock-out alone.
-     */
-    assists?: boolean;
 }
 
 /** What a `BattleState` is built from: the persisted state on the server, the response on the board and in the recap. */
@@ -185,7 +179,6 @@ export interface BattleSource {
     /** The players in seat order, and whether they fight together against the computer's warbands (§29): what the sides are read from. */
     seats?: readonly string[];
     coop?: boolean;
-    assists?: boolean;
 }
 
 /**
@@ -212,12 +205,9 @@ export const ENEMY_SIDE = "enemy";
  * battle so far — has no `sides`. Co-op has two: the players, and a warband
  * for each of them (§29.1).
  */
-export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop, assists }: BattleSource): BattleState {
+export function battleFrom(field: Battlefield, { fighters, fog, clouds, seats = [], coop }: BattleSource): BattleState {
     const sides = coop ? Object.fromEntries([...seats.map(player => [player, TEAM_SIDE]), ...warbandsFor(seats).map(warband => [warband, ENEMY_SIDE])]) : undefined;
-    return {
-        field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}),
-        ...(assists ? { assists: true } : {}),
-    };
+    return { field, fighters, ...(fog ? { fog: true } : {}), ...(clouds && clouds.length > 0 ? { clouds } : {}), ...(sides ? { sides } : {}) };
 }
 
 /** The side an owner fights on (§29.6): its own, in a free-for-all. */
@@ -615,7 +605,6 @@ export function viewOf(state: BattleState, player: string | null): BattleState {
         fog: true,
         ...(clouds.length > 0 ? { clouds } : {}),
         ...(state.sides ? { sides: state.sides } : {}),
-        ...(state.assists ? { assists: true } : {}),
     };
 }
 
@@ -921,9 +910,9 @@ function resolver(state: BattleState, roll: Roll) {
 
     /**
      * Takes HP off a character; at 0 it's down, losing every effect, and an
-     * enemy who downed it scores (§13.5, §13.7, §20.2). So, in a battle with
-     * assists, does every other enemy who hurt it since it last stood up —
-     * all but the downer's own side, which the knock-out already scores for.
+     * enemy who downed it scores (§13.5, §13.7, §20.2). So does every other
+     * enemy who hurt it since it last stood up — all but the downer's own
+     * side, which the knock-out already scores for.
      * An assist is only ever beside a knock-out: a character downed by its own
      * side, or by a fire whose setter has left, scores nobody anything. In a
      * duel or in co-op, only the downer's side can have hurt it, so assists
@@ -931,7 +920,7 @@ function resolver(state: BattleState, roll: Roll) {
      */
     const wound = (by: Pick<Fighter, "id" | "owner">, target: Fighter, damage: number) => {
         const enemy = !allied(battle, by.owner, target.owner);
-        if (battle.assists && enemy && damage > 0 && !target.woundedBy?.includes(by.owner)) target.woundedBy = [...target.woundedBy ?? [], by.owner];
+        if (enemy && damage > 0 && !target.woundedBy?.includes(by.owner)) target.woundedBy = [...target.woundedBy ?? [], by.owner];
         target.hp = Math.max(0, target.hp - damage);
         if (isStanding(target)) return;
         const assists = enemy ? (target.woundedBy ?? []).filter(owner => !allied(battle, owner, by.owner)) : [];

@@ -758,10 +758,10 @@ As proposed in v0.3 (default taken):
   scores nobody. A character downed forgets who hurt it, so one raised starts
   owing nobody, though a heal doesn't; a player who drops scores none for the
   hurt their squad did before it left. Who hurt a character stays on the
-  server: it's never sent. Fixed as a battle is created: a battle begun
-  before assists keeps scoring the knock-out alone, and replays that way. So
-  no command version: no command means anything different, and an older
-  battle replays with the flag as it was stored.
+  server: it's never sent. It applies to every battle, those already being
+  fought among them, with no command version: no command means anything
+  different, and no battle fought before it had done any damage, so every
+  replay of one scores as it did.
 
 It brings squads together early, and works the same in free-for-all and in
 teams.
@@ -3276,4 +3276,4 @@ Realm, its sibling in the same world.
 | 1.38 | B8 PR 4b builds the end of it (§29.3, §29.5, §29.6, §29.9): `endAsTeam` and the team's ending, with the final score as its detail; a random enemy hidden until the team sees it (`coop.random`, `coop.enemySeen`), off the wire and named "the enemy" in the log through `ownerToken` until then; the End turn's outcome holding the enemy's turn step by step, and the recap's rows for it built as a player's are; the battle record with the enemy as one column. |
 | 1.39 | B8 PR 5 builds the screens (§29.9): the setup's mode and its hidden enemy picker, co-op's party of two or three; the enemy named and coloured as one on the board, the scoreboard as the team's total against the enemy's, and the team's ending; the result's races as the team's line against the enemy's, and the enemy beside the players in the damage chart and the battle record; the guide's co-op section. B8 is built. |
 | 1.40 | The next six PRs after co-op (§30, B9): Banned Islet, Outbreak and Fires Out end through `endAsTeam` and word a defeat with `finishedGameCopy`, and a Fires Out loss says which of its two it was; a side remembers where it last saw each enemy in fog, drawn faded on the board and read by the planner, and never sent to anyone else; *Hold Out*, a co-op mission where every third round each warband is brought back up to strength and the team wins by having anyone standing at the end, hunted by warbands that head for the team they see or remember; Realm Arena's first achievements, every match check an `end` check since fog hides the battlefield from the null viewer until it's over; difficulty as the warbands' size, from the existing ready-made squads (70, 80 or 100 points); and solo, co-op with a team of one on the Ruined Fort, whose turn never leaves the player. |
-| 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op; fixed as a battle is created, so one already being fought keeps scoring the knock-out alone. The battle record counts them, and the result shows them when anybody scored one (§28.1). |
+| 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op. Every battle scores them, those already being fought too: none had done any damage. The battle record counts them, and the result shows them when anybody scored one (§28.1). |

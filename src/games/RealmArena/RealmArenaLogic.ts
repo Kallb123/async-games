@@ -87,7 +87,6 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
         fog: gs.fog === true && !complete,
         seats: gs.seats,
         coop: gs.coop !== undefined,
-        assists: gs.assists === true,
     });
 }
 
@@ -260,7 +259,6 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         fighters: (gs.fighters ?? []).map(storedFighter),
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.coop ? { coop: { ...gs.coop } } : {}),
-        ...(gs.assists ? { assists: true } : {}),
         blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
         scores: { ...gs.scores },

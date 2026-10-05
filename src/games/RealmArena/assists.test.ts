@@ -35,14 +35,14 @@ function ready(id: number, owner: string, character: CharacterId, square: number
 }
 
 /** A Knight in the middle with a Man-at-arms of `a`'s, `b`'s and `c`'s on three sides of it: three strikes of 4 down its 12 HP. */
-function ringed(assists = true, sides?: BattleState["sides"]): BattleState {
+function ringed(sides?: BattleState["sides"]): BattleState {
     const fighters = [
         ready(0, "x", "knight", at(OPEN, 4, 2)),
         ready(1, "a", "manAtArms", at(OPEN, 3, 2)),
         ready(2, "b", "manAtArms", at(OPEN, 5, 2)),
         ready(3, "c", "manAtArms", at(OPEN, 4, 1)),
     ];
-    return { field: OPEN, fighters, ...(assists ? { assists: true } : {}), ...(sides ? { sides } : {}) };
+    return { field: OPEN, fighters, ...(sides ? { sides } : {}) };
 }
 
 /** Each strike in turn, by the fighter with that id, on the Knight: the battle after them all, and every event. */
@@ -99,7 +99,7 @@ describe("assists on a knock-out (§13.7)", () => {
 
     it("score nobody on the downer's side, which the knock-out already scores for (§29.6)", () => {
         // a and b fight as one: c's strike earns c an assist, b's earns nothing more than a's knock-out.
-        const { events } = strikes(ringed(true, { a: "team", b: "team" }), 2, 3, 1);
+        const { events } = strikes(ringed({ a: "team", b: "team" }), 2, 3, 1);
         expect(scored(events)).toEqual([
             { kind: "scored", player: "a", points: 5, reason: "knockout" },
             { kind: "scored", player: "c", points: 3, reason: "assist" },
@@ -129,27 +129,6 @@ describe("assists on a knock-out (§13.7)", () => {
         expect(scored(startTurn(burning, "x").events)).toEqual([]);
     });
 
-    it("aren't scored, or remembered, in a battle created before them", () => {
-        const { battle, events } = strikes(ringed(false), 2, 1, 3);
-        expect(scored(events)).toEqual([{ kind: "scored", player: "c", points: 5, reason: "knockout" }]);
-        expect(battle.fighters.some(one => one.woundedBy)).toBe(false);
-    });
-
-    it("are kept through every way a battle is built and viewed", () => {
-        expect(battleFrom(OPEN, { fighters: [], assists: true }).assists).toBe(true);
-        expect(battleFrom(OPEN, { fighters: [] })).toEqual({ field: OPEN, fighters: [] });
-        expect(viewOf({ ...ringed(), fog: true }, "a").assists).toBe(true);
-        expect(battleOfState(buildInitialRealmArenaState(["a", "b", "c"], {})).assists).toBe(true);
-        expect(battleOfState(buildInitialRealmArenaState(["a", "b", "c"], {}, false, undefined, false, false)).assists).toBeUndefined();
-    });
-
-    it("are replayed as the battle was created: on since them, and off in a battle from before", () => {
-        const adapter = getReplayAdapter("RealmArenaGameType")!;
-        const game = makeGame(["a", "b", "c"]);
-        expect((adapter.buildInitialSpecificGameState(game) as IRealmArenaSpecificGameState).assists).toBe(true);
-        delete game.specificGameState.assists;
-        expect((adapter.buildInitialSpecificGameState(game) as IRealmArenaSpecificGameState).assists).toBeUndefined();
-    });
 });
 
 describe("assists in a battle", () => {
@@ -165,7 +144,7 @@ describe("assists in a battle", () => {
                     const wire = gameStateToModel(game.specificGameState, viewer, null, complete);
                     // A null viewer sees nobody in fog until the battle is over (§27).
                     if (viewer !== null || !fog || complete) expect(wire.fighters.length).toBeGreaterThan(0);
-                    expect(JSON.stringify(wire)).not.toMatch(/woundedBy|assists/);
+                    expect(JSON.stringify(wire)).not.toMatch(/woundedBy/);
                 }
             }
         }
