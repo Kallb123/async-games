@@ -2491,11 +2491,26 @@ sure it is.
 - The walk from each square to the centre is a search of the whole map, made
   once per battlefield and kept. It isn't the cache of sight and odds held in
   reserve above.
-- A warband's turn on the Four-Gate Fort plans in about 100 ms on average,
-  the slowest about 250. The test holds the average under 250 ms and every
-  turn under 500, so one slow turn on a busy test runner doesn't fail it.
-- The cap of four actions a character is the turn loop's (PR 4a). Every
-  action costs at least 1 AP, so the planner can't loop on its own.
+- The squares a watcher would react on are worked out once a plan, for every
+  character of the warband, and the way round them only for a character whose
+  cheapest way to one of its dozen squares crosses them.
+- The dozen stays a dozen. Eight was quicker but missed the covered way: the
+  squares beside a watcher outrank the rest before their overwatch is counted.
+- A warband's turn on the Four-Gate Fort, against three squads on watch,
+  plans in about 130–220 ms on average; the slowest turn reaches about
+  250–450, and the Three-Gate Fort, three warbands against three squads, is
+  quicker a warband. The test holds the average under 250 ms and every turn
+  under 500, so one slow turn on a busy test runner doesn't fail it. If the
+  slowest turns matter in a real request, the cache of sight and odds within
+  a turn is next.
+- For the turn loop (PR 4a): the cap of four actions a character is its, but
+  every action costs at least 1 AP, so the planner can't loop on its own. An
+  action the battle refuses should end the warband's turn rather than be
+  asked for again: the same view gets the same action. A deadline on the
+  loop, ending the warband's turn once it's passed, is a cheap guard on the
+  request's time.
+- A round that isn't one is read as round 1, rather than scoring every battle
+  NaN, which nothing beats.
 - The puzzle of the flanked enemy sets it against one in half cover: on flat
   ground, the wall that gives full cover blocks the shot too.
 

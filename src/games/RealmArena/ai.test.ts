@@ -167,25 +167,33 @@ describe("nextAction never cheats (§29.11)", () => {
 
 describe("nextAction's pace (§29.7)", () => {
     it("plans a warband's turn on the Four-Gate Fort in under 250 ms", () => {
-        // Three of the team's ready-made squads and one warband, which plays its
-        // turns while the team stands: as long a turn as it gets, with every
-        // enemy in reach of something. Rolls are as good as fixed.
-        const owners = ["a", "b", "c", AI];
+        // Three of the team's ready-made squads and one warband. The team ends
+        // each of its turns where it stands, so every one of its characters is
+        // on watch and every move the warband weighs has a way round to find:
+        // as long as a turn gets. Rolls are as good as fixed.
+        const team = ["a", "b", "c"];
+        const owners = [...team, AI];
         let id = 0;
         const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS.realm.readyMade[3])
             .map(pick => newFighter(id++, owner, pick.character, pick.square)));
         let state: BattleState = { field: FOUR_GATE_FORT, fighters, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
+        const turn = (owner: string, round: number) => {
+            state = { ...state, fighters: startTurn(state, owner).fighters };
+            const start = performance.now();
+            if (owner === AI) {
+                for (let action = nextAction(viewOf(state, AI), AI, round); action; action = nextAction(viewOf(state, AI), AI, round)) {
+                    state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
+                }
+            }
+            state = { ...state, fighters: endTurn(state, owner, round).fighters };
+            return performance.now() - start;
+        };
         const times: number[] = [];
         for (let round = 1; round <= 6; round++) {
-            state = { ...state, fighters: startTurn(state, AI).fighters };
-            const start = performance.now();
-            for (let action = nextAction(viewOf(state, AI), AI, round); action; action = nextAction(viewOf(state, AI), AI, round)) {
-                state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
-            }
-            times.push(performance.now() - start);
-            state = { ...state, fighters: endTurn(state, AI, round).fighters };
+            for (const player of team) turn(player, round);
+            times.push(turn(AI, round));
         }
-        // On average, with room for one slow turn on a busy test runner.
+        // On average, with room for a slow turn on a busy test runner.
         expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
         expect(Math.max(...times)).toBeLessThan(500);
     });

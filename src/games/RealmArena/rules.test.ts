@@ -367,13 +367,13 @@ describe("reactions (§13.4)", () => {
         const ally = fighter(5, "a", "archer", at(walled, 5, 4), { banked: 4 });
         const mover = fighter(2, "a", "scout", at(walled, 9, 0));
         const state = { field: walled, fighters: [knight, archer, spent, ally, mover] };
-        const watched = watchedSquares(state, mover);
+        const watched = watchedSquares(state, "a");
         walled.tiles.forEach((_, square) => {
             expect(watched.has(square)).toBe(reactionsTo(state, mover, [mover.square, square]).length > 0);
         });
         expect(watched.has(at(walled, 9, 2))).toBe(true);
         expect(watched.has(at(walled, 2, 0))).toBe(false);
-        expect(watchedSquares({ field: walled, fighters: [spent, ally, mover] }, mover).size).toBe(0);
+        expect(watchedSquares({ field: walled, fighters: [spent, ally, mover] }, "a").size).toBe(0);
     });
 
     it("are kept clear of by a reach avoiding the squares watched, which goes round them", () => {
@@ -381,7 +381,7 @@ describe("reactions (§13.4)", () => {
         const mover = fighter(2, "a", "manAtArms", at(field, 4, 2), { ap: 1 });
         const state = { field, fighters: [knight, mover] };
         // Its own square is watched, and it can still leave it.
-        const round = reachOf(state, mover, false, watchedSquares(state, mover));
+        const round = reachOf(state, mover, false, watchedSquares(state, "a"));
         expect(round.costs[at(field, 3, 2)]).toBe(1);
         expect(round.costs[at(field, 4, 1)]).toBe(Infinity);
         expect(reachOf(state, mover).costs[at(field, 4, 1)]).toBe(1);

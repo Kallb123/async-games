@@ -30,7 +30,7 @@
 //
 // Pure and browser-safe, like rules.ts.
 
-import { DEFAULT_CLIMB, reachFrom, pathTo } from "@/utils/games/battlefield/pathfinding";
+import { DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
@@ -75,6 +75,8 @@ interface Plan {
     round: number;
     /** How far a character stands from the centre, in movement points. */
     toCentre: (fighter: Fighter) => number;
+    /** Every square a move by one of its characters would set off a reaction on (`watchedSquares`): worked out once, when a move first asks. */
+    watched: () => ReadonlySet<Square>;
 }
 
 /**
@@ -84,7 +86,8 @@ interface Plan {
  * battle round, counted from 1. Never anything `check` refuses.
  */
 export function nextAction(view: BattleState, owner: string, round: number): Action | undefined {
-    const plan = planFor(view, owner, round);
+    // A round that isn't one would score every battle NaN, which nothing beats.
+    const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
     const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter) && fighter.ap > 0).sort((a, b) => a.id - b.id);
@@ -112,7 +115,8 @@ function planFor(view: BattleState, owner: string, round: number): Plan {
         const cost = centreWalk(field, CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB)[fighter.square];
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
-    return { state, owner, round, toCentre };
+    let watched: ReadonlySet<Square> | undefined;
+    return { state, owner, round, toCentre, watched: () => watched ??= watchedSquares(state, owner) };
 }
 
 /**
@@ -210,14 +214,15 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
     const sneaking = kind === "sneak";
     const reach = reachOf(state, fighter, sneaking);
     // A sneak sets nothing off, so has no way round to look for.
-    const watched = sneaking ? new Set<Square>() : watchedSquares(state, fighter);
-    const covered = watched.size > 0 ? reachOf(state, fighter, false, watched) : undefined;
+    const watched = sneaking ? new Set<Square>() : plan.watched();
+    let covered: Reach | undefined;
     const taken = new Set(state.fighters.filter(isStanding).map(one => one.square));
     const ranked: { square: Square; value: number }[] = [];
+    const enemies = enemiesOf(state, fighter.owner);
     reach.costs.forEach((cost, square) => {
         if (cost === Infinity || square === reach.from || taken.has(square) || !state.field.tiles[square].terrain.standable) return;
         const { battle, moved } = standingAt(state, { ...fighter, ap: fighter.ap - moveAp(fighter, cost, sneaking) }, square);
-        ranked.push({ square, value: standingTerms(plan, battle, moved) });
+        ranked.push({ square, value: standingTerms(plan, battle, moved, enemies) });
     });
     ranked.sort((a, b) => b.value - a.value || a.square - b.square);
     const moves: Action[] = [];
@@ -230,7 +235,7 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
         if (sent.length === 0) continue;
         squares++;
         moves.push(...sent);
-        if (covered && cheapest?.some(step => watched.has(step))) moves.push(...along(pathTo(covered, square)?.squares));
+        if (cheapest?.some(step => watched.has(step))) moves.push(...along(pathTo(covered ??= reachOf(state, fighter, false, watched), square)?.squares));
     }
     return moves.sort((a, b) => lastSquare(a) - lastSquare(b));
 }
@@ -268,14 +273,16 @@ function judge(plan: Plan, action: Action): number {
 /**
  * The rolls an action is played out with, and how likely each is: a shot's
  * hit, graze and miss, by its odds, and for anything else one roll that misses
- * whatever it's asked for — the overwatch a move sets off.
+ * whatever it's asked for — the overwatch a move sets off. That one is past
+ * the dice, so even an overwatch shot that can't miss outright doesn't graze:
+ * it's only ever played out, never rolled.
  */
 function rollsFor(state: BattleState, action: Action): { roll: number; weight: number }[] {
     const shot = shotOf(action.kind);
     const actor = fighterById(state, action.fighter);
     const target = "target" in action ? fighterById(state, action.target) : undefined;
     const odds = shot && actor && target ? shotOdds(state, actor, target, shot) : undefined;
-    if (!odds) return [{ roll: ROLL_SIDES, weight: 1 }];
+    if (!odds) return [{ roll: ROLL_SIDES + 1, weight: 1 }];
     const { chance, grazeChance } = odds;
     return [
         { roll: 1, weight: chance },
@@ -302,10 +309,11 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
     for (const player of new Set(battle.fighters.map(fighter => fighter.owner))) {
         total += side(player) * centrePoints(battle, player, round) * WEIGHTS.points;
     }
+    const enemies = enemiesOf(battle, owner);
     for (const fighter of battle.fighters) {
         if (!isStanding(fighter)) continue;
         total += side(fighter.owner) * worthOf(fighter, fighter.hp) * WEIGHTS.strength;
-        if (fighter.owner === owner) total += standingTerms(plan, battle, fighter);
+        if (fighter.owner === owner) total += standingTerms(plan, battle, fighter, enemies);
     }
     return total;
 }
@@ -319,10 +327,9 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
  * has to walk to the centre, weighing more as the round the centre scores
  * from comes nearer.
  */
-function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter): number {
+function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[]): number {
     let exposure = 0, threat = 0;
-    for (const enemy of battle.fighters) {
-        if (!isStanding(enemy) || allied(battle, enemy.owner, fighter.owner)) continue;
+    for (const enemy of enemies) {
         exposure = Math.max(exposure, expectedHarm(battle, enemy, fighter));
         threat = Math.max(threat, expectedHarm(battle, fighter, enemy));
     }
@@ -331,6 +338,11 @@ function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter): numbe
     return -WEIGHTS.exposure * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter);
+}
+
+/** The enemies of a player standing in a battle: whoever its characters' Exposure and Threat are read against. */
+function enemiesOf(battle: BattleState, player: string): Fighter[] {
+    return battle.fighters.filter(enemy => isStanding(enemy) && !allied(battle, enemy.owner, player));
 }
 
 /**

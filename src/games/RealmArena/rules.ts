@@ -457,7 +457,7 @@ export interface Reaction {
  * move is sent.
  */
 export function reactionsTo(state: BattleState, mover: Fighter, path: readonly Square[]): Reaction[] {
-    const watchers = watchersOf(state, mover);
+    const watchers = watchersOf(state, mover.owner);
     const smoke = smokeSquares(state);
     const reacted = new Set<number>();
     const reactions: Reaction[] = [];
@@ -474,17 +474,18 @@ export function reactionsTo(state: BattleState, mover: Fighter, path: readonly S
     return reactions;
 }
 
-/** The enemies watching that could react to a move by this character: standing, with a reaction's AP banked (§13.4). */
-function watchersOf(state: BattleState, mover: Fighter): Fighter[] {
-    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, mover.owner) && watcher.banked >= REACTION_COST);
+/** The enemies watching that could react to a move by one of a player's characters: standing, with a reaction's AP banked (§13.4). */
+function watchersOf(state: BattleState, player: string): Fighter[] {
+    return state.fighters.filter(watcher => isStanding(watcher) && !allied(state, watcher.owner, player) && watcher.banked >= REACTION_COST);
 }
 
 /**
- * Every square a move by this character would set off a reaction on, from
- * whoever is watching now (§13.4): what a path keeps out of to set off none.
+ * Every square a move by one of a player's characters would set off a
+ * reaction on, from whoever is watching now (§13.4): what a path keeps out of
+ * to set off none.
  */
-export function watchedSquares(state: BattleState, mover: Fighter): ReadonlySet<Square> {
-    const watchers = watchersOf(state, mover);
+export function watchedSquares(state: BattleState, player: string): ReadonlySet<Square> {
+    const watchers = watchersOf(state, player);
     if (watchers.length === 0) return new Set();
     const smoke = smokeSquares(state);
     return new Set(state.field.tiles.flatMap((_, square) => watchers.some(watcher => setsOff(state, watcher, square, smoke)) ? [square] : []));
