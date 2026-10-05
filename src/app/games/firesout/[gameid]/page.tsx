@@ -426,7 +426,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 ? abandoned.message
                                 : gameData?.endReason === 'teamwin'
                                     ? 'The crew rescued everyone! 🎉'
-                                    : teamEnding ? `${teamEnding}.` : "The crew couldn't make it out in time."}
+                                    : gameData?.endDetail ? `${teamEnding}.` : "The crew couldn't make it out in time."}
                             gameId={gameId}
                             gameUrl="firesout"
                             usernameList={usernameList}

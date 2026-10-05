@@ -249,7 +249,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
-            subtitle = gameData?.endReason === 'teamloss' ? `💀 ${teamEnding ?? 'The team lost'}` : '🎉 The team won!';
+            subtitle = gameData?.endReason === 'teamloss' ? '💀 The team lost' : '🎉 The team won!';
         } else if (isMyTurn && gs.phase === 'discard') {
             subtitle = <span className="ag-hi">Discard down to {HAND_LIMIT}</span>;
         } else if (isMyTurn && gs.phase === 'forecast') {
@@ -386,7 +386,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             // names none — that generic line is only the
                             // fallback for a game that ended before the
                             // reason was recorded.
-                            ? teamEnding
+                            ? gameData.endDetail
                                 ? `${teamEnding}.`
                                 : 'The outbreak overwhelmed the team.'
                             : 'The team cured every disease! 🎉'}
