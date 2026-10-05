@@ -704,7 +704,9 @@ open. All are first guesses for playtesting, kept in `characters.ts` and
 - **HP and Fireball's damage**, as in the table above.
 - **Ranges are measured centre to centre, as the crow flies**, so a range
   reaches out in a circle. Overwatch needs the mover in range as well as in
-  sight.
+  sight. A character beside full cover can look down either side of it: the
+  cover does not block an angled line leaving their square, though looking
+  straight through it and every piece of full cover further away still do.
 - **"Next to" is touching, side or corner**, unless high cover fills both
   corners between the two squares. It's what melee, guard, a healing draught
   and raising need. A heal is aimed as a fireball is: at an ally in sight

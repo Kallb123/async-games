@@ -312,6 +312,16 @@ describe("reactions (§13.4)", () => {
         expect(byId(2)).toMatchObject({ hp: 4, square: path[3], facing: 4 });
     });
 
+    it("fires down the side of full cover directly beside the overwatcher", () => {
+        const lane = fieldOf([".#...", "....."]);
+        const archer = fighter(1, "b", "archer", at(lane, 0, 0), { ap: 0, banked: 2 });
+        const mover = fighter(2, "a", "manAtArms", at(lane, 4, 1));
+        const path = [mover.square, at(lane, 3, 1)];
+
+        expect(reactionsTo({ field: lane, fighters: [archer, mover] }, mover, path)).toEqual([{ watcher: 1, step: 1 }]);
+        expect(shotOdds({ field: lane, fighters: [archer, mover] }, archer, { ...mover, square: path[1] }, "overwatch")).toBeDefined();
+    });
+
     it("come nearest watcher first, and not from one without 2 AP banked", () => {
         const archer = fighter(1, "b", "archer", at(field, 0, 0), { banked: 4 });
         const mage = fighter(3, "b", "mage", at(field, 9, 0), { banked: 2 });

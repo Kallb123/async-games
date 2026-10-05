@@ -10,6 +10,7 @@ import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaE
 import RealmArenaFx, { cueTiming, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
+import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type BattleState, type Fighter, type MusterPick } from '@/games/RealmArena/rules';
@@ -101,6 +102,8 @@ interface RealmArenaBoardProps {
      * figure of the squad that musters in it, wears its owner's colour.
      */
     owners: readonly string[];
+    /** The signed-in viewer, whose preferred turn of the board this browser remembers. */
+    viewerId: string;
     colourFor: (userId: string) => string;
     nameFor: (userId: string) => string;
     selected: Fighter | undefined;
@@ -444,7 +447,6 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, facingFor, 
 
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
 interface Turned {
-    rotation: IsoRotation;
     from: IsoRotation;
     /** How many times it's been turned, so each turn is its own pivot. */
     turns: number;
@@ -565,10 +567,17 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, owners, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
-    const [turned, setTurned] = useState<Turned>({ rotation: 0, from: 0, turns: 0 });
-    const turn = (by: 1 | 3) => setTurned(({ rotation, turns }) => ({ rotation: ((rotation + by) % 4) as IsoRotation, from: rotation, turns: turns + 1 }));
-    const { rotation } = turned;
+export default function RealmArenaBoard({ field, fighters, unseen, clouds, sides, sealed, owners, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+    const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
+    const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
+        ? Number(storedRotation) as IsoRotation
+        : 0;
+    const [turned, setTurned] = useState<Turned>({ from: rotation, turns: 0 });
+    const turn = (by: 1 | 3) => {
+        const next = ((rotation + by) % 4) as IsoRotation;
+        setTurned(({ turns }) => ({ from: rotation, turns: turns + 1 }));
+        storeRotation(String(next));
+    };
 
     // The ground changes only when cover is blasted away, so it's laid out once a battlefield, and again each turn of the view.
     const ground = useMemo(() => {

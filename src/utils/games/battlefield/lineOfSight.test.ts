@@ -66,6 +66,24 @@ describe("canSee", () => {
         expect(canSee(diagonal, at(diagonal, 0, 0), at(diagonal, 1, 1))).toBe(false);
     });
 
+    it("looks down the side of full cover directly beside the viewer, but not through it or past later cover", () => {
+        const beside = fieldOf(
+            ".#...",
+            ".....",
+        );
+        expect(canSee(beside, at(beside, 0, 0), at(beside, 4, 1))).toBe(true);
+        expect(canSee(beside, at(beside, 0, 0), at(beside, 4, 0))).toBe(false);
+        // The allowance belongs to the viewer beside the cover, not to the
+        // distant figure looking back towards them.
+        expect(canSee(beside, at(beside, 4, 1), at(beside, 0, 0))).toBe(false);
+
+        const further = fieldOf(
+            ".##..",
+            ".....",
+        );
+        expect(canSee(further, at(further, 0, 0), at(further, 4, 1))).toBe(false);
+    });
+
     it("always sees itself and its neighbours", () => {
         const field = fieldOf(
             "###",
