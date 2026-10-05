@@ -31,7 +31,7 @@
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { canSee } from "@/utils/games/battlefield/lineOfSight";
 import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
+import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
     type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Faction, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
@@ -1415,21 +1415,50 @@ export function storedFighter(fighter: Fighter): Fighter {
 }
 
 /**
+ * A squad dealt round a zone's areas like cards — the first character to the
+ * first area, the next to the next — each area's share spread evenly along
+ * the middle line of its long side.
+ */
+function dealtRound(field: Battlefield, areas: readonly Area[], squad: readonly CharacterId[]): MusterPick[] {
+    return squad.map((character, i) => {
+        const part = i % areas.length, place = Math.floor(i / areas.length);
+        const { col, row, width, height } = areas[part];
+        // How many characters this area gets: one for every round of the deal that reaches it.
+        const share = Math.ceil((squad.length - part) / areas.length);
+        const along = Math.floor(((place + 0.5) * Math.max(width, height)) / share);
+        const square = width >= height
+            ? (row + Math.floor((height - 1) / 2)) * field.width + col + along
+            : (row + along) * field.width + col + Math.floor((width - 1) / 2);
+        return { character, square };
+    });
+}
+
+/**
  * Where a ready-made squad stands (§17.2): spread evenly along the middle row
  * of the seat's deployment zone, or across the whole zone when the row is too
- * narrow. Every square of a zone can be stood on (`buildBattlefield` checks),
- * so the picks always pass `musterRefusal` — a timed-out muster runs on the
- * server and mustn't fail. It throws only for a zone with fewer squares than
- * the squad, which is a map that can't be played.
+ * narrow. A zone drawn as several areas — a warband closing in from every
+ * edge (§30.9) — has the squad dealt round them in turn instead, each area's
+ * share spread along the middle of its long side. Every square of a zone can
+ * be stood on (`buildBattlefield` checks), so the picks always pass
+ * `musterRefusal` — a timed-out muster runs on the server and mustn't fail.
+ * It throws only for a zone with fewer squares than the squad, which is a map
+ * that can't be played.
  */
 export function readyMadeMuster(field: Battlefield, seat: number, squad: readonly CharacterId[]): MusterPick[] {
     const zone = (field.deployments[seat] ?? []).map(square => coordsOf(field, square));
     if (zone.length === 0) throw new Error(`${field.name} has no deployment zone for seat ${seat}`);
-    const cols = zone.map(({ col }) => col), rows = zone.map(({ row }) => row);
-    const left = Math.min(...cols), width = Math.max(...cols) - left + 1;
-    const row = Math.floor((Math.min(...rows) + Math.max(...rows)) / 2);
     const spread = (count: number) => squad.map((_, i) => Math.floor(((i + 0.5) * count) / squad.length));
-    if (squad.length <= width) return spread(width).map((col, i) => ({ character: squad[i], square: row * field.width + left + col }));
+    const areas = field.deploymentAreas[seat];
+    if (areas.length === 1) {
+        const cols = zone.map(({ col }) => col), rows = zone.map(({ row }) => row);
+        const left = Math.min(...cols), width = Math.max(...cols) - left + 1;
+        const row = Math.floor((Math.min(...rows) + Math.max(...rows)) / 2);
+        if (squad.length <= width) return spread(width).map((col, i) => ({ character: squad[i], square: row * field.width + left + col }));
+    } else {
+        const dealt = dealtRound(field, areas, squad);
+        // Only short of room when an area's share is longer than the area.
+        if (new Set(dealt.map(pick => pick.square)).size === dealt.length) return dealt;
+    }
     const squares = field.deployments[seat];
     if (squad.length > squares.length) throw new Error(`${field.name}'s deployment zone ${seat} is too small for ${squad.length} characters`);
     return spread(squares.length).map((index, i) => ({ character: squad[i], square: squares[index] }));

@@ -772,16 +772,17 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
                     <path className="ag-ra-grid" d={ground.lines} />
 
-                    {field.deployments.map((squares, seat) => {
+                    {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
+                    {field.deploymentAreas.map((areas, seat) => {
                         const owner = owners[seat];
-                        return (
+                        return areas.map(({ col, row, width, height }, part) => (
                             <polygon
-                                key={seat}
+                                key={`${seat}-${part}`}
                                 className="ag-ra-deployment"
-                                points={isoArea(view, areaRect(field, squares))}
+                                points={isoArea(view, { x: col, y: row, width, height })}
                                 style={{ '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties}
                             />
-                        );
+                        ));
                     })}
                     {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
                     {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}

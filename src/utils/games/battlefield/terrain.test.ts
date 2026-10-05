@@ -68,6 +68,15 @@ describe("buildBattlefield", () => {
         expect(field.objectives).toEqual({ centre: [4, 5, 7, 8] });
     });
 
+    it("takes a deployment zone in several areas, keeping the areas it was drawn as", () => {
+        const parts = [{ col: 0, row: 0, width: 3, height: 1 }, { col: 2, row: 1, width: 1, height: 2 }];
+        const field = buildBattlefield(map({ deployments: [parts, { col: 0, row: 2, width: 2, height: 1 }] }));
+        expect(field.deployments).toEqual([[0, 1, 2, 5, 8], [6, 7]]);
+        expect(field.deploymentAreas).toEqual([parts, [{ col: 0, row: 2, width: 2, height: 1 }]]);
+        expect(() => buildBattlefield(map({ deployments: [[parts[0], { col: 2, row: 0, width: 1, height: 2 }]] })))
+            .toThrow(/deployment 0's areas overlap/);
+    });
+
     it("throws on a map drawn wrong", () => {
         expect(() => buildBattlefield(map({ rows: [] }))).toThrow(/at least one square/);
         expect(() => buildBattlefield(map({ rows: ["...", ".."] }))).toThrow(/row 1 is 2 squares wide/);

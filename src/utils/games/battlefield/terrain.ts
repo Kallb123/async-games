@@ -128,8 +128,12 @@ export interface BattlefieldMap {
      * the map is flat. A square's top is its ground plus its terrain's height.
      */
     elevation?: readonly string[];
-    /** Where each seat's squad musters, in seat order. Every square in one must be standable. */
-    deployments: readonly Area[];
+    /**
+     * Where each seat's squad musters, in seat order: one area, or several
+     * apart — a squad closing in from more than one edge. Every square in one
+     * must be standable, and no square in two of a seat's areas.
+     */
+    deployments: readonly (Area | readonly Area[])[];
     /** The named areas a mission scores, e.g. the centre of Hold the Centre (§13.7). */
     objectives: Readonly<Record<string, Area>>;
 }
@@ -145,6 +149,8 @@ export interface Battlefield {
     /** Each square, by `Square`. */
     tiles: readonly Tile[];
     deployments: readonly (readonly Square[])[];
+    /** Each seat's deployment as the areas it was drawn as: what the board outlines, and what a ready-made squad is spread over. */
+    deploymentAreas: readonly (readonly Area[])[];
     objectives: Readonly<Record<string, readonly Square[]>>;
 }
 
@@ -182,9 +188,11 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
         return Array.from({ length: w * h }, (_, i) => (row + Math.floor(i / w)) * width + col + (i % w));
     };
 
-    const deployments = map.deployments.map((area, seat) => {
-        const squares = squaresIn(area, `deployment ${seat}`);
+    const deploymentAreas = map.deployments.map(areas => "col" in areas ? [areas] : areas);
+    const deployments = deploymentAreas.map((areas, seat) => {
+        const squares = areas.flatMap(area => squaresIn(area, `deployment ${seat}`));
         if (squares.some(square => !tiles[square].terrain.standable)) throw new Error(`${map.name}: deployment ${seat} has a square nobody can stand on`);
+        if (new Set(squares).size < squares.length) throw new Error(`${map.name}: deployment ${seat}'s areas overlap`);
         return squares;
     });
     const objectives = Object.fromEntries(Object.entries(map.objectives).map(([id, area]) => {
@@ -193,7 +201,7 @@ export function buildBattlefield(map: BattlefieldMap): Battlefield {
         return [id, squares];
     }));
 
-    return { name: map.name, width, height, tiles, deployments, objectives };
+    return { name: map.name, width, height, tiles, deployments, deploymentAreas, objectives };
 }
 
 /**

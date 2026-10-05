@@ -577,6 +577,19 @@ describe("mustering", () => {
         expect(() => readyMadeMuster(narrow, 0, [...squad, "scout", "scout"])).toThrow("too small");
     });
 
+    it("deals a ready-made squad round a zone drawn in parts, along the middle of each (§30.9)", () => {
+        // A row along the top and a column down the right: the squad alternates between them.
+        const parts = [{ col: 0, row: 0, width: 6, height: 3 }, { col: 7, row: 0, width: 3, height: 9 }];
+        const field = buildBattlefield({ name: "Edges", rows: Array(9).fill(".".repeat(10)), deployments: [parts], objectives: {} });
+        const picks = readyMadeMuster(field, 0, ["knight", "archer", "scout", "mage", "cleric"]);
+        expect(picks.map(pick => [pick.square % 10, Math.floor(pick.square / 10)])).toEqual([[1, 1], [8, 2], [3, 1], [8, 6], [5, 1]]);
+        expect(musterRefusal(field, 0, picks, 200, {}, REALM)).toBeUndefined();
+        // More than a part's middle line holds, and it spreads over the whole zone as a narrow one does.
+        const crowded = readyMadeMuster(field, 0, Array(14).fill("manAtArms"));
+        expect(new Set(crowded.map(pick => pick.square)).size).toBe(14);
+        expect(crowded.every(pick => field.deployments[0].includes(pick.square))).toBe(true);
+    });
+
     it("takes as many of any one character as the budget buys (§13.6)", () => {
         const sixMen = Array.from({ length: 6 }, (_, i) => ({ character: "manAtArms", square: zone[i] }));
         expect(musterRefusal(RUINED_FORT, 0, sixMen, budget, {}, REALM)).toBeUndefined();
