@@ -425,14 +425,6 @@ export class RealmArenaGameType implements IGameType {
     readonly className: string = "RealmArenaGameType";
 
     /**
-     * The rotation (§17.2): the turn passes round the seats, through the muster
-     * and on into the battle without a break, stepping over a seat dropped or
-     * wiped out (`nextSeat`). The next battle turn has already begun by now:
-     * the command that ended the last one began it (`handOff`), since its
-     * burning can end the battle, and only a command's own changes are seen
-     * by `CheckGameOver`, which runs before this.
-     */
-    /**
      * What a command's own sender is told it did: everything, but in a battle
      * fought in fog of war and not yet over, cut to what their side saw
      * (`toldTo`) — which in co-op is the enemy's turn inside their End turn
@@ -446,6 +438,14 @@ export class RealmArenaGameType implements IGameType {
         return { ...outcome, events: toldTo(events, battle, viewerId) } as IRealmArenaOutcome;
     }
 
+    /**
+     * The rotation (§17.2): the turn passes round the seats, through the muster
+     * and on into the battle without a break, stepping over a seat dropped or
+     * wiped out (`nextSeat`). The next battle turn has already begun by now:
+     * the command that ended the last one began it (`handOff`), since its
+     * burning can end the battle, and only a command's own changes are seen
+     * by `CheckGameOver`, which runs before this.
+     */
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const data = gameData as IRealmArenaGameData;
@@ -628,6 +628,21 @@ function applyAction(data: IRealmArenaGameData, owner: string, sent: unknown, ro
 }
 
 /**
+ * The start of `owner`'s turn, a player's or a warband's: fresh AP, and
+ * burning, which can down a character (§20.2) — told in a line of its own
+ * (§20.3). Returns what happened.
+ */
+function beginTurn(data: IRealmArenaGameData, owner: string): BattleEvent[] {
+    const gs = data.specificGameState;
+    const battle = battleOf(gs);
+    const { fighters, events } = startTurn(battle, owner);
+    gs.fighters = fighters;
+    addScores(gs, events);
+    if (events.length > 0) data.gameState.history.unshift({ text: narrate(events, battle.fighters, "") });
+    return events;
+}
+
+/**
  * The end of `owner`'s turn, a player's or a warband's (§29.8): every
  * character with AP enough goes on watch but those in `keepStill`, and the
  * centre scores. Returns what happened.
@@ -779,7 +794,9 @@ export class RealmArenaEndTurn implements IGameCommand {
         const events = applyEndTurn(data, this.senderId, this.keepStill);
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
         const { enemy, started } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll });
-        if (enemy) this.recordedEnemyActions = enemy.actions;
+        // Always a list in co-op, an empty one when no warband took a turn,
+        // so a replay that comes to one never asks the planner.
+        if (gs.coop) this.recordedEnemyActions = enemy?.actions ?? [];
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
         markDirty(gameData);
@@ -825,39 +842,33 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): WarbandTur
     if (!coop) return undefined;
     const order = data.gameState.turnOrder;
     const count = gs.seats.length;
-    const standing = (owner: string) => battleOf(gs).fighters.some(fighter => fighter.owner === owner && isStanding(fighter));
-    const k = Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count).find(one => standing(warbandOwner(one)));
+    const standing = squadsStanding(battleOf(gs), Array.from({ length: count }, (_, k) => warbandOwner(k)));
+    const k = Array.from({ length: count }, (_, step) => (coop.nextWarband + step) % count).find(one => standing.includes(warbandOwner(one)));
     if (k === undefined) return undefined;
     const owner = warbandOwner(k);
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
 
-    const turn: WarbandTurn = { actions: [], events: [] };
-    const begun = battleOf(gs);
-    const { fighters, events } = startTurn(begun, owner);
-    gs.fighters = fighters;
-    addScores(gs, events);
-    if (events.length > 0) data.gameState.history.unshift({ text: narrate(events, begun.fighters, "") });
-    turn.events.push(...events);
+    const turn: WarbandTurn = { actions: [], events: beginTurn(data, owner) };
     const over = () => isBattleOver(battleOf(gs), order, gs.roundsPlayed);
     if (over()) return turn;
 
     const cap = ACTION_POINTS * battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isStanding(fighter)).length;
     const deadline = Date.now() + WARBAND_DEADLINE_MS;
     for (let step = 0; !over(); step++) {
-        let action: unknown;
-        if (moves.recorded) {
-            action = moves.recorded[step];
-        } else {
-            if (step === cap || Date.now() > deadline) break;
-            try {
-                action = nextAction(viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1);
-            } catch (error) {
-                console.error(`Realm Arena game ${data.gameId}: ${owner}'s planner threw, so its turn ends here`, error);
-                break;
-            }
+        if (!moves.recorded && (step === cap || Date.now() > deadline)) break;
+        let action: unknown, applied: Applied | undefined;
+        // The planner, and any rule an action it chose trips over, can't fail
+        // the player's End turn — or wedge the turn timer's, which runs it on
+        // every sweep. `applyAction` changes nothing until the action has
+        // been worked out, so the battle stands as the last one left it.
+        try {
+            action = moves.recorded ? moves.recorded[step] : nextAction(viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1);
+            if (action === undefined) break;
+            applied = applyAction(data, owner, action, moves.roll);
+        } catch (error) {
+            console.error(`Realm Arena game ${data.gameId}: ${owner}'s turn threw, so it ends here`, error);
+            break;
         }
-        if (action === undefined) break;
-        const applied = applyAction(data, owner, action, moves.roll);
         if (!applied) {
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
             break;
@@ -894,12 +905,7 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): 
         if (order.indexOf(next) <= order.indexOf(seat)) gs.roundsPlayed += 1;
         if (isBattleOver(battleOf(gs), order, gs.roundsPlayed)) return { enemy, started };
 
-        const battle = battleOf(gs);
-        const { fighters, events } = startTurn(battle, next);
-        gs.fighters = fighters;
-        addScores(gs, events);
-        if (events.length > 0) data.gameState.history.unshift({ text: narrate(events, battle.fighters, "") });
-        started.push(...events);
+        started.push(...beginTurn(data, next));
         if (isBattleOver(battleOf(gs), order, gs.roundsPlayed) || squadsStanding(battleOf(gs), [next]).length > 0) return { enemy, started };
         seat = next;
     }

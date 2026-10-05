@@ -2563,7 +2563,7 @@ sure it is.
   holds it to that, so a lobby's settings, which reach the model unread, are
   held to it too. The setup route refuses anything else sent for it, and a
   team that isn't two or three. A lobby can still fill to four; four play a
-  free-for-all, whatever the invitation said.
+  free-for-all, and the setup log says so.
 - On the battle it's `coop: { enemy, nextWarband }`, with Random drawn by
   `CreateGame` and stored as what it drew. The setup log names a faction the
   host picked and says only "an enemy drawn at random" for Random. A stored
@@ -2580,22 +2580,32 @@ sure it is.
 - The rotation steps past a warband with nobody standing as its turn would
   begin, and a warband's turn is played only if the battle isn't over
   already. It's capped at four actions a character it has standing, and
-  stops planning after two seconds; a refused action or a planner that
-  throws ends it, logged, and its End turn still runs.
-- `RealmArenaEndTurn` keeps `recordedEnemyActions` — an empty list when the
-  warband took none, so a replay knows not to ask the planner — and the
-  warband's rolls in `recordedRolls`, the player's End turn rolling none of
-  its own. A replay takes the recorded actions and stops where they do.
+  stops planning after two seconds — between actions: one call to the
+  planner isn't cut short. A refused action, or a planner or an action that
+  throws, ends it, logged, and its End turn still runs, so neither a player's
+  End turn nor the turn timer's can fail on it.
+- `RealmArenaEndTurn` keeps `recordedEnemyActions` in co-op whatever
+  happened — an empty list when no warband took an action, or no turn at
+  all — so a replay never asks the planner, and the warband's rolls in
+  `recordedRolls`, the player's End turn rolling none of its own. A replay
+  takes the recorded actions and stops where they do.
 - The outcome a command returns its own sender goes through the game type
   (`IGameType.outcomeFor`), which the command route asks: Realm Arena cuts it
   to what the sender's side saw while the fog lasts (`toldTo`, moved beside
   the game type for it). Every other game sends its outcome whole, as before.
-  Rolls stay in the sender's, as before; a review step still drops them.
+  Rolls stay in the sender's, as before — the board's readout shows them,
+  and a roll once made hides nothing — and a review step still drops them.
+  The move is saved before this runs, so a game whose `outcomeFor` throws
+  tells its sender nothing of what the move did, rather than failing it.
 - A warband's lines in the log carry no `actorId`, so nobody can react to
   the computer or be pushed about it, and name it by its owner token until
   `ownerToken` (PR 4b). The End turn's outcome carries the enemy's events
   among its own; the per-action `{ action, events }` comes with the recap's
   rows in 4b. `CheckGameOver` still ranks the players alone until `endAsTeam`.
+  Until those rows, the recap's End turn row scores only its own player's
+  centre points, and folds the enemy's lines in with burning's; and its tip
+  still measures a player against the best score of anyone else, a warband's
+  or a teammate's. All three are 4b's.
 - The whole-battle tests seed the rolls, and time each player's turn with the
   warband's after it: about 130 ms on average, under 300 at worst. The
   scripted team wins none of the 20.

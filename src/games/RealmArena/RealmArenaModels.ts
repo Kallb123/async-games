@@ -11,7 +11,7 @@ import { battleOf, toldTo } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { CHARACTERS, FACTIONS, factionById, isFactionId, musterSize, POINTS_BUDGET, type CharacterId, type FactionId } from "./characters";
+import { CHARACTERS, FACTION_IDS, factionById, isFactionId, musterSize, POINTS_BUDGET, type CharacterId, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, DEPLOYMENT_NAMES, mapFor, type RealmArenaMapId } from "./maps";
 import { battleRounds, pickOf, storedFighter, viewOf, type BattleEvent, type Fighter, type MusterPick, type ToldEvent } from "./rules";
@@ -136,6 +136,9 @@ export const RANDOM_ENEMY = "random";
 /** How many players a co-op team can be (§29.1): one battlefield for each (§29.2). */
 export const COOP_PLAYERS = { min: 2, max: 3 } as const;
 
+/** Whether a party of this size can play co-op: a team its battlefields are built for. */
+export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.min && players <= COOP_PLAYERS.max;
+
 /**
  * A co-op setting as the host chose it, or undefined for anything else a
  * request could send: only an enemy that is a faction, or Random. What the
@@ -182,20 +185,22 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     // Co-op only for a team its battlefields are built for: a lobby can fill
     // to four, and four play a free-for-all whatever the invitation said.
     const invited = coopInviteOf(this.coop);
-    const coop = invited && turnOrder.length >= COOP_PLAYERS.min && turnOrder.length <= COOP_PLAYERS.max ? invited : undefined;
+    const coop = fitsCoop(turnOrder.length) ? invited : undefined;
     // Random is drawn here, on the server, once, and stored as the faction it
     // came out as (§29.3): a replay rebuilds the same enemy, and no client
     // chooses it.
-    const factionIds = Object.keys(FACTIONS) as FactionId[];
-    const enemy = coop && (coop.enemy === RANDOM_ENEMY ? factionIds[randomInt(factionIds.length)] : coop.enemy);
+    const enemy = coop && (coop.enemy === RANDOM_ENEMY ? FACTION_IDS[randomInt(FACTION_IDS.length)] : coop.enemy);
     const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), this.fog === true, enemy);
 
     const field = battlefieldById(specificGameState.map);
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
     history.push({ text: `Setup: Hold the Centre on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
-    if (coop && enemy) {
+    if (invited && !coop) {
+        history.push({ text: `Setup: co-op is for ${COOP_PLAYERS.min}–${COOP_PLAYERS.max} players, so this is a free-for-all` });
+    }
+    if (enemy) {
         // A random enemy isn't named: the team musters not knowing whom it will face (§29.3).
-        const foe = coop.enemy === RANDOM_ENEMY ? "an enemy drawn at random" : factionById(enemy).enemyName;
+        const foe = coop?.enemy === RANDOM_ENEMY ? "an enemy drawn at random" : factionById(enemy).enemyName;
         history.push({ text: `Setup: the players fight together against ${foe}, a warband deployed opposite each of them` });
     }
     history.push({ text: `Setup: ${turnOrder.map((userId, seat) => `${userToken(userId)} deploys ${zones[seat]}`).join(", ")}` });

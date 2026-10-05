@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
-import { FACTIONS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
+import { FACTION_IDS, POINTS_BUDGET, REALM, type FactionId } from "./characters";
 import { battlefieldById } from "./maps";
-import { coopInviteOf, gameStateToModel, RealmArenaInvitationModel, type IRealmArenaGameData } from "./RealmArenaModels";
+import { coopInviteOf, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData } from "./RealmArenaModels";
 import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
-import { readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
+import { isWarband, readyMadeMuster, squadSight, standings, warbandOwner, type BattleEvent } from "./rules";
 import {
     battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
 } from "./testFixtures";
@@ -39,7 +39,6 @@ afterEach(() => {
 });
 
 const TEAMS = [["a", "b"], ["a", "b", "c"]];
-const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
 
 /** Every roll from here on drawn from a seed, so a battle plays the same each run (mulberry32). */
 function seedRolls(seed: number): void {
@@ -63,7 +62,7 @@ const warbandsOf = (game: RealmArenaTestGame) => game.gameState.turnOrder.map((_
 /** Whether the enemy won: the sides ranked as §29.5 ranks them, with the warbands' seats last, so a battle level all the way goes to them. */
 function enemyWon(game: RealmArenaTestGame): boolean {
     const ranked = standings(battleOf(game), [...game.gameState.turnOrder, ...warbandsOf(game)], game.specificGameState.scores);
-    return ranked[0].startsWith("ai:");
+    return isWarband(ranked[0]);
 }
 
 /**
@@ -129,6 +128,8 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
         const game = await createGame.call(invite, invite, ["a", "b", "c", "d"]);
         expect(game.specificGameState.coop).toBeUndefined();
         expect(game.specificGameState.map).toBe("fourGateFort");
+        // …and says so, since the host asked for co-op.
+        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: co-op is for 2–3 players, so this is a free-for-all");
     });
 });
 
@@ -161,7 +162,7 @@ describe("the muster in co-op (§29.1, §29.7)", () => {
             const { sides } = battleOf(game);
             expect(new Set(players.map(player => sides?.[player])).size).toBe(1);
             expect(new Set(warbandsOf(game).map(owner => sides?.[owner])).size).toBe(1);
-            expect(sides?.[players[0]]).not.toBe(sides?.["ai:0"]);
+            expect(sides?.[players[0]]).not.toBe(sides?.[warbandOwner(0)]);
             // The warbands aren't seated: the turn goes from one player to the next.
             expect(game.currentTurn).toBe(players[0]);
             expect(game.gameState.turnOrder).toEqual(players);
@@ -171,6 +172,7 @@ describe("the muster in co-op (§29.1, §29.7)", () => {
 
 describe("the enemy's turn (§29.4)", () => {
     it("follows each player's, one warband after each in turn, recorded on the End turn", async () => {
+        const [first, second] = [warbandOwner(0), warbandOwner(1)];
         const game = makeGame(["a", "b"], {}, false, "realm");
         await musterAll(game);
         const ended = endTurnBy("a");
@@ -179,18 +181,18 @@ describe("the enemy's turn (§29.4)", () => {
         expect(game.currentTurn).toBe("b");
         const actions = (ended as RealmArenaEndTurn).recordedEnemyActions ?? [];
         expect(actions.length).toBeGreaterThan(0);
-        expect(actions.every(action => battleOf(game).fighters.find(fighter => fighter.id === action.fighter)?.owner === "ai:0")).toBe(true);
+        expect(actions.every(action => battleOf(game).fighters.find(fighter => fighter.id === action.fighter)?.owner === first)).toBe(true);
         // It acted, and ended its turn as a player does: AP spent, on watch.
         const events = (outcome as IRealmArenaOutcome).events;
-        expect(events.some(event => event.kind === "moved" && battleOf(game).fighters[event.fighter].owner === "ai:0")).toBe(true);
+        expect(events.some(event => event.kind === "moved" && battleOf(game).fighters[event.fighter].owner === first)).toBe(true);
         const band = (owner: string) => battleOf(game).fighters.filter(fighter => fighter.owner === owner);
-        expect(band("ai:0").every(fighter => fighter.ap === 0)).toBe(true);
-        expect(band("ai:1").every(fighter => fighter.ap === 0 && fighter.banked === 0)).toBe(true);
+        expect(band(first).every(fighter => fighter.ap === 0)).toBe(true);
+        expect(band(second).every(fighter => fighter.ap === 0 && fighter.banked === 0)).toBe(true);
         expect(game.specificGameState.coop?.nextWarband).toBe(1);
 
-        const deployed = band("ai:1").map(fighter => fighter.square);
+        const deployed = band(second).map(fighter => fighter.square);
         await play(game, endTurnBy("b"));
-        expect(band("ai:1").map(fighter => fighter.square)).not.toEqual(deployed);
+        expect(band(second).map(fighter => fighter.square)).not.toEqual(deployed);
         expect(game.specificGameState.coop?.nextWarband).toBe(0);
         // A round is still the players' seats: the warbands add no hand-offs.
         expect(game.specificGameState.roundsPlayed).toBe(1);
@@ -198,16 +200,28 @@ describe("the enemy's turn (§29.4)", () => {
     });
 
     it("steps past a warband with nobody standing", async () => {
+        const [first, second] = [warbandOwner(0), warbandOwner(1)];
         const game = makeGame(["a", "b"], {}, false, "realm");
         await musterAll(game);
-        game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => fighter.owner === "ai:0" ? { ...fighter, hp: 0 } : fighter);
+        game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => fighter.owner === first ? { ...fighter, hp: 0 } : fighter);
         const ended = endTurnBy("a");
         await play(game, ended);
-        expect((ended as RealmArenaEndTurn).recordedEnemyActions?.every(action => battleOf(game).fighters[action.fighter].owner === "ai:1")).toBe(true);
+        expect((ended as RealmArenaEndTurn).recordedEnemyActions?.every(action => battleOf(game).fighters[action.fighter].owner === second)).toBe(true);
         expect(game.specificGameState.coop?.nextWarband).toBe(0);
     });
 
+    it("records that no warband took a turn when the battle is over first, so a replay never plans one", async () => {
+        const game = makeGame(["a", "b"], {}, false, "realm");
+        await musterAll(game);
+        game.specificGameState.fighters = game.specificGameState.fighters.map(fighter => isWarband(fighter.owner) ? { ...fighter, hp: 0 } : fighter);
+        const ended = endTurnBy("a");
+        await play(game, ended);
+        expect((ended as RealmArenaEndTurn).recordedEnemyActions).toEqual([]);
+        expect(game.complete).toBe(true);
+    });
+
     it("ends there when the planner throws, and the player's End turn still stands", async () => {
+        const first = warbandOwner(0);
         const game = makeGame(["a", "b"], {}, false, "realm");
         await musterAll(game);
         planner.broken = true;
@@ -217,7 +231,7 @@ describe("the enemy's turn (§29.4)", () => {
         expect(error).toHaveBeenCalledOnce();
         expect((ended as RealmArenaEndTurn).recordedEnemyActions).toEqual([]);
         // It did nothing, so it went on watch where it stood.
-        expect(battleOf(game).fighters.filter(fighter => fighter.owner === "ai:0").every(fighter => fighter.banked > 0)).toBe(true);
+        expect(battleOf(game).fighters.filter(fighter => fighter.owner === first).every(fighter => fighter.banked > 0)).toBe(true);
         expect(game.currentTurn).toBe("b");
     });
 
@@ -247,15 +261,30 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         const told = (new RealmArenaGameType().outcomeFor(game, outcome, "a") as IRealmArenaOutcome).events;
         const battle = battleOf(game);
         const seen = squadSight(battle, "a");
-        const enemyMoves = (events: BattleEvent[]) => events.filter(event => event.kind === "moved" && battle.fighters[event.fighter].owner === "ai:0");
+        const enemyMoves = (events: BattleEvent[]) => events.filter(event => event.kind === "moved" && battle.fighters[event.fighter].owner === warbandOwner(0));
         // The warbands deploy too far off to be seen, so it moved out of sight.
         expect(enemyMoves(all).some(event => event.kind === "moved" && event.path.length > 0)).toBe(true);
         for (const event of enemyMoves(told)) {
             if (event.kind === "moved") expect(event.path.every(seen)).toBe(true);
         }
         expect(told).not.toEqual(all);
-        // A teammate is told it the same.
+        // A teammate is told it the same, and so is a review of the step,
+        // which leaves out the rolls; nobody seated is told the warband's moves.
         expect((new RealmArenaGameType().outcomeFor(game, outcome, "b") as IRealmArenaOutcome).events).toEqual(told);
+        const reviewed = stepOutcomeToModel(outcome, "a", game.specificGameState)?.events ?? [];
+        expect(reviewed).toEqual(told.map(event => event.kind === "shot" ? (({ roll: _roll, ...rest }) => rest)(event) : event));
+        const nobody = stepOutcomeToModel(outcome, null, game.specificGameState)?.events ?? [];
+        expect(enemyMoves(nobody as BattleEvent[]).every(event => event.kind === "moved" && event.path.length === 0)).toBe(true);
+    });
+
+    it("never carries whom the team fights: only that it's co-op", async () => {
+        const game = makeGame(["a", "b"], {}, true, "realm");
+        await musterAll(game);
+        for (const viewer of ["a", "b", null]) {
+            const wire = gameStateToModel(game.specificGameState, viewer, null);
+            expect(wire.coop).toBe(true);
+            expect(JSON.stringify(wire)).not.toMatch(/enemy|nextWarband|"realm"/);
+        }
     });
 
     it("is everything once the fog has lifted, and everything without it", async () => {

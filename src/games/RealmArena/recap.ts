@@ -175,9 +175,10 @@ function toEvents(
             // Always a row, since it closes the turn's window; only the centre
             // scoring makes it news, so a bare one is `quiet`. Read off the
             // events rather than the score, which a knock-out by burning as
-            // the next turn begins can add to as well (§20.2).
+            // the next turn begins can add to as well (§20.2) — and only the
+            // sender's own, not a warband's in the enemy's turn after it (§29.4).
             const events = (outcome as Partial<IRealmArenaOutcome>).events ?? [];
-            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" ? event.points : 0), 0);
+            const points = events.reduce((sum, event) => sum + (event.kind === "scored" && event.reason === "centre" && event.player === command.senderId ? event.points : 0), 0);
             if (points > 0) {
                 // Counted off the squad as the feed's viewer sees it, so not
                 // at all in fog of war, where they may see none of it (§27).

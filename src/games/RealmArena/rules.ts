@@ -177,10 +177,11 @@ export interface BattleSource {
  * `ai:0`, `ai:1`, …, which no Clerk id can ever be. Warband `k` deploys
  * opposite player `k`.
  */
-export const warbandOwner = (k: number): string => `ai:${k}`;
+export const warbandOwner = (k: number): string => `${WARBAND_PREFIX}${k}`;
+const WARBAND_PREFIX = "ai:";
 
 /** Whether an owner is one of the computer's warbands rather than a player. */
-export const isWarband = (owner: string): boolean => owner.startsWith("ai:");
+export const isWarband = (owner: string): boolean => owner.startsWith(WARBAND_PREFIX);
 
 /**
  * The one way a `BattleState` is built (§29.6), so the board's previews and

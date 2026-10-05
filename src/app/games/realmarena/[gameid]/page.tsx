@@ -119,7 +119,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, musterSize(seats.length, !!gs?.coop), gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
+    // In co-op the players are one side (§29.6), and every squad musters 80 points (§29.1).
+    const coop = !!gs?.coop;
+    const draft = useMusterDraft(field, mySeat, musterSize(seats.length, coop), gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.
@@ -142,8 +144,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // throwers it can't. The fog lifts once the battle is over.
     const fogged = !!gs?.fog && !complete;
     const clouds = gs?.clouds ?? [];
-    // In co-op the players are one side (§29.6).
-    const coop = !!gs?.coop;
     const battle = battleFrom(field, { fighters, fog: fogged, clouds, seats, coop });
     // Every square the viewer's squad can't see, dimmed on the board: a
     // sweep of sight lines, so only redone when someone moves or cover goes.

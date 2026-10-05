@@ -314,6 +314,9 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
 /** The Realm, which every player fights as until a squad can choose its faction (B6). */
 export const REALM = FACTIONS.realm;
 
+/** Every faction's id: what Random is drawn from (§29.3). */
+export const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
+
 export function isFactionId(value: unknown): value is FactionId {
     return typeof value === "string" && Object.hasOwn(FACTIONS, value);
 }

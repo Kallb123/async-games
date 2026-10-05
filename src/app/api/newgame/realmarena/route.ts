@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { COOP_PLAYERS, coopInviteOf, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
+import { COOP_PLAYERS, coopInviteOf, fitsCoop, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
 import { meta } from '@/games/RealmArena/meta';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { partySizeErrorMessage } from '@/utils/ui/games';
@@ -30,12 +30,11 @@ export async function POST(request: NextRequest) {
   // enemy that is a faction or Random, and a team of two or three, which its
   // battlefields are built for. Anything else it sent for `coop` is refused
   // rather than read as a free-for-all the host didn't choose.
-  const coop = body.coop == null ? undefined : coopInviteOf(body.coop);
+  const coop = coopInviteOf(body.coop);
   if (body.coop != null && !coop) {
     return NextResponse.json({}, { status: 400, statusText: "Unknown enemy" });
   }
-  const players = invitees.length + 1;
-  if (coop && (players < COOP_PLAYERS.min || players > COOP_PLAYERS.max)) {
+  if (coop && !fitsCoop(invitees.length + 1)) {
     return NextResponse.json({}, { status: 400, statusText: `Co-op is for ${COOP_PLAYERS.min}–${COOP_PLAYERS.max} players` });
   }
 
