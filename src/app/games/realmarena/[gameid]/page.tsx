@@ -9,8 +9,8 @@ import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFight
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
 import RealmArenaTargets from "@/games/RealmArena/components/RealmArenaTargets";
-import RealmArenaTurnEnd from "@/games/RealmArena/components/RealmArenaTurnEnd";
-import RealmArenaTurnSheet, { actTarget } from "@/games/RealmArena/components/RealmArenaTurnSheet";
+import RealmArenaTurnEnd, { RealmArenaWatchSwitches } from "@/games/RealmArena/components/RealmArenaTurnEnd";
+import RealmArenaTurnSheet, { actTarget, RealmArenaAim } from "@/games/RealmArena/components/RealmArenaTurnSheet";
 import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
@@ -436,6 +436,25 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         />
                     </div>
 
+                    {/* What's used most sits nearest the board (§17.3 PR 7):
+                        End turn, then whatever is lined up and who it could be
+                        aimed at, ahead of the squad and the actions. */}
+                    {battleTurn && (
+                        <div className="ag-section ag-stack">
+                            <RealmArenaTurnEnd
+                                onEndTurn={endTurn}
+                                canUndo={gs.canUndo}
+                                onUndo={undo}
+                                undoPending={pendingTarget === 'undo'}
+                                pending={pendingTarget === 'endTurn'}
+                                disabled={pendingTarget !== null}
+                            />
+                            {turn
+                                ? <RealmArenaAim draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />
+                                : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>}
+                        </div>
+                    )}
+
                     {!mustering && (
                         <RealmArenaUnits
                             battle={battle}
@@ -477,35 +496,18 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         </div>
                     )}
 
+                    {selected && (
+                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
+                        </RealmArenaFighterCard>
+                    )}
+
                     {battleTurn && lastEvents.length > 0 && (
                         <RealmArenaResults events={lastEvents} fighters={fighters} viewerId={myUserId} nameFor={playerName} />
                     )}
 
-                    {battleTurn && !selected && (
-                        <div className="ag-section">
-                            <p className="ag-hint ag-hint--tight">Tap one of your units above, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>
-                        </div>
-                    )}
-
-                    {selected && (
-                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
-                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />}
-                        </RealmArenaFighterCard>
-                    )}
-
                     {battleTurn && (
-                        <RealmArenaTurnEnd
-                            fighters={fighters}
-                            player={myUserId}
-                            keepStill={keepStill}
-                            onKeepStill={setKeepStill}
-                            onEndTurn={endTurn}
-                            canUndo={gs.canUndo}
-                            onUndo={undo}
-                            undoPending={pendingTarget === 'undo'}
-                            pending={pendingTarget === 'endTurn'}
-                            disabled={pendingTarget !== null}
-                        />
+                        <RealmArenaWatchSwitches fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
                     )}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />

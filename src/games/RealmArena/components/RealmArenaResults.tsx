@@ -32,20 +32,22 @@ export default function RealmArenaResults({ events, fighters, viewerId, nameFor 
     if (runs.length === 0) return null;
     return (
         <Section label="What happened">
-            {runs.map((run, index) => run[0].roll !== undefined ? (
-                <RollReadout key={index} className="ag-ra-roll" values={[run[0].roll]} sides={[ROLL_SIDES]} headline={run[0].title} sub={run[0].sub} />
-            ) : (
-                <div key={index} className="ag-list">
-                    {run.map((line, row) => (
-                        <ListRow
-                            key={row}
-                            icon={line.mark ? <SpriteImage sprite={line.mark} boxed /> : line.icon}
-                            title={line.title}
-                            sub={line.sub}
-                        />
-                    ))}
-                </div>
-            ))}
+            <div className="ag-stack">
+                {runs.map((run, index) => run[0].roll !== undefined ? (
+                    <RollReadout key={index} values={[run[0].roll]} sides={[ROLL_SIDES]} headline={run[0].title} sub={run[0].sub} />
+                ) : (
+                    <div key={index} className="ag-list">
+                        {run.map((line, row) => (
+                            <ListRow
+                                key={row}
+                                icon={line.mark ? <SpriteImage sprite={line.mark} boxed /> : line.icon}
+                                title={line.title}
+                                sub={line.sub}
+                            />
+                        ))}
+                    </div>
+                ))}
+            </div>
         </Section>
     );
 }

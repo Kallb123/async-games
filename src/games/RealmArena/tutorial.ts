@@ -69,7 +69,7 @@ export const tutorial: GameTutorial<RealmArenaSignal> = {
         {
             anchor: "ra-turn-end",
             title: "End turn",
-            body: `Anyone left with ${REACTION_COST} AP or more goes on watch, to shoot or strike an enemy that moves near them on the next turn. Switch one off to keep it still.`,
+            body: `Anyone left with ${REACTION_COST} AP or more goes on watch, to shoot or strike an enemy that moves near them on the next turn. Switch one off, further down the page, to keep it still.`,
             when: "myTurn",
         },
         {

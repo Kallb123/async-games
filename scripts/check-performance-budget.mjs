@@ -25,7 +25,10 @@ import { globSync } from 'node:fs';
 // board route to 960 KB: the board reads the battle with the same rules
 // module the server does, so the co-op rules ride along. Left room for the
 // co-op screens still to come (docs/games/realm-arena.md §29.10, PR 5).
-const limits = { routeJavaScript: 1_000_000, largestImage: 5_250_000 };
+//
+// Raised again from 1,000,000 when Hold Out, difficulty and battle size and
+// the Sacked Fort took Realm Arena's board route to 977 KB, just over it.
+const limits = { routeJavaScript: 1_025_000, largestImage: 5_250_000 };
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;

@@ -154,7 +154,7 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmA
  */
 function MusterActions({ why, children }: { why: React.ReactNode; children: React.ReactNode }) {
     return (
-        <div className="ag-section">
+        <div className="ag-section ag-stack">
             {why}
             <div className="ag-action-grid">{children}</div>
         </div>

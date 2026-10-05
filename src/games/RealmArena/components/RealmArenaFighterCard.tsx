@@ -33,38 +33,40 @@ export default function RealmArenaFighterCard({ fighter, label, children }: Real
     const weapon = weaponOf(fighter);
     return (
         <Section label={label}>
-            <div className="ag-stat-row">
-                <Stat value={`${fighter.hp}/${character.hp}`} label="HP" />
-                <Stat value={fighter.ap} label="AP left" />
-                <Stat value={fighter.banked} label="AP banked" />
-            </div>
-            <p className="ag-hint ag-hint--tight">{isStanding(fighter) ? watchStatus(fighter) ?? character.role : 'Down'}</p>
-            <RealmArenaStatusList effects={effectsOn(fighter)} />
-            {children ?? (
-                <div className="ag-list">
-                    <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon)} />
-                    {abilitiesOf(fighter).map(id => {
-                        const ability = ABILITIES[id];
-                        return (
-                            <ListRow
-                                key={id}
-                                icon={ABILITY_MARK}
-                                title={ability.name}
-                                sub={`${ability.ap} AP · ${ability.description}`}
-                                action={<span className="ag-tag ag-tag--quiet">{abilityWait(fighter, id) ?? 'Ready'}</span>}
-                            />
-                        );
-                    })}
-                    {fighter.item && (
-                        <ListRow
-                            icon={<SpriteImage sprite={ITEM_ART[fighter.item]} boxed />}
-                            title={ITEMS[fighter.item].name}
-                            sub={`${ITEMS[fighter.item].ap} AP · ${ITEMS[fighter.item].description}`}
-                            action={<span className="ag-tag ag-tag--quiet">Carried</span>}
-                        />
-                    )}
+            <div className="ag-stack">
+                <div className="ag-stat-row">
+                    <Stat value={`${fighter.hp}/${character.hp}`} label="HP" />
+                    <Stat value={fighter.ap} label="AP left" />
+                    <Stat value={fighter.banked} label="AP banked" />
                 </div>
-            )}
+                <p className="ag-hint">{isStanding(fighter) ? watchStatus(fighter) ?? character.role : 'Down'}</p>
+                <RealmArenaStatusList effects={effectsOn(fighter)} />
+                {children ?? (
+                    <div className="ag-list">
+                        <ListRow icon={weaponMark(fighter.character, fighter.option)} title={weapon.name} sub={weaponLine(weapon)} />
+                        {abilitiesOf(fighter).map(id => {
+                            const ability = ABILITIES[id];
+                            return (
+                                <ListRow
+                                    key={id}
+                                    icon={ABILITY_MARK}
+                                    title={ability.name}
+                                    sub={`${ability.ap} AP · ${ability.description}`}
+                                    action={<span className="ag-tag ag-tag--quiet">{abilityWait(fighter, id) ?? 'Ready'}</span>}
+                                />
+                            );
+                        })}
+                        {fighter.item && (
+                            <ListRow
+                                icon={<SpriteImage sprite={ITEM_ART[fighter.item]} boxed />}
+                                title={ITEMS[fighter.item].name}
+                                sub={`${ITEMS[fighter.item].ap} AP · ${ITEMS[fighter.item].description}`}
+                                action={<span className="ag-tag ag-tag--quiet">Carried</span>}
+                            />
+                        )}
+                    </div>
+                )}
+            </div>
         </Section>
     );
 }
