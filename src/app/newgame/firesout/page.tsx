@@ -98,13 +98,11 @@ function NewGameFiresOutForm() {
             id: 'crew',
             label: 'Crew',
             description: `Play with ${MIN_PLAYERS}–${MAX_PLAYERS} people, one firefighter each.`,
-            ariaLabel: 'Play with a crew of other people',
           },
           {
             id: 'solo',
             label: 'Solo',
             description: 'Play on your own, running the whole crew yourself.',
-            ariaLabel: 'Play solo, running the whole crew',
           },
         ]}
       />
@@ -137,8 +135,8 @@ function NewGameFiresOutForm() {
         value={ruleset}
         onChange={setRuleset}
         choices={[
-          { id: 'family', label: 'Family', description: 'The printed starting fire and setup — quicker to learn.', ariaLabel: 'Play the Family game' },
-          { id: 'experienced', label: 'Experienced', description: 'A rolled, randomised setup — harder, and different every game.', ariaLabel: 'Play the Experienced game' },
+          { id: 'family', label: 'Family', description: 'The printed starting fire and setup — quicker to learn.' },
+          { id: 'experienced', label: 'Experienced', description: 'A rolled, randomised setup — harder, and different every game.' },
         ]}
       />
 

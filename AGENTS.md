@@ -51,6 +51,10 @@ out. A second copy is the signal to extract the first one.
   second copy of the rail),
   `Avatar`, `GameThumb`, `TurnTimerSelect`, `ThemeSelect` (the pick-a-dressing
   block on a setup screen, which renders nothing for a game with no themes),
+  `OptionChoiceSection` (every pick-exactly-one choice on a setup screen — a
+  radio group of `OptionRadioRow`s, with arrow keys and one Tab stop; a
+  genuinely on/off setting stays an `OptionToggleRow`, and two mutually
+  exclusive toggles are a choice, not two settings),
   `GameSetupLayout`, `GameLibrary`
   (the filter-chips + featured + grid game browser, shared by `/newgame` and
   the public landing page). Every heading-and-body block on a page is a
