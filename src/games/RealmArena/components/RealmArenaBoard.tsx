@@ -108,6 +108,8 @@ interface RealmArenaBoardProps {
     owners: readonly string[];
     /** Hold Out's next wave lands next round (§30.11): the warbands' zones, where it will stand, are lit. */
     waveDue?: boolean;
+    /** The map's centre is drawn, with its name: not in Hold Out, where holding it decides nothing (§30). */
+    showCentre?: boolean;
     /** The signed-in viewer, whose preferred turn of the board this browser remembers. */
     viewerId: string;
     colourFor: (userId: string) => string;
@@ -591,7 +593,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -657,7 +659,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
 
-    const centreSquares = field.objectives[CENTRE] ?? [];
+    const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
     // Everything shaded square by square, in the order it's painted: the fog

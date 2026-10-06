@@ -429,6 +429,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
                             waveDue={waveDue}
+                            showCentre={gs.mission !== 'holdOut'}
                             viewerId={myUserId}
                             colourFor={colourFor}
                             nameFor={playerName}
