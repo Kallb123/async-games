@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLIMB_COST, findPath, pathCost, pathTo, reachFrom, stepCost } from "./pathfinding";
+import { CLIMB_COST, costsFrom, findPath, pathCost, pathTo, reachFrom, stepCost } from "./pathfinding";
 import { at, fieldOf, hillOf } from "./testFixtures";
 
 describe("stepCost", () => {
@@ -114,6 +114,20 @@ describe("reachFrom", () => {
         expect(reach.costs[at(field, 1, 1)]).toBe(Infinity);
         expect(reach.costs[at(field, 1, 0)]).toBe(Infinity);
         expect(pathTo(reach, at(field, 2, 0))).toEqual({ squares: [at(field, 0, 0), at(field, 1, 0), at(field, 2, 0)], cost: 2 });
+    });
+});
+
+describe("costsFrom", () => {
+    it("is the least of the walks from each square it's given, every one of them its own start", () => {
+        const field = hillOf(
+            [".....#", ".,##..", "..s...", "#.....", "...,.."],
+            ["000000", "000000", "000600", "000000", "000000"],
+        );
+        const sources = [at(field, 0, 0), at(field, 4, 4), at(field, 3, 1)];
+        const least = Float64Array.from(field.tiles, (_, square) => Math.min(...sources.map(from => reachFrom(field, from).costs[square])));
+        expect(costsFrom(field, sources)).toEqual(least);
+        expect(costsFrom(field, sources, { climb: 6 })).toEqual(Float64Array.from(field.tiles, (_, square) =>
+            Math.min(...sources.map(from => reachFrom(field, from, Infinity, { climb: 6 }).costs[square]))));
     });
 });
 

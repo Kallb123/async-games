@@ -2518,8 +2518,15 @@ could reach:
 
 - Before any move is played out, the reachable squares are ranked by the
   Exposure, Threat and Objective terms of the battle with the character
-  standing there (`standingAt`) — the same score, without playing out the
-  path's overwatch — and only the best dozen are played out.
+  standing there — the same score, without playing out the path's overwatch —
+  and only the best dozen are played out.
+- *Since built:* a turn keeps what it can from one plan to the next
+  (`TurnMemo`). A square's Exposure and Threat for a character don't read
+  where it stands now or the AP it has, so they're kept until it or an enemy
+  is hurt, an enemy moves or comes into sight, a shield wall or smoke cloud
+  goes up or down, or the ground is blasted; and Hold Out's walk from the
+  hunted squares (§30.3) is kept until those squares change. A plan with the
+  memo chooses exactly what one without it would, which its test holds.
 - A turn is capped at four actions a character, more than its AP could ever
   pay for, so it always ends.
 - *Target:* a warband's turn plans in under 250 ms on the Four-Gate Fort, and

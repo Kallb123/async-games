@@ -35,6 +35,18 @@ describe("sightLine", () => {
         expect(back.crossed).toEqual([...there.crossed].reverse());
     });
 
+    it("walks no further than it's asked to, but every square of the line until then", () => {
+        const wide = fieldOf(...Array(7).fill("........."));
+        for (const to of [at(wide, 8, 3), at(wide, 7, 6), at(wide, 2, 6), at(wide, 8, 0)]) {
+            const whole = sightLine(wide, at(wide, 0, 0), to);
+            const near = (square: number) => Math.max(square % wide.width, Math.floor(square / wide.width)) <= 2;
+            const part = sightLine(wide, at(wide, 0, 0), to, 2);
+            expect(part.crossed.filter(near)).toEqual(whole.crossed.filter(near));
+            expect(part.grazed.filter(pair => pair.some(near))).toEqual(whole.grazed.filter(pair => pair.some(near)));
+            expect(part.crossed.length).toBeLessThan(whole.crossed.length);
+        }
+    });
+
     it("is empty between neighbours", () => {
         expect(sightLine(field, at(field, 1, 1), at(field, 2, 1))).toEqual({ crossed: [], grazed: [] });
     });

@@ -24,9 +24,11 @@ export interface SightLine {
 /**
  * Walks the line from one square's centre to another's, a square at a time:
  * across a column edge or a row edge, whichever the line meets first, and
- * straight through a corner when it meets both at once.
+ * straight through a corner when it meets both at once. With `within`, only
+ * as far as that many squares from `from` in any direction: the line never
+ * turns back, so nothing past there comes nearer again.
  */
-export function sightLine(field: Battlefield, from: Square, to: Square): SightLine {
+export function sightLine(field: Battlefield, from: Square, to: Square, within = Infinity): SightLine {
     const a = coordsOf(field, from), b = coordsOf(field, to);
     const across = Math.abs(b.col - a.col), down = Math.abs(b.row - a.row);
     const stepCol = Math.sign(b.col - a.col), stepRow = Math.sign(b.row - a.row);
@@ -34,7 +36,7 @@ export function sightLine(field: Battlefield, from: Square, to: Square): SightLi
     const at = (c: number, r: number): Square => r * field.width + c;
     const line: SightLine = { crossed: [], grazed: [] };
     let col = a.col, row = a.row;
-    for (let i = 0, j = 0; i < across || j < down;) {
+    for (let i = 0, j = 0; (i < across || j < down) && Math.max(i, j) <= within;) {
         // The next column edge is (i + ½) / across of the way along the line,
         // the next row edge (j + ½) / down: whichever is nearer comes first.
         const race = (1 + 2 * i) * down - (1 + 2 * j) * across;
