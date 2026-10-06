@@ -935,8 +935,18 @@ export function nextWaveOf(gs: IRealmArenaSpecificGameState): { round: number; a
     const rounds = battleRounds(gs.seats.length);
     const round = nextWaveRound(gs.roundsPlayed + 1, rounds);
     if (round === undefined) return undefined;
-    if (!gs.fog) return { round, arriving: warbandsFor(gs.seats).reduce((sum, owner) => sum + waveOf(gs, owner, true, round).length, 0) };
     if (enemyHidden(gs.coop)) return { round };
+    // Growing: every End turn played from here on is the current version's.
+    // A count the placement can't work out costs the line its count, never
+    // the board its response.
+    if (!gs.fog) {
+        try {
+            return { round, arriving: warbandsFor(gs.seats).reduce((sum, owner) => sum + waveOf(gs, owner, true, round).length, 0) };
+        } catch (error) {
+            console.error("Realm Arena: the next wave couldn't be counted", error);
+            return { round };
+        }
+    }
     return { round, arriving: warbandsFor(gs.seats).length * waveStrength(warbandSquad(gs), round).length, upTo: true };
 }
 

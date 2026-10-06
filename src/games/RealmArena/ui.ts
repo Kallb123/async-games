@@ -26,6 +26,17 @@ export const TEAM_COLOUR = "var(--ag-gold)";
 export const TEAM_NAME = "the team";
 export const ENEMY_COLOUR = "var(--ag-purple)";
 
+/**
+ * What the enemy's line on the scoreboard says of Hold Out's next wave
+ * (§30.3, §30.11), as the wire tells it (`nextWave`) in battle round `round`:
+ * when it lands and how many it brings — in fog, the most it could.
+ */
+export function waveLineOf(nextWave: { round: number; arriving?: number; upTo?: true } | undefined, round: number): string {
+    if (!nextWave) return 'final wave landed';
+    const when = nextWave.round === round + 1 ? 'wave next round' : `next wave ${nextWave.round}`;
+    return nextWave.arriving === undefined ? when : `${when} · ${nextWave.upTo ? 'up to ' : ''}${nextWave.arriving} coming`;
+}
+
 /** The letter a square's terrain is drawn with on the map: what the board styles it by. */
 export function terrainLetter(field: Battlefield, square: Square): TerrainLetter {
     return LETTER_OF.get(field.tiles[square].terrain) ?? ".";

@@ -350,6 +350,12 @@ describe("Hold Out's rally and the next wave told (§30.11)", () => {
         expect(nextWaveOf(gs)).toEqual({ round: 4, arriving: 2 * (REALM.readyMade[80].length + 1), upTo: true });
     });
 
+    it("counts a random enemy's wave without fog, where it's seen from the start", async () => {
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        await musterAll(game);
+        expect(nextWaveOf(game.specificGameState)).toEqual({ round: 4, arriving: 2 });
+    });
+
     it("tells nothing outside Hold Out", async () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
         await musterAll(game);

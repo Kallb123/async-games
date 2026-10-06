@@ -19,8 +19,8 @@ import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/chara
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
-import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, nextWaveRound, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares } from "@/games/RealmArena/ui";
+import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
+import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -289,13 +289,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const scores = gs?.scores ?? {};
     const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
     // In Hold Out the enemy's line also says when its next wave comes (§30.3)
-    // and how many it brings (§30.11) — in fog, only how many at most. The
-    // round before it lands, the board lights up where it will.
-    const nextWave = gs?.mission === 'holdOut' ? nextWaveRound(gs.round, gs.battleRounds) : undefined;
-    const waveDue = !mustering && !complete && nextWave === (gs?.round ?? 0) + 1;
-    const arriving = gs?.nextWave?.arriving;
-    const waveSize = arriving === undefined ? '' : ` · ${gs?.nextWave?.upTo ? 'up to ' : ''}${arriving} coming`;
-    const waveLine = nextWave === undefined ? 'final wave landed' : `${waveDue ? 'wave next round' : `next wave ${nextWave}`}${waveSize}`;
+    // and how many it brings (§30.11). The round before it lands, the board
+    // lights up where it will.
+    const waveDue = gs?.nextWave !== undefined && gs.nextWave.round === gs.round + 1;
     // In co-op the strip is the team's total against the enemy's (§29.9), each
     // player's share under the team's, and how each one stands once it's opened.
     const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? [
@@ -312,7 +308,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             id: ENEMY_SIDE,
             name: capitalise(enemyName),
             color: ENEMY_COLOUR,
-            sub: mustering ? 'musters last' : gs.mission === 'holdOut' ? `${enemyStanding} · ${waveLine}` : enemyStanding,
+            sub: mustering ? 'musters last' : gs.mission === 'holdOut' && !complete ? `${enemyStanding} · ${waveLineOf(gs.nextWave, gs.round)}` : enemyStanding,
             score: sideScore(battle, scores, ENEMY_SIDE),
         },
     ] : seatOrder.map(userId => ({
