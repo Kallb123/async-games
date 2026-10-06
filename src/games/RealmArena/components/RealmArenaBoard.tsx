@@ -15,7 +15,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -125,8 +125,12 @@ interface RealmArenaBoardProps {
     refocus?: number;
     /** The player whose turn it is in battle: their characters show the AP they have left. */
     acting?: string | null;
-    /** Squares brought into view whenever `key` changes: a review's step (§17.3 PR 8), or a target picked from the turn sheet's list. */
-    follow?: { squares: readonly Square[]; key: string } | null;
+    /**
+     * Squares brought into view whenever `key` changes: a review's step
+     * (§17.3 PR 8), or — `aim` — a target picked from the turn sheet's list,
+     * framed close with whoever is aiming at it (`aimFocus`).
+     */
+    follow?: { squares: readonly Square[]; key: string } | { aim: { caster: Square; target: Square }; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
@@ -561,8 +565,9 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * At a phone's width a square is under ten pixels across — fine for reading
  * the battle, far too small to tap — so `BoardZoom`'s deepest step brings
  * about seven squares across the column, and selecting a character brings the
- * view to most of where it could move — as deep as that still fits
- * (`reachFocus`).
+ * view to the near half of where it could move — as deep as that still fits
+ * (`reachFocus`) — and a target picked from the list brings it in close on the
+ * caster and the target (`aimFocus`).
  *
  * On the viewer's battle turn (`aiming`, §17.3 PR 7) it shades the selected
  * character's reach by the AP each square costs, draws the path a lined-up
@@ -643,7 +648,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         return seat < 0 ? undefined : tintId(artId, seat);
     };
 
-    // A character selected in battle brings most of where it could move into
+    // A character selected in battle brings the near half of where it could move into
     // view, rather than just the squares round it — zoomed exactly to that,
     // since a full turn's reach is too wide for any step but the fit. A search
     // over the whole map, so only redone when the selection or the board moves.
@@ -656,7 +661,8 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const pickedUp = placing?.selected != null ? sealed?.[placing.selected] : undefined;
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
-    if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}` };
+    if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
+    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}` };
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
 

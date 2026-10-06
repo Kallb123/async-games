@@ -207,9 +207,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // whoever is aiming at it, and keeps it there until the character acts,
     // another is selected, a box is tapped or a review is stepped into.
     const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
-    const [picked, setPicked] = useResettingState<{ squares: number[]; key: string } | null>(null, pickKey);
+    const [picked, setPicked] = useResettingState<{ aim: { caster: number; target: number }; key: string } | null>(null, pickKey);
     const focusTarget = (target: Fighter) => {
-        if (selected) setPicked({ squares: [selected.square, target.square], key: `target:${target.id}:${Date.now()}` });
+        if (selected) setPicked({ aim: { caster: selected.square, target: target.square }, key: `target:${target.id}:${Date.now()}` });
     };
     const endTurn = () => {
         // AP left unspent is a turn ended by mistake as often as on purpose,

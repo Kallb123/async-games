@@ -82,8 +82,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Pinch-zooming a board keeps up with your fingers",
-                detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom.",
+                title: "Board zooming keeps up with your fingers, and Realm Arena zooms in closer",
+                detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom. In Realm Arena, picking a target from the list now zooms in close on your character and the target rather than out across the map, and selecting a character frames the nearer half of where it could move instead of most of it.",
             },
             {
                 title: "Realm Arena: Hold Out on the Sacked Fort",
