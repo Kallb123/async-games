@@ -582,7 +582,15 @@ export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs
     if (!Array.isArray(events) || events.length === 0) return undefined;
     const battle = battleOf(gs, complete);
     const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId, enemyHidden(gs.coop)) : events as BattleEvent[];
-    const parts = partsOf(outcome as IRealmArenaOutcome, viewerId, gs, complete);
+    // The parts only add to what `events` already tells, so a board one of
+    // them can't draw (an odd state from an old command version) costs the
+    // review its parts, never the timeline, the recap or a result built on it.
+    let parts: IRealmArenaStepPart[] | undefined;
+    try {
+        parts = partsOf(outcome as IRealmArenaOutcome, viewerId, gs, complete);
+    } catch (error) {
+        console.error("Realm Arena: an End turn's parts couldn't be drawn, so its review step plays whole", error);
+    }
     return { events: withoutRolls(told), ...parts ? { parts } : {} };
 }
 
@@ -608,9 +616,11 @@ const withoutRolls = (events: readonly BattleEvent[]): ToldEvent[] => events.map
  * happened is no more theirs than the line it wrote. And each board is
  * `gameStateToModel`'s own view for that viewer of the board as the part left
  * it, so it holds only what their side saw then, and the ghosts only they
- * remember. Nothing is shown of a part that the log, the recap and the
- * snapshot don't show, so there's nothing for a part's number or its place to
- * tell. Once the battle is over the fog is lifted for all of it, boards
+ * remember. Nothing is shown of a part that the log and the recap don't
+ * show, so there's nothing for a part's number or its place to tell. (A
+ * board can hold an enemy the snapshot doesn't — one seen mid-turn by a
+ * lookout downed later in it — but only as the viewer's side saw it then,
+ * which is what the log's line for that action was written from.) Once the battle is over the fog is lifted for all of it, boards
  * included, as it is for `events`.
  *
  * Undefined with fewer than two parts told. The last never carries a board:

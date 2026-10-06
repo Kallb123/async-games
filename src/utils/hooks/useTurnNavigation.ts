@@ -279,6 +279,18 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
         return () => clearTimeout(timer);
     }, [playing, viewIndex, snapshots, currentIndex]);
 
+    // Hidden, the player isn't watching, and a backgrounded tab's throttled
+    // timers would play on in fits: so auto-play stops, and coming back finds
+    // the review where they left it, with Play to carry on.
+    useEffect(() => {
+        if (!playing) return;
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") setPlaying(false);
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => document.removeEventListener("visibilitychange", onVisibility);
+    }, [playing]);
+
     const isLive = mode === "live";
     const activeSnapshot: ITurnSnapshot<TState, TOutcome> | undefined = isLive ? undefined : snapshots[viewIndex];
 
