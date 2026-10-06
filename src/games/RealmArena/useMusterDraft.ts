@@ -1,7 +1,7 @@
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import type { Battlefield, Square } from "@/utils/games/battlefield/terrain";
 import { pluralize } from "@/utils/ui/text";
-import { readyMadeSquad, REALM, squadPoints, type ItemId, type OptionId } from "./characters";
+import { FACTIONS, readyMadeSquad, squadPoints, type FactionId, type ItemId, type OptionId } from "./characters";
 import type { Ranks } from "./mastery";
 import { itemsPoints, musterRefusal, pickOf, readyMadeMuster, type MusterPick } from "./rules";
 import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, type ItemCounts, type Placement, type SquadCounts } from "./ui";
@@ -12,7 +12,8 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * each stands and which carries what. Held on this device alone until the
  * sealed `RealmArenaMuster` goes, and dropped when `turnKey` moves on.
  *
- * It starts from the faction's ready-made squad, the one a timed-out muster
+ * It starts from the first faction the host allowed (B6), and from that
+ * faction's ready-made squad, the one a timed-out muster
  * gets (§17.2), so a player happy with it musters in two taps. Every point is
  * spent on the first step, items included. Placing starts from the same spread
  * a ready-made squad stands in, with the items handed down the squad one each,
@@ -20,12 +21,15 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * player only moves the ones they want elsewhere, passes the items between
  * them, and picks an option (§23.2) a rank has unlocked.
  */
-export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, turnKey: string) {
-    // Every player fights as the Realm (§29.3), and starts from its squad for the budget.
-    const readyMade = readyMadeSquad(REALM, budget);
-    const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), turnKey);
+export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, factions: readonly FactionId[], turnKey: string) {
+    const [factionId, setFaction] = useResettingState<FactionId | undefined>(factions[0], turnKey);
+    const faction = FACTIONS[factionId ?? "realm"];
+    // Another faction is another roster: the squad starts again from its ready-made one for the budget.
+    const squadKey = `${turnKey}:${factionId}`;
+    const readyMade = readyMadeSquad(faction, budget);
+    const [counts, setCounts] = useResettingState<SquadCounts>(squadCounts(readyMade), squadKey);
     const [items, setItems] = useResettingState<ItemCounts>(NO_ITEMS, turnKey);
-    const [placement, setPlacement] = useResettingState<Placement | null>(null, turnKey);
+    const [placement, setPlacement] = useResettingState<Placement | null>(null, squadKey);
 
     const squad = squadOf(counts);
     const bought = itemsOf(items);
@@ -38,7 +42,7 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
     // characters: only a draft can buy them, and handing out would drop the rest.
     const refusal = squad.length > 0 && bought.length > squad.length
         ? `Your squad can carry ${pluralize(squad.length, "item")}, one each`
-        : musterRefusal(field, seat, picks, budget, ranks, REALM);
+        : musterRefusal(field, seat, picks, budget, ranks, faction);
 
     // Changes what the character picked up goes into battle with.
     const outfit = (change: (picks: MusterPick[], selected: number) => MusterPick[]) => {
@@ -47,8 +51,12 @@ export function useMusterDraft(field: Battlefield, seat: number, budget: number,
     };
 
     return {
+        /** The factions the host allowed (B6), and the one the squad is mustered from. */
+        factions,
+        faction: factionId,
+        setFaction,
         /** The characters the squad is bought from: its faction's roster, as the server holds it to. */
-        roster: REALM.characters,
+        roster: faction.characters,
         counts,
         setCounts,
         /** The items bought for the squad to carry. */

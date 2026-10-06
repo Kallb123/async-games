@@ -135,7 +135,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // The live turn, not the one a review shows, so stepping back through the
     // match and returning leaves anything lined up as it was.
     const turnKey = `${gameData?.currentTurn ?? ''}:${gameData?.specificGameState?.phase ?? ''}`;
-    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, turnKey);
+    const draft = useMusterDraft(field, mySeat, gs?.budget ?? 0, gs?.mastery?.[myUserId] ?? {}, gs?.factions ?? [], turnKey);
     const musterTurn = mustering && isMyTurn && !gs?.myMuster;
     const placement = musterTurn ? draft.placement : null;
     // A box in the placing list picks that one up and brings the view to it, even when it already was.
@@ -147,6 +147,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (!placement) return;
         const command = new RealmArenaMuster();
         command.picks = placement.picks;
+        command.faction = draft.faction;
         submitCommand(command, undefined, 'muster');
     };
 

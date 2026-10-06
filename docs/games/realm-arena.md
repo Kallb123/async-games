@@ -1017,7 +1017,7 @@ recap, a guide and a tutorial.
 | C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
-| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction next |
+| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32) |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
 | B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built to PR 5, with battle size beside difficulty; solo next (§30.6) |
@@ -3475,8 +3475,36 @@ from `EFFECTS` for every effect that has one, rather than from Marked alone.
   many-jointed `limb`. The owner's colour is the plating on each one's back.
   The Spitter's shot flies as a gobbet of acid, and a Burst splashes a pool of
   it over the 3×3.
-- **The profile** lists mastery for the Realm's characters only: nobody
-  musters the Swarm's yet, so nobody has XP with them.
+- **The profile** listed mastery for the Realm's characters only while
+  nobody could muster the Swarm's; it lists every faction's now (§32).
+
+## 32. Choosing a faction (B6)
+
+The rest of B6: a squad is mustered from a faction its player chooses, among
+those the host allows — the Swarm in a free-for-all, or a team of Realm and
+Swarm in co-op.
+
+- **The host allows the factions** on the setup screen: a toggle for each,
+  every one on to start with. They aren't exclusive — any of them, so long as
+  at least one stays on: the last one left on can't be turned off, and the
+  route refuses a list with none (or a faction it doesn't know). Stored on the
+  battle as `factions`, in `FACTION_IDS` order, only when it's more than the
+  Realm — absent is the Realm alone, every battle from before it among them
+  (`playableFactions`). A lobby's settings reach the invitation unread, so
+  its schema holds them to the same rule (`playableFactionsOf`).
+- **Each player picks one as they muster**, above the squad's steppers, when
+  more than one is allowed. Changing it starts the squad again from that
+  faction's ready-made one. `RealmArenaMuster` carries the `faction`; the
+  server holds it to the host's list and the squad to its roster
+  (`musterRefusal`). A muster that names none is the battle's first faction —
+  the Realm, for every muster recorded before the choice — so no command means
+  anything new, and the command version stands.
+- **Sealed with the squad.** The faction is kept on the muster, which nobody
+  else is sent until every player has mustered; once the squads are on the
+  field their characters tell it anyway. The allowed list is sent during the
+  muster only.
+- **A timed-out muster** gets the first allowed faction's ready-made squad.
+- **Mastery** is earned by any character, so the profile lists every faction's.
 
 ---
 
@@ -3545,3 +3573,4 @@ Realm, its sibling in the same world.
 | 1.42 | Fog of war reaches the log, the recap and the review (§27.2–§27.3): a player is told only what their side saw, by one rule (`toldTo`); each line of the log is written per player (`perViewer`), naming a character they didn't see as one out of sight, and a line nobody of theirs saw isn't told at all; the recap and its reactions are built per viewer, and a review leaves out a step that told its viewer nothing. The fog lifts on the log as the battle ends. |
 | 1.43 | B9 PR 5 builds difficulty and battle size (§30.5): Easy, Normal or Hard warbands, and Small, Normal or Large battles in every mode, from a ladder of budgets 50–120 points with a ready-made squad of at most five characters for each; *Against the Odds* for a win on Hard. |
 | 1.44 | The Swarm, a second faction (§31, B6): five characters — the Skitterling, the Ravager, the Spitter, the Bloater and the Broodmother — cheaper and weaker than the Realm's, so its ready-made squads field more of them; Rend, Regrowth and Burst; and Corroded, +10% to hit, from its acid. Fought in co-op, picked by the host or drawn at Random; a squad choosing its own faction is next. |
+| 1.45 | Choosing a faction (§32, B6): the host allows any of the factions on the setup screen, at least one, and each player picks one of them as they muster, held to its roster; a timed-out muster takes the first. |

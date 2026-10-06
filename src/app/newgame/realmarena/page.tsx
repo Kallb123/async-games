@@ -16,7 +16,8 @@ import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META, partySizeRange } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
-import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RANDOM_ENEMY, type BattleSize, type Difficulty } from "@/games/RealmArena/characters";
+import { factionRosterLine } from "@/games/RealmArena/roster";
+import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RANDOM_ENEMY, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
 
 type Mode = 'freeForAll' | 'coop';
 type Enemy = RealmArenaCoopInvite['enemy'];
@@ -65,7 +66,8 @@ const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
 // in fog of war (§27), and whether it's a free-for-all or the players
 // together against the computer (§29.9) — and, in co-op, whom they fight,
 // and in Hold Out on which battlefield (§30.9) —
-// and how big the battle is, and in co-op how strong the enemy (§30.5).
+// and how big the battle is, and in co-op how strong the enemy (§30.5) —
+// and which factions the players may muster from (B6), at least one.
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
@@ -80,6 +82,7 @@ function NewGameRealmArenaForm() {
   const [battlefield, setBattlefield] = useState<Battlefield>('sackedFort');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [size, setSize] = useState<BattleSize>('normal');
+  const [factions, setFactions] = useState<readonly FactionId[]>(FACTION_IDS);
   const coop = mode === 'coop';
   const gameMeta = GAME_META.realmarena;
   const partyMeta = coop ? COOP_PARTY : gameMeta;
@@ -96,6 +99,7 @@ function NewGameRealmArenaForm() {
       userList: players,
       turnTimer,
       fog,
+      factions: [...factions],
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
         enemy,
@@ -142,6 +146,22 @@ function NewGameRealmArenaForm() {
         <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_CHOICES} />
       )}
       <OptionChoiceSection label="Battle size" value={size} onChange={setSize} choices={SIZE_CHOICES} />
+      <OptionSection label="Factions" footer={<p className="ag-hint">Each player picks one of these as they muster. At least one stays on.</p>}>
+        {FACTION_IDS.map(id => {
+          const on = factions.includes(id);
+          return (
+            <OptionToggleRow
+              key={id}
+              title={FACTIONS[id].name}
+              description={factionRosterLine(id)}
+              on={on}
+              // The last faction left on can't go: the players need one to muster from.
+              disabled={on && factions.length === 1}
+              onToggle={() => setFactions(FACTION_IDS.filter(other => other === id ? !on : factions.includes(other)))}
+            />
+          );
+        })}
+      </OptionSection>
       <OptionSection label="Realm Arena options">
         <OptionToggleRow
           title="Fog of war"

@@ -6,7 +6,7 @@
 // carrying the whole of rules.ts into its bundle. The board's own readings of
 // the battle are ui.ts's.
 
-import { ABILITIES, CHARACTERS, EFFECTS, OPTIONS, type AbilityId, type CharacterId, type OptionId, type Weapon } from "./characters";
+import { ABILITIES, CHARACTERS, EFFECTS, FACTIONS, OPTIONS, type AbilityId, type CharacterId, type FactionId, type OptionId, type Weapon } from "./characters";
 import { nextRankXp, rankOf } from "./mastery";
 
 /**
@@ -30,6 +30,11 @@ export const CHARACTER_MARK: Readonly<Record<CharacterId, string>> = {
 
 /** Every character, in §13.6's table's order. */
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
+
+/** Whom a faction fields, in one line: "Man-at-Arms, Knight, Archer, …" — what the setup screen and the muster show beside its name (B6). */
+export function factionRosterLine(id: FactionId): string {
+    return FACTIONS[id].characters.map(character => CHARACTERS[character].name).join(", ");
+}
 
 /** A weapon in one line: "80% · range 20 · 3 damage", and what it leaves on a hit: "· slowed on a hit". */
 export function weaponLine(weapon: Weapon): string {

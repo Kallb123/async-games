@@ -30,6 +30,8 @@ export interface IRealmArenaSpecificGameStateResponse {
     budget: number;
     /** How big the battle is (§30.5); absent is normal. */
     size?: StoredBattleSize;
+    /** The factions each player may muster from (B6): at least one, in `FACTION_IDS` order. Only during the muster. */
+    factions?: FactionId[];
     /** Whether the battle is fought in fog of war (§27). */
     fog: boolean;
     /** Whether the players fight together against the computer's warbands (§29), so are one side (§29.6). */

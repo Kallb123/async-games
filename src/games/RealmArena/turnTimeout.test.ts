@@ -12,7 +12,7 @@ describe("a timed-out turn", () => {
     it("musters the ready-made squad in the deployment zone, so the battle can start", async () => {
         const game = makeGame();
         expect(await resolveStalledTurn(game, "a", "a")).toBe("advanced");
-        expect(game.specificGameState.musters[0]).toEqual({ owner: "a", picks: readyMadePicks(game, 0) });
+        expect(game.specificGameState.musters[0]).toEqual({ owner: "a", faction: "realm", picks: readyMadePicks(game, 0) });
         expect(game.currentTurn).toBe("b");
 
         expect(await resolveStalledTurn(game, "b", "b")).toBe("advanced");
