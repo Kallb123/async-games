@@ -1,6 +1,6 @@
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { commandVersion, type ICommandOutcome, type IGameCommand, type IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { markDirty } from "@/utils/games/markDirty";
 import { recordedRolls } from "@/utils/games/recordedRolls";
@@ -47,6 +47,7 @@ import {
     warbandOwner,
     warbandsFor,
     waveArrives,
+    wavesLanded,
     type Action,
     type BattleEvent,
     type BattleState,
@@ -840,13 +841,34 @@ function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail
     return undefined;
 }
 
+/**
+ * The command version from which every Hold Out wave is a character bigger
+ * than the last (§30.10): an End turn played before it lands a wave that only
+ * refills each warband to its squad, on a replay too. Never moves once
+ * shipped: later versions keep growing waves.
+ */
+const GROWING_WAVES_VERSION = 5;
+
+/**
+ * The strength a warband is brought up to by the wave landing as `round`
+ * begins (§30.3, §30.10): its squad, and one character more for every wave
+ * landed so far — the squad's own characters again, in its order, the first
+ * after the last. So a wave always has someone to bring, however few of the
+ * enemy the team has downed. `growing` false is the squad alone, as every
+ * wave before growing waves was.
+ */
+export function waveStrength(squad: readonly CharacterId[], round: number, growing = true): CharacterId[] {
+    const extra = growing && squad.length > 0 ? wavesLanded(round) : 0;
+    return [...squad, ...Array.from({ length: extra }, (_, k) => squad[k % squad.length])];
+}
+
 /** The reinforcements one warband can place in its deployment zone this wave. */
-export function waveOf(gs: IRealmArenaSpecificGameState, owner: string): Fighter[] {
+export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean): Fighter[] {
     if (gs.coop?.mission !== "holdOut") return [];
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
     const field = battlefieldById(gs.map);
-    const planned = readyMadeMuster(field, gs.seats.length + warband, warbandSquad(gs));
+    const planned = readyMadeMuster(field, gs.seats.length + warband, waveStrength(warbandSquad(gs), gs.roundsPlayed + 1, growing));
     const missing = [...planned];
     for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one))) {
         const index = missing.findIndex(pick => pick.character === fighter.character);
@@ -860,11 +882,12 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string): Fighter
     return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option));
 }
 
-function landWave(data: IRealmArenaGameData): void {
+/** The wave due as the round `roundsPlayed` has just reached begins, if one is (§30.3). `version` is the End turn's that lands it. */
+function landWave(data: IRealmArenaGameData, version: number): void {
     const gs = data.specificGameState;
     if (gs.coop?.mission !== "holdOut" || !waveArrives(gs.roundsPlayed + 1, battleRounds(gs.seats.length))) return;
     for (const owner of warbandsFor(gs.seats)) {
-        const fresh = waveOf(gs, owner);
+        const fresh = waveOf(gs, owner, version >= GROWING_WAVES_VERSION);
         if (fresh.length === 0) continue;
         gs.fighters.push(...fresh);
     }
@@ -1250,7 +1273,7 @@ export class RealmArenaEndTurn implements IGameCommand {
 
         const events = applyEndTurn(data, this.senderId, this.keepStill);
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
-        const { enemy, started, startedTold } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll });
+        const { enemy, started, startedTold } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll }, commandVersion(this));
         // Always a list in co-op, an empty one when no warband took a turn,
         // so a replay that comes to one never asks the planner.
         if (gs.coop) this.recordedEnemyActions = enemy?.steps.map(step => step.action) ?? [];
@@ -1355,7 +1378,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
  * Returns the warband's turn, and everything that happened as the next
  * player's turn began.
  */
-function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): { enemy?: EnemyTurn; started: BattleEvent[]; startedTold?: Told } {
+function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves, version: number): { enemy?: EnemyTurn; started: BattleEvent[]; startedTold?: Told } {
     const gs = data.specificGameState;
     const order = data.gameState.turnOrder;
     const enemy = battleIsOver(gs) ? undefined : warbandTurn(data, moves);
@@ -1366,7 +1389,7 @@ function handOff(data: IRealmArenaGameData, from: string, moves: WarbandMoves): 
         const next = nextSeat(data, seat);
         if (order.indexOf(next) <= order.indexOf(seat)) {
             gs.roundsPlayed += 1;
-            landWave(data);
+            landWave(data, version);
         }
         if (battleIsOver(gs)) return { enemy, started, startedTold };
 

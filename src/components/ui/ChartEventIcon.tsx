@@ -65,6 +65,9 @@ const ICON_ART: Record<GameResultEventIcon, ReactNode> = {
             d="M8 1C4.4 1 2 3.5 2 6.6c0 2 1 3.3 2.3 4.1v2.7c0 .9.7 1.6 1.6 1.6h4.2c.9 0 1.6-.7 1.6-1.6v-2.7C13 9.9 14 8.6 14 6.6 14 3.5 11.6 1 8 1z M4.1 7.9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M8.9 7.9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z"
         />
     ),
+    // A wave: the pennant a fresh warband marches in under — a Hold Out wave
+    // landing, on the enemy's line (docs/games/realm-arena.md §30.10).
+    wave: <path d="M2.4 0.8h1.8v14.4H2.4z M4.2 1.6 14.2 4.8 4.2 8z" />,
 };
 
 interface ChartEventIconProps {

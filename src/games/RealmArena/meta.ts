@@ -21,7 +21,9 @@ export const meta: GameMeta = {
     // Version 4 lets a muster name its faction (§32): a tab from before it
     // can't, and would only be refused in a battle without the Realm, so it's
     // asked to reload instead. Version 3's musters replay unchanged, as the Realm.
-    commandVersion: 4,
+    // Version 5 grows every Hold Out wave a character on the last (§30.10): an
+    // End turn from before it lands a wave that only refills, on a replay too.
+    commandVersion: 5,
     oldestReplayableCommandVersion: 2,
     available: true,
 };

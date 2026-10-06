@@ -2,15 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
-import { FACTION_IDS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
-import { battlefieldById } from "./maps";
+import { FACTION_IDS, FACTIONS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
+import { battlefieldById, mapFor } from "./maps";
 import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { RealmArenaGameType, waveOf, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
-    battleRounds, ENEMY_SIDE, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, type BattleEvent,
+    battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
 } from "./rules";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
@@ -123,13 +123,13 @@ describe("co-op's setting (§29.8)", () => {
 });
 
 describe("Hold Out (§30.3)", () => {
-    it("refills a warband only to its ready-made strength, using fresh ids and free deployment squares", async () => {
+    it("refills a warband to its ready-made strength before any wave has landed, using fresh ids and free deployment squares", async () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const owner = warbandOwner(0);
         const original = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
         original[0].hp = 0;
-        const fresh = waveOf(game.specificGameState, owner);
+        const fresh = waveOf(game.specificGameState, owner, true);
         expect(fresh).toHaveLength(1);
         expect(fresh[0].character).toBe(original[0].character);
         expect(fresh[0].id).toBeGreaterThan(Math.max(...game.specificGameState.fighters.map(fighter => fighter.id)));
@@ -139,7 +139,7 @@ describe("Hold Out (§30.3)", () => {
         game.specificGameState.fighters.push(...field.deployments[2].map((square, index) => ({
             ...original[1], id: 10_000 + index, owner: "a", square,
         })));
-        expect(waveOf(game.specificGameState, owner)).toHaveLength(0);
+        expect(waveOf(game.specificGameState, owner, true)).toHaveLength(0);
     });
 
     it("continues after the enemy is wiped out, lands round four's wave, and wins by surviving the last round", async () => {
@@ -219,6 +219,127 @@ describe("Hold Out (§30.3)", () => {
     });
 });
 
+describe("Hold Out's growing waves (§30.10)", () => {
+    const holdOut = () => makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
+    const standingOf = (game: RealmArenaTestGame, owner: string) => game.specificGameState.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter));
+
+    it("brings a warband to its squad and one character more for every wave landed, the squad's own in its order", () => {
+        const squad = REALM.readyMade[80];
+        expect([1, 3, 4, 6, 7, 10, 13].map(wavesLanded)).toEqual([0, 0, 1, 1, 2, 3, 4]);
+        expect(waveStrength(squad, 1)).toEqual([...squad]);
+        expect(waveStrength(squad, 4)).toEqual([...squad, squad[0]]);
+        expect(waveStrength(squad, 13)).toEqual([...squad, ...squad]);
+        expect(waveStrength(["archer"], 10)).toEqual(["archer", "archer", "archer", "archer"]);
+        // Before growing waves, a wave only ever refilled the squad.
+        expect(waveStrength(squad, 13, false)).toEqual([...squad]);
+    });
+
+    it("has room for its last wave's strength in every warband's zone, for every faction, size and difficulty", () => {
+        for (const players of TEAMS) {
+            for (const map of [undefined, "sackedFort"] as const) {
+                const field = battlefieldById(mapFor(players.length, true, map));
+                for (const faction of FACTION_IDS) {
+                    for (const size of ["small", "normal", "large"] as const) {
+                        for (const difficulty of ["easy", "normal", "hard"] as const) {
+                            const squad = FACTIONS[faction].readyMade[warbandBudget(players.length, size, difficulty)];
+                            const strongest = waveStrength(squad, lastWaveRound(battleRounds(players.length)));
+                            for (let k = 0; k < players.length; k++) {
+                                expect(() => readyMadeMuster(field, players.length + k, strongest), `${field.name}, ${faction}, ${size}, ${difficulty}`).not.toThrow();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    it("always has someone to bring, even with nobody of the warband downed", async () => {
+        const game = holdOut();
+        await musterAll(game);
+        const owner = warbandOwner(0);
+        game.specificGameState.roundsPlayed = 3;
+        const fresh = waveOf(game.specificGameState, owner, true);
+        expect(fresh.map(fighter => fighter.character)).toEqual([REALM.readyMade[80][0]]);
+        const occupied = new Set(game.specificGameState.fighters.map(fighter => fighter.square));
+        expect(fresh.every(fighter => !occupied.has(fighter.square))).toBe(true);
+        expect(waveOf(game.specificGameState, owner, false)).toEqual([]);
+    });
+
+    it("lands a character more each wave in a whole battle's End turns, and only refills under an older version", async () => {
+        for (const version of [undefined, 4]) {
+            const game = holdOut();
+            await musterAll(game);
+            const squad = REALM.readyMade[80].length;
+            for (const [round, grown] of [[3, 1], [6, 2]] as const) {
+                game.specificGameState.roundsPlayed = round - 1;
+                const before = game.specificGameState.roundsPlayed;
+                // Clear the field, so the warbands' own turns can't change who stands.
+                game.specificGameState.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+                const a = endTurnBy("a"), b = endTurnBy("b");
+                if (version !== undefined) Object.assign(a, { version }), Object.assign(b, { version });
+                await play(game, a);
+                await play(game, b);
+                expect(game.specificGameState.roundsPlayed).toBe(before + 1);
+                for (const owner of warbandsOf(game)) {
+                    expect(standingOf(game, owner), `round ${round + 1}, version ${version}`).toHaveLength(version === undefined ? squad + grown : squad);
+                }
+            }
+        }
+    });
+});
+
+describe("Hold Out's result (§30.10)", () => {
+    it("tells the waves, who stood each round, and how the battle ended", async () => {
+        seedRolls(11);
+        const { game } = await coopBattle(["a", "b"], { coop: { enemy: "realm", mission: "holdOut" } });
+        const record = await recordBattle(game);
+        expect(record?.waves).toBeDefined();
+        const waves = record!.waves!;
+        expect(record!.battleRounds).toBe(15);
+        expect(waves[0]).toMatchObject({ round: 0, arrived: 2 * REALM.readyMade[80].length });
+        expect(waves.slice(1).map(wave => wave.round + 1).every(round => waveArrives(round, 15))).toBe(true);
+        // Every knock-out of the enemy is in a wave, by the player who scored it.
+        const knockouts = record!.fighting.filter(row => row.userId !== ENEMY_SIDE).reduce((sum, row) => sum + row.knockouts, 0);
+        expect(waves.reduce((sum, wave) => sum + [...wave.downed.values()].reduce((a, b) => a + b, 0), 0)).toBe(knockouts);
+        expect(waves.every(wave => [...wave.downed.keys()].every(owner => ["a", "b"].includes(owner)))).toBe(true);
+        // Whoever stands at the end is whoever's standing on the battlefield.
+        const last = record!.standingPerRound!.at(-1)!;
+        const fighters = game.specificGameState.fighters.filter(isStanding);
+        expect([last.get(TEAM_SIDE), last.get(ENEMY_SIDE)]).toEqual([fighters.filter(f => !isWarband(f.owner)).length, fighters.filter(f => isWarband(f.owner)).length]);
+
+        const stats = computeRealmArenaResultStats(game, record);
+        const [group] = formatRealmArenaResultStats(stats, new Map(Object.entries(NAMES)));
+        expect(group.username).toBe("Hold Out");
+        expect(group.lines[0]).toMatch(game.endReason === "teamwin" ? /^(Held out for all 15 rounds|Beat the last wave in round \d+ of 15)$/ : /^Overrun in round \d+ of 15$/);
+        expect(group.lines[1]).toMatch(new RegExp(`^Faced ${waves.length} waves?: \\d+ of the enemy took the field, and the team downed ${knockouts}$`));
+        expect(group.lines).toHaveLength(2 + waves.length);
+
+        const charts = formatRealmArenaCharts(stats);
+        const standing = charts.find(chart => chart.title === "Characters standing per round") as GameResultChart;
+        expect(standing.series?.map(series => series.key)).toEqual([TEAM_SIDE, ENEMY_SIDE]);
+        expect(standing.events?.map(event => [event.icon, event.seriesKey])).toEqual(waves.slice(1).map(() => ["wave", ENEMY_SIDE]));
+        const byWave = charts.find(chart => chart.title === "Enemies downed by wave") as GameResultBarChart;
+        expect(byWave.bars.map(bar => bar.label)).toEqual(waves.map((_, index) => `Wave ${index + 1}`));
+    }, 60_000);
+
+    it("is never recorded while the battle is still being fought, through the fog", async () => {
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", mission: "holdOut" } });
+        await musterAll(game);
+        expect(await recordBattle(game)).toBeUndefined();
+    });
+
+    it("has nothing of Hold Out's in a battle of Hold the Centre", async () => {
+        seedRolls(11);
+        const { game } = await coopBattle(["a", "b"], { coop: { enemy: "realm" } });
+        const record = await recordBattle(game);
+        expect(record).toBeDefined();
+        expect(record!.waves).toBeUndefined();
+        const stats = computeRealmArenaResultStats(game, record);
+        expect(formatRealmArenaResultStats(stats, new Map()).some(group => group.username === "Hold Out")).toBe(false);
+        expect(formatRealmArenaCharts(stats).some(chart => chart.title === "Enemies downed by wave")).toBe(false);
+    }, 60_000);
+});
+
 describe("difficulty (§30.5)", () => {
     const createGame = RealmArenaInvitationModel.schema.methods.CreateGame as
         (this: unknown, invite: unknown, userIdList: string[]) => Promise<IRealmArenaGameData>;
@@ -266,15 +387,15 @@ describe("difficulty (§30.5)", () => {
         }
     });
 
-    it("refills each warband to its difficulty's squad in Hold Out, and no further", async () => {
+    it("refills each warband to its difficulty's squad in Hold Out before any wave has landed", async () => {
         for (const difficulty of ["easy", "hard"] as const) {
             const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", difficulty } });
             await musterAll(game);
             const owner = warbandOwner(0);
-            expect(waveOf(game.specificGameState, owner)).toEqual([]);
+            expect(waveOf(game.specificGameState, owner, true)).toEqual([]);
             const band = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
             band.forEach(fighter => { fighter.hp = 0; });
-            expect(waveOf(game.specificGameState, owner).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
+            expect(waveOf(game.specificGameState, owner, true).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
         }
     });
 
