@@ -32,8 +32,11 @@ test('start a solo Fires Out game and take two of the crew’s turns', async ({ 
 
   await page.goto('/newgame/firesout');
 
-  // Solo is the second of the two modes on the same form.
-  await page.getByRole('button', { name: 'Play solo, running the whole crew' }).click();
+  // Solo is the second of the two modes on the same form — a radio whose name
+  // is its title followed by its description.
+  const soloMode = page.getByRole('radio', { name: /^Solo\b/ });
+  await soloMode.click();
+  await expect(soloMode).toBeChecked();
 
   // The mode-dependent half of the screen: there is nobody to invite, so the
   // invite list and the open-seats picker are gone and a crew-size picker
