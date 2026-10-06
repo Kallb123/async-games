@@ -167,6 +167,9 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     cripplingShot: "abilities",
     huntersMark: "abilities",
     purify: "abilities",
+    rend: "abilities",
+    regrowth: "abilities",
+    burst: "abilities",
     throw: "items",
     draught: "items",
 };
@@ -197,7 +200,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // the player does something that isn't undoable.
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
-// heal, a raise, a Purify, a Hunter's mark, a healing draught, and a throw or a
+// heal or a Regrowth, a raise, a Purify, a Hunter's mark, a healing draught, and a throw or a
 // Demolish that lands on nobody — a smoke pot always does (§21.2) — the
 // actions that roll nothing and hurt nobody. A fire flask or a Demolish that
 // lands on nobody still blasts low cover away (§22), and is still taken back
@@ -223,7 +226,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
@@ -430,6 +433,10 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
             return `used ${ABILITIES.demolish.name} with ${name(event.fighter)}${hit}`;
         }
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
+        case "burst": {
+            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            return `burst ${name(event.fighter)}${hit}`;
+        }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
@@ -455,7 +462,8 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
     switch (event.kind) {
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
-        case "demolished": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "demolished":
+        case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "marked":
@@ -637,6 +645,8 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             case "thrown":
             case "demolished":
                 return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
+            case "burst":
+                return keep(saw(event.fighter) || event.targets.some(saw));
             case "shot":
             case "struck":
             case "healed":
@@ -960,6 +970,9 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     cripplingShot: "took a crippling shot",
     huntersMark: "used Hunter's mark",
     purify: "used Purify",
+    rend: "used Rend",
+    regrowth: "used Regrowth",
+    burst: "used Burst",
 };
 
 /**
@@ -977,11 +990,14 @@ function cleanAction(action: Action): Action {
         case "draught":
         case "shieldBash":
         case "cripplingShot":
-        case "huntersMark": return { kind: action.kind, fighter: action.fighter, target: action.target };
+        case "huntersMark":
+        case "rend":
+        case "regrowth": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
         case "shieldWall":
-        case "purify": return { kind: action.kind, fighter: action.fighter };
+        case "purify":
+        case "burst": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
         case "throw":

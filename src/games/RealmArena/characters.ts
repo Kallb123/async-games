@@ -11,18 +11,23 @@
 
 import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 
-export type CharacterId = "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric";
+export type CharacterId =
+    | "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric"
+    // The Swarm's (§31).
+    | "skitterling" | "ravager" | "spitter" | "bloater" | "broodmother";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
     // The abilities an option swaps in (§23.2).
-    | "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "purify";
+    | "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "purify"
+    // The Swarm's (§31).
+    | "rend" | "regrowth" | "burst";
 
 /**
  * Something that happens to a character for a few of its owner's turns
- * (§20.1): the four conditions, and the two stances a character takes itself.
+ * (§20.1): the five conditions, and the two stances a character takes itself.
  */
-export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "hunkered" | "shieldWall";
+export type EffectId = "burning" | "stunned" | "slowed" | "marked" | "corroded" | "hunkered" | "shieldWall";
 
 export interface Effect {
     name: string;
@@ -38,7 +43,7 @@ export interface Effect {
     damage?: number;
     /** The AP its owner's next turn starts with, instead of the usual (Stunned). */
     ap?: number;
-    /** Added to every shot at it, reactions included (Marked). */
+    /** Added to every shot at it, reactions included (Marked, Corroded). */
     hitBonus?: number;
     /** Whether a Cleric's Heal clears it (§20.2). */
     healed?: true;
@@ -49,6 +54,8 @@ export const EFFECTS = {
     stunned: { name: "Stunned", state: "stunned", count: 1, ap: 2, healed: true },
     slowed: { name: "Slowed", state: "slowed", count: 2, healed: true },
     marked: { name: "Marked", state: "marked", count: 2, hitBonus: 15 },
+    // The Swarm's acid, eating through armour (§31.2): easier to hit, and a heal washes it off.
+    corroded: { name: "Corroded", state: "corroded", count: 2, hitBonus: 10, healed: true },
     hunkered: { name: "Hunkered down", state: "hunkered down", count: 1 },
     shieldWall: { name: "Shield wall", state: "holding a shield wall", count: 1 },
 } as const satisfies Record<EffectId, Effect>;
@@ -84,11 +91,11 @@ export interface Ability {
     oncePerBattle?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
-    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark, Heal). */
+    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark, Heal, Regrowth). */
     range?: number;
-    /** What it does to each character it hits, in place of the weapon's (Fireball, Shield bash, Demolish). */
+    /** What it does to each character it hits, in place of the weapon's (Fireball, Shield bash, Demolish, Rend, Burst). */
     damage?: number;
-    /** HP it restores (Heal, Purify). */
+    /** HP it restores (Heal, Purify, Regrowth). */
     hp?: number;
     /** What it leaves on everyone it hits: Fireball's burning, and the options' (§23.2). A shot leaves it only on a hit (§20.2). */
     effect?: Affliction;
@@ -107,13 +114,16 @@ export const ABILITIES = {
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
-    heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to an ally it can see within 12 squares, and clear burning, slowed and stunned" },
+    heal: { name: "Heal", ap: 2, cooldown: 2, range: 12, hp: 4, description: "Restore 4 HP to an ally it can see within 12 squares, and clear burning, slowed, stunned and corroded" },
     raise: { name: "Raise", ap: 3, cooldown: 0, oncePerBattle: true, description: "Bring a downed ally next to them back at half HP, once per battle" },
     shieldBash: { name: "Shield bash", ap: 2, cooldown: 3, damage: 2, effect: "stunned", description: "Strike one enemy next to them for 2, and stun it" },
     demolish: { name: "Demolish", ap: 2, cooldown: 2, damage: 2, blasts: "target", description: "Blast away one square of low cover next to them, and strike everyone else beside it for 2, friend or foe" },
     cripplingShot: { name: "Crippling shot", ap: 3, cooldown: 2, effect: "slowed", description: "A shot that slows on a hit" },
     huntersMark: { name: "Hunter's mark", ap: 1, cooldown: 2, range: 12, effect: "marked", description: "Mark an enemy it can see within 12 squares: +15% to hit it, for every attacker" },
-    purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed and marked from itself and each ally next to it, and give each 2 HP" },
+    purify: { name: "Purify", ap: 2, cooldown: 3, hp: 2, description: "Clear burning, stunned, slowed, marked and corroded from itself and each ally next to it, and give each 2 HP" },
+    rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
+    regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
+    burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
 } as const satisfies Record<AbilityId, Ability>;
 
 export interface Character {
@@ -155,6 +165,27 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     cleric: {
         name: "Cleric", role: "Support", movement: 6, hp: 7,
         weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
+    },
+    // The Swarm (§31): cheaper and weaker, one for one, than the Realm's.
+    skitterling: {
+        name: "Skitterling", role: "Fast and frail; strikes in numbers", movement: 8, climb: FULL_HEIGHT, hp: 4,
+        weapon: { name: "Claws", kind: "melee", damage: 2 }, abilities: [], points: 10,
+    },
+    ravager: {
+        name: "Ravager", role: "Bulky brawler; hits hard", movement: 5, hp: 9,
+        weapon: { name: "Scything talons", kind: "melee", damage: 4 }, abilities: ["rend"], points: 20,
+    },
+    spitter: {
+        name: "Spitter", role: "Spits acid from its raised tail", movement: 5, hp: 5,
+        weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded" }, abilities: [], points: 15,
+    },
+    bloater: {
+        name: "Bloater", role: "Slow sac of acid; bursts among the enemy", movement: 4, hp: 6,
+        weapon: { name: "Barbs", kind: "melee", damage: 1 }, abilities: ["burst"], points: 10,
+    },
+    broodmother: {
+        name: "Broodmother", role: "Leads the brood; mends it", movement: 5, sight: 25, hp: 8,
+        weapon: { name: "Talons", kind: "melee", damage: 3 }, abilities: ["regrowth"], points: 20,
     },
 };
 
@@ -246,7 +277,7 @@ export const ITEMS = {
     fireFlask: { name: "Fire flask", points: 5, ap: 2, range: THROW_RANGE, damage: 2, effect: "burning", blasts: "area", description: "Thrown at one square: 2 damage to whoever is there, sets them burning, and blasts away the low cover on and next to it" },
     thunderFlask: { name: "Thunder flask", points: 5, ap: 2, range: THROW_RANGE, area: true, effect: "stunned", description: "Thrown at a 3×3 area: stuns everyone in it, friend or foe" },
     smokePot: { name: "Smoke pot", points: 5, ap: 1, range: THROW_RANGE, area: true, hitPenalty: 20, description: "Thrown at a 3×3 area: until the thrower's next turn, −20% to hit anyone in it, and no overwatch at anyone stepping into it" },
-    healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed and stunned" },
+    healingDraught: { name: "Healing draught", points: 5, ap: 1, hp: 3, description: "Restore 3 HP to the carrier or an ally next to them, and clear burning, slowed, stunned and corroded" },
 } as const satisfies Record<ItemId, Item>;
 
 /** Every item, in the order the muster offers them. */
@@ -337,7 +368,7 @@ export interface Faction {
     enemyName: string;
 }
 
-export type FactionId = "realm";
+export type FactionId = "realm" | "swarm";
 
 /**
  * Every faction, by the id a battle stores. An id, once used, is never
@@ -360,6 +391,23 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
             120: ["knight", "archer", "scout", "mage", "cleric"],
         },
         enemyName: "the Renegades",
+    },
+    // A brood of chitinous beasts out of the deep places (§31): more of them,
+    // each cheaper and weaker than the Realm's, spending its budget on bodies.
+    swarm: {
+        name: "The Swarm",
+        characters: ["skitterling", "ravager", "spitter", "bloater", "broodmother"],
+        readyMade: {
+            50: ["skitterling", "skitterling", "spitter", "spitter"],
+            60: ["ravager", "skitterling", "spitter", "spitter"],
+            70: ["ravager", "skitterling", "skitterling", "spitter", "spitter"],
+            80: ["ravager", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
+            90: ["ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter"],
+            100: ["ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
+            110: ["ravager", "ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter"],
+            120: ["ravager", "ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
+        },
+        enemyName: "the Swarm",
     },
 };
 

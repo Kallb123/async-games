@@ -26,7 +26,7 @@ import {
 export type RangeKind = "weapon" | "nextTo" | "cover" | "item" | number;
 
 /** The actions aimed at one character. */
-export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark";
+export type TargetKind = "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth";
 
 export type ActionKind = Action["kind"];
 
@@ -70,6 +70,9 @@ export const ACTION_AIMS: Readonly<Record<ActionKind, ActionAim>> = {
     watch: { at: "self" },
     shieldWall: { at: "self" },
     purify: { at: "self" },
+    rend: { at: "enemy", range: "weapon" },
+    regrowth: { at: "ally", range: ABILITIES.regrowth.range },
+    burst: { at: "self" },
 };
 
 /** The shot an action takes, if it's one: its odds are `shotOdds`. Anything else aimed at an enemy always lands. */

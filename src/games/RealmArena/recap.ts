@@ -124,13 +124,14 @@ function toldOf(told: Told | undefined, events: readonly BattleEvent[], viewerId
  */
 function actionKind(events: readonly BattleEvent[]): { type: string; glyph: string } {
     const has = (match: (event: BattleEvent) => boolean) => events.some(match);
-    if (has(event => event.kind === "downed")) return { type: RA_KNOCKOUT, glyph: "✕" };
+    // A Bloater downs itself as it bursts (§31.2): that's no knock-out.
+    if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: "🔥" };
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
     if (thrown) return { type: RA_THROWN, glyph: ITEM_GLYPH[thrown.item] };
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
     // A Demolish that struck someone beside the cover hit them, as a strike does (§23.2).
-    if (has(event => event.kind === "demolished" && event.targets.length > 0)) return { type: RA_HIT, glyph: "💥" };
+    if (has(event => (event.kind === "demolished" || event.kind === "burst") && event.targets.length > 0)) return { type: RA_HIT, glyph: "💥" };
     if (has(event => event.kind === "shot")) return { type: RA_MISS, glyph: "🎯" };
     if (has(event => event.kind === "raised")) return { type: RA_RAISED, glyph: "✚" };
     const healed = events.find((event): event is Extract<BattleEvent, { kind: "healed" }> => event.kind === "healed");
@@ -149,7 +150,8 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball":
             case "thrown":
-            case "demolished": return event.damage > 0 ? event.targets : [];
+            case "demolished":
+            case "burst": return event.damage > 0 ? event.targets : [];
             case "burned": return [event.fighter];
             case "downed": return [event.fighter];
             default: return [];
@@ -232,11 +234,11 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // Named as its latest line names it, which is the last to see a sighting.
     const own = { ...base, actorId: turn.owner, actorUsername: nameOf(lines.at(-1)?.text ?? "") };
     // While it's hidden, its rows tell what its characters did as the wire
-    // does (`unnamed`), and a blast as the hit it was: a fireball or a Demolish
-    // names the kind of character that did it.
+    // does (`unnamed`), and a blast as the hit it was: a fireball, a Demolish
+    // or a Burst names the kind of character that did it.
     const notTeam = (id: number) => !next.fighters.some(fighter => fighter.id === id && !isWarband(fighter.owner));
     const told = (events: readonly BattleEvent[]): readonly BattleEvent[] => next.enemy ? events
-        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "demolished"
+        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "demolished" || event.kind === "burst"
             ? event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: event.damage, reaction: false }))
             : [event]);
     // In fog, only the parts the viewer was told of wrote them a line (§27.2).

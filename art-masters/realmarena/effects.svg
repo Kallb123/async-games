@@ -2,13 +2,13 @@
 <!--
   Realm Arena's status effect marks (docs/games/realm-arena.md §20): one 96px
   badge a cell, left to right in `EFFECT_IDS` order — burning, stunned, slowed,
-  marked, hunkered down, shield wall. Each is a coin with a dark rim, so it
+  marked, corroded, hunkered down, shield wall. Each is a coin with a dark rim, so it
   reads on grass, stone or a figure's own colour at a few pixels across, and
   one bold glyph in white.
 
   `npm run ra-marks` renders this to public/art/realmarena/effects.png.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="576" height="96" viewBox="0 0 576 96">
+<svg xmlns="http://www.w3.org/2000/svg" width="672" height="96" viewBox="0 0 672 96">
   <defs>
     <radialGradient id="sheen" cx="0.38" cy="0.3" r="0.75">
       <stop offset="0" stop-color="#fff" stop-opacity="0.38"/>
@@ -63,8 +63,19 @@
       <circle cx="48" cy="48" r="5" fill="#fff" stroke="#24150f" stroke-width="3"/>
     </g>
 
-    <!-- Hunkered down: chevrons pressing down onto the ground. -->
+    <!-- Corroded: a drop of acid eating into a plate. -->
     <g transform="translate(384 0)">
+      <circle cx="48" cy="48" r="42" fill="#5c8a1e"/>
+      <use href="#rim"/>
+      <path d="M48 13 C55 26 66 36 66 50 C66 61 58 68 48 68 C38 68 30 61 30 50 C30 36 41 26 48 13 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+      <path d="M40 50 C40 56 44 60 49 60" fill="none" stroke="#9ad13a" stroke-width="5"/>
+      <path d="M22 78 H36 L40 72 L46 79 L52 72 L57 78 H74" fill="none" stroke="#24150f" stroke-width="10"/>
+      <path d="M22 78 H36 L40 72 L46 79 L52 72 L57 78 H74" fill="none" stroke="#fff" stroke-width="4"/>
+    </g>
+
+    <!-- Hunkered down: chevrons pressing down onto the ground. -->
+    <g transform="translate(480 0)">
       <circle cx="48" cy="48" r="42" fill="#72662f"/>
       <use href="#rim"/>
       <g fill="none" stroke="#24150f" stroke-width="15">
@@ -76,7 +87,7 @@
     </g>
 
     <!-- Shield wall: a heater shield. -->
-    <g transform="translate(480 0)">
+    <g transform="translate(576 0)">
       <circle cx="48" cy="48" r="42" fill="#53677e"/>
       <use href="#rim"/>
       <path d="M48 16 L72 25 V45 C72 62 62 73 48 80 C34 73 24 62 24 45 V25 Z"

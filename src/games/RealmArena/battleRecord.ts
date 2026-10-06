@@ -147,7 +147,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             else attacker.dealt += taken;
         };
         for (const event of events) {
-            if (event.kind === "shot" || event.kind === "struck" || event.kind === "fireball" || event.kind === "thrown" || event.kind === "demolished") attacker = event.fighter;
+            if (event.kind === "shot" || event.kind === "struck" || event.kind === "fireball" || event.kind === "thrown" || event.kind === "demolished" || event.kind === "burst") attacker = event.fighter;
             switch (event.kind) {
                 case "effect":
                     if (event.effect === "burning") burnedBy.set(event.fighter, event.change === "cleared" ? undefined : attacker);
@@ -171,6 +171,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 case "fireball":
                 case "thrown":
                 case "demolished":
+                case "burst":
                     for (const target of event.targets) wound(event.fighter, target, event.damage);
                     break;
                 case "burned":

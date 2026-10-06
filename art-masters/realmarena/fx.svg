@@ -3,11 +3,11 @@
   Realm Arena's battle visuals (docs/games/realm-arena.md §26). Top row, a
   96px cell each in `MISSILE_ART` order, then the slash: what flies points
   right, its front at the cell's right edge; a flask or pot tumbles, so it's
-  upright in the middle. Bottom row, 192x96 each: the ring of flame and the
-  thunder flash, lying flat as the board's squares do. Rendered to
+  upright in the middle. Bottom row, 192x96 each: the ring of flame, the
+  thunder flash and the Bloater's splash of acid, lying flat as the board's squares do. Rendered to
   public/art/realmarena/fx.png by `npm run ra-marks`.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="672" height="192" viewBox="0 0 672 192">
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="192" viewBox="0 0 768 192">
   <defs>
     <radialGradient id="fire-core" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#fff7d6"/>
@@ -35,6 +35,23 @@
       <stop offset="0.85" stop-color="#e0521f" stop-opacity="0.45"/>
       <stop offset="1" stop-color="#c8361a" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="acid-core" cx="0.4" cy="0.4" r="0.6">
+      <stop offset="0" stop-color="#f2ffc8"/>
+      <stop offset="0.45" stop-color="#b6e23a"/>
+      <stop offset="1" stop-color="#4f8a17"/>
+    </radialGradient>
+    <linearGradient id="acid-tail" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#9ad13a"/>
+      <stop offset="1" stop-color="#4f8a17" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="acid-glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#eaff9e" stop-opacity="0.95"/>
+      <stop offset="0.5" stop-color="#9ad13a" stop-opacity="0.75"/>
+      <stop offset="0.85" stop-color="#4f8a17" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#2f5a0c" stop-opacity="0"/>
+    </radialGradient>
+    <!-- A splash of acid, its foot on the origin, flung up. -->
+    <path id="splash" d="M-7 0 C-9 -8 -4 -12 -2 -20 C-1 -24 3 -24 3 -20 C4 -13 9 -8 7 0 Z"/>
     <radialGradient id="flash-glow" cx="0.5" cy="0.55" r="0.5">
       <stop offset="0" stop-color="#ffffff"/>
       <stop offset="0.4" stop-color="#fff6c8" stop-opacity="0.9"/>
@@ -101,8 +118,16 @@
       <path d="M32 64 C40 68 56 68 64 64" fill="none" stroke="#24150f" stroke-width="3" stroke-opacity="0.45"/>
     </g>
 
-    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <!-- Acid: a Spitter's gobbet, green and glistening, dripping as it streams back from its front at the right edge. -->
     <g transform="translate(576 0)">
+      <path d="M8 48 C24 38 44 36 64 38 L64 58 C44 60 24 58 8 48 Z" fill="url(#acid-tail)"/>
+      <path d="M30 56 C30 62 34 64 34 68 M46 58 C46 64 50 66 49 72" fill="none" stroke="#9ad13a" stroke-width="4"/>
+      <path d="M90 48 C90 60 80 68 68 68 C56 68 50 60 50 50 C50 38 60 30 72 30 C82 30 90 38 90 48 Z" fill="url(#acid-core)" stroke="#24150f" stroke-width="4"/>
+      <path d="M62 40 C66 36 72 35 77 37" fill="none" stroke="#fff" stroke-width="3.5" stroke-opacity="0.75"/>
+    </g>
+
+    <!-- Slash: a blade's bright crescent cut down across the cell, top right to bottom left. -->
+    <g transform="translate(672 0)">
       <path d="M84 10 C78 46 54 74 12 86 C44 70 64 46 70 14 Z" fill="#ffffff" stroke="#24150f" stroke-width="4"/>
       <path d="M78 16 C72 44 54 66 26 80" fill="none" stroke="#c9d6e6" stroke-width="3"/>
       <path d="M90 30 C86 44 80 54 72 62 M62 8 C58 18 54 24 48 30" fill="none" stroke="#ffffff" stroke-width="3" stroke-opacity="0.75"/>
@@ -154,6 +179,27 @@
         <path d="M96 50 L172 58"/>
       </g>
       <circle cx="96" cy="50" r="12" fill="#ffffff"/>
+    </g>
+
+    <!-- Acid splash: a pool of acid spreading over the ground, gobbets flung up round its edge. -->
+    <g transform="translate(384 96)">
+      <ellipse cx="96" cy="54" rx="92" ry="40" fill="url(#acid-glow)"/>
+      <ellipse cx="96" cy="58" rx="48" ry="18" fill="#9ad13a" stroke="#24150f" stroke-width="3" fill-opacity="0.85"/>
+      <g fill="#b6e23a" stroke="#24150f" stroke-width="3">
+        <use href="#splash" transform="translate(96 36)"/>
+        <use href="#splash" transform="translate(54 40) scale(0.9)"/>
+        <use href="#splash" transform="translate(138 40) scale(0.9)"/>
+        <use href="#splash" transform="translate(22 56) scale(0.8)"/>
+        <use href="#splash" transform="translate(170 56) scale(0.8)"/>
+        <use href="#splash" transform="translate(40 82) scale(1.1)"/>
+        <use href="#splash" transform="translate(152 82) scale(1.1)"/>
+        <use href="#splash" transform="translate(96 92) scale(1.2)"/>
+      </g>
+      <g fill="#f2ffc8">
+        <circle cx="80" cy="54" r="5"/>
+        <circle cx="110" cy="60" r="4"/>
+        <circle cx="96" cy="66" r="3"/>
+      </g>
     </g>
   </g>
 </svg>

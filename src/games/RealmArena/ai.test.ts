@@ -62,6 +62,23 @@ describe("nextAction's puzzles (§29.11)", () => {
         expect(planned(battle(OPEN, [knight, cleric, far]))).toEqual({ kind: "heal", fighter: cleric.id, target: knight.id });
     });
 
+    it("bursts a Bloater among two enemies, its own downing and all (§31.2)", () => {
+        const bloater = ready(0, AI, "bloater", at(OPEN, 6, 4));
+        const knight = ready(1, "a", "manAtArms", at(OPEN, 7, 4), { hp: 3 });
+        const archer = ready(2, "b", "archer", at(OPEN, 5, 4), { hp: 3 });
+        expect(planned(battle(OPEN, [bloater, knight, archer]))).toEqual({ kind: "burst", fighter: bloater.id });
+    });
+
+    it("tears into an enemy beside a Ravager with Rend, and mends a hurt ally with Regrowth (§31.2)", () => {
+        const ravager = ready(0, AI, "ravager", at(OPEN, 6, 4));
+        const enemy = ready(1, "a", "archer", at(OPEN, 7, 4));
+        expect(planned(battle(OPEN, [ravager, enemy]))).toEqual({ kind: "rend", fighter: ravager.id, target: enemy.id });
+        const hurt = ready(0, AI, "ravager", at(OPEN, 2, 4), { hp: 3 });
+        const mother = ready(1, AI, "broodmother", at(OPEN, 6, 4));
+        const far = ready(2, "a", "manAtArms", at(OPEN, 15, 0));
+        expect(planned(battle(OPEN, [hurt, mother, far]))).toEqual({ kind: "regrowth", fighter: mother.id, target: hurt.id });
+    });
+
     it("moves into cover rather than stopping in the open", () => {
         // Too little AP left to shoot back, under the eye of an enemy Archer: the low wall is the only shelter.
         const field = fieldOf([

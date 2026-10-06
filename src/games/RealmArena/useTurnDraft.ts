@@ -10,10 +10,10 @@ import { reachShading } from "./ui";
 /** What the board is armed for: a tap on a square or a character lines up one of these. */
 export type Aim =
     | "move" | "sneak" | "attack" | "aimedShot" | "cleave" | "fireball" | "heal" | "raise" | "throw" | "draught"
-    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish";
+    | "shieldBash" | "cripplingShot" | "huntersMark" | "demolish" | "rend" | "regrowth";
 
 /** The actions that need nothing aimed, and go the moment they're tapped. */
-export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify"] as const;
+export const INSTANT_KINDS = ["hunker", "watch", "shieldWall", "purify", "burst"] as const;
 export type InstantKind = typeof INSTANT_KINDS[number];
 
 export interface Draft {

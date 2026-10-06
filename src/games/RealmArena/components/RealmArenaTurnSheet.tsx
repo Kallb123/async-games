@@ -41,6 +41,8 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     cripplingShot: 'Tap an enemy to see the odds. A hit slows them.',
     huntersMark: 'Tap an enemy they can see within 12 squares.',
     demolish: 'Tap the low cover next to them to blast it away. Everyone else beside it is struck, friend or foe.',
+    rend: 'Tap an enemy next to them. It always hits.',
+    regrowth: `Tap a hurt ally they can see within ${ABILITIES.regrowth.range} squares.`,
 };
 
 /** What the send button says, by the action lined up. */
@@ -59,6 +61,8 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     cripplingShot: 'Take the crippling shot',
     huntersMark: 'Mark them',
     demolish: 'Demolish',
+    rend: 'Rend',
+    regrowth: 'Regrowth',
 };
 
 /**
@@ -78,6 +82,9 @@ const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs
     cripplingShot: { icon: ABILITY_MARK, tag: 'Aim', needs: 'cripplingShot' },
     huntersMark: { icon: '◎', tag: 'Aim', needs: 'huntersMark' },
     purify: { icon: '✚', tag: 'Purify' },
+    rend: { icon: ABILITY_MARK, tag: 'Aim', needs: 'rend' },
+    regrowth: { icon: '✚', tag: 'Aim', needs: 'regrowth' },
+    burst: { icon: '💥', tag: 'Burst' },
 };
 
 interface RealmArenaTurnSheetProps {
@@ -305,8 +312,8 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     if (aim === 'cleave') return hint(`Strikes ${draft.targets.map(name).join(' and ')} for ${strike} each.`);
     if (!target) return null;
     const max = CHARACTERS[target.character].hp;
-    if (aim === 'heal' || aim === 'draught') {
-        const hp = Math.min(aim === 'heal' ? ABILITIES.heal.hp : ITEMS.healingDraught.hp, max - target.hp);
+    if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {
+        const hp = Math.min(aim === 'draught' ? ITEMS.healingDraught.hp : ABILITIES[aim].hp, max - target.hp);
         const cleared = healedEffects(target).map(effect => EFFECTS[effect].state);
         const heals = hp > 0 ? `heals for ${hp} HP` : '';
         const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';
@@ -319,6 +326,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     const health = `${Name(target.id)} · ${target.hp}/${max} HP`;
     if (aim === 'shieldBash') return hint(`${health} · always hits, for ${ABILITIES.shieldBash.damage}, and stuns them.`);
+    if (aim === 'rend') return hint(`${health} · always hits, for ${ABILITIES.rend.damage}.`);
     const shot = shotOf(aim);
     const odds = shot && shotOdds(battle, fighter, target, shot);
     if (!shot || !odds) return hint(`${health} · a strike always hits, for ${strike}.`);

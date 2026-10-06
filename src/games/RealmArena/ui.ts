@@ -373,6 +373,12 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
                     title: `${ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
                     ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
                 }];
+            case "burst":
+                return [{
+                    icon: "💥",
+                    title: `${Name(event.fighter)} burst: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
+                }];
             case "marked":
                 return [{ icon: "◎", title: `${Name(event.fighter)} used ${ABILITIES.huntersMark.name} on ${name(event.target)}` }];
             case "raised":
@@ -486,7 +492,7 @@ const CUE_STEP_MS = 450;
 /** The longest any one action plays for, however much it set off: every part is shortened to fit (§26.1). */
 export const PLAYBACK_MS = 3000;
 /** How long each missile takes to get there (§26.1): an arrow quickly, a bolt quicker, a fireball or a throw on a higher, slower arc. */
-export const FLIGHT_MS: Readonly<Record<Missile, number>> = { arrow: 400, bolt: 250, fireball: 600, fireFlask: 600, thunderFlask: 600, smokePot: 600 };
+export const FLIGHT_MS: Readonly<Record<Missile, number>> = { arrow: 400, bolt: 250, fireball: 600, fireFlask: 600, thunderFlask: 600, smokePot: 600, acid: 450 };
 /** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
 const SHOT_AFTER_MS = 350;
 /** How long a burst takes to flash and fade. */
@@ -497,6 +503,9 @@ const SCORCH_AT = 0.6;
 const SLASH_MS = 250;
 /** How long a downed character takes to fade once its blow has landed. */
 const FALL_MS = 400;
+
+/** What each character that shoots something other than an arrow shoots (§26.1): the Mage's bolt, the Spitter's acid. */
+const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "bolt", spitter: "acid" };
 
 /** What each thrown item bursts into (§26.1), and over how much. */
 const THROWN_BURST: Readonly<Record<ThrownItem, BurstKind>> = { fireFlask: "fire", thunderFlask: "thunder", smokePot: "smoke" };
@@ -577,8 +586,9 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 text(event.fighter, beat(), "Spotted", "word");
                 break;
             case "shot": {
-                // The Mage's bolt; anyone else who shoots has a bow.
-                const missile = as.get(event.fighter)?.character === "mage" ? "bolt" : "arrow";
+                // The Mage's bolt, the Spitter's acid; anyone else who shoots has a bow.
+                const shooter = as.get(event.fighter)?.character;
+                const missile = (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
                 const land = beat(FLIGHT_MS[missile]);
                 fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
@@ -614,6 +624,15 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 // A blow at the cover, and everyone beside it struck at once as it lands.
                 const land = beat(SLASH_MS);
                 cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                landing = { start: land, targets: event.targets };
+                event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
+                break;
+            }
+            case "burst": {
+                // The Bloater splashes the 3×3 round it, and everyone there is hit at once.
+                const land = beat();
+                const square = at.get(event.fighter);
+                if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
                 event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;

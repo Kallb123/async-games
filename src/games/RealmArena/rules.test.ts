@@ -1270,3 +1270,83 @@ describe("options (§23.2)", () => {
         });
     });
 });
+
+describe("the Swarm (§31)", () => {
+    const field = fieldOf();
+
+    describe("Corroded", () => {
+        it("is left by a Spitter's acid on a hit, and adds 10 to every shot at it until it wears off", () => {
+            const spitter = fighter(1, "a", "spitter", at(field, 0, 3));
+            const knight = fighter(2, "b", "knight", at(field, 6, 3));
+            const { byId, events } = run({ field, fighters: [spitter, knight] }, "a", { kind: "attack", fighter: 1, target: 2 }, [1]);
+            expect(byId(2)).toMatchObject({ hp: CHARACTERS.knight.hp - 3, effects: { corroded: 2 } });
+            expect(events.at(-1)).toEqual({ kind: "effect", fighter: 2, effect: "corroded", change: "applied" });
+            const archer = fighter(3, "b", "archer", at(field, 0, 0));
+            const before = shotOdds({ field, fighters: [archer, spitter] }, archer, spitter)!.chance;
+            const corroded = { ...spitter, effects: { corroded: 2 } };
+            expect(shotOdds({ field, fighters: [archer, corroded] }, archer, corroded)!.chance).toBe(before + 10);
+            const both = { ...spitter, effects: { corroded: 2, marked: 2 } };
+            expect(shotOdds({ field, fighters: [archer, both] }, archer, both)!.chance).toBe(Math.min(100, before + 25));
+        });
+
+        it("is washed off by a heal", () => {
+            const cleric = fighter(1, "a", "cleric", at(field, 0, 0));
+            const knight = fighter(2, "a", "knight", at(field, 3, 0), { effects: { corroded: 2 } });
+            const { byId } = run({ field, fighters: [cleric, knight] }, "a", { kind: "heal", fighter: 1, target: 2 });
+            expect(byId(2).effects).toEqual({});
+        });
+    });
+
+    describe("Rend", () => {
+        it("tears into one enemy next to the Ravager for 6, always, and goes on cooldown", () => {
+            const ravager = fighter(1, "a", "ravager", at(field, 0, 0));
+            const knight = fighter(2, "b", "knight", at(field, 1, 0));
+            const { byId, events } = run({ field, fighters: [ravager, knight] }, "a", { kind: "rend", fighter: 1, target: 2 });
+            expect(events).toEqual([{ kind: "struck", fighter: 1, target: 2, damage: ABILITIES.rend.damage, reaction: false }]);
+            expect(byId(2).hp).toBe(CHARACTERS.knight.hp - 6);
+            expect(byId(1)).toMatchObject({ ap: ACTION_POINTS - ABILITIES.rend.ap, cooldowns: { rend: 3 } });
+        });
+
+        it("needs an enemy next to it, and a Ravager to use it", () => {
+            const fighters = [fighter(1, "a", "ravager", at(field, 0, 0)), fighter(2, "b", "knight", at(field, 3, 0)), fighter(3, "a", "skitterling", at(field, 0, 1))];
+            expect(check({ field, fighters }, "a", { kind: "rend", fighter: 1, target: 2 })).toEqual({ refused: "Too far away to strike" });
+            expect(check({ field, fighters }, "a", { kind: "rend", fighter: 3, target: 2 })).toEqual({ refused: "This Skitterling can't use Rend" });
+        });
+    });
+
+    describe("Regrowth", () => {
+        it("mends an ally the Broodmother can see within 8 squares, and clears what a heal does", () => {
+            const mother = fighter(1, "a", "broodmother", at(field, 0, 0));
+            const ravager = fighter(2, "a", "ravager", at(field, 6, 0), { hp: 4, effects: { corroded: 1 } });
+            const { byId } = run({ field, fighters: [mother, ravager] }, "a", { kind: "regrowth", fighter: 1, target: 2 });
+            expect(byId(2)).toMatchObject({ hp: 7, effects: {} });
+            expect(byId(1)).toMatchObject({ cooldowns: { regrowth: 2 } });
+            const far = fighter(2, "a", "ravager", at(field, 9, 0), { hp: 4 });
+            expect(check({ field, fighters: [mother, far] }, "a", { kind: "regrowth", fighter: 1, target: 2 })).toEqual({ refused: "Out of range or out of sight" });
+        });
+    });
+
+    describe("Burst", () => {
+        it("splashes everyone next to the Bloater, friend or foe, corrodes whoever stands, and downs the Bloater for nobody's points", () => {
+            const bloater = fighter(1, "a", "bloater", at(field, 1, 1));
+            const knight = fighter(2, "b", "knight", at(field, 2, 1));
+            const archer = fighter(3, "b", "archer", at(field, 0, 0), { hp: 2 });
+            const skitterling = fighter(4, "a", "skitterling", at(field, 1, 2));
+            const away = fighter(5, "b", "scout", at(field, 5, 1));
+            const { byId, events } = run({ field, fighters: [bloater, knight, archer, skitterling, away] }, "a", { kind: "burst", fighter: 1 });
+            expect(events[0]).toEqual({ kind: "burst", fighter: 1, targets: [2, 3, 4], damage: 3 });
+            expect(byId(2)).toMatchObject({ hp: CHARACTERS.knight.hp - 3, effects: { corroded: 2 } });
+            expect(byId(3).hp).toBe(0);
+            expect(byId(4)).toMatchObject({ hp: 1, effects: { corroded: 2 } });
+            expect(byId(5).hp).toBe(CHARACTERS.scout.hp);
+            expect(byId(1).hp).toBe(0);
+            expect(events.filter(event => event.kind === "scored")).toEqual([{ kind: "scored", player: "a", points: CHARACTERS.archer.points / 5, reason: "knockout" }]);
+            expect(events.at(-1)).toEqual({ kind: "downed", fighter: 1, by: 1 });
+        });
+
+        it("needs an enemy next to it", () => {
+            const fighters = [fighter(1, "a", "bloater", at(field, 1, 1)), fighter(2, "a", "skitterling", at(field, 2, 1)), fighter(3, "b", "knight", at(field, 5, 1))];
+            expect(check({ field, fighters }, "a", { kind: "burst", fighter: 1 })).toEqual({ refused: "No enemy next to them" });
+        });
+    });
+});
