@@ -742,8 +742,11 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
     ];
 }
 
-/** How many of the enemy a wave's players downed, all of them together. Read by name: a stored wave is a Mongoose subdocument. */
-const downedIn = ({ downed }: WaveRecord): number => [...mongoMap(downed ?? new Map<string, number>()).values()].reduce((sum, count) => sum + count, 0);
+/** Who downed how many of a wave. Read by name: a stored wave is a Mongoose subdocument. */
+const downedOf = ({ downed }: WaveRecord): Map<string, number> => mongoMap(downed ?? new Map<string, number>());
+
+/** How many of the enemy a wave's players downed, all of them together. */
+const downedIn = (wave: WaveRecord): number => [...downedOf(wave).values()].reduce((sum, count) => sum + count, 0);
 
 /**
  * A battle of Hold Out's own story (§30.10), above the players': how it ended
@@ -787,7 +790,7 @@ function formatWaveChart(stats: IRealmArenaGameResultStats): GameResultBarChart 
         bars: stats.waves.map((wave, index) => ({
             label: `Wave ${index + 1}`,
             value: downedIn(wave),
-            segments: Object.fromEntries(mongoMap(wave.downed ?? new Map<string, number>())),
+            segments: Object.fromEntries(downedOf(wave)),
         })),
     };
 }

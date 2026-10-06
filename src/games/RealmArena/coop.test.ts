@@ -123,13 +123,13 @@ describe("co-op's setting (§29.8)", () => {
 });
 
 describe("Hold Out (§30.3)", () => {
-    it("refills a warband only to its ready-made strength, using fresh ids and free deployment squares", async () => {
+    it("refills a warband to its ready-made strength before any wave has landed, using fresh ids and free deployment squares", async () => {
         const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut" } });
         await musterAll(game);
         const owner = warbandOwner(0);
         const original = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
         original[0].hp = 0;
-        const fresh = waveOf(game.specificGameState, owner);
+        const fresh = waveOf(game.specificGameState, owner, true);
         expect(fresh).toHaveLength(1);
         expect(fresh[0].character).toBe(original[0].character);
         expect(fresh[0].id).toBeGreaterThan(Math.max(...game.specificGameState.fighters.map(fighter => fighter.id)));
@@ -139,7 +139,7 @@ describe("Hold Out (§30.3)", () => {
         game.specificGameState.fighters.push(...field.deployments[2].map((square, index) => ({
             ...original[1], id: 10_000 + index, owner: "a", square,
         })));
-        expect(waveOf(game.specificGameState, owner)).toHaveLength(0);
+        expect(waveOf(game.specificGameState, owner, true)).toHaveLength(0);
     });
 
     it("continues after the enemy is wiped out, lands round four's wave, and wins by surviving the last round", async () => {
@@ -258,7 +258,7 @@ describe("Hold Out's growing waves (§30.10)", () => {
         await musterAll(game);
         const owner = warbandOwner(0);
         game.specificGameState.roundsPlayed = 3;
-        const fresh = waveOf(game.specificGameState, owner);
+        const fresh = waveOf(game.specificGameState, owner, true);
         expect(fresh.map(fighter => fighter.character)).toEqual([REALM.readyMade[80][0]]);
         const occupied = new Set(game.specificGameState.fighters.map(fighter => fighter.square));
         expect(fresh.every(fighter => !occupied.has(fighter.square))).toBe(true);
@@ -322,6 +322,12 @@ describe("Hold Out's result (§30.10)", () => {
         expect(byWave.bars.map(bar => bar.label)).toEqual(waves.map((_, index) => `Wave ${index + 1}`));
     }, 60_000);
 
+    it("is never recorded while the battle is still being fought, through the fog", async () => {
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm", mission: "holdOut" } });
+        await musterAll(game);
+        expect(await recordBattle(game)).toBeUndefined();
+    });
+
     it("has nothing of Hold Out's in a battle of Hold the Centre", async () => {
         seedRolls(11);
         const { game } = await coopBattle(["a", "b"], { coop: { enemy: "realm" } });
@@ -381,15 +387,15 @@ describe("difficulty (§30.5)", () => {
         }
     });
 
-    it("refills each warband to its difficulty's squad in Hold Out, and no further", async () => {
+    it("refills each warband to its difficulty's squad in Hold Out before any wave has landed", async () => {
         for (const difficulty of ["easy", "hard"] as const) {
             const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", mission: "holdOut", difficulty } });
             await musterAll(game);
             const owner = warbandOwner(0);
-            expect(waveOf(game.specificGameState, owner)).toEqual([]);
+            expect(waveOf(game.specificGameState, owner, true)).toEqual([]);
             const band = game.specificGameState.fighters.filter(fighter => fighter.owner === owner);
             band.forEach(fighter => { fighter.hp = 0; });
-            expect(waveOf(game.specificGameState, owner).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
+            expect(waveOf(game.specificGameState, owner, true).map(fighter => fighter.character)).toEqual([...REALM.readyMade[warbandBudget(2, "normal", difficulty)]]);
         }
     });
 

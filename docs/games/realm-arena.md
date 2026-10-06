@@ -3147,7 +3147,7 @@ battlefield (§29.7, *What PR 3 settled*), and the time-budget test holds it.
   as the enemy's is. The board's scoreboard shows the round the next wave
   comes in. The guide's co-op section gains a paragraph.
 
-**Tests.** A wave refills each warband to its squad and no further, stands
+**Tests.** A wave refills each warband to its squad and no further (since grown, §30.10), stands
 where `readyMadeMuster` would, waits with no room, and is told; a battle with
 the enemy wiped out goes on to the next wave and ends after the last; the
 endings and their details; whole battles of Hold Out on both co-op forts
@@ -3208,7 +3208,7 @@ sizes (§13.6), so difficulty needs no new squad:
   muster's line says what the enemy fields: "The Renegades field 100 points a
   warband."
 - **It applies to both missions.** In Hold Out each wave refills a warband to
-  its difficulty's squad.
+  its difficulty's squad (and, since §30.10, grows it).
 - **The planner plays its best at every difficulty.** A computer told to
   play badly reads as a broken one; a smaller enemy is fair and legible.
   *Considered and set aside:* switching off Exposure, or the move ranking's

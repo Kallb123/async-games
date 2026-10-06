@@ -844,7 +844,8 @@ function holdOutEnding(gs: IRealmArenaSpecificGameState): { won: boolean; detail
 /**
  * The command version from which every Hold Out wave is a character bigger
  * than the last (§30.10): an End turn played before it lands a wave that only
- * refills each warband to its squad, on a replay too.
+ * refills each warband to its squad, on a replay too. Never moves once
+ * shipped: later versions keep growing waves.
  */
 const GROWING_WAVES_VERSION = 5;
 
@@ -862,7 +863,7 @@ export function waveStrength(squad: readonly CharacterId[], round: number, growi
 }
 
 /** The reinforcements one warband can place in its deployment zone this wave. */
-export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing = true): Fighter[] {
+export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean): Fighter[] {
     if (gs.coop?.mission !== "holdOut") return [];
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
