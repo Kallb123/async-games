@@ -82,7 +82,9 @@ interface Glide { settle: () => void }
 
 /**
  * Draw the board `offset` into the pane at `scale` times its laid-out size.
- * While it's drawn this way it's marked as moving (`MOVING`), so a board can
+ * While it's drawn this way it's marked as moving (`MOVING`), which makes it a
+ * compositor layer of its own (ag-theme.css) — so each frame scales what's
+ * already drawn instead of re-rasterising the whole board — and lets a board
  * switch off its own pulses for the gesture (Realm Arena's, in ag-theme.css):
  * an animation inside the SVG — even paused — has the whole board re-rastered
  * at every frame's scale, which is what makes a pinch stutter. A board names
@@ -94,7 +96,7 @@ function drawAt(content: HTMLDivElement, offset: { x: number; y: number }, scale
     content.classList.add(MOVING);
 }
 
-/** Drop the transform: the board is drawn as laid out again, and its pulses start over. */
+/** Drop the transform: the board is drawn as laid out again, sharp at its new zoom, and its pulses start over. */
 function release(content: HTMLDivElement) {
     content.style.transform = '';
     content.classList.remove(MOVING);

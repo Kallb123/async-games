@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Pinch-zooming a board keeps up with your fingers",
+                detail: "Pinching to zoom a big board — Realm Arena's battlefield above all, but World Domination, Outbreak, Race Cars and the rest too — used to redraw the whole map on every frame, so it lagged well behind your fingers while scrolling around stayed smooth. The map now just stretches while you pinch, looking a touch soft until you let go, when it sharpens at its new zoom.",
+            },
+            {
                 title: "Realm Arena: Hold Out on the Sacked Fort",
                 detail: "Hold Out has a battlefield of its own. Your team starts in a ruined keep in the middle of the map, and the enemy closes in from every edge, where each fresh wave lands too. Its walls are full of gaps, so there's no corner to sit in. The host picks it, or the gate forts, when setting up.",
                 game: "realmarena",
@@ -120,11 +124,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Game results show each player's stats in their colour",
                 detail: "Every player's stats on a finished game's result carry a bar in their colour down the side, so you can match them to their line on the charts at a glance.",
-            },
-            {
-                title: "See the final board on a Settlements & Cities result",
-                detail: "A finished game's result page now shows the board as the game ended — every settlement, city and road in its owner's colour. Hover or press a bar in the dice roll chart to see how many of those rolls each player threw.",
-                game: "settlementsandcities",
             },
         ],
     },
