@@ -1311,8 +1311,13 @@ export function endTurn(state: BattleState, player: string, round: number, keepS
 
 // ─── The end of the battle (§5.1) ───────────────────────────────────────────
 
+/**
+ * How many battle rounds a battle of `playerCount` players lasts (§13.8). Solo
+ * (§30.6) lasts a duel's: its round is one player's turn and one warband's, as
+ * a duel's is two players'.
+ */
 export function battleRounds(playerCount: number): number {
-    const rounds = BATTLE_ROUNDS[playerCount as PlayerCount];
+    const rounds = BATTLE_ROUNDS[(playerCount === 1 ? 2 : playerCount) as PlayerCount];
     if (rounds === undefined) throw new Error(`Realm Arena has no battle length for ${playerCount} players`);
     return rounds;
 }

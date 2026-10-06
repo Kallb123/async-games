@@ -13,20 +13,24 @@ import OptionChoiceSection, { type OptionChoice } from "@/components/ui/OptionCh
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
+import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
 import { GAME_META, partySizeRange } from "@/utils/ui/games";
-import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
+import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import type { RealmArenaCoopInvite, RealmArenaInvitationRequest } from "@/games/RealmArena/RealmArenaModels";
 import { factionRosterLine } from "@/games/RealmArena/roster";
-import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RANDOM_ENEMY, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
+import { BATTLE_SIZE_NAMES, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, FACTIONS, RA_SOLO_PARAM, RANDOM_ENEMY, type BattleSize, type Difficulty, type FactionId } from "@/games/RealmArena/characters";
 
-type Mode = 'freeForAll' | 'coop';
+type Mode = 'freeForAll' | 'coop' | 'solo';
 type Enemy = RealmArenaCoopInvite['enemy'];
 type Mission = NonNullable<RealmArenaCoopInvite['mission']> | 'holdCentre';
 type Battlefield = NonNullable<RealmArenaCoopInvite['map']> | 'line';
 
+const INVITE_PATH = '/api/newgame/realmarena';
+
 // Co-op is for a team its battlefields are built for (§29.2), so the party's
-// limits are its own while it's chosen.
-const COOP_PARTY = { ...GAME_META.realmarena, name: `${GAME_META.realmarena.name} co-op`, minPlayers: COOP_PLAYERS.min, maxPlayers: COOP_PLAYERS.max };
+// limits are its own while it's chosen. A team of one is Solo, which invites
+// nobody (§30.6), so the team this screen invites starts at two.
+const COOP_PARTY = { ...GAME_META.realmarena, name: `${GAME_META.realmarena.name} co-op`, minPlayers: GAME_META.realmarena.minPlayers, maxPlayers: COOP_PLAYERS.max };
 
 // Whom a co-op team can fight (§29.3): every faction, or one drawn at random
 // as the battle begins and unknown until it's seen.
@@ -67,7 +71,9 @@ const DIFFICULTY_CHOICES: OptionChoice<Difficulty>[] = [
 // together against the computer (§29.9) — and, in co-op, whom they fight,
 // and in Hold Out on which battlefield (§30.9) —
 // and how big the battle is, and in co-op how strong the enemy (§30.5) —
-// and which factions the players may muster from (B6), at least one.
+// and which factions the players may muster from (B6), at least one. Solo
+// (§30.6) is co-op with a team of one: nobody to invite and no turn timer,
+// fought on the Ruined Fort, and started at once.
 function NewGameRealmArenaForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
@@ -76,59 +82,75 @@ function NewGameRealmArenaForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [fog, setFog] = useState(true);
-  const [mode, setMode] = useState<Mode>('freeForAll');
+  // A rematch of a solo battle comes back to Solo rather than to an empty invite list.
+  const [mode, setMode] = useState<Mode>(() => readRematchFlag(searchParams, RA_SOLO_PARAM) ? 'solo' : 'freeForAll');
   const [enemy, setEnemy] = useState<Enemy>(FACTION_IDS[0]);
   const [mission, setMission] = useState<Mission>('holdCentre');
   const [battlefield, setBattlefield] = useState<Battlefield>('sackedFort');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [size, setSize] = useState<BattleSize>('normal');
   const [factions, setFactions] = useState<readonly FactionId[]>(FACTION_IDS);
-  const coop = mode === 'coop';
+  const solo = mode === 'solo';
+  // Solo is fought against the computer too, with every co-op choice but the battlefield.
+  const coop = mode === 'coop' || solo;
   const gameMeta = GAME_META.realmarena;
   const partyMeta = coop ? COOP_PARTY : gameMeta;
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
     meta: partyMeta,
     gameType: 'RealmArena',
-    invitePath: '/api/newgame/realmarena',
+    invitePath: INVITE_PATH,
     invitedCount: players.length,
   });
+  const { starting, start } = useStartSoloGame(INVITE_PATH);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Solo is fought on the Ruined Fort alone, whatever the hidden Battlefield picker last held.
+    const map = solo || battlefield === 'line' ? undefined : battlefield;
     const data: RealmArenaInvitationRequest = {
-      userList: players,
+      userList: solo ? [] : players,
       turnTimer,
       fog,
       factions: [...factions],
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
         enemy,
-        ...(mission === 'holdOut' ? { mission, ...(battlefield !== 'line' ? { map: battlefield } : {}) } : {}),
+        ...(mission === 'holdOut' ? { mission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
       } } : {}),
+      ...(solo ? { solo } : {}),
     };
-    await submit(data);
+    // Solo skips useCreateLobbyOrInvite's submit, which rightly refuses a
+    // party the host is the only member of: its invitation is accepted at once.
+    if (solo) await start(data);
+    else await submit(data);
   };
 
   return (
     <GameSetupLayout
       meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel={actionLabel}
-      actionDisabled={!canSubmit}
-      footnote={footnote}
+      actionLabel={solo ? (starting ? 'Mustering…' : 'Start the battle') : actionLabel}
+      actionDisabled={solo ? starting : !canSubmit}
+      footnote={solo ? 'Take your turns whenever you like: there is no turn timer' : footnote}
     >
-      <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
-      <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint meta={partyMeta} total={partySize} />
+      {!solo && (
+        <>
+          <UserInviteList userList={userList} setItem={setItem} />
+          <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
+          <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+          <PartySizeHint meta={partyMeta} total={partySize} />
+        </>
+      )}
       <OptionChoiceSection
         label="Mode"
         value={mode}
         onChange={setMode}
+        disabled={starting}
         choices={[
           { id: 'freeForAll', label: 'Free-for-all', description: `Every squad for itself, for ${partySizeRange(gameMeta)}.` },
           { id: 'coop', label: 'Co-op against the computer', description: `Fight together as one team against the computer's warbands, for ${partySizeRange(COOP_PARTY)}.` },
+          { id: 'solo', label: 'Solo', description: "Fight one of the computer's warbands on your own, on the Ruined Fort." },
         ]}
       />
       {/* Nothing to choose while there's one faction to fight (§29.3): the
@@ -139,7 +161,8 @@ function NewGameRealmArenaForm() {
       {coop && (
         <OptionChoiceSection label="Mission" value={mission} onChange={setMission} choices={MISSION_CHOICES} />
       )}
-      {coop && mission === 'holdOut' && (
+      {/* Solo has the one battlefield, the Ruined Fort (§30.6). */}
+      {coop && !solo && mission === 'holdOut' && (
         <OptionChoiceSection label="Battlefield" value={battlefield} onChange={setBattlefield} choices={BATTLEFIELD_CHOICES} />
       )}
       {coop && (

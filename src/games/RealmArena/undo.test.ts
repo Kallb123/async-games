@@ -12,7 +12,7 @@ import { RealmArenaGameDataModel } from "./RealmArenaModels";
 import { cloneRealmArenaState, RealmArenaUndo, UNDO_STACK_DEPTH } from "./RealmArenaLogic";
 import type { IRealmArenaGameDataResponse } from "./apiModels";
 import { check, moveAp, reachOf, reactionsTo, readyMadeMuster, type Action, type Fighter } from "./rules";
-import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, play, PLAYERS, type RealmArenaTestGame, responseFor } from "./testFixtures";
+import { actBy, battleOf, blastSpot, cmd, endTurnBy, makeGame, muster, oneStep, play, PLAYERS, type RealmArenaTestGame, responseFor } from "./testFixtures";
 
 // docs/undo.md's eighth game, shaped like Fires Out's: a turn is a run of
 // actions and only End turn hands it on, so every action that rolls nothing
@@ -31,20 +31,6 @@ const NAMES: Record<string, string> = { a: "Alice", b: "Bob" };
 const undoBy = (sender: string) => cmd(RealmArenaUndo, sender);
 const own = (game: RealmArenaTestGame, player: string) => game.specificGameState.fighters.filter(one => one.owner === player);
 const byId = (game: RealmArenaTestGame, id: number) => game.specificGameState.fighters.find(one => one.id === id)!;
-
-/** A move (or a sneak) by `fighter` to the first square it can stop on for the fewest AP. */
-function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move" | "sneak" = "move"): Action {
-    const reach = reachOf(battleOf(game), fighter, kind === "sneak");
-    let best: number | undefined;
-    for (let square = 0; square < reach.costs.length; square++) {
-        const cost = reach.costs[square];
-        if (cost > 0 && cost !== Infinity && (best === undefined || cost < reach.costs[best])) best = square;
-    }
-    if (best === undefined || moveAp(fighter, reach.costs[best], kind === "sneak") > fighter.ap) {
-        throw new Error(`${fighter.character} has nowhere to go`);
-    }
-    return { kind, fighter: fighter.id, path: pathTo(reach, best)!.squares };
-}
 
 /** A battle on a's first turn, a's squad with a Scout in it to sneak with. */
 async function battle(): Promise<RealmArenaTestGame> {

@@ -1,6 +1,6 @@
 # Realm Arena — Game Design Document
 
-**Status:** v1.42. Split out of Defender of the Realm in its third round of
+**Status:** v1.48. Split out of Defender of the Realm in its third round of
 design, when one concept became two games
 ([`defender-of-the-realm.md`](./defender-of-the-realm.md) §17). It's being
 built first (§10). §11 records every answer. §13 has the battle rules and the
@@ -18,13 +18,15 @@ library, at command version 2. A finished battle's result tells the battle
 (§28): the points race, each squad's health, the damage by character and a
 record of what each squad did. Co-op against the computer (B8, §29) is built:
 the players as one team, and an enemy of the host's choosing, played by game
-AI, that takes a turn after each of theirs. §30 plans what comes after it:
-Banned Islet, Outbreak and Fires Out on co-op's shared ending, remembering
-where an enemy was last seen, a wave-survival mission, achievements,
-difficulty and solo play.
+AI, that takes a turn after each of theirs. §30 is what came after it, all
+built: Banned Islet, Outbreak and Fires Out on co-op's shared ending,
+remembering where an enemy was last seen, a wave-survival mission,
+achievements, difficulty and solo play (§30.6), one player against one
+warband.
 **Working title:** Realm Arena (see the appendix)
 **Genre:** Turn-based tactical squad battles, XCOM-style
-**Players:** 2–4, free-for-all or two teams of two
+**Players:** 1–4: free-for-all or two teams of two, co-op for two or three,
+or solo against the computer
 **Session shape:** one battle per match, four to six days (longer with more
 players), played a turn at a time in spare minutes
 **Setting:** the same fantasy world as Defender of the Realm (§10)
@@ -1020,7 +1022,7 @@ recap, a guide and a tutorial.
 | B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32) |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
-| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built to PR 5, with battle size beside difficulty; solo next (§30.6) |
+| B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built, with battle size beside difficulty (§30.5) |
 
 **What B2 settled:**
 
@@ -2840,7 +2842,7 @@ sure it is.
 | 4a | **The enemy's turn.** `coop` from setup to state, Random drawn, `applyAction` and `applyEndTurn` out of the commands, the warbands mustered, their turn in `handOff`, recorded and replayed, and the whole-battle tests (§29.11). The setup route takes `coop`; the screen doesn't offer it yet | `caveman`, `locksmith`, `gremlin`, `croupier` |
 | 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, the recap's rows for the enemy's turn, and a random enemy kept hidden until it's seen (§29.3) | `caveman`, `croupier` |
 | 5 | **The screens** (§29.9), the enemy's faction picker among them, the guide, and the one What's new line | `caveman`, `rulebook` |
-| Later | Planned in §30: Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
+| Later | Built in §30 (B9): Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
 
 ### 29.11 Testing the computer
 
@@ -2876,7 +2878,7 @@ sure it is.
   the waves is planned, as Hold Out (§30.3).*
 - **Difficulty.** One level to start. If the playtest wants more, the simplest
   lever is the warbands' size — the ready-made squad, one character more or
-  one fewer — chosen with the same `OptionChoiceSection`. *Planned (§30.5),
+  one fewer — chosen with the same `OptionChoiceSection`. *Built (§30.5),
   with the existing ready-made squads as the three sizes.*
 - **Does the enemy want a Mage and a Cleric?** The ready-made squad for 80
   points has neither, so the enemy wouldn't fireball or heal.
@@ -2927,7 +2929,7 @@ The caveman reviewed the first draft of this plan. What changed:
 
 ## 30. After co-op: the next six PRs (B9)
 
-*Planned.* Co-op against the computer (§29) is built. What comes next is the
+*Built.* Co-op against the computer (§29) is built. What came next is the
 work §29.10 left for later, plus a second mission for co-op, broken into PRs
 in the order they're built. Each one is a branch of its own, passes the gates
 (`build`, `tsc`, `lint`, `test`), and gets the crew listed beside it (§30.7).
@@ -3310,6 +3312,35 @@ of one there).
   every turn, the timer is unlimited, and the whole-battle and replay tests
   run on the Ruined Fort.
 
+**What PR 6 settled:**
+
+- **`meta.players` reads "1–4 players"**, and the library shows Realm Arena
+  under *Solo*, but `minPlayers` stays 2: it's the invite flow's bound, which
+  the setup and lobby routes read, and solo never goes through it. Fires Out
+  draws the same line, and the guard test that holds `players` to the bounds
+  names both.
+- **The request says it's solo** (`solo: true`), as Fires Out's names a crew
+  size, rather than solo being read off an empty invite list: a host who
+  invited only themselves is refused as the party of one they are. A solo
+  request must carry `coop`, invite nobody and name no battlefield — the
+  Sacked Fort is built for two or three — and is stored with the unlimited
+  timer whatever it sent. Nobody is pushed an invitation.
+- **`turnEnded`** is the muster's and the End turn's outcome: `turnOver`
+  with more than one seat, `timerRestarts` always. A free-for-all or a co-op
+  team's battle is unchanged by the second: the command route already
+  restarts the clock on `turnOver`.
+- **The End turn clears the undo stack itself**, in every battle, as well as
+  `CheckEndTurn` on a hand-off. The test shows why: without it, an undo after
+  an undone move restores the battle from before the warband's turn.
+- **The setup screen** has *Solo* as the third mode, without the invite list,
+  the open seats, the turn timer, the party hint or the battlefield; *Start
+  the battle* deals it at once. The board says the player fights alone, and a
+  solo battle's rematch link comes back to *Solo* (`RA_SOLO_PARAM`).
+- **Nothing else needed changing.** The recap, the result, the battle record
+  and the stats read a battle with one seat as they are: the whole-battle
+  test fights Hold the Centre and Hold Out (in fog) to their ends, replays
+  them without the planner, and reads their results.
+
 ### 30.7 Review
 
 | PR | Review |
@@ -3630,3 +3661,4 @@ Realm, its sibling in the same world.
 | 1.45 | Choosing a faction (§32, B6): the host allows any of the factions on the setup screen, at least one, and each player picks one of them as they muster, held to its roster; a timed-out muster takes the first. |
 | 1.46 | The warbands plan about three times quicker, every choice unchanged (§29.7): a turn keeps each square's Exposure and Threat, and Hold Out's walk to the team, from one plan to the next (`TurnMemo`); that walk is one search from every hunted square (`costsFrom`); and the path search, the copy an action resolves on, the smoke check and the walk for cover each do less. |
 | 1.47 | Growing waves, and Hold Out's own result (§30.10): every wave brings a warband one character more than the last (command version 5), and the result page tells a battle of Hold Out by its waves — how it ended, what each wave brought and how many of it the team downed, and who stood each round. |
+| 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |

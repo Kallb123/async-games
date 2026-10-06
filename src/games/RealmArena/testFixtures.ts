@@ -112,6 +112,20 @@ export function blastSpot(game: RealmArenaTestGame, thrower: Fighter): number {
     throw new Error("nowhere to blast");
 }
 
+/** A move (or a sneak) by `fighter` to the first square it can stop on for the fewest AP. */
+export function oneStep(game: RealmArenaTestGame, fighter: Fighter, kind: "move" | "sneak" = "move"): Action {
+    const reach = reachOf(battleOf(game), fighter, kind === "sneak");
+    let best: number | undefined;
+    for (let square = 0; square < reach.costs.length; square++) {
+        const cost = reach.costs[square];
+        if (cost > 0 && cost !== Infinity && (best === undefined || cost < reach.costs[best])) best = square;
+    }
+    if (best === undefined || moveAp(fighter, reach.costs[best], kind === "sneak") > fighter.ap) {
+        throw new Error(`${fighter.character} has nowhere to go`);
+    }
+    return { kind, fighter: fighter.id, path: pathTo(reach, best)!.squares };
+}
+
 /** The enemy nearest a fighter, or undefined when none is standing. */
 function nearestEnemy(game: RealmArenaTestGame, fighter: Fighter): Fighter | undefined {
     const battle = battleOf(game);

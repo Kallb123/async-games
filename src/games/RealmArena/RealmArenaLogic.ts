@@ -899,6 +899,17 @@ function landWave(data: IRealmArenaGameData, version: number): void {
 
 // ─── Commands ───────────────────────────────────────────────────────────────
 
+/**
+ * The outcome of a turn ending, a muster or an End turn. Solo (§30.6) has one
+ * seat, so the turn comes straight back to the player who ended it: that's no
+ * hand-off, so nobody is pushed "your move" a moment after their own, but the
+ * turn is still over for the clock and for the achievements judged as one ends
+ * (`timerRestarts`), as in Fires Out's solitaire mode.
+ */
+function turnEnded(gs: IRealmArenaSpecificGameState): ICommandOutcome {
+    return { validMove: true, turnOver: gs.seats.length > 1, timerRestarts: true };
+}
+
 /** The squad, and where each character stands (§17.2). Sealed until every player has mustered. */
 @serializable
 export class RealmArenaMuster implements IGameCommand {
@@ -959,7 +970,7 @@ export class RealmArenaMuster implements IGameCommand {
             noteSighting(gs);
         }
         markDirty(gameData);
-        return { validMove: true, turnOver: true };
+        return turnEnded(gs);
     }
 }
 
@@ -1279,10 +1290,12 @@ export class RealmArenaEndTurn implements IGameCommand {
         if (gs.coop) this.recordedEnemyActions = enemy?.steps.map(step => step.action) ?? [];
         if (used.length > 0) this.recordedRolls = used;
         else delete this.recordedRolls;
+        // Here as well as in CheckEndTurn, which a solo battle never reaches
+        // (§30.6): an undo across the warband's turn would undo the warband's turn.
+        clearUndo(gs);
         markDirty(gameData);
         return {
-            validMove: true,
-            turnOver: true,
+            ...turnEnded(gs),
             events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
             recap: { enemy, started, startedTold },
         } as IRealmArenaOutcome;
