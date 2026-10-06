@@ -23,6 +23,9 @@ export interface TurnRecapEvent {
     reactions?: IReactionSummary[];
 }
 
+/** A button under the recap: its words, and what it does. */
+export interface RecapAction { label: string; onClick: () => void }
+
 interface TurnRecapProps {
     header: { name: string; accent: string; glyph?: string };
     /** The line under the header's game name — "Since your last turn" for the
@@ -43,10 +46,10 @@ interface TurnRecapProps {
      * driver dismiss back to the board first. Omit for nothing there.
      */
     footer?: React.ReactNode;
-    cta: { label: string; onClick: () => void };
+    cta: RecapAction;
     /** A second, quieter button under the CTA — "Replay from your last turn".
      *  Omit for nothing there. */
-    replay?: { label: string; onClick: () => void };
+    replay?: RecapAction;
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
     /** The signed-in viewer's userId — gives their own reaction the

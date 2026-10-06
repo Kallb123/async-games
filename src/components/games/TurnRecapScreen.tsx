@@ -1,5 +1,5 @@
 'use client'
-import TurnRecap from '@/components/games/TurnRecap';
+import TurnRecap, { type RecapAction } from '@/components/games/TurnRecap';
 import type { IRecapResponse } from '@/app/api/game/[gameid]/recap/route';
 
 interface TurnRecapScreenProps {
@@ -14,7 +14,7 @@ interface TurnRecapScreenProps {
     onReact: (eventId: string, reaction: string) => void;
     /** Optional second button — replay the match from the viewer's last turn.
      *  Only a game that offers auto-play passes it; absent, nothing changes. */
-    replay?: { label: string; onClick: () => void };
+    replay?: RecapAction;
 }
 
 // The "since you were last here" screen as every game shows it: the recap the

@@ -157,23 +157,22 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
         [gameId]
     );
 
-    const enterRecap = useCallback(async () => {
-        setPlaying(false);
-        const data = await fetchTimeline([]);
-        if (!data) return;
-        setPlannedCommands([]);
-        setViewIndex(data.currentIndex);
-        setMode("recap");
-    }, [fetchTimeline]);
-
-    const enterPlanning = useCallback(async () => {
-        setPlaying(false);
-        const data = await fetchTimeline([]);
-        if (!data) return;
-        setPlannedCommands([]);
-        setViewIndex(data.currentIndex);
-        setMode("planning");
-    }, [fetchTimeline]);
+    // Fetches the timeline afresh and opens it in `next` mode, at the live
+    // position unless `at` picks another — shared by every way into a review.
+    const openTimeline = useCallback(
+        async (next: Exclude<NavMode, "live">, at = (data: ITimelineResponse<TState, TOutcome>) => data.currentIndex) => {
+            setPlaying(false);
+            const data = await fetchTimeline([]);
+            if (!data) return null;
+            setPlannedCommands([]);
+            setViewIndex(at(data));
+            setMode(next);
+            return data;
+        },
+        [fetchTimeline]
+    );
+    const enterRecap = useCallback(() => openTimeline("recap"), [openTimeline]);
+    const enterPlanning = useCallback(() => openTimeline("planning"), [openTimeline]);
 
     const returnToLive = useCallback(() => {
         setPlaying(false);
@@ -246,25 +245,20 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
         setViewIndex(viewIndex + 1);
     }, [canPlay, viewIndex]);
 
-    // "Replay from my last turn" on the recap screen: the same fetch as
-    // `enterRecap`, then play from the step before the viewer's last command.
+    // "Replay from my last turn" on the recap screen: open the review at the
+    // viewer's last command (the step before it is the start, so that command
+    // is the first one played) and play from there. A game with nothing played
+    // yet has nothing to play: it shows the one position and stays put.
     const playFromLastTurnOf = useCallback(
         async (viewerId: string) => {
-            setPlaying(false);
-            const data = await fetchTimeline([]);
-            if (!data) return;
-            setPlannedCommands([]);
-            const start = replayStartIndex(data.snapshots, data.currentIndex, viewerId);
-            setMode("recap");
-            // A one-position game has nothing to play: show it and stay put.
-            if (start >= data.currentIndex) {
-                setViewIndex(data.currentIndex);
-                return;
-            }
-            setViewIndex(start + 1);
-            setPlaying(true);
+            let start = 0;
+            const data = await openTimeline("recap", (timeline) => {
+                start = replayStartIndex(timeline.snapshots, timeline.currentIndex, viewerId);
+                return Math.min(start + 1, timeline.currentIndex);
+            });
+            if (data && start < data.currentIndex) setPlaying(true);
         },
-        [fetchTimeline]
+        [openTimeline]
     );
 
     // The player: rest on the step shown for as long as it takes to animate,

@@ -2286,7 +2286,8 @@ information, kept as a squad is during the muster (§17.2):
 - **Off the wire until then.** The response carries `coop.enemy` only once
   `enemySeen` is set; before that, the board shows "an unknown enemy" on the
   scoreboard and the muster. A review is built from the state at each step,
-  so a step before the sighting doesn't carry it either.
+  so a step before the sighting doesn't carry it either — nor does a part of
+  a co-op End turn (§26.2) drawn from a board before it.
 - **The log doesn't give it away.** Fog's log tells what the team saw happen
   (§27.2) — "the Renegades' Archer fired on overwatch" — and a character's
   kind is its faction. So until the enemy is seen, `ownerToken` and `narrate` call
@@ -3740,3 +3741,4 @@ Realm, its sibling in the same world.
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
+| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. |

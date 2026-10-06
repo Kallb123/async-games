@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -30,12 +30,12 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
-import { prefersReducedMotion } from "@/utils/hooks/usePrefersReducedMotion";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
+import { useScrollIntoViewOnOpen } from "@/utils/hooks/useScrollIntoViewOnOpen";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
@@ -295,12 +295,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // dock's Play or the recap screen's replay, whose board mounts a moment
     // after. The top bar sticks and the dock is pinned, so the board is
     // scrolled to below the one (`scroll-margin-top`) and above the other.
-    const boardRef = useRef<HTMLDivElement>(null);
-    const boardShown = !!gs;
-    useEffect(() => {
-        if (!nav.playing || !boardShown) return;
-        boardRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
-    }, [nav.playing, boardShown]);
+    const boardRef = useScrollIntoViewOnOpen(nav.playing && !!gs);
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
