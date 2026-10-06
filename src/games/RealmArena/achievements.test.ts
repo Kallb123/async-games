@@ -71,4 +71,36 @@ describe("Realm Arena achievements", () => {
         expect(check("realmarena.against-the-odds", view({ difficulty: "easy" }), "win")).toBe(false);
         expect(check("realmarena.against-the-odds", view({ coop: false, difficulty: "hard" }), "win")).toBe(false);
     });
+
+    it("awards Lone Wolf only for winning Hold Out on your own", () => {
+        const solo = [fighter("a"), fighter("a", 0), fighter("ai:0")];
+        expect(check("realmarena.lone-wolf", view({ mission: "holdOut", fighters: solo }), "win")).toBe(true);
+        expect(check("realmarena.lone-wolf", view({ mission: "holdOut", fighters: solo }), "loss")).toBe(false);
+        expect(check("realmarena.lone-wolf", view({ mission: "holdOut" }), "win")).toBe(false);
+        expect(check("realmarena.lone-wolf", view({ fighters: solo }), "win")).toBe(false);
+    });
+
+    it("awards Hold the Keep only for winning Hold Out on the Sacked Fort", () => {
+        for (const map of ["sackedFortTwo", "sackedFortThree"] as const) {
+            expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "win")).toBe(true);
+            expect(check("realmarena.hold-the-keep", view({ mission: "holdOut", map }), "loss")).toBe(false);
+        }
+        expect(check("realmarena.hold-the-keep", view({ mission: "holdOut" }), "win")).toBe(false);
+    });
+
+    it("awards Broken Tide only for a Hold Out won with the whole enemy down", () => {
+        const wiped = [fighter("a"), fighter("b"), fighter("ai:0", 0), fighter("ai:1", 0)];
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: wiped }), "win")).toBe(true);
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: wiped }), "loss")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut" }), "win")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ mission: "holdOut", fighters: [fighter("a")] }), "win")).toBe(false);
+        expect(check("realmarena.broken-tide", view({ fighters: wiped }), "win")).toBe(false);
+    });
+
+    it("awards Unbroken only for a Hold Out won with the whole team standing", () => {
+        expect(check("realmarena.unbroken", view({ mission: "holdOut" }), "win")).toBe(true);
+        expect(check("realmarena.unbroken", view({ mission: "holdOut" }), "loss")).toBe(false);
+        expect(check("realmarena.unbroken", view({ mission: "holdOut", fighters: [fighter("a"), fighter("b", 0), fighter("ai:0")] }), "win")).toBe(false);
+        expect(check("realmarena.unbroken", view(), "win")).toBe(false);
+    });
 });
