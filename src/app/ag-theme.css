@@ -972,8 +972,9 @@ a.ag-list-row, a.ag-list-row-main {
 /* The pick-one sibling of the toggle row above: a whole row is the control, so
    it is a <button>, and a radio mark stands where the switch would. Always worn
    alongside .ag-option-row, which already gives it the padding and the dashed
-   rule — this only undoes what a browser does to a button. Used by ThemeSelect;
-   anything else a setup screen offers one of belongs here too. */
+   rule — this only undoes what a browser does to a button. Drawn by
+   OptionRadioRow, inside OptionChoiceSection's radio group — every pick-one
+   block on a setup screen. */
 .ag-option-row--choice {
     width: 100%;
     background: none;
@@ -1000,6 +1001,7 @@ a.ag-list-row, a.ag-list-row-main {
     border: 2px solid var(--ag-line);
     position: relative;
 }
+.ag-option-row--choice:disabled { cursor: default; opacity: 0.6; }
 .ag-option-row--on .ag-option-radio { border-color: var(--ag-terracotta); }
 .ag-option-row--on .ag-option-radio::after {
     content: "";

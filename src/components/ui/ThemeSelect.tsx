@@ -1,6 +1,6 @@
 'use client'
 
-import OptionSection from "@/components/ui/OptionSection";
+import OptionChoiceSection from "@/components/ui/OptionChoiceSection";
 import { themesForGame } from "@/utils/ui/gameThemes";
 
 interface ThemeSelectProps {
@@ -25,7 +25,7 @@ export default function ThemeSelect({ gameUrl, value, onChange }: ThemeSelectPro
     if (themes.length < 2) return null;
 
     return (
-        <OptionSection
+        <OptionChoiceSection
             label="Theme"
             footer={
                 <p className="ag-hint">
@@ -33,27 +33,15 @@ export default function ThemeSelect({ gameUrl, value, onChange }: ThemeSelectPro
                     and the numbers are identical either way.
                 </p>
             }
-        >
-            {themes.map(theme => {
-                const on = theme.id === value;
-                return (
-                    <button
-                        key={theme.id}
-                        type="button"
-                        className={`ag-option-row ag-option-row--choice${on ? " ag-option-row--on" : ""}`}
-                        aria-pressed={on}
-                        onClick={() => onChange(theme.id)}
-                    >
-                        <span className="ag-option-glyph" aria-hidden="true">{theme.glyph}</span>
-                        <span className="ag-option-main">
-                            <span className="ag-option-title">{theme.name}</span>
-                            <span className="ag-option-desc">{theme.description}</span>
-                            {theme.note && <span className="ag-option-note">{theme.note}</span>}
-                        </span>
-                        <span className="ag-option-radio" />
-                    </button>
-                );
-            })}
-        </OptionSection>
+            value={value}
+            onChange={onChange}
+            choices={themes.map(theme => ({
+                id: theme.id,
+                label: theme.name,
+                description: theme.description,
+                note: theme.note,
+                glyph: theme.glyph,
+            }))}
+        />
     );
 }
