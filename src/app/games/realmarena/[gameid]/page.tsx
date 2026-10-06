@@ -445,7 +445,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.targets,
-                                damage: turn.damage,
+                                hpChange: turn.hpChange,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,
                             }}

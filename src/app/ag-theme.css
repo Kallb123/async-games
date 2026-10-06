@@ -5247,8 +5247,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
     --ra-range: oklch(0.6 0.19 35);
-    /* An HP bar's dark edge, and what a lined-up blow would take off it. */
+    /* An HP bar's dark edge and what a lined-up blow would take off it, and what a heal would give back. */
     --ra-hp-dark: oklch(0.1 0 0);
+    --ra-hp-light: oklch(1 0 0);
 }
 .ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
 .ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
@@ -5345,10 +5346,16 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-hp-edge { fill: none; stroke: var(--ra-hp-dark); stroke-width: 0.45; pointer-events: none; }
 /* Filled in its owner's colour (`colourFor`), as the figure is tinted. */
 .ag-ra-hp-fill { pointer-events: none; }
-/* The HP an action lined up on a character would take off, flashing black over the end of its bar. */
-.ag-ra-hp-loss { fill: var(--ra-hp-dark); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+/* What an action lined up on a character would do to its HP, flashing at the end of its
+   bar: black over what a blow would take off, white past it for what a heal gives back.
+   Held still half-way through the flash without motion. */
+.ag-ra-hp-loss,
+.ag-ra-hp-gain { pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+.ag-ra-hp-loss { fill: var(--ra-hp-dark); }
+.ag-ra-hp-gain { fill: var(--ra-hp-light); }
 @media (prefers-reduced-motion: reduce) {
-    .ag-ra-hp-loss { animation: none; opacity: 0.6; }
+    .ag-ra-hp-loss,
+    .ag-ra-hp-gain { animation: none; opacity: calc((1 + var(--ag-pulse-min)) / 2); }
 }
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */

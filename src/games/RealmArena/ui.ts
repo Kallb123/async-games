@@ -178,7 +178,7 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
     return facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
-/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP, which never takes it below empty. */
+/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
 export function hpFraction(fighter: Fighter, lost = 0): number {
     return Math.min(1, Math.max(0, fighter.hp - lost) / CHARACTERS[fighter.character].hp);
 }
