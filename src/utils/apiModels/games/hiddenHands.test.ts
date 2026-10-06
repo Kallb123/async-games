@@ -723,10 +723,12 @@ describe("Realm Arena's random co-op enemy", () => {
         expect(Object.keys(hidden).sort()).toEqual([
             "battleRounds", "blasted", "budget", "canUndo", "clouds", "coop",
             "difficulty", "fighters", "fog", "ghosts", "map", "mastery", "mission", "mustered",
-            "myMuster", "phase", "round", "scores", "size",
+            "myMuster", "nextWave", "phase", "round", "scores", "size",
         ]);
         // What the host chose in the open: every viewer's, the null viewer's included.
         expect(hidden).toMatchObject({ difficulty: "hard", size: "large" });
+        // In fog with the enemy unseen, the next wave's round and nothing of its size, which would name the faction.
+        expect(hidden.nextWave).toEqual({ round: 4 });
         expect(hidden).not.toHaveProperty("enemy");
         expect(hidden.fighters).toEqual([]);
         expect(hidden.ghosts).toEqual([]);
@@ -737,7 +739,8 @@ describe("Realm Arena's random co-op enemy", () => {
         // Match achievements run only after the battle ends. Completion lifts
         // the fog for the null viewer, revealing the enemy and every fighter.
         const complete = realmArenaStateToModel(game.specificGameState, null, null, true);
-        expect(Object.keys(complete).sort()).toEqual([...Object.keys(hidden), "enemy"].sort());
+        // The next wave goes with the battle: no wave is coming.
+        expect(Object.keys(complete).sort()).toEqual([...Object.keys(hidden).filter(key => key !== "nextWave"), "enemy"].sort());
         expect(complete.enemy).toBe("realm");
         expect(complete.fighters).toHaveLength(game.specificGameState.fighters.length);
         expect(complete.ghosts).toEqual([]);

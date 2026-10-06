@@ -3473,6 +3473,40 @@ read off the game-end replay with the rest of the record (§28):
   the enemy's with each wave marked where it landed (a pennant, `wave`), and
   *Enemies downed by wave*, a bar a wave stacked by who downed them.
 
+### 30.11 The team rallies, and the next wave is told
+
+Growing waves (§30.10) made the late rounds a grind the team could only lose
+slowly, and a wave's size and place were a surprise every time. Three changes
+give the team a little back.
+
+**The rally.** As each wave lands, every character of the team still standing
+regains half its HP, rounded down, never past full (`rally`). The downed stay
+down: only a Cleric raises them. The log says "The team rallies: everyone
+standing regains half their HP" after the wave's own line. It's a rule, so it
+takes a command version (§30.3): version 6. An End turn from before it lands a
+wave that heals nobody, on a replay too.
+
+**How many are coming.** The enemy's line on the scoreboard says the round the
+next wave lands and how many it would bring if it landed now
+(`nextWaveOf`, on the wire as `nextWave`): each warband's strength for that
+wave, less who of it is standing, as far as its zone has room — what
+`waveOf` would place. It moves as the team downs the enemy, which is the
+point. In fog of war the team can't count who is down out of sight, so it's
+told only the most the wave could bring ("up to 10"), and while a random enemy
+is unseen not even that: a squad's size names its faction (§29.3). Absent
+outside Hold Out's battle, after the last wave, and once the battle is over.
+
+**Where they'll land.** The round before a wave, every warband's deployment
+zone is lit on the board, breathing, in its colour: the area, not the squares
+a fresh character will take. The zones are the battlefield's, public from the
+start, so this tells nobody anything new — it only says when to look.
+
+**Tests.** The rally heals by half rounded down, never past full and never
+the downed, and an End turn of version 5 heals nobody; the count follows who
+is down, is a ceiling in fog and absent while a random enemy is unseen, and
+goes once the battle is over (`coop.test.ts`, and the null viewer's response
+pinned in `hiddenHands.test.ts`).
+
 ---
 
 ## 31. The Swarm: a second faction (B6)
@@ -3662,3 +3696,4 @@ Realm, its sibling in the same world.
 | 1.46 | The warbands plan about three times quicker, every choice unchanged (§29.7): a turn keeps each square's Exposure and Threat, and Hold Out's walk to the team, from one plan to the next (`TurnMemo`); that walk is one search from every hunted square (`costsFrom`); and the path search, the copy an action resolves on, the smoke check and the walk for cover each do less. |
 | 1.47 | Growing waves, and Hold Out's own result (§30.10): every wave brings a warband one character more than the last (command version 5), and the result page tells a battle of Hold Out by its waves — how it ended, what each wave brought and how many of it the team downed, and who stood each round. |
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
+| 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |

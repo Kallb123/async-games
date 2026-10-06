@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import { stripRecordedRandomness } from "@/utils/apiModels/gameCommand";
-import { FACTION_IDS, FACTIONS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
+import { CHARACTERS, FACTION_IDS, FACTIONS, musterBudget, REALM, warbandBudget, type BattleSize, type Difficulty } from "./characters";
 import { battlefieldById, mapFor } from "./maps";
 import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { nextWaveOf, RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
     battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
 } from "./rules";
@@ -285,6 +285,81 @@ describe("Hold Out's growing waves (§30.10)", () => {
                 }
             }
         }
+    });
+});
+
+describe("Hold Out's rally and the next wave told (§30.11)", () => {
+    const holdOut = (fog = false) => makeGame(["a", "b"], {}, { fog, coop: { enemy: "realm", mission: "holdOut" } });
+    const team = (game: RealmArenaTestGame) => game.specificGameState.fighters.filter(fighter => !isWarband(fighter.owner));
+
+    /** Ends round three with the team hurt and the enemy off the field, so the warbands' own turns can't touch anyone, and lands round four's wave. */
+    async function landRoundFour(game: RealmArenaTestGame, version?: number): Promise<void> {
+        const gs = game.specificGameState;
+        gs.roundsPlayed = 2;
+        gs.fighters.forEach(fighter => { if (isWarband(fighter.owner)) fighter.hp = 0; });
+        const [hurt, wounded, down] = team(game);
+        hurt.hp = 1;
+        wounded.hp = CHARACTERS[wounded.character].hp - 1;
+        down.hp = 0;
+        const a = endTurnBy("a"), b = endTurnBy("b");
+        if (version !== undefined) Object.assign(a, { version }), Object.assign(b, { version });
+        await play(game, a);
+        await play(game, b);
+        expect(gs.roundsPlayed).toBe(3);
+    }
+
+    it("heals everyone of the team standing by half their HP, rounded down and never past full, as a wave lands", async () => {
+        const game = holdOut();
+        await musterAll(game);
+        await landRoundFour(game);
+        const [hurt, wounded, down, ...rest] = team(game);
+        expect(hurt.hp).toBe(1 + Math.floor(CHARACTERS[hurt.character].hp / 2));
+        expect(wounded.hp).toBe(CHARACTERS[wounded.character].hp);
+        expect(down.hp).toBe(0);
+        for (const fighter of rest) expect(fighter.hp).toBe(CHARACTERS[fighter.character].hp);
+        expect(game.gameState.history.map(entry => entry.text)).toContain("The team rallies: everyone standing regains half their HP");
+    });
+
+    it("heals nobody under an End turn from before the rally, on a replay too", async () => {
+        const game = holdOut();
+        await musterAll(game);
+        await landRoundFour(game, 5);
+        expect(team(game)[0].hp).toBe(1);
+        expect(game.gameState.history.some(entry => entry.text.includes("rallies"))).toBe(false);
+    });
+
+    it("tells the team the next wave's round and how many it would bring now", async () => {
+        const game = holdOut();
+        await musterAll(game);
+        const gs = game.specificGameState;
+        // Nobody down: each warband's wave brings only the one character more.
+        expect(nextWaveOf(gs)).toEqual({ round: 4, arriving: 2 });
+        gs.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
+        expect(nextWaveOf(gs)).toEqual({ round: 4, arriving: 3 });
+        expect(gameStateToModel(gs, "a", null).nextWave).toEqual({ round: 4, arriving: 3 });
+        expect(gameStateToModel(gs, "a", null, true)).not.toHaveProperty("nextWave");
+        gs.roundsPlayed = 12;
+        expect(nextWaveOf(gs)).toBeUndefined();
+    });
+
+    it("tells a team in fog only the most the wave could bring", async () => {
+        const game = holdOut(true);
+        await musterAll(game);
+        const gs = game.specificGameState;
+        gs.fighters.find(fighter => isWarband(fighter.owner))!.hp = 0;
+        expect(nextWaveOf(gs)).toEqual({ round: 4, arriving: 2 * (REALM.readyMade[80].length + 1), upTo: true });
+    });
+
+    it("counts a random enemy's wave without fog, where it's seen from the start", async () => {
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm", random: true, mission: "holdOut" } });
+        await musterAll(game);
+        expect(nextWaveOf(game.specificGameState)).toEqual({ round: 4, arriving: 2 });
+    });
+
+    it("tells nothing outside Hold Out", async () => {
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
+        await musterAll(game);
+        expect(nextWaveOf(game.specificGameState)).toBeUndefined();
     });
 });
 

@@ -29,6 +29,7 @@ import {
     landedSmoke,
     lastWaveRound,
     musterRefusal,
+    nextWaveRound,
     newFighter,
     pickOf,
     readyMadeMuster,
@@ -862,13 +863,16 @@ export function waveStrength(squad: readonly CharacterId[], round: number, growi
     return [...squad, ...Array.from({ length: extra }, (_, k) => squad[k % squad.length])];
 }
 
-/** The reinforcements one warband can place in its deployment zone this wave. */
-export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean): Fighter[] {
+/**
+ * The reinforcements one warband can place in its deployment zone in the wave
+ * landing as `round` begins: the one landing now, unless told otherwise.
+ */
+export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing: boolean, round = gs.roundsPlayed + 1): Fighter[] {
     if (gs.coop?.mission !== "holdOut") return [];
     const warband = warbandsFor(gs.seats).indexOf(owner);
     if (warband < 0) return [];
     const field = battlefieldById(gs.map);
-    const planned = readyMadeMuster(field, gs.seats.length + warband, waveStrength(warbandSquad(gs), gs.roundsPlayed + 1, growing));
+    const planned = readyMadeMuster(field, gs.seats.length + warband, waveStrength(warbandSquad(gs), round, growing));
     const missing = [...planned];
     for (const fighter of gs.fighters.filter(one => one.owner === owner && isStanding(one))) {
         const index = missing.findIndex(pick => pick.character === fighter.character);
@@ -880,6 +884,23 @@ export function waveOf(gs: IRealmArenaSpecificGameState, owner: string, growing:
         .filter(square => !occupied.has(square));
     let nextId = Math.max(-1, ...gs.fighters.map(fighter => fighter.id)) + 1;
     return missing.slice(0, zone.length).map((pick, index) => newFighter(nextId++, owner, pick.character, zone[index], pick.item ?? null, pick.option));
+}
+
+/**
+ * The command version from which the team rallies as each Hold Out wave lands
+ * (§30.11): every character of it still standing regains half its HP, rounded
+ * down. An End turn played before it lands a wave that heals nobody, on a
+ * replay too. Never moves once shipped.
+ */
+const RALLYING_VERSION = 6;
+
+/** What the team's characters standing as a wave lands regain (§30.11): half their HP, rounded down, never past full. */
+function rally(gs: IRealmArenaSpecificGameState): void {
+    for (const fighter of gs.fighters) {
+        if (isWarband(fighter.owner) || !isStanding(fighter)) continue;
+        const full = CHARACTERS[fighter.character].hp;
+        fighter.hp = Math.min(full, fighter.hp + Math.floor(full / 2));
+    }
 }
 
 /** The wave due as the round `roundsPlayed` has just reached begins, if one is (§30.3). `version` is the End turn's that lands it. */
@@ -894,7 +915,39 @@ function landWave(data: IRealmArenaGameData, version: number): void {
     // The scheduled wave is public even when every deployment square is
     // blocked; its line must not reveal which hidden warbands found room.
     data.gameState.history.unshift({ text: `A fresh wave of ${enemyNameOf(enemyKnown(gs.coop) ? gs.coop.enemy : undefined)} arrives` });
+    if (version >= RALLYING_VERSION) {
+        rally(gs);
+        data.gameState.history.unshift({ text: "The team rallies: everyone standing regains half their HP" });
+    }
     noteSighting(gs);
+}
+
+/**
+ * The next Hold Out wave as the team is told of it (§30.11): the round it
+ * lands in, and how many of the enemy it would bring if it landed now — the
+ * whole battlefield in sight. In fog of war the team can't count who is down
+ * or where there's room, so it's told only how many it brings at most, and
+ * nothing at all while a random enemy is unseen: its size would name the
+ * faction. Undefined outside Hold Out's battle, and once the last has landed.
+ */
+export function nextWaveOf(gs: IRealmArenaSpecificGameState): { round: number; arriving?: number; upTo?: true } | undefined {
+    if (gs.coop?.mission !== "holdOut" || gs.phase !== "battle") return undefined;
+    const rounds = battleRounds(gs.seats.length);
+    const round = nextWaveRound(gs.roundsPlayed + 1, rounds);
+    if (round === undefined) return undefined;
+    if (enemyHidden(gs.coop)) return { round };
+    // Growing: every End turn played from here on is the current version's.
+    // A count the placement can't work out costs the line its count, never
+    // the board its response.
+    if (!gs.fog) {
+        try {
+            return { round, arriving: warbandsFor(gs.seats).reduce((sum, owner) => sum + waveOf(gs, owner, true, round).length, 0) };
+        } catch (error) {
+            console.error("Realm Arena: the next wave couldn't be counted", error);
+            return { round };
+        }
+    }
+    return { round, arriving: warbandsFor(gs.seats).length * waveStrength(warbandSquad(gs), round).length, upTo: true };
 }
 
 // ─── Commands ───────────────────────────────────────────────────────────────

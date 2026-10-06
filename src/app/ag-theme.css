@@ -5284,6 +5284,17 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     stroke-dasharray: 2 1.5;
     pointer-events: none;
 }
+/* A warband's zone the round before Hold Out's next wave lands in it (§30.11): lit, and breathing. */
+.ag-ra-deployment--wave {
+    fill: color-mix(in oklch, var(--ra-seat) 38%, transparent);
+    stroke: var(--ra-seat);
+    stroke-width: 1;
+    --ag-pulse-min: 0.5;
+    animation: ag-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-deployment--wave { animation: none; }
+}
 /* The keep's ruins: what Hold the Centre scores (§13.7). */
 .ag-ra-centre {
     fill: color-mix(in oklch, var(--ra-centre) 18%, transparent);

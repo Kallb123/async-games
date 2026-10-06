@@ -7,7 +7,7 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, budgetOf, enemyHidden, toldTo, warbandBudgetOf } from "./RealmArenaLogic";
+import { battleOf, budgetOf, enemyHidden, nextWaveOf, toldTo, warbandBudgetOf } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
@@ -495,6 +495,7 @@ export function gameStateToModel(
     const musters = gs.musters ?? [];
     const own = gs.phase === "muster" ? musters.find(muster => muster.owner === viewerId) : undefined;
     const view = viewOf(battleOf(gs, complete), viewerId);
+    const nextWave = complete ? undefined : nextWaveOf(gs);
     return {
         map: gs.map,
         phase: gs.phase,
@@ -507,6 +508,7 @@ export function gameStateToModel(
         // What the muster offers (B6): the host's choice, which nobody needs once the squads are on the field.
         ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
+        ...(nextWave ? { nextWave } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
         // fog lifts as the battle ends, the faction with it. Never a view with

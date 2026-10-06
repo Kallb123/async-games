@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement } from "./ui";
+import { abilityWait, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -502,5 +502,14 @@ describe("battleCues", () => {
         flights.forEach((flight, i) => expect(Math.abs(flight.start + flight.land - texts[i].start)).toBeLessThanOrEqual(1));
         // Still in order, and still one after another.
         expect(texts.every((cue, i) => i === 0 || cue.start > texts[i - 1].start)).toBe(true);
+    });
+});
+
+describe("the next wave on the scoreboard (§30.11)", () => {
+    it("says when it lands, and how many it brings or could", () => {
+        expect(waveLineOf({ round: 7, arriving: 3 }, 4)).toBe("next wave 7 · 3 coming");
+        expect(waveLineOf({ round: 7, arriving: 10, upTo: true }, 6)).toBe("wave next round · up to 10 coming");
+        expect(waveLineOf({ round: 4 }, 1)).toBe("next wave 4");
+        expect(waveLineOf(undefined, 14)).toBe("final wave landed");
     });
 });
