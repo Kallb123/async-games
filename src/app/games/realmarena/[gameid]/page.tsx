@@ -207,6 +207,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (selected) setPicked({ squares: [selected.square, target.square], key: `target:${target.id}:${Date.now()}` });
     };
     const endTurn = () => {
+        // AP left unspent is a turn ended by mistake as often as on purpose,
+        // so it's asked about — even where it would go on watch.
+        const unspent = fighters.filter(fighter => fighter.owner === myUserId && isStanding(fighter) && fighter.ap > 0);
+        if (unspent.length > 0) {
+            const left = unspent.map(fighter => `${capitalise(fighterName(fighters, fighter))} (${fighter.ap} AP)`).join(', ');
+            if (!window.confirm(`Still to spend: ${left}. End your turn anyway?`)) return;
+        }
         const command = new RealmArenaEndTurn();
         command.keepStill = keepStill;
         // Burning, as the next player's turn begins (§20.2).
@@ -446,11 +453,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
                     {/* What's used most sits nearest the board (§17.3 PR 7):
                         End turn, then whatever is lined up and who it could be
-                        aimed at, ahead of the squad and the actions. */}
+                        aimed at, then the selected character's actions, all
+                        ahead of the squad. */}
                     {battleTurn && (
                         <div className="ag-section ag-stack">
                             <RealmArenaTurnEnd
                                 onEndTurn={endTurn}
+                                onDeselect={selected ? () => setSelectedId(null) : undefined}
                                 canUndo={gs.canUndo}
                                 onUndo={undo}
                                 undoPending={pendingTarget === 'undo'}
@@ -461,6 +470,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 ? <RealmArenaAim draft={turn} battle={battle} player={myUserId} nameFor={playerName} pendingTarget={pendingTarget} onFocus={focusTarget} />
                                 : <p className="ag-hint">Tap one of your units below, or on the board, to act with it. Each has its own {ACTION_POINTS} AP.</p>}
                         </div>
+                    )}
+
+                    {selected && (
+                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
+                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
+                        </RealmArenaFighterCard>
                     )}
 
                     {!mustering && (
@@ -504,12 +519,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                     : `${currentTurnName} is mustering. Your turn to muster is coming, and no squad is seen until every player has.`}
                             </div>
                         </div>
-                    )}
-
-                    {selected && (
-                        <RealmArenaFighterCard fighter={selected} label={`${fighterName(fighters, selected)} · ${playerName(selected.owner)}`}>
-                            {turn && <RealmArenaTurnSheet draft={turn} battle={battle} player={myUserId} pendingTarget={pendingTarget} />}
-                        </RealmArenaFighterCard>
                     )}
 
                     {battleTurn && lastEvents.length > 0 && (

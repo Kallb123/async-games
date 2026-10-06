@@ -5249,13 +5249,22 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-game--realmarena .ag-stat { background: var(--ag-surface); border-radius: 9px; }
 .ag-game--realmarena .ag-section .ag-stat-row { background: none; padding: 0 0 8px; }
 .ag-game--realmarena .ag-board-tag { background: var(--ra-oxblood); color: var(--ag-on-dark); }
-.ag-game--realmarena .ag-board-area { background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night)); }
-/* The battlefield floats on the night: an isometric map is a diamond, and
-   what's round it is the frame, not more ground. */
+.ag-game--realmarena .ag-board-area {
+    padding: 4px 0;
+    background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night));
+}
+/* The battlefield floats on the night, edge to edge: an isometric map is a
+   diamond, and what's round it is already night, so on a phone every pixel
+   of width goes to the squares rather than to a frame, its padding and its
+   rounded corners. */
 .ag-realmarena-frame {
     background: var(--ra-night);
-    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.28), 0 4px 0 var(--ra-oxblood-deep);
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
 }
+.ag-realmarena-frame .ag-board-scroll,
+.ag-realmarena-frame svg { border-radius: 0; }
 
 /* ---- The battlefield ---- */
 /* Terrain is drawn from its tile art (src/games/RealmArena/art.ts). What's
