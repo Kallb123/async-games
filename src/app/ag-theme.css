@@ -5240,6 +5240,11 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
     --ra-range: oklch(0.6 0.19 35);
+    /* HP bars: the viewer's own, a teammate's, an enemy's, and a lined-up blow's loss. */
+    --ra-hp-own: oklch(0.72 0.17 145);
+    --ra-hp-ally: oklch(0.65 0.15 250);
+    --ra-hp-enemy: oklch(0.6 0.2 27);
+    --ra-hp-loss: oklch(0.1 0 0);
 }
 .ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
 .ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
@@ -5333,7 +5338,16 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-marker--watch { stroke: var(--ag-on-dark); }
 .ag-ra-marker--sealed { stroke: var(--ra-oxblood); }
 .ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
-.ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
+/* The viewer's own characters' HP is green, a teammate's blue, an enemy's red. */
+.ag-ra-hp-fill { pointer-events: none; }
+.ag-ra-hp-fill--own { fill: var(--ra-hp-own); }
+.ag-ra-hp-fill--ally { fill: var(--ra-hp-ally); }
+.ag-ra-hp-fill--enemy { fill: var(--ra-hp-enemy); }
+/* The HP an action lined up on a character would take off, flashing black over the end of its bar. */
+.ag-ra-hp-loss { fill: var(--ra-hp-loss); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-hp-loss { animation: none; opacity: 0.6; }
+}
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */
 .ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }

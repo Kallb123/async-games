@@ -9,7 +9,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, allied, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -170,9 +170,17 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
     return facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
-/** How full a character's HP bar is, 0–1. */
-export function hpFraction(fighter: Fighter): number {
-    return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
+/** Whose a character is to the viewer, which colours its HP bar: their own, a teammate's (§29.6), or an enemy's. */
+export type Allegiance = "own" | "ally" | "enemy";
+
+export function allegianceOf(state: Pick<BattleState, "sides">, viewerId: string, owner: string): Allegiance {
+    if (owner === viewerId) return "own";
+    return allied(state, viewerId, owner) ? "ally" : "enemy";
+}
+
+/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP, which never takes it below empty. */
+export function hpFraction(fighter: Fighter, lost = 0): number {
+    return Math.min(1, Math.max(0, fighter.hp - lost) / CHARACTERS[fighter.character].hp);
 }
 
 /** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */

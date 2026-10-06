@@ -429,6 +429,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
                             waveDue={waveDue}
+                            showCentre={gs.mission !== 'holdOut'}
                             viewerId={myUserId}
                             colourFor={colourFor}
                             nameFor={playerName}
@@ -443,6 +444,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.targets,
+                                damage: turn.damage,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,
                             }}

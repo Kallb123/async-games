@@ -1,7 +1,7 @@
 'use client'
 import React from 'react';
 import { EFFECTS, ITEMS, type EffectId, type ItemId } from '@/games/RealmArena/characters';
-import { EFFECT_ART, ITEM_ART } from '@/games/RealmArena/art';
+import { EFFECT_ART, ITEM_ART, WATCH_ART } from '@/games/RealmArena/art';
 import { SpriteImage, SpriteUse } from './RealmArenaTerrain';
 
 // The drawn marks (docs/games/realm-arena.md §20.2, §21.2): each status
@@ -13,6 +13,8 @@ interface RealmArenaEffectMarksProps {
     /** The board's id, which `RealmArenaTerrainDefs` defined its sprites under. */
     id: string;
     effects: readonly EffectId[];
+    /** On watch (§13.4): its mark heads the column, so it never lands on an effect's. */
+    watching?: boolean;
     /** The middle of the column, in board units. */
     x: number;
     y: number;
@@ -21,11 +23,12 @@ interface RealmArenaEffectMarksProps {
     step: number;
 }
 
-/** A character's effects on the board: a column of marks centred on (`x`, `y`). */
-export function RealmArenaEffectMarks({ id, effects, x, y, size, step }: RealmArenaEffectMarksProps) {
-    const top = y - (step * (effects.length - 1)) / 2;
-    return effects.map((effect, i) => (
-        <SpriteUse key={effect} className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[effect]} x={x} y={top + i * step} size={size} />
+/** A character's watch and effects on the board: a column of marks centred on (`x`, `y`). */
+export function RealmArenaEffectMarks({ id, effects, watching = false, x, y, size, step }: RealmArenaEffectMarksProps) {
+    const sprites = [...(watching ? [WATCH_ART] : []), ...effects.map(effect => EFFECT_ART[effect])];
+    const top = y - (step * (sprites.length - 1)) / 2;
+    return sprites.map((sprite, i) => (
+        <SpriteUse key={i} className="ag-ra-figure-mark" id={id} sprite={sprite} x={x} y={top + i * step} size={size} />
     ));
 }
 

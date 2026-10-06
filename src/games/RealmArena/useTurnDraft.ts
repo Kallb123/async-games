@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, type Ability } from "./characters";
-import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
+import { ABILITIES, type Ability, type Item } from "./characters";
+import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, shotOdds, weaponOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
 
@@ -68,6 +68,9 @@ function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square
 /** What blasts away low cover where it's aimed (§22): the ability, or the item thrown. */
 const BLASTER: Readonly<Record<Exclude<AtSquare, "throw">, Ability>> = { fireball: ABILITIES.fireball, demolish: ABILITIES.demolish };
 
+/** What lands where a fireball, a throw or a Demolish is aimed: the ability, or the item thrown. */
+const landsOf = (fighter: Fighter, aim: AtSquare): Ability | Item | undefined => aim === "throw" ? itemOf(fighter) : BLASTER[aim];
+
 /** The action a draft has lined up, once it has everything the action needs. */
 function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Square[] | undefined): Action | null {
     switch (aim) {
@@ -79,6 +82,31 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
         case "cleave": return targets.length === 2 ? { kind: "cleave", fighter: fighter.id, targets } : null;
         default: return targets.length === 1 ? { kind: aim, fighter: fighter.id, target: targets[0] } : null;
     }
+}
+
+/** The aims that strike or shoot the characters they're lined up on, rather than help them. */
+const HURTS: readonly Aim[] = ["attack", "aimedShot", "cripplingShot", "cleave", "shieldBash", "rend"];
+
+/**
+ * What a lined-up action would do to each character it hurts, on a hit, by
+ * id: a shot's damage at its odds, a strike's, or what a fireball, a throw or
+ * a Demolish lands on everyone standing in `area`. What the board flashes off
+ * their HP bars.
+ */
+export function damagePreview(battle: BattleState, fighter: Fighter, { aim, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
+    if (area && isAtSquare(aim)) {
+        const damage = landsOf(fighter, aim)?.damage ?? 0;
+        const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
+        return new Map(caught.map(one => [one.id, damage]));
+    }
+    if (!HURTS.includes(aim)) return new Map();
+    return new Map(targets.flatMap((id): [number, number][] => {
+        const target = fighterById(battle, id);
+        if (!target) return [];
+        if (aim === "shieldBash" || aim === "rend") return [[id, ABILITIES[aim].damage ?? 0]];
+        const shot = shotOf(aim);
+        return [[id, (shot && shotOdds(battle, fighter, target, shot)?.damage) ?? weaponOf(fighter).damage]];
+    }));
 }
 
 /** Where a character would stand once the move lined up is made, and the AP it would have left there. */
@@ -220,6 +248,7 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
     const targetKind = targetKindOf(aim);
     const candidates = targetKind ? targetsOf(battle, player, fighter, targetKind) : [];
     const context: TapContext = { battle, fighter, draft, reach, candidates };
+    const area = isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null;
 
     const send = () => {
         if (action && verdict && !("refused" in verdict)) onAct(action);
@@ -254,9 +283,11 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         after: afterMove(fighter, path, verdict),
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
         /** Every square a lined-up fireball, throw or Demolish lands on. */
-        area: isAtSquare(aim) && draft.square !== null ? landing(battle, fighter, aim, draft.square) : null,
+        area,
+        /** What the action lined up would take off each character it hurts, on a hit. */
+        damage: damagePreview(battle, fighter, draft, area),
         /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
-        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, aim === "throw" ? itemOf(fighter) : BLASTER[aim], draft.square) : null,
+        blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, landsOf(fighter, aim), draft.square) : null,
         action,
         verdict,
         send,

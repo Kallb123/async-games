@@ -2,13 +2,14 @@
 <!--
   Realm Arena's status effect marks (docs/games/realm-arena.md §20): one 96px
   badge a cell, left to right in `EFFECT_IDS` order — burning, stunned, slowed,
-  marked, corroded, hunkered down, shield wall. Each is a coin with a dark rim, so it
+  marked, corroded, hunkered down, shield wall — then, after the effects, the
+  watch a character banks AP on for overwatch or guard (`WATCH_ART`). Each is a coin with a dark rim, so it
   reads on grass, stone or a figure's own colour at a few pixels across, and
   one bold glyph in white.
 
   `npm run ra-marks` renders this to public/art/realmarena/effects.png.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="672" height="96" viewBox="0 0 672 96">
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="96" viewBox="0 0 768 96">
   <defs>
     <radialGradient id="sheen" cx="0.38" cy="0.3" r="0.75">
       <stop offset="0" stop-color="#fff" stop-opacity="0.38"/>
@@ -93,6 +94,16 @@
       <path d="M48 16 L72 25 V45 C72 62 62 73 48 80 C34 73 24 62 24 45 V25 Z"
             fill="#fff" stroke="#24150f" stroke-width="4"/>
       <path d="M48 23 V73 M31 43 H65" fill="none" stroke="#53677e" stroke-width="6"/>
+    </g>
+
+    <!-- On watch (overwatch or guard): an open eye. -->
+    <g transform="translate(672 0)">
+      <circle cx="48" cy="48" r="42" fill="#3c4f9a"/>
+      <use href="#rim"/>
+      <path d="M16 48 C26 31 37 25 48 25 C59 25 70 31 80 48 C70 65 59 71 48 71 C37 71 26 65 16 48 Z"
+            fill="#fff" stroke="#24150f" stroke-width="4"/>
+      <circle cx="48" cy="48" r="13" fill="#3c4f9a" stroke="#24150f" stroke-width="4"/>
+      <circle cx="48" cy="48" r="5" fill="#24150f"/>
     </g>
   </g>
 </svg>
