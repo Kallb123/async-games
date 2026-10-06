@@ -55,7 +55,7 @@ import {
     type Roll,
 } from "@/games/RealmArena/rules";
 import { facingTowards, type Facing, type Square } from "@/utils/games/battlefield/terrain";
-import { nextAction } from "@/games/RealmArena/ai";
+import { nextAction, turnMemo } from "@/games/RealmArena/ai";
 import { playerHistory, tellEveryone, userToken, type IHistoryEntry } from "@/utils/games/history";
 import { randomInt } from "@/utils/games/random";
 import { endAsTeam } from "@/utils/games/endAsTeam";
@@ -1311,6 +1311,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
 
     const cap = ACTION_POINTS * battleOf(gs).fighters.filter(fighter => fighter.owner === owner && isStanding(fighter)).length;
     const deadline = Date.now() + WARBAND_DEADLINE_MS;
+    const memo = turnMemo();
     for (let step = 0; !over(); step++) {
         if (!moves.recorded && (step === cap || Date.now() > deadline)) break;
         let action: unknown, applied: Applied | undefined;
@@ -1321,7 +1322,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
         try {
             action = moves.recorded ? moves.recorded[step] : nextAction(
                 viewOf(battleOf(gs), owner), owner, gs.roundsPlayed + 1,
-                gs.coop?.mission === "holdOut" ? gs.sightings?.[owner] ?? [] : undefined,
+                gs.coop?.mission === "holdOut" ? gs.sightings?.[owner] ?? [] : undefined, memo,
             );
             if (action === undefined) break;
             applied = applyAction(data, owner, action, moves.roll);

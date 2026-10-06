@@ -227,10 +227,13 @@ export interface Kit {
     abilities: readonly AbilityId[];
 }
 
+/** Each character's kit with no option, made once: the computer asks for a weapon many thousand times a turn. */
+const STARTER_KITS = Object.fromEntries(Object.entries(CHARACTERS).map(([id, { weapon, abilities }]) => [id, Object.freeze({ weapon, abilities })])) as Record<CharacterId, Kit>;
+
 export function kitOf(character: CharacterId, option?: OptionId): Kit {
     const { weapon, abilities } = CHARACTERS[character];
     const swap: CharacterOption | undefined = option ? OPTIONS[option] : undefined;
-    if (!swap || swap.character !== character) return { weapon, abilities };
+    if (!swap || swap.character !== character) return STARTER_KITS[character];
     return "weapon" in swap
         ? { weapon: swap.weapon, abilities }
         : { weapon, abilities: abilities.map(id => id === swap.replaces ? swap.ability : id) };

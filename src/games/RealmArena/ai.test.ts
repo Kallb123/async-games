@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
-import { buildBattlefield, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { battlefieldWith, buildBattlefield, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { FACTIONS, type CharacterId } from "./characters";
 import { FOUR_GATE_FORT } from "./maps/fourGateFort";
 import {
-    ACTION_POINTS, act, areaAround, check, endTurn, newFighter, reactionsTo, readyMadeMuster, startTurn, viewOf,
+    ACTION_POINTS, act, areaAround, blastedIn, check, endTurn, newFighter, reactionsTo, readyMadeMuster, startTurn, viewOf,
     type Action, type BattleState, type Fighter,
 } from "./rules";
-import { nextAction } from "./ai";
+import { nextAction, turnMemo } from "./ai";
 
 // docs/games/realm-arena.md §29.7, §29.11: the computer's planner. Each puzzle
 // is a small battle with one right answer, set up for the warband "ai:0" to
@@ -199,7 +199,10 @@ describe("nextAction's pace (§29.7)", () => {
             state = { ...state, fighters: startTurn(state, owner).fighters };
             const start = performance.now();
             if (owner === AI) {
-                for (let action = nextAction(viewOf(state, AI), AI, round); action; action = nextAction(viewOf(state, AI), AI, round)) {
+                // As the turn loop plans it: one memo for the whole turn.
+                const memo = turnMemo();
+                const plan = () => nextAction(viewOf(state, AI), AI, round, undefined, memo);
+                for (let action = plan(); action; action = plan()) {
                     state = { ...state, fighters: act(state, AI, action, () => 50).fighters };
                 }
             }
@@ -215,4 +218,59 @@ describe("nextAction's pace (§29.7)", () => {
         expect(times.reduce((total, ms) => total + ms, 0) / times.length).toBeLessThan(250);
         expect(Math.max(...times)).toBeLessThan(500);
     });
+});
+
+describe("a turn's memo (§29.7)", () => {
+    // What the memo keeps is good only while nothing it was worked out from
+    // has changed. Here warbands' whole turns are planned with one, and each
+    // action checked against a plan made without it, through moves, hits,
+    // overwatch, blasts and knock-outs, on either mission. The two sides start in
+    // reach of each other, among walls and low cover, so it comes to blows.
+    const field = fieldOf([
+        "....................",
+        "...,....#....,......",
+        "........#...........",
+        "..,.........##...,..",
+        "....................",
+        "......,.......,.....",
+        "..##........#.......",
+        "...........,........",
+    ]);
+    it.each([
+        ["realm", "Hold the Centre"], ["swarm", "Hold the Centre"], ["realm", "Hold Out"], ["swarm", "Hold Out"],
+    ] as const)("never changes what a %s warband chooses, in %s", (faction, mission) => {
+        const team: [string, CharacterId[]][] = [["a", ["knight", "archer", "cleric"]], ["b", ["manAtArms", "mage", "scout"]]];
+        const warband = FACTIONS[faction].readyMade[80];
+        const fighters = [
+            ...team.flatMap(([owner, squad], row) => squad.map((character, i) => ready(row * 3 + i, owner, character, at(field, 2 + 2 * i, 3 * row + 1)))),
+            ...warband.map((character, i) => ready(6 + i, AI, character, at(field, 17 - 2 * (i % 3), 1 + 3 * Math.floor(i / 3)))),
+        ];
+        let state = battle(field, fighters);
+        const hunt = mission === "Hold Out" ? [] : undefined;
+        let roll = 0;
+        const seen = new Set<string>();
+        // Some cover blasted already, so every plan is handed a new copy of the map.
+        const blasted: Square[] = [at(field, 3, 1), at(field, 2, 3)];
+        state = { ...state, field: battlefieldWith(field, blasted) };
+        for (let round = 1; round <= 4; round++) {
+            for (const owner of ["a", "b", AI]) {
+                state = { ...state, fighters: startTurn(state, owner).fighters };
+                const memo = turnMemo();
+                for (let step = 0; owner === AI && step < 24; step++) {
+                    const action = nextAction(viewOf(state, AI), AI, round, hunt, memo);
+                    expect(action).toEqual(nextAction(viewOf(state, AI), AI, round, hunt));
+                    if (!action) break;
+                    // Rolls that hit, graze and miss in turn.
+                    const outcome = act(state, AI, action, () => [10, 75, 95][roll++ % 3]);
+                    outcome.events.forEach(event => seen.add(event.kind));
+                    // What's blasted is cleared from the ground, as the turn loop's battle does (§22).
+                    blasted.push(...blastedIn(outcome.events));
+                    state = { ...state, field: battlefieldWith(field, blasted), fighters: outcome.fighters };
+                }
+                state = { ...state, fighters: endTurn(state, owner, round).fighters };
+            }
+        }
+        expect(seen.has("shot") || seen.has("struck")).toBe(true);
+        expect(seen).toContain("downed");
+    }, 60_000);
 });

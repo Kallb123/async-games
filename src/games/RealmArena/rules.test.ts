@@ -217,6 +217,26 @@ describe("act", () => {
         expect(state.fighters).toEqual(before);
     });
 
+    it("never writes to anything inside the fighters it was given: cooldowns, effects, the spent and the hurt", () => {
+        const field = fieldOf();
+        const deepFreeze = <T>(value: T): T => {
+            if (value && typeof value === "object") Object.values(Object.freeze(value)).forEach(deepFreeze);
+            return value;
+        };
+        const state: BattleState = deepFreeze({ field, fighters: [
+            fighter(1, "a", "manAtArms", at(field, 0, 0), { option: "shieldBash" }),
+            fighter(2, "b", "archer", at(field, 1, 0), { woundedBy: ["c"] }),
+            fighter(3, "a", "cleric", at(field, 0, 1)),
+            fighter(4, "a", "knight", at(field, 1, 1), { hp: 0 }),
+        ] });
+        // A frozen fighter throws on any write, so these only pass on a copy.
+        const bashed = run(state, "a", { kind: "shieldBash", fighter: 1, target: 2 });
+        expect(bashed.byId(1).cooldowns.shieldBash).toBeGreaterThan(0);
+        expect(bashed.byId(2).effects.stunned).toBeGreaterThan(0);
+        expect(bashed.byId(2).woundedBy).toEqual(["c", "a"]);
+        expect(run(state, "a", { kind: "raise", fighter: 3, target: 4 }).byId(3).spent).toEqual(["raise"]);
+    });
+
     it("turns a mover to face the way it last stepped, and leaves anyone else facing as they were", () => {
         const field = fieldOf();
         const state: BattleState = { field, fighters: [fighter(1, "a", "scout", at(field, 0, 0)), fighter(2, "a", "knight", at(field, 5, 4), { facing: 6 })] };

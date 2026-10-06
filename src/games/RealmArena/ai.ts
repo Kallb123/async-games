@@ -30,15 +30,15 @@
 //
 // Pure and browser-safe, like rules.ts.
 
-import { DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
+import { costsFrom, DEFAULT_CLIMB, reachFrom, pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import { battlefieldWith, coordsOf, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, type AbilityId } from "./characters";
 import {
-    abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, isStanding,
+    abilitiesOf, act, allied, areaAround, ATTACK_AP, blastedIn, CENTRE, CENTRE_SCORES_FROM_ROUND, centrePoints, check, fighterById, hasEffect, isStanding, landedSmoke,
     moveAp, movementOf, reachOf, ROLL_SIDES, shotOdds, watchedSquares, weaponOf, weaponReaches,
     type Action, type BattleEvent, type BattleState, type Fighter, type FogGhost, type ShotOdds,
 } from "./rules";
-import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, standingAt, targetKindOf, targetsOf, type ActionKind } from "./tactics";
+import { ACTION_AIMS, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type ActionKind } from "./tactics";
 
 /**
  * What each term of a battle's score is worth (§29.7): the same for every
@@ -67,12 +67,53 @@ const MOVES_PLAYED_OUT = 12;
 /** What an action has to gain over stopping to be worth taking, so rounding never sends a pointless move. */
 const LEAST_GAIN = 1e-6;
 
+/**
+ * What a warband's turn keeps from one plan to the next (§29.7): planned
+ * again after every action, it would otherwise work out much the same things
+ * again each time. Made for each turn (`turnMemo`) and handed to every
+ * `nextAction` in it; a plan with one chooses exactly what a plan without it
+ * would, only sooner.
+ */
+export interface TurnMemo {
+    /**
+     * Each square's Exposure and Threat for a character standing on it
+     * (`harmAt`), by everything they read but where it stands now and the AP
+     * it has (`harmKnown`): neither of which they read, so they last while it
+     * moves, until it or an enemy is hurt, an enemy moves or comes into
+     * sight, a shield wall or a smoke cloud goes up or down, or the ground is
+     * blasted.
+     */
+    harm: Map<string, Map<Square, Harm>>;
+    /** The last walk from the squares hunted (§30.3), for each climb: the team stands still through a warband's turn, so plan after plan hunts the same squares. */
+    hunts: Map<number, { hunted: string; costs: Float64Array }>;
+    /** Each battlefield seen this turn, numbered by its place here for the keys above: a blast makes a new one. */
+    fields: Battlefield[];
+}
+
+export const turnMemo = (): TurnMemo => ({ harm: new Map(), hunts: new Map(), fields: [] });
+
+/**
+ * The number a turn knows a battlefield by: the same for the same ground.
+ * Once anything is blasted, every plan is handed a new copy of the map
+ * (`battlefieldWith`), so it's told by its squares rather than by which copy
+ * it is.
+ */
+function fieldId(memo: TurnMemo, field: Battlefield): number {
+    const same = (seen: Battlefield) => seen === field || (seen.width === field.width && seen.tiles.length === field.tiles.length
+        && seen.tiles.every((tile, square) => tile.terrain === field.tiles[square].terrain && tile.elevation === field.tiles[square].elevation));
+    const id = memo.fields.findIndex(same);
+    if (id >= 0) return id;
+    memo.fields.push(field);
+    return memo.fields.length - 1;
+}
+
 /** What a warband plans with: its side's view, whose turn it is, and the round. */
 interface Plan {
     /** The view it was handed. */
     state: BattleState;
     owner: string;
     round: number;
+    memo: TurnMemo;
     /** How far a character stands from the centre, in movement points. */
     toCentre: (fighter: Fighter) => number;
     /** Every square a move by one of its characters would set off a reaction on (`watchedSquares`): worked out once, when a move first asks. */
@@ -85,9 +126,9 @@ interface Plan {
  * `view` is the battle as `owner`'s side sees it (`viewOf`), and `round` the
  * battle round, counted from 1. Never anything `check` refuses.
  */
-export function nextAction(view: BattleState, owner: string, round: number, hunt?: readonly FogGhost[]): Action | undefined {
+export function nextAction(view: BattleState, owner: string, round: number, hunt?: readonly FogGhost[], memo: TurnMemo = turnMemo()): Action | undefined {
     // A round that isn't one would score every battle NaN, which nothing beats.
-    const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, hunt);
+    const plan = planFor(view, owner, Number.isFinite(round) ? Math.max(1, round) : 1, memo, hunt);
     let best: Action | undefined;
     let bestScore = score(plan, plan.state, []) + LEAST_GAIN;
     const ready = plan.state.fighters.filter(fighter => fighter.owner === owner && isStanding(fighter) && fighter.ap > 0).sort((a, b) => a.id - b.id);
@@ -103,7 +144,7 @@ export function nextAction(view: BattleState, owner: string, round: number, hunt
     return best;
 }
 
-function planFor(view: BattleState, owner: string, round: number, hunt?: readonly FogGhost[]): Plan {
+function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo, hunt?: readonly FogGhost[]): Plan {
     // A view is already only what its side can see, and seeing it again
     // changes nothing (`viewOf`): dropping the fog spares every `check` the
     // planner asks from working that out again. It adds nothing it didn't see.
@@ -118,21 +159,15 @@ function planFor(view: BattleState, owner: string, round: number, hunt?: readonl
     const hunted = hunt === undefined ? [] : seenEnemies.length > 0 ? seenEnemies.map(fighter => fighter.square) : hunt.map(ghost => ghost.square);
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
     const centre = new Set(objective);
-    const huntWalks = new Map<number, Float64Array>();
+    const huntKey = `${fieldId(memo, field)}:${[...hunted].sort((a, b) => a - b).join()}`;
     const toCentre = (fighter: Fighter): number => {
         if (centre.size === 0 || centre.has(fighter.square)) return 0;
         const climb = CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB;
-        let costs = huntWalks.get(climb);
-        if (hunted.length > 0 && !costs) {
-            const walks = objective.map(square => reachFrom(field, square, Infinity, { climb }).costs);
-            costs = Float64Array.from({ length: field.tiles.length }, (_, square) => Math.min(...walks.map(walk => walk[square])));
-            huntWalks.set(climb, costs);
-        }
-        const cost = hunted.length > 0 ? costs![fighter.square] : centreWalk(field, climb)[fighter.square];
+        const cost = (hunted.length > 0 ? huntWalk(memo, field, hunted, huntKey, climb) : centreWalk(field, climb))[fighter.square];
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
     let watched: ReadonlySet<Square> | undefined;
-    return { state, owner, round, toCentre, watched: () => watched ??= watchedSquares(state, owner) };
+    return { state, owner, round, memo, toCentre, watched: () => watched ??= watchedSquares(state, owner) };
 }
 
 /**
@@ -154,6 +189,22 @@ function centreWalk(field: Battlefield, climb: number): Float64Array {
         walks.set(climb, costs);
     }
     return costs;
+}
+
+/**
+ * The walk to every square of a battlefield from the nearest of the squares a
+ * warband hunts (§30.3), for a character that climbs this far: a search of the
+ * whole map, like the centre's, so the turn keeps the last one it made. `key`
+ * names the battlefield (`fieldId`), which a blast changes, and the squares
+ * hunted, in any order they come in.
+ */
+function huntWalk(memo: TurnMemo, field: Battlefield, hunted: readonly Square[], key: string, climb: number): Float64Array {
+    let last = memo.hunts.get(climb);
+    if (last?.hunted !== key) {
+        last = { hunted: key, costs: costsFrom(field, hunted, { climb }) };
+        memo.hunts.set(climb, last);
+    }
+    return last.costs;
 }
 
 /** The square of an area nearest its middle that a character could stand on, or undefined for an area with none. */
@@ -235,10 +286,18 @@ function movesFor(plan: Plan, fighter: Fighter, kind: "move" | "sneak"): Action[
     const taken = new Set(state.fighters.filter(isStanding).map(one => one.square));
     const ranked: { square: Square; value: number }[] = [];
     const enemies = enemiesOf(state, fighter.owner);
+    const known = harmKnown(plan, fighter, enemies);
     reach.costs.forEach((cost, square) => {
         if (cost === Infinity || square === reach.from || taken.has(square) || !state.field.tiles[square].terrain.standable) return;
-        const { battle, moved } = standingAt(state, { ...fighter, ap: fighter.ap - moveAp(fighter, cost, sneaking) }, square);
-        ranked.push({ square, value: standingTerms(plan, battle, moved, enemies) });
+        // Read against the battle as it stands rather than one with the
+        // character moved (`standingAt`), which costs a copy of every fighter
+        // a square: its terms read the others' squares, and nobody else's
+        // reads where it stands — its own shield wall shelters its allies,
+        // never itself or an enemy.
+        const moved = { ...fighter, square, ap: fighter.ap - moveAp(fighter, cost, sneaking) };
+        let harm = known.get(square);
+        if (!harm) known.set(square, harm = harmAt(state, moved, enemies));
+        ranked.push({ square, value: standingTerms(plan, state, moved, enemies, harm) });
     });
     ranked.sort((a, b) => b.value - a.value || a.square - b.square);
     const moves: Action[] = [];
@@ -343,17 +402,49 @@ function score(plan: Plan, battle: BattleState, events: readonly BattleEvent[]):
  * has to walk to the centre, weighing more as the round the centre scores
  * from comes nearer.
  */
-function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[]): number {
-    let exposure = 0, threat = 0;
-    for (const enemy of enemies) {
-        exposure = Math.max(exposure, expectedHarm(battle, enemy, fighter));
-        threat = Math.max(threat, expectedHarm(battle, fighter, enemy));
-    }
+function standingTerms(plan: Plan, battle: BattleState, fighter: Fighter, enemies: readonly Fighter[], harm = harmAt(battle, fighter, enemies)): number {
+    const { exposure, threat } = harm;
     const armed = fighter.ap >= ATTACK_AP ? 1 : SPENT_THREAT;
     const urgency = Math.min(1, plan.round / CENTRE_SCORES_FROM_ROUND);
     return -WEIGHTS.exposure * exposure
         + WEIGHTS.threat * armed * threat
         - WEIGHTS.objective * urgency * plan.toCentre(fighter) / movementOf(fighter);
+}
+
+/** A character's Exposure and Threat where it stands (`standingTerms`). */
+interface Harm {
+    exposure: number;
+    threat: number;
+}
+
+function harmAt(battle: BattleState, fighter: Fighter, enemies: readonly Fighter[]): Harm {
+    let exposure = 0, threat = 0;
+    for (const enemy of enemies) {
+        exposure = Math.max(exposure, expectedHarm(battle, enemy, fighter));
+        threat = Math.max(threat, expectedHarm(battle, fighter, enemy));
+    }
+    return { exposure, threat };
+}
+
+/**
+ * Where a turn keeps a character's `harmAt` for each square (`TurnMemo`):
+ * named by everything `expectedHarm` reads but the character's square and
+ * AP — the character, every enemy, the shield walls and smoke clouds that
+ * change a shot's odds, the sides, and the battlefield. Anything that reads
+ * more must name it here too, which the memo's test holds.
+ */
+function harmKnown(plan: Plan, fighter: Fighter, enemies: readonly Fighter[]): Map<Square, Harm> {
+    const { state, memo } = plan;
+    // Of each character, only what a shot or a strike reads: not the way it
+    // faces, or what it has banked or spent, which every action changes, the
+    // overwatch a move sets off among them. Of the character itself, not
+    // where it stands either.
+    const read = ({ id, owner, character, option, hp, effects }: Fighter) => [id, owner, character, option ?? null, hp, effects];
+    const walls = state.fighters.filter(one => isStanding(one) && hasEffect(one, "shieldWall")).map(({ id, owner, square }) => [id, owner, square]);
+    const key = JSON.stringify([fieldId(memo, state.field), read(fighter), enemies.map(enemy => [...read(enemy), enemy.square]), walls, state.clouds ?? [], landedSmoke(state.fighters), state.sides ?? null]);
+    let known = memo.harm.get(key);
+    if (!known) memo.harm.set(key, known = new Map());
+    return known;
 }
 
 /** The enemies of a player standing in a battle: whoever its characters' Exposure and Threat are read against. */

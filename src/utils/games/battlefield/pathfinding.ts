@@ -64,19 +64,31 @@ function enterable(field: Battlefield, square: Square | undefined): square is Sq
  * above both ends.
  */
 export function stepCost(field: Battlefield, from: Square, to: Square, climb = DEFAULT_CLIMB): number | undefined {
-    const start = field.tiles[from];
-    if (start === undefined || !enterable(field, to) || !isNeighbour(field, from, to)) return undefined;
-    const end = field.tiles[to];
+    if (field.tiles[from] === undefined || !enterable(field, to) || !isNeighbour(field, from, to)) return undefined;
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    return neighbourStep(field, from, b.col - a.col, b.row - a.row, climb);
+}
+
+/**
+ * `stepCost` from a square to the neighbour `dc` columns and `dr` rows away,
+ * which the caller has already found is on the map: what the search asks of
+ * every step, so it takes the step as the search has it rather than working
+ * it out again from the squares.
+ */
+function neighbourStep(field: Battlefield, from: Square, dc: number, dr: number, climb = DEFAULT_CLIMB): number | undefined {
+    const to = from + dr * field.width + dc;
+    const start = field.tiles[from], end = field.tiles[to];
+    if (end.terrain.moveCost === Infinity) return undefined;
     const span = Math.abs(end.elevation - start.elevation);
     // A stair climbs its own height and no more: beside a cliff, the rest is a climb like any other.
-    const stair = [start, end].find(tile => tile.terrain.stairs);
+    const stair = start.terrain.stairs ? start : end.terrain.stairs ? end : undefined;
     const climbs = !stair || span > stair.terrain.height;
     if (climbs && span > climb) return undefined;
     const cost = end.terrain.moveCost + (climbs && span >= HALF_HEIGHT ? CLIMB_COST : 0);
-    const a = coordsOf(field, from), b = coordsOf(field, to);
-    if (a.col === b.col || a.row === b.row) return cost;
-    const walls = (corner: Square | undefined) => !enterable(field, corner) || towersOver(field, corner, from, to);
-    return walls(squareAt(field, b.col, a.row)) || walls(squareAt(field, a.col, b.row)) ? undefined : cost * DIAGONAL_STEP;
+    if (dc === 0 || dr === 0) return cost;
+    // The two corners a diagonal passes, both on the map since its ends are.
+    const walls = (corner: Square) => !enterable(field, corner) || towersOver(field, corner, from, to);
+    return walls(from + dc) || walls(from + dr * field.width) ? undefined : cost * DIAGONAL_STEP;
 }
 
 /**
@@ -85,12 +97,26 @@ export function stepCost(field: Battlefield, from: Square, to: Square, climb = D
  * nothing, so it's always in reach.
  */
 export function reachFrom(field: Battlefield, from: Square, budget = Infinity, rules: MoveRules = {}): Reach {
+    const { costs, cameFrom } = search(field, [from], budget, rules);
+    return { from, costs, cameFrom };
+}
+
+/**
+ * The cheapest walk to every square from whichever of `sources` is nearest:
+ * the least of `reachFrom`'s costs from each of them, in one search rather
+ * than one a source.
+ */
+export function costsFrom(field: Battlefield, sources: readonly Square[], rules: MoveRules = {}): Float64Array {
+    return search(field, sources, Infinity, rules).costs;
+}
+
+function search(field: Battlefield, sources: readonly Square[], budget: number, rules: MoveRules): Omit<Reach, "from"> {
     const size = field.tiles.length;
     const halves = new Float64Array(size).fill(Infinity);
     const cameFrom = new Int32Array(size).fill(-1);
     const limit = Math.floor(budget * 2);
-    const buckets: Square[][] = [[from]];
-    halves[from] = 0;
+    const buckets: Square[][] = [[...sources]];
+    for (const source of sources) halves[source] = 0;
 
     for (let cost = 0; cost < buckets.length; cost++) {
         // Every step costs at least a whole point (two halves), so nothing is
@@ -101,7 +127,7 @@ export function reachFrom(field: Battlefield, from: Square, budget = Infinity, r
             for (const [dc, dr] of STEPS) {
                 const next = squareAt(field, here.col + dc, here.row + dr);
                 if (next === undefined || rules.blocked?.has(next)) continue;
-                const step = stepCost(field, square, next, rules.climb);
+                const step = neighbourStep(field, square, dc, dr, rules.climb);
                 if (step === undefined) continue;
                 const reached = cost + step * 2;
                 if (reached > limit || reached >= halves[next]) continue;
@@ -112,9 +138,10 @@ export function reachFrom(field: Battlefield, from: Square, budget = Infinity, r
         }
     }
 
+    const start = new Set(sources);
     const costs = halves.map((half, square) =>
-        square !== from && (!field.tiles[square].terrain.standable || rules.occupied?.has(square)) ? Infinity : half / 2);
-    return { from, costs, cameFrom };
+        !start.has(square) && (!field.tiles[square].terrain.standable || rules.occupied?.has(square)) ? Infinity : half / 2);
+    return { costs, cameFrom };
 }
 
 /** The cheapest path to a square in reach, or undefined when it isn't. */

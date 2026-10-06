@@ -22,7 +22,8 @@ const RANK: Record<Cover, number> = { none: 0, half: 1, full: 2 };
 
 /** The cover `target` has against an attack from `attacker`. `"none"` means it's flanked. */
 export function coverAgainst(field: Battlefield, target: Square, attacker: Square): Cover {
-    const { crossed, grazed } = sightLine(field, target, attacker);
+    // Only the squares next to it cover it, so the line is walked no further.
+    const { crossed, grazed } = sightLine(field, target, attacker, 1);
     return [...crossed, ...grazed.flat()]
         .filter(square => isNeighbour(field, target, square))
         .flatMap(square => [field.tiles[square].terrain.cover, coverOfRise(riseOf(field, square, target))])

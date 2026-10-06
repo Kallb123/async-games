@@ -416,6 +416,8 @@ function shielded(state: BattleState, target: Fighter): boolean {
  * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
  */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
+    // Usually there's none, and every shot's odds ask.
+    if (!state.clouds?.length && !state.fighters.some(fighter => fighter.smoke !== undefined)) return new Set();
     return new Set([...landedSmoke(state.fighters), ...state.clouds ?? []].flatMap(at => areaAround(state.field, at)));
 }
 
@@ -923,9 +925,23 @@ export function blastedIn(events: readonly BattleEvent[]): Square[] {
     return events.flatMap(event => event.kind === "blasted" ? event.squares : []);
 }
 
+/**
+ * A deep copy of plain data — a battle's fighters, which are nothing but
+ * numbers, strings, arrays and plain objects — that a rule can change without
+ * touching what it was handed. What `structuredClone` makes, many times
+ * quicker, since the computer copies the fighters for every action it weighs.
+ */
+function copyOf<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(copyOf) as T;
+    if (value === null || typeof value !== "object") return value;
+    const copy: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) copy[key] = copyOf((value as Record<string, unknown>)[key]);
+    return copy as T;
+}
+
 /** A working copy of the battle that an action changes as it resolves, writing down what happens. */
 function resolver(state: BattleState, roll: Roll) {
-    const fighters = structuredClone(state.fighters) as Fighter[];
+    const fighters = copyOf(state.fighters) as Fighter[];
     const battle: BattleState = { ...state, fighters };
     const events: BattleEvent[] = [];
     const get = (id: number): Fighter => {
@@ -1282,7 +1298,7 @@ export function centrePoints(state: BattleState, player: string, round: number):
 export function endTurn(state: BattleState, player: string, round: number, keepStill: unknown = []): Outcome {
     const still = Array.isArray(keepStill) ? keepStill : [];
     const events: BattleEvent[] = [];
-    const fighters = structuredClone(state.fighters).map(fighter => {
+    const fighters = copyOf(state.fighters).map(fighter => {
         if (fighter.owner !== player || !isStanding(fighter)) return fighter;
         const watching = fighter.ap >= REACTION_COST && !still.includes(fighter.id) && !hasEffect(fighter, "stunned");
         if (watching) events.push({ kind: "watching", fighter: fighter.id, banked: fighter.ap });
