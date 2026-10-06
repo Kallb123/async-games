@@ -5357,6 +5357,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     .ag-ra-hp-loss,
     .ag-ra-hp-gain { animation: none; opacity: calc((1 + var(--ag-pulse-min)) / 2); }
 }
+/* The board's pulses — these flashes and a wave's zones — hold off while it's
+   pinched or gliding, and start over once it lands (`.ag-board-zoom-content--moving`). */
+.ag-board-zoom-content--moving :is(.ag-ra-hp-loss, .ag-ra-hp-gain, .ag-ra-deployment--wave) { animation: none; }
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */
 .ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }

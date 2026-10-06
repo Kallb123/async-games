@@ -133,6 +133,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Realm Arena's map pinches smoothly again",
+                detail: "With an attack or a heal lined up, or Hold Out's next wave about to land, pinching to zoom the battlefield stuttered badly: the flashing HP bars and glowing spawn zones made the phone redraw the whole map on every frame of the pinch. They now hold still while the map zooms and start flashing again the moment it settles.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena's fog of war covers the log, the recap and the review",
                 detail: "In a battle fought in fog of war the board hid what your squad couldn't see, but the match history, the recap and the match review still told you every move, shot and knock-out out there. Now they only tell you what your squad saw: an enemy hunkering down out of sight leaves no line at all, and a shot at you from the fog says you were hit, not who fired it. When the battle ends the fog lifts and the whole log is there for everyone.",
                 game: "realmarena",
@@ -172,10 +177,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Kingdom Builder's world map no longer hides its own ground art",
                 detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, and every tappable site on top of that in a thick gold ring sized for a much bigger board — between the two, a site-dense map was more circle than art. Both are gone in favour of a small dot and the \"Open site\"/\"Your town\" label already sitting next to it, whose own text used to render as an illegible dark blob. A big field of grass now draws from several tiles instead of repeating one, so the map reads as a picture again.",
                 game: "kingdombuilder",
-            },
-            {
-                title: "Signing in with Google no longer leaves the form tappable underneath",
-                detail: "In the app, tapping Continue with Google could sit for a moment while your account was checked and our side of the handshake finished — and until now the sign-in card underneath stayed fully clickable the whole time, so a stray tap could fight the sign-in already under way. It's now covered by a pulsing loading bar and locked until the check is done.",
             },
         ],
     },

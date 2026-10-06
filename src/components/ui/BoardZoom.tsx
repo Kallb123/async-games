@@ -65,6 +65,9 @@ const FOCUS_MARGIN_PX = 28;
  */
 interface FocusTarget { cx: number; cy: number; smooth: boolean; from?: ZoomView }
 
+/** The class on the board while a pinch or a glide is drawing it (`drawAt`). */
+const MOVING = 'ag-board-zoom-content--moving';
+
 /** How long an unprompted focus takes to glide the board over to what it's showing. */
 const GLIDE_MS = 380;
 
@@ -77,9 +80,24 @@ const GLIDE_MS = 380;
  */
 interface Glide { settle: () => void }
 
-/** Draw the board `offset` into the pane at `scale` times its laid-out size. */
+/**
+ * Draw the board `offset` into the pane at `scale` times its laid-out size.
+ * While it's drawn this way it's marked as moving (`MOVING`), so a board can
+ * switch off its own pulses for the gesture (Realm Arena's, in ag-theme.css):
+ * an animation inside the SVG — even paused — has the whole board re-rastered
+ * at every frame's scale, which is what makes a pinch stutter. A board names
+ * its animated classes under the marker rather than `*`, which would restyle
+ * every node on it as each gesture starts and ends.
+ */
 function drawAt(content: HTMLDivElement, offset: { x: number; y: number }, scale: number) {
     content.style.transform = `translate(${offset.x}px, ${offset.y}px) scale(${scale})`;
+    content.classList.add(MOVING);
+}
+
+/** Drop the transform: the board is drawn as laid out again, and its pulses start over. */
+function release(content: HTMLDivElement) {
+    content.style.transform = '';
+    content.classList.remove(MOVING);
 }
 
 /**
@@ -96,7 +114,7 @@ function liftOff(pane: HTMLDivElement, content: HTMLDivElement, offset: { x: num
 
 /** And hand it back: no transform, the pane scrolled to `scroll`. */
 function landAt(pane: HTMLDivElement, content: HTMLDivElement, scroll: { x: number; y: number }) {
-    content.style.transform = '';
+    release(content);
     pane.scrollLeft = scroll.x;
     pane.scrollTop = scroll.y;
 }
@@ -329,7 +347,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
         anchorRef.current = null;
         const scrollTo = scrollToRef.current;
         scrollToRef.current = null;
-        content.style.transform = '';
+        release(content);
         const focusTarget = focusTargetRef.current;
         if (focusTarget) {
             focusTargetRef.current = null;
@@ -394,7 +412,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
             // Fingers still down would otherwise go on drawing over a pane
             // that has just scrolled out from under them.
             pinchRef.current = null;
-            content.style.transform = '';
+            release(content);
             glideRef.current = showFocus(pane, content, target, zoom);
         } else {
             focusTargetRef.current = target;
@@ -416,7 +434,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
         // Read as it's drawn: mid-pinch, the pane sits unscrolled under the transform.
         const view = currentView(pane, zoomRef.current, pinchRef.current);
         pinchRef.current = null;
-        content.style.transform = '';
+        release(content);
         const middle = { x: pane.clientWidth / 2, y: pane.clientHeight / 2 };
         const to = pivot.at({
             x: (view.scroll.x + middle.x) / view.content.x * viewBox.width,
