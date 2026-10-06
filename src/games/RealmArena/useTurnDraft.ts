@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { pathTo, type Reach } from "@/utils/games/battlefield/pathfinding";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { ABILITIES, type Ability, type Item } from "./characters";
+import { ABILITIES, ITEMS, type Ability, type Item } from "./characters";
 import { allied, blastedBy, check, demolishArea, fighterById, areaAround, isStanding, itemOf, reachOf, shotOdds, weaponOf, type Action, type BattleState, type Check, type Fighter } from "./rules";
 import { ACTION_AIMS, attackOptions, hitChance, rangeKindOf, rangeSquares, reactionPreviews, shotOf, targetKindOf, targetsOf, type AttackOption } from "./tactics";
 import { reachShading } from "./ui";
@@ -84,28 +84,34 @@ function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Squar
     }
 }
 
-/** The aims that strike or shoot the characters they're lined up on, rather than help them. */
+/** The aims that strike or shoot the characters they're lined up on. */
 const HURTS: readonly Aim[] = ["attack", "aimedShot", "cripplingShot", "cleave", "shieldBash", "rend"];
 
+/** The aims that heal the one they're lined up on, and by how much (before it's capped at full). */
+export const HEAL_HP: Partial<Record<Aim, number>> = { heal: ABILITIES.heal.hp, regrowth: ABILITIES.regrowth.hp, draught: ITEMS.healingDraught.hp };
+
 /**
- * What a lined-up action would do to each character it hurts, on a hit, by
- * id: a shot's damage at its odds, a strike's, or what a fireball, a throw or
- * a Demolish lands on everyone standing in `area`. What the board flashes off
- * their HP bars.
+ * What a lined-up action would do to the HP of each character it touches, by
+ * id: less a shot's damage at its odds on a hit, a strike's, or what a
+ * fireball, a throw or a Demolish lands on everyone standing in `area`; more
+ * what a heal or a draught gives back. What the board flashes on their HP
+ * bars, which never run past empty or full.
  */
-export function damagePreview(battle: BattleState, fighter: Fighter, { aim, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
+export function hpPreview(battle: BattleState, fighter: Fighter, { aim, targets }: Draft, area: readonly Square[] | null): ReadonlyMap<number, number> {
     if (area && isAtSquare(aim)) {
         const damage = landsOf(fighter, aim)?.damage ?? 0;
         const caught = damage > 0 ? battle.fighters.filter(one => isStanding(one) && area.includes(one.square)) : [];
-        return new Map(caught.map(one => [one.id, damage]));
+        return new Map(caught.map(one => [one.id, -damage]));
     }
+    const heals = HEAL_HP[aim];
+    if (heals !== undefined) return new Map(targets.map(id => [id, heals]));
     if (!HURTS.includes(aim)) return new Map();
     return new Map(targets.flatMap((id): [number, number][] => {
         const target = fighterById(battle, id);
         if (!target) return [];
-        if (aim === "shieldBash" || aim === "rend") return [[id, ABILITIES[aim].damage ?? 0]];
+        if (aim === "shieldBash" || aim === "rend") return [[id, -(ABILITIES[aim].damage ?? 0)]];
         const shot = shotOf(aim);
-        return [[id, (shot && shotOdds(battle, fighter, target, shot)?.damage) ?? weaponOf(fighter).damage]];
+        return [[id, -((shot && shotOdds(battle, fighter, target, shot)?.damage) ?? weaponOf(fighter).damage)]];
     }));
 }
 
@@ -284,8 +290,8 @@ export function useTurnDraft(battle: BattleState, player: string, fighter: Fight
         reactions: path && aim === "move" ? reactionPreviews(battle, fighter, path) : [],
         /** Every square a lined-up fireball, throw or Demolish lands on. */
         area,
-        /** What the action lined up would take off each character it hurts, on a hit. */
-        damage: damagePreview(battle, fighter, draft, area),
+        /** What the action lined up would do to the HP of each character it touches: less on a hit, more for a heal. */
+        hpChange: hpPreview(battle, fighter, draft, area),
         /** The low cover a lined-up fireball, fire flask or Demolish would blast away (§22). */
         blasts: isAtSquare(aim) && draft.square !== null ? blastedBy(battle.field, landsOf(fighter, aim), draft.square) : null,
         action,

@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, allegianceOf, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
+import { abilityWait, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -123,6 +123,12 @@ describe("canAct, apPips and hpFraction", () => {
         const max = knight.hp;
         expect(hpFraction(knight, 1)).toBe((max - 1) / max);
         expect(hpFraction(knight, max + 5)).toBe(0);
+    });
+
+    it("reads what the bar would be after a heal, never past full", () => {
+        const max = knight.hp;
+        expect(hpFraction({ ...knight, hp: 1 }, -2)).toBe(3 / max);
+        expect(hpFraction({ ...knight, hp: max - 1 }, -5)).toBe(1);
     });
 });
 
@@ -520,12 +526,10 @@ describe("the next wave on the scoreboard (§30.11)", () => {
     });
 });
 
-describe("allegianceOf", () => {
-    it("reads the viewer's own, a teammate's and an enemy's characters", () => {
-        const sides = { alice: "team", bob: "team", carol: "carol" };
-        expect(allegianceOf({ sides }, "alice", "alice")).toBe("own");
-        expect(allegianceOf({ sides }, "alice", "bob")).toBe("ally");
-        expect(allegianceOf({ sides }, "alice", "carol")).toBe("enemy");
-        expect(allegianceOf({}, "alice", "bob")).toBe("enemy");
+describe("coopColourOf", () => {
+    it("colours the viewer's own green, a teammate's blue and a warband's red", () => {
+        expect(coopColourOf("alice", "alice")).toBe(TEAM_COLOUR);
+        expect(coopColourOf("alice", "bob")).toBe(ALLY_COLOUR);
+        expect(coopColourOf("alice", warbandOwner(0))).toBe(ENEMY_COLOUR);
     });
 });

@@ -15,7 +15,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { allegianceOf, apPips, areaRect, type Allegiance, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -43,7 +43,7 @@ const FIGURE_RADIUS = 4.5;
 const FIGURE_RISE = 7;
 const FIGURE_TOP = 12.5;
 const HP_BAR_WIDTH = 9;
-const HP_BAR_HEIGHT = 1.5;
+const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 const HP_BAR_RISE = FIGURE_TOP + 0.5;
 /**
@@ -159,8 +159,8 @@ interface Aiming {
     candidates: readonly number[];
     /** Who is aimed at. */
     aimed: readonly number[];
-    /** What the action lined up would take off each character it hurts, flashed off their HP bars. */
-    damage: ReadonlyMap<number, number>;
+    /** What the action lined up would do to the HP of each character it touches (less, or more for a heal), flashed on their HP bars. */
+    hpChange: ReadonlyMap<number, number>;
     /** The watchers a lined-up move would set off. */
     flagged: readonly number[];
     /** A tap on a square of the board, anywhere no character stands. */
@@ -178,9 +178,6 @@ type FacingFor = (figure: { square: Square; facing?: Facing }) => Facing;
 
 /** The filter a player's characters are tinted with (`tintId`), or undefined for one not seated. */
 type TintFor = (userId: string) => string | undefined;
-
-/** Whose an owner's characters are to the viewer: what colours their HP bars. */
-type AllegianceFor = (owner: string) => Allegiance;
 
 interface Placing {
     zone: readonly Square[];
@@ -297,20 +294,24 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
 
 /**
  * A standing figure's HP bar, over the figure standing on the square whose
- * middle is (`x`, `y`), in the colour of whose it is to the viewer: with the
- * `damage` an action lined up on it would do flashing black over the end of
- * what's left, never past empty.
+ * middle is (`x`, `y`), in its owner's colour, as its figure is: with the
+ * `change` an action lined up on it would make flashing at the end of what's
+ * left — black over what a blow would take off, never past empty, and white
+ * beyond it for what a heal would give back, never past full.
  */
-function HpBar({ x, y, fighter, allegiance, damage = 0 }: { x: number; y: number; fighter: Fighter; allegiance: Allegiance; damage?: number }) {
+function HpBar({ x, y, fighter, colour, change = 0 }: { x: number; y: number; fighter: Fighter; colour: string; change?: number }) {
     const top = y - HP_BAR_RISE - HP_BAR_HEIGHT;
     const left = x - HP_BAR_WIDTH / 2;
-    const after = HP_BAR_WIDTH * hpFraction(fighter, damage);
+    const after = HP_BAR_WIDTH * hpFraction(fighter, -change);
     const now = HP_BAR_WIDTH * hpFraction(fighter);
     return (
         <>
             <rect className="ag-ra-hp" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className={`ag-ra-hp-fill ag-ra-hp-fill--${allegiance}`} x={left} y={top} width={now} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={left} y={top} width={now} height={HP_BAR_HEIGHT} />
             {now > after && <rect className="ag-ra-hp-loss" x={left + after} y={top} width={now - after} height={HP_BAR_HEIGHT} />}
+            {after > now && <rect className="ag-ra-hp-gain" x={left + now} y={top} width={after - now} height={HP_BAR_HEIGHT} />}
+            {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
+            <rect className="ag-ra-hp-edge" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
         </>
     );
 }
@@ -320,13 +321,13 @@ function HpBar({ x, y, fighter, allegiance, damage = 0 }: { x: number; y: number
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
  * something to hit. Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, cue, facing, tintFor, allegianceFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor; allegianceFor: AllegianceFor }) {
+function Falling({ artId, view, cue, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     return (
         <g className="ag-ra-falling" style={cueTiming(cue)}>
             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
-            <HpBar x={x} y={y} fighter={fighter} allegiance={allegianceFor(fighter.owner)} />
+            <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </g>
     );
 }
@@ -426,9 +427,10 @@ interface FighterNodeProps {
     selected: boolean;
     /** It's its owner's turn in battle, so it shows the AP it has left. */
     acting: boolean;
-    /** What the action lined up would take off it, flashed off its HP bar. */
-    damage: number | undefined;
-    allegiance: Allegiance;
+    /** What the action lined up would do to its HP, flashed on its HP bar. */
+    hpChange: number | undefined;
+    /** Its owner's colour, which its HP bar is drawn in. */
+    colour: string;
     facingFor: FacingFor;
     tintFor: TintFor;
     nameFor: (userId: string) => string;
@@ -436,7 +438,7 @@ interface FighterNodeProps {
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, damage, allegiance, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, hpChange, colour, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -464,7 +466,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, damage, all
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} allegiance={allegiance} damage={damage} />}
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colour} change={hpChange} />}
             <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -640,7 +642,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const seat = owners.indexOf(userId);
         return seat < 0 ? undefined : tintId(artId, seat);
     };
-    const allegianceFor: AllegianceFor = owner => allegianceOf({ sides }, viewerId, owner);
 
     // A character selected in battle brings most of where it could move into
     // view, rather than just the squares round it — zoomed exactly to that,
@@ -742,8 +743,8 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     ring={ringOf(fighter)}
                     selected={fighter.id === selected?.id}
                     acting={fighter.owner === acting}
-                    damage={aiming?.damage.get(fighter.id)}
-                    allegiance={allegianceFor(fighter.owner)}
+                    hpChange={aiming?.hpChange.get(fighter.id)}
+                    colour={colourFor(fighter.owner)}
                     facingFor={facingFor}
                     tintFor={tintFor}
                     nameFor={nameFor}
@@ -759,7 +760,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         if (cue.kind === 'fall') items.push({
             depth: isoDepth(view, cue.fighter.square) + 0.6,
-            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} allegianceFor={allegianceFor} />,
+            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />,
         });
         if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }

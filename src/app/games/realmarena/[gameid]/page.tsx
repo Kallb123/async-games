@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -122,7 +122,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         if (owner === ENEMY_SIDE || (owner && isWarband(owner))) return enemyName;
         return nameForUserId(gameData, owner);
     };
-    const colourFor = (owner: string): string => isWarband(owner) ? ENEMY_COLOUR : playerColourForId(owner, userIdList);
+    // In co-op, the viewer's own green, a teammate's blue and the enemy's red; else each player's own colour.
+    const colourFor = (owner: string): string => coop ? coopColourOf(myUserId, owner) : playerColourForId(owner, userIdList);
     const currentTurnName = nameForUserId(gameData, currentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
     const winnerName = nameForUserId(gameData, nav.displayedWinner);
@@ -444,7 +445,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                                 blasts: turn.blasts,
                                 candidates: turn.candidates,
                                 aimed: turn.targets,
-                                damage: turn.damage,
+                                hpChange: turn.hpChange,
                                 flagged: turn.reactions.map(reaction => reaction.watcher.id),
                                 onSquare: turn.tapSquare,
                             }}

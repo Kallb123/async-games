@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import type { CharacterId } from "./characters";
-import { ABILITIES } from "./characters";
+import { ABILITIES, ITEMS } from "./characters";
 import { ACTION_POINTS, newFighter, reachOf, shotOdds, weaponOf, type BattleState, type Fighter } from "./rules";
 import { targetsOf } from "./tactics";
-import { afterMove, damagePreview, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
+import { afterMove, hpPreview, MOVE, reachAfter, tapFighter, tapSquare, targetOptions, type Draft, type TapContext } from "./useTurnDraft";
 
 // The tap decisions behind lining up an action on the board (§17.3 PR 7):
 // what a tap on a square or a character does, for each aim.
@@ -179,29 +179,35 @@ describe("targetOptions", () => {
     });
 });
 
-describe("damagePreview", () => {
+describe("hpPreview", () => {
     const strike = weaponOf(manAtArms).damage;
 
     it("takes a strike off each character a cleave is lined up on", () => {
         const draft: Draft = { aim: "cleave", square: null, targets: [near.id, nearToo.id] };
-        expect([...damagePreview(battle, manAtArms, draft, null)]).toEqual([[near.id, strike], [nearToo.id, strike]]);
+        expect([...hpPreview(battle, manAtArms, draft, null)]).toEqual([[near.id, -strike], [nearToo.id, -strike]]);
     });
 
-    it("gives a shot its damage on a hit", () => {
+    it("takes a shot's damage on a hit", () => {
         const archer = ready(6, "a", "archer", at(field, 0, 4));
         const shooting: BattleState = { field, fighters: [...battle.fighters, archer] };
         const draft: Draft = { aim: "attack", square: null, targets: [far.id] };
-        expect(damagePreview(shooting, archer, draft, null).get(far.id)).toBe(shotOdds(shooting, archer, far)?.damage);
+        expect(hpPreview(shooting, archer, draft, null).get(far.id)).toBe(-(shotOdds(shooting, archer, far)?.damage ?? 0));
     });
 
     it("lands a fireball on everyone standing in the blast, allies included", () => {
         const mage = ready(6, "a", "mage", at(field, 0, 4));
         const draft: Draft = { aim: "fireball", square: manAtArms.square, targets: [] };
         const area = [manAtArms.square, near.square, body.square];
-        expect([...damagePreview(battle, mage, draft, area)]).toEqual([[manAtArms.id, ABILITIES.fireball.damage], [near.id, ABILITIES.fireball.damage]]);
+        expect([...hpPreview(battle, mage, draft, area)]).toEqual([[manAtArms.id, -ABILITIES.fireball.damage], [near.id, -ABILITIES.fireball.damage]]);
     });
 
-    it("hurts nobody with help", () => {
-        expect(damagePreview(battle, manAtArms, { aim: "heal", square: null, targets: [ally.id] }, null).size).toBe(0);
+    it("gives back what a heal or a draught restores", () => {
+        expect([...hpPreview(battle, manAtArms, { aim: "heal", square: null, targets: [ally.id] }, null)]).toEqual([[ally.id, ABILITIES.heal.hp]]);
+        expect([...hpPreview(battle, manAtArms, { aim: "draught", square: null, targets: [ally.id] }, null)]).toEqual([[ally.id, ITEMS.healingDraught.hp]]);
+    });
+
+    it("touches nobody with a mark or a move", () => {
+        expect(hpPreview(battle, manAtArms, { aim: "huntersMark", square: null, targets: [near.id] }, null).size).toBe(0);
+        expect(hpPreview(battle, manAtArms, MOVE, null).size).toBe(0);
     });
 });

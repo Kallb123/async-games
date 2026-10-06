@@ -5,13 +5,13 @@ import BuildRow from '@/components/ui/BuildRow';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
-import { ABILITIES, CHARACTERS, EFFECTS, ITEMS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
+import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
 import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, fighterById, hasEffect, healedEffects, isStanding, itemOf, shotEffect, shotOdds, smokeSquares, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
 import { abilityWait, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
-import { INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
+import { HEAL_HP, INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
 import { capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
 
@@ -313,7 +313,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
     if (!target) return null;
     const max = CHARACTERS[target.character].hp;
     if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {
-        const hp = Math.min(aim === 'draught' ? ITEMS.healingDraught.hp : ABILITIES[aim].hp, max - target.hp);
+        const hp = Math.min(HEAL_HP[aim] ?? 0, max - target.hp);
         const cleared = healedEffects(target).map(effect => EFFECTS[effect].state);
         const heals = hp > 0 ? `heals for ${hp} HP` : '';
         const clears = cleared.length > 0 ? `is no longer ${cleared.join(' or ')}` : '';

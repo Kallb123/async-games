@@ -101,6 +101,13 @@
        different ground (the in-game log, Train Time's panels) re-points it. */
     --ag-recap-ground: color-mix(in oklch, var(--ag-terracotta) 9%, var(--ag-surface));
 
+    /* Realm Arena's co-op sides (src/games/RealmArena/ui.ts): the viewer's own and
+       the team, a teammate, and the enemy. Here rather than under
+       .ag-game--realmarena since a result's charts draw them off the board too. */
+    --ra-own: oklch(0.72 0.17 145);
+    --ra-ally: oklch(0.65 0.15 250);
+    --ra-enemy: oklch(0.6 0.2 27);
+
     color-scheme: light;
 }
 
@@ -5240,11 +5247,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
     --ra-range: oklch(0.6 0.19 35);
-    /* HP bars: the viewer's own, a teammate's, an enemy's, and a lined-up blow's loss. */
-    --ra-hp-own: oklch(0.72 0.17 145);
-    --ra-hp-ally: oklch(0.65 0.15 250);
-    --ra-hp-enemy: oklch(0.6 0.2 27);
-    --ra-hp-loss: oklch(0.1 0 0);
+    /* An HP bar's dark edge and what a lined-up blow would take off it, and what a heal would give back. */
+    --ra-hp-dark: oklch(0.1 0 0);
+    --ra-hp-light: oklch(1 0 0);
 }
 .ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
 .ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
@@ -5337,16 +5342,20 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-marker { fill: none; stroke-width: 0.7; stroke-dasharray: 1.2 0.8; pointer-events: none; }
 .ag-ra-marker--watch { stroke: var(--ag-on-dark); }
 .ag-ra-marker--sealed { stroke: var(--ra-oxblood); }
-.ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
-/* The viewer's own characters' HP is green, a teammate's blue, an enemy's red. */
+.ag-ra-hp { fill: rgba(0, 0, 0, 0.7); pointer-events: none; }
+.ag-ra-hp-edge { fill: none; stroke: var(--ra-hp-dark); stroke-width: 0.45; pointer-events: none; }
+/* Filled in its owner's colour (`colourFor`), as the figure is tinted. */
 .ag-ra-hp-fill { pointer-events: none; }
-.ag-ra-hp-fill--own { fill: var(--ra-hp-own); }
-.ag-ra-hp-fill--ally { fill: var(--ra-hp-ally); }
-.ag-ra-hp-fill--enemy { fill: var(--ra-hp-enemy); }
-/* The HP an action lined up on a character would take off, flashing black over the end of its bar. */
-.ag-ra-hp-loss { fill: var(--ra-hp-loss); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+/* What an action lined up on a character would do to its HP, flashing at the end of its
+   bar: black over what a blow would take off, white past it for what a heal gives back.
+   Held still half-way through the flash without motion. */
+.ag-ra-hp-loss,
+.ag-ra-hp-gain { pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+.ag-ra-hp-loss { fill: var(--ra-hp-dark); }
+.ag-ra-hp-gain { fill: var(--ra-hp-light); }
 @media (prefers-reduced-motion: reduce) {
-    .ag-ra-hp-loss { animation: none; opacity: 0.6; }
+    .ag-ra-hp-loss,
+    .ag-ra-hp-gain { animation: none; opacity: calc((1 + var(--ag-pulse-min)) / 2); }
 }
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */

@@ -9,22 +9,30 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, allied, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
 );
 
 /**
- * The two sides of a co-op battle as they're drawn (§29.9): the enemy in one
- * colour whichever warband, on the board and the result alike, and the team
- * as one line against it on the result's charts. Neither is a player's: the
- * team is at most three, who wear the palette's first three.
+ * The colours of a co-op battle (§29.9), from the viewer's side of it: their
+ * own characters in green, a teammate's in blue and every warband's in red, on
+ * the board's figures and HP bars alike. The team is the viewer's green as one
+ * line on the scoreboard and the result's charts, and the enemy the red. Out
+ * of co-op everyone wears their player colour instead.
  */
-export const TEAM_COLOUR = "var(--ag-gold)";
+export const TEAM_COLOUR = "var(--ra-own)";
+export const ALLY_COLOUR = "var(--ra-ally)";
 /** What the players are called together, as the enemy is by `enemyNameOf`. */
 export const TEAM_NAME = "the team";
-export const ENEMY_COLOUR = "var(--ag-purple)";
+export const ENEMY_COLOUR = "var(--ra-enemy)";
+
+/** The colour an owner's characters wear in co-op, to `viewerId`: their own, a teammate's or the enemy's. */
+export function coopColourOf(viewerId: string, owner: string): string {
+    if (isWarband(owner)) return ENEMY_COLOUR;
+    return owner === viewerId ? TEAM_COLOUR : ALLY_COLOUR;
+}
 
 /**
  * What the enemy's line on the scoreboard says of Hold Out's next wave
@@ -170,15 +178,7 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
     return facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
-/** Whose a character is to the viewer, which colours its HP bar: their own, a teammate's (§29.6), or an enemy's. */
-export type Allegiance = "own" | "ally" | "enemy";
-
-export function allegianceOf(state: Pick<BattleState, "sides">, viewerId: string, owner: string): Allegiance {
-    if (owner === viewerId) return "own";
-    return allied(state, viewerId, owner) ? "ally" : "enemy";
-}
-
-/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP, which never takes it below empty. */
+/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
 export function hpFraction(fighter: Fighter, lost = 0): number {
     return Math.min(1, Math.max(0, fighter.hp - lost) / CHARACTERS[fighter.character].hp);
 }
