@@ -15,7 +15,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { allegianceOf, apPips, areaRect, type Allegiance, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -177,6 +177,9 @@ type FacingFor = (figure: { square: Square; facing?: Facing }) => Facing;
 /** The filter a player's characters are tinted with (`tintId`), or undefined for one not seated. */
 type TintFor = (userId: string) => string | undefined;
 
+/** Whose an owner's characters are to the viewer: what colours their HP bars. */
+type AllegianceFor = (owner: string) => Allegiance;
+
 interface Placing {
     zone: readonly Square[];
     /** The index into `sealed` of the character picked up to move, if any. */
@@ -292,10 +295,11 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
 
 /**
  * A standing figure's HP bar, over the figure standing on the square whose
- * middle is (`x`, `y`): with the `damage` an action lined up on it would do
- * flashing at the end of what's left, never past empty.
+ * middle is (`x`, `y`), in the colour of whose it is to the viewer: with the
+ * `damage` an action lined up on it would do flashing black over the end of
+ * what's left, never past empty.
  */
-function HpBar({ x, y, fighter, damage = 0 }: { x: number; y: number; fighter: Fighter; damage?: number }) {
+function HpBar({ x, y, fighter, allegiance, damage = 0 }: { x: number; y: number; fighter: Fighter; allegiance: Allegiance; damage?: number }) {
     const top = y - HP_BAR_RISE - HP_BAR_HEIGHT;
     const left = x - HP_BAR_WIDTH / 2;
     const after = HP_BAR_WIDTH * hpFraction(fighter, damage);
@@ -303,7 +307,7 @@ function HpBar({ x, y, fighter, damage = 0 }: { x: number; y: number; fighter: F
     return (
         <>
             <rect className="ag-ra-hp" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className="ag-ra-hp-fill" x={left} y={top} width={after} height={HP_BAR_HEIGHT} />
+            <rect className={`ag-ra-hp-fill ag-ra-hp-fill--${allegiance}`} x={left} y={top} width={now} height={HP_BAR_HEIGHT} />
             {now > after && <rect className="ag-ra-hp-loss" x={left + after} y={top} width={now - after} height={HP_BAR_HEIGHT} />}
         </>
     );
@@ -314,13 +318,13 @@ function HpBar({ x, y, fighter, damage = 0 }: { x: number; y: number; fighter: F
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
  * something to hit. Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, cue, facing, tintFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor }) {
+function Falling({ artId, view, cue, facing, tintFor, allegianceFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor; allegianceFor: AllegianceFor }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     return (
         <g className="ag-ra-falling" style={cueTiming(cue)}>
             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
-            <HpBar x={x} y={y} fighter={fighter} />
+            <HpBar x={x} y={y} fighter={fighter} allegiance={allegianceFor(fighter.owner)} />
         </g>
     );
 }
@@ -422,6 +426,7 @@ interface FighterNodeProps {
     acting: boolean;
     /** What the action lined up would take off it, flashed off its HP bar. */
     damage: number | undefined;
+    allegiance: Allegiance;
     facingFor: FacingFor;
     tintFor: TintFor;
     nameFor: (userId: string) => string;
@@ -429,7 +434,7 @@ interface FighterNodeProps {
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, damage, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, damage, allegiance, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -456,7 +461,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, damage, fac
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} damage={damage} />}
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} allegiance={allegiance} damage={damage} />}
             <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -632,6 +637,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const seat = owners.indexOf(userId);
         return seat < 0 ? undefined : tintId(artId, seat);
     };
+    const allegianceFor: AllegianceFor = owner => allegianceOf({ sides }, viewerId, owner);
 
     // A character selected in battle brings most of where it could move into
     // view, rather than just the squares round it — zoomed exactly to that,
@@ -734,6 +740,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     selected={fighter.id === selected?.id}
                     acting={fighter.owner === acting}
                     damage={aiming?.damage.get(fighter.id)}
+                    allegiance={allegianceFor(fighter.owner)}
                     facingFor={facingFor}
                     tintFor={tintFor}
                     nameFor={nameFor}
@@ -749,7 +756,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         if (cue.kind === 'fall') items.push({
             depth: isoDepth(view, cue.fighter.square) + 0.6,
-            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} />,
+            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} allegianceFor={allegianceFor} />,
         });
         if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }

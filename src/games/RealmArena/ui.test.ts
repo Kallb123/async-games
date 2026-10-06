@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
+import { abilityWait, allegianceOf, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -517,5 +517,15 @@ describe("the next wave on the scoreboard (§30.11)", () => {
         expect(waveLineOf({ round: 7, arriving: 10, upTo: true }, 6)).toBe("wave next round · up to 10 coming");
         expect(waveLineOf({ round: 4 }, 1)).toBe("next wave 4");
         expect(waveLineOf(undefined, 14)).toBe("final wave landed");
+    });
+});
+
+describe("allegianceOf", () => {
+    it("reads the viewer's own, a teammate's and an enemy's characters", () => {
+        const sides = { alice: "team", bob: "team", carol: "carol" };
+        expect(allegianceOf({ sides }, "alice", "alice")).toBe("own");
+        expect(allegianceOf({ sides }, "alice", "bob")).toBe("ally");
+        expect(allegianceOf({ sides }, "alice", "carol")).toBe("enemy");
+        expect(allegianceOf({}, "alice", "bob")).toBe("enemy");
     });
 });
