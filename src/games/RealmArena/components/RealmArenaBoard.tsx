@@ -433,12 +433,13 @@ interface FighterNodeProps {
     onSelect: (fighterId: number) => void;
 }
 
-/** A character on the battlefield, standing or fallen: its figure, HP bar, effects and AP, and the tap that selects it. */
+/** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
 function FighterNode({ artId, view, fighter, ring, selected, acting, damage, allegiance, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
     const standing = isStanding(fighter);
+    const watching = standing && fighter.banked > 0;
     return (
         <ClickableMapNode
             x={x} y={y} radius={FIGURE_RADIUS}
@@ -450,7 +451,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, damage, all
         >
             <Figure
                 ring={ring}
-                marker={standing && fighter.banked > 0 ? 'watch' : undefined}
+                marker={watching ? 'watch' : undefined}
                 view={view}
                 square={fighter.square}
                 character={fighter.character}
@@ -462,7 +463,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, damage, all
                 tint={tintFor(fighter.owner)}
             />
             {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} allegiance={allegiance} damage={damage} />}
-            <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
+            <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
     );

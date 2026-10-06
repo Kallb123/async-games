@@ -25,10 +25,10 @@ export const ART_SHEETS = {
     walls: { href: "/art/realmarena/walls.png", width: 512, height: 1024 },
     /**
      * The status effects' marks (§20.2), one `MARK_PX` badge a cell in a
-     * row, in `EFFECT_IDS` order. Rendered from its SVG master,
+     * row, in `EFFECT_IDS` order, then the watch's (§13.4). Rendered from its SVG master,
      * `art-masters/realmarena/effects.svg`, by `npm run ra-marks`.
      */
-    effects: { href: "/art/realmarena/effects.png", width: 672, height: 96 },
+    effects: { href: "/art/realmarena/effects.png", width: 768, height: 96 },
     /**
      * The items (§21.2), one `MARK_PX` badge a cell in `ITEM_IDS` order, and
      * then the smoke pot's cloud. Rendered from `art-masters/realmarena/items.svg`
@@ -163,6 +163,9 @@ const marks = <Id extends string>(sheet: ArtSheet, ids: readonly Id[]) =>
 /** The mark a figure wears for each effect on it (§20.2), and its box beside the effect's name. */
 export const EFFECT_ART = marks("effects", EFFECT_IDS);
 
+/** The mark a figure on watch wears (§13.4), AP banked for overwatch or guard: after the effects' on their sheet, and in their column. */
+export const WATCH_ART = mark("effects", EFFECT_IDS.length);
+
 /** Each item's mark (§21.2): by the shoulder of a figure carrying it, and beside its name wherever it's named. */
 export const ITEM_ART = marks("items", ITEM_IDS);
 
@@ -253,7 +256,7 @@ export function facingCell(facing: Facing, rotation: IsoRotation): number {
 /** Every sprite the board draws, once each, by the number it defines it under up front. */
 export const SPRITES: ReadonlyMap<Sprite, number> = new Map(
     [...new Set([
-        ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), ...Object.values(ITEM_ART), SMOKE_ART,
+        ...GRASS, ...LAYERS.flatMap(layer => layer.sprites), ...Object.values(EFFECT_ART), WATCH_ART, ...Object.values(ITEM_ART), SMOKE_ART,
         ...Object.values(MISSILE_ART), SLASH_ART, ...Object.values(BURST_ART),
         ...Object.values(CHARACTER_ART).flatMap(poses => Object.values(poses).flatMap(art => [...art.body, ...art.team])),
     ])].map((sprite, index) => [sprite, index]),
