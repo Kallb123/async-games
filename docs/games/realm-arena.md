@@ -3173,8 +3173,21 @@ first, written to `docs/achievements.md` §11's checklist: an
 | `realmarena.shoulder-to-shoulder` | Shoulder to Shoulder | Win a battle against the computer | match, `end` |
 | `realmarena.none-left-behind` | None Left Behind | Win a battle against the computer with every one of the team's characters standing at the end | match, `end` |
 | `realmarena.last-stand` | Last Stand | Win a battle of Hold Out | match, `end` |
+| `realmarena.lone-wolf` | Lone Wolf | Win a battle of Hold Out in Solo | match, `end` |
+| `realmarena.hold-the-keep` | Hold the Keep | Win a battle of Hold Out on the Sacked Fort | match, `end` |
+| `realmarena.broken-tide` | Broken Tide | Win a battle of Hold Out by downing the whole last wave before the last round is over | match, `end` |
+| `realmarena.unbroken` | Unbroken | Win a battle of Hold Out with every one of the team's characters standing at the end | match, `end` |
 
-The titles may change; the ids never do (§11). PR 5 adds a sixth.
+The titles may change; the ids never do (§11). PR 5 adds *Against the Odds*
+(§30.5). The four Hold Out rungs after Last Stand came later, so the mission
+has more than one thing to chase, and take Realm Arena past §11's three to six
+deliberately: a game with a free-for-all, two co-op missions and Solo has more
+distinct ways of playing to reward than most. They read only what is already on the wire once the fog lifts:
+Solo is a team whose fighters all belong to one player (the response carries
+no solo flag), the Sacked Fort is a `map` id starting `sackedFort`, and the
+last wave was beaten early when the warbands fielded someone and none of them
+is standing — a Hold Out battle only ends that way once the last wave has
+landed (`holdOutEnding`).
 
 - **Every match check is an `end` check.** In fog, the null viewer sees
   nobody on the battlefield while the battle is fought (§27.3), so a
@@ -3697,3 +3710,4 @@ Realm, its sibling in the same world.
 | 1.47 | Growing waves, and Hold Out's own result (§30.10): every wave brings a warband one character more than the last (command version 5), and the result page tells a battle of Hold Out by its waves — how it ended, what each wave brought and how many of it the team downed, and who stood each round. |
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
+| 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
