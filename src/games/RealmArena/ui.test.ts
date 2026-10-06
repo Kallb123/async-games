@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
+import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -217,18 +217,30 @@ function ready(id: number, owner: string, character: CharacterId, square: number
     return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
 }
 
+describe("aimFocus", () => {
+    it("frames the caster and the target with a square and a half round them", () => {
+        expect(aimFocus(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!, squareAt(RUINED_FORT, 14, 18)!))
+            .toEqual({ x: 8.5, y: 16.5, width: 8, height: 6 });
+    });
+
+    it("frames closer than focusOn does", () => {
+        const caster = squareAt(RUINED_FORT, 10, 20)!, target = squareAt(RUINED_FORT, 11, 20)!;
+        expect(aimFocus(RUINED_FORT, caster, target).width).toBeLessThan(focusOn(RUINED_FORT, caster, target).width);
+    });
+});
+
 const nameFor = (userId: string) => ({ a: "Alice", b: "Bob" })[userId] ?? userId;
 
 describe("reachFocus", () => {
     const LONG = buildBattlefield({ name: "Long", rows: [".".repeat(30), ".".repeat(30), ".".repeat(30)], deployments: [], objectives: {} });
 
-    it("frames two thirds of the reach each way from where the character stands", () => {
+    it("frames half the reach each way from where the character stands", () => {
         // 4 movement points an AP, so 2 AP reach eight squares either way along the row: cols 7–23.
         const knight = ready(0, "a", "knight", at(LONG, 15, 1));
         const rect = reachFocus({ field: LONG, fighters: [knight] }, knight, 2);
         const centre = 15.5, side = 8.5;
-        expect(rect.x).toBeCloseTo(centre - side * 2 / 3);
-        expect(rect.width).toBeCloseTo(side * 4 / 3);
+        expect(rect.x).toBeCloseTo(centre - side / 2);
+        expect(rect.width).toBeCloseTo(side);
     });
 
     it("never frames less than the squares round the character", () => {

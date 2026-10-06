@@ -72,22 +72,39 @@ const FOCUS_REACH = 3;
  * `FOCUS_REACH` either side of them.
  */
 export function focusOn(field: Pick<Battlefield, "width">, ...squares: Square[]): Rect {
+    return framed(field, squares, FOCUS_REACH);
+}
+
+/** The squares, and `margin` squares either side of them. */
+function framed(field: Pick<Battlefield, "width">, squares: readonly Square[], margin: number): Rect {
     const { x, y, width, height } = areaRect(field, squares);
-    return { x: x - FOCUS_REACH, y: y - FOCUS_REACH, width: width + FOCUS_REACH * 2, height: height + FOCUS_REACH * 2 };
+    return { x: x - margin, y: y - margin, width: width + margin * 2, height: height + margin * 2 };
+}
+
+/** How many squares a caster and its target keep round them (`aimFocus`): room for the target's figure, HP bar and odds standing over its square. */
+const AIM_MARGIN = 1.5;
+
+/**
+ * The region `BoardZoom` brings into view for a target picked to aim at, in
+ * squares: the caster and the target, and `AIM_MARGIN` round them — closer
+ * than `focusOn`, since the two of them are all the player is looking at.
+ */
+export function aimFocus(field: Pick<Battlefield, "width">, caster: Square, target: Square): Rect {
+    return framed(field, [caster, target], AIM_MARGIN);
 }
 
 /**
  * How much of a selected character's reach the view keeps in frame, measured
  * out from where it stands in each direction. At full AP a reach runs most of
- * the board's width, so all of it would be the fitted board again; two thirds
- * of it each way still shows the bulk of where it could go — the squares near
- * enough to plan around — at a zoom a square can be tapped at.
+ * the board's width, so all of it would be the fitted board again; half of it
+ * each way still shows the squares near enough to plan around, at a zoom a
+ * square can be tapped at.
  */
-const REACH_SHOWN = 2 / 3;
+const REACH_SHOWN = 1 / 2;
 
 /**
  * The region `BoardZoom` brings into view for a selected character, in
- * squares: most of where it could move this turn (`REACH_SHOWN`), with `ap`
+ * squares: the near half of where it could move this turn (`REACH_SHOWN`), with `ap`
  * to spend — what it has left on its owner's turn, a full turn's otherwise.
  * Never less than `focusOn` frames round it, so a character with nowhere to
  * go is still brought close.

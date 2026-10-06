@@ -1810,6 +1810,12 @@ a.ag-list-row, a.ag-list-row-main {
 }
 /* What a pinch transforms, frame by frame, before the new zoom is committed. */
 .ag-board-zoom-content { transform-origin: 0 0; }
+/* For as long as a pinch or a glide draws it (BoardZoom's `drawAt`), the board
+   is a layer of its own, so each frame only scales what's already drawn rather
+   than repainting and re-rasterising every node of it: the difference between
+   a pinch that keeps up with the fingers and one that doesn't. The price is a
+   board a little soft mid-pinch, sharp again the moment it lands. */
+.ag-board-zoom-content--moving { will-change: transform; }
 .ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
     position: absolute;

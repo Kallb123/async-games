@@ -88,8 +88,8 @@ out. A second copy is the signal to extract the first one.
   and panning from wherever the board already is, as Race Cars does the
   instant a roll hands a driver their car and the spaces it may finish on. It
   zooms to the deepest step the region fits at, or — with `exact` — to the zoom
-  that just fits it, as Realm Arena does for most of a selected unit's reach,
-  which no step frames well. A board redrawn under the player without anything
+  that just fits it, as Realm Arena does for the near half of a selected
+  unit's reach and for a caster and its target, which no step frames well. A board redrawn under the player without anything
   happening on it — Realm Arena's battlefield turned a quarter — passes a
   `pivot` instead, which keeps whatever was in the middle of the frame there
   at the zoom it was at. (The track editor is the one exception, and says why
