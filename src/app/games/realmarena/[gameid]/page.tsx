@@ -288,9 +288,14 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const seatOrder = scoreboardSeatOrder(gameData, myUserId);
     const scores = gs?.scores ?? {};
     const enemyStanding = standingLine(fighters.filter(fighter => isWarband(fighter.owner)), fogged);
-    // In Hold Out the enemy's line also says when its next wave comes (§30.3).
+    // In Hold Out the enemy's line also says when its next wave comes (§30.3)
+    // and how many it brings (§30.11) — in fog, only how many at most. The
+    // round before it lands, the board lights up where it will.
     const nextWave = gs?.mission === 'holdOut' ? nextWaveRound(gs.round, gs.battleRounds) : undefined;
-    const waveLine = nextWave === undefined ? 'final wave landed' : `next wave ${nextWave}`;
+    const waveDue = !mustering && !complete && nextWave === (gs?.round ?? 0) + 1;
+    const arriving = gs?.nextWave?.arriving;
+    const waveSize = arriving === undefined ? '' : ` · ${gs?.nextWave?.upTo ? 'up to ' : ''}${arriving} coming`;
+    const waveLine = nextWave === undefined ? 'final wave landed' : `${waveDue ? 'wave next round' : `next wave ${nextWave}`}${waveSize}`;
     // In co-op the strip is the team's total against the enemy's (§29.9), each
     // player's share under the team's, and how each one stands once it's opened.
     const scoreEntries: ScoreEntry[] = !gs ? [] : coop ? [
@@ -416,6 +421,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             sides={battle.sides}
                             sealed={placement?.picks ?? gs.myMuster}
                             owners={coop ? [...seats, ...warbandsFor(seats)] : seats}
+                            waveDue={waveDue}
                             viewerId={myUserId}
                             colourFor={colourFor}
                             nameFor={playerName}

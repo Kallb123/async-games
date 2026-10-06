@@ -38,6 +38,14 @@ export interface IRealmArenaSpecificGameStateResponse {
     coop: boolean;
     /** The co-op mission; absent is Hold the Centre. */
     mission?: "holdOut";
+    /**
+     * Hold Out's next wave (§30.11): the round it lands in, and how many of the
+     * enemy it would bring if it landed now — or, in fog of war (`upTo`), the
+     * most it could bring, and no count while a random enemy is unseen. Absent
+     * outside Hold Out's battle, once the last wave has landed, and once the
+     * battle is over.
+     */
+    nextWave?: { round: number; arriving?: number; upTo?: true };
     /** How strong the co-op warbands are (§30.5); absent is Normal. */
     difficulty?: StoredDifficulty;
     /**

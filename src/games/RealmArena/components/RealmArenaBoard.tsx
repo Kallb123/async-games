@@ -13,7 +13,7 @@ import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
 import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
@@ -106,6 +106,8 @@ interface RealmArenaBoardProps {
      * figure of the squad that musters in it, wears its owner's colour.
      */
     owners: readonly string[];
+    /** Hold Out's next wave lands next round (§30.11): the warbands' zones, where it will stand, are lit. */
+    waveDue?: boolean;
     /** The signed-in viewer, whose preferred turn of the board this browser remembers. */
     viewerId: string;
     colourFor: (userId: string) => string;
@@ -571,7 +573,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -780,7 +782,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                         return areas.map(({ col, row, width, height }, part) => (
                             <polygon
                                 key={`${seat}-${part}`}
-                                className="ag-ra-deployment"
+                                className={`ag-ra-deployment${waveDue && owner && isWarband(owner) ? ' ag-ra-deployment--wave' : ''}`}
                                 points={isoArea(view, { x: col, y: row, width, height })}
                                 style={{ '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties}
                             />

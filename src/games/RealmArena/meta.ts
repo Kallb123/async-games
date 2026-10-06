@@ -27,7 +27,9 @@ export const meta: GameMeta = {
     // asked to reload instead. Version 3's musters replay unchanged, as the Realm.
     // Version 5 grows every Hold Out wave a character on the last (§30.10): an
     // End turn from before it lands a wave that only refills, on a replay too.
-    commandVersion: 5,
+    // Version 6 rallies the team as each Hold Out wave lands (§30.11): an End
+    // turn from before it lands a wave that heals nobody, on a replay too.
+    commandVersion: 6,
     oldestReplayableCommandVersion: 2,
     available: true,
 };
