@@ -183,7 +183,8 @@ describe("nextAction never cheats (§29.11)", () => {
 });
 
 describe("nextAction's pace (§29.7)", () => {
-    it("plans a warband's turn on the Four-Gate Fort in under 250 ms", () => {
+    // The Swarm's warband is six characters to the Realm's four (§31.1).
+    it.each(["realm", "swarm"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 250 ms", faction => {
         // Three of the team's ready-made squads and one warband. The team ends
         // each of its turns where it stands, so every one of its characters is
         // on watch and every move the warband weighs has a way round to find:
@@ -191,7 +192,7 @@ describe("nextAction's pace (§29.7)", () => {
         const team = ["a", "b", "c"];
         const owners = [...team, AI];
         let id = 0;
-        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS.realm.readyMade[80])
+        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS[owner === AI ? faction : "realm"].readyMade[80])
             .map(pick => newFighter(id++, owner, pick.character, pick.square)));
         let state: BattleState = { field: FOUR_GATE_FORT, fighters, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
         const turn = (owner: string, round: number) => {

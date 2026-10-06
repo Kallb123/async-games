@@ -191,6 +191,11 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                     const fallen = known.get(event.fighter);
                     if (!fallen) break;
                     recordOf(event.fighter)!.downed += 1;
+                    // A Bloater's Burst spends whatever it had left on itself (§31.2): taken, though nobody dealt it.
+                    if (event.by === event.fighter) {
+                        recordOf(event.fighter)!.taken += hp.get(event.fighter) ?? 0;
+                        hp.set(event.fighter, 0);
+                    }
                     const by = event.by === event.fighter ? undefined : known.get(event.by);
                     const ally = allied(sided, by?.owner, fallen.owner);
                     if (by && !ally) {

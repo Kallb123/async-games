@@ -397,7 +397,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     // Whom a blast hit, of the characters the line's reader saw (§27.2).
     const hitIn = (targets: readonly number[]) => seen ? targets.filter(seen) : targets;
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
-    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name, hitIn) : undefined;
+    const hidden = enemyHidden(coop);
+    const warbands = (id: number) => isWarband(fighters.find(one => one.id === id)?.owner ?? "");
+    // An effect a hidden enemy left names the weapon it came from — Corroded
+    // the Swarm's acid, Burning the Mage's fire — on its turn, or on a
+    // teammate it hit on overwatch (§31.3).
+    if (hidden && event.kind === "effect" && event.change !== "cleared" && (isWarband(actor) || !warbands(event.fighter))) return `${name(event.fighter)} is afflicted`;
+    const veiled = hidden && "fighter" in event && warbands(event.fighter) ? veiledClause(event, name, hitIn) : undefined;
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
@@ -538,7 +544,30 @@ function noteSighting(gs: IRealmArenaSpecificGameState, events: readonly BattleE
     const battle = battleOf(gs);
     // As `viewOf` reads a view, standing or fallen, without building one.
     const seen = squadSight(battle, gs.seats[0]);
-    if (!battle.fog || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
+    if (!battle.fog || felt(battle, events) || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
+}
+
+/**
+ * Whether the team felt the enemy in these events, seen or not (§29.3, §31.3):
+ * one of its characters hurt one of theirs, or one of its own went down. A
+ * hit's damage and a knock-out's points each tell one faction from another —
+ * a Rend's 6 is no Realm blow — and the victim of one can be downed by it,
+ * leaving nobody to see who struck. So either counts as the sighting.
+ */
+function felt(battle: BattleState, events: readonly BattleEvent[]): boolean {
+    const enemy = (id: number) => isWarband(fighterById(battle, id)?.owner ?? "");
+    return events.some(event => {
+        switch (event.kind) {
+            case "shot":
+            case "struck": return enemy(event.fighter) && event.damage > 0 && !enemy(event.target);
+            case "fireball":
+            case "thrown":
+            case "demolished":
+            case "burst": return enemy(event.fighter) && event.targets.some(target => !enemy(target));
+            case "downed": return enemy(event.fighter);
+            default: return false;
+        }
+    });
 }
 
 /** Refresh every player's last known enemy positions after the battlefield changes. */

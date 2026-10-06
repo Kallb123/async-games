@@ -2269,6 +2269,9 @@ information, kept as a squad is during the muster (§17.2):
   tells the team its points' worth, and the ids in a review hint at the
   enemy's numbers; either might narrow down a faction. Both are told today in
   fog, for the same reasons, and the team still hasn't seen what it fought.
+  With a second faction (§31) a knock-out's points do tell one from the
+  other, so a knock-out of one of the enemy's, like a hit on the team, now
+  counts as the sighting (§31.3).
 - **The fog lifts when the battle ends** (§27.1), and the faction with it.
 - **The players are the Realm**, as in every battle today. Choosing their own
   faction is B6's, for free-for-all and co-op alike.
@@ -3457,9 +3460,16 @@ from `EFFECTS` for every effect that has one, rather than from Marked alone.
   to bursting among two enemies, rending the enemy beside it and mending a
   hurt ally.
 - **A hidden enemy** (§29.3): a Burst is told as a fireball is — a blast that
-  says what it did to whom — and the recap tells it as the hits it was. Every
-  Swarm weapon reaches less far than a character sees, so whatever it hits
-  can see it, and the sighting comes with the hit.
+  says what it did to whom — and the recap tells it as the hits it was. With
+  two factions a hit tells them apart — a Rend's 6 is no Realm blow, and
+  Corroded is only the Swarm's — and so does a knock-out's points (§13.7).
+  Every Swarm weapon reaches less far than a character sees, but a victim the
+  blow downs sees nothing, and a Realm Archer can hit from beyond a Knight's
+  sight, so a hit from out of sight would tell "not the Swarm". So the enemy
+  is known the moment it **hurts the team or loses a character**, seen or not
+  (`felt`, beside `noteSighting`). A line written before then calls what an
+  enemy's turn or overwatch left on someone "afflicted" rather than naming
+  the effect.
 - **Figures** are modelled in code like the Realm's (§26.5), from the same
   kit with a shell, a belly, bone and glowing acid added to its palette and a
   many-jointed `limb`. The owner's colour is the plating on each one's back.
