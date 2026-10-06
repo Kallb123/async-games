@@ -5247,8 +5247,8 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     --ra-centre: oklch(0.8 0.15 85);
     --ra-reach: oklch(0.45 0.13 250);
     --ra-range: oklch(0.6 0.19 35);
-    /* What a lined-up blow would take off an HP bar. */
-    --ra-hp-loss: oklch(0.1 0 0);
+    /* An HP bar's dark edge, and what a lined-up blow would take off it. */
+    --ra-hp-dark: oklch(0.1 0 0);
 }
 .ag-game--realmarena .ag-game-topbar { background: var(--ra-night); }
 .ag-game--realmarena .ag-scorestrip { background: var(--ra-night-2); }
@@ -5341,11 +5341,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-marker { fill: none; stroke-width: 0.7; stroke-dasharray: 1.2 0.8; pointer-events: none; }
 .ag-ra-marker--watch { stroke: var(--ag-on-dark); }
 .ag-ra-marker--sealed { stroke: var(--ra-oxblood); }
-.ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
+.ag-ra-hp { fill: rgba(0, 0, 0, 0.7); pointer-events: none; }
+.ag-ra-hp-edge { fill: none; stroke: var(--ra-hp-dark); stroke-width: 0.45; pointer-events: none; }
 /* Filled in its owner's colour (`colourFor`), as the figure is tinted. */
 .ag-ra-hp-fill { pointer-events: none; }
 /* The HP an action lined up on a character would take off, flashing black over the end of its bar. */
-.ag-ra-hp-loss { fill: var(--ra-hp-loss); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+.ag-ra-hp-loss { fill: var(--ra-hp-dark); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hp-loss { animation: none; opacity: 0.6; }
 }

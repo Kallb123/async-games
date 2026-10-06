@@ -43,7 +43,7 @@ const FIGURE_RADIUS = 4.5;
 const FIGURE_RISE = 7;
 const FIGURE_TOP = 12.5;
 const HP_BAR_WIDTH = 9;
-const HP_BAR_HEIGHT = 1.5;
+const HP_BAR_HEIGHT = 2;
 /** How high the HP bar's foot is over the middle of its square. */
 const HP_BAR_RISE = FIGURE_TOP + 0.5;
 /**
@@ -308,6 +308,8 @@ function HpBar({ x, y, fighter, colour, damage = 0 }: { x: number; y: number; fi
             <rect className="ag-ra-hp" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
             <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={left} y={top} width={now} height={HP_BAR_HEIGHT} />
             {now > after && <rect className="ag-ra-hp-loss" x={left + after} y={top} width={now - after} height={HP_BAR_HEIGHT} />}
+            {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
+            <rect className="ag-ra-hp-edge" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
         </>
     );
 }
