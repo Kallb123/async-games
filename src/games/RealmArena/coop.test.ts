@@ -742,6 +742,10 @@ describe("a review's parts of an End turn that held the enemy's (§29.9)", () =>
             }
             const parts = outcome!.parts!;
             expect(parts).toHaveLength(told);
+            // Each says which it is, in the order they're played.
+            const raws = rawParts(raw);
+            const kinds = raws.map((_, index) => index === 0 ? "ended" : index === raws.length - 1 ? "handOff" : "enemy").filter((_, index) => raws[index].length > 0);
+            expect(parts.map(part => part.kind)).toEqual(kinds);
             // Played in turn, the parts are the End turn's events, whole.
             expect(parts.flatMap(part => part.events)).toEqual(outcome!.events);
             expect(parts.slice(0, -1).every(part => part.state !== undefined)).toBe(true);

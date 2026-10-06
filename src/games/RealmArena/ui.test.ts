@@ -3,10 +3,11 @@ import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { at } from "@/utils/games/battlefield/testFixtures";
-import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter } from "./rules";
+import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf } from "./ui";
+import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
+import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
 function named(field: { width: number }, squares: Iterable<number>): string[] {
@@ -543,5 +544,73 @@ describe("coopColourOf", () => {
         expect(coopColourOf("alice", "alice")).toBe(TEAM_COLOUR);
         expect(coopColourOf("alice", "bob")).toBe(ALLY_COLOUR);
         expect(coopColourOf("alice", warbandOwner(0))).toBe(ENEMY_COLOUR);
+    });
+});
+
+describe("a review step's parts", () => {
+    const start = [ready(0, "a", "knight", 10), ready(1, warbandOwner(0), "archer", 50)];
+    const board = (fighters: Fighter[], blasted: number[] = []): RealmArenaPartState => ({ fighters, ghosts: [], clouds: [], blasted, scores: {} });
+    const shot: ToldEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false };
+    const moved: ToldEvent = { kind: "moved", fighter: 1, path: [50, 51], sneaking: false };
+
+    it("rests on a step for as long as its cues play and a beat more, and never less than the floor", () => {
+        const cues = battleCues([shot], start);
+        const end = Math.max(...cues.map(cue => cue.start + cue.length));
+        expect(partDurationMs(cues)).toBe(Math.max(STEP_MIN_MS, end + STEP_BEAT_MS));
+        // A move plays nothing, and still gives the board's glide its time.
+        expect(partDurationMs(battleCues([moved], start))).toBe(STEP_MIN_MS);
+        expect(partDurationMs([])).toBe(STEP_MIN_MS);
+    });
+
+    it("keeps a step that took twelve shots within the playback cap and a beat", () => {
+        const shots: ToldEvent[] = Array.from({ length: 12 }, () => shot);
+        expect(partDurationMs(battleCues(shots, start))).toBeLessThanOrEqual(PLAYBACK_MS + STEP_BEAT_MS);
+    });
+
+    it("is a single part for an ordinary step, and one with nothing to play for a step with no outcome", () => {
+        const plain: IRealmArenaStepOutcome = { events: [shot] };
+        const [only] = reviewParts(plain, { fighters: start, blasted: [] });
+        expect(only.cues.length).toBeGreaterThan(0);
+        expect(only.state).toBeUndefined();
+        expect(reviewStepMs(plain, { fighters: start, blasted: [] })).toBe(only.durationMs);
+        expect(reviewParts(undefined, { fighters: start, blasted: [] })).toMatchObject([{ cues: [], durationMs: STEP_MIN_MS }]);
+    });
+
+    it("plays each part from the board the one before left, and a step's time is its parts' added up", () => {
+        const moved1 = { ...start[1], square: 51 };
+        const outcome: IRealmArenaStepOutcome = {
+            events: [moved, shot, shot],
+            parts: [
+                { kind: "ended", events: [moved], state: board([start[0], moved1], [7]) },
+                { kind: "enemy", events: [shot] },
+            ],
+        };
+        const parts = reviewParts(outcome, { fighters: start, blasted: [] });
+        expect(parts).toHaveLength(2);
+        expect(parts[0].before).toEqual({ fighters: start, blasted: [] });
+        expect(parts[1].before).toEqual({ fighters: [start[0], moved1], blasted: [7] });
+        // The second part's shot flies from where the first part left the archer.
+        const flight = parts[1].cues.find(cue => cue.kind === "flight");
+        expect(flight).toMatchObject({ from: 51, to: 10 });
+        expect(reviewStepMs(outcome, { fighters: start, blasted: [] })).toBe(parts[0].durationMs + parts[1].durationMs);
+    });
+
+    it("draws a part's board over the snapshot's, leaving out an enemy the part had not met", () => {
+        const snapshot = { ...board([start[0]]), enemy: "swarm" as const, round: 3 };
+        const part = board([start[1]], [4]);
+        expect(withPartState(snapshot, part)).toEqual({ ...snapshot, fighters: [start[1]], blasted: [4], enemy: undefined });
+        expect(withPartState(snapshot, undefined)).toBe(snapshot);
+    });
+
+    it("names each part for the dock: the End turn, the enemy's actions in order, the turn passing on", () => {
+        const parts = [{ kind: "ended" as const }, { kind: "enemy" as const }, { kind: "enemy" as const }, { kind: "enemy" as const }, { kind: "handOff" as const }];
+        const labels = parts.map((_, index) => partLabel(parts, index, "the Renegades"));
+        expect(labels).toEqual(["ending the turn", "the Renegades' action 1 of 3", "the Renegades' action 2 of 3", "the Renegades' action 3 of 3", "the turn passes on"]);
+    });
+
+    it("names a part by its kind, not its place, when fog left the End turn's own part out", () => {
+        const parts = [{ kind: "enemy" as const }, { kind: "enemy" as const }];
+        expect(parts.map((_, index) => partLabel(parts, index, "the enemy"))).toEqual(["the enemy's action 1 of 2", "the enemy's action 2 of 2"]);
+        expect(partLabel([{}], 0, "the enemy")).toBeUndefined();
     });
 });

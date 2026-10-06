@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, PLAYBACK_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -30,6 +30,7 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { prefersReducedMotion } from "@/utils/hooks/usePrefersReducedMotion";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useGameData } from "@/utils/hooks/useGameData";
@@ -53,7 +54,9 @@ import { capitalise } from "@/utils/ui/text";
  * what it did as it comes back, and ends the turn (PR 7). A player coming
  * back to their turn is told what happened while they were away, and anyone
  * can step back through the match one action at a time, the view following
- * each action as it goes (PR 8).
+ * each action as it goes (PR 8), or press Play and watch it play itself
+ * forward, every action animated in turn — a co-op End turn's warband acting
+ * one action at a time, from the step's `parts` (§26.2).
  */
 export default function GameRealmArena({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -84,12 +87,37 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         complete: gameData?.complete ?? false,
         winner: gameData?.winner ?? '',
         history: gameData?.gameState?.history ?? [],
+    }, {
+        // Play rests on a step for as long as the board takes to play it,
+        // every part of an End turn included: the same plan the page follows.
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
     const gameIntro = useGameIntro('realmarena');
 
-    const gs = nav.displayedState;
+    // A step with parts (a co-op End turn holding the enemy's turn) is shown
+    // one part at a time, whenever it is shown: each part's cues play over the
+    // board as it left the part before, and the board is drawn as that part
+    // left it (§26.2). Any other step is the one part. Live shows none.
+    const previous = nav.previousSnapshot;
+    const stepOutcome = nav.displayedOutcome;
+    const parts = useMemo(
+        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState) : [],
+        [nav.isLive, previous, stepOutcome],
+    );
+    const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
+    const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
+    const part = parts[partIndex];
+    useEffect(() => {
+        if (partIndex >= parts.length - 1) return;
+        const rested = setTimeout(() => setReached(partIndex + 1), parts[partIndex].durationMs);
+        return () => clearTimeout(rested);
+    }, [parts, partIndex, setReached]);
+    // What the part playing left on the board, over the snapshot's own, so the
+    // board, the units, the scores and the stats all agree with what plays.
+    const viewed = nav.displayedState;
+    const gs = viewed && part ? withPartState(viewed, part.state) : viewed;
     const complete = nav.displayedComplete;
     const currentTurn = nav.displayedCurrentTurn;
     const myUserId = user?.id ?? '';
@@ -245,20 +273,34 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
     // Stepping through the match, the view goes to each action as it comes.
     // A step that handed the turn on moved everyone's AP, not anyone in
-    // particular, so the view stays where it is. One that ended the battle
-    // hands it to nobody, and is followed: it's the blow that decided it.
-    // Live, it goes to a target picked from the turn sheet's list instead.
-    const previous = nav.previousSnapshot;
+    // particular, so the view stays where it is — save for the parts of an
+    // End turn before the hand-off, which are the enemy's actions. One that
+    // ended the battle hands it to nobody, and is followed: it's the blow that
+    // decided it. Live, it goes to a target picked from the turn sheet's list
+    // instead. Each part is its own key, so the view glides again for each.
+    const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
     const follow = !nav.isLive
-        ? previous && (previous.currentTurn === currentTurn || currentTurn === '')
-            ? { squares: actionSquares(previous.specificGameState.fighters, fighters), key: String(nav.viewIndex) }
+        ? previous && part && (!handedOn || partIndex < parts.length - 1)
+            ? { squares: actionSquares(part.before.fighters, fighters), key: `${nav.viewIndex}:${partIndex}` }
             : null
         : picked;
-    // And plays what each step did as it's stepped to (§26.1), whoever took it.
-    const stepEvents = nav.displayedOutcome?.events;
-    const stepCues = previous && stepEvents ? battleCues(stepEvents, previous.specificGameState.fighters) : [];
+    // And plays what each step — each part of one — did as it's stepped to
+    // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : previous && stepCues.length > 0 ? { key: `step:${nav.viewIndex}`, cues: stepCues, field: battlefieldOf(map, previous.specificGameState.blasted) } : null;
+        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted) } : null;
+    // Which part of the step the dock says it is on, for a step with several.
+    const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
+
+    // Playing the review brings the board into view as it starts — from the
+    // dock's Play or the recap screen's replay, whose board mounts a moment
+    // after. The top bar sticks and the dock is pinned, so the board is
+    // scrolled to below the one (`scroll-margin-top`) and above the other.
+    const boardRef = useRef<HTMLDivElement>(null);
+    const boardShown = !!gs;
+    useEffect(() => {
+        if (!nav.playing || !boardShown) return;
+        boardRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    }, [nav.playing, boardShown]);
 
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
@@ -371,6 +413,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                 onDismiss={recap.dismiss}
                 viewerId={user?.id}
                 onReact={recap.react}
+                replay={myUserId ? {
+                    label: '▶︎ Replay from your last turn',
+                    onClick: () => {
+                        recap.dismiss();
+                        nav.playFromLastTurnOf(myUserId);
+                    },
+                } : undefined}
             />
         );
     }
@@ -419,7 +468,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
             {gs && (
                 <>
-                    <div className="ag-board-area">
+                    <div className="ag-board-area" ref={boardRef}>
                         <RealmArenaBoard
                             field={field}
                             fighters={fighters}
@@ -536,7 +585,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                         <RealmArenaWatchSwitches fighters={fighters} player={myUserId} keepStill={keepStill} onKeepStill={setKeepStill} disabled={pendingTarget !== null} />
                     )}
 
-                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} canPlay userIdList={userIdList} stepDetail={stepDetail} />
                 </>
             )}
         </GameShell>

@@ -3,6 +3,7 @@
 // state the response already ships, never a rule: those are rules.ts's.
 
 import type { Rect } from "@/utils/ui/mapLabels";
+import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
@@ -705,4 +706,85 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
     const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
     if (end <= PLAYBACK_MS) return cues;
     return cues.map(cue => scaled(cue, PLAYBACK_MS / end));
+}
+
+/** How long a review rests after a step's last cue has landed, before the next step (or part) begins. */
+export const STEP_BEAT_MS = 400;
+/**
+ * The least a review step or part lasts, however little it plays: one with no
+ * cues (a move) still gives the board's glide to it time to land.
+ */
+export const STEP_MIN_MS = 1200;
+
+/**
+ * How long a run of cues takes to play out, and a beat more: the time a review
+ * waits before the next step or part. Each cue is already shortened to fit
+ * `PLAYBACK_MS` by `battleCues`, so this is bounded by it too.
+ */
+export function partDurationMs(cues: readonly BattleCue[]): number {
+    const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
+    return Math.max(STEP_MIN_MS, end + STEP_BEAT_MS);
+}
+
+/** The part of a board a review's cues and its follow-zoom read as it stood before a step or part. */
+export type BoardBefore = Pick<RealmArenaPartState, "fighters" | "blasted">;
+
+/** One stretch of a review step, played on its own (§26.2): the whole of an ordinary step, or one part of a co-op End turn. */
+export interface ReviewPart {
+    /** Which part of a co-op End turn it is; absent on an ordinary step. */
+    kind?: IRealmArenaStepPart["kind"];
+    /** What the board plays for it. */
+    cues: BattleCue[];
+    /** The board as the part found it: where its cues stand, and what the follow-zoom compares against. */
+    before: BoardBefore;
+    /** The board after it, drawn in place of the snapshot's; absent on the last part, whose board is the snapshot's own. */
+    state?: RealmArenaPartState;
+    /** How long a review rests on it. */
+    durationMs: number;
+}
+
+/**
+ * The parts a review plays a step in, one after another. A step with no parts
+ * of its own is a single one, so a caller needn't tell the two apart. Each
+ * part starts from the board the one before it left (the step's own start for
+ * the first), which is how its cues find where everyone stood.
+ */
+export function reviewParts(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore): ReviewPart[] {
+    const told: (Omit<IRealmArenaStepPart, "kind"> & Partial<Pick<IRealmArenaStepPart, "kind">>)[] = outcome?.parts?.length ? outcome.parts : [{ events: outcome?.events ?? [] }];
+    let from = before;
+    return told.map(part => {
+        const cues = battleCues(part.events, from.fighters);
+        const played: ReviewPart = { kind: part.kind, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
+        if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
+        return played;
+    });
+}
+
+/** How long a review rests on a whole step: its parts' times added up. */
+export function reviewStepMs(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore): number {
+    return reviewParts(outcome, before).reduce((total, part) => total + part.durationMs, 0);
+}
+
+/** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
+export function withPartState<T extends RealmArenaPartState>(state: T, part: RealmArenaPartState | undefined): T {
+    if (!part) return state;
+    const { fighters, ghosts, clouds, blasted, scores, enemy } = part;
+    return { ...state, fighters, ghosts, clouds, blasted, scores, enemy };
+}
+
+/**
+ * What the review dock says of the part of a step it is playing, for a step
+ * with more than one: the player's own End turn, each of the warband's actions
+ * it was told of ("the Renegades' action 2 of 5"), and the turn passing on.
+ * Read from each part's kind, not its place: in fog of war a part the viewer
+ * was told nothing of is left out, so the first or last may be the enemy's.
+ */
+export function partLabel(parts: readonly Pick<ReviewPart, "kind">[], index: number, enemyName: string): string | undefined {
+    const kind = parts[index]?.kind;
+    if (kind === "ended") return "ending the turn";
+    if (kind === "handOff") return "the turn passes on";
+    if (kind !== "enemy") return undefined;
+    const actions = parts.filter(part => part.kind === "enemy").length;
+    const nth = parts.slice(0, index + 1).filter(part => part.kind === "enemy").length;
+    return `${possessive(enemyName)} action ${nth} of ${actions}`;
 }

@@ -106,6 +106,13 @@ export type RealmArenaPartState = Pick<IRealmArenaSpecificGameStateResponse, "fi
  * board after them.
  */
 export interface IRealmArenaStepPart {
+    /**
+     * Which part of the End turn it is: the player's own End turn (and the
+     * warband's burning as its turn began), one of the warband's actions, or
+     * the turn passing on. A part the viewer was told nothing of is left out,
+     * so the first part needn't be the player's, nor the last the hand-off.
+     */
+    kind: "ended" | "enemy" | "handOff";
     events: ToldEvent[];
     /**
      * The board after this part. Absent on the last part, whose board is the

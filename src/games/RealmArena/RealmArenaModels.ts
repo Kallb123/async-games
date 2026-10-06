@@ -643,14 +643,14 @@ function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IReal
         return { fighters, ghosts, clouds, blasted, scores, ...whom ? { enemy: whom } : {} };
     };
     const planned = [
-        { events: said(both(recap.told, enemy.startedTold), [...own, ...enemy.started]), after: enemy.startedAfter },
-        ...enemy.steps.map(step => ({ events: said(step.told, step.events), after: step.after })),
-        { events: said(both(enemy.endedTold, recap.startedTold), [...enemy.ended ?? [], ...started]), after: undefined },
+        { kind: "ended" as const, events: said(both(recap.told, enemy.startedTold), [...own, ...enemy.started]), after: enemy.startedAfter },
+        ...enemy.steps.map(step => ({ kind: "enemy" as const, events: said(step.told, step.events), after: step.after })),
+        { kind: "handOff" as const, events: said(both(enemy.endedTold, recap.startedTold), [...enemy.ended ?? [], ...started]), after: undefined },
     ].filter(part => part.events.length > 0);
     if (planned.length < 2) return undefined;
-    return planned.map(({ events: told, after }, index): IRealmArenaStepPart => {
+    return planned.map(({ kind, events: told, after }, index): IRealmArenaStepPart => {
         const state = index < planned.length - 1 ? board(after) : undefined;
-        return { events: withoutRolls(told), ...state ? { state } : {} };
+        return { kind, events: withoutRolls(told), ...state ? { state } : {} };
     });
 }
 

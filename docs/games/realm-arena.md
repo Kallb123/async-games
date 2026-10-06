@@ -1823,6 +1823,27 @@ sends (`BattleEvent` in `rules.ts`).
   Realm Arena opts in. Its events are all public once the battle starts,
   since the log tells every one of them — except, in fog of war, what the
   viewer's squad didn't see (§27.2). A muster's outcome carries none.
+- **Play, and a co-op End turn's parts.** The review can play itself: Play
+  steps forward one recorded action at a time, resting on each for as long as
+  the board takes to play it, until it reaches the current position, and Stop
+  takes its place while it runs. The recap screen's "Replay from your last
+  turn" starts the same walk from the step before the viewer's last command.
+  Starting it scrolls the board into view. One pure plan in `ui.ts`
+  (`reviewParts`) times every step — its cues' end plus a short beat, never
+  less than a floor that lets the follow-zoom land — and both the hook's
+  `stepDurationMs` and the page's own timer read it, so they never disagree.
+  In co-op the warband takes its whole turn inside the player's End turn, so
+  that one step's outcome also carries `parts`: the player's End turn with the
+  burning that began the warband's turn, one part for each action the
+  warband took, and its End turn with the next seat's burning. Each part
+  has the events it plays and, except the last, the board it left, drawn
+  for the viewer through the same fog as the snapshot (§27). Whenever such a
+  step is shown, play or step by hand, the page plays the parts one after
+  another: each part's cues start from the board the part before left, the
+  board, units, scores and stats are drawn as that part left them, and the
+  zoom follows each part's own changes (every part has its own playback and
+  follow key). The dock says which part it is on ("the Renegades' action 2 of
+  5"). A step with no parts is one part, so the two take the same path.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
   a second game wants it (AGENTS.md's second-copy rule).
