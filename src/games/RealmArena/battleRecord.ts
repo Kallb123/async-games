@@ -18,7 +18,7 @@ import type { IReplayStep } from "@/utils/games/replay";
 import { CHARACTERS, type CharacterId } from "./characters";
 import type { IRealmArenaSpecificGameState } from "./RealmArenaModels";
 import { CHARACTER_IDS } from "./roster";
-import { allied, battleRounds, ENEMY_SIDE, isWarband, knockoutPoints, sideOf, type BattleEvent, type BattleState, type Fighter } from "./rules";
+import { allied, battleRounds, ENEMY_SIDE, isStanding, isWarband, knockoutPoints, sideOf, TEAM_SIDE, waveArrives, type BattleEvent, type BattleState, type Fighter } from "./rules";
 
 /** What one player's characters of one kind did in a battle, pooled as their mastery is (§23.1). */
 export interface FightingRecord {
@@ -66,7 +66,7 @@ export interface FightingRow extends FightingRecord {
  * the enemy (`ENEMY_SIDE`), its warbands added together (§29.6) — the team
  * reads its players one by one, and the enemy as the one squad it fights.
  */
-export interface BattleRecord {
+export interface BattleRecord extends Partial<HoldOutRecord> {
     /** A row for every kind of character each column fought with, in seat order — the enemy last — and then the muster's. */
     fighting: FightingRow[];
     /** Each column's points from holding the centre; the rest of its score is knock-outs and assists. */
@@ -82,6 +82,30 @@ export interface BattleRecord {
     squadHpPerRound: Map<string, number>[];
     /** Every character downed, on its column's line, in the round it fell: `turnIndex` is that round's index. */
     losses: GameResultEvent[];
+}
+
+/**
+ * One Hold Out wave (§30.10), the warbands' own muster the first: the round it
+ * landed in, from 0 as `pointsPerRound` counts them, how many of the enemy it
+ * brought onto the battlefield, and how many of the enemy each player downed
+ * from then until the next wave landed.
+ */
+export interface WaveRecord {
+    round: number;
+    arrived: number;
+    downed: Map<string, number>;
+}
+
+/**
+ * What only a battle of Hold Out records (§30.10), absent from any other and
+ * from a result recorded before it: its waves, how many characters each side
+ * had standing at the end of every round, `TEAM_SIDE`'s and `ENEMY_SIDE`'s,
+ * and how many rounds it was to last.
+ */
+export interface HoldOutRecord {
+    waves: WaveRecord[];
+    standingPerRound: Map<string, number>[];
+    battleRounds: number;
 }
 
 const keyOf = (userId: string, character: CharacterId) => `${userId}\u0000${character}`;
@@ -118,6 +142,10 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
     const losses: GameResultEvent[] = [];
     /** The battle round being played, from 0. */
     let round = 0;
+    /** Whether it's a battle of Hold Out, which the first step of the battle says. */
+    let holdOut = false;
+    const waves: WaveRecord[] = [];
+    const standingPerRound: Map<string, number>[] = [];
 
     const recordOf = (id: number | undefined): FightingRecord | undefined => {
         const fighter = id === undefined ? undefined : known.get(id);
@@ -202,6 +230,8 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                         const downer = recordOf(event.by)!;
                         downer.knockouts += 1;
                         downer.knockoutPoints += knockoutPoints(fallen.character);
+                        const wave = waves.at(-1);
+                        if (wave && isWarband(fallen.owner)) wave.downed.set(by.owner, (wave.downed.get(by.owner) ?? 0) + 1);
                     }
                     const how = !by ? "" : ` by ${by.owner === fallen.owner ? "its own" : ally ? "an allied" : "an enemy"} ${CHARACTERS[by.character].name}`;
                     losses.push({ turnIndex: round, icon: "knockout", title: `${CHARACTERS[fallen.character].name} downed${how}`, seriesKey: columnOf(fallen.owner) });
@@ -235,6 +265,16 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             undoable = undoable.slice(Math.max(0, undoable.length - (gs.undoStack ?? []).length));
 
             const fighters = gs.fighters ?? [];
+            // A wave is every round it was due in that this step began, and
+            // brought whoever of the enemy wasn't on the battlefield before.
+            holdOut = gs.coop?.mission === "holdOut";
+            if (holdOut) {
+                if (waves.length === 0) waves.push({ round: 0, arrived: 0, downed: new Map() });
+                for (let begun = round + 1; begun <= Math.min(gs.roundsPlayed, lastRound); begun++) {
+                    if (waveArrives(begun + 1, lastRound + 1)) waves.push({ round: begun, arrived: 0, downed: new Map() });
+                }
+                waves.at(-1)!.arrived += fighters.filter(fighter => isWarband(fighter.owner) && !known.has(fighter.id)).length;
+            }
             for (const fighter of fighters) {
                 known.set(fighter.id, { owner: fighter.owner, character: fighter.character });
                 // Starts its row, so a character that did nothing still has one.
@@ -251,6 +291,7 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             for (let skipped = pointsPerRound.length; skipped < index; skipped++) {
                 pointsPerRound.push(pointsPerRound[skipped - 1]);
                 squadHpPerRound.push(squadHpPerRound[skipped - 1]);
+                if (holdOut) standingPerRound.push(standingPerRound[skipped - 1]);
             }
             const score = (column: string) => Object.entries(gs.scores ?? {}).reduce((sum, [owner, points]) => sum + (columnOf(owner) === column ? points : 0), 0);
             pointsPerRound[index] = new Map(columns.map(column => [column, score(column)]));
@@ -262,6 +303,10 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
             const before = squadHpPerRound[index] ?? squadHpPerRound[index - 1];
             squadHpPerRound[index] = new Map(columns.map(column => [column, left(column) ? before?.get(column) ?? 0
                 : fighters.filter(ours(column)).reduce((sum, fighter) => sum + fighter.hp, 0)]));
+            if (holdOut) {
+                const standing = (enemy: boolean) => fighters.filter(fighter => isStanding(fighter) && isWarband(fighter.owner) === enemy).length;
+                standingPerRound[index] = new Map([[TEAM_SIDE, standing(false)], [ENEMY_SIDE, standing(true)]]);
+            }
             round = gs.roundsPlayed;
         },
 
@@ -276,6 +321,11 @@ export function battleRecorder(seats: readonly string[], sides?: BattleState["si
                 pointsPerRound: [...pointsPerRound],
                 squadHpPerRound: [...squadHpPerRound],
                 losses: [...losses],
+                ...(holdOut ? {
+                    waves: waves.map(wave => ({ ...wave, downed: new Map(wave.downed) })),
+                    standingPerRound: [...standingPerRound],
+                    battleRounds: lastRound + 1,
+                } : {}),
             };
         },
     };

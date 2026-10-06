@@ -1325,6 +1325,11 @@ export function waveArrives(round: number, rounds: number): boolean {
     return round > 1 && round <= rounds && (round - 1) % WAVE_EVERY === 0;
 }
 
+/** How many Hold Out waves have landed by the start of `round` (counted from 1), the warbands' own muster not counted (§30.3). */
+export function wavesLanded(round: number): number {
+    return Math.max(0, Math.floor((round - 1) / WAVE_EVERY));
+}
+
 /** The round the next Hold Out wave arrives in after `round`, or undefined once the last has landed (§30.3). */
 export function nextWaveRound(round: number, rounds: number): number | undefined {
     const next = round + WAVE_EVERY - (round - 1) % WAVE_EVERY;

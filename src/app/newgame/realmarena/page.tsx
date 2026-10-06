@@ -38,7 +38,7 @@ const ENEMY_CHOICES: OptionChoice<Enemy>[] = [
 // What a co-op team sets out to do (§30.3): the keep's points race, or surviving the waves.
 const MISSION_CHOICES: OptionChoice<Mission>[] = [
   { id: 'holdCentre', label: 'Hold the Centre', description: 'Score points by controlling the keep and knocking enemies out.' },
-  { id: 'holdOut', label: 'Hold Out', description: 'Survive repeated enemy waves until the last round.' },
+  { id: 'holdOut', label: 'Hold Out', description: 'Survive enemy waves, each bigger than the last, until the last round.' },
 ];
 
 // Where Hold Out is fought (§30.9): the fort built for it, or the line battle Hold the Centre is fought on.

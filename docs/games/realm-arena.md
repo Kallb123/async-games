@@ -3088,7 +3088,8 @@ surviving the waves as the first co-op mission of its own. This is it.
   character standing in its deployment zone for each of its own that is down.
   So the enemy never outnumbers its starting strength, which keeps the board
   and the planner's time (§29.7) where they are; every knock-out still buys
-  the team time until the next wave.
+  the team time until the next wave. (Since grown: each wave brings a
+  warband one character more than the last, §30.10.)
 - **Where a wave stands.** Each fresh character is placed as its warband's
   ready-made squad is (`readyMadeMuster`), on the first free standable square
   of the zone; one with no free square waits for the next wave. A team
@@ -3325,9 +3326,8 @@ of one there).
 - ~~**Does Hold Out want its own battlefield?**~~ Yes: the Sacked Fort
   (§30.9), picked by the host, with the team in the middle and the enemy
   round the edges. The gate forts stay a choice.
-- **Do the waves want to grow?** A wave refills a warband and no more. If the
-  later rounds are too easy, the next lever is one character more per wave
-  after the second, held to the time budget.
+- ~~**Do the waves want to grow?**~~ Yes: every wave brings a warband one
+  character more than the last (§30.10).
 - **Is the memory too generous?** A remembered enemy is kept until its square
   is seen empty, however long ago it was seen. If old ghosts clutter the
   board, they fade after a few rounds.
@@ -3399,6 +3399,48 @@ reaches, the shared reach checks, the first-turn walk, and the wall's gaps.
 `coop.test.ts`: the setting (Hold Out only), the battle created on the right
 map with its setup lines, whole Hold Out battles on it for both teams with and
 without fog, and a replay on it.
+
+### 30.10 Growing waves, and Hold Out's own result
+
+§30.8 asked whether the waves want to grow. A wave that only refills leaves
+the later rounds no harder than the first, and a team that downs nobody faces
+no wave at all — the log says one arrives, and nobody does. So each wave now
+grows the enemy.
+
+**The rule.** The wave landing as round *r* begins brings each warband up to
+its squad **and one character more for every wave landed so far**, its own
+muster not counted (`wavesLanded`): one more at round 4, two at round 7, and so
+on. The extra characters are the squad's own, in its order, the first again
+after the last (`waveStrength`), so a Realm warband on Normal grows by a
+Knight, then a Man-at-arms, an Archer and a Scout. Strength only rises, so a
+wave always has someone to bring, however few of the enemy are down. It
+stands as any wave does (§30.3): its warband's ready-made places for the
+grown squad first, then the rest of the zone, and anyone with no room waits
+for the next wave. Every faction's strongest last wave fits every warband's
+zone on every Hold Out battlefield, which a test holds.
+
+**Engine.** A wave changes how an End turn plays, so it takes a command
+version (§30.3, `docs/command-versions.md`): version 5. The End turn hands its
+version to `handOff`, and an End turn from before it lands a wave that only
+refills, on a replay too. The planner's time holds: a large battle on Hard
+against the Swarm for three, the most characters any battle fields, plans its
+slowest turn in about three-quarters of a second.
+
+**The result.** A battle of Hold Out tells its own story on the result page,
+read off the game-end replay with the rest of the record (§28):
+
+- **The record** gains, for Hold Out alone, every wave — the round it landed,
+  how many of the enemy it brought, and how many each player downed until the
+  next landed — how many of each side stood at the end of every round, and
+  the battle's length (`HoldOutRecord`). Absent from any other battle, and
+  from a result recorded before it, which shows what it always did.
+- **Stats** open with a *Hold Out* group above the players': how it ended
+  ("Held out for all 15 rounds", "Beat the last wave in round 13 of 15",
+  "Overrun in round 9 of 15"), the waves faced with how many of the enemy took
+  the field and how many the team downed, and a line for each wave.
+- **Charts** gain *Characters standing per round*, the team's line against
+  the enemy's with each wave marked where it landed (a pennant, `wave`), and
+  *Enemies downed by wave*, a bar a wave stacked by who downed them.
 
 ---
 
@@ -3587,3 +3629,4 @@ Realm, its sibling in the same world.
 | 1.44 | The Swarm, a second faction (§31, B6): five characters — the Skitterling, the Ravager, the Spitter, the Bloater and the Broodmother — cheaper and weaker than the Realm's, so its ready-made squads field more of them; Rend, Regrowth and Burst; and Corroded, +10% to hit, from its acid. Fought in co-op, picked by the host or drawn at Random; a squad choosing its own faction is next. |
 | 1.45 | Choosing a faction (§32, B6): the host allows any of the factions on the setup screen, at least one, and each player picks one of them as they muster, held to its roster; a timed-out muster takes the first. |
 | 1.46 | The warbands plan about three times quicker, every choice unchanged (§29.7): a turn keeps each square's Exposure and Threat, and Hold Out's walk to the team, from one plan to the next (`TurnMemo`); that walk is one search from every hunted square (`costsFrom`); and the path search, the copy an action resolves on, the smoke check and the walk for cover each do less. |
+| 1.47 | Growing waves, and Hold Out's own result (§30.10): every wave brings a warband one character more than the last (command version 5), and the result page tells a battle of Hold Out by its waves — how it ended, what each wave brought and how many of it the team downed, and who stood each round. |

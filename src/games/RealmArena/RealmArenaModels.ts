@@ -17,7 +17,7 @@ import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, typ
 import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
-import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow } from "./battleRecord";
+import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
 import { CHARACTER_IDS } from "./roster";
 import { ENEMY_COLOUR, TEAM_COLOUR, TEAM_NAME } from "./ui";
 
@@ -632,6 +632,10 @@ export const realmArenaGameResultStatsSchemaDef = {
     pointsPerRound: [{ type: Schema.Types.Map, of: Number }],
     squadHpPerRound: [{ type: Schema.Types.Map, of: Number }],
     losses: [gameResultEventSchemaDef],
+    // Hold Out's alone (§30.10): absent from any other battle, and from a result recorded before them.
+    waves: { type: [{ _id: false, round: Number, arrived: Number, downed: { type: Schema.Types.Map, of: Number } }], default: undefined },
+    standingPerRound: { type: [{ type: Schema.Types.Map, of: Number }], default: undefined },
+    battleRounds: Number,
 };
 
 /**
@@ -731,7 +735,61 @@ export function formatRealmArenaResultStats(stats: IRealmArenaGameResultStats, u
         linesOf(row.userId).push(`${CHARACTERS[row.character]?.name ?? row.character}: ${xpOf({ battles: 1, attacks, abilities, items })} XP`);
     }
     // The enemy's column in co-op is its warbands together (§29.6), and nobody's to name.
-    return [...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? ENEMY_SERIES.name : userId), lines }));
+    const holdOut = holdOutGroup(stats);
+    return [
+        ...(holdOut ? [holdOut] : []),
+        ...[...groups].map(([userId, lines]) => ({ username: usernameById.get(userId) ?? (userId === ENEMY_SIDE ? ENEMY_SERIES.name : userId), lines })),
+    ];
+}
+
+/** How many of the enemy a wave's players downed, all of them together. Read by name: a stored wave is a Mongoose subdocument. */
+const downedIn = ({ downed }: WaveRecord): number => [...mongoMap(downed ?? new Map<string, number>()).values()].reduce((sum, count) => sum + count, 0);
+
+/**
+ * A battle of Hold Out's own story (§30.10), above the players': how it ended
+ * and in which round, how many of the enemy its waves brought and how many the
+ * team downed, then each wave's. None for any other battle, nor for a result
+ * recorded before waves were.
+ */
+function holdOutGroup(stats: IRealmArenaGameResultStats): GameResultStatGroup | undefined {
+    const { waves, standingPerRound, battleRounds: rounds } = stats;
+    if (!waves?.length || !standingPerRound?.length || !rounds) return undefined;
+    const lasted = standingPerRound.length;
+    const overrun = (mongoMap(standingPerRound[lasted - 1]).get(TEAM_SIDE) ?? 0) === 0;
+    const arrived = waves.reduce((sum, wave) => sum + wave.arrived, 0);
+    const downed = waves.reduce((sum, wave) => sum + downedIn(wave), 0);
+    return {
+        username: "Hold Out",
+        lines: [
+            overrun ? `Overrun in round ${lasted} of ${rounds}`
+                : lasted >= rounds ? `Held out for all ${rounds} rounds`
+                : `Beat the last wave in round ${lasted} of ${rounds}`,
+            `Faced ${pluralize(waves.length, "wave")}: ${arrived} of the enemy took the field, and the team downed ${downed}`,
+            ...waves.map((wave, index) => `Wave ${index + 1}, round ${wave.round + 1}: ${wave.arrived} arrived, ${downedIn(wave)} downed`),
+        ],
+    };
+}
+
+/** How many of each side stood, round by round, with every wave marked on the enemy's line as it landed (§30.10). */
+function formatStandingChart(stats: IRealmArenaGameResultStats) {
+    const events: StoredGameResultEvent[] = (stats.waves ?? []).slice(1).map((wave, index) =>
+        ({ turnIndex: wave.round, icon: "wave", title: `Wave ${index + 2}: ${wave.arrived} arrived`, seriesKey: ENEMY_SIDE }));
+    return formatPerTurnChart(stats.standingPerRound, "Characters standing per round", "Characters", 1, SIDE_SERIES, events);
+}
+
+/** How many of the enemy the team downed in each wave, stacked by who downed them (§30.10). */
+function formatWaveChart(stats: IRealmArenaGameResultStats): GameResultBarChart | undefined {
+    if (!stats.waves?.length) return undefined;
+    return {
+        kind: "bar",
+        title: "Enemies downed by wave",
+        yLabel: "Downed",
+        bars: stats.waves.map((wave, index) => ({
+            label: `Wave ${index + 1}`,
+            value: downedIn(wave),
+            segments: Object.fromEntries(mongoMap(wave.downed ?? new Map<string, number>())),
+        })),
+    };
 }
 
 /** The enemy, wherever the result draws it beside the players (§29.9): one column, its warbands added together. */
@@ -816,16 +874,21 @@ function formatRecordTable(stats: IRealmArenaGameResultStats): GameResultTable |
  * health beside it; then the damage each kind of character dealt, and the
  * table of everything each squad did. None for a result without the record.
  * In co-op the races are the team's line against the enemy's, and the damage
- * and the table draw the enemy beside the players (§29.9).
+ * and the table draw the enemy beside the players (§29.9). Hold Out adds how
+ * many of each side stood, its waves marked, and what the team downed of each
+ * wave (§30.10).
  */
 export function formatRealmArenaCharts(stats: IRealmArenaGameResultStats): GameResultAnyChart[] {
     const damage = formatDamageChart(stats);
     const table = formatRecordTable(stats);
+    const waves = formatWaveChart(stats);
     return [
         ...compactCharts(
             formatRaceChart(stats, stats.pointsPerRound, "Points per round", "Points", stats.losses),
             formatRaceChart(stats, stats.squadHpPerRound, "Squad health per round", "HP"),
+            formatStandingChart(stats),
         ),
+        ...(waves ? [waves] : []),
         ...(damage ? [damage] : []),
         ...(table ? [table] : []),
     ];
