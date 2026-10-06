@@ -289,9 +289,10 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.sightings ? { sightings: Object.fromEntries(Object.entries(gs.sightings).map(([viewer, ghosts]) => [viewer, ghosts.map(ghost => ({ ...ghost }))])) } : {}),
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.size ? { size: gs.size } : {}),
+        ...(gs.factions ? { factions: [...gs.factions] } : {}),
         ...(gs.coop ? { coop: { ...gs.coop } } : {}),
         blasted: [...(gs.blasted ?? [])],
-        musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
+        musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},

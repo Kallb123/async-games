@@ -97,8 +97,10 @@ describe("mustering from a faction (B6)", () => {
     it("keeps the faction sealed with the squad: the other player isn't told it before the battle begins", async () => {
         const game = makeGame(undefined, {}, { factions: ["realm", "swarm"] });
         await play(game, musterAs("a", game, 0, "swarm"));
-        const wire = JSON.stringify((await responseFor(game, "b")).specificGameState);
-        for (const character of FACTIONS.swarm.characters) expect(wire).not.toContain(character);
+        for (const viewer of ["b", null]) {
+            const wire = JSON.stringify((await responseFor(game, viewer)).specificGameState);
+            for (const character of FACTIONS.swarm.characters) expect(wire, String(viewer)).not.toContain(character);
+        }
     });
 
     it("gives a timed-out muster the first allowed faction's ready-made squad", async () => {

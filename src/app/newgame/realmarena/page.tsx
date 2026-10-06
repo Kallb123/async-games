@@ -157,7 +157,7 @@ function NewGameRealmArenaForm() {
               on={on}
               // The last faction left on can't go: the players need one to muster from.
               disabled={on && factions.length === 1}
-              onToggle={() => setFactions(FACTION_IDS.filter(other => other === id ? !on : factions.includes(other)))}
+              onToggle={() => setFactions(on ? factions.filter(other => other !== id) : [...factions, id])}
             />
           );
         })}

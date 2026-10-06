@@ -22,8 +22,8 @@ import { handItem, handOut, itemsOf, NO_ITEMS, placeTap, squadCounts, squadOf, t
  * them, and picks an option (§23.2) a rank has unlocked.
  */
 export function useMusterDraft(field: Battlefield, seat: number, budget: number, ranks: Ranks, factions: readonly FactionId[], turnKey: string) {
-    const [factionId, setFaction] = useResettingState<FactionId | undefined>(factions[0], turnKey);
-    const faction = FACTIONS[factionId ?? "realm"];
+    const [factionId, setFaction] = useResettingState<FactionId>(factions[0], turnKey);
+    const faction = FACTIONS[factionId];
     // Another faction is another roster: the squad starts again from its ready-made one for the budget.
     const squadKey = `${turnKey}:${factionId}`;
     const readyMade = readyMadeSquad(faction, budget);
