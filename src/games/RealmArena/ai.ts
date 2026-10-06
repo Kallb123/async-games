@@ -86,17 +86,25 @@ export interface TurnMemo {
     harm: Map<string, Map<Square, Harm>>;
     /** The last walk from the squares hunted (§30.3), for each climb: the team stands still through a warband's turn, so plan after plan hunts the same squares. */
     hunts: Map<number, { hunted: string; costs: Float64Array }>;
-    /** A number for each battlefield seen this turn, for the keys above: a blast makes a new one. */
-    fields: Map<Battlefield, number>;
+    /** Each battlefield seen this turn, numbered by its place here for the keys above: a blast makes a new one. */
+    fields: Battlefield[];
 }
 
-export const turnMemo = (): TurnMemo => ({ harm: new Map(), hunts: new Map(), fields: new Map() });
+export const turnMemo = (): TurnMemo => ({ harm: new Map(), hunts: new Map(), fields: [] });
 
-/** The number a turn knows a battlefield by. */
+/**
+ * The number a turn knows a battlefield by: the same for the same ground.
+ * Once anything is blasted, every plan is handed a new copy of the map
+ * (`battlefieldWith`), so it's told by its squares rather than by which copy
+ * it is.
+ */
 function fieldId(memo: TurnMemo, field: Battlefield): number {
-    let id = memo.fields.get(field);
-    if (id === undefined) memo.fields.set(field, id = memo.fields.size);
-    return id;
+    const same = (seen: Battlefield) => seen === field || (seen.width === field.width && seen.tiles.length === field.tiles.length
+        && seen.tiles.every((tile, square) => tile.terrain === field.tiles[square].terrain && tile.elevation === field.tiles[square].elevation));
+    const id = memo.fields.findIndex(same);
+    if (id >= 0) return id;
+    memo.fields.push(field);
+    return memo.fields.length - 1;
 }
 
 /** What a warband plans with: its side's view, whose turn it is, and the round. */
@@ -152,16 +160,10 @@ function planFor(view: BattleState, owner: string, round: number, memo: TurnMemo
     const objective = hunted.length > 0 ? hunted : field.objectives[CENTRE] ?? [];
     const centre = new Set(objective);
     const huntKey = `${fieldId(memo, field)}:${[...hunted].sort((a, b) => a - b).join()}`;
-    const walks = new Map<number, Float64Array>();
     const toCentre = (fighter: Fighter): number => {
         if (centre.size === 0 || centre.has(fighter.square)) return 0;
         const climb = CHARACTERS[fighter.character].climb ?? DEFAULT_CLIMB;
-        let costs = walks.get(climb);
-        if (!costs) {
-            costs = hunted.length > 0 ? huntWalk(memo, field, hunted, huntKey, climb) : centreWalk(field, climb);
-            walks.set(climb, costs);
-        }
-        const cost = costs[fighter.square];
+        const cost = (hunted.length > 0 ? huntWalk(memo, field, hunted, huntKey, climb) : centreWalk(field, climb))[fighter.square];
         return Number.isFinite(cost) ? cost : field.width + field.height;
     };
     let watched: ReadonlySet<Square> | undefined;

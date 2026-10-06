@@ -2532,6 +2532,8 @@ could reach:
 - *Target:* a warband's turn plans in under 250 ms on the Four-Gate Fort, and
   a test holds it there. If it doesn't, the dozen gets smaller first; a cache
   of line of sight and odds within a turn comes only if that isn't enough.
+  (It came as the turn's memo, above, which keeps each square's Exposure and
+  Threat rather than the sight and odds under them.)
 
 **When something goes wrong**, the player's End turn still succeeds. An
 action the planner chose that `check` refuses ends that warband's turn there,
@@ -2594,7 +2596,9 @@ sure it is.
   quicker a warband. The test holds the average under 250 ms and every turn
   under 500, so one slow turn on a busy test runner doesn't fail it. If the
   slowest turns matter in a real request, the cache of sight and odds within
-  a turn is next.
+  a turn is next. (Since built, as the turn's memo, above, with the cheaper
+  searches and copies of revision 1.46: whole battles against the planner
+  run about three times quicker, every choice unchanged.)
 - For the turn loop (PR 4a): the cap of four actions a character is its, but
   every action costs at least 1 AP, so the planner can't loop on its own. An
   action the battle refuses should end the warband's turn rather than be
@@ -3256,7 +3260,8 @@ sizes (§13.6), so difficulty needs no new squad:
   the slowest is about three-quarters of one and the average across every
   size and difficulty stays under 250 ms. The whole-battle test holds every
   turn under 1.5 s. If a large battle's turns matter in a real request, the
-  cache of sight and odds (§29.7) is next.
+  cache of sight and odds (§29.7) is next. (Since built, as the turn's memo,
+  §29.7, revision 1.46.)
 - **The ending names the difficulty** unless it's Normal ("12 points to 8, on
   Hard"), so the banner, the result and the push all say it.
 - `buildInitialRealmArenaState` takes what the host chose as one settings
@@ -3581,3 +3586,4 @@ Realm, its sibling in the same world.
 | 1.43 | B9 PR 5 builds difficulty and battle size (§30.5): Easy, Normal or Hard warbands, and Small, Normal or Large battles in every mode, from a ladder of budgets 50–120 points with a ready-made squad of at most five characters for each; *Against the Odds* for a win on Hard. |
 | 1.44 | The Swarm, a second faction (§31, B6): five characters — the Skitterling, the Ravager, the Spitter, the Bloater and the Broodmother — cheaper and weaker than the Realm's, so its ready-made squads field more of them; Rend, Regrowth and Burst; and Corroded, +10% to hit, from its acid. Fought in co-op, picked by the host or drawn at Random; a squad choosing its own faction is next. |
 | 1.45 | Choosing a faction (§32, B6): the host allows any of the factions on the setup screen, at least one, and each player picks one of them as they muster, held to its roster; a timed-out muster takes the first. |
+| 1.46 | The warbands plan about three times quicker, every choice unchanged (§29.7): a turn keeps each square's Exposure and Threat, and Hold Out's walk to the team, from one plan to the next (`TurnMemo`); that walk is one search from every hunted square (`costsFrom`); and the path search, the copy an action resolves on, the smoke check and the walk for cover each do less. |

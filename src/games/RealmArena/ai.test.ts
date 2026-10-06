@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { at } from "@/utils/games/battlefield/testFixtures";
 import { coverAgainst } from "@/utils/games/battlefield/cover";
 import { reachFrom } from "@/utils/games/battlefield/pathfinding";
-import { buildBattlefield, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
+import { battlefieldWith, buildBattlefield, type Battlefield, type Square } from "@/utils/games/battlefield/terrain";
 import { FACTIONS, type CharacterId } from "./characters";
 import { FOUR_GATE_FORT } from "./maps/fourGateFort";
 import {
-    ACTION_POINTS, act, areaAround, check, endTurn, newFighter, reactionsTo, readyMadeMuster, startTurn, viewOf,
+    ACTION_POINTS, act, areaAround, blastedIn, check, endTurn, newFighter, reactionsTo, readyMadeMuster, startTurn, viewOf,
     type Action, type BattleState, type Fighter,
 } from "./rules";
 import { nextAction, turnMemo } from "./ai";
@@ -224,7 +224,7 @@ describe("a turn's memo (§29.7)", () => {
     // What the memo keeps is good only while nothing it was worked out from
     // has changed. Here warbands' whole turns are planned with one, and each
     // action checked against a plan made without it, through moves, hits,
-    // overwatch and knock-outs, on either mission. The two sides start in
+    // overwatch, blasts and knock-outs, on either mission. The two sides start in
     // reach of each other, among walls and low cover, so it comes to blows.
     const field = fieldOf([
         "....................",
@@ -249,6 +249,9 @@ describe("a turn's memo (§29.7)", () => {
         const hunt = mission === "Hold Out" ? [] : undefined;
         let roll = 0;
         const seen = new Set<string>();
+        // Some cover blasted already, so every plan is handed a new copy of the map.
+        const blasted: Square[] = [at(field, 3, 1), at(field, 2, 3)];
+        state = { ...state, field: battlefieldWith(field, blasted) };
         for (let round = 1; round <= 4; round++) {
             for (const owner of ["a", "b", AI]) {
                 state = { ...state, fighters: startTurn(state, owner).fighters };
@@ -260,7 +263,9 @@ describe("a turn's memo (§29.7)", () => {
                     // Rolls that hit, graze and miss in turn.
                     const outcome = act(state, AI, action, () => [10, 75, 95][roll++ % 3]);
                     outcome.events.forEach(event => seen.add(event.kind));
-                    state = { ...state, fighters: outcome.fighters };
+                    // What's blasted is cleared from the ground, as the turn loop's battle does (§22).
+                    blasted.push(...blastedIn(outcome.events));
+                    state = { ...state, field: battlefieldWith(field, blasted), fighters: outcome.fighters };
                 }
                 state = { ...state, fighters: endTurn(state, owner, round).fighters };
             }

@@ -416,13 +416,9 @@ function shielded(state: BattleState, target: Fighter): boolean {
  * landed, while it lasts (§21.2). A thrower who is downed loses its `smoke`.
  */
 export function smokeSquares(state: BattleState): ReadonlySet<Square> {
+    // Usually there's none, and every shot's odds ask.
+    if (!state.clouds?.length && !state.fighters.some(fighter => fighter.smoke !== undefined)) return new Set();
     return new Set([...landedSmoke(state.fighters), ...state.clouds ?? []].flatMap(at => areaAround(state.field, at)));
-}
-
-/** Whether a square is under a smoke cloud: `smokeSquares`, without building them when there's no cloud at all, as there usually isn't. */
-function inSmoke(state: BattleState, square: Square): boolean {
-    if (!state.clouds?.length && !state.fighters.some(fighter => fighter.smoke !== undefined)) return false;
-    return smokeSquares(state).has(square);
 }
 
 /** Where each of these characters' smoke pots landed, while its cloud lasts (§21.2). */
@@ -470,7 +466,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
         - COVER_PENALTY[cover] * (hasEffect(target, "hunkered") ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
         + effectsHitBonus(target)
-        - (inSmoke(state, target.square) ? ITEMS.smokePot.hitPenalty : 0)
+        - (smokeSquares(state).has(target.square) ? ITEMS.smokePot.hitPenalty : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
     const clamp = (percent: number) => Math.min(ROLL_SIDES, Math.max(0, percent));

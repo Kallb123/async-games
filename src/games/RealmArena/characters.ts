@@ -228,7 +228,7 @@ export interface Kit {
 }
 
 /** Each character's kit with no option, made once: the computer asks for a weapon many thousand times a turn. */
-const STARTER_KITS = Object.fromEntries(Object.entries(CHARACTERS).map(([id, { weapon, abilities }]) => [id, { weapon, abilities }])) as Record<CharacterId, Kit>;
+const STARTER_KITS = Object.fromEntries(Object.entries(CHARACTERS).map(([id, { weapon, abilities }]) => [id, Object.freeze({ weapon, abilities })])) as Record<CharacterId, Kit>;
 
 export function kitOf(character: CharacterId, option?: OptionId): Kit {
     const { weapon, abilities } = CHARACTERS[character];
