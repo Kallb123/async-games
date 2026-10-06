@@ -157,6 +157,8 @@ interface Aiming {
     candidates: readonly number[];
     /** Who is aimed at. */
     aimed: readonly number[];
+    /** What the action lined up would take off each character it hurts, flashed off their HP bars. */
+    damage: ReadonlyMap<number, number>;
     /** The watchers a lined-up move would set off. */
     flagged: readonly number[];
     /** A tap on a square of the board, anywhere no character stands. */
@@ -288,13 +290,21 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
     );
 }
 
-/** A standing figure's HP bar, over the figure standing on the square whose middle is (`x`, `y`). */
-function HpBar({ x, y, fighter }: { x: number; y: number; fighter: Fighter }) {
+/**
+ * A standing figure's HP bar, over the figure standing on the square whose
+ * middle is (`x`, `y`): with the `damage` an action lined up on it would do
+ * flashing at the end of what's left, never past empty.
+ */
+function HpBar({ x, y, fighter, damage = 0 }: { x: number; y: number; fighter: Fighter; damage?: number }) {
     const top = y - HP_BAR_RISE - HP_BAR_HEIGHT;
+    const left = x - HP_BAR_WIDTH / 2;
+    const after = HP_BAR_WIDTH * hpFraction(fighter, damage);
+    const now = HP_BAR_WIDTH * hpFraction(fighter);
     return (
         <>
-            <rect className="ag-ra-hp" x={x - HP_BAR_WIDTH / 2} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className="ag-ra-hp-fill" x={x - HP_BAR_WIDTH / 2} y={top} width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-fill" x={left} y={top} width={after} height={HP_BAR_HEIGHT} />
+            {now > after && <rect className="ag-ra-hp-loss" x={left + after} y={top} width={now - after} height={HP_BAR_HEIGHT} />}
         </>
     );
 }
@@ -410,6 +420,8 @@ interface FighterNodeProps {
     selected: boolean;
     /** It's its owner's turn in battle, so it shows the AP it has left. */
     acting: boolean;
+    /** What the action lined up would take off it, flashed off its HP bar. */
+    damage: number | undefined;
     facingFor: FacingFor;
     tintFor: TintFor;
     nameFor: (userId: string) => string;
@@ -417,7 +429,7 @@ interface FighterNodeProps {
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, damage, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -444,7 +456,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, facingFor, 
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} />}
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} damage={damage} />}
             <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -721,6 +733,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     ring={ringOf(fighter)}
                     selected={fighter.id === selected?.id}
                     acting={fighter.owner === acting}
+                    damage={aiming?.damage.get(fighter.id)}
                     facingFor={facingFor}
                     tintFor={tintFor}
                     nameFor={nameFor}

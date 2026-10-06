@@ -5334,6 +5334,11 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-marker--sealed { stroke: var(--ra-oxblood); }
 .ag-ra-hp { fill: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .ag-ra-hp-fill { fill: oklch(0.72 0.17 145); pointer-events: none; }
+/* The HP an action lined up on a character would take off, flashing at the end of its bar. */
+.ag-ra-hp-loss { fill: var(--ag-danger); pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-hp-loss { animation: none; opacity: 0.6; }
+}
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */
 .ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }

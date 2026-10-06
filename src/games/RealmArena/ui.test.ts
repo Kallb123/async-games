@@ -118,6 +118,12 @@ describe("canAct, apPips and hpFraction", () => {
         expect(hpFraction(knight)).toBe(1);
         expect(hpFraction({ ...knight, hp: 0 })).toBe(0);
     });
+
+    it("reads what the bar would be after a blow, never below empty", () => {
+        const max = knight.hp;
+        expect(hpFraction(knight, 1)).toBe((max - 1) / max);
+        expect(hpFraction(knight, max + 5)).toBe(0);
+    });
 });
 
 describe("squadCounts and squadOf", () => {

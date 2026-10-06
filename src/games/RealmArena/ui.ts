@@ -170,9 +170,9 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
     return facingTowards(field, square, squareAt(field, Math.floor(field.width / 2), Math.floor(field.height / 2)) ?? square);
 }
 
-/** How full a character's HP bar is, 0–1. */
-export function hpFraction(fighter: Fighter): number {
-    return Math.min(1, fighter.hp / CHARACTERS[fighter.character].hp);
+/** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP, which never takes it below empty. */
+export function hpFraction(fighter: Fighter, lost = 0): number {
+    return Math.min(1, Math.max(0, fighter.hp - lost) / CHARACTERS[fighter.character].hp);
 }
 
 /** Why an ability can't be used yet — "Used", "Back in 2 turns" — or undefined when it's ready. */
