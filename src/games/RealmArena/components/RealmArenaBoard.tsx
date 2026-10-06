@@ -86,6 +86,9 @@ const HEADROOM = ODDS_RISE + ODDS_HEIGHT / 2 + 1;
 /** How the battlefield is laid out on the board, at whichever turn it's viewed from. */
 const VIEW = { base: SLAB_DEPTH, headroom: HEADROOM, minAspect: MIN_ASPECT };
 
+/** A target picked to aim at, and who is aiming at it: what `follow` frames close (`aimFocus`). */
+export interface AimFollow { aim: { caster: Square; target: Square }; key: string }
+
 interface RealmArenaBoardProps {
     field: Battlefield;
     /** Everyone on the battlefield, standing or fallen — in fog of war, everyone the viewer can see. */
@@ -130,7 +133,7 @@ interface RealmArenaBoardProps {
      * (§17.3 PR 8), or — `aim` — a target picked from the turn sheet's list,
      * framed close with whoever is aiming at it (`aimFocus`).
      */
-    follow?: { squares: readonly Square[]; key: string } | { aim: { caster: Square; target: Square }; key: string } | null;
+    follow?: { squares: readonly Square[]; key: string } | AimFollow | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */

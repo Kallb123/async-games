@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "@/games/RealmArena/apiModels";
-import RealmArenaBoard, { type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
+import RealmArenaBoard, { type AimFollow, type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
 import RealmArenaResults from "@/games/RealmArena/components/RealmArenaResults";
@@ -207,7 +207,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // whoever is aiming at it, and keeps it there until the character acts,
     // another is selected, a box is tapped or a review is stepped into.
     const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
-    const [picked, setPicked] = useResettingState<{ aim: { caster: number; target: number }; key: string } | null>(null, pickKey);
+    const [picked, setPicked] = useResettingState<AimFollow | null>(null, pickKey);
     const focusTarget = (target: Fighter) => {
         if (selected) setPicked({ aim: { caster: selected.square, target: target.square }, key: `target:${target.id}:${Date.now()}` });
     };
