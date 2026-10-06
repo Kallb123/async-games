@@ -10,6 +10,8 @@ import { CHARACTER_MARK } from '@/games/RealmArena/roster';
 
 interface RealmArenaTurnEndProps {
     onEndTurn: () => void;
+    /** Lets go of the selected character, while one is selected. */
+    onDeselect?: () => void;
     /** The player's last action can still be taken back (docs/undo.md). */
     canUndo: boolean;
     onUndo: () => void;
@@ -23,14 +25,20 @@ interface RealmArenaTurnEndProps {
 
 /**
  * End turn, with Undo beside it while the last action can still be taken back
- * (docs/games/realm-arena.md §17.3 PR 7): the first row under the board, so a
- * turn ends without a scroll past the squad. Who goes on watch as it does is
- * `RealmArenaWatchSwitches`, further down.
+ * and Deselect while a character is selected (docs/games/realm-arena.md §17.3
+ * PR 7): the first row under the board, so a turn ends without a scroll past
+ * the squad. Who goes on watch as it does is `RealmArenaWatchSwitches`,
+ * further down.
  */
-export default function RealmArenaTurnEnd({ onEndTurn, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
+export default function RealmArenaTurnEnd({ onEndTurn, onDeselect, canUndo, onUndo, undoPending, pending, disabled }: RealmArenaTurnEndProps) {
     return (
         <div className="ag-action-grid" data-tour="ra-turn-end">
             {canUndo && <UndoButton pending={undoPending} disabled={disabled} onClick={onUndo} />}
+            {onDeselect && (
+                <button type="button" className="ag-btn ag-btn--light" disabled={disabled} onClick={onDeselect}>
+                    Deselect
+                </button>
+            )}
             <ActionButton className="ag-btn ag-btn--primary" pending={pending} pendingLabel="Ending turn…" disabled={disabled} onClick={onEndTurn}>
                 End turn
             </ActionButton>

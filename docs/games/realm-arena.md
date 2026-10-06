@@ -980,9 +980,13 @@ recap, a guide and a tutorial.
   - The keep-still switches start on watch.
   - The sheet shows the last action's result with its rolls.
   - What's used most sits nearest the board. Directly under it come End turn
-    (with Undo), the lined-up action's Cancel and send buttons with its odds,
-    and everyone it could be aimed at. The squad, the selected character's
-    actions, the last action's result and the keep-still switches follow.
+    (with Undo, and Deselect while a character is selected), the lined-up
+    action's Cancel and send buttons with its odds, everyone it could be aimed
+    at, and the selected character's actions. The squad, the last action's
+    result and the keep-still switches follow.
+  - End turn asks first while any character still has AP to spend, even
+    where it would go on watch with it.
+  - The battlefield runs edge to edge, with no frame round it.
   - Each enemy in reach wears its chance to hit, previewed from the end of a
     lined-up move.
 - **PR 8, replay and recap.**
