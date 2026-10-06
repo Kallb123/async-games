@@ -105,6 +105,8 @@ function NewGameRealmArenaForm() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Solo is fought on the Ruined Fort alone, whatever the hidden Battlefield picker last held.
+    const map = solo || battlefield === 'line' ? undefined : battlefield;
     const data: RealmArenaInvitationRequest = {
       userList: solo ? [] : players,
       turnTimer,
@@ -113,7 +115,7 @@ function NewGameRealmArenaForm() {
       ...(size !== 'normal' ? { size } : {}),
       ...(coop ? { coop: {
         enemy,
-        ...(mission === 'holdOut' ? { mission, ...(battlefield !== 'line' && !solo ? { map: battlefield } : {}) } : {}),
+        ...(mission === 'holdOut' ? { mission, ...(map ? { map } : {}) } : {}),
         ...(difficulty !== 'normal' ? { difficulty } : {}),
       } } : {}),
       ...(solo ? { solo } : {}),

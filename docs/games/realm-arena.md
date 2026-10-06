@@ -2842,7 +2842,7 @@ sure it is.
 | 4a | **The enemy's turn.** `coop` from setup to state, Random drawn, `applyAction` and `applyEndTurn` out of the commands, the warbands mustered, their turn in `handOff`, recorded and replayed, and the whole-battle tests (§29.11). The setup route takes `coop`; the screen doesn't offer it yet | `caveman`, `locksmith`, `gremlin`, `croupier` |
 | 4b | **The end of it.** `endAsTeam`, the co-op ending, the record by side, `ownerToken`, the recap's rows for the enemy's turn, and a random enemy kept hidden until it's seen (§29.3) | `caveman`, `croupier` |
 | 5 | **The screens** (§29.9), the enemy's faction picker among them, the guide, and the one What's new line | `caveman`, `rulebook` |
-| Later | Planned in §30: Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
+| Later | Built in §30 (B9): Banned Islet, Outbreak and Fires Out moved onto `endAsTeam`; remembering where an enemy was last seen in fog; *Hold Out*, a wave-survival mission; achievements; difficulty; solo against the computer | |
 
 ### 29.11 Testing the computer
 
@@ -2878,7 +2878,7 @@ sure it is.
   the waves is planned, as Hold Out (§30.3).*
 - **Difficulty.** One level to start. If the playtest wants more, the simplest
   lever is the warbands' size — the ready-made squad, one character more or
-  one fewer — chosen with the same `OptionChoiceSection`. *Planned (§30.5),
+  one fewer — chosen with the same `OptionChoiceSection`. *Built (§30.5),
   with the existing ready-made squads as the three sizes.*
 - **Does the enemy want a Mage and a Cleric?** The ready-made squad for 80
   points has neither, so the enemy wouldn't fireball or heal.

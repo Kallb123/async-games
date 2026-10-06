@@ -27,8 +27,11 @@ export function useStartSoloGame(invitePath: string) {
     // its response not making it home — must not create a *second* one on the
     // retry, or the player ends up with two games and only asked for one.
     // Re-accepting the same id is safe: `acceptSeat` answers a request that
-    // lost the race with the game the invitation became.
-    const pendingInvite = useRef<string | null>(null);
+    // lost the race with the game the invitation became. Kept with the
+    // settings it was created from: a retry after the player changed one
+    // (Realm Arena's setup has a dozen) creates a fresh invitation rather than
+    // dealing the old settings under the new ones; the first is left unused.
+    const pendingInvite = useRef<{ inviteId: string, settings: string } | null>(null);
     const router = useRouter();
     const { showToast } = useToast();
 
@@ -36,8 +39,9 @@ export function useStartSoloGame(invitePath: string) {
         if (starting) return;
         setStarting(true);
 
+        const settings = JSON.stringify(data);
         try {
-            if (!pendingInvite.current) {
+            if (pendingInvite.current?.settings !== settings) {
                 const createResponse = await fetch(invitePath, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -54,14 +58,14 @@ export function useStartSoloGame(invitePath: string) {
                 if (!inviteId) {
                     throw new Error('No invitation to accept');
                 }
-                pendingInvite.current = inviteId;
+                pendingInvite.current = { inviteId, settings };
             }
 
             // Solo game: nobody else to accept, so this completes immediately.
             const acceptResponse = await fetch('/api/invite/accept', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inviteId: pendingInvite.current }),
+                body: JSON.stringify({ inviteId: pendingInvite.current.inviteId }),
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             });
             if (!acceptResponse.ok) {
