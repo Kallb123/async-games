@@ -62,6 +62,23 @@ describe("nextAction's puzzles (§29.11)", () => {
         expect(planned(battle(OPEN, [knight, cleric, far]))).toEqual({ kind: "heal", fighter: cleric.id, target: knight.id });
     });
 
+    it("bursts a Bloater among two enemies, its own downing and all (§31.2)", () => {
+        const bloater = ready(0, AI, "bloater", at(OPEN, 6, 4));
+        const knight = ready(1, "a", "manAtArms", at(OPEN, 7, 4), { hp: 3 });
+        const archer = ready(2, "b", "archer", at(OPEN, 5, 4), { hp: 3 });
+        expect(planned(battle(OPEN, [bloater, knight, archer]))).toEqual({ kind: "burst", fighter: bloater.id });
+    });
+
+    it("tears into an enemy beside a Ravager with Rend, and mends a hurt ally with Regrowth (§31.2)", () => {
+        const ravager = ready(0, AI, "ravager", at(OPEN, 6, 4));
+        const enemy = ready(1, "a", "archer", at(OPEN, 7, 4));
+        expect(planned(battle(OPEN, [ravager, enemy]))).toEqual({ kind: "rend", fighter: ravager.id, target: enemy.id });
+        const hurt = ready(0, AI, "ravager", at(OPEN, 2, 4), { hp: 3 });
+        const mother = ready(1, AI, "broodmother", at(OPEN, 6, 4));
+        const far = ready(2, "a", "manAtArms", at(OPEN, 15, 0));
+        expect(planned(battle(OPEN, [hurt, mother, far]))).toEqual({ kind: "regrowth", fighter: mother.id, target: hurt.id });
+    });
+
     it("moves into cover rather than stopping in the open", () => {
         // Too little AP left to shoot back, under the eye of an enemy Archer: the low wall is the only shelter.
         const field = fieldOf([
@@ -166,7 +183,8 @@ describe("nextAction never cheats (§29.11)", () => {
 });
 
 describe("nextAction's pace (§29.7)", () => {
-    it("plans a warband's turn on the Four-Gate Fort in under 250 ms", () => {
+    // The Swarm's warband is six characters to the Realm's four (§31.1).
+    it.each(["realm", "swarm"] as const)("plans a %s warband's turn on the Four-Gate Fort in under 250 ms", faction => {
         // Three of the team's ready-made squads and one warband. The team ends
         // each of its turns where it stands, so every one of its characters is
         // on watch and every move the warband weighs has a way round to find:
@@ -174,7 +192,7 @@ describe("nextAction's pace (§29.7)", () => {
         const team = ["a", "b", "c"];
         const owners = [...team, AI];
         let id = 0;
-        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS.realm.readyMade[80])
+        const fighters = owners.flatMap((owner, seat) => readyMadeMuster(FOUR_GATE_FORT, seat, FACTIONS[owner === AI ? faction : "realm"].readyMade[80])
             .map(pick => newFighter(id++, owner, pick.character, pick.square)));
         let state: BattleState = { field: FOUR_GATE_FORT, fighters, sides: { a: "team", b: "team", c: "team", [AI]: "enemy" } };
         const turn = (owner: string, round: number) => {

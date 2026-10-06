@@ -34,7 +34,7 @@ import { DEFAULT_CLIMB, pathCost, pathTo, reachFrom, type MoveRules, type Reach 
 import { coordsOf, distance, facingTowards, HALF_HEIGHT, isNeighbour, riseOf, squareAt, type Area, type Battlefield, type Cover, type Facing, type Square } from "@/utils/games/battlefield/terrain";
 import {
     ABILITIES, AFFLICTIONS, CHARACTERS, EFFECT_IDS, EFFECTS, isCharacterId, isItemId, isOptionId, ITEMS, kitOf, OPTIONS, squadPoints,
-    type Ability, type AbilityId, type Affliction, type CharacterId, type EffectId, type Faction, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
+    type Ability, type AbilityId, type Affliction, type CharacterId, type Effect, type EffectId, type Faction, type Item, type ItemId, type OptionId, type PlayerCount, type Weapon,
 } from "./characters";
 import { addTally, NO_TALLY, type Ranks, type Tally } from "./mastery";
 
@@ -233,8 +233,8 @@ export function allied(state: Pick<BattleState, "sides">, a: string | null | und
 
 export type Action =
     | { kind: "move" | "sneak"; fighter: number; path: Square[] }
-    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark"; fighter: number; target: number }
-    | { kind: "hunker" | "watch" | "shieldWall" | "purify"; fighter: number }
+    | { kind: "attack" | "aimedShot" | "heal" | "raise" | "draught" | "shieldBash" | "cripplingShot" | "huntersMark" | "rend" | "regrowth"; fighter: number; target: number }
+    | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst"; fighter: number }
     | { kind: "cleave"; fighter: number; targets: number[] }
     /** A demolish is aimed at the square of low cover it blasts. */
     | { kind: "fireball" | "throw" | "demolish"; fighter: number; at: Square };
@@ -260,6 +260,8 @@ export type BattleEvent =
     | { kind: "blasted"; fighter: number; squares: Square[] }
     /** A Knight's Demolish at the cover on `at`: `targets` is everyone beside it that it struck (§23.2). Its `blasted` follows. */
     | { kind: "demolished"; fighter: number; at: Square; targets: number[]; damage: number }
+    /** A Bloater's Burst: `targets` is everyone next to it that the acid hit (§31.2). Its own `downed` follows theirs. */
+    | { kind: "burst"; fighter: number; targets: number[]; damage: number }
     /** A Scout's Hunter's mark on `target`, whose `effect` follows (§23.2). */
     | { kind: "marked"; fighter: number; target: number }
     | { kind: "raised"; fighter: number; target: number; hp: number }
@@ -441,6 +443,14 @@ export function shotEffect(shooter: Fighter, kind: ShotKind): Affliction | undef
     return weapon.kind === "ranged" ? weapon.effect : undefined;
 }
 
+/** What the effects on a character add to every shot at it: Marked's, Corroded's (§23.2, §31.2). */
+function effectsHitBonus(target: Fighter): number {
+    return EFFECT_IDS.reduce((total, effect) => {
+        const { hitBonus } = EFFECTS[effect] as Effect;
+        return total + (hitBonus !== undefined && hasEffect(target, effect) ? hitBonus : 0);
+    }, 0);
+}
+
 export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter, kind: ShotKind = "attack"): ShotOdds | undefined {
     const { field } = state;
     const weapon = weaponOf(attacker);
@@ -453,7 +463,7 @@ export function shotOdds(state: BattleState, attacker: Fighter, target: Fighter,
     const raw = weapon.accuracy
         - COVER_PENALTY[cover] * (hasEffect(target, "hunkered") ? 2 : 1)
         + (highGround ? HIGH_GROUND_BONUS : 0)
-        + (hasEffect(target, "marked") ? EFFECTS.marked.hitBonus : 0)
+        + effectsHitBonus(target)
         - (smokeSquares(state).has(target.square) ? ITEMS.smokePot.hitPenalty : 0)
         + (kind === "aimedShot" ? ABILITIES.aimedShot.hitBonus : 0)
         - (kind === "overwatch" ? OVERWATCH_PENALTY : 0);
@@ -766,6 +776,9 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         // leaves an effect: Shield bash strikes, Crippling shot shoots (§23.2).
         case "shieldBash":
             return ability("shieldBash", () => attackRefusal(state, actor, target, "attack"));
+        // A strike with the character's own reach, for the ability's damage (§31.2).
+        case "rend":
+            return ability("rend", () => attackRefusal(state, actor, target, "attack"));
         case "cripplingShot":
             return ability("cripplingShot", () => attackRefusal(state, actor, target, "cripplingShot"));
         case "huntersMark":
@@ -795,7 +808,11 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "fireball":
             return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
         case "heal":
-            return ability("heal", () => healRefusal(state, actor, target, false));
+        case "regrowth":
+            return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind].range));
+        case "burst":
+            return ability("burst", () => state.fighters.some(one => isEnemy(state, actor, one) && burstArea(state.field, actor.square).includes(one.square))
+                ? undefined : "No enemy next to them");
         case "raise":
             return ability("raise", () => {
                 if (!target || !allied(state, target.owner, actor.owner) || isStanding(target)) return "Pick a downed ally";
@@ -828,12 +845,12 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
 /**
  * Why a character can't heal `target`, or undefined when it can: an ally that
  * is hurt or has something a heal clears (§20.2, §21.2) — one it can see in
- * Heal's range, or, for a healing draught (`draught`), one next to it or
- * itself.
+ * the ability's `range` (Heal, Regrowth), or, for a healing draught
+ * (`draught`), one next to it or itself.
  */
-function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean): string | undefined {
+function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean, range = 0): string | undefined {
     if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
-    const far = draught ? undefined : aimRefusal(state, healer, target.square, ABILITIES.heal.range);
+    const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
     if (draught && target.id !== healer.id && !nextTo(state.field, healer.square, target.square)) return "Too far away to heal";
     return target.hp < CHARACTERS[target.character].hp || healedEffects(target).length > 0 ? undefined : "Already at full health";
@@ -848,6 +865,9 @@ export function coverNextTo(field: Battlefield, from: Square, square: Square): b
 export function demolishArea(field: Battlefield, knight: Square, at: Square): Square[] {
     return areaAround(field, at).filter(square => square !== knight);
 }
+
+/** Who a Bloater's Burst splashes: everyone next to it, friend or foe, but itself (§31.2) — a Demolish at its own square. */
+export const burstArea = (field: Battlefield, bloater: Square): Square[] => demolishArea(field, bloater, bloater);
 
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
 export function afflictionsOn(fighter: Fighter): Affliction[] {
@@ -1081,6 +1101,20 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             run.strike(actor, get(action.target), false, ABILITIES.shieldBash.damage);
             run.afflict(actor, get(action.target), ABILITIES.shieldBash.effect);
             break;
+        case "rend":
+            // For the ability's damage, not the talons' (§31.2).
+            run.strike(actor, get(action.target), false, ABILITIES.rend.damage);
+            break;
+        case "burst": {
+            // Everyone next to it, friend or foe, hit and corroded; then the
+            // Bloater itself is spent, downed by its own hand, which scores
+            // nobody anything (§31.2).
+            const { damage, effect } = ABILITIES.burst;
+            run.land(actor, burstArea(state.field, actor.square), damage, effect,
+                targets => ({ kind: "burst", fighter: actor.id, targets, damage }));
+            run.wound(actor, actor, actor.hp);
+            break;
+        }
         case "cripplingShot":
             // At the bow's usual odds; slowed only on a hit (§20.2).
             run.shoot(actor, get(action.target), "cripplingShot");
@@ -1127,8 +1161,9 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             break;
         }
         case "heal":
-            // The answer to effects: it puts out burning, and clears slowed and stunned (§20.2).
-            run.mend(actor, get(action.target), ABILITIES.heal.hp);
+        case "regrowth":
+            // The answer to effects: it puts out burning, and clears slowed, stunned and corroded (§20.2).
+            run.mend(actor, get(action.target), ABILITIES[action.kind].hp);
             break;
         case "purify":
             for (const ally of purified(state, actor)) run.mend(actor, get(ally.id), ABILITIES.purify.hp, "purify");

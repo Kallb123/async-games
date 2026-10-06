@@ -167,6 +167,9 @@ const TALLIED: Readonly<Partial<Record<Action["kind"], keyof Tally>>> = {
     cripplingShot: "abilities",
     huntersMark: "abilities",
     purify: "abilities",
+    rend: "abilities",
+    regrowth: "abilities",
+    burst: "abilities",
     throw: "items",
     draught: "items",
 };
@@ -197,9 +200,9 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // the player does something that isn't undoable.
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
-// heal, a raise, a Purify, a Hunter's mark, a healing draught, and a throw or a
-// Demolish that lands on nobody — a smoke pot always does (§21.2) — the
-// actions that roll nothing and hurt nobody. A fire flask or a Demolish that
+// heal or a Regrowth, a raise, a Purify, a Hunter's mark, a healing draught,
+// and a throw or a Demolish that lands on nobody — a smoke pot always does
+// (§21.2) — the actions that roll nothing and hurt nobody. A fire flask or a Demolish that
 // lands on nobody still blasts low cover away (§22), and is still taken back
 // whole: the snapshot holds what was blasted. A mark hurts nobody either: it
 // only makes a target easier to hit, which the other side sees whether or not
@@ -223,7 +226,7 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // snapshot outlives its turn.
 
 /** The kinds that can ever be taken back: no attack is among them. */
-const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
+const UNDOABLE_KINDS: ReadonlySet<Action["kind"]> = new Set(["move", "sneak", "hunker", "watch", "shieldWall", "heal", "regrowth", "raise", "purify", "huntersMark", "draught", "throw", "demolish"]);
 
 /**
  * What an undoable action may have done: everything but an attack landing, a
@@ -394,7 +397,13 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
     // Whom a blast hit, of the characters the line's reader saw (§27.2).
     const hitIn = (targets: readonly number[]) => seen ? targets.filter(seen) : targets;
     const landed = (damage: number, graze: boolean) => damage === 0 ? "a miss" : `${graze ? "a graze" : "a hit"} for ${damage}`;
-    const veiled = enemyHidden(coop) && "fighter" in event && isWarband(fighters.find(one => one.id === event.fighter)?.owner ?? "") ? veiledClause(event, name, hitIn) : undefined;
+    const hidden = enemyHidden(coop);
+    const warbands = (id: number) => isWarband(fighters.find(one => one.id === id)?.owner ?? "");
+    // An effect a hidden enemy left names the weapon it came from — Corroded
+    // the Swarm's acid, Burning the Mage's fire — on its turn, or on a
+    // teammate it hit on overwatch (§31.3).
+    if (hidden && event.kind === "effect" && event.change !== "cleared" && (isWarband(actor) || !warbands(event.fighter))) return `${name(event.fighter)} is afflicted`;
+    const veiled = hidden && "fighter" in event && warbands(event.fighter) ? veiledClause(event, name, hitIn) : undefined;
     if (veiled !== undefined) return veiled;
     switch (event.kind) {
         case "moved": return `${event.sneaking ? "sneaked" : "moved"} ${name(event.fighter)}`;
@@ -430,6 +439,10 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
             return `used ${ABILITIES.demolish.name} with ${name(event.fighter)}${hit}`;
         }
         case "marked": return `used ${ABILITIES.huntersMark.name} with ${name(event.fighter)}`;
+        case "burst": {
+            const hit = hitIn(event.targets).length === 0 ? "" : `, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            return `burst ${name(event.fighter)}${hit}`;
+        }
         case "raised": return `raised ${name(event.target)} with ${name(event.fighter)}`;
         case "hunkered": return `hunkered ${name(event.fighter)} down`;
         case "shieldWall": return `raised a shield wall with ${name(event.fighter)}`;
@@ -455,7 +468,8 @@ function veiledClause(event: BattleEvent, name: (id: number) => string, hitIn: (
     switch (event.kind) {
         case "moved": return `moved ${name(event.fighter)}`;
         case "fireball":
-        case "demolished": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
+        case "demolished":
+        case "burst": return `used an ability with ${name(event.fighter)}${hit(event.targets, event.damage)}`;
         case "healed": return event.via === "draught" ? undefined : `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "raised": return `used an ability on ${name(event.target)} with ${name(event.fighter)}`;
         case "marked":
@@ -530,7 +544,30 @@ function noteSighting(gs: IRealmArenaSpecificGameState, events: readonly BattleE
     const battle = battleOf(gs);
     // As `viewOf` reads a view, standing or fallen, without building one.
     const seen = squadSight(battle, gs.seats[0]);
-    if (!battle.fog || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
+    if (!battle.fog || felt(battle, events) || battle.fighters.some(fighter => isWarband(fighter.owner) && seen(fighter.square))) gs.coop = { ...coop!, enemySeen: true };
+}
+
+/**
+ * Whether the team felt the enemy in these events, seen or not (§29.3, §31.3):
+ * one of its characters hurt one of theirs, or one of its own went down. A
+ * hit's damage and a knock-out's points each tell one faction from another —
+ * a Rend's 6 is no Realm blow — and the victim of one can be downed by it,
+ * leaving nobody to see who struck. So either counts as the sighting.
+ */
+function felt(battle: BattleState, events: readonly BattleEvent[]): boolean {
+    const enemy = (id: number) => isWarband(fighterById(battle, id)?.owner ?? "");
+    return events.some(event => {
+        switch (event.kind) {
+            case "shot":
+            case "struck": return enemy(event.fighter) && event.damage > 0 && !enemy(event.target);
+            case "fireball":
+            case "thrown":
+            case "demolished":
+            case "burst": return enemy(event.fighter) && event.targets.some(target => !enemy(target));
+            case "downed": return enemy(event.fighter);
+            default: return false;
+        }
+    });
 }
 
 /** Refresh every player's last known enemy positions after the battlefield changes. */
@@ -637,6 +674,8 @@ export function toldTo(events: readonly BattleEvent[], battle: BattleState, view
             case "thrown":
             case "demolished":
                 return keep(saw(event.fighter) || event.targets.some(saw) || areaAround(battle.field, event.at).some(seen));
+            case "burst":
+                return keep(saw(event.fighter) || event.targets.some(saw));
             case "shot":
             case "struck":
             case "healed":
@@ -960,6 +999,9 @@ const ACTION_PHRASES: Readonly<Record<Action["kind"], string>> = {
     cripplingShot: "took a crippling shot",
     huntersMark: "used Hunter's mark",
     purify: "used Purify",
+    rend: "used Rend",
+    regrowth: "used Regrowth",
+    burst: "used Burst",
 };
 
 /**
@@ -977,11 +1019,14 @@ function cleanAction(action: Action): Action {
         case "draught":
         case "shieldBash":
         case "cripplingShot":
-        case "huntersMark": return { kind: action.kind, fighter: action.fighter, target: action.target };
+        case "huntersMark":
+        case "rend":
+        case "regrowth": return { kind: action.kind, fighter: action.fighter, target: action.target };
         case "hunker":
         case "watch":
         case "shieldWall":
-        case "purify": return { kind: action.kind, fighter: action.fighter };
+        case "purify":
+        case "burst": return { kind: action.kind, fighter: action.fighter };
         case "cleave": return { kind: action.kind, fighter: action.fighter, targets: [...action.targets] };
         case "fireball":
         case "throw":

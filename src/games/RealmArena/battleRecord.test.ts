@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CHARACTERS } from "./characters";
 import { formatGameResultCharts, formatGameResultStats, RealmArenaGameResultModel } from "@/utils/mongodb/GameResultData";
 import { battleRecorder, NO_RECORD, type BattleRecord } from "./battleRecord";
 import { recordBattle } from "./recordBattle";
@@ -150,6 +151,21 @@ describe("the battle recorder (§28)", () => {
         expect(row("a", "knight")).toMatchObject({ taken: 2, downed: 1 });
         expect(losses).toEqual([{ turnIndex: 0, icon: "knockout", title: "Knight downed by an enemy Archer", seriesKey: "a" }]);
         expect(Object.fromEntries(pointsPerRound[0])).toEqual({ a: 0, b: knockoutPoints("knight") });
+    });
+
+    it("counts a Burst's splash as dealt, and what the Bloater had left as taken, with no knock-out for anybody (§31.2)", () => {
+        const recorder = battleRecorder(PLAYERS);
+        const bloater = newFighter(4, "b", "bloater", 4);
+        recorder.observe(act("0", []), battle([knight, bloater]));
+        recorder.observe(act("1", [
+            { kind: "burst", fighter: bloater.id, targets: [knight.id], damage: 3 },
+            { kind: "effect", fighter: knight.id, effect: "corroded", change: "applied" },
+            { kind: "downed", fighter: bloater.id, by: bloater.id },
+        ]), battle([{ ...knight, hp: knight.hp - 3 }, { ...bloater, hp: 0 }]));
+
+        const { fighting, losses } = recorder.result();
+        expect(fighting.find(one => one.character === "bloater")).toMatchObject({ dealt: 3, taken: CHARACTERS.bloater.hp, downed: 1, knockouts: 0 });
+        expect(losses).toEqual([{ turnIndex: 0, icon: "knockout", title: "Bloater downed", seriesKey: "b" }]);
     });
 
     it("credits burning lit and suffered in one step to whoever lit it: an End turn holds the enemy's turn and the next one's start (§29.4)", () => {

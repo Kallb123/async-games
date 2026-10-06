@@ -3,7 +3,7 @@ import { ABILITIES, BUDGETS, CHARACTERS, enemyNameOf, FACTIONS, musterBudget, sq
 
 describe("the first faction's characters (§13.6)", () => {
     it("each have 5–12 HP and abilities that exist", () => {
-        for (const character of Object.values(CHARACTERS)) {
+        for (const character of FACTIONS.realm.characters.map(id => CHARACTERS[id])) {
             expect(character.hp, character.name).toBeGreaterThanOrEqual(5);
             expect(character.hp, character.name).toBeLessThanOrEqual(12);
             for (const ability of character.abilities) expect(ABILITIES[ability], `${character.name}: ${ability}`).toBeDefined();
@@ -12,6 +12,24 @@ describe("the first faction's characters (§13.6)", () => {
 
     it("let a Man-at-arms down a Mage in one turn, as §13.2's balance note says", () => {
         expect(2 * CHARACTERS.manAtArms.weapon.damage).toBeGreaterThanOrEqual(CHARACTERS.mage.hp);
+    });
+});
+
+describe("the Swarm's characters (§31)", () => {
+    const swarm = FACTIONS.swarm.characters.map(id => CHARACTERS[id]);
+
+    it("each have 4–10 HP and abilities that exist", () => {
+        for (const character of swarm) {
+            expect(character.hp, character.name).toBeGreaterThanOrEqual(4);
+            expect(character.hp, character.name).toBeLessThanOrEqual(10);
+            for (const ability of character.abilities) expect(ABILITIES[ability], `${character.name}: ${ability}`).toBeDefined();
+        }
+    });
+
+    it("are cheaper than the Realm's, so a ready-made squad fields more of them for the same points", () => {
+        const dearest = Math.max(...swarm.map(character => character.points));
+        expect(dearest).toBeLessThan(Math.max(...FACTIONS.realm.characters.map(id => CHARACTERS[id].points)));
+        for (const budget of BUDGETS) expect(FACTIONS.swarm.readyMade[budget].length, `${budget}`).toBeGreaterThan(FACTIONS.realm.readyMade[budget].length);
     });
 });
 

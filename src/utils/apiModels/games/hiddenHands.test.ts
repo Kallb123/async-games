@@ -671,6 +671,35 @@ describe("Realm Arena's random co-op enemy", () => {
         }
     });
 
+    it("is known the moment it hurts the team, even when the blow downs the only one who could see it (§31.3)", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "swarm", random: true } });
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        expect(gs.coop?.enemySeen).toBeUndefined();
+        // Alice's Archer, hurt, alone with a Ravager; the rest of both sides
+        // down but one teammate on the far side of the field, who sees nothing.
+        const field = realmArenaBattle(game).field;
+        const archer = gs.fighters.find(one => one.owner === "a" && one.character === "archer")!;
+        const ravager = gs.fighters.find(one => one.owner === warbandOwner(0) && one.character === "ravager")!;
+        const far = gs.fighters.find(one => one.owner === "b")!;
+        const { col, row } = { col: archer.square % field.width, row: Math.floor(archer.square / field.width) };
+        const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dc, dr]) => (row + dr) * field.width + col + dc)
+            .find(square => field.tiles[square]?.terrain.standable && field.tiles[square].elevation === field.tiles[archer.square].elevation && !gs.fighters.some(one => one.square === square))!;
+        gs.fighters = gs.fighters.map(one => one.id === archer.id ? { ...one, hp: 2 }
+            : one.id === ravager.id ? { ...one, square: beside }
+            : one.id === far.id ? one : { ...one, hp: 0 });
+        expect(realmArenaBattle(game).fighters.filter(one => isRealmArenaStanding(one)).length).toBe(3);
+
+        const ended = Object.assign(realmArenaEndTurn(game.currentTurn), { recordedEnemyActions: [{ kind: "rend", fighter: ravager.id, target: archer.id }] }) as RealmArenaEndTurn;
+        const { outcome } = await playRealmArena(game, ended);
+        expect(outcome.validMove).toBe(true);
+        expect((outcome as IRealmArenaOutcome).events).toContainEqual({ kind: "struck", fighter: ravager.id, target: archer.id, damage: 6, reaction: false });
+        expect(gs.coop?.enemySeen).toBe(true);
+        for (const viewer of ["a", "b"]) expect(realmArenaStateToModel(gs, viewer, null).enemy).toBe("swarm");
+        // The enemy's turn is told once it's over, by when the team knows whom it fights.
+        expect(game.gameState.history.map(({ text }) => text)).toContain("The Swarm struck {{a}}'s Archer with their Ravager for 6; {{a}}'s Archer is down; scored 4 for the knock-out");
+    });
+
     it("is there from the moment the squads take the field without fog", async () => {
         const game = makeRealmArenaGame(["a", "b"], {}, { coop: { enemy: "realm", random: true } });
         await realmArenaMusterAll(game);

@@ -1017,7 +1017,7 @@ recap, a guide and a tutorial.
 | C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
-| B6 | More factions | After C |
+| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction next |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
 | B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built to PR 5, with battle size beside difficulty; solo next (§30.6) |
@@ -1165,6 +1165,7 @@ The numbers are first guesses for playtesting, like §13's.
 | **Stunned** | Its banked AP are lost as it's stunned, so it can't react until its owner's next turn, which it starts with 2 AP instead of 4 | 1 | A thunder flask (§21), Shield bash (§23) |
 | **Slowed** | Its movement allowance is halved, rounded up, for its owner's next turn | 2 | Crippling shot and Frost bolt (§23) |
 | **Marked** | +15% to hit it, for every attacker, reactions included, until its owner's turn after next | 2 | Hunter's mark (§23) |
+| **Corroded** | +10% to hit it, for every attacker, reactions included, for two of its turns; a heal clears it | 2 | The Spitter's acid spit, the Bloater's Burst (§31) |
 
 **The count works exactly as a cooldown's does** (§13.6), and shares its
 code. It goes down by one at the start of each of the affected character's
@@ -1190,7 +1191,7 @@ a third and fourth.
   not twice the damage.
 - **A shot applies its effect only on a hit**, not a graze or a miss.
   Anything that doesn't roll (a strike, a fireball, a flask) always does.
-- **Heal also puts out burning and clears slowed and stunned.** That's the
+- **Heal also puts out burning and clears slowed, stunned and corroded (§31.2).** That's the
   answer to effects, and it gives the Cleric a reason to heal a character
   that isn't badly hurt.
 - **A downed character loses every effect.** A raised one comes back clear.
@@ -2268,6 +2269,9 @@ information, kept as a squad is during the muster (§17.2):
   tells the team its points' worth, and the ids in a review hint at the
   enemy's numbers; either might narrow down a faction. Both are told today in
   fog, for the same reasons, and the team still hasn't seen what it fought.
+  With a second faction (§31) a knock-out's points do tell one from the
+  other, so a knock-out of one of the enemy's, like a hit on the team, now
+  counts as the sighting (§31.3).
 - **The fog lifts when the battle ends** (§27.1), and the faction with it.
 - **The players are the Realm**, as in every battle today. Choosing their own
   faction is B6's, for free-for-all and co-op alike.
@@ -2301,7 +2305,8 @@ every player fights as, and the muster lists the faction's roster. Reading a
 stored faction id, with an unknown one as the Realm, waits for PR 4a, which
 stores the first one.
 
-**What a second faction will bring**, which is B6's work, not this plan's:
+**What a second faction will bring**, which is B6's work, not this plan's —
+and which the Swarm brought (§31):
 its characters and their abilities, its ready-made squads, and its figures
 (`npm run ra-characters`). One thing in it touches the computer: a new
 ability is a new kind of action, and the planner has to know what it's aimed
@@ -2762,7 +2767,8 @@ sure it is.
 
 - **Setup**: the mode as an `OptionChoiceSection`, as Banned Islet's and Fires
   Out's difficulty already are, and under it, for co-op, the enemy's faction
-  or Random as another (§29.3), hidden while there's only one faction. On the
+  or Random as another (§29.3), hidden while there's only one faction — shown
+  since the Swarm made two (§31). On the
   screen that has fog of war's switch, with `GameSetupLayout` as now.
 - **The board**: the enemy's characters in its own colour and named by its
   faction (`nameFor`, `colourFor`); the muster names the enemy the players
@@ -3384,6 +3390,96 @@ without fog, and a replay on it.
 
 ---
 
+## 31. The Swarm: a second faction (B6)
+
+The first faction that isn't the Realm, and the one §29.3 was built to take:
+a brood of chitinous beasts, after the Zerg and the Tyranids. It's fought in
+co-op, as the host's pick or as Random; the players still fight as the Realm,
+and a squad choosing its own faction — the Swarm in a free-for-all — is the
+rest of B6.
+
+### 31.1 What it's like
+
+- **More of them, each cheaper and weaker.** No Swarm character costs more
+  than 20 points or has more than 9 HP, so a ready-made squad fields more
+  bodies than the Realm's at every budget: four at 50 points against three,
+  eight at 120 against five. A knock-out scores a fifth of what was downed
+  (§13.7), so each one is worth less too.
+- **Acid.** The Spitter's spit and the Bloater's burst leave a new
+  affliction, *Corroded* (§31.2), which makes a character easier to hit. It's
+  the Swarm's answer to cover, as burning is the Mage's.
+- **No items.** Like every warband, it musters a ready-made squad and carries
+  nothing (§29.7).
+
+### 31.2 The characters
+
+| Character | Points | HP | Move | Weapon | Ability |
+|---|---|---|---|---|---|
+| Skitterling | 10 | 4 | 8, climbs a full height | Claws: melee, 2 | — |
+| Ravager | 20 | 9 | 5 | Scything talons: melee, 4 | Rend |
+| Spitter | 15 | 5 | 5 | Acid spit: 70%, range 12, 2, corrodes on a hit | — |
+| Bloater | 10 | 6 | 4 | Barbs: melee, 1 | Burst |
+| Broodmother | 20 | 8 | 5, sight 25 | Talons: melee, 3 | Regrowth |
+
+- **Skitterling:** the fast, weak one — it outruns everything but a Scout and
+  climbs as a Scout does, and dies to one good hit.
+- **Ravager:** the strong one, slower and bulkier. **Rend** (3 AP, cooldown 3)
+  strikes one enemy next to it for 6, always.
+- **Spitter:** the ranged one, its tail raised over its head as a scorpion's
+  — or a chimera's — is, spitting acid from the gland at its tip.
+- **Bloater:** a sac of acid on legs. **Burst** (1 AP, once) splashes
+  everyone on the eight squares round it, friend or foe, for 3 and corrodes
+  whoever stands; then the Bloater is down, by its own hand, which scores
+  nobody anything — and its knock-out's points are nobody's either. It needs
+  an enemy beside it.
+- **Broodmother:** the leader. **Regrowth** (2 AP, cooldown 2) is a shorter
+  Heal: 3 HP to an ally it can see within 8 squares, clearing what a heal
+  clears.
+
+**Corroded:** +10% to every shot at the character, overwatch included, for
+two of its turns; it counts down as every effect does (§20.1). It's healed —
+a Heal, a Regrowth, a healing draught or a Purify washes it off — and doesn't
+stack, but it adds to Marked's +15%: what an effect adds to hit is now read
+from `EFFECTS` for every effect that has one, rather than from Marked alone.
+
+### 31.3 How it's built
+
+- **Data.** The five characters, three abilities and the effect are lines in
+  `characters.ts`, and `FACTIONS.swarm` lists them with a ready-made squad
+  for every rung of `BUDGETS`, each spending the whole budget, held there by
+  the test that holds the Realm's.
+- **The abilities reuse the shapes already there.** Rend is a strike for the
+  ability's damage, as Shield bash is. Regrowth is Heal with its own range and
+  HP: the check and the act for the two are one `case`, reading `ABILITIES`.
+  Burst is new: it lands on `burstArea` — the 3×3 round the Bloater but its
+  own square — as a fireball lands, told as a `burst` event, then wounds the
+  Bloater for all it has left.
+- **The computer needed one line each** in `ACTION_AIMS` (§29.3): Rend at an
+  enemy in weapon reach, Regrowth at an ally in its range, Burst at itself.
+  The planner judges them as it judges anything else, and the puzzles hold it
+  to bursting among two enemies, rending the enemy beside it and mending a
+  hurt ally.
+- **A hidden enemy** (§29.3): a Burst is told as a fireball is — a blast that
+  says what it did to whom — and the recap tells it as the hits it was. With
+  two factions a hit tells them apart — a Rend's 6 is no Realm blow, and
+  Corroded is only the Swarm's — and so does a knock-out's points (§13.7).
+  Every Swarm weapon reaches less far than a character sees, but a victim the
+  blow downs sees nothing, and a Realm Archer can hit from beyond a Knight's
+  sight, so a hit from out of sight would tell "not the Swarm". So the enemy
+  is known the moment it **hurts the team or loses a character**, seen or not
+  (`felt`, beside `noteSighting`). A line written before then calls what an
+  enemy's turn or overwatch left on someone "afflicted" rather than naming
+  the effect.
+- **Figures** are modelled in code like the Realm's (§26.5), from the same
+  kit with a shell, a belly, bone and glowing acid added to its palette and a
+  many-jointed `limb`. The owner's colour is the plating on each one's back.
+  The Spitter's shot flies as a gobbet of acid, and a Burst splashes a pool of
+  it over the 3×3.
+- **The profile** lists mastery for the Realm's characters only: nobody
+  musters the Swarm's yet, so nobody has XP with them.
+
+---
+
 ## Appendix: Working title
 
 "Realm Arena", chosen in round 4. The shared "Realm" ties it to Defender of the
@@ -3448,3 +3544,4 @@ Realm, its sibling in the same world.
 | 1.41 | Assists (§13.7): every other enemy who hurt a character since it last stood up scores half its knock-out, rounded up, when it's downed — so in a free-for-all softening up a character a third player finishes is still worth it. Never the downer's side, so none in a duel or co-op. Every battle scores them, those already being fought too: none had done any damage. The battle record counts them, and the result shows them when anybody scored one (§28.1). |
 | 1.42 | Fog of war reaches the log, the recap and the review (§27.2–§27.3): a player is told only what their side saw, by one rule (`toldTo`); each line of the log is written per player (`perViewer`), naming a character they didn't see as one out of sight, and a line nobody of theirs saw isn't told at all; the recap and its reactions are built per viewer, and a review leaves out a step that told its viewer nothing. The fog lifts on the log as the battle ends. |
 | 1.43 | B9 PR 5 builds difficulty and battle size (§30.5): Easy, Normal or Hard warbands, and Small, Normal or Large battles in every mode, from a ladder of budgets 50–120 points with a ready-made squad of at most five characters for each; *Against the Odds* for a win on Hard. |
+| 1.44 | The Swarm, a second faction (§31, B6): five characters — the Skitterling, the Ravager, the Spitter, the Bloater and the Broodmother — cheaper and weaker than the Realm's, so its ready-made squads field more of them; Rend, Regrowth and Burst; and Corroded, +10% to hit, from its acid. Fought in co-op, picked by the host or drawn at Random; a squad choosing its own faction is next. |

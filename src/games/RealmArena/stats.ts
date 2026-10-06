@@ -78,6 +78,9 @@ const ABILITY_USE: Readonly<Record<AbilityId, AbilityUse>> = {
     cripplingShot: { reach: "weapon" },
     huntersMark: { reach: "aimed" },
     purify: { reach: "self", note: "Itself and allies next to it" },
+    rend: { reach: "next" },
+    regrowth: { reach: "aimed" },
+    burst: { reach: "self", note: "Everyone next to it, friend or foe; then the Bloater is down" },
 };
 
 const NONE = "—";

@@ -18,7 +18,7 @@ const SLASH_SIZE = 14;
 /**
  * How each missile flies (§26.1), in board units: how high its arc rises as
  * a share of how far it goes, and how long it's drawn. An arrow on a shallow
- * arc, a bolt in a straight line, a fireball or a throw on a high one. A
+ * arc, a bolt in a straight line, a gobbet of acid on a lob, a fireball or a throw on a high one. A
  * flask or a pot tumbles end over end; anything else points the way it goes.
  */
 const FLIGHT: Readonly<Record<Missile, { arc: number; size: number; tumbles?: true }>> = {
@@ -28,6 +28,7 @@ const FLIGHT: Readonly<Record<Missile, { arc: number; size: number; tumbles?: tr
     fireFlask: { arc: 0.3, size: 7, tumbles: true },
     thunderFlask: { arc: 0.3, size: 7, tumbles: true },
     smokePot: { arc: 0.3, size: 7, tumbles: true },
+    acid: { arc: 0.2, size: 10 },
 };
 /** How fast a flask or a pot turns over, in degrees a millisecond. */
 const TUMBLE = 0.9;

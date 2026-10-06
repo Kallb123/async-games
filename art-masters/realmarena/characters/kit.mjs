@@ -35,6 +35,12 @@ export const MATERIALS = {
     feather: { colour: '#efe9dc' },
     fire: { colour: '#ffb43a', glow: true },
     flame: { colour: '#ff6a1f', glow: true },
+    // The Swarm's (§31): a dark shell, its pale underside, bone-white claws, and acid.
+    chitin: { colour: '#4a3548', shine: 0.35 },
+    belly: { colour: '#a8867a' },
+    bone: { colour: '#e6dcc4', shine: 0.2 },
+    sac: { colour: '#b9c66a', shine: 0.3 },
+    acid: { colour: '#a6e03a', glow: true },
 };
 
 /**
@@ -120,4 +126,29 @@ export function arc(from, to, bend, { r, mat, steps = 6 }) {
     const parts = [];
     for (let i = 0; i < steps; i++) parts.push({ capsule: { from: point(i / steps), to: point((i + 1) / steps), r }, mat });
     return parts;
+}
+
+/**
+ * A many-jointed limb, the Swarm's (§31): a run of capsules from `from`
+ * through each of `joints`, thinning as it goes, ending in a claw's point.
+ */
+export function limb(from, joints, { r, mat = 'chitin', tip = 'bone' }) {
+    const points = [from, ...joints];
+    const parts = [];
+    for (let i = 0; i < points.length - 1; i++) {
+        const thick = r * (1 - 0.25 * i / points.length);
+        parts.push({ capsule: { from: points[i], to: points[i + 1], r: thick }, mat: i === points.length - 2 ? tip : mat });
+    }
+    return parts;
+}
+
+/** A limb and its mirror across the body: `from` and `joints` given for the left one (y > 0). */
+export function limbPair(from, joints, options) {
+    const mirror = ([x, y, z]) => [x, -y, z];
+    return [...limb(from, joints, options), ...limb(mirror(from), joints.map(mirror), options)];
+}
+
+/** A pair of legs, from `hip` through `knee` to `foot`, given for the left one. */
+export function legPair(hip, knee, foot, { r = 0.025, mat = 'chitin', tip = mat } = {}) {
+    return limbPair(hip, [knee, foot], { r, mat, tip });
 }
