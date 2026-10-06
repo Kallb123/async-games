@@ -4,13 +4,14 @@ import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { battleSizeOf, coopInviteOf, RealmArenaInvitationModel, RealmArenaInvitationRequest } from '@/games/RealmArena/RealmArenaModels';
-import { COOP_PLAYERS, fitsCoop } from '@/games/RealmArena/characters';
+import { COOP_PLAYERS, fitsCoop, playableFactionsOf } from '@/games/RealmArena/characters';
 import { meta } from '@/games/RealmArena/meta';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { partySizeErrorMessage } from '@/utils/ui/games';
 
-// docs/games/realm-arena.md §17.3 PR 4, co-op's setting (§29.8), and the
-// battle's size and difficulty (§30.5).
+// docs/games/realm-arena.md §17.3 PR 4, co-op's setting (§29.8), the
+// battle's size and difficulty (§30.5), and the factions the players may
+// muster from (B6).
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, { status: 400, statusText: "Unknown battle size" });
   }
 
+  // The factions the players may muster from (B6): at least one known
+  // faction when sent, the Realm alone when absent, and anything else
+  // refused rather than read as a choice the host didn't make.
+  const factions = playableFactionsOf(body.factions);
+  if (body.factions != null && !factions) {
+    return NextResponse.json({}, { status: 400, statusText: "Choose at least one faction" });
+  }
+
   await dbConnect();
 
   const invite: IInvitationDataDocument = new RealmArenaInvitationModel({
@@ -57,6 +66,7 @@ export async function POST(request: NextRequest) {
     fog: body.fog === true,
     coop,
     size,
+    factions,
     turnTimer,
     timestamp: (new Date()).toISOString(),
     gameType: 'RealmArena',

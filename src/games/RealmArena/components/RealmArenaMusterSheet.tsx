@@ -3,12 +3,13 @@ import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import AmountSteppers from '@/components/ui/AmountSteppers';
 import BuildRow from '@/components/ui/BuildRow';
+import OptionChoiceSection from '@/components/ui/OptionChoiceSection';
 import Section from '@/components/ui/Section';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { CHARACTERS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
+import { CHARACTERS, FACTIONS, ITEM_IDS, ITEMS, OPTIONS, type ItemId, type OptionId } from '@/games/RealmArena/characters';
 import type { Ranks } from '@/games/RealmArena/mastery';
 import type { MusterPick } from '@/games/RealmArena/rules';
-import { CHARACTER_MARK, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
+import { CHARACTER_MARK, factionRosterLine, optionsFor, optionView, starterView } from '@/games/RealmArena/roster';
 import type { UnitRef } from '@/games/RealmArena/stats';
 import { numberedName, squadOf } from '@/games/RealmArena/ui';
 import type { MusterDraft } from '@/games/RealmArena/useMusterDraft';
@@ -34,7 +35,7 @@ interface RealmArenaMusterSheetProps {
 
 /**
  * The muster, on the player's own turn (docs/games/realm-arena.md §17.3 PR 6):
- * first the squad and the items it carries (§21.3), a stepper for each
+ * first the faction, when the host allowed more than one (B6), then the squad and the items it carries (§21.3), a stepper for each
  * character and each item with the points left, and then placing it on the
  * board before the sealed muster goes. While placing, a box for each of the
  * squad (`UnitBox`, as the battle's own list draws them) picks it up and
@@ -58,7 +59,7 @@ export default function RealmArenaMusterSheet(props: RealmArenaMusterSheetProps)
 
 /** Whichever step of the muster the player is on: picking the squad, or placing it. */
 function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmArenaMusterSheetProps) {
-    const { roster, counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
+    const { factions, faction, setFaction, roster, counts, setCounts, items, setItems, pointsLeft, refusal, placement, ranks } = draft;
     const [info, setInfo] = useState<UnitRef>();
     // Over budget, the box already says why the muster can't go.
     const why = pointsLeft >= 0 && refusal && <p className="ag-hint">{refusal}</p>;
@@ -68,6 +69,15 @@ function MusterStep({ draft, budget, colour, onPick, onMuster, pending }: RealmA
         return (
             <>
                 {info && <RealmArenaUnitInfo unit={info} onClose={() => setInfo(undefined)} />}
+                {/* Nothing to choose with one faction allowed: the squad is bought from it. */}
+                {factions.length > 1 && (
+                    <OptionChoiceSection
+                        label="Your faction"
+                        value={faction}
+                        onChange={setFaction}
+                        choices={factions.map(id => ({ id, label: FACTIONS[id].name, description: factionRosterLine(id) }))}
+                    />
+                )}
                 <Section label="Muster your squad">
                     {/* No cap on any one character: the budget is the limit, so each
                         goes as high as the whole budget would buy, and over it the

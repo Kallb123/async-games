@@ -411,14 +411,29 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
     },
 };
 
-/** The Realm, which every player fights as until a squad can choose its faction (B6). */
+/** The Realm: the first faction, and the one every player fought as before a squad could choose its own (B6). */
 export const REALM = FACTIONS.realm;
 
-/** Every faction's id: what Random is drawn from (§29.3). */
+/** Every faction's id: what Random is drawn from (§29.3), and what the host can let the players muster from (B6). */
 export const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
 
 export function isFactionId(value: unknown): value is FactionId {
     return typeof value === "string" && Object.hasOwn(FACTIONS, value);
+}
+
+/** The factions a battle that predates the host's choice lets its players muster from: the Realm alone. */
+export const REALM_ONLY: readonly FactionId[] = ["realm"];
+
+/**
+ * The factions the host let the players muster from (B6), or undefined for
+ * anything else a request could send: a list of known factions, at least one,
+ * read back each once in `FACTION_IDS` order. What the setup route checks and
+ * the invitation stores.
+ */
+export function playableFactionsOf(value: unknown): FactionId[] | undefined {
+    if (!Array.isArray(value) || !value.every(isFactionId)) return undefined;
+    const chosen = FACTION_IDS.filter(id => value.includes(id));
+    return chosen.length > 0 ? chosen : undefined;
 }
 
 /** The faction a stored id names: the Realm for an id no release knows, as an unknown map reads as the Ruined Fort (§29.3). */

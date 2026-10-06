@@ -7,7 +7,7 @@ import { recordedRolls } from "@/utils/games/recordedRolls";
 import { isDropped, nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRealmArenaCoop, IRealmArenaGameData, IRealmArenaSpecificGameState } from "@/games/RealmArena/RealmArenaModels";
-import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, ITEMS, musterBudget, readyMadeSquad, REALM, warbandBudget, type Budget, type CharacterId } from "@/games/RealmArena/characters";
+import { ABILITIES, CHARACTERS, DIFFICULTY_NAMES, EFFECTS, enemyNameOf, factionById, FACTIONS, ITEMS, musterBudget, readyMadeSquad, REALM_ONLY, warbandBudget, type Budget, type CharacterId, type FactionId } from "@/games/RealmArena/characters";
 import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { addTally, NO_TALLY, type Tally } from "@/games/RealmArena/mastery";
 import {
@@ -99,6 +99,11 @@ export function battleOf(gs: IRealmArenaSpecificGameState, complete = false): Ba
 /** Each player's points to muster with (§13.6): the party's, moved by the battle's size (§30.5). */
 export function budgetOf(gs: IRealmArenaSpecificGameState): Budget {
     return musterBudget(gs.seats.length, gs.coop !== undefined, gs.size);
+}
+
+/** The factions each player may muster from (B6): the host's choice, or the Realm alone in a battle from before it. */
+export function playableFactions(gs: IRealmArenaSpecificGameState): readonly FactionId[] {
+    return gs.factions ?? REALM_ONLY;
 }
 
 /** Each co-op warband's points (§30.5): the players', moved by the difficulty. */
@@ -284,9 +289,10 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         ...(gs.sightings ? { sightings: Object.fromEntries(Object.entries(gs.sightings).map(([viewer, ghosts]) => [viewer, ghosts.map(ghost => ({ ...ghost }))])) } : {}),
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.size ? { size: gs.size } : {}),
+        ...(gs.factions ? { factions: [...gs.factions] } : {}),
         ...(gs.coop ? { coop: { ...gs.coop } } : {}),
         blasted: [...(gs.blasted ?? [])],
-        musters: (gs.musters ?? []).map(({ owner, picks }) => ({ owner, picks: picks.map(pickOf) })),
+        musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
         scores: { ...gs.scores },
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
@@ -879,6 +885,8 @@ export class RealmArenaMuster implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     picks: MusterPick[] = [];
+    /** The faction the squad is mustered from (B6): one the host allowed. The battle's first when absent, as every muster before the choice was. */
+    faction?: FactionId;
     readonly className = "RealmArenaMuster";
 
     // Says nothing about the squad: the match review prints this to everyone.
@@ -894,14 +902,18 @@ export class RealmArenaMuster implements IGameCommand {
         // Seat order, one turn each, so a player's seat is the next muster.
         if (seat !== musters.length) return INVALID;
         const field = battlefieldById(gs.map);
-        // Held to the ranks the battle was created with, never to anything sent (§23.3),
-        // and to the Realm's roster, which every player fights as (§29.3).
+        // From a faction the host allowed (B6), and held to its roster (§29.3)
+        // and the ranks the battle was created with, never to anything sent (§23.3).
+        const allowed = playableFactions(gs);
+        const faction = this.faction ?? allowed[0];
+        if (!allowed.includes(faction)) return INVALID;
         const ranks = gs.mastery?.[this.senderId] ?? {};
-        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, REALM) !== undefined) return INVALID;
+        if (musterRefusal(field, seat, this.picks, budgetOf(gs), ranks, FACTIONS[faction]) !== undefined) return INVALID;
 
         // Exactly what was checked, and nothing else a request carried.
         this.picks = this.picks.map(pickOf);
-        musters.push({ owner: this.senderId, picks: this.picks });
+        this.faction = faction;
+        musters.push({ owner: this.senderId, faction, picks: this.picks });
         gs.musters = musters;
         data.gameState.history.unshift(playerHistory(this.senderId, this.myString()));
 

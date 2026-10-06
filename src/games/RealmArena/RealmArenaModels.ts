@@ -11,7 +11,7 @@ import { battleOf, budgetOf, enemyHidden, toldTo, warbandBudgetOf } from "./Real
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
-import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, fitsCoop, isFactionId, RANDOM_ENEMY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
+import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
 import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
@@ -68,6 +68,8 @@ export interface IRealmArenaCoop {
 /** One player's sealed squad, as they mustered it. */
 export interface IRealmArenaMuster {
     owner: string;
+    /** The faction the squad was mustered from (B6). Absent on a warband's, which is the enemy's. */
+    faction?: FactionId;
     picks: MusterPick[];
 }
 
@@ -102,6 +104,13 @@ export interface IRealmArenaSpecificGameState {
      * one, every battle from before it among them.
      */
     size?: StoredBattleSize;
+    /**
+     * The factions each player may muster from (B6), at least one, in
+     * `FACTION_IDS` order. Chosen by the host and fixed when the battle is
+     * created; absent for the Realm alone, every battle from before it among
+     * them (`playableFactions`).
+     */
+    factions?: FactionId[];
     /** Battle rounds played to the end: 0 until the first round's last turn ends. The round being played is one more. */
     roundsPlayed: number;
     /**
@@ -171,6 +180,8 @@ export interface RealmArenaInvitationRequest extends IInvitationRequest {
     size?: StoredBattleSize;
     /** Fight together against the computer (§29), and whom. A free-for-all when absent. */
     coop?: RealmArenaCoopInvite;
+    /** The factions the players may muster from (B6): at least one. The Realm alone when absent. */
+    factions?: FactionId[];
 }
 
 /** Whom a co-op team fights, as the host chose it: a faction, or one drawn at random as the battle is created (§29.3). */
@@ -205,6 +216,7 @@ export interface IRealmArenaInvitationData extends IInvitationData {
     fog?: boolean;
     size?: StoredBattleSize;
     coop?: RealmArenaCoopInvite;
+    factions?: FactionId[];
 }
 
 export interface IRealmArenaInvitationDataDocument extends IRealmArenaInvitationData, IInvitationDataDocument {}
@@ -222,6 +234,9 @@ var RealmArenaInvitationSchema = new Schema<IRealmArenaInvitationDataDocument>({
     coop: { type: Schema.Types.Mixed, set: coopInviteOf },
     // The battle's size (§30.5), likewise: anything but small or large is normal.
     size: { type: String, set: battleSizeOf },
+    // The factions the players may muster from (B6), likewise: anything but
+    // a list of known factions, at least one, is the Realm alone.
+    factions: { type: Schema.Types.Mixed, set: playableFactionsOf },
 }, { discriminatorKey: 'kind' });
 RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmArenaInvitationData, userIdList: string[]) {
     console.log('CreateGame: Realm Arena game');
@@ -247,6 +262,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const specificGameState = buildInitialRealmArenaState(turnOrder, await masterySnapshotOf(turnOrder), {
         fog: this.fog === true,
         size: battleSizeOf(this.size),
+        factions: playableFactionsOf(this.factions),
         ...(coop && enemy ? { coop: { ...coop, enemy, ...(coop.enemy === RANDOM_ENEMY ? { random: true as const } : {}) } } : {}),
     });
 
@@ -266,7 +282,9 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     if (specificGameState.fog) history.push({ text: "Setup: fought in fog of war, so each player sees only what their squad can" });
     const size = specificGameState.size ?? "normal";
     const sized = size === "normal" ? "" : `a ${BATTLE_SIZE_NAMES[size].toLowerCase()} battle, so `;
-    history.push({ text: `Setup: ${sized}each player musters ${budgetOf(specificGameState)} points' worth of characters, sealed until every player has` });
+    const factions = specificGameState.factions ?? REALM_ONLY;
+    const from = factions.length > 1 ? `, from ${factions.map(id => FACTIONS[id].name.replace(/^The /, "the ")).join(" or ")}` : "";
+    history.push({ text: `Setup: ${sized}each player musters ${budgetOf(specificGameState)} points' worth of characters${from}, sealed until every player has` });
     if (specificGameState.coop) {
         history.push({ text: `Setup: on ${DIFFICULTY_NAMES[specificGameState.coop.difficulty ?? "normal"]}, each warband musters ${warbandBudgetOf(specificGameState)} points' worth` });
     }
@@ -306,6 +324,8 @@ export interface RealmArenaSettings {
     fog?: boolean;
     /** The battle's size (§30.5). */
     size?: StoredBattleSize;
+    /** The factions the players may muster from (B6); the Realm alone when absent. */
+    factions?: FactionId[];
     /** In co-op against the computer (§29): the faction drawn or picked, whether it was drawn at `random` (§29.3), the mission (§30.3), the difficulty (§30.5) and the battlefield picked for Hold Out (§30.9). */
     coop?: CoopSettings;
 }
@@ -325,6 +345,8 @@ export interface RealmArenaSettings {
  */
 export function buildInitialRealmArenaState(turnOrder: string[], mastery: MasterySnapshot, settings: RealmArenaSettings = {}): IRealmArenaSpecificGameState {
     const { fog, size } = settings;
+    // Only when it's more than the Realm, so a battle without the choice looks as every one before it did.
+    const factions = settings.factions && settings.factions.join() !== REALM_ONLY.join() ? [...settings.factions] : undefined;
     const coop = settings.coop !== undefined;
     const map = mapFor(turnOrder.length, coop, settings.coop?.map);
     const field = battlefieldById(map);
@@ -338,6 +360,7 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
         // Only when it's on, so a battle without it looks as every one before it did.
         ...(fog ? { fog: true } : {}),
         ...(size ? { size } : {}),
+        ...(factions ? { factions } : {}),
         ...(settings.coop ? { coop: coopState(settings.coop) } : {}),
         phase: "muster",
         roundsPlayed: 0,
@@ -358,9 +381,10 @@ function coopState({ enemy, random, mission, difficulty, map }: CoopSettings): I
 
 /** What a battle's settings are, read back off its state: what a replay rebuilds it from. */
 export function settingsOf(gs: IRealmArenaSpecificGameState): RealmArenaSettings {
-    if (!gs.coop) return { fog: gs.fog === true, size: gs.size };
+    const settings = { fog: gs.fog === true, size: gs.size, factions: gs.factions };
+    if (!gs.coop) return settings;
     const { nextWarband: _turn, enemySeen: _seen, ...coop } = gs.coop;
-    return { fog: gs.fog === true, size: gs.size, coop };
+    return { ...settings, coop };
 }
 
 // ─── Game data interfaces ───────────────────────────────────────────────────
@@ -392,6 +416,8 @@ var RealmArenaGameDataSchema = new Schema<IRealmArenaGameDataDocument>(
             // Written once, as the battle is created (§30.5). Without this
             // path the save dropped it, and every battle mustered at normal.
             size: { type: String, set: battleSizeOf },
+            // Written once, as the battle is created (B6); absent is the Realm alone.
+            factions: { type: [String], default: undefined },
             phase: String,
             roundsPlayed: Number,
             fighters: Schema.Types.Mixed,
@@ -474,6 +500,8 @@ export function gameStateToModel(
         fog: gs.fog === true,
         coop: gs.coop !== undefined,
         ...(gs.size ? { size: gs.size } : {}),
+        // What the muster offers (B6): the host's choice, which nobody needs once the squads are on the field.
+        ...(gs.phase === "muster" ? { factions: [...gs.factions ?? REALM_ONLY] } : {}),
         ...(gs.coop?.mission ? { mission: gs.coop.mission } : {}),
         ...(gs.coop?.difficulty ? { difficulty: gs.coop.difficulty } : {}),
         // A random enemy stays off the wire until it's seen (§29.3), and the
