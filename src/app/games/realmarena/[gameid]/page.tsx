@@ -195,6 +195,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             const events = (response.outcome as IRealmArenaOutcome).events ?? [];
             setLastEvents(events);
             play(command.id, events);
+            // A character with nothing left to do this turn — its last AP spent,
+            // on watch, hunkered down or knocked out on the way — is let go of.
+            const after = (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters.find(fighter => fighter.id === action.fighter);
+            if (!after || after.ap === 0 || !isStanding(after)) setSelectedId(current => current === action.fighter ? null : current);
         }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);

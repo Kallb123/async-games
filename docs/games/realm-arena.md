@@ -984,6 +984,8 @@ recap, a guide and a tutorial.
     action's Cancel and send buttons with its odds, everyone it could be aimed
     at, and the selected character's actions. The squad, the last action's
     result and the keep-still switches follow.
+  - A character is deselected once an action leaves it with nothing to do:
+    its last AP spent, on watch, hunkered down or knocked out on the way.
   - End turn asks first while any character still has AP to spend, even
     where it would go on watch with it.
   - The battlefield runs edge to edge, with no frame round it.
