@@ -44,6 +44,9 @@ interface TurnRecapProps {
      */
     footer?: React.ReactNode;
     cta: { label: string; onClick: () => void };
+    /** A second, quieter button under the CTA — "Replay from your last turn".
+     *  Omit for nothing there. */
+    replay?: { label: string; onClick: () => void };
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
     /** The signed-in viewer's userId — gives their own reaction the
@@ -62,7 +65,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, footer, cta, backHref = '/', viewerId, onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, footer, cta, replay, backHref = '/', viewerId, onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -122,6 +125,12 @@ export default function TurnRecap({ header, since = "Since your last turn", summ
                 <button className="ag-btn ag-btn--primary ag-btn--block ag-recap-cta" onClick={cta.onClick}>
                     {cta.label}
                 </button>
+
+                {replay && (
+                    <button type="button" className="ag-btn ag-btn--light ag-btn--block ag-recap-replay" onClick={replay.onClick}>
+                        {replay.label}
+                    </button>
+                )}
             </div>
         </div>
     );

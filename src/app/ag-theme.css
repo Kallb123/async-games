@@ -2577,6 +2577,10 @@ button.ag-chat-gif { cursor: pointer; }
     box-shadow: 0 2px 0 color-mix(in oklch, black 22%, var(--ag-gold));
 }
 .ag-review-btn--key:hover:not(:disabled) { background: var(--ag-gold); filter: brightness(1.06); }
+/* Play / Stop: the one labelled button in the transport, so it reads as a
+   different thing from the ▶ (next action) beside it — wider than a step
+   button, and never squeezed below its own text. */
+.ag-review-btn--play { flex: 2 1 0; min-width: max-content; padding-inline: 12px; }
 
 /* One tick per point on the timeline: played turns lit, the viewed one brass
    and tall, anything ahead of it dimmed (hypothetical ones brass-tinted). */
@@ -3893,6 +3897,7 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-end-turn-hand .ag-hand:first-child { border-top: 0; }
 
 .ag-recap-cta { margin-top: 20px; padding: 16px; font-size: 16px; border-radius: 16px; }
+.ag-recap-replay { margin-top: 10px; }
 
 /* ==========================================================================
    World Domination — parchment war-room accent for the shared board frame

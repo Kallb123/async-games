@@ -12,6 +12,9 @@ interface TurnRecapScreenProps {
      *  interactive slot; every reaction, including opponents', still shows. */
     viewerId?: string;
     onReact: (eventId: string, reaction: string) => void;
+    /** Optional second button — replay the match from the viewer's last turn.
+     *  Only a game that offers auto-play passes it; absent, nothing changes. */
+    replay?: { label: string; onClick: () => void };
 }
 
 // The "since you were last here" screen as every game shows it: the recap the
@@ -19,7 +22,7 @@ interface TurnRecapScreenProps {
 // the call-to-action, so that's the only prop a page passes beyond the recap.
 // The payload is guaranteed by the hook's `show` — a game must not render this
 // on its own guess.
-export default function TurnRecapScreen({ recap, cta, onDismiss, viewerId, onReact }: TurnRecapScreenProps) {
+export default function TurnRecapScreen({ recap, cta, onDismiss, viewerId, onReact, replay }: TurnRecapScreenProps) {
     return (
         <TurnRecap
             header={recap.header!}
@@ -36,6 +39,7 @@ export default function TurnRecapScreen({ recap, cta, onDismiss, viewerId, onRea
             chat={recap.chat}
             tip={recap.tip}
             cta={{ label: cta, onClick: onDismiss }}
+            replay={replay}
             viewerId={viewerId}
             onReact={onReact}
         />
