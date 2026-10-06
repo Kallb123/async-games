@@ -809,7 +809,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
             return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
         case "heal":
         case "regrowth":
-            return ability(kind, () => healRefusal(state, actor, target, ABILITIES[kind].range));
+            return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind].range));
         case "burst":
             return ability("burst", () => state.fighters.some(one => isEnemy(state, actor, one) && burstArea(state.field, actor.square).includes(one.square))
                 ? undefined : "No enemy next to them");
@@ -829,7 +829,7 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         }
         case "draught": {
             if (actor.item !== "healingDraught") return refused("They have no healing draught");
-            const reason = healRefusal(state, actor, target);
+            const reason = healRefusal(state, actor, target, true);
             return reason ? refused(reason) : afford(ITEMS.healingDraught.ap);
         }
         default:
@@ -845,11 +845,10 @@ function aimRefusal(state: BattleState, actor: Fighter, at: unknown, range: numb
 /**
  * Why a character can't heal `target`, or undefined when it can: an ally that
  * is hurt or has something a heal clears (§20.2, §21.2) — one it can see in
- * the ability's `range` (Heal, Regrowth), or, for a healing draught (no
- * `range`), one next to it or itself.
+ * the ability's `range` (Heal, Regrowth), or, for a healing draught
+ * (`draught`), one next to it or itself.
  */
-function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, range?: number): string | undefined {
-    const draught = range === undefined;
+function healRefusal(state: BattleState, healer: Fighter, target: Fighter | undefined, draught: boolean, range = 0): string | undefined {
     if (!target || !allied(state, target.owner, healer.owner) || !isStanding(target) || (target.id === healer.id && !draught)) return "Pick an ally to heal";
     const far = draught ? undefined : aimRefusal(state, healer, target.square, range);
     if (far) return far;
@@ -867,10 +866,8 @@ export function demolishArea(field: Battlefield, knight: Square, at: Square): Sq
     return areaAround(field, at).filter(square => square !== knight);
 }
 
-/** Who a Bloater's Burst splashes: everyone next to it, friend or foe, but itself (§31.2). */
-export function burstArea(field: Battlefield, bloater: Square): Square[] {
-    return areaAround(field, bloater).filter(square => square !== bloater);
-}
+/** Who a Bloater's Burst splashes: everyone next to it, friend or foe, but itself (§31.2) — a Demolish at its own square. */
+export const burstArea = (field: Battlefield, bloater: Square): Square[] => demolishArea(field, bloater, bloater);
 
 /** The afflictions on a character, which Purify clears: every one, Marked among them (§23.2). */
 export function afflictionsOn(fighter: Fighter): Affliction[] {

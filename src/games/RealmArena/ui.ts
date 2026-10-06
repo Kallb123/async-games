@@ -368,15 +368,10 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "blasted":
                 return [{ icon: "💥", title: `${capitalise(pluralize(event.squares.length, "square"))} of low cover blasted away`, sub: "Open ground now" }];
             case "demolished":
-                return [{
-                    icon: "💥",
-                    title: `${ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
-                    ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
-                }];
             case "burst":
                 return [{
                     icon: "💥",
-                    title: `${Name(event.fighter)} burst: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    title: `${event.kind === "burst" ? `${Name(event.fighter)} burst` : ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
                     ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
                 }];
             case "marked":
@@ -620,19 +615,19 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;
             }
-            case "demolished": {
-                // A blow at the cover, and everyone beside it struck at once as it lands.
-                const land = beat(SLASH_MS);
-                cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
-                landing = { start: land, targets: event.targets };
-                event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
-                break;
-            }
+            case "demolished":
             case "burst": {
-                // The Bloater splashes the 3×3 round it, and everyone there is hit at once.
-                const land = beat();
-                const square = at.get(event.fighter);
-                if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
+                // A blow at the cover, or the Bloater's splash over the 3×3
+                // round it: everyone it caught is hit at once as it lands.
+                let land: number;
+                if (event.kind === "demolished") {
+                    land = beat(SLASH_MS);
+                    cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                } else {
+                    land = beat();
+                    const square = at.get(event.fighter);
+                    if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
+                }
                 landing = { start: land, targets: event.targets };
                 event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
                 break;

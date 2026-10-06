@@ -200,9 +200,9 @@ export function tallied(fighters: readonly Fighter[], action: Action, events: re
 // the player does something that isn't undoable.
 //
 // Undoable: a move, a sneak, hunkering down, going on watch, a shield wall, a
-// heal or a Regrowth, a raise, a Purify, a Hunter's mark, a healing draught, and a throw or a
-// Demolish that lands on nobody — a smoke pot always does (§21.2) — the
-// actions that roll nothing and hurt nobody. A fire flask or a Demolish that
+// heal or a Regrowth, a raise, a Purify, a Hunter's mark, a healing draught,
+// and a throw or a Demolish that lands on nobody — a smoke pot always does
+// (§21.2) — the actions that roll nothing and hurt nobody. A fire flask or a Demolish that
 // lands on nobody still blasts low cover away (§22), and is still taken back
 // whole: the snapshot holds what was blasted. A mark hurts nobody either: it
 // only makes a target easier to hit, which the other side sees whether or not

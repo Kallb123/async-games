@@ -2,7 +2,7 @@
 // four legs, her upright body plated in the owner's colour, a crown of bone
 // spines and two clawed arms.
 
-import { legPair, limb } from './kit.mjs';
+import { legPair, limbPair } from './kit.mjs';
 
 const headZ = 0.76;
 
@@ -27,6 +27,5 @@ export const parts = [
     { ball: { at: [0.135, 0.03, headZ + 0.01], r: 0.016 }, mat: 'acid' },
     { ball: { at: [0.135, -0.03, headZ + 0.01], r: 0.016 }, mat: 'acid' },
     // Two clawed arms, reaching forward.
-    ...limb([0.04, 0.13, 0.62], [[0.12, 0.2, 0.5], [0.24, 0.17, 0.54], [0.3, 0.12, 0.48]], { r: 0.026 }),
-    ...limb([0.04, -0.13, 0.62], [[0.12, -0.2, 0.5], [0.24, -0.17, 0.54], [0.3, -0.12, 0.48]], { r: 0.026 }),
+    ...limbPair([0.04, 0.13, 0.62], [[0.12, 0.2, 0.5], [0.24, 0.17, 0.54], [0.3, 0.12, 0.48]], { r: 0.026 }),
 ];

@@ -1165,6 +1165,7 @@ The numbers are first guesses for playtesting, like §13's.
 | **Stunned** | Its banked AP are lost as it's stunned, so it can't react until its owner's next turn, which it starts with 2 AP instead of 4 | 1 | A thunder flask (§21), Shield bash (§23) |
 | **Slowed** | Its movement allowance is halved, rounded up, for its owner's next turn | 2 | Crippling shot and Frost bolt (§23) |
 | **Marked** | +15% to hit it, for every attacker, reactions included, until its owner's turn after next | 2 | Hunter's mark (§23) |
+| **Corroded** | +10% to hit it, for every attacker, reactions included, for two of its turns; a heal clears it | 2 | The Spitter's acid spit, the Bloater's Burst (§31) |
 
 **The count works exactly as a cooldown's does** (§13.6), and shares its
 code. It goes down by one at the start of each of the affected character's
@@ -1190,7 +1191,7 @@ a third and fourth.
   not twice the damage.
 - **A shot applies its effect only on a hit**, not a graze or a miss.
   Anything that doesn't roll (a strike, a fireball, a flask) always does.
-- **Heal also puts out burning and clears slowed and stunned.** That's the
+- **Heal also puts out burning and clears slowed, stunned and corroded (§31.2).** That's the
   answer to effects, and it gives the Cleric a reason to heal a character
   that isn't badly hurt.
 - **A downed character loses every effect.** A raised one comes back clear.
@@ -2301,7 +2302,8 @@ every player fights as, and the muster lists the faction's roster. Reading a
 stored faction id, with an unknown one as the Realm, waits for PR 4a, which
 stores the first one.
 
-**What a second faction will bring**, which is B6's work, not this plan's:
+**What a second faction will bring**, which is B6's work, not this plan's —
+and which the Swarm brought (§31):
 its characters and their abilities, its ready-made squads, and its figures
 (`npm run ra-characters`). One thing in it touches the computer: a new
 ability is a new kind of action, and the planner has to know what it's aimed
@@ -2762,7 +2764,8 @@ sure it is.
 
 - **Setup**: the mode as an `OptionChoiceSection`, as Banned Islet's and Fires
   Out's difficulty already are, and under it, for co-op, the enemy's faction
-  or Random as another (§29.3), hidden while there's only one faction. On the
+  or Random as another (§29.3), hidden while there's only one faction — shown
+  since the Swarm made two (§31). On the
   screen that has fog of war's switch, with `GameSetupLayout` as now.
 - **The board**: the enemy's characters in its own colour and named by its
   faction (`nameFor`, `colourFor`); the muster names the enemy the players

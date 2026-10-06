@@ -2,7 +2,7 @@
 // its back plated in the owner's colour and a pair of hooked claws held up
 // before its jaws.
 
-import { legPair, limb } from './kit.mjs';
+import { legPair, limbPair } from './kit.mjs';
 
 export const parts = [
     // The abdomen, trailing low behind, and the plated thorax ahead of it.
@@ -15,13 +15,11 @@ export const parts = [
     { ball: { at: [0.14, 0, 0.22], r: [0.065, 0.06, 0.055] }, mat: 'chitin' },
     { ball: { at: [0.185, 0.03, 0.245], r: 0.014 }, mat: 'acid' },
     { ball: { at: [0.185, -0.03, 0.245], r: 0.014 }, mat: 'acid' },
-    ...limb([0.18, 0.025, 0.2], [[0.23, 0.01, 0.18]], { r: 0.01 }),
-    ...limb([0.18, -0.025, 0.2], [[0.23, -0.01, 0.18]], { r: 0.01 }),
+    ...limbPair([0.18, 0.025, 0.2], [[0.23, 0.01, 0.18]], { r: 0.01 }),
     // Six legs, splayed.
     ...legPair([0.05, 0.06, 0.2], [0.12, 0.17, 0.28], [0.2, 0.22, 0.01], { r: 0.017 }),
     ...legPair([-0.01, 0.07, 0.19], [0.0, 0.19, 0.27], [0.01, 0.25, 0.01], { r: 0.017 }),
     ...legPair([-0.07, 0.06, 0.18], [-0.13, 0.17, 0.25], [-0.2, 0.22, 0.01], { r: 0.017 }),
     // The hooked claws, raised before the jaws.
-    ...limb([0.08, 0.06, 0.24], [[0.16, 0.1, 0.36], [0.26, 0.07, 0.3]], { r: 0.018 }),
-    ...limb([0.08, -0.06, 0.24], [[0.16, -0.1, 0.36], [0.26, -0.07, 0.3]], { r: 0.018 }),
+    ...limbPair([0.08, 0.06, 0.24], [[0.16, 0.1, 0.36], [0.26, 0.07, 0.3]], { r: 0.018 }),
 ];

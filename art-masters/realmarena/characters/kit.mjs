@@ -142,11 +142,13 @@ export function limb(from, joints, { r, mat = 'chitin', tip = 'bone' }) {
     return parts;
 }
 
-/** A pair of legs, mirrored across the body: `hip`, `knee` and `foot` given for the left one (y > 0). */
-export function legPair(hip, knee, foot, { r = 0.025, mat = 'chitin', tip = mat } = {}) {
+/** A limb and its mirror across the body: `from` and `joints` given for the left one (y > 0). */
+export function limbPair(from, joints, options) {
     const mirror = ([x, y, z]) => [x, -y, z];
-    return [
-        ...limb(hip, [knee, foot], { r, mat, tip }),
-        ...limb(mirror(hip), [mirror(knee), mirror(foot)], { r, mat, tip }),
-    ];
+    return [...limb(from, joints, options), ...limb(mirror(from), joints.map(mirror), options)];
+}
+
+/** A pair of legs, from `hip` through `knee` to `foot`, given for the left one. */
+export function legPair(hip, knee, foot, { r = 0.025, mat = 'chitin', tip = mat } = {}) {
+    return limbPair(hip, [knee, foot], { r, mat, tip });
 }

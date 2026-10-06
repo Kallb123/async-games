@@ -2,7 +2,7 @@
 // its shell plated in the owner's colour, a crest of bone along its head and
 // a pair of great scything talons arched up over it.
 
-import { legPair, limb } from './kit.mjs';
+import { legPair, limbPair } from './kit.mjs';
 
 export const parts = [
     // The heavy abdomen behind, and the thorax plated in the owner's colour.
@@ -19,12 +19,10 @@ export const parts = [
     { taper: { from: [0.16, 0, 0.38], to: [0.06, 0, 0.47], r: 0.04, r2: 0.005 }, mat: 'bone' },
     { ball: { at: [0.26, 0.036, 0.345], r: 0.017 }, mat: 'acid' },
     { ball: { at: [0.26, -0.036, 0.345], r: 0.017 }, mat: 'acid' },
-    ...limb([0.24, 0.045, 0.29], [[0.31, 0.035, 0.25], [0.32, 0.0, 0.23]], { r: 0.015 }),
-    ...limb([0.24, -0.045, 0.29], [[0.31, -0.035, 0.25], [0.32, 0.0, 0.23]], { r: 0.015 }),
+    ...limbPair([0.24, 0.045, 0.29], [[0.31, 0.035, 0.25], [0.32, 0.0, 0.23]], { r: 0.015 }),
     // Four thick legs, bent low and wide.
     ...legPair([0.08, 0.12, 0.26], [0.16, 0.28, 0.3], [0.22, 0.31, 0.01], { r: 0.038 }),
     ...legPair([-0.14, 0.12, 0.2], [-0.2, 0.28, 0.26], [-0.28, 0.3, 0.01], { r: 0.038 }),
     // The scything talons, arched up and over, their blades curling forward.
-    ...limb([0.08, 0.14, 0.4], [[0.08, 0.21, 0.62], [0.22, 0.2, 0.74], [0.34, 0.16, 0.54]], { r: 0.032 }),
-    ...limb([0.08, -0.14, 0.4], [[0.08, -0.21, 0.62], [0.22, -0.2, 0.74], [0.34, -0.16, 0.54]], { r: 0.032 }),
+    ...limbPair([0.08, 0.14, 0.4], [[0.08, 0.21, 0.62], [0.22, 0.2, 0.74], [0.34, 0.16, 0.54]], { r: 0.032 }),
 ];
