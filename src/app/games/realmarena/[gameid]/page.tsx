@@ -15,7 +15,8 @@ import RealmArenaUnits from "@/games/RealmArena/components/RealmArenaUnits";
 import { guide as realmArenaGuide } from "@/games/RealmArena/guide";
 import { tutorial as realmArenaTutorial } from "@/games/RealmArena/tutorial";
 import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
-import { enemyNameOf, REALM_ONLY } from "@/games/RealmArena/characters";
+import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/characters";
+import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, nextWaveRound, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
@@ -109,6 +110,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // In co-op the players are one side against the computer's warbands (§29.6),
     // and every squad musters 80 points (§29.1).
     const coop = !!gs?.coop;
+    // Solo is co-op with a team of one (§30.6).
+    const solo = coop && seats.length === 1;
     // The enemy goes by its faction's name, or "the enemy" until a random one is seen (§29.3).
     const enemyName = enemyNameOf(gs?.enemy);
     // Whoever owns a character or holds the centre: a player, a warband by the
@@ -396,6 +399,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     userIdList={userIdList}
                     myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
+                    // A solo battle has nobody to invite again, so its rematch comes back to Solo.
+                    extraParams={solo ? rematchFlag(RA_SOLO_PARAM, true) : undefined}
                 />
             )}
 
@@ -473,7 +478,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                     {mustering && coop && (
                         <div className="ag-section">
                             <p className="ag-hint ag-hint--tight">
-                                {gs.enemy
+                                {solo
+                                    ? `You fight alone against ${gs.enemy ? enemyName : 'an unknown enemy, drawn at random'}, with a warband of theirs opposite you.`
+                                    : gs.enemy
                                     ? `You fight together against ${enemyName}, with a warband of theirs opposite each of you.`
                                     : 'You fight together against an unknown enemy, drawn at random: you\'ll learn who it is when one of its characters is first seen.'}
                             </p>

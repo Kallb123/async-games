@@ -458,7 +458,7 @@ describe("a co-op battle's creation (§29.2, §29.3)", () => {
         expect(game.specificGameState.coop).toBeUndefined();
         expect(game.specificGameState.map).toBe("fourGateFort");
         // …and says so, since the host asked for co-op.
-        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: co-op is for 2–3 players, so this is a free-for-all");
+        expect(game.gameState.history.map(entry => entry.text)).toContain("Setup: co-op is for up to 3 players, so this is a free-for-all");
     });
 });
 

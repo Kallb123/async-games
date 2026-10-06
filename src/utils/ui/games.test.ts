@@ -41,7 +41,8 @@ describe('partySizeRange', () => {
 
     it('matches the display copy for every game whose modes all go through the invite flow', () => {
         for (const [slug, meta] of Object.entries(GAME_META)) {
-            if (slug === 'firesout') continue; // the one game the two deliberately differ for
+            // The games the two deliberately differ for: each has a solo mode outside the invite flow.
+            if (slug === 'firesout' || slug === 'realmarena') continue;
             expect(partySizeRange(meta), slug).toBe(meta.players.replace('-', '–'));
         }
     });

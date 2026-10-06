@@ -459,8 +459,15 @@ export function enemyNameOf(enemy: FactionId | undefined): string {
 /** What the host picks to fight an enemy drawn at random as the battle is created, rather than a faction (§29.3). */
 export const RANDOM_ENEMY = "random";
 
-/** How many players a co-op team can be (§29.1): one battlefield for each (§29.2). */
-export const COOP_PLAYERS = { min: 2, max: 3 } as const;
+/**
+ * How many players a co-op team can be (§29.1): one battlefield for each
+ * (§29.2). A team of one is solo (§30.6), on the Ruined Fort, which skips the
+ * invite flow; a team the host invites is two or three.
+ */
+export const COOP_PLAYERS = { min: 1, max: 3 } as const;
+
+/** The rematch link's flag for a solo battle (§30.6), so "play again" comes back to Solo. */
+export const RA_SOLO_PARAM = "solo";
 
 /** Whether a party of this size can play co-op: a team its battlefields are built for. */
 export const fitsCoop = (players: number): boolean => players >= COOP_PLAYERS.min && players <= COOP_PLAYERS.max;

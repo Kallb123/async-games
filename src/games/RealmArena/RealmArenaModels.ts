@@ -182,6 +182,8 @@ export interface RealmArenaInvitationRequest extends IInvitationRequest {
     coop?: RealmArenaCoopInvite;
     /** The factions the players may muster from (B6): at least one. The Realm alone when absent. */
     factions?: FactionId[];
+    /** One player alone against the computer (§30.6): co-op with nobody invited, started at once. */
+    solo?: boolean;
 }
 
 /** Whom a co-op team fights, as the host chose it: a faction, or one drawn at random as the battle is created (§29.3). */
@@ -270,7 +272,7 @@ RealmArenaInvitationSchema.methods.CreateGame = async function(invite: IRealmAre
     const zones = DEPLOYMENT_NAMES[specificGameState.map];
     history.push({ text: `Setup: ${coop?.mission === "holdOut" ? "Hold Out" : "Hold the Centre"} on the ${field.name}, over ${battleRounds(turnOrder.length)} battle rounds` });
     if (invited && !coop) {
-        history.push({ text: `Setup: co-op is for ${COOP_PLAYERS.min}–${COOP_PLAYERS.max} players, so this is a free-for-all` });
+        history.push({ text: `Setup: co-op is for up to ${COOP_PLAYERS.max} players, so this is a free-for-all` });
     }
     if (enemy) {
         // A random enemy isn't named: the team musters not knowing whom it will face (§29.3).
@@ -351,8 +353,10 @@ export function buildInitialRealmArenaState(turnOrder: string[], mastery: Master
     const map = mapFor(turnOrder.length, coop, settings.coop?.map);
     const field = battlefieldById(map);
     const seated = coop ? field.deployments.length / 2 : field.deployments.length;
-    if (turnOrder.length < 2 || turnOrder.length > seated) {
-        throw new Error(`Realm Arena: the ${field.name} seats 2–${seated} players, not ${turnOrder.length}`);
+    // A team of one is solo (§30.6); a free-for-all needs someone to fight.
+    const fewest = coop ? COOP_PLAYERS.min : 2;
+    if (turnOrder.length < fewest || turnOrder.length > seated) {
+        throw new Error(`Realm Arena: the ${field.name} seats ${fewest}–${seated} players, not ${turnOrder.length}`);
     }
     return {
         map,

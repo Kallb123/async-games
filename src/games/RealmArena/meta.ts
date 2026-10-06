@@ -3,10 +3,14 @@ import type { GameMeta } from "@/utils/ui/games";
 export const meta: GameMeta = {
     url: "realmarena",
     name: "Realm Arena",
-    categories: ["Strategy"],
+    // Solo against the computer (§30.6) earns it the library's Solo chip.
+    categories: ["Strategy", "Solo"],
     // Two on the Ruined Fort, or a free-for-all of three on the Ring Fort or
     // four on the Four-Gate Fort (docs/games/realm-arena.md §17.4 B2, §19).
-    players: "2–4 players",
+    // `players` is the library's copy, and counts solo (§30.6), which skips
+    // the invite flow; `minPlayers`/`maxPlayers` are the invite flow's bounds,
+    // which every setup and lobby route reads, as Fires Out's are.
+    players: "1–4 players",
     minPlayers: 2,
     maxPlayers: 4,
     tagline: "Muster a squad in secret, then fight for the centre one action at a time.",
