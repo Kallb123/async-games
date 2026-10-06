@@ -277,6 +277,30 @@ function revealed(before: BattleState, after: BattleState, player: string): bool
 }
 
 /**
+ * What an action changes of the battle, and what a viewer's board is drawn
+ * from (`gameStateToModel`): the characters, the cover blasted away, where each
+ * side last saw the other's, the co-op state a sighting writes to, and the
+ * score.
+ */
+export type RealmArenaBoard = Pick<IRealmArenaSpecificGameState, "fighters" | "blasted" | "sightings" | "coop" | "scores">;
+
+/**
+ * The board as plain objects, copied so nothing that happens next reaches it:
+ * what the undo stack keeps, and what a warband's turn keeps after each part
+ * of it (`EnemyTurn`). The stored fighters may be a Mongoose copy, which
+ * `storedFighter` reads back in full.
+ */
+export function boardOf(gs: RealmArenaBoard): RealmArenaBoard {
+    return {
+        fighters: (gs.fighters ?? []).map(storedFighter),
+        ...(gs.sightings ? { sightings: Object.fromEntries(Object.entries(gs.sightings).map(([viewer, ghosts]) => [viewer, ghosts.map(ghost => ({ ...ghost }))])) } : {}),
+        ...(gs.coop ? { coop: { ...gs.coop } } : {}),
+        blasted: [...(gs.blasted ?? [])],
+        scores: { ...gs.scores },
+    };
+}
+
+/**
  * The whole state, as plain objects the undo stack can keep and hand back.
  * Never nests a stack: a snapshot's own `undoStack` is empty, and restoring
  * one leaves the live stack where it is anyway.
@@ -287,15 +311,11 @@ export function cloneRealmArenaState(gs: IRealmArenaSpecificGameState): IRealmAr
         seats: [...gs.seats],
         phase: gs.phase,
         roundsPlayed: gs.roundsPlayed,
-        fighters: (gs.fighters ?? []).map(storedFighter),
-        ...(gs.sightings ? { sightings: Object.fromEntries(Object.entries(gs.sightings).map(([viewer, ghosts]) => [viewer, ghosts.map(ghost => ({ ...ghost }))])) } : {}),
+        ...boardOf(gs),
         ...(gs.fog ? { fog: true } : {}),
         ...(gs.size ? { size: gs.size } : {}),
         ...(gs.factions ? { factions: [...gs.factions] } : {}),
-        ...(gs.coop ? { coop: { ...gs.coop } } : {}),
-        blasted: [...(gs.blasted ?? [])],
         musters: (gs.musters ?? []).map(({ owner, faction, picks }) => ({ owner, ...(faction ? { faction } : {}), picks: picks.map(pickOf) })),
-        scores: { ...gs.scores },
         // Written once as the battle is created and never changed, so shared.
         mastery: gs.mastery ?? {},
         undoStack: [],
@@ -511,6 +531,16 @@ function lineBy(owner: string, text: string, coop: IRealmArenaCoop | undefined):
 export type Told = Record<string, BattleEvent[]>;
 
 /**
+ * What each player was told of some events (`toldTo`), read from `battle` —
+ * the battle as they left it, which is the current one unless the caller has
+ * it already. Only in a battle fought in fog of war (§27); undefined without.
+ */
+function toldByViewer(data: IRealmArenaGameData, events: readonly BattleEvent[], battle = battleOf(data.specificGameState)): Told | undefined {
+    if (!battle.fog) return undefined;
+    return Object.fromEntries(data.gameState.turnOrder.map(viewer => [viewer, toldTo(events, battle, viewer)]));
+}
+
+/**
  * Writes the line `write` makes of some events to the log — and, in a battle
  * fought in fog of war, the line as each player's side saw them (§27.2):
  * written from only the events they were told (`toldTo`), naming every
@@ -528,8 +558,8 @@ function writeLine(
     if (!line) return undefined;
     const battle = battleOf(data.specificGameState);
     data.gameState.history.unshift(line);
-    if (!battle.fog) return undefined;
-    const told: Told = Object.fromEntries(data.gameState.turnOrder.map(viewer => [viewer, toldTo(events, battle, viewer)]));
+    const told = toldByViewer(data, events, battle);
+    if (!told) return undefined;
     line.perViewer = data.gameState.turnOrder.flatMap(viewer => {
         const own = write(told[viewer], witnessed(events, battle, viewer));
         return own ? [{ userId: viewer, text: own.text }] : [];
@@ -1047,7 +1077,11 @@ export interface IRealmArenaOutcome extends ICommandOutcome {
         started?: BattleEvent[];
         /** In fog, what each player was told of what happened as the next turn began (§27.2). */
         startedTold?: Told;
-        /** In fog, what each player was told of an action (§27.2): the events its line of the log for them was written from. */
+        /**
+         * In fog, what each player was told of an action (§27.2): the events
+         * its line of the log for them was written from. On an End turn in
+         * co-op, of the player's own End turn alone, before the warband's.
+         */
         told?: Told;
     };
 }
@@ -1057,6 +1091,12 @@ export interface EnemyStep {
     action: Action;
     events: BattleEvent[];
     told?: Told;
+    /**
+     * The board as the action left it, for a review that plays the turn one
+     * action at a time. Taken as it's played, never stored, and never sent as
+     * it is: each viewer's is drawn from it (`stepOutcomeToModel`).
+     */
+    after?: RealmArenaBoard;
 }
 
 /**
@@ -1072,8 +1112,12 @@ export interface EnemyTurn {
     started: BattleEvent[];
     /** In fog, what each player was told of the burning as it began (§27.2). */
     startedTold?: Told;
+    /** The board once the burning had done what it did, as `EnemyStep.after` is the board after an action. */
+    startedAfter?: RealmArenaBoard;
     steps: EnemyStep[];
     ended?: BattleEvent[];
+    /** In fog, what each player was told of the End turn (§27.2): the centre it scored, and any warband going on watch in their sight. */
+    endedTold?: Told;
 }
 
 /** Everything that happened in a warband's turn, in order. */
@@ -1336,6 +1380,9 @@ export class RealmArenaEndTurn implements IGameCommand {
             .map(fighter => fighter.id);
 
         const events = applyEndTurn(data, this.senderId, this.keepStill);
+        // What each player was told of it, read from the battle as it left it,
+        // before the warband's turn that follows changes it (§29.9).
+        const told = gs.coop ? toldByViewer(data, events) : undefined;
         const { roll, used } = recordedRolls(this.recordedRolls, () => randomInt(ROLL_SIDES) + 1);
         const { enemy, started, startedTold } = handOff(data, this.senderId, { recorded: this.recordedEnemyActions, roll }, commandVersion(this));
         // Always a list in co-op, an empty one when no warband took a turn,
@@ -1350,7 +1397,7 @@ export class RealmArenaEndTurn implements IGameCommand {
         return {
             ...turnEnded(gs),
             events: [...events, ...enemy ? enemyEvents(enemy) : [], ...started],
-            recap: { enemy, started, startedTold },
+            recap: { enemy, started, startedTold, told },
         } as IRealmArenaOutcome;
     }
 }
@@ -1394,7 +1441,7 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
     gs.coop = { ...coop, nextWarband: (k + 1) % count };
 
     const { events: started, told: startedTold } = beginTurn(data, owner);
-    const turn: EnemyTurn = { owner, started, startedTold, steps: [] };
+    const turn: EnemyTurn = { owner, started, startedTold, startedAfter: boardOf(gs), steps: [] };
     const over = () => battleIsOver(gs);
     if (over()) return turn;
 
@@ -1423,9 +1470,12 @@ function warbandTurn(data: IRealmArenaGameData, moves: WarbandMoves): EnemyTurn 
             console.warn(`Realm Arena game ${data.gameId}: ${owner}'s ${(action as Partial<Action>)?.kind} was refused, so its turn ends here`);
             break;
         }
-        turn.steps.push({ action: applied.action, events: applied.events, told: applied.told });
+        turn.steps.push({ action: applied.action, events: applied.events, told: applied.told, after: boardOf(gs) });
     }
-    if (!over()) turn.ended = applyEndTurn(data, owner, []);
+    if (!over()) {
+        turn.ended = applyEndTurn(data, owner, []);
+        turn.endedTold = toldByViewer(data, turn.ended);
+    }
     return turn;
 }
 

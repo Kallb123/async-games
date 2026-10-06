@@ -7,15 +7,15 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise, pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { RealmArenaGameType, type IGameCommand } from "@/utils/apiModels/GameLogic";
-import { battleOf, budgetOf, enemyHidden, nextWaveOf, toldTo, warbandBudgetOf } from "./RealmArenaLogic";
+import { battleOf, budgetOf, enemyEvents, enemyHidden, nextWaveOf, toldTo, unnamed, warbandBudgetOf, type IRealmArenaOutcome, type RealmArenaBoard, type Told } from "./RealmArenaLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { randomInt } from "@/utils/games/random";
 import { userToken } from "@/utils/games/history";
 import { BATTLE_SIZE_NAMES, CHARACTERS, COOP_PLAYERS, DIFFICULTY_NAMES, FACTION_IDS, factionById, FACTIONS, fitsCoop, isFactionId, playableFactionsOf, RANDOM_ENEMY, REALM_ONLY, UNKNOWN_ENEMY, type BattleSize, type CharacterId, type Difficulty, type FactionId } from "./characters";
 import { addTally, NO_TALLY, xpOf, type MasterySnapshot, type Tally } from "./mastery";
 import { battlefieldById, COOP_MAPS, DEPLOYMENT_NAMES, mapFor, type CoopMap, type RealmArenaMapId } from "./maps";
-import { allied, battleRounds, ENEMY_SIDE, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
-import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "./apiModels";
+import { allied, battleRounds, ENEMY_SIDE, fighterById, fogGhost, isWarband, pickOf, squadSight, storedFighter, TEAM_SIDE, viewOf, warbandsFor, type BattleEvent, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from "./rules";
+import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import type { Square } from "@/utils/games/battlefield/terrain";
 import { addRecords, NO_RECORD, RECORD_KEYS, type BattleRecord, type FightingRecord, type FightingRow, type WaveRecord } from "./battleRecord";
 import { CHARACTER_IDS } from "./roster";
@@ -573,19 +573,85 @@ function ranksOnTheWire(mastery: MasterySnapshot, viewerId: string | null): Mast
  * cut down to what they can (`toldTo`). `gs` is the battle after the command.
  * replay.test.ts pins every event's fields, so a new one can't slip through
  * without someone deciding what it tells.
+ *
+ * An End turn that held a warband's turn (§29.4) also gets its `parts`
+ * (`partsOf`), for a review that plays the turn one action at a time.
  */
 export function stepOutcomeToModel(outcome: unknown, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete = false): IRealmArenaStepOutcome | undefined {
     const events = (outcome as { events?: unknown } | null)?.events;
     if (!Array.isArray(events) || events.length === 0) return undefined;
     const battle = battleOf(gs, complete);
     const told = battle.fog ? toldTo(events as BattleEvent[], battle, viewerId, enemyHidden(gs.coop)) : events as BattleEvent[];
-    return {
-        events: told.map((event): ToldEvent => {
-            if (event.kind !== "shot") return event;
-            const { roll: _roll, ...rest } = event;
-            return rest;
-        }),
+    const parts = partsOf(outcome as IRealmArenaOutcome, viewerId, gs, complete);
+    return { events: withoutRolls(told), ...parts ? { parts } : {} };
+}
+
+/** Events as a review is told them: a shot's roll is the log's to leave out (§26.2). */
+const withoutRolls = (events: readonly BattleEvent[]): ToldEvent[] => events.map((event): ToldEvent => {
+    if (event.kind !== "shot") return event;
+    const { roll: _roll, ...rest } = event;
+    return rest;
+});
+
+/**
+ * An End turn's parts for one viewer, when it held a warband's turn (§29.4):
+ * the player's own End turn with the burning that began the warband's, each
+ * action the warband took, and its End turn with what happened as the next
+ * turn began — each with the board as it left it, drawn for the viewer.
+ *
+ * Fog of war (§27) is kept the way the snapshot and the log keep it, part by
+ * part. A part's events are what the viewer was told of it as it happened —
+ * what the log's line for them was written from, recorded as each part was
+ * played, and cut from the board at that point where nothing was recorded —
+ * under the same cover for a random enemy (§29.3) and without a shot's roll,
+ * as `events` are. A part they were told nothing of isn't listed: that it
+ * happened is no more theirs than the line it wrote. And each board is
+ * `gameStateToModel`'s own view for that viewer of the board as the part left
+ * it, so it holds only what their side saw then, and the ghosts only they
+ * remember. Nothing is shown of a part that the log, the recap and the
+ * snapshot don't show, so there's nothing for a part's number or its place to
+ * tell. Once the battle is over the fog is lifted for all of it, boards
+ * included, as it is for `events`.
+ *
+ * Undefined with fewer than two parts told. The last never carries a board:
+ * the snapshot's follows it, differing only by what nobody was told.
+ */
+function partsOf(outcome: IRealmArenaOutcome, viewerId: string | null, gs: IRealmArenaSpecificGameState, complete: boolean): IRealmArenaStepPart[] | undefined {
+    const { events = [], recap } = outcome;
+    const enemy = recap?.enemy;
+    if (!enemy) return undefined;
+    const battle = battleOf(gs, complete);
+    const hidden = battle.fog && enemyHidden(gs.coop);
+    // What the viewer was told of some events: the record of it where there is
+    // one, else what they would be told of them from the battle as it is now.
+    const said = (told: Told | undefined, of: readonly BattleEvent[]): BattleEvent[] => {
+        if (!battle.fog) return [...of];
+        const recorded = told && viewerId !== null && told[viewerId] ? told[viewerId] : toldTo(of, battle, viewerId);
+        return hidden ? unnamed(recorded, id => isWarband(fighterById(battle, id)?.owner ?? "")) : [...recorded];
     };
+    // Two runs of events told in a row: nothing was recorded for one that had no events.
+    const both = (first: Told | undefined, second: Told | undefined): Told | undefined =>
+        first || second ? Object.fromEntries(Object.keys({ ...first, ...second }).map(viewer => [viewer, [...first?.[viewer] ?? [], ...second?.[viewer] ?? []]])) : undefined;
+    const started = recap.started ?? [];
+    // The command's own events are the player's End turn, then the warband's
+    // turn, then what happened as the next turn began (`RealmArenaEndTurn`).
+    const own = events.slice(0, events.length - enemyEvents(enemy).length - started.length);
+
+    const board = (after: RealmArenaBoard | undefined): RealmArenaPartState | undefined => {
+        if (!after) return undefined;
+        const { fighters, ghosts, clouds, blasted, scores, enemy: whom } = gameStateToModel({ ...gs, ...after, sightings: after.sightings, coop: after.coop }, viewerId, null, complete);
+        return { fighters, ghosts, clouds, blasted, scores, ...whom ? { enemy: whom } : {} };
+    };
+    const planned = [
+        { events: said(both(recap.told, enemy.startedTold), [...own, ...enemy.started]), after: enemy.startedAfter },
+        ...enemy.steps.map(step => ({ events: said(step.told, step.events), after: step.after })),
+        { events: said(both(enemy.endedTold, recap.startedTold), [...enemy.ended ?? [], ...started]), after: undefined },
+    ].filter(part => part.events.length > 0);
+    if (planned.length < 2) return undefined;
+    return planned.map(({ events: told, after }, index): IRealmArenaStepPart => {
+        const state = index < planned.length - 1 ? board(after) : undefined;
+        return { events: withoutRolls(told), ...state ? { state } : {} };
+    });
 }
 
 /**

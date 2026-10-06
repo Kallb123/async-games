@@ -8,10 +8,11 @@ import {
     computeRealmArenaResultStats, coopInviteOf, formatRealmArenaCharts, formatRealmArenaResultStats, gameStateToModel, RealmArenaInvitationModel, stepOutcomeToModel, type IRealmArenaGameData, type RealmArenaSettings,
 } from "./RealmArenaModels";
 import { recordBattle } from "./recordBattle";
-import { nextWaveOf, RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
+import { battleOf as battleOfState, enemyEvents, nextWaveOf, RealmArenaGameType, waveOf, waveStrength, type IRealmArenaOutcome, type RealmArenaEndTurn } from "./RealmArenaLogic";
 import {
     battleRounds, ENEMY_SIDE, isStanding, isWarband, lastWaveRound, nextWaveRound, readyMadeMuster, squadSight, standings, TEAM_SIDE, warbandOwner, waveArrives, wavesLanded, type BattleEvent,
 } from "./rules";
+import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 import type { GameResultBarChart, GameResultChart, GameResultTable } from "@/utils/apiModels/GameDataApi";
 import {
     battleOf, endTurnBy, makeGame, muster, musterAll, play, playScriptedBattle, playScriptedTurn, readyMadePicks, type RealmArenaTestGame,
@@ -700,6 +701,170 @@ describe("what a player is told of the enemy's turn in fog of war (§29.8)", () 
         expect(recap?.enemy?.steps.length).toBeGreaterThan(0);
         expect(recap?.started).toEqual([]);
         expect(new RealmArenaGameType().outcomeFor(game, outcome, "a")).toEqual(told);
+    });
+});
+
+describe("a review's parts of an End turn that held the enemy's (§29.9)", () => {
+    const NAMES = { a: "Alice", b: "Bob" };
+    const STATE_FIELDS = ["blasted", "clouds", "fighters", "ghosts", "scores"];
+
+    /** A co-op battle played for a few turns, then reviewed by `viewer`: each step's outcome as the viewer is told it, beside the raw one. */
+    async function review(settings: RealmArenaSettings, viewer: string | null, turns = 14) {
+        const game = makeGame(["a", "b"], {}, settings);
+        await musterAll(game);
+        for (let turn = 0; turn < turns && !game.complete; turn++) await playScriptedTurn(game);
+        const raw = new Map<number, IRealmArenaOutcome>();
+        const timeline = await buildTimeline(game, NAMES, [], step => raw.set(step.next.index, step.outcome as IRealmArenaOutcome), viewer);
+        const steps = timeline.snapshots.flatMap(snapshot => raw.has(snapshot.index)
+            ? [{ command: snapshot.command, outcome: snapshot.outcome as IRealmArenaStepOutcome | undefined, raw: raw.get(snapshot.index)! }] : []);
+        return { game, steps };
+    }
+    const endTurns = <T extends { raw: IRealmArenaOutcome }>(steps: T[]) => steps.filter(step => step.raw.recap?.enemy);
+
+    /** What each of an End turn's parts holds in the raw, in order: the player's End turn and the burning, each action, the warband's End turn and what the next turn began with. */
+    function rawParts(raw: IRealmArenaOutcome): BattleEvent[][] {
+        const { enemy, started = [] } = raw.recap!;
+        const own = raw.events.slice(0, raw.events.length - enemyEvents(enemy!).length - started.length);
+        return [[...own, ...enemy!.started], ...enemy!.steps.map(step => step.events), [...enemy!.ended ?? [], ...started]];
+    }
+
+    it("gives an End turn a part for the player's, one for each action the warband took, and one for its End turn, with the board after each but the last", async () => {
+        seedRolls(7);
+        const { steps } = await review({ coop: { enemy: "realm" } }, "a");
+        const turns = endTurns(steps);
+        expect(turns.length).toBeGreaterThan(3);
+        for (const { outcome, raw } of turns) {
+            // One for each that did something: a part with nothing to play isn't one, and a turn of one has none.
+            const told = rawParts(raw).filter(events => events.length > 0).length;
+            if (told < 2) {
+                expect(outcome?.parts).toBeUndefined();
+                continue;
+            }
+            const parts = outcome!.parts!;
+            expect(parts).toHaveLength(told);
+            // Played in turn, the parts are the End turn's events, whole.
+            expect(parts.flatMap(part => part.events)).toEqual(outcome!.events);
+            expect(parts.slice(0, -1).every(part => part.state !== undefined)).toBe(true);
+            expect(parts.at(-1)).not.toHaveProperty("state");
+            for (const part of parts.slice(0, -1)) expect(Object.keys(part.state!).filter(key => key !== "enemy").sort()).toEqual(STATE_FIELDS);
+        }
+        expect(turns.filter(turn => turn.outcome?.parts).length).toBeGreaterThan(3);
+    });
+
+    it("draws each action's board as that action left it, and leaves the last to the snapshot's", async () => {
+        seedRolls(7);
+        const game = makeGame(["a", "b"], {}, { coop: { enemy: "realm" } });
+        await musterAll(game);
+        const { outcome } = await play(game, endTurnBy("a"));
+        const steps = (outcome as IRealmArenaOutcome).recap!.enemy!.steps;
+        const parts = stepOutcomeToModel(outcome, "a", game.specificGameState)!.parts!;
+        expect(steps.length).toBeGreaterThan(1);
+        // The player's, then an action each, and nothing the warband's End turn held.
+        expect(parts.length).toBeGreaterThanOrEqual(steps.length);
+        const squareOf = (state: Pick<RealmArenaPartState, "fighters"> | undefined, id: number) => state?.fighters.find(fighter => fighter.id === id)?.square;
+        const snapshot = gameStateToModel(game.specificGameState, "a", null);
+        const last = steps.at(-1)!;
+        const path = (last.events[0] as Extract<BattleEvent, { kind: "moved" }>).path;
+        // Standing where its last move began in the board before it, and where it ended in the snapshot's.
+        expect(squareOf(parts.at(-2)!.state, last.action.fighter)).toBe(path[0]);
+        expect(squareOf(snapshot, last.action.fighter)).toBe(path.at(-1));
+        // The ones before it are each a board of their own.
+        const boards = parts.slice(0, -1).map(part => part.state!.fighters.map(fighter => fighter.square).join());
+        expect(new Set(boards).size).toBeGreaterThan(1);
+        // The same for everyone but the viewer: scores and cover are the battle's.
+        expect(parts.at(-2)!.state!.scores).toEqual(snapshot.scores);
+        expect(parts.at(-2)!.state!.blasted).toEqual(snapshot.blasted);
+    });
+
+    it("gives nothing of a free-for-all's End turn, or of an action", async () => {
+        const solo = await review({}, "a", 6);
+        expect(solo.steps.length).toBeGreaterThan(5);
+        expect(solo.steps.every(step => step.outcome === undefined || !("parts" in step.outcome))).toBe(true);
+        seedRolls(7);
+        const co = await review({ coop: { enemy: "realm" } }, "a");
+        const actions = co.steps.filter(step => step.raw.recap?.enemy === undefined && step.outcome);
+        expect(actions.length).toBeGreaterThan(5);
+        expect(actions.every(step => !("parts" in step.outcome!))).toBe(true);
+    });
+
+    it("leaves out a shot's roll in every part", async () => {
+        seedRolls(7);
+        const { steps } = await review({ coop: { enemy: "realm" } }, "a", 30);
+        const events = endTurns(steps).flatMap(step => step.outcome?.parts?.flatMap(part => part.events) ?? []);
+        expect(events.some(event => event.kind === "shot")).toBe(true);
+        expect(events.every(event => !("roll" in event))).toBe(true);
+    });
+
+    it("keeps a part for a viewer in fog only if they were told something of it, and draws only what their side saw", async () => {
+        seedRolls(7);
+        let dropped = 0;
+        for (const viewer of ["a", "b", null]) {
+            const { game, steps } = await review({ fog: true, coop: { enemy: "realm" } }, viewer);
+            for (const { outcome, raw } of endTurns(steps)) {
+                // What the log told them of each part, as it was recorded.
+                const { enemy } = raw.recap!;
+                const told = (list: Record<string, BattleEvent[]> | undefined): BattleEvent[] => viewer === null ? [] : list?.[viewer] ?? [];
+                const heard = [
+                    [...told(raw.recap!.told), ...told(enemy!.startedTold)],
+                    ...enemy!.steps.map(step => told(step.told)),
+                    [...told(enemy!.endedTold), ...told(raw.recap!.startedTold)],
+                ].filter(events => events.length > 0);
+                if (viewer === null) {
+                    // Nobody in particular sees nothing but what's everyone's: points scored, cover blasted.
+                    expect((outcome?.parts ?? []).every(part => part.events.every(event => event.kind === "scored" || event.kind === "blasted"))).toBe(true);
+                } else {
+                    expect(outcome?.parts?.length).toBe(heard.length >= 2 ? heard.length : undefined);
+                    dropped += rawParts(raw).length - (outcome?.parts?.length ?? 0);
+                }
+                const parts = outcome?.parts;
+                if (!parts) continue;
+                expect(parts.every(part => part.events.length > 0)).toBe(true);
+                expect(parts.at(-1)).not.toHaveProperty("state");
+                for (const part of parts.slice(0, -1)) {
+                    const state = part.state!;
+                    if (viewer === null) {
+                        expect(state.fighters).toEqual([]);
+                        expect(state.ghosts).toEqual([]);
+                        continue;
+                    }
+                    // Anyone on it who isn't theirs is on a square their side sees.
+                    const battle = battleOfState({ ...game.specificGameState, fighters: state.fighters, blasted: state.blasted });
+                    const seen = squadSight(battle, viewer);
+                    for (const fighter of state.fighters) expect(isWarband(fighter.owner) ? seen(fighter.square) : true).toBe(true);
+                    expect(JSON.stringify(state)).not.toMatch(/sightings|woundedBy|undoStack/);
+                }
+            }
+        }
+        // Somewhere the warband acted, or its turn ended, out of their sight.
+        expect(dropped).toBeGreaterThan(0);
+    });
+
+    it("lists no part of the warband's turn out of sight, and not its lone part", async () => {
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm" } });
+        await musterAll(game);
+        const { outcome } = await play(game, endTurnBy("a"));
+        const raw = outcome as IRealmArenaOutcome;
+        // Tamper: nothing of the warband's turn was told to a, so only a's own End turn is left.
+        for (const step of raw.recap!.enemy!.steps) step.told = { a: [], b: [] };
+        raw.recap!.enemy!.startedTold = { a: [], b: [] };
+        raw.recap!.enemy!.endedTold = { a: [], b: [] };
+        raw.recap!.startedTold = { a: [], b: [] };
+        expect(stepOutcomeToModel(outcome, "a", game.specificGameState)?.parts).toBeUndefined();
+        // One kept action is two parts: it and the player's own.
+        raw.recap!.enemy!.steps[0].told = { a: raw.recap!.enemy!.steps[0].events, b: [] };
+        const parts = stepOutcomeToModel(outcome, "a", game.specificGameState)?.parts;
+        expect(parts).toHaveLength(raw.recap!.told?.a.length ? 2 : 1);
+    });
+
+    it("lifts the fog from every part once the battle is over, as it does from the events", async () => {
+        seedRolls(7);
+        const game = makeGame(["a", "b"], {}, { fog: true, coop: { enemy: "realm" } });
+        await musterAll(game);
+        const { outcome } = await play(game, endTurnBy("a"));
+        const told = stepOutcomeToModel(outcome, "a", game.specificGameState, true)!;
+        expect(told.parts).toHaveLength(rawParts(outcome as IRealmArenaOutcome).filter(events => events.length > 0).length);
+        expect(told.parts!.flatMap(part => part.events)).toEqual(told.events);
+        expect(told.parts![0].state!.fighters).toHaveLength(game.specificGameState.fighters.length);
     });
 });
 
