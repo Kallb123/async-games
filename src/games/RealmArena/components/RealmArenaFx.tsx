@@ -25,9 +25,10 @@ const SLASH_SIZE = 14;
 
 /**
  * How each missile flies (§26.1), in board units: how high its arc rises as
- * a share of how far it goes, and how long it's drawn. An arrow on a shallow
- * arc, a bolt in a straight line, a gobbet of acid on a lob, a fireball or a throw on a high one. A
- * flask or a pot tumbles end over end; anything else points the way it goes.
+ * a share of how far it goes (up to `MAX_ARC`), and how long it's drawn. An
+ * arrow on a shallow arc, a bolt in a straight line, a gobbet of acid on a lob,
+ * a fireball or a throw on a high one. A flask or a pot tumbles end over end;
+ * anything else points the way it goes.
  */
 const FLIGHT: Readonly<Record<Missile, { arc: number; size: number; tumbles?: true }>> = {
     arrow: { arc: 0.1, size: 12 },
@@ -38,6 +39,12 @@ const FLIGHT: Readonly<Record<Missile, { arc: number; size: number; tumbles?: tr
     smokePot: { arc: 0.3, size: 7, tumbles: true },
     acid: { arc: 0.2, size: 10 },
 };
+/**
+ * The highest any arc peaks above the straight line, in board units: three
+ * squares' depth on screen. Without it a lob across the map would rise by a
+ * share of the whole map, out of a close frame.
+ */
+const MAX_ARC = 3 * 2 * ISO_HALF_HEIGHT;
 /** How fast a flask or a pot turns over, in degrees a millisecond. */
 const TUMBLE = 0.9;
 /** How far a graze turns a shot, in degrees, and how fast it glances on, as a share of the speed it flew at. */
@@ -112,7 +119,8 @@ function flightAt(cue: FlightCue, at: RealmArenaFxProps['at'], ms: number): { po
         : cue.result === 'miss' ? { x: target.head.x, y: target.head.y - MISS_CLEAR }
         : target.body;
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
-    const rise = 2 * FLIGHT[cue.missile].arc * distance;
+    // A quadratic arc peaks at half the control point's rise.
+    const rise = 2 * Math.min(FLIGHT[cue.missile].arc * distance, MAX_ARC);
     const control = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - rise };
     const flying = ms <= cue.land;
     const u = ms / cue.land;
@@ -140,14 +148,22 @@ function fade(ms: number, cue: FlightCue): number {
 /** A cue's timing as CSS animation: what the keyframed cues — text, a burst, a slash, and the board's fall and blast — are timed by. */
 export const cueTiming = ({ start, length }: BattleCue): React.CSSProperties => ({ animationDelay: `${start}ms`, animationDuration: `${length}ms` });
 
+/**
+ * A blow that lands pops as it appears (`ag-ra-hit-pop`, which only a hit or a
+ * graze plays); its length is the stylesheet's, its start the cue's.
+ */
+const popTiming = ({ start }: BattleCue): React.CSSProperties => ({ animationDelay: `${start}ms` });
+
 function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
     const { x } = over;
     const y = over.y - (cue.lane ?? 0) * LANE_RISE;
     return (
         <g className={`ag-ra-hit ag-ra-hit--${cue.tone}`} style={cueTiming(cue)}>
-            <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
-            {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}
-            {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={y - VALUE_RISE} size={MARK_SIZE} />}
+            <g className="ag-ra-hit-pop" style={popTiming(cue)}>
+                <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
+                {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}
+                {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={y - VALUE_RISE} size={MARK_SIZE} />}
+            </g>
         </g>
     );
 }
@@ -204,9 +220,11 @@ function Flights({ id, flights, at, held }: { id: string; flights: readonly Flig
  *
  * What flies — an arrow, a bolt, a fireball, a flask — is moved a frame at a
  * time along its arc, turned to face the way it's going. What stays put —
- * hit text rising and fading, a burst, a slash — is CSS keyframes
- * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. A walk is the
- * board's, which draws the figure along its path. With reduced
+ * hit text rising and fading (and, for a blow that lands, popping), a burst, a
+ * slash — is CSS keyframes (`ag-ra-hit`, `ag-ra-hit-pop`, `ag-ra-burst`,
+ * `ag-ra-slash`) timed by its cue. This layer is drawn above the board's
+ * depth-sorted items, so keyframing a transform here lifts nothing else. A
+ * walk is the board's, which draws the figure along its path. With reduced
  * motion, nothing flies, bursts or slashes: only the text plays — the
  * flights aren't drawn, and the stylesheet hides the bursts and the slashes. Nothing here
  * can be tapped, so the board goes on working underneath while it plays.

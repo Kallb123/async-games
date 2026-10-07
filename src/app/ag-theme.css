@@ -5427,6 +5427,20 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     65% { opacity: 1; }
     100% { opacity: 0; transform: translateY(var(--ra-hit-lift)); }
 }
+/* A blow that lands (a hit or a graze, not a miss, a heal or a word) pops as
+   its text appears: 1.25 down to 1 about its own middle. The group inside the
+   hit text takes it, so it composes with the rise; RealmArenaFx sets the delay
+   (the cue's start), the length is here. The fx layer is drawn above the
+   board's depth-sorted items, so keyframing a transform here lifts nothing. */
+.ag-ra-hit--hit .ag-ra-hit-pop, .ag-ra-hit--graze .ag-ra-hit-pop {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: ag-ra-hit-pop 120ms ease-out both;
+}
+@keyframes ag-ra-hit-pop {
+    from { transform: scale(1.25); }
+    to { transform: scale(1); }
+}
 /* A burst (§26.1): the fireball's or a flask's, flaring over where it landed
    and fading. A strike's slash: wiped across its target. Both are timed by
    their cue, like the hit text, and grow about their own middles. What flies
@@ -5465,11 +5479,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 /* Everything the board plays waits, as it stands at its start, while the view
    is still gliding to it (`held` on the board), and plays once it has landed. */
-.ag-ra-held :is(.ag-ra-hit, .ag-ra-burst, .ag-ra-slash, .ag-ra-arriving) { animation-play-state: paused; }
-/* With reduced motion the text doesn't rise: it appears where it happened,
+.ag-ra-held :is(.ag-ra-hit, .ag-ra-hit-pop, .ag-ra-burst, .ag-ra-slash, .ag-ra-arriving) { animation-play-state: paused; }
+/* With reduced motion the text doesn't rise or pop: it appears where it happened,
    and fades. Nothing flies, bursts, slashes or walks. */
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
+    :is(.ag-ra-hit--hit, .ag-ra-hit--graze) .ag-ra-hit-pop { animation: none; }
     .ag-ra-burst, .ag-ra-slash { display: none; }
 }
 /* A review step that happened out of the viewer's sight (§26.2): a big,
