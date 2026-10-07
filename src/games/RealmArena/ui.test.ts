@@ -662,8 +662,17 @@ describe("moveFrame", () => {
         expect(moveFrame([move([10, 20]), shot, move([20, 31])], [mover], [arrived])).toEqual([10, 31]);
     });
 
-    it("is null when the mover is missing from before or after, or never moved, or ended where it began", () => {
-        expect(moveFrame([move([30, 31])], [], [arrived])).toBeNull();
+    it("frames the part of the move the viewer saw when it came into sight or went out of it", () => {
+        // Out of the fog: from where it was first seen to where it stands.
+        expect(moveFrame([move([30, 31])], [], [arrived])).toEqual([30, 31]);
+        // Into the fog: from where it stood to the last square it was seen on.
+        expect(moveFrame([move([10, 20, 25])], [mover], [])).toEqual([10, 25]);
+        // Through the viewer's sight and out again: just the stretch they saw.
+        expect(moveFrame([move([40, 41]), move([41, 42])], [], [])).toEqual([40, 42]);
+    });
+
+    it("is null when nothing of the move was seen, there was none, or it ended where it began", () => {
+        expect(moveFrame([move([])], [], [])).toBeNull();
         expect(moveFrame([move([10])], [mover], [])).toBeNull();
         expect(moveFrame([{ kind: "hunkered", fighter: 0 }], [mover], [arrived])).toBeNull();
         expect(moveFrame([move([10, 11, 10])], [mover], [mover])).toBeNull();

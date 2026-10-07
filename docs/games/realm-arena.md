@@ -1872,9 +1872,10 @@ sends (`BattleEvent` in `rules.ts`).
   not anyone in particular), whether or not the part before it was left out.
   A move is framed from where the mover began to where it ended, with the zoom
   that just fits both (`moveFrame`; the first `moved` event of the part to the
-  last of the same character's) — only when it is known where it both began and
-  ended, which in fog of war it isn't for a move that came into or went out of
-  sight; anything else follows every character the part touched, as deep as
+  last of the same character's). In fog of war, a move that came into sight or
+  went out of it is framed over the stretch the viewer saw instead — from where
+  its told path begins, or to where it ends — which is what the board walks; a
+  move told with no path frames nothing. Anything else follows every character the part touched, as deep as
   they all fit. A turn beginning is not a character doing something: AP going
   up (everyone's fresh allowance) is not a change `actionSquares` follows, only
   AP spent, banked AP changing, and a new square, hit points or effects. A part
@@ -3781,4 +3782,4 @@ Realm, its sibling in the same world.
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
-| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end (§26.1, §26.2); the playback cap is four and a half seconds. | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
+| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.

@@ -177,17 +177,21 @@ export function spreadWide(field: Pick<Battlefield, "width" | "height">, squares
  * The two squares a review frames a move by (§26.2): where the character that
  * moved stood before, and where it stands after — from the first `moved` event
  * of `events` to the last of the same character's (an overwatch shot splits one
- * move into several). Only when both are known: a mover missing from `before`
- * came into sight on the way, one missing from `after` went out of it, and in
- * fog of war either is a move the viewer saw only part of. Null then — and
- * when it ended where it began — for the caller to follow `actionSquares`.
+ * move into several). Where one end is out of the viewer's sight — a mover
+ * missing from `before` came into sight on the way, one missing from `after`
+ * went out of it — that end is where the path the viewer was told begins or
+ * ends instead: the part of the move they saw, which is what the board walks.
+ * Null when there's no move, when nothing of it was seen (a move told with no
+ * path, from a mover that wasn't in sight at either end), or when it ended
+ * where it began — for the caller to follow `actionSquares`.
  */
 export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[]): [Square, Square] | null {
-    const first = events.find((event): event is Extract<ToldEvent, { kind: "moved" }> => event.kind === "moved");
-    if (!first) return null;
-    const mover = first.fighter;
-    const start = before.find(fighter => fighter.id === mover)?.square;
-    const end = after.find(fighter => fighter.id === mover)?.square;
+    const moves = events.filter((event): event is Extract<ToldEvent, { kind: "moved" }> => event.kind === "moved");
+    if (moves.length === 0) return null;
+    const mover = moves[0].fighter;
+    const seen = moves.filter(move => move.fighter === mover).flatMap(move => move.path);
+    const start = before.find(fighter => fighter.id === mover)?.square ?? seen[0];
+    const end = after.find(fighter => fighter.id === mover)?.square ?? seen.at(-1);
     return start === undefined || end === undefined || start === end ? null : [start, end];
 }
 
