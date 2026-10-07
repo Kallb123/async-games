@@ -5446,8 +5446,18 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     from { opacity: 1; }
     to { opacity: 0; }
 }
+/* A character walking its path (§26.1) is drawn frame by frame by the board,
+   and never in the way of a tap. What it leaves behind waits out the walk: its
+   resting figure, standing where the path ends, is hidden until the walk is
+   over (the delay is set inline, by the cue) and then simply there. */
+.ag-ra-walker { pointer-events: none; }
+.ag-ra-arriving { animation: ag-ra-arrive 1ms both; }
+@keyframes ag-ra-arrive {
+    from { opacity: 0; visibility: hidden; }
+    to { opacity: 1; visibility: visible; }
+}
 /* With reduced motion the text doesn't rise: it appears where it happened,
-   and fades. Nothing flies, bursts or slashes. */
+   and fades. Nothing flies, bursts, slashes or walks. */
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
     .ag-ra-burst, .ag-ra-slash { display: none; }

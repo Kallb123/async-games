@@ -55,8 +55,8 @@ interface RealmArenaFxProps {
     at: (square: Square) => FxPoints;
 }
 
-/** Milliseconds since it started, a frame at a time, until `until`: what the flights are drawn at. */
-function useElapsed(until: number): number {
+/** Milliseconds since it started, a frame at a time, until `until`: what the flights are drawn at, and the board's walkers. */
+export function useElapsed(until: number): number {
     const [elapsed, setElapsed] = useState(0);
     useEffect(() => {
         if (until <= 0) return;
@@ -188,7 +188,8 @@ function Flights({ id, flights, at }: { id: string; flights: readonly FlightCue[
  * What flies — an arrow, a bolt, a fireball, a flask — is moved a frame at a
  * time along its arc, turned to face the way it's going. What stays put —
  * hit text rising and fading, a burst, a slash — is CSS keyframes
- * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. With reduced
+ * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. A walk is the
+ * board's, which draws the figure along its path. With reduced
  * motion, nothing flies, bursts or slashes: only the text plays — the
  * flights aren't drawn, and the stylesheet hides the bursts and the slashes. Nothing here
  * can be tapped, so the board goes on working underneath while it plays.
@@ -205,7 +206,7 @@ export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
                     case 'text': return <HitText key={index} id={id} cue={cue} over={at(cue.square).head} />;
                     case 'burst': return <Burst key={index} id={id} cue={cue} ground={at(cue.at).ground} />;
                     case 'slash': return <Slash key={index} id={id} cue={cue} body={at(cue.square).body} />;
-                    // A flight is drawn below; a fall and a scorch are the board's, which draws the figure and the ground.
+                    // A flight is drawn below; a fall, a scorch and a walk are the board's, which draws the figure and the ground.
                     default: return null;
                 }
             })}

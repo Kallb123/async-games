@@ -142,6 +142,24 @@ export function actionSquares(before: readonly Fighter[], after: readonly Fighte
     });
 }
 
+/**
+ * The two squares a review frames a move by (§26.2): where the character that
+ * moved stood before, and where it stands after — from the first `moved` event
+ * of `events` to the last of the same character's (an overwatch shot splits one
+ * move into several). Only when both are known: a mover missing from `before`
+ * came into sight on the way, one missing from `after` went out of it, and in
+ * fog of war either is a move the viewer saw only part of. Null then — and
+ * when it ended where it began — for the caller to follow `actionSquares`.
+ */
+export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[]): [Square, Square] | null {
+    const first = events.find((event): event is Extract<ToldEvent, { kind: "moved" }> => event.kind === "moved");
+    if (!first) return null;
+    const mover = first.fighter;
+    const start = before.find(fighter => fighter.id === mover)?.square;
+    const end = after.find(fighter => fighter.id === mover)?.square;
+    return start === undefined || end === undefined || start === end ? null : [start, end];
+}
+
 function sameCounts(a: Fighter["effects"], b: Fighter["effects"]): boolean {
     return EFFECT_IDS.every(id => a[id] === b[id]);
 }
@@ -502,6 +520,27 @@ export interface FallCue extends Timed {
     kind: "fall";
     /** As the action found it, standing where it fell. */
     fighter: Fighter;
+    /**
+     * When it gets there, for one downed partway through a move: it stands on
+     * the square it fell on only once its walk has reached it. Absent for one
+     * that never moved, which stands there from the start.
+     */
+    arrives?: number;
+}
+
+/**
+ * A character walking its told path (§26.1), square by square: `path` is
+ * exactly what the viewer was told — in fog of war, only the squares of it
+ * they could see — and `length` is `WALK_STEP_MS` a square crossed. It stands
+ * on the path's first square until `start`, and between walks of the same
+ * move (an overwatch shot splits one) on the last square of the one before.
+ * `fighter` is as it looked: as the action found it, or — for one that came
+ * into sight on the way — as it stands after.
+ */
+export interface WalkCue extends Timed {
+    kind: "walk";
+    fighter: Fighter;
+    path: readonly Square[];
 }
 
 /**
@@ -515,14 +554,26 @@ export interface ScorchCue extends Timed {
 }
 
 /** One thing the board plays as an action comes back. */
-export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue;
+export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue | WalkCue;
 
 /** How long a piece of hit text takes to rise and fade (§26.1). */
 export const HIT_TEXT_MS = 1000;
 /** From one thing an action did landing to the next: long enough to see each land before the next. */
 const CUE_STEP_MS = 450;
-/** The longest any one action plays for, however much it set off: every part is shortened to fit (§26.1). */
-export const PLAYBACK_MS = 3000;
+/**
+ * How long a character takes to cross a square on a walk (§26.1): quick enough
+ * that a long move — a warband's runs go twelve to twenty-six squares — is
+ * over in two or three seconds, slow enough that each square can be followed.
+ */
+export const WALK_STEP_MS = 110;
+/**
+ * The longest any one action plays for, however much it set off: every part is
+ * shortened to fit (§26.1). Four and a half seconds, up from three now that
+ * moves walk: the longest run, twenty-six squares, is 2.75 seconds on its
+ * own, and a shot after it takes another 1.5 until its text has risen — at
+ * three it would be squeezed to a jog to leave room for either.
+ */
+export const PLAYBACK_MS = 4500;
 /** How long each missile takes to get there (§26.1): an arrow quickly, a bolt quicker, a fireball or a throw on a higher, slower arc. */
 export const FLIGHT_MS: Readonly<Record<Missile, number>> = { arrow: 400, bolt: 250, fireball: 600, fireFlask: 600, thunderFlask: 600, smokePot: 600, acid: 450 };
 /** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
@@ -550,7 +601,8 @@ function scaled(cue: BattleCue, scale: number): BattleCue {
     const by = (ms: number) => Math.round(ms * scale);
     const timed = { ...cue, start: by(cue.start), length: by(cue.length) };
     // A flight's arc is drawn by how far through it is, so it never lands in no time.
-    return timed.kind === "flight" ? { ...timed, land: Math.max(1, by(timed.land)) } : timed;
+    if (timed.kind === "flight") return { ...timed, land: Math.max(1, by(timed.land)) };
+    return timed.kind === "fall" && timed.arrives !== undefined ? { ...timed, arrives: by(timed.arrives) } : timed;
 }
 
 /**
@@ -569,11 +621,21 @@ function scaled(cue: BattleCue, scale: number): BattleCue {
  *
  * `before` is everyone as the action found them, which says where each cue
  * stands: a move carries its mover along, so an overwatch shot flies to where
- * the mover had got to. Moves, stances, watches and scores play nothing of
- * their own. However much happened, it all fits in `PLAYBACK_MS`.
+ * the mover had got to. A move walks its told path (`WalkCue`), one square
+ * every `WALK_STEP_MS`, starting as the last thing landed — so an overwatch shot
+ * fired part-way through flies once the first leg has walked, at the square
+ * the mover stopped on, and the rest of the move walks after the shot lands.
+ * `after` is everyone as the action left them: the look of a mover who wasn't
+ * in `before` because it came into sight on the way. A move told with a path
+ * of fewer than two squares, or of a character in neither, plays nothing.
+ * Stances, watches and scores play nothing of their own. However much
+ * happened, it all fits in `PLAYBACK_MS`.
  */
-export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[]): BattleCue[] {
+export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[] = []): BattleCue[] {
     const as = new Map(before.map(fighter => [fighter.id, fighter]));
+    const afterAs = new Map(after.map(fighter => [fighter.id, fighter]));
+    /** When each character's last walk so far ends: a character downed on the way is on its square only from then. */
+    const walked = new Map<number, number>();
     const at = new Map(before.map(fighter => [fighter.id, fighter.square]));
     const cues: BattleCue[] = [];
     /** The latest text on each character: where an effect's name goes under the number that came with it. */
@@ -597,6 +659,20 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         cues.push(cue);
         latest.set(fighter, cue);
     };
+    /**
+     * A character walking `path`, starting as the last thing landed: so a shot
+     * told before it has landed first, and one told after it flies once it's
+     * over, as the next thing to land.
+     */
+    const walk = (fighter: number, path: readonly Square[]) => {
+        const walker = as.get(fighter) ?? afterAs.get(fighter);
+        if (!walker || path.length < 2) return;
+        const start = landed ?? 0;
+        const length = (path.length - 1) * WALK_STEP_MS;
+        cues.push({ kind: "walk", fighter: walker, path, start, length });
+        landed = start + length;
+        walked.set(fighter, landed);
+    };
     /** Something flying from a character to a square, landing at `land`. */
     const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, after = 0) => {
         const from = at.get(fighter);
@@ -608,6 +684,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
     for (const event of events) {
         switch (event.kind) {
             case "moved": {
+                walk(event.fighter, event.path);
                 // A move told with no path went out of the viewer's sight (§27): lost there, not left where it was last seen.
                 const end = event.path.at(-1);
                 if (end !== undefined) at.set(event.fighter, end);
@@ -684,7 +761,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const fighter = as.get(event.fighter);
                 const square = at.get(event.fighter);
                 const land = beat();
-                if (fighter && square !== undefined) cues.push({ kind: "fall", fighter: { ...fighter, square }, start: blow?.start ?? land, length: FALL_MS });
+                if (fighter && square !== undefined) cues.push({ kind: "fall", fighter: { ...fighter, square }, start: blow?.start ?? land, length: FALL_MS, arrives: walked.get(event.fighter) });
                 text(event.fighter, land, "Down", "word");
                 break;
             }
@@ -731,6 +808,8 @@ export type BoardBefore = Pick<RealmArenaPartState, "fighters" | "blasted">;
 
 /** One stretch of a review step, played on its own (§26.2): the whole of an ordinary step, or one part of a co-op End turn. */
 export interface ReviewPart {
+    /** What it told, which `moveFrame` frames a move by. */
+    events: readonly ToldEvent[];
     /** Which part of a co-op End turn it is; absent on an ordinary step. */
     kind?: IRealmArenaStepPart["kind"];
     /** What the board plays for it. */
@@ -747,22 +826,24 @@ export interface ReviewPart {
  * The parts a review plays a step in, one after another. A step with no parts
  * of its own is a single one, so a caller needn't tell the two apart. Each
  * part starts from the board the one before it left (the step's own start for
- * the first), which is how its cues find where everyone stood.
+ * the first), which is how its cues find where everyone stood. `after` is the
+ * board the step's last part leaves, which the others carry in `state`: what
+ * a move into sight is drawn as, and the end of the move a review frames.
  */
-export function reviewParts(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore): ReviewPart[] {
+export function reviewParts(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = []): ReviewPart[] {
     const told: (Omit<IRealmArenaStepPart, "kind"> & Partial<Pick<IRealmArenaStepPart, "kind">>)[] = outcome?.parts?.length ? outcome.parts : [{ events: outcome?.events ?? [] }];
     let from = before;
     return told.map(part => {
-        const cues = battleCues(part.events, from.fighters);
-        const played: ReviewPart = { kind: part.kind, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
+        const cues = battleCues(part.events, from.fighters, part.state?.fighters ?? after);
+        const played: ReviewPart = { kind: part.kind, events: part.events, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
         return played;
     });
 }
 
 /** How long a review rests on a whole step: its parts' times added up. */
-export function reviewStepMs(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore): number {
-    return reviewParts(outcome, before).reduce((total, part) => total + part.durationMs, 0);
+export function reviewStepMs(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = []): number {
+    return reviewParts(outcome, before, after).reduce((total, part) => total + part.durationMs, 0);
 }
 
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */

@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -90,7 +90,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     }, {
         // Play rests on a step for as long as the board takes to play it,
         // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState) : STEP_MIN_MS,
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -102,9 +102,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // left it (§26.2). Any other step is the one part. Live shows none.
     const previous = nav.previousSnapshot;
     const stepOutcome = nav.displayedOutcome;
+    const stepFighters = nav.displayedState?.fighters;
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState) : [],
-        [nav.isLive, previous, stepOutcome],
+        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters) : [],
+        [nav.isLive, previous, stepOutcome, stepFighters],
     );
     const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
@@ -208,8 +209,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // Gone once it has had its time, whether or not the board was showing it,
     // so coming back from a review doesn't play it again.
     const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
-    const play = (key: string, events: BattleEvent[]) => {
-        const cues = battleCues(events, fighters);
+    const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
+        const cues = battleCues(events, fighters, after);
         setOwnPlayback(cues.length > 0 ? { key, cues, field } : null);
     };
     useEffect(() => {
@@ -223,7 +224,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         submitCommand(command, response => {
             const events = (response.outcome as IRealmArenaOutcome).events ?? [];
             setLastEvents(events);
-            play(command.id, events);
+            play(command.id, events, (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters);
             // A character with nothing left to do this turn — its last AP spent,
             // on watch, hunkered down or knocked out on the way — is let go of.
             const after = (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters.find(fighter => fighter.id === action.fighter);
@@ -250,7 +251,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         const command = new RealmArenaEndTurn();
         command.keepStill = keepStill;
         // Burning, as the next player's turn begins (§20.2).
-        submitCommand(command, response => play(command.id, (response.outcome as IRealmArenaOutcome).events ?? []), 'endTurn');
+        submitCommand(command, response => play(command.id, (response.outcome as IRealmArenaOutcome).events ?? [], (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters), 'endTurn');
     };
     // What the undone action did is no longer what happened, so its results go too.
     const undo = () => submitCommand(new RealmArenaUndo(), () => {
@@ -272,16 +273,22 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         : null;
 
     // Stepping through the match, the view goes to each action as it comes.
-    // A step that handed the turn on moved everyone's AP, not anyone in
-    // particular, so the view stays where it is — save for the parts of an
-    // End turn before the hand-off, which are the enemy's actions. One that
-    // ended the battle hands it to nobody, and is followed: it's the blow that
-    // decided it. Live, it goes to a target picked from the turn sheet's list
+    // A move is framed from where it began to where it ended, as close as
+    // both fit, when both are known (`moveFrame`: in fog of war a move can
+    // start or end out of sight); anything else goes to every character it
+    // touched, as deep as they all still fit. A step that handed the turn on
+    // moved everyone's AP, not anyone in particular, so the view stays where
+    // it is — and so for the hand-off part of an End turn, but not for the
+    // enemy's actions before it, which are followed. One that ended the
+    // battle hands it to nobody, and is followed: it's the blow that decided
+    // it. Live, it goes to a target picked from the turn sheet's list
     // instead. Each part is its own key, so the view glides again for each.
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
+    const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
+    const moved = part && followed ? moveFrame(part.events, part.before.fighters, fighters) : null;
     const follow = !nav.isLive
-        ? previous && part && (!handedOn || partIndex < parts.length - 1)
-            ? { squares: actionSquares(part.before.fighters, fighters), key: `${nav.viewIndex}:${partIndex}` }
+        ? previous && part && followed
+            ? { squares: moved ?? actionSquares(part.before.fighters, fighters), key: `${nav.viewIndex}:${partIndex}`, exact: !!moved }
             : null
         : picked;
     // And plays what each step — each part of one — did as it's stepped to

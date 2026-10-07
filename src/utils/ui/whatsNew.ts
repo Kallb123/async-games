@@ -83,7 +83,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Realm Arena: watch the battle play back",
-                detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn, with the view following each one — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn.",
+                detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn — characters walking along the path they took — with the view following each one, a move framed from where it began to where it ended — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn.",
                 game: "realmarena",
             },
             {

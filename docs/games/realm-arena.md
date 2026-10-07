@@ -1788,33 +1788,50 @@ sends (`BattleEvent` in `rules.ts`).
   after another, in the order of the events, each starting as the last one
   lands. An overwatch shot flies to where the mover was when it was shot,
   which is the end of the path so far, not where it stopped.
+- **A move walks.** The character is drawn crossing the path the viewer was
+  told, a square about every 0.11 s, turned to face each step and rising and
+  falling with the ground, and arrives where the path ends. Its resting figure
+  (HP bar, AP, effect marks and all) stays hidden until it gets there. A walk
+  starts as the last thing landed, and what comes after waits for it: an
+  overwatch shot fired part-way through a move flies once the first leg has
+  walked, at the square the mover stopped on, and the rest of the move walks
+  once the shot has landed. In fog of war only the squares the viewer saw are
+  walked, and a mover that came into sight on the way is drawn as it stands
+  after. A path of fewer than two squares plays nothing. With
+  `prefers-reduced-motion` set a character is simply where it ended up.
 - **A figure downed by the action stays drawn until its hit lands**, and
-  then fades, so the arrow has something to hit. Otherwise the board shows
-  the state after the action, as it does today.
+  then fades, so the arrow has something to hit. One downed partway through a
+  move stands on the square it fell on only once it has walked there.
+  Otherwise the board shows the state after the action, as it does today.
 - **When it plays.** It plays when the player's own action comes back, and
   when a review steps through another player's turn (§17.3 PR 8). The review
   is where most players will see their own squad get hurt. Opening the game
   doesn't replay anything by itself.
 - **It never gets in the way.** The board can be used while it plays, and the
   next action cuts it short. However much one action set off, its whole
-  playback fits in about three seconds, with each part shortened to fit. With
-  `prefers-reduced-motion` set, nothing flies or bursts: the hit text appears
-  in place and fades.
+  playback fits in about four and a half seconds, with each part shortened to
+  fit: the longest run, twenty-six squares, is 2.75 s of it on its own. With
+  `prefers-reduced-motion` set, nothing flies, bursts or walks: the hit text
+  appears in place and fades.
 
 ### 26.2 Building it
 
 - **A pure timeline.** One function in `ui.ts` turns an action's events, and
   the fighters before it, into timed cues. A cue is a flight from one point to
-  another, a burst over some squares, or a text on a figure, each with a start
-  and a length. It's tested like the rest of `ui.ts`: the order, an overwatch
-  shot aimed at the right square, a miss landing beyond the target, and the
-  three-second cap.
+  another, a burst over some squares, a text on a figure, or a walk along a
+  path, each with a start and a length. It's tested like the rest of `ui.ts`:
+  the order, a walk before the shot that follows it, an overwatch shot aimed at
+  the right square, a miss landing beyond the target, and the playback cap.
 - **One layer on the board.** `RealmArenaFx` draws the cues in the board's
   SVG, above the figures. It uses the same isometric projection, at each
   figure's height, so it turns with the view (§13.1). The hit text is CSS
   keyframes in `ag-theme.css`. The arrow, the fireball and the burst are
   drawn art: an SVG master rendered by `npm run ra-marks`, like the effects
-  and items.
+  and items. A walk is the board's own, drawn a frame at a time (the same
+  clock as the flights) as the figure and its HP bar slid between the middles
+  of the path's squares, in the depth order over the front-most square it
+  crosses; the resting figure of whoever walks sits in a group that
+  `ag-theme.css`'s `ag-ra-arriving` keeps hidden until the walk's end.
 - **The review needs each step's events.** A replayed snapshot carries the
   state after a command, not the command's outcome. The difference between two
   snapshots shows the damage but not a miss, so it isn't enough. The timeline
@@ -1842,7 +1859,15 @@ sends (`BattleEvent` in `rules.ts`).
   another: each part's cues start from the board the part before left, the
   board, units, scores and stats are drawn as that part left them, and the
   zoom follows each part's own changes (every part has its own playback and
-  follow key). The dock says which part it is on ("the Renegades' action 2 of
+  follow key). The follow is by kind: the player's End turn and each of the
+  warband's actions are followed, the hand-off is not (it moved everyone's AP,
+  not anyone in particular), whether or not the part before it was left out.
+  A move is framed from where the mover began to where it ended, with the zoom
+  that just fits both (`moveFrame`; the first `moved` event of the part to the
+  last of the same character's) — only when it is known where it both began and
+  ended, which in fog of war it isn't for a move that came into or went out of
+  sight; anything else follows every character the part touched, as deep as
+  they all fit. The dock says which part it is on ("the Renegades' action 2 of
   5"). A step with no parts is one part, so the two take the same path.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
@@ -1859,8 +1884,8 @@ sends (`BattleEvent` in `rules.ts`).
      A flask that does no damage names its effect on its own, on everyone it
      lands on at once. A heal that clears an effect says "Cured" under it, and
      one that only clears says "Cured" alone.
-   - A Raise is "+N" with "Raised" under it. A move, a stance, a watch, a
-     smoke pot and a score play nothing.
+   - A Raise is "+N" with "Raised" under it. A stance, a watch, a smoke pot
+     and a score play nothing. (A move played nothing here; it walks now.)
    - The text rises from where the character stood when it happened, so an
      overwatch hit rises mid-path, where PR 2's arrow will land.
    - A replayed snapshot carries the events as `outcome` through the replay
@@ -3741,4 +3766,4 @@ Realm, its sibling in the same world.
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
-| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. |
+| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end (§26.1, §26.2); the playback cap is four and a half seconds. |
