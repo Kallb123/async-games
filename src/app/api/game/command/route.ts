@@ -22,10 +22,20 @@ import { hasTurnEndAchievements, judgeTurnEnd, TURN_END_BUDGET_MS, TURN_END_PUSH
 import type { EarnedAchievement } from '@/utils/games/awardAchievements';
 import type { Achievement } from '@/utils/games/achievements';
 import { withTimeout } from '@/utils/withTimeout';
+import { getReplayAdapter } from '@/utils/games/replay';
 
 export interface ICommandResponse {
   outcome: ICommandOutcome,
-  gameData: IGameDataResponse
+  gameData: IGameDataResponse,
+  /**
+   * What a review of this command would show its sender: the game's replay
+   * adapter's `snapshotOutcome` for them, against the game as the command left
+   * it. For a board that plays the command part by part as it comes back
+   * (Realm Arena's End turn, one part per warband action) rather than from the
+   * whole of `outcome`, which a game may have cut (`outcomeFor`). Absent for a
+   * game with no such adapter, and when it couldn't be worked out.
+   */
+  step?: unknown
 }
 
 /** The game's response, with each history line's reaction (if any) attached,
@@ -323,6 +333,27 @@ export async function POST(request: NextRequest) {
     }
   };
 
+  // What a review of this command would show its sender, for a board that plays
+  // it part by part (ICommandResponse.step). It is the replay's own call —
+  // buildTimeline asks `snapshotOutcome` for the timeline's viewer, with the
+  // outcome as the pipeline made it and the game as the command left it — so
+  // it tells the sender nothing the timeline wouldn't send them for this step.
+  // (`omitUntoldSteps` doesn't apply: it drops other players' steps from a
+  // viewer's timeline, and this one is the sender's own.) Taken from the
+  // uncut outcome for that reason, and not from `toldToSender`'s, which has
+  // already left out the `recap` the parts are made of. Same promise as
+  // `toldToSender`: the move is saved by the time this is read, so a failure
+  // leaves the step out rather than failing a move that stands.
+  const stepForSender = (): { step?: unknown } => {
+    try {
+      const step = getReplayAdapter(gameData.gameType.className)?.snapshotOutcome?.(commandOutcome, userId, (gameData as unknown as { specificGameState: unknown }).specificGameState, gameData.complete);
+      return step === undefined ? {} : { step };
+    } catch (error) {
+      console.error(`Couldn't work out the review step of ${userId}'s move in game ${gameData.gameId}`, error);
+      return {};
+    }
+  };
+
   // They acted within their turn window, so they haven't missed this one —
   // clear any run of expiries the turntimer cron had counted against them.
   // Not for a card played on somebody else's turn: that isn't taking your
@@ -349,7 +380,8 @@ export async function POST(request: NextRequest) {
 
     const response: ICommandResponse = {
       outcome: serializeOutcomeMaps(toldToSender(commandOutcome)),
-      gameData: await dataResponseWithReactions(gameData, userId)
+      gameData: await dataResponseWithReactions(gameData, userId),
+      ...stepForSender()
     }
 
     // Recording the match result, judging achievements and telling everyone the
@@ -382,7 +414,8 @@ export async function POST(request: NextRequest) {
 
   const response: ICommandResponse = {
     outcome: serializeOutcomeMaps(toldToSender(commandOutcome)),
-    gameData: await dataResponseWithReactions(gameData, userId)
+    gameData: await dataResponseWithReactions(gameData, userId),
+    ...stepForSender()
   }
 
   // The pipeline already refuses an out-of-turn `turnOver` that didn't end

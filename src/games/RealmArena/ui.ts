@@ -1344,6 +1344,28 @@ export function isUnplaced(part: Pick<ReviewPart, "events" | "cues" | "before">,
     return !moveFrame(part.events, part.before.fighters, after) && actionSquares(part.before.fighters, after).length === 0;
 }
 
+/**
+ * Whether the view follows a part of a step: everything but the turn handing
+ * on, which moves everyone's AP and no one in particular. A part of a co-op
+ * End turn says which it is (`kind`); a step with no parts is the hand-off
+ * when the turn went to someone else (`handedOn`).
+ */
+export function isFollowedPart(part: Pick<ReviewPart, "kind">, handedOn: boolean): boolean {
+    return part.kind ? part.kind !== "handOff" : !handedOn;
+}
+
+/**
+ * Where the view goes for a part of a step, in a review or as the viewer's own
+ * End turn plays live: the part's action when it is followed and can be
+ * pointed to, else the viewer's own side (`friendly`), just fit. `after` is
+ * the board the part left; `key` is the part's own, so the view glides again
+ * for each.
+ */
+export function partFollow(part: Pick<ReviewPart, "kind" | "events" | "before" | "field">, after: readonly Fighter[], friendly: Square[], handedOn: boolean, key: string, still = false): ActionFollow | null {
+    return (isFollowedPart(part, handedOn) ? actionFollow(part.field, part.events, part.before.fighters, after, key, still) : null)
+        ?? (friendly.length > 0 ? { squares: friendly, key, exact: true } : null);
+}
+
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
 export function withPartState<T extends RealmArenaPartState>(state: T, part: RealmArenaPartState | undefined): T {
     if (!part) return state;

@@ -131,7 +131,11 @@ export interface IReplayAdapter {
     // — with the game's state after the command and whether that ended it, so
     // a game whose outcomes say things some viewer may not see (Realm Arena's
     // fog of war) shapes what each one is told. Never asked of a planned
-    // command, whose outcome is resolved against the real game.
+    // command, whose outcome is resolved against the real game. The command
+    // route asks it too, for the sender of each command as it is run, with the
+    // live game's state (ICommandResponse.step) — so what it returns goes on
+    // the wire every move, and must be cut for `viewerId` and read nothing a
+    // replay alone has.
     snapshotOutcome?(outcome: ICommandOutcome, viewerId: string | null, specificGameState: unknown, complete: boolean): unknown;
     // Optional: leave out of the viewer's timeline every step that told them
     // nothing — one that wrote no line of the log they're told (see

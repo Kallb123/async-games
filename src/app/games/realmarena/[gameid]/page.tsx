@@ -3,7 +3,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome } from "@/games/RealmArena/apiModels";
+import type { IRealmArenaGameDataResponse, IRealmArenaSpecificGameStateResponse, IRealmArenaStepOutcome, RealmArenaPartState } from "@/games/RealmArena/apiModels";
 import RealmArenaBoard, { type AimFollow, type Playback } from "@/games/RealmArena/components/RealmArenaBoard";
 import RealmArenaFighterCard from "@/games/RealmArena/components/RealmArenaFighterCard";
 import RealmArenaMusterSheet from "@/games/RealmArena/components/RealmArenaMusterSheet";
@@ -20,8 +20,9 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionFollow, battleCues, centreInSight, endOf, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isFollowedPart, isUnplaced, partFollow, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
+import type { ICommandResponse } from "@/app/api/game/command/route";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import GameShell from "@/components/ui/GameShell";
@@ -45,6 +46,25 @@ import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { capitalise } from "@/utils/ui/text";
+
+/** The viewer's own action or End turn played over the board as it comes back: one playback, or a co-op End turn's parts one after another (`index`), resting a beat between (`rested`). */
+interface OwnPlayback {
+    playbacks: { playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow>; state?: RealmArenaPartState }[];
+    index: number;
+    rested: boolean;
+}
+
+/** The viewer's own playback once the board has played the one with `key`: the last let go of, an earlier part resting its beat before the next. */
+function ownPlayed(current: OwnPlayback | null, key: string): OwnPlayback | null {
+    if (current?.playbacks[current.index]?.playback.key !== key) return current;
+    return current.index >= current.playbacks.length - 1 ? null : { ...current, rested: true };
+}
+
+/** How long past its end a part of the viewer's own playback waits to be told it has played, before it is let go of anyway: room for the glide to it, however slow. */
+const OWN_STUCK_MS = 4000;
+
+/** The sender's step for a command, as a review gets it (a co-op End turn's parts included), when the response carries one. */
+const stepOf = (response: ICommandResponse): IRealmArenaStepOutcome | undefined => (response as { step?: IRealmArenaStepOutcome }).step;
 
 /**
  * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5): the
@@ -138,10 +158,50 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         }, partPlays ? STEP_BEAT_MS : STEP_MIN_MS);
         return () => clearTimeout(rested);
     }, [nav.isLive, partPlays, playedKey, partKey, lastPart, partIndex, playing, stepEnded, viewIndex, setReached]);
+    // What the viewer's own last action or End turn did, played over the board
+    // as it comes back (§26.1), from where everyone stood — and the cover that
+    // stood — when it was sent. An ordinary action is one playback. A co-op
+    // End turn comes back with the warband's whole turn, and plays one part per
+    // warband action, the same as the review does: each its own playback, its
+    // own view and the board as that part left it (`state`, absent on the last,
+    // whose board is the live one), one after another (`index`), resting a beat
+    // between (`rested`, once the board has said the one on screen has played).
+    // Gone once the board says the last has played (`played`, below) — and gone
+    // on leaving live for a review, whether or not the board had played it, so
+    // coming back doesn't play it again.
+    // The view stays on the action itself while it plays — the target the
+    // player picked, the route a move took, or whatever it touched —
+    // rather than going where the selection or the board's resting view would
+    // next take it, so a shot isn't played from further out than it was aimed
+    // and a long walk doesn't start off the frame. That is worked out as the
+    // action is sent, and goes when the playback does.
+    const [own, setOwn] = useState<OwnPlayback | null>(null);
+    // Reset during render rather than by `useResettingState`, whose value would
+    // come back on returning to the mode it was held in.
+    const [ownMode, setOwnMode] = useState(nav.mode);
+    if (ownMode !== nav.mode) {
+        setOwnMode(nav.mode);
+        setOwn(null);
+    }
+    // Nor does it outlast the board: the recap screen takes the board's place,
+    // and coming back from it shouldn't play the turn the recap has just told.
+    if (recap.show && own) setOwn(null);
+    const ownNow = own?.playbacks[own.index] ?? null;
+    const ownRested = !!own?.rested;
+    const ownIndex = own?.index ?? 0;
+    useEffect(() => {
+        if (!ownRested) return;
+        const rested = setTimeout(() => {
+            setOwn(current => current && current.index === ownIndex ? { ...current, index: ownIndex + 1, rested: false } : current);
+        }, STEP_BEAT_MS);
+        return () => clearTimeout(rested);
+    }, [ownRested, ownIndex]);
     // What the part playing left on the board, over the snapshot's own, so the
-    // board, the units, the scores and the stats all agree with what plays.
+    // board, the units, the scores and the stats all agree with what plays —
+    // live, the part of the viewer's own End turn on screen.
     const viewed = nav.displayedState;
-    const gs = viewed && part ? withPartState(viewed, part.state) : viewed;
+    const liveState = nav.isLive ? ownNow?.state : undefined;
+    const gs = viewed && part ? withPartState(viewed, part.state) : viewed && liveState ? withPartState(viewed, liveState) : viewed;
     const complete = nav.displayedComplete;
     const currentTurn = nav.displayedCurrentTurn;
     const myUserId = user?.id ?? '';
@@ -215,7 +275,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
 
     // A battle turn: a run of actions, one command each so every result is
     // seen before the next is chosen, then the end of the turn (§17.2).
-    const battleTurn = !!gs && !mustering && isMyTurn;
+    // Not while a part of the viewer's own End turn is being played over the
+    // board as it stood then: there is nothing to act on until it has played.
+    const battleTurn = !!gs && !mustering && isMyTurn && !liveState;
     // In fog of war, the battle as the viewer's squad sees it (§27): the
     // response holds only who it can see, and the clouds it can see whose
     // throwers it can't. The fog lifts once the battle is over.
@@ -232,47 +294,60 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const actor = battleTurn && selected && selected.owner === myUserId && isStanding(selected) ? selected : null;
     const [lastEvents, setLastEvents] = useResettingState<BattleEvent[]>([], turnKey);
     const [keepStill, setKeepStill] = useResettingState<number[]>([], turnKey);
-    // What the viewer's own last action or End turn did, played over the board
-    // as it comes back (§26.1), from where everyone stood — and the cover that
-    // stood — when it was sent.
-    // Gone once the board says it has played (`played`, below) — and gone on
-    // leaving live for a review, whether or not the board had played it, so
-    // coming back doesn't play it again.
-    // The view stays on the action itself while it plays — the target the
-    // player picked, the route a move took, or whatever it touched —
-    // rather than going where the selection or the board's resting view would
-    // next take it, so a shot isn't played from further out than it was aimed
-    // and a long walk doesn't start off the frame. That is worked out as the
-    // action is sent, and goes when the playback does.
-    const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
-    // Reset during render rather than by `useResettingState`, whose value would
-    // come back on returning to the mode it was held in.
-    const [ownMode, setOwnMode] = useState(nav.mode);
-    if (ownMode !== nav.mode) {
-        setOwnMode(nav.mode);
-        setOwn(null);
-    }
-    const ownPlayback = own?.playback ?? null;
-    const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
+    const ownPlayback = ownNow?.playback ?? null;
+    const play = (key: string, events: BattleEvent[], after: readonly Fighter[], step?: IRealmArenaStepOutcome) => {
+        // A response that lands once the viewer has gone to the review is played
+        // nowhere: back in live, it is simply the board as it stands.
+        if (!nav.isLive) return;
+        if (step?.parts?.length) {
+            // A co-op End turn: one playback per warband action, each from the
+            // board the part before it left. A part with nothing to play is
+            // dropped; the next one's `before` already chains from its board.
+            const friendlyAfter = (state: readonly Fighter[]) => friendlySquares(state, myUserId, coop);
+            const entries = reviewParts(map, step, { fighters, blasted: gs?.blasted ?? [] }, after, { still })
+                .filter(part => part.cues.length > 0)
+                .map((part, i) => {
+                    const partKey = `${key}:${i}`;
+                    const left = part.state?.fighters ?? after;
+                    return {
+                        playback: { key: partKey, cues: part.cues, events: part.events, field: part.field, before: part.before.fighters },
+                        follow: partFollow(part, left, friendlyAfter(left), false, partKey, still),
+                        state: part.state,
+                    };
+                });
+            return setOwn(entries.length > 0 ? { playbacks: entries, index: 0, rested: false } : null);
+        }
         const cues = battleCues(field, events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`, still);
-        setOwn({ playback: { key, cues, events, field, before: fighters }, follow: to });
+        setOwn({ playbacks: [{ playback: { key, cues, events, field, before: fighters }, follow: to }], index: 0, rested: false });
     };
     // The board has played the playback with this key through to its end (the
     // view's glide to it included): live, that is the viewer's own action, which
-    // is let go; in a review, it is the part on screen, which then rests its beat.
+    // is let go — or, of a co-op End turn's parts, one that rests its beat before
+    // the next; in a review, it is the part on screen, which then rests its beat.
     const played = (key: string) => {
-        if (nav.isLive) setOwn(current => current?.playback.key === key ? null : current);
+        if (nav.isLive) setOwn(current => ownPlayed(current, key));
         else setPlayedKey(key);
     };
+    // A part the board never says has played — a view that never lands, say —
+    // is let go of anyway, a while after it should have ended, so the turn's
+    // controls, hidden while a part of the viewer's own End turn plays, can't
+    // stay hidden.
+    const ownKey = ownNow?.playback.key;
+    const ownEnd = ownNow ? endOf(ownNow.playback.cues) : 0;
+    useEffect(() => {
+        if (!ownKey) return;
+        const stuck = setTimeout(() => setOwn(current => ownPlayed(current, ownKey)), ownEnd + OWN_STUCK_MS);
+        return () => clearTimeout(stuck);
+    }, [ownKey, ownEnd]);
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
         submitCommand(command, response => {
             const events = (response.outcome as IRealmArenaOutcome).events ?? [];
             setLastEvents(events);
-            play(command.id, events, (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters);
+            play(command.id, events, (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters, stepOf(response));
             // A character with nothing left to do this turn — its last AP spent,
             // on watch, hunkered down or knocked out on the way — is let go of.
             const after = (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters.find(fighter => fighter.id === action.fighter);
@@ -294,7 +369,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         const command = new RealmArenaEndTurn();
         command.keepStill = keepStill;
         // Burning, as the next player's turn begins (§20.2).
-        submitCommand(command, response => play(command.id, (response.outcome as IRealmArenaOutcome).events ?? [], (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters), 'endTurn');
+        submitCommand(command, response => play(command.id, (response.outcome as IRealmArenaOutcome).events ?? [], (response.gameData as IRealmArenaGameDataResponse).specificGameState.fighters, stepOf(response)), 'endTurn');
     };
     // What the undone action did is no longer what happened, so its results go too.
     const undo = () => submitCommand(new RealmArenaUndo(), () => {
@@ -311,7 +386,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // lined-up move while there is one: listed over the board's foot, and
     // each enemy's odds worn on its figure. Live only: a review shows what
     // happened, not what could.
-    const reach = nav.isLive && selected && selected.owner === myUserId && isStanding(selected) && !mustering && !complete
+    const reach = nav.isLive && !liveState && selected && selected.owner === myUserId && isStanding(selected) && !mustering && !complete
         ? reachAfter(battle, selected, turn?.after)
         : null;
 
@@ -334,16 +409,15 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // instead, just fit, rather than out to the whole board; a move is always
     // kept, since it's known. Live, it goes to a target picked from the turn
     // sheet's list instead, and while the viewer's own action plays, to that.
-    // Each part is its own key, so the view glides again for each.
+    // Each part is its own key, so the view glides again for each. The viewer's
+    // own co-op End turn is followed the same way, a part at a time (`play`).
     const friendly = friendlySquares(fighters, myUserId, coop);
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
-    const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
+    const followed = !!part && isFollowedPart(part, handedOn);
     const stepKey = `${nav.viewIndex}:${partIndex}`;
     const follow = !nav.isLive
-        ? !previous || !part ? null
-            : (followed ? actionFollow(field, part.events, part.before.fighters, fighters, stepKey, still) : null)
-                ?? (friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true } : null)
-        : own?.follow ?? picked;
+        ? !previous || !part ? null : partFollow(part, fighters, friendly, handedOn, stepKey, still)
+        : ownNow?.follow ?? picked;
     // A followed step the board can't point to — something happened out of
     // sight, which cost the viewer something they were told of — says so with
     // a "?" over the board for as long as it is shown, while the view rests on

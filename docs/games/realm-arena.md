@@ -1933,6 +1933,15 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   the part as usual so it still glides again for each; a move is always kept.
   The dock says which part it is on ("the Renegades' action 2 of
   5"). A step with no parts is one part, so the two take the same path.
+  Live, the player's own co-op End turn plays the same way as it comes back:
+  the command's response carries the step its review would show them
+  (`step`, the replay adapter's `snapshotOutcome` for the sender, so it tells
+  them nothing a review wouldn't), and the page plays its parts one after
+  another, each with its own view and the board as it left it, resting a beat
+  between, rather than the warband's whole turn squeezed into one playback.
+  The turn's controls wait until the last part, whose board is the live one;
+  a part the board never says has played is let go of a few seconds after it
+  should have ended.
 - **Somewhere out of sight.** A followed step or part that told of something
   other than a score, and that the board can place nowhere — no move to frame
   (`moveFrame`), no character it changed (`actionSquares`), no cue — is
