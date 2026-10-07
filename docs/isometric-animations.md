@@ -7,8 +7,12 @@ everything here is read off it, but the timeline and the frame loop in §4
 belong to the board rather than to the game, and the next isometric board
 should get them for free.
 
-**Status: a review, nothing built.** §2 describes the code as it stands.
-§3–§5 are proposals, ranked; §6 orders them into PRs. Realm Arena's design
+**Status: first fixes built.** §3.1–§3.4 and §3.8 are in: bars and marks
+wait for their blow, the fallen wait for theirs, the view stays on the
+player's own action, hit text stacks in lanes (`TextCue.lane`) and reduced
+motion times nothing it doesn't draw (`battleCues`' `still`). §2 still
+describes the rest of the code as it stood; §3.5–§3.7, §4 and §5 are
+proposals, ranked; §6 orders them into PRs. Realm Arena's design
 document keeps what the player should see (§26 of
 [`games/realm-arena.md`](./games/realm-arena.md)); this keeps how the board
 draws it.
@@ -67,7 +71,7 @@ as black flashes and stutter. Every proposal below keeps that rule.
 
 Ranked: the first four are what a player notices most.
 
-### 3.1 The HP bar drops before the blow lands
+### 3.1 The HP bar drops before the blow lands — *built*
 
 Every resting figure (`FighterNode`) draws its `HpBar` from the state *after*
 the action. The target's bar is already short while the arrow is still in the
@@ -79,7 +83,7 @@ action found it. At that fighter's hit cue, tween the fill down to the new
 value, with a pale "chip" segment that lags behind and drains over about 300ms
 — the classic damage read. Effect marks swap at the cue that told them.
 
-### 3.2 The fallen pose shows under the standing one
+### 3.2 The fallen pose shows under the standing one — *built*
 
 `Falling` fades the standing figure over the resting `FighterNode` — which is
 already lying in its `fallen` pose. The lying sprite is wider, so it shows
@@ -90,7 +94,7 @@ overwatch, the resting node arrives as its walk ends, again before the blow.
 so the body appears as the standing figure starts to go — better still, fade
 the fallen figure in as the standing one fades out, with a unit or so of drop.
 
-### 3.3 The camera leaves the action before playing it
+### 3.3 The camera leaves the action before playing it — *built*
 
 Live, the focus that holds the playback is whatever the board would show
 next, not the action:
@@ -110,7 +114,7 @@ move's frame (`moveFrame`), what it touched (`actionSquares`), or the target
 already picked — and the selection's focus takes over once it's played (§4.1
 gives the board the "played" to wait for).
 
-### 3.4 Hit text lands on itself
+### 3.4 Hit text lands on itself — *built*
 
 A knock-out's "Down" starts `CUE_STEP_MS` after the damage that caused it, at
 the same point over the same head, while the damage text still has 550ms to
@@ -153,7 +157,7 @@ shows.
 
 **Fix.** §4.5.
 
-### 3.8 Reduced motion still waits out the walks
+### 3.8 Reduced motion still waits out the walks — *built*
 
 The walker isn't drawn, but the cues keep its time: the player looks at a still
 board for up to three seconds before the text comes.
@@ -265,7 +269,7 @@ them until then.
 ## 6. Order of work
 
 1. **What gives the result away** — §3.1–§3.5 and §3.8. Local to the board,
-   the page and `battleCues`; the most noticeable gain.
+   the page and `battleCues`; the most noticeable gain. All but §3.5 built.
 2. **Timings** — §5's table, bar the camera rows.
 3. **The timeline** — §4.1–§4.5, which also settles §3.6 and §3.7, and makes a
    skip and a 2× review a few lines each. §4.6's tests go in with it.
