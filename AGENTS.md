@@ -151,9 +151,16 @@ out. A second copy is the signal to extract the first one.
   on a square is cut to, the back-to-front order and which square a tap lands
   on, all of it turned a quarter at a time when the player turns the view),
   `achievements.ts` (a profile's achievement groups, a result's unlock rows,
-  and what the toaster hasn't celebrated yet).
+  and what the toaster hasn't celebrated yet), `playbackClock.ts` (the one
+  clock an action played over a board runs on — paused, resumed, sped up,
+  skipped, over at its end).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the
-  "who's playing" invite picker used by every game-setup screen), and
+  "who's playing" invite picker used by every game-setup screen),
+  `usePlayback` — the one frame loop for whatever a board plays: a board mounts
+  `PlaybackProvider` round what it draws, and everything that moves reads the
+  time with `usePlaybackFrame`, setting its own SVG attributes through a ref
+  with no React render a frame, rather than running a clock of its own
+  ([`docs/isometric-animations.md`](./docs/isometric-animations.md) §4), and
   `useStoredValue` — the one place in the app that touches `localStorage`, so
   anything remembered per browser (a dismissed banner, a guest's first turn) is
   a call to it rather than another copy of the swallowed try/catch. A screen

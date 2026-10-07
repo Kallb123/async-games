@@ -1846,16 +1846,20 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   path, each with a start and a length. It's tested like the rest of `ui.ts`:
   the order, a walk before the shot that follows it, an overwatch shot aimed at
   the right square, a miss landing beyond the target, and the playback cap.
-- **One layer on the board.** `RealmArenaFx` draws the cues in the board's
-  SVG, above the figures. It uses the same isometric projection, at each
-  figure's height, so it turns with the view (§13.1). The hit text is CSS
-  keyframes in `ag-theme.css`. The arrow, the fireball and the burst are
-  drawn art: an SVG master rendered by `npm run ra-marks`, like the effects
-  and items. A walk is the board's own, drawn a frame at a time (the same
-  clock as the flights) as the figure and its HP bar slid between the middles
-  of the path's squares, in the depth order over the front-most square it
-  crosses; the resting figure of whoever walks sits in a group that
-  `ag-theme.css`'s `ag-ra-arriving` keeps hidden until the walk's end.
+- **One layer on the board, one clock.** `RealmArenaFx` draws the flights,
+  bursts, slashes and hit text in an overlay SVG stacked over the board's, with
+  the same viewBox, so it zooms, pans and turns with the view (§13.1) without
+  its frames repainting the board. It uses the same isometric projection, at
+  each figure's height. The arrow, the fireball and the burst are drawn art: an
+  SVG master rendered by `npm run ra-marks`, like the effects and items. A walk
+  is the board's own: the figure and its HP bar slid between the middles of the
+  path's squares, drawn in the depth order at the square it is nearest, so a
+  wall in front of that square hides it. Everything that moves — the walk, the
+  flights, the text, the fades, the knocks and the shake — reads one playback
+  clock (`PlaybackClock`, run by `usePlayback`'s single frame loop), which sets
+  SVG attributes a frame at a time with no React render, and is paused while
+  the view glides to the action. The resting figure of whoever walks stays
+  hidden until the walk's end.
 - **The review needs each step's events.** A replayed snapshot carries the
   state after a command, not the command's outcome. The difference between two
   snapshots shows the damage but not a miss, so it isn't enough. The timeline
@@ -1869,14 +1873,15 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   the board takes to play it, until it reaches the current position, and Stop
   takes its place while it runs. The recap screen's "Replay from your last
   turn" starts the same walk from the step before the viewer's last command.
-  Starting it scrolls the board into view. One pure plan in `ui.ts`
-  (`reviewParts`) times every step — the follow-zoom's glide to it, its cues'
-  end and half a second's beat before the view moves on, never less than a
-  floor — and both the hook's
-  `stepDurationMs` and the page's own timer read it, so they never disagree.
-  The cues wait for the view: the board holds whatever it plays, as it stands
-  at its start, until `BoardZoom` says the glide to it has landed
-  (`onFocused`), so nothing happens while the board is still moving.
+  Starting it scrolls the board into view. Nothing guesses how long a step
+  takes: the board says when a playback has played (`onPlayed`), and the page
+  rests half a second's beat (`STEP_BEAT_MS`) before moving to the next part,
+  or telling the review hook the step is over (`awaitsStepEnd`, `stepEnded`).
+  A part with nothing to play rests a floor (`STEP_MIN_MS`) instead. The cues
+  wait for the view: the board's playback clock stands still, as it stands at
+  its start, until `BoardZoom` says the glide to it has landed (`onFocused`),
+  so nothing happens while the board is still moving, however long a slow
+  phone takes over it.
   In co-op the warband takes its whole turn inside the player's End turn, so
   that one step's outcome also carries `parts`: the player's End turn with the
   burning that began the warband's turn, one part for each action the
@@ -1957,13 +1962,14 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
    - Cover a burst blasts away stands, drawn from the battlefield as the
      action found it, until the burst fades, and then fades off the scorched
      ground. A downed figure does the same over its fallen one.
-   - What flies is moved a frame at a time, turned to face the way it's going.
-     What stays put over everything (a burst, a slash) is CSS keyframes, like
-     the text. A fall and blasted cover fade a frame at a time too, and the
-     board's pulses (a wave's zones, a lined-up HP change) are drawn after
-     everything else: a keyframed opacity in the middle of the depth order is
-     a compositor layer that drags everything in front of it into more, which
-     on a phone shows as black flashes and a stuttering board.
+   - Everything is moved a frame at a time on the one playback clock, by
+     setting SVG attributes, never by CSS keyframes: what flies turns to face
+     the way it's going, a burst, a slash and the text rise and fade, and a
+     fall and blasted cover fade. The board's pulses (a wave's zones, a
+     lined-up HP change) are drawn after everything else: a keyframed opacity
+     in the middle of the depth order is a compositor layer that drags
+     everything in front of it into more, which on a phone shows as black
+     flashes and a stuttering board.
    - The art is `fx.svg`, rendered to one sheet with the rest by
      `npm run ra-marks`. A flask in flight is drawn bare, without the tile its
      mark has.
