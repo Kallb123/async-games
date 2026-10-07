@@ -7,7 +7,7 @@ import { facingTowards, type Battlefield, type Facing, type Square, type Terrain
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
-import RealmArenaFx, { cueTiming, useElapsed, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
+import RealmArenaFx, { useElapsed, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
@@ -316,28 +316,57 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
     );
 }
 
-/**
- * A standing figure's HP bar, over the figure standing on the square whose
- * middle is (`x`, `y`), in its owner's colour, as its figure is: with the
- * `change` an action lined up on it would make flashing at the end of what's
- * left — black over what a blow would take off, never past empty, and white
- * beyond it for what a heal would give back, never past full.
- */
-function HpBar({ x, y, fighter, colour, change = 0 }: { x: number; y: number; fighter: Fighter; colour: string; change?: number }) {
-    const top = y - HP_BAR_RISE - HP_BAR_HEIGHT;
-    const left = x - HP_BAR_WIDTH / 2;
-    const after = HP_BAR_WIDTH * hpFraction(fighter, -change);
-    const now = HP_BAR_WIDTH * hpFraction(fighter);
+/** The top-left corner of the HP bar over the figure standing on the square whose middle is (`x`, `y`). */
+const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2, y: y - HP_BAR_RISE - HP_BAR_HEIGHT });
+
+/** A standing figure's HP bar, over the figure standing on the square whose middle is (`x`, `y`), in its owner's colour, as its figure is. */
+function HpBar({ x, y, fighter, colour }: { x: number; y: number; fighter: Fighter; colour: string }) {
+    const corner = hpBarCorner(x, y);
     return (
         <>
-            <rect className="ag-ra-hp" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={left} y={top} width={now} height={HP_BAR_HEIGHT} />
-            {now > after && <rect className="ag-ra-hp-loss" x={left + after} y={top} width={now - after} height={HP_BAR_HEIGHT} />}
-            {after > now && <rect className="ag-ra-hp-gain" x={left + now} y={top} width={after - now} height={HP_BAR_HEIGHT} />}
+            <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
             {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
-            <rect className="ag-ra-hp-edge" x={left} y={top} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-edge" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
         </>
     );
+}
+
+/**
+ * The `change` an action lined up on a standing figure would make to its HP,
+ * laid over the end of its bar — black over what a blow would take off, never
+ * past empty, and white beyond it for what a heal would give back, never past
+ * full — or nothing for no change. The board draws these over everything, in
+ * one flashing group (`ag-ra-pulse--hp`).
+ */
+function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; change: number }) {
+    const { x, y } = isoCentre(view, fighter.square);
+    const corner = hpBarCorner(x, y);
+    const after = HP_BAR_WIDTH * hpFraction(fighter, -change);
+    const now = HP_BAR_WIDTH * hpFraction(fighter);
+    if (now === after) return null;
+    return (
+        <rect
+            className={now > after ? 'ag-ra-hp-loss' : 'ag-ra-hp-gain'}
+            x={corner.x + Math.min(now, after)} y={corner.y} width={Math.abs(now - after)} height={HP_BAR_HEIGHT}
+        />
+    );
+}
+
+/**
+ * What the action being played takes off the board (§26.1) — a character it
+ * downed, cover it blasted — there as it was until its cue starts, then
+ * fading out over the cue, easing in, and gone. Faded a frame at a time, as
+ * the walkers are walked, rather than by keyframes: a keyframed fade here, in
+ * the middle of the board's depth order, would have the browser lift it and
+ * everything drawn in front of it into layers of their own for as long as the
+ * playback lasts — which a phone pays for in flashes and stutter.
+ */
+function Fading({ cue, className, children }: { cue: { start: number; length: number }; className: string; children: React.ReactNode }) {
+    const ms = useElapsed(cue.start + cue.length);
+    const faded = Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+    if (faded >= 1) return null;
+    return <g className={className} opacity={1 - faded * faded}>{children}</g>;
 }
 
 /**
@@ -349,10 +378,10 @@ function Falling({ artId, view, cue, facing, tintFor, colourFor }: { artId: stri
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     return (
-        <g className="ag-ra-falling" style={cueTiming(cue)}>
+        <Fading cue={cue} className="ag-ra-falling">
             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
-        </g>
+        </Fading>
     );
 }
 
@@ -498,8 +527,6 @@ interface FighterNodeProps {
     selected: boolean;
     /** It's its owner's turn in battle, so it shows the AP it has left. */
     acting: boolean;
-    /** What the action lined up would do to its HP, flashed on its HP bar. */
-    hpChange: number | undefined;
     /** Its owner's colour, which its HP bar is drawn in. */
     colour: string;
     facingFor: FacingFor;
@@ -509,7 +536,7 @@ interface FighterNodeProps {
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, hpChange, colour, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -537,7 +564,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, hpChange, c
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colour} change={hpChange} />}
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colour} />}
             <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -586,9 +613,9 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
         return {
             depth: block.depth,
             node: (
-                <g key={`blast-${playback.key}-${square}`} className="ag-ra-blasting" style={cueTiming(cue)}>
+                <Fading key={`blast-${playback.key}-${square}`} cue={cue} className="ag-ra-blasting">
                     <RaisedSquare id={artId} block={block} shades={[]} />
-                </g>
+                </Fading>
             ),
         };
     });
@@ -766,6 +793,18 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     }
     const flatShades = shades.flatMap(shade => flatRuns(view, shade));
 
+    const zones = field.deploymentAreas.flatMap((areas, seat) => {
+        const owner = owners[seat];
+        const wave = waveDue && owner !== undefined && isWarband(owner);
+        const style = { '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties;
+        return areas.map(({ col, row, width, height }, part) => ({ key: `${seat}-${part}`, points: isoArea(view, { x: col, y: row, width, height }), wave, style }));
+    });
+    const waves = zones.filter(zone => zone.wave);
+    const hpChanges = aiming ? fighters.flatMap(fighter => {
+        const change = aiming.hpChange.get(fighter.id);
+        return change && isStanding(fighter) ? [{ fighter, change }] : [];
+    }) : [];
+
     const ringOf = (fighter: Fighter): Ring | undefined => {
         if (fighter.id === selected?.id) return 'selected';
         if (aiming?.aimed.includes(fighter.id)) return 'aimed';
@@ -842,7 +881,6 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 ring={ringOf(fighter)}
                 selected={fighter.id === selected?.id}
                 acting={fighter.owner === acting}
-                hpChange={aiming?.hpChange.get(fighter.id)}
                 colour={colourFor(fighter.owner)}
                 facingFor={facingFor}
                 tintFor={tintFor}
@@ -908,17 +946,14 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     <path className="ag-ra-grid" d={ground.lines} />
 
                     {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
-                    {field.deploymentAreas.map((areas, seat) => {
-                        const owner = owners[seat];
-                        return areas.map(({ col, row, width, height }, part) => (
-                            <polygon
-                                key={`${seat}-${part}`}
-                                className={`ag-ra-deployment${waveDue && owner && isWarband(owner) ? ' ag-ra-deployment--wave' : ''}`}
-                                points={isoArea(view, { x: col, y: row, width, height })}
-                                style={{ '--ra-seat': owner ? colourFor(owner) : 'var(--ag-ink-softer)' } as React.CSSProperties}
-                            />
-                        ));
-                    })}
+                    {zones.map(zone => (
+                        <polygon
+                            key={zone.key}
+                            className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
+                            points={zone.points}
+                            style={zone.style}
+                        />
+                    ))}
                     {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
                     {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
 
@@ -980,6 +1015,22 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
 
                     {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
                     {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} />}
+
+                    {/* The pulses — the wave's zones breathing over their lit
+                        ground, and the HP a lined-up action would change — one
+                        group of each, after everything else, so the layer the
+                        browser makes of a pulse lifts nothing else with it
+                        (`.ag-ra-pulse`). */}
+                    {waves.length > 0 && (
+                        <g className="ag-ra-pulse ag-ra-pulse--wave">
+                            {waves.map(zone => <polygon key={zone.key} className="ag-ra-wave" points={zone.points} style={zone.style} />)}
+                        </g>
+                    )}
+                    {hpChanges.length > 0 && (
+                        <g className="ag-ra-pulse ag-ra-pulse--hp">
+                            {hpChanges.map(({ fighter, change }) => <HpChange key={fighter.id} view={view} fighter={fighter} change={change} />)}
+                        </g>
+                    )}
                 </svg>
             </BoardZoom>
             {/* Turning the view: beside BoardZoom rather than in it, since

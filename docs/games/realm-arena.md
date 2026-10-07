@@ -1949,7 +1949,12 @@ sends (`BattleEvent` in `rules.ts`).
      action found it, until the burst fades, and then fades off the scorched
      ground. A downed figure does the same over its fallen one.
    - What flies is moved a frame at a time, turned to face the way it's going.
-     What stays put (a burst, a slash, a fall) is CSS keyframes, like the text.
+     What stays put over everything (a burst, a slash) is CSS keyframes, like
+     the text. A fall and blasted cover fade a frame at a time too, and the
+     board's pulses (a wave's zones, a lined-up HP change) are drawn after
+     everything else: a keyframed opacity in the middle of the depth order is
+     a compositor layer that drags everything in front of it into more, which
+     on a phone shows as black flashes and a stuttering board.
    - The art is `fx.svg`, rendered to one sheet with the rest by
      `npm run ra-marks`. A flask in flight is drawn bare, without the tile its
      mark has.

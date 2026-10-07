@@ -5318,16 +5318,18 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     stroke-dasharray: 2 1.5;
     pointer-events: none;
 }
-/* A warband's zone the round before Hold Out's next wave lands in it (§30.11): lit, and breathing. */
+/* A warband's zone the round before Hold Out's next wave lands in it (§30.11):
+   lit on the ground, and breathing over it (`.ag-ra-wave`, drawn over
+   everything in the board's pulses). */
 .ag-ra-deployment--wave {
-    fill: color-mix(in oklch, var(--ra-seat) 38%, transparent);
+    fill: color-mix(in oklch, var(--ra-seat) 22%, transparent);
+    stroke: color-mix(in oklch, var(--ra-seat) 75%, transparent);
+    stroke-width: 1;
+}
+.ag-ra-wave {
+    fill: color-mix(in oklch, var(--ra-seat) 16%, transparent);
     stroke: var(--ra-seat);
     stroke-width: 1;
-    --ag-pulse-min: 0.5;
-    animation: ag-pulse 1.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-    .ag-ra-deployment--wave { animation: none; }
 }
 /* The keep's ruins: what Hold the Centre scores (§13.7). */
 .ag-ra-centre {
@@ -5362,19 +5364,23 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* Filled in its owner's colour (`colourFor`), as the figure is tinted. */
 .ag-ra-hp-fill { pointer-events: none; }
 /* What an action lined up on a character would do to its HP, flashing at the end of its
-   bar: black over what a blow would take off, white past it for what a heal gives back.
-   Held still half-way through the flash without motion. */
-.ag-ra-hp-loss,
-.ag-ra-hp-gain { pointer-events: none; --ag-pulse-min: 0.15; animation: ag-pulse 0.8s ease-in-out infinite; }
+   bar: black over what a blow would take off, white past it for what a heal gives back. */
 .ag-ra-hp-loss { fill: var(--ra-hp-dark); }
 .ag-ra-hp-gain { fill: var(--ra-hp-light); }
+/* The board's pulses: a wave's zones breathing and those HP flashes, each kind
+   one group pulsing as a whole, drawn after everything else on the board.
+   Never anything inside the board's depth order: a browser draws a pulse as a
+   layer of its own, and lifts everything drawn after it that overlaps it into
+   more — on a phone, a board that flashes black and stutters. Held still
+   half-way through without motion, and held off while the board is pinched or
+   gliding, starting over once it lands (`.ag-board-zoom-content--moving`). */
+.ag-ra-pulse { pointer-events: none; animation: ag-pulse var(--ra-pulse-length) ease-in-out infinite; }
+.ag-ra-pulse--wave { --ag-pulse-min: 0; --ra-pulse-length: 1.6s; }
+.ag-ra-pulse--hp { --ag-pulse-min: 0.15; --ra-pulse-length: 0.8s; }
 @media (prefers-reduced-motion: reduce) {
-    .ag-ra-hp-loss,
-    .ag-ra-hp-gain { animation: none; opacity: calc((1 + var(--ag-pulse-min)) / 2); }
+    .ag-ra-pulse { animation: none; opacity: calc((1 + var(--ag-pulse-min)) / 2); }
 }
-/* The board's pulses — these flashes and a wave's zones — hold off while it's
-   pinched or gliding, and start over once it lands (`.ag-board-zoom-content--moving`). */
-.ag-board-zoom-content--moving :is(.ag-ra-hp-loss, .ag-ra-hp-gain, .ag-ra-deployment--wave) { animation: none; }
+.ag-board-zoom-content--moving .ag-ra-pulse { animation: none; }
 /* The ring round a figure's feet: the one selected, one a tap could aim at, one aimed
    at, and a watcher the move lined up would set off. */
 .ag-ra-ring { fill: none; stroke-width: 0.9; pointer-events: none; }
@@ -5439,22 +5445,20 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 /* A character the action downed, standing as it was until its blow lands,
    then fading off its fallen figure; and cover it blasted away, standing
-   until the burst fades, then fading off its scorched ground. Never in the
-   way of a tap. */
-.ag-ra-falling, .ag-ra-blasting { pointer-events: none; animation: ag-ra-fall ease-in both; }
-@keyframes ag-ra-fall {
-    from { opacity: 1; }
-    to { opacity: 0; }
-}
+   until the burst fades, then fading off its scorched ground. The board fades
+   them a frame at a time (`Fading`). Never in the way of a tap. */
+.ag-ra-falling, .ag-ra-blasting { pointer-events: none; }
 /* A character walking its path (§26.1) is drawn frame by frame by the board,
    and never in the way of a tap. What it leaves behind waits out the walk: its
    resting figure, standing where the path ends, is hidden until the walk is
-   over (the delay is set inline, by the cue) and then simply there. */
+   over (the delay is set inline, by the cue) and then simply there. Only its
+   visibility is keyframed: a keyframed opacity, even one waiting out its
+   delay, is a layer of its own, and lifts everything in front of it into more. */
 .ag-ra-walker { pointer-events: none; }
 .ag-ra-arriving { animation: ag-ra-arrive 1ms both; }
 @keyframes ag-ra-arrive {
-    from { opacity: 0; visibility: hidden; }
-    to { opacity: 1; visibility: visible; }
+    from { visibility: hidden; }
+    to { visibility: visible; }
 }
 /* With reduced motion the text doesn't rise: it appears where it happened,
    and fades. Nothing flies, bursts, slashes or walks. */

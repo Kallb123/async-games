@@ -133,6 +133,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Realm Arena's battlefield stops flashing black",
+                detail: "On phones, and in the Android app most of all, the battlefield could flicker black and judder while Hold Out's next spawn zones glowed, while an attack's damage flashed on an HP bar, or while a turn played back. Those effects made the phone redraw large parts of the map over and over. They now cost it next to nothing, so the board stays steady and still looks the same.",
+                game: "realmarena",
+            },
+            {
                 title: "Realm Arena's map pinches smoothly again",
                 detail: "With an attack or a heal lined up, or Hold Out's next wave about to land, pinching to zoom the battlefield stuttered badly: the flashing HP bars and glowing spawn zones made the phone redraw the whole map on every frame of the pinch. They now hold still while the map zooms and start flashing again the moment it settles.",
                 game: "realmarena",
@@ -172,11 +177,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Every join link shows a picture when you share it",
                 detail: "Sharing a join link for a game that didn't have its own preview image yet — Kingdom Builder, for one — unfurled in the chat with a broken picture or none at all. A game without its own card now shows the general Async Games one instead.",
-            },
-            {
-                title: "Kingdom Builder's world map no longer hides its own ground art",
-                detail: "A settlement site drew as a solid terracotta circle a tile and a half wide, and every tappable site on top of that in a thick gold ring sized for a much bigger board — between the two, a site-dense map was more circle than art. Both are gone in favour of a small dot and the \"Open site\"/\"Your town\" label already sitting next to it, whose own text used to render as an illegible dark blob. A big field of grass now draws from several tiles instead of repeating one, so the map reads as a picture again.",
-                game: "kingdombuilder",
             },
         ],
     },
