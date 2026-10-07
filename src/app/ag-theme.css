@@ -5374,7 +5374,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-hp-loss { fill: var(--ra-hp-dark); }
 .ag-ra-hp-gain { fill: var(--ra-hp-light); }
 /* The HP a blow has just taken off, pale on the end of the bar and draining after
-   the fill (`HpBar`'s `chip`): its width is set a frame at a time, never animated. */
+   the fill (`HpBar` given a `told`): its width is set a frame at a time, never animated. */
 .ag-ra-hp-chip { fill: var(--ra-hp-light); fill-opacity: 0.8; pointer-events: none; }
 /* The board's pulses: a wave's zones breathing and those HP flashes, each kind
    one group pulsing as a whole, drawn after everything else on the board.
