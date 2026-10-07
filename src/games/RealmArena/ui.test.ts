@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -1581,6 +1581,42 @@ describe("the board at a moment", () => {
             expect(ground.x).toBeLessThan(Math.max(a.x, b.x));
             expect(ground.y).toBeGreaterThan(Math.min(a.y, b.y));
             expect(ground.y).toBeLessThan(Math.max(a.y, b.y));
+        });
+
+        describe("smoothed", () => {
+            const flat = isoView({ width: 7, height: 7, heights: Array(49).fill(0) }, { base: 0, headroom: 0 });
+            const at = (square: number) => isoCentre(flat, square);
+            const long = (path: number[]): WalkCue => ({ kind: "walk", fighter: knight, path, start: 1000, length: 2400 });
+
+            it("is exactly where the walk starts until it starts, and where it ends from its end on", () => {
+                const walks = [long([0, 1, 2, 3, 4, 5, 6])];
+                expect(walkCameraAt(walks, flat, 0)).toEqual(at(0));
+                expect(walkCameraAt(walks, flat, 1000)).toEqual(at(0));
+                expect(walkCameraAt(walks, flat, 3400)).toEqual(at(6));
+                expect(walkCameraAt(walks, flat, 9000)).toEqual(at(6));
+            });
+
+            it("is where the walker is on a stretch walked straight and steadily", () => {
+                const walks = [long([0, 1, 2, 3, 4, 5, 6])];
+                const camera = walkCameraAt(walks, flat, 2200), walker = walkerGroundAt(walks, flat, 2200);
+                expect(camera.x).toBeCloseTo(walker.x, 6);
+                expect(camera.y).toBeCloseTo(walker.y, 6);
+            });
+
+            it("cuts the corners of a path that zig-zags, rather than jerking round each", () => {
+                // A straight step, then a diagonal one, over and over: on screen they go different ways. At a walk's pace, a leg a ninth of a second.
+                const walks: WalkCue[] = [{ kind: "walk", fighter: knight, path: [0, 1, 9, 10, 18, 19, 27], start: 1000, length: 700 }];
+                const a = at(0), b = at(27);
+                // Which side of the straight way from start to end a point is, and how far.
+                const off = (p: { x: number; y: number }) => ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / Math.hypot(b.x - a.x, b.y - a.y);
+                const moments = Array.from({ length: 30 }, (_, i) => 1200 + i * 10);
+                // How far it swings from side to side through the middle of the walk.
+                const sway = (point: (ms: number) => { x: number; y: number }) => {
+                    const offs = moments.map(ms => off(point(ms)));
+                    return Math.max(...offs) - Math.min(...offs);
+                };
+                expect(sway(ms => walkCameraAt(walks, flat, ms))).toBeLessThan(sway(ms => walkerGroundAt(walks, flat, ms)) / 4);
+            });
         });
 
         it("is the straight way between the two centres of a leg that climbs, without the hop", () => {

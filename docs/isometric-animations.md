@@ -41,7 +41,7 @@ draws it.
 | `RealmArenaBoard` | `src/games/RealmArena/components/RealmArenaBoard.tsx` | Draws the battlefield in depth order, and inside it whatever plays *between* things: `WalkerSlot`, `Falling` and `blasting` (both fading by `CueFade`, which also fades the fallen in), `Arriving`, `ToldFighterNode`. Runs the playback's clock, held while the view glides (`held`), and says when it has played (`onPlayed`). |
 | `RealmArenaFx` | `src/games/RealmArena/components/RealmArenaFx.tsx` | Draws whatever plays *over* everything, in an overlay SVG: `Flight`, `HitText`, `Burst`, `Slash`. |
 | `BoardZoom` | `src/components/ui/BoardZoom.tsx` | The glide to a `focus` (`GLIDE_MS`), `onFocused` once it has all but landed (`GLIDE_LEAD`), and `useBoardCentre`, which a board calls a frame at a time to keep something moving in the middle of the frame. |
-| `actionFollow`, `moveFrame`, `toldSquares`, `walkerGroundAt` | `src/games/RealmArena/ui.ts` | Where the view goes for an action: a move's whole path, or its start and the walker followed from there (`track`); anything else, who the events name. Pure. |
+| `actionFollow`, `moveFrame`, `toldSquares`, `walkCameraAt` | `src/games/RealmArena/ui.ts` | Where the view goes for an action: a move's whole path, or its start and the walker followed from there (`track`); anything else, who the events name. Pure. |
 | The page | `src/app/games/realmarena/[gameid]/page.tsx` | Builds the playback — the player's own action as it comes back (`ownPlayback`), or a review step's part — picks the focus, and lets go of the one or moves the review on when the board says it has played. |
 
 ## 2. How it works today
@@ -69,13 +69,20 @@ draws it.
    played to its end (`onPlayed`). A walk too long to frame (`actionFollow`'s
    `track`) is framed where it starts, and `WalkCamera` keeps the walker in
    the middle of the frame from there, a frame at a time on the same clock
-   (`walkerGroundAt`, `useBoardCentre`), until the player takes hold of the
+   (`walkCameraAt`, `useBoardCentre`), until the player takes hold of the
    board. It moves the board as a glide does, by a sub-pixel transform on a
    layer of its own, and hands it back to the pane's scroll once the walk is
    over: scrolling the pane a frame at a time moved it in whole pixels, and
    the walker juddered against it. The loop reads each frame's time from
    `requestAnimationFrame`, not from when its tick happens to run, so
-   everything steps by exactly a frame's worth.
+   everything steps by exactly a frame's worth. The camera follows where the
+   walker is averaged over a sixth of a second either side (`walkCameraAt`),
+   so it glides along the way the walk goes rather than jerking the board
+   round each corner of a zig-zagging path. And a walker is drawn from where
+   it is each frame (`legPoint`), not from the leg it was last rendered for:
+   the render that turns it to its next leg lands a frame or two late, and
+   held at the corner till then — the camera moving on — it jerked back and
+   caught up at every one.
 3. **One way of moving.** Everything that moves reads that clock: each piece
    calls `usePlaybackRef` (or `usePlaybackFrame`) and sets its own SVG attributes (`transform`,
    `opacity`, `visibility`, a bar's `width`) through a ref, a frame at a time,
@@ -322,7 +329,7 @@ Small changes, mostly constants and pure functions in `ui.ts` and
 | **Hit text** | One fade-and-rise for every tone. | A short pop — scale 1.25 to 1 over 120ms — for a hit; none for a miss. The difference reads at a glance. | Built in [#881](https://github.com/Kallb123/async-games/pull/881), for a hit and a graze. |
 | **Dead time** | Glide (380ms), then the action, then `STEP_BEAT_MS` (500ms). | A review step's first cue starts at about three-quarters through the glide, not after it. | Built with the camera: `BoardZoom` says it has landed `GLIDE_LEAD` (0.75) through its glide, live and in a review alike, and the board's clock starts then. |
 | **Framing an action** | Anything not a move or a target picked from the list framed every character whose state changed, with `focusOn`'s room round them, snapped to a zoom step: a heal three squares off showed twenty, and the first action of a turn swept in what the turn starting reset. | Frame whoever acted and whoever it reached, as the events name them, exactly and as close as an aimed target. | Built with the timeline: `toldSquares`, and `actionFollow`'s `close` (`aimFocus`). |
-| **Framing a walk** | `moveFrame` frames the start and the end, zoomed to fit both. A route round a wall can leave that frame. | Frame the whole path; for a long walk, have the camera follow the walker instead of zooming out to fit it. | Built with the camera: `moveFrame` gives the whole path seen; past `TRACK_SPAN` squares across and down, `actionFollow` marks it `track`, the board frames its start and `WalkCamera` centres the walker each frame (`walkerGroundAt`, `useBoardCentre`). With reduced motion it frames the end. |
+| **Framing a walk** | `moveFrame` frames the start and the end, zoomed to fit both. A route round a wall can leave that frame. | Frame the whole path; for a long walk, have the camera follow the walker instead of zooming out to fit it. | Built with the camera: `moveFrame` gives the whole path seen; past `TRACK_SPAN` squares across and down, `actionFollow` marks it `track`, the board frames its start and `WalkCamera` follows the walker each frame, smoothed (`walkCameraAt`, `useBoardCentre`). With reduced motion it frames the end. |
 
 Longer term, the biggest step in life is art rather than timing: an attack and
 a hurt frame per character, in each of the eight facings, from the

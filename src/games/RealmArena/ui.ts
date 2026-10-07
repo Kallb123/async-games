@@ -1429,21 +1429,56 @@ export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from
     return { from: path[leg], to: path[leg + 1], across, at: first + (across < 0.5 ? leg : leg + 1) };
 }
 
+/** Where on the ground over a leg a walker is (board units): between the centres of its two squares, as far over as it has got — without the bob or the hop (`walkLift`). */
+export function legPoint(view: IsoView, { from, to, across }: WalkerLeg): Point {
+    const a = isoCentre(view, from), b = isoCentre(view, to);
+    return { x: a.x + (b.x - a.x) * across, y: a.y + (b.y - a.y) * across };
+}
+
 /**
- * Where on the board (board units) a camera following a walker keeps in the
- * middle: the point on the ground under it `ms` into the playback, between the
- * centres of the two squares of the leg it is on, as far over as it has got
- * (`walkerAt`, by the view's lengths). Not the bob or the hop (`walkLift`),
- * which a camera following them would shake with. Once its last walk is over it
- * is the centre of the last square of the last walk's path, and before the
- * first starts the centre of that path's first. `walks` is never empty, as
- * `walkerAt` assumes.
+ * The point on the ground under a walker `ms` into the playback (`walkerAt`,
+ * by the view's lengths; `legPoint`): once its last walk is over, the centre
+ * of the last square of the last walk's path, and before the first starts the
+ * centre of that path's first. `walks` is never empty, as `walkerAt` assumes.
  */
 export function walkerGroundAt(walks: readonly WalkCue[], view: IsoView, ms: number): Point {
     const leg = walkerAt(walks, ms, legLengthOn(view));
-    if (!leg) return isoCentre(view, walks[walks.length - 1].path.at(-1)!);
-    const from = isoCentre(view, leg.from), to = isoCentre(view, leg.to);
-    return { x: from.x + (to.x - from.x) * leg.across, y: from.y + (to.y - from.y) * leg.across };
+    return leg ? legPoint(view, leg) : isoCentre(view, walks[walks.length - 1].path.at(-1)!);
+}
+
+/**
+ * How far either side of the moment a camera following a walker looks at
+ * where it is (`walkCameraAt`). A path over the grid zig-zags — a straight step
+ * and a diagonal one go different ways on screen — and a camera locked to the
+ * walker would jerk the whole board round every corner, nine times a second;
+ * averaged over a sixth of a second either side, it glides along the way the
+ * walker is going instead, and the walker weaves a little about the middle
+ * of the frame, as it would on a board standing still.
+ */
+const CAMERA_EASE_MS = 160;
+/** How many moments, either side of the one it's at, `walkCameraAt` averages. */
+const CAMERA_SAMPLES = 4;
+
+/**
+ * Where on the board a camera following a walker keeps in the middle, `ms`
+ * into the playback: where the walker is on the ground (`walkerGroundAt`),
+ * averaged over up to `CAMERA_EASE_MS` either side, the moments nearest
+ * weighing most. On a stretch walked straight and steadily that is where the
+ * walker is; round a corner it cuts inside. Towards either end of the walk it
+ * looks less far either side, so it is exactly where the walk starts as it
+ * starts and where it ends as it ends — no lag to make up once it has stopped.
+ */
+export function walkCameraAt(walks: readonly WalkCue[], view: IsoView, ms: number): Point {
+    const reach = Math.min(CAMERA_EASE_MS, Math.max(0, Math.min(ms - walks[0].start, endOf(walks) - ms)));
+    let x = 0, y = 0, weights = 0;
+    for (let k = -CAMERA_SAMPLES; k <= CAMERA_SAMPLES; k++) {
+        const weight = CAMERA_SAMPLES + 1 - Math.abs(k);
+        const at = walkerGroundAt(walks, view, ms + k * reach / CAMERA_SAMPLES);
+        x += at.x * weight;
+        y += at.y * weight;
+        weights += weight;
+    }
+    return { x: x / weights, y: y / weights };
 }
 
 /**

@@ -17,7 +17,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkerGroundAt, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -501,18 +501,19 @@ function WalkerSlot({ artId, view, field, fighter, walker, slot, tintFor, colour
 
 /** A walker on one leg, from `from` to `to`: slid and lifted a frame at a time (`WalkerSlot`). */
 function WalkingFigure({ artId, view, field, fighter, walker, from, to, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; tintFor: TintFor; colourFor: (owner: string) => string }) {
-    const feet = isoCentre(view, from), next = isoCentre(view, to);
-    // A frame in which the walker has moved on to its next leg, before this slot has been rendered over: stay as it was.
-    const onThisLeg = (ms: number) => {
-        const now = walker(ms);
-        return now && now.from === from && now.to === to ? now : null;
-    };
+    const feet = isoCentre(view, from);
+    // Drawn from wherever the walker is each frame, not from the leg this was
+    // rendered for: the render that turns it to its next leg lands a frame or
+    // two after it gets there, and a walker held at the corner till then — the
+    // camera following it on — would jerk back and catch up at every one.
     const slide = usePlaybackRef<SVGGElement>((group, ms) => {
-        const now = onThisLeg(ms);
-        if (now) setAttributes(group, { transform: translation({ x: (next.x - feet.x) * now.across, y: (next.y - feet.y) * now.across }) });
+        const now = walker(ms);
+        if (!now) return;
+        const at = legPoint(view, now);
+        setAttributes(group, { transform: translation({ x: at.x - feet.x, y: at.y - feet.y }) });
     });
     const lift = usePlaybackRef<SVGGElement>((group, ms) => {
-        const now = onThisLeg(ms);
+        const now = walker(ms);
         if (now) setAttributes(group, { transform: translation({ x: 0, y: walkLift(now, square => view.heights[square]) }) });
     });
     return (
@@ -730,7 +731,7 @@ function WalkCamera({ view, walks }: { view: IsoView; walks: readonly WalkCue[] 
     const end = endOf(walks);
     // Let go once the walk is over, so the board is scrolled where the walk left it —
     // and on going away, should a new playback or a hold come first, while the board stays.
-    usePlaybackFrame(ms => centre?.(ms < end ? walkerGroundAt(walks, view, ms) : null));
+    usePlaybackFrame(ms => centre?.(ms < end ? walkCameraAt(walks, view, ms) : null));
     useEffect(() => () => centre?.(null), [centre]);
     return null;
 }

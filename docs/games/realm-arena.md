@@ -1904,8 +1904,8 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   begins, or to where it ends — which is what the board walks; a move told with
   no path frames nothing. A move too long to frame that way (`TRACK_SPAN`) is
   followed instead: the view frames where it starts, as close as a character
-  selected with nowhere to go, and keeps the walker in the middle of the frame
-  as it goes (`track`, the board's `WalkCamera`), until a player's own touch on
+  selected with nowhere to go, and follows the walker as it goes, smoothed
+  so it glides along the way the walk goes rather than round every corner (`track`, the board's `WalkCamera`), until a player's own touch on
   the board takes the view back; with reduced motion nothing walks, so it
   frames where the move ended. Anything else is framed round whoever
   acted and whoever it reached, as the part's events name them (`toldSquares`),
