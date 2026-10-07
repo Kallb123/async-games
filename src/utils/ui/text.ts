@@ -37,3 +37,8 @@ export function capitalise(text: string): string {
 export function possessive(name: string): string {
     return name.endsWith("s") ? `${name}'` : `${name}'s`;
 }
+
+/** Items as a run of prose: "A", "A and B", "A, B and C". */
+export function andList(items: readonly string[]): string {
+    return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}

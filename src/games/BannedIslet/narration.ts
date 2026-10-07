@@ -7,14 +7,11 @@
 // names and numbers only, no rules.
 import { LOSING_WATER_LEVEL, tileName, type BannedIsletTileId } from "@/games/BannedIslet/board";
 import type { IBannedIsletFloodLogEntry, IBannedIsletSwim } from "@/games/BannedIslet/rules";
-import { pluralize } from "@/utils/ui/text";
+import { andList, pluralize } from "@/utils/ui/text";
 
 /** "Kelp Stair", "Kelp Stair and Coral Steps", "Kelp Stair, Coral Steps and Bone Reach". */
 export function tileList(tiles: readonly BannedIsletTileId[]): string {
-    const names = tiles.map(tileName);
-    if (names.length <= 1) return names.join("");
-    if (names.length === 2) return `${names[0]} and ${names[1]}`;
-    return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return andList(tiles.map(tileName));
 }
 
 /**

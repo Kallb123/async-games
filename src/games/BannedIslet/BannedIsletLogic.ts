@@ -50,7 +50,7 @@ import { onTurnOfClause, playerHistory, userToken } from "@/utils/games/history"
 import { deleteFromMongoMap } from "@/utils/games/mongoMaps";
 import { nextActivePlayer, registerPlayerDropoutAdapter } from "@/utils/games/playerDropout";
 import { shuffle } from "@/utils/games/shuffle";
-import { pluralize } from "@/utils/ui/text";
+import { andList, pluralize } from "@/utils/ui/text";
 import { endAsTeam } from "@/utils/games/endAsTeam";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -912,8 +912,7 @@ function applyHelicopterLift(
 
     for (const userId of userIds) playerState(gs, userId)!.position = target;
 
-    const tokens = userIds.map(userToken);
-    const flown = tokens.length === 1 ? tokens[0] : `${tokens.slice(0, -1).join(', ')} and ${tokens[tokens.length - 1]}`;
+    const flown = andList(userIds.map(userToken));
     return `played Helicopter Lift, flying ${flown} from ${tileName(gs.positions[from].tile)} to ${tileName(gs.positions[target].tile)}`;
 }
 

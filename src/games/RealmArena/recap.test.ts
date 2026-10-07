@@ -247,7 +247,7 @@ describe("Realm Arena feed, a row per character per turn", () => {
             affectedIds: ["b"],
         })]);
         // What the grouping reads off a row stays on the server.
-        expect(JSON.stringify(rows)).not.toMatch(/"fighter"|"battle"|"clause"|"roll"/);
+        expect(JSON.stringify(rows)).not.toMatch(/"fighter"|"battle"|"clause"|"deed"|"roll"/);
     });
 
     it("tells a run of the same move once, and two of the same shot twice", () => {
@@ -284,6 +284,129 @@ describe("Realm Arena feed, a row per character per turn", () => {
     it("never folds one player's character into another's", () => {
         const rows = forFeed([...act("c1", 0, "Alice moved their Archer", [moved]), ...act("c2", 0, "Bob moved their Archer", [moved], "b")]);
         expect(rows.map(row => row.id)).toEqual(["c1", "c2"]);
+    });
+});
+
+describe("Realm Arena feed, one row for a run of quiet deeds by different characters", () => {
+    const squad: Fighter[] = [newFighter(0, "a", "archer", 10), newFighter(1, "a", "knight", 11), newFighter(2, "a", "mage", 12), newFighter(3, "b", "knight", 20), newFighter(4, "a", "archer", 13)];
+    const move = (fighter: number, sneaking = false): BattleEvent => ({ kind: "moved", fighter, path: [1, 2], sneaking });
+    const shot: BattleEvent = { kind: "shot", fighter: 0, target: 3, chance: 80, roll: 12, result: "miss", damage: 0, reaction: false };
+    const act = (id: string, fighter: number, text: string, events: BattleEvent[], sender = "a") => toEvents(
+        snap(state({ fighters: squad })),
+        snap(state({ fighters: squad }), [{ ...line(text, sender), commandId: id }]),
+        cmd("RealmArenaAct", { id, senderId: sender, senderUsername: sender === "a" ? "Alice" : "Bob", action: { kind: "move", fighter } }),
+        valid(events),
+    );
+    const titles = (rows: IGameEvent[]) => rows.map(row => row.title);
+
+    it("tells two or three different characters moved as one row, named in turn", () => {
+        const two = forFeed([...act("c1", 0, "Alice moved their Archer", [move(0)]), ...act("c2", 1, "Alice moved their Knight", [move(1)])]);
+        expect(two).toEqual([expect.objectContaining({ id: "c1", type: "ra_manoeuvre", glyph: "👣", title: "Alice moved their Archer and their Knight" })]);
+        const three = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 1, "Alice moved their Knight", [move(1)]),
+            ...act("c3", 2, "Alice moved their Mage", [move(2)]),
+        ]);
+        expect(titles(three)).toEqual(["Alice moved their Archer, their Knight and their Mage"]);
+        expect(JSON.stringify(three)).not.toMatch(/"fighter"|"battle"|"clause"|"deed"/);
+    });
+
+    it("tells a character that moved twice among them once", () => {
+        const rows = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 1, "Alice moved their Knight", [move(1)]),
+            ...act("c3", 0, "Alice moved their Archer", [move(0)]),
+        ]);
+        expect(titles(rows)).toEqual(["Alice moved their Archer and their Knight"]);
+    });
+
+    it("does not fold across a shot, or swallow a character that moved and then shot", () => {
+        const rows = forFeed([
+            ...act("c1", 1, "Alice moved their Knight", [move(1)]),
+            ...act("c2", 0, "Alice shot Bob's Knight with their Archer (80%): a miss", [shot]),
+            ...act("c3", 2, "Alice moved their Mage", [move(2)]),
+            ...act("c4", 0, "Alice moved their Archer", [move(0)]),
+        ]);
+        // The Archer's later move is told on its first row, as ever; the Mage is alone after the shot.
+        expect(titles(rows)).toEqual([
+            "Alice moved their Knight",
+            "Alice shot Bob's Knight with their Archer (80%): a miss; then moved their Archer",
+            "Alice moved their Mage",
+        ]);
+        const after = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 0, "Alice shot Bob's Knight with their Archer (80%): a miss", [shot]),
+            ...act("c3", 1, "Alice moved their Knight", [move(1)]),
+        ]);
+        expect(titles(after)).toEqual(["Alice moved their Archer; then shot Bob's Knight with their Archer (80%): a miss", "Alice moved their Knight"]);
+    });
+
+    it("keeps a move a watcher reacted to, a sneak among moves, and each player's turn to itself", () => {
+        const reacted: BattleEvent = { kind: "shot", fighter: 3, target: 1, chance: 60, roll: 90, result: "miss", damage: 0, reaction: true };
+        const rows = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 1, "Alice moved their Knight; Bob's Knight fired on overwatch: a miss", [move(1), reacted]),
+            ...act("c3", 2, "Alice sneaked their Mage", [move(2, true)]),
+            ...act("c4", 0, "Bob moved their Archer", [move(0)], "b"),
+            ...act("c5", 1, "Bob moved their Knight", [move(1)], "b"),
+        ]);
+        expect(titles(rows)).toEqual([
+            "Alice moved their Archer",
+            "Alice moved their Knight; Bob's Knight fired on overwatch: a miss",
+            "Alice sneaked their Mage",
+            "Bob moved their Archer and their Knight",
+        ]);
+        const turns = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...toEvents(snap(state({ fighters: squad })), snap(state({ fighters: squad })), cmd("RealmArenaEndTurn", { id: "c2" }), valid()),
+            ...act("c3", 1, "Alice moved their Knight", [move(1)]),
+        ]);
+        expect(turns.map(row => row.id)).toEqual(["c1", "c2", "c3"]);
+    });
+
+    it("tells going on watch and hunkering down the same way, and never one for the other", () => {
+        const watch = (fighter: number): BattleEvent => ({ kind: "watching", fighter, banked: 2 });
+        const rows = forFeed([
+            ...act("c1", 0, "Alice put their Archer on watch", [watch(0)]),
+            ...act("c2", 1, "Alice put their Knight on watch", [watch(1)]),
+            ...act("c3", 2, "Alice hunkered their Mage down", [{ kind: "hunkered", fighter: 2 }]),
+        ]);
+        expect(titles(rows)).toEqual(["Alice put their Archer and their Knight on watch", "Alice hunkered their Mage down"]);
+        // A character that moved and then went on watch is one row, and no part of a run.
+        const both = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 0, "Alice put their Archer on watch", [watch(0)]),
+            ...act("c3", 1, "Alice moved their Knight", [move(1)]),
+        ]);
+        expect(titles(both)).toEqual(["Alice moved their Archer; then put their Archer on watch", "Alice moved their Knight"]);
+    });
+
+    it("starts a new row at a character of a kind it already named, as the feed can't tell two Archers apart", () => {
+        const rows = forFeed([
+            ...act("c1", 0, "Alice moved their Archer", [move(0)]),
+            ...act("c2", 1, "Alice moved their Knight", [move(1)]),
+            ...act("c3", 4, "Alice moved their Archer", [move(4)]),
+        ]);
+        expect(titles(rows)).toEqual(["Alice moved their Archer and their Knight", "Alice moved their Archer"]);
+    });
+
+    it("tells the co-op enemy's run of moves as one row, counting a hidden enemy's characters", () => {
+        const owner = warbandOwner(0);
+        const enemyMove = (fighter: number) => ({ action: { kind: "move", fighter }, events: [move(fighter)] });
+        const coop = (enemy?: "realm") => state({ coop: true, enemy, fighters: [...squad, newFighter(5, owner, "knight", 30), newFighter(6, owner, "archer", 31), newFighter(7, owner, "mage", 32)] });
+        const enemy = (steps: number[]) => ({ owner, started: [], steps: steps.map(enemyMove), ended: [] });
+        const turn = (steps: number[], lines: string[], faction?: "realm") => toEvents(snap(coop()), snap(coop(faction), [...lines.map(text => line(text)).reverse(), line("Alice ended their turn", "a")]),
+            cmd("RealmArenaEndTurn"), { ...valid(), turnOver: true, recap: { enemy: enemy(steps), started: [] } } as unknown as ICommandOutcome);
+        const known = forFeed(turn([5, 6, 7], ["The Renegades moved their Knight", "The Renegades moved their Archer", "The Renegades moved their Mage", "The Renegades ended their turn"], "realm"));
+        expect(titles(known)).toEqual(["Alice ended their turn", "The Renegades moved their Knight, their Archer and their Mage"]);
+        expect(known[1]).toMatchObject({ id: "c1:enemy:0", actorId: owner, type: "ra_manoeuvre" });
+        const hidden = forFeed(turn([5, 6, 7], [...Array(3).fill("The enemy moved one of its characters"), "The enemy ended their turn"]));
+        expect(titles(hidden)).toEqual(["Alice ended their turn", "The enemy moved 3 of its characters"]);
+    });
+
+    it("folds nothing outside the feed", () => {
+        const rows = postProcess!([...act("c1", 0, "Alice moved their Archer", [move(0)]), ...act("c2", 1, "Alice moved their Knight", [move(1)])], { forFeed: false });
+        expect(titles(rows)).toEqual(["Alice moved their Archer", "Alice moved their Knight"]);
     });
 });
 
