@@ -1,5 +1,5 @@
 'use client'
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
 import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
@@ -12,9 +12,13 @@ import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 const VALUE_RISE = 4;
 const LABEL_DROP = 3.6;
 const MARK_SIZE = 3.4;
-const MARK_OFFSET = 5.4;
-/** How much further out each character past a number's two ("−3") pushes a mark, so one beside a word — "Hunker down" — clears it: half a character's width. */
-const MARK_PER_CHAR = 1.6;
+/**
+ * The room between the end of the big text and the mark beside it, in board
+ * units: clear of the text's outline (half its 1.3 stroke) with a little air.
+ * The mark goes after the text as it is drawn (`HitText` measures it), so a
+ * word — "Hunker down" — is cleared as surely as a number.
+ */
+const MARK_GAP = 1.2;
 /**
  * How much higher each lane of hit text stands (`TextCue.lane`): clear of the
  * number and the label under it on the lane below, with room for that one to
@@ -60,12 +64,24 @@ function HitText({ id, cue, over, still }: { id: string; cue: TextCue; over: Poi
     const popping = usePlaybackRef<SVGGElement>((group, ms) => {
         setAttributes(group, { transform: scaleAbout(x, middle, hitTextAt(cue, ms, still).scale) });
     });
+    // The mark stands just past the end of the text as the font draws it, measured
+    // once it's laid out, rather than from a guess at how wide its characters are.
+    const value = useRef<SVGTextElement>(null);
+    const mark = useRef<SVGGElement>(null);
+    useLayoutEffect(() => {
+        if (!value.current || !mark.current) return;
+        setAttributes(mark.current, { transform: translation({ x: value.current.getComputedTextLength() / 2 + MARK_GAP + MARK_SIZE / 2, y: 0 }) });
+    }, [cue.value, cue.mark]);
     return (
         <g ref={rising} className={`ag-ra-hit ag-ra-hit--${cue.tone}`}>
             <g ref={popping}>
-                <text className="ag-ra-hit-value" x={x} y={middle}>{cue.value}</text>
+                <text ref={value} className="ag-ra-hit-value" x={x} y={middle}>{cue.value}</text>
                 {cue.label && <text className="ag-ra-hit-label" x={x} y={middle + LABEL_DROP}>{cue.label}</text>}
-                {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={middle} size={MARK_SIZE} />}
+                {cue.mark && (
+                    <g ref={mark}>
+                        <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x} y={middle} size={MARK_SIZE} />
+                    </g>
+                )}
             </g>
         </g>
     );
