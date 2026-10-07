@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, FOLLOW_GLIDE_MS, partLabel } from "./ui";
+import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, FOLLOW_GLIDE_MS, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -699,6 +699,92 @@ describe("battleCues", () => {
         expect(Math.max(...longer.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
         expect(only(longer, "walk")[0].length).toBeLessThan(59 * WALK_STEP_MS);
     });
+
+    it("stands a knock-out's Down a line above the damage that caused it, and a later text back in the usual place", () => {
+        const cues = battleCues([
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: false },
+            { kind: "downed", fighter: 0, by: 1 },
+            { kind: "burned", fighter: 3, damage: 1 },
+        ], before);
+        const [damage, down] = only(cues, "text");
+        expect(damage.lane ?? 0).toBe(0);
+        expect(down).toMatchObject({ value: "Down", lane: 1 });
+        // Down starts while the damage is still rising.
+        expect(down.start).toBeLessThan(damage.start + damage.length);
+        // Another fighter's text shares nothing with theirs.
+        expect(only(cues, "text")[2].lane ?? 0).toBe(0);
+        // Once the first text has gone, the next on that fighter is back on the ground.
+        const later = battleCues([
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "burned", fighter: 0, damage: 1 },
+        ], before);
+        expect(only(later, "text").map(cue => cue.start)).toEqual([0, 450, 900]);
+        // The third starts at 900, while the first (to 1000) and the second (to 1450) are both still showing.
+        expect(only(later, "text").map(cue => cue.lane ?? 0)).toEqual([0, 1, 2]);
+        const gap = battleCues(Array.from({ length: 4 }, () => ({ kind: "burned", fighter: 0, damage: 1 }) as const), before);
+        // The fourth starts at 1350, after the first (to 1000) has gone, so it takes the lowest lane again.
+        expect(only(gap, "text").map(cue => [cue.start, cue.lane ?? 0])).toEqual([[0, 0], [450, 1], [900, 2], [1350, 0]]);
+    });
+
+    it("keeps everyone one fireball hits in the usual place, and gives texts that start together on one fighter lanes of their own", () => {
+        const cues = battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 }], before);
+        expect(only(cues, "text").map(cue => cue.lane ?? 0)).toEqual([0, 0]);
+        const together = battleCues([{ kind: "hunkered", fighter: 0 }, { kind: "watching", fighter: 0, banked: 2 }, { kind: "watching", fighter: 1, banked: 2 }], before);
+        const [first, second] = only(together, "text").filter(cue => cue.fighter === 0);
+        expect(first.lane ?? 0).not.toBe(second.lane ?? 0);
+    });
+
+    it("keeps texts that overlap on different lanes when an action is shortened to fit", () => {
+        const shots: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
+        const texts = only(battleCues([...shots, { kind: "downed", fighter: 0, by: 1 }], before), "text");
+        expect(texts).toHaveLength(13);
+        expect(Math.max(...texts.map(cue => cue.lane ?? 0))).toBeGreaterThan(0);
+        for (const [i, one] of texts.entries()) {
+            for (const other of texts.slice(i + 1)) {
+                const overlap = Math.min(one.start + one.length, other.start + other.length) - Math.max(one.start, other.start);
+                // A millisecond of rounding either side is no overlap.
+                if (overlap > 2) expect(one.lane ?? 0).not.toBe(other.lane ?? 0);
+            }
+        }
+    });
+
+    describe("for a player who sees no walk or flight", () => {
+        const run: BattleEvent[] = [
+            { kind: "moved", fighter: 0, path: Array.from({ length: 11 }, (_, i) => 10 + i), sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 3, reaction: true },
+            { kind: "downed", fighter: 0, by: 1 },
+        ];
+
+        it("takes no time over a walk, so a shot after it is told at once", () => {
+            const walking = battleCues(run, before), still = battleCues(run, before, [], { still: true });
+            const shot = (cues: BattleCue[]) => only(cues, "text").find(cue => cue.value === "\u22123")!;
+            expect(shot(walking).start).toBe(10 * WALK_STEP_MS + 450);
+            expect(shot(still).start).toBe(0);
+            expect(shot(still).start).toBeLessThan(shot(walking).start - 1000);
+            expect(only(still, "walk")).toMatchObject([{ path: expect.any(Array), start: 0, length: 0 }]);
+            // The downed mover is on its square from the moment the walk (such as it is) ends.
+            expect(only(still, "fall")).toMatchObject([{ fighter: { id: 0, square: 20 }, arrives: 0 }]);
+            expect(partDurationMs(still)).toBeLessThan(partDurationMs(walking));
+        });
+
+        it("lands a flight with no lead, and still gives it a moment so it is never drawn landing in no time", () => {
+            const [flight] = only(battleCues([run[1]], before, [], { still: true }), "flight");
+            expect(flight).toMatchObject({ start: 0, land: 1 });
+            expect(flight.length).toBeGreaterThanOrEqual(flight.land);
+            const [fireball] = only(battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1], damage: 3 }], before, [], { still: true }), "burst");
+            expect(fireball.start).toBe(0);
+        });
+
+        it("leaves the timeline as it was without the option, and carries it through a review's parts and step", () => {
+            expect(battleCues(run, before, [], {})).toEqual(battleCues(run, before));
+            expect(battleCues(run, before, [], { still: false })).toEqual(battleCues(run, before));
+            const outcome = { events: run } as IRealmArenaStepOutcome;
+            const board = { fighters: before, blasted: [] };
+            expect(reviewParts(outcome, board, [], { still: true })[0].cues).toEqual(battleCues(run, before, [], { still: true }));
+            expect(reviewStepMs(outcome, board, [], { still: true })).toBeLessThan(reviewStepMs(outcome, board));
+        });
+    });
 });
 
 describe("moveFrame", () => {
@@ -863,5 +949,100 @@ describe("isUnplaced", () => {
 
     it("is not one that isn't followed, such as the turn passing on", () => {
         expect(isUnplaced(part([hunkered]), start, false)).toBe(false);
+    });
+});
+
+describe("actionFollow", () => {
+    const mover = ready(0, "a", "knight", 10);
+    const arrived = { ...mover, square: 31 };
+    const move = (path: number[]): ToldEvent => ({ kind: "moved", fighter: 0, path, sneaking: false });
+    const at2 = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
+
+    it("frames a move exactly, from where it began to where it ended", () => {
+        expect(actionFollow(RUINED_FORT, [move([10, 20, 31])], [mover], [arrived], "k")).toEqual({ squares: [10, 31], key: "k", exact: true });
+    });
+
+    it("goes to what a step touched, as deep as it fits, when it was no move", () => {
+        const hurt = { ...mover, hp: mover.hp - 1 };
+        expect(actionFollow(RUINED_FORT, [], [mover], [hurt], "k")).toEqual({ squares: [10], key: "k" });
+    });
+
+    it("is null when nothing changed or what changed is spread over more than half the field", () => {
+        expect(actionFollow(RUINED_FORT, [], [mover], [{ ...mover }], "k")).toBeNull();
+        const near = ready(1, "b", "archer", at2(2, 2)), far = ready(2, "b", "mage", at2(30, 40));
+        const hurt = [near, far].map(fighter => ({ ...fighter, hp: fighter.hp - 1 }));
+        expect(actionFollow(RUINED_FORT, [], [near, far], hurt, "k")).toBeNull();
+    });
+});
+
+describe("an HP bar through an action", () => {
+    const before = ready(0, "a", "knight", 10);
+    const max = before.hp;
+    const text = (start: number, hpChange?: number): TextCue => ({ kind: "text", fighter: 0, square: 10, value: "−", tone: "hit", start, length: HIT_TEXT_MS, hpChange });
+    const told = (cues: TextCue[], after: Fighter, still = false) => toldOf(cues, before, after, still)!;
+    const hurt = (hp: number): Fighter => ({ ...before, hp });
+
+    it("holds the HP it was found at until its cue, then tweens to the new HP over the tween", () => {
+        const one = told([text(500, -4)], hurt(max - 4));
+        expect(toldAt(one, hurt(max - 4), 499).drawn.hp).toBe(max);
+        expect(toldAt(one, hurt(max - 4), 500 + HP_TWEEN_MS / 2).drawn.hp).toBe(max - 2);
+        expect(toldAt(one, hurt(max - 4), 500 + HP_TWEEN_MS).drawn.hp).toBe(max - 4);
+    });
+
+    it("carries a second blow on from where the first had got to", () => {
+        const after = hurt(max - 6);
+        const two = told([text(500, -4), text(500 + HP_TWEEN_MS / 2, -2)], after);
+        // Halfway through the first tween the second lands: it starts from max - 2.
+        expect(toldAt(two, after, 500 + HP_TWEEN_MS / 2).drawn.hp).toBe(max - 2);
+        expect(toldAt(two, after, 500 + HP_TWEEN_MS).drawn.hp).toBe(max - 4);
+        expect(toldAt(two, after, 500 + HP_TWEEN_MS * 2).drawn.hp).toBe(max - 6);
+    });
+
+    it("always ends the last step on the fighter's real HP, even if the cues don't add up", () => {
+        const after = hurt(max - 3);
+        const lying = told([text(0, -1)], after);
+        expect(lying.steps.at(-1)!.to).toBe(max - 3);
+        expect(toldAt(lying, after, 10000).drawn.hp).toBe(max - 3);
+    });
+
+    it("drains the chip after the fill, which it lags", () => {
+        const after = hurt(max - 4);
+        const one = told([text(0, -4)], after);
+        expect(toldAt(one, after, -1).chip).toBe(max);
+        expect(toldAt(one, after, HP_TWEEN_MS).drawn.hp).toBe(max - 4);
+        expect(toldAt(one, after, HP_TWEEN_MS).chip).toBe(max);
+        expect(toldAt(one, after, HP_TWEEN_MS + HP_CHIP_MS / 2).chip).toBe(max - 2);
+        expect(toldAt(one, after, HP_TWEEN_MS + HP_CHIP_MS).chip).toBe(max - 4);
+        expect(one.until).toBe(HP_TWEEN_MS + HP_CHIP_MS);
+    });
+
+    it("jumps with reduced motion, and leaves no chip", () => {
+        const after = hurt(max - 4);
+        const one = told([text(500, -4)], after, true);
+        expect(toldAt(one, after, 499).drawn.hp).toBe(max);
+        expect(toldAt(one, after, 500).drawn.hp).toBe(max - 4);
+        expect(toldAt(one, after, 500).chip).toBeUndefined();
+        expect(one.until).toBe(500);
+    });
+
+    it("draws the marks as `before` had them until the first cue lands", () => {
+        const after = { ...hurt(max - 4), banked: 2 };
+        const one = told([text(500, -4)], after);
+        expect(toldAt(one, after, 499).drawn.banked).toBe(before.banked);
+        expect(toldAt(one, after, 500).drawn.banked).toBe(2);
+    });
+
+    it("tells nothing of a fighter with no cue, not there before, down, or unchanged", () => {
+        expect(toldOf([], before, hurt(max - 1), false)).toBeNull();
+        expect(toldOf([text(0, -1)], undefined, hurt(max - 1), false)).toBeNull();
+        expect(toldOf([text(0, -1)], before, hurt(0), false)).toBeNull();
+        expect(toldOf([text(0, 0)], before, { ...before }, false)).toBeNull();
+    });
+
+    it("steps a value through each step, jumping when there's no tween", () => {
+        const steps = [{ at: 100, to: 6 }, { at: 200, to: 3 }];
+        expect(stepped(10, steps, 0, 0, 99)).toBe(10);
+        expect(stepped(10, steps, 0, 0, 150)).toBe(6);
+        expect(stepped(10, steps, 0, 0, 200)).toBe(3);
     });
 });

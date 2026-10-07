@@ -14,6 +14,12 @@ const MARK_SIZE = 3.4;
 const MARK_OFFSET = 5.4;
 /** How much further out each character past a number's two ("−3") pushes a mark, so one beside a word — "Hunker down" — clears it: half a character's width. */
 const MARK_PER_CHAR = 1.6;
+/**
+ * How much higher each lane of hit text stands (`TextCue.lane`): clear of the
+ * number and the label under it on the lane below, with room for that one to
+ * rise as it fades.
+ */
+const LANE_RISE = 9;
 /** A strike's slash, across the figure it lands on. */
 const SLASH_SIZE = 14;
 
@@ -135,7 +141,8 @@ function fade(ms: number, cue: FlightCue): number {
 export const cueTiming = ({ start, length }: BattleCue): React.CSSProperties => ({ animationDelay: `${start}ms`, animationDuration: `${length}ms` });
 
 function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
-    const { x, y } = over;
+    const { x } = over;
+    const y = over.y - (cue.lane ?? 0) * LANE_RISE;
     return (
         <g className={`ag-ra-hit ag-ra-hit--${cue.tone}`} style={cueTiming(cue)}>
             <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>

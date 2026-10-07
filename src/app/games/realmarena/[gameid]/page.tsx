@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, moveFrame, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -34,6 +34,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
+import { usePrefersReducedMotion } from "@/utils/hooks/usePrefersReducedMotion";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useScrollIntoViewOnOpen } from "@/utils/hooks/useScrollIntoViewOnOpen";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
@@ -78,6 +79,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     };
     const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
+    // With reduced motion the board draws no walk and no flight, so neither
+    // takes any time in what it plays, nor in how long a review rests on it.
+    const still = usePrefersReducedMotion();
+
     // Planning is out by design (§17.3 PR 8): every attack worth planning
     // needs a roll, and the turn sheet already shows the odds of one before
     // it's sent. So the review steps back through the match, and no further.
@@ -90,7 +95,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     }, {
         // Play rests on a step for as long as the board takes to play it,
         // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters) : STEP_MIN_MS,
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -104,8 +109,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepOutcome = nav.displayedOutcome;
     const stepFighters = nav.displayedState?.fighters;
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters) : [],
-        [nav.isLive, previous, stepOutcome, stepFighters],
+        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        [nav.isLive, previous, stepOutcome, stepFighters, still],
     );
     const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
@@ -184,6 +189,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         submitCommand(command, undefined, 'muster');
     };
 
+    // A target picked from the turn sheet's list brings the view to it and
+    // whoever is aiming at it, and keeps it there until the character acts,
+    // another is selected, a box is tapped or a review is stepped into.
+    const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
+    const [picked, setPicked] = useResettingState<AimFollow | null>(null, pickKey);
+
     // A battle turn: a run of actions, one command each so every result is
     // seen before the next is chosen, then the end of the turn (§17.2).
     const battleTurn = !!gs && !mustering && isMyTurn;
@@ -209,16 +220,25 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // Gone once it has had its time — and the time the board may hold it while
     // the view glides to it — whether or not the board was showing it, so
     // coming back from a review doesn't play it again.
-    const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
+    // The view stays on the action itself while it plays — the target the
+    // player picked, the stretch a move covered, or whatever it touched —
+    // rather than going where the selection or the board's resting view would
+    // next take it, so a shot isn't played from further out than it was aimed
+    // and a long walk doesn't start off the frame. That is worked out as the
+    // action is sent, and goes when the playback does.
+    const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
+    const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
-        const cues = battleCues(events, fighters, after);
-        setOwnPlayback(cues.length > 0 ? { key, cues, field } : null);
+        const cues = battleCues(events, fighters, after, { still });
+        if (cues.length === 0) return setOwn(null);
+        const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
+        setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
     };
     useEffect(() => {
-        if (!ownPlayback) return;
-        const played = setTimeout(() => setOwnPlayback(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
+        if (!own) return;
+        const played = setTimeout(() => setOwn(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
         return () => clearTimeout(played);
-    }, [ownPlayback]);
+    }, [own]);
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
@@ -233,11 +253,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
-    // A target picked from the turn sheet's list brings the view to it and
-    // whoever is aiming at it, and keeps it there until the character acts,
-    // another is selected, a box is tapped or a review is stepped into.
-    const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
-    const [picked, setPicked] = useResettingState<AimFollow | null>(null, pickKey);
     const focusTarget = (target: Fighter) => {
         if (selected) setPicked({ aim: { caster: selected.square, target: target.square }, key: `target:${target.id}:${Date.now()}` });
     };
@@ -257,7 +272,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // What the undone action did is no longer what happened, so its results go too.
     const undo = () => submitCommand(new RealmArenaUndo(), () => {
         setLastEvents([]);
-        setOwnPlayback(null);
+        setOwn(null);
     }, 'undo');
     // A tap on a character aims the action lined up, when it can; otherwise it selects.
     const tapFighter = (id: number) => {
@@ -286,21 +301,17 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // battlefield (`spreadWide`), the view goes to the viewer's own side
     // instead, just fit, rather than out to the whole board; a move is always
     // kept, since it's known. Live, it goes to a target picked from the turn
-    // sheet's list instead. Each part is its own key, so the view glides
-    // again for each.
+    // sheet's list instead, and while the viewer's own action plays, to that.
+    // Each part is its own key, so the view glides again for each.
     const friendly = friendlySquares(fighters, myUserId, coop);
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
     const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
-    const moved = part && followed ? moveFrame(part.events, part.before.fighters, fighters) : null;
     const stepKey = `${nav.viewIndex}:${partIndex}`;
-    const touched = previous && part && followed && !moved ? actionSquares(part.before.fighters, fighters) : [];
     const follow = !nav.isLive
         ? !previous || !part ? null
-            : moved ? { squares: moved, key: stepKey, exact: true }
-            : followed && touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key: stepKey }
-            : friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true }
-            : null
-        : picked;
+            : (followed ? actionFollow(field, part.events, part.before.fighters, fighters, stepKey) : null)
+                ?? (friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true } : null)
+        : own?.follow ?? picked;
     // A followed step the board can't point to — something happened out of
     // sight, which cost the viewer something they were told of — says so with
     // a "?" over the board for as long as it is shown, while the view rests on
@@ -309,7 +320,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted) } : null;
+        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted), before: part.before.fighters } : null;
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 
