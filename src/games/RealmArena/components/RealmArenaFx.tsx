@@ -1,11 +1,11 @@
 'use client'
-import React, { useRef } from 'react';
+import React from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
 import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
 import { burstAt, flightAt, hitTextAt, slashAt, type BattleCue, type BurstCue, type FlightCue, type FxPoints, type SlashCue, type TextCue } from '@/games/RealmArena/ui';
 import { SpriteUse } from './RealmArenaTerrain';
-import { usePlaybackFrame } from '@/utils/hooks/usePlayback';
+import { scaleAbout, setAttributes, translation, usePlaybackRef } from '@/utils/hooks/usePlayback';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
 /** The hit text, in board units: the number's middle above the point it's given, the label under it, and a mark beside the number. */
@@ -49,23 +49,16 @@ interface RealmArenaFxProps {
     at: (square: Square) => FxPoints;
 }
 
-/** `scale` about the point (`cx`, `cy`) rather than about the origin, as a transform. */
-const scaleAbout = (cx: number, cy: number, scale: number) => `translate(${cx} ${cy}) scale(${scale}) translate(${-cx} ${-cy})`;
-
-function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
-    const still = usePrefersReducedMotion();
-    const rising = useRef<SVGGElement>(null);
-    const popping = useRef<SVGGElement>(null);
+function HitText({ id, cue, over, still }: { id: string; cue: TextCue; over: Point; still: boolean }) {
     const { x } = over;
     const y = over.y - (cue.lane ?? 0) * LANE_RISE;
     const middle = y - VALUE_RISE;
-    // The attributes are the frame loop's alone: it draws them before the first
-    // paint, and a render never puts them back.
-    usePlaybackFrame(ms => {
+    const rising = usePlaybackRef<SVGGElement>((group, ms) => {
         const frame = hitTextAt(cue, ms, still);
-        rising.current?.setAttribute('opacity', String(frame.opacity));
-        rising.current?.setAttribute('transform', `translate(0 ${frame.rise})`);
-        popping.current?.setAttribute('transform', scaleAbout(x, middle, frame.scale));
+        setAttributes(group, { opacity: frame.opacity, transform: translation({ x: 0, y: frame.rise }) });
+    });
+    const popping = usePlaybackRef<SVGGElement>((group, ms) => {
+        setAttributes(group, { transform: scaleAbout(x, middle, hitTextAt(cue, ms, still).scale) });
     });
     return (
         <g ref={rising} className={`ag-ra-hit ag-ra-hit--${cue.tone}`}>
@@ -80,16 +73,14 @@ function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
 
 /** A burst over the square or the 3×3 it went off on, its foot along the area's front corner. */
 function Burst({ id, cue, ground }: { id: string; cue: BurstCue; ground: Point }) {
-    const flaring = useRef<SVGGElement>(null);
     const across = 2 * cue.radius + 1;
     const sprite = BURST_ART[cue.burst];
     const width = across * 2 * ISO_HALF_WIDTH;
     const height = width * sprite.height / sprite.width;
     const middle = ground.y + across * ISO_HALF_HEIGHT - height / 2;
-    usePlaybackFrame(ms => {
+    const flaring = usePlaybackRef<SVGGElement>((group, ms) => {
         const frame = burstAt(cue, ms);
-        flaring.current?.setAttribute('opacity', String(frame.opacity));
-        flaring.current?.setAttribute('transform', scaleAbout(ground.x, middle, frame.scale));
+        setAttributes(group, { opacity: frame.opacity, transform: scaleAbout(ground.x, middle, frame.scale) });
     });
     return (
         <g ref={flaring} className={`ag-ra-burst ag-ra-burst--${cue.burst}`}>
@@ -100,11 +91,10 @@ function Burst({ id, cue, ground }: { id: string; cue: BurstCue; ground: Point }
 
 /** A strike's slash, wiped across the figure it lands on. */
 function Slash({ id, cue, body }: { id: string; cue: SlashCue; body: Point }) {
-    const wiping = useRef<SVGGElement>(null);
-    usePlaybackFrame(ms => {
+    const wiping = usePlaybackRef<SVGGElement>((group, ms) => {
         const frame = slashAt(cue, ms);
-        wiping.current?.setAttribute('opacity', String(frame.opacity));
-        wiping.current?.setAttribute('transform', `translate(${frame.dx} ${frame.dy}) ${scaleAbout(body.x, body.y, frame.scale)}`);
+        const offset = translation({ x: frame.dx, y: frame.dy });
+        setAttributes(group, { opacity: frame.opacity, transform: `${offset ?? ''} ${scaleAbout(body.x, body.y, frame.scale)}` });
     });
     return (
         <g ref={wiping} className="ag-ra-slash">
@@ -115,17 +105,16 @@ function Slash({ id, cue, body }: { id: string; cue: SlashCue; body: Point }) {
 
 /** A missile where it is now: pointing the way it flies, its front on the point, or tumbling about its middle. Hidden before it's loosed and once it's gone. */
 function Flight({ id, cue, at }: { id: string; cue: FlightCue; at: RealmArenaFxProps['at'] }) {
-    const flying = useRef<SVGGElement>(null);
     const { size, tumbles } = FLIGHT[cue.missile];
-    usePlaybackFrame(ms => {
-        const group = flying.current;
-        if (!group) return;
+    const flying = usePlaybackRef<SVGGElement>((group, ms) => {
         const now = flightAt(cue, at, ms);
-        group.setAttribute('visibility', now ? 'visible' : 'hidden');
-        if (!now) return;
+        if (!now) return setAttributes(group, { visibility: 'hidden' });
         const turn = tumbles ? (ms - cue.start) * TUMBLE : now.heading;
-        group.setAttribute('opacity', String(now.opacity));
-        group.setAttribute('transform', `translate(${now.point.x} ${now.point.y}) rotate(${turn}) scale(${now.scale})`);
+        setAttributes(group, {
+            visibility: 'visible',
+            opacity: now.opacity,
+            transform: `${translation(now.point) ?? ''} rotate(${turn}) scale(${now.scale})`,
+        });
     });
     return (
         <g ref={flying} className="ag-ra-flight">
@@ -140,7 +129,7 @@ function Flight({ id, cue, at }: { id: string; cue: FlightCue; at: RealmArenaFxP
  * figures. `battleCues` worked out when each part starts and how long it lasts.
  *
  * All of it moves on the playback's one clock (docs/isometric-animations.md
- * §4): each piece draws itself from the time `usePlaybackFrame` hands it, by
+ * §4): each piece draws itself from the time `usePlaybackRef` hands it, by
  * setting its own SVG attributes through a ref — no render a frame, and nothing
  * keyframed in the stylesheet. So a pause is one flag on the clock, a skip lands
  * everything at once, and nothing drifts against the walkers the board draws on
@@ -163,11 +152,10 @@ export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
         <g className="ag-ra-fx" aria-hidden="true">
             {cues.map((cue, index) => {
                 switch (cue.kind) {
-                    case 'text': return <HitText key={index} id={id} cue={cue} over={at(cue.square).head} />;
+                    case 'text': return <HitText key={index} id={id} cue={cue} over={at(cue.square).head} still={still} />;
                     case 'burst': return still ? null : <Burst key={index} id={id} cue={cue} ground={at(cue.at).ground} />;
                     case 'slash': return still ? null : <Slash key={index} id={id} cue={cue} body={at(cue.square).body} />;
                     case 'flight': return still ? null : <Flight key={index} id={id} cue={cue} at={at} />;
-                    // A fall, a scorch and a walk are the board's, which draws the figure and the ground.
                     default: return null;
                 }
             })}

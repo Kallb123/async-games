@@ -23,10 +23,6 @@ export class PlaybackClock {
         return Math.min(this.end, Math.max(0, run));
     }
 
-    get running(): boolean {
-        return this.since !== null;
-    }
-
     /** It has got to its end. */
     get ended(): boolean {
         return this.ms >= this.end;

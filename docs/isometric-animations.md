@@ -35,7 +35,7 @@ draws it.
 | `flightAt`, `walkerAt`, `hitTextAt`, `burstAt`, `slashAt`, `fadeOutAt`, `fadeInAt`, `toldAt`, `shoveAt`, `shakeAt` | `src/games/RealmArena/ui.ts` | What each thing looks like at a moment of the playback. Pure, and tested at a moment (§4.6). |
 | `PlaybackClock` | `src/utils/ui/playbackClock.ts` | The one clock a playback runs on: paused, resumed, sped up, skipped, over at its end. Pure. |
 | `PlaybackProvider`, `usePlaybackFrame`, `usePlaybackValue` | `src/utils/hooks/usePlayback.tsx` | The one frame loop over that clock, and how whatever moves reads it. |
-| `RealmArenaBoard` | `src/games/RealmArena/components/RealmArenaBoard.tsx` | Draws the battlefield in depth order, and inside it whatever plays *between* things: `WalkerSlot`, `Falling`, `blasting` (via `Fading`), `Appearing`, `Arriving`, `ToldFighterNode`. Runs the playback's clock, held while the view glides (`held`), and says when it has played (`onPlayed`). |
+| `RealmArenaBoard` | `src/games/RealmArena/components/RealmArenaBoard.tsx` | Draws the battlefield in depth order, and inside it whatever plays *between* things: `WalkerSlot`, `Falling` and `blasting` (both fading by `CueFade`, which also fades the fallen in), `Arriving`, `ToldFighterNode`. Runs the playback's clock, held while the view glides (`held`), and says when it has played (`onPlayed`). |
 | `RealmArenaFx` | `src/games/RealmArena/components/RealmArenaFx.tsx` | Draws whatever plays *over* everything, in an overlay SVG: `Flight`, `HitText`, `Burst`, `Slash`. |
 | `BoardZoom` | `src/components/ui/BoardZoom.tsx` | The glide to a `focus` (`GLIDE_MS`), and `onFocused` once it lands. |
 | The page | `src/app/games/realmarena/[gameid]/page.tsx` | Builds the playback — the player's own action as it comes back (`ownPlayback`), or a review step's part — picks the focus, and lets go of the one or moves the review on when the board says it has played. |
@@ -63,7 +63,7 @@ draws it.
    says it has landed there, however long that takes, and tells the page
    once it has played to its end (`onPlayed`).
 3. **One way of moving.** Everything that moves reads that clock: each piece
-   calls `usePlaybackFrame` and sets its own SVG attributes (`transform`,
+   calls `usePlaybackRef` (or `usePlaybackFrame`) and sets its own SVG attributes (`transform`,
    `opacity`, `visibility`, a bar's `width`) through a ref, a frame at a time,
    with no React render. What it draws at a moment is a pure function of the
    playback's time in `ui.ts`: `flightAt`, `hitTextAt` (the rise, and the pop

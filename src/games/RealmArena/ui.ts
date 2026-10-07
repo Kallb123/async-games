@@ -1585,8 +1585,7 @@ type Keyframe = readonly [at: number, value: number];
  * A value `progress` of the way through a cue, between keyframes listed in
  * order of `at`: eased out over each pair, as a CSS animation with `ease-out`
  * eases between the stops it names, and held at the first before it and at the
- * last after it. A property a keyframe doesn't name is left out of that stop,
- * and the interval runs on to the next that does.
+ * last after it.
  */
 function keyframed(frames: readonly Keyframe[], progress: number): number {
     const next = frames.findIndex(([at]) => progress < at);
@@ -1645,7 +1644,7 @@ export function hitTextAt(cue: TextCue, ms: number, still: boolean): HitTextFram
     return {
         opacity: keyframed([[0, 0], [0.15, 1], [0.65, 1], [1, 0]], progress),
         rise: still ? 0 : keyframed([[0, HIT_SETTLE], [0.15, 0], [1, HIT_LIFT]], progress),
-        scale: pops ? keyframed([[0, POP_SCALE], [1, 1]], Math.min(1, Math.max(0, (ms - cue.start) / POP_MS))) : 1,
+        scale: pops ? keyframed([[0, POP_SCALE], [1, 1]], progressOf({ start: cue.start, length: POP_MS }, ms)) : 1,
     };
 }
 

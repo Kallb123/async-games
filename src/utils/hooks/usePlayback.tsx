@@ -1,6 +1,7 @@
 'use client'
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PlaybackClock } from '@/utils/ui/playbackClock';
+import type { Point } from '@/utils/ui/isometric';
 
 // One frame loop for everything a playback moves (docs/isometric-animations.md
 // §4.1–§4.3): a board mounts a `PlaybackProvider` round what it draws, and
@@ -20,7 +21,7 @@ const NOT_PLAYING = Number.POSITIVE_INFINITY;
  * gets to its end, when it draws that once more and says so.
  */
 class PlaybackLoop {
-    readonly clock: PlaybackClock;
+    private readonly clock: PlaybackClock;
     private readonly draws = new Set<(ms: number) => void>();
     private frame = 0;
     private told = false;
@@ -99,9 +100,8 @@ export function PlaybackProvider({ playKey, end, held, onEnd, children }: Playba
 /**
  * Calls `draw` with the playback's time every frame it runs, and once as it
  * mounts and on every render, so it is drawn right before the first paint and
- * while held. `draw` sets attributes on its own elements through refs — never
- * ones React also renders as props, which a render would put back. Outside a
- * playback it is never called.
+ * while held. `draw` sets attributes on its own elements through refs
+ * (`usePlaybackRef`, `setAttributes`). Outside a playback it is never called.
  */
 export function usePlaybackFrame(draw: (ms: number) => void): void {
     const loop = useContext(PlaybackContext);
@@ -126,4 +126,38 @@ export function usePlaybackValue<T>(read: (ms: number) => T): T {
         setValue(current => Object.is(current, next) ? current : next);
     });
     return loop ? value : read(NOT_PLAYING);
+}
+
+/**
+ * A ref to an element the playback moves, and the way it is drawn: `draw` is
+ * called with the element and the playback's time as `usePlaybackFrame` does,
+ * and not at all while the ref is null. It sets the element's attributes
+ * (`setAttributes`) — and never ones React also renders as props, which a
+ * render would put back — so an element is either drawn this way or given its
+ * attributes as props, not both.
+ */
+export function usePlaybackRef<E extends Element>(draw: (element: E, ms: number) => void): React.RefObject<E | null> {
+    const ref = useRef<E>(null);
+    usePlaybackFrame(ms => {
+        if (ref.current) draw(ref.current, ms);
+    });
+    return ref;
+}
+
+/** Sets the attributes of an element a frame draws, or takes one off for null; a number is written as its text. */
+export function setAttributes(element: Element, attributes: Record<string, string | number | null>): void {
+    for (const [name, value] of Object.entries(attributes)) {
+        if (value === null) element.removeAttribute(name);
+        else element.setAttribute(name, String(value));
+    }
+}
+
+/** A `translate` by the point's `x` and `y` board units, or null for none: what a frame sets a moving group's `transform` to. */
+export function translation({ x, y }: Point): string | null {
+    return x === 0 && y === 0 ? null : `translate(${x} ${y})`;
+}
+
+/** A `scale` about the point (`x`, `y`) rather than about the origin, as a transform. */
+export function scaleAbout(x: number, y: number, scale: number): string {
+    return `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})`;
 }

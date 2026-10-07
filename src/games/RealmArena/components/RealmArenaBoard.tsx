@@ -12,7 +12,7 @@ import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
-import { PlaybackProvider, usePlaybackFrame, usePlaybackValue } from '@/utils/hooks/usePlayback';
+import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
@@ -315,21 +315,24 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
     const groundRing = (className: string, radius: number) => (
         <ellipse className={className} cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH * radius} ry={ISO_HALF_HEIGHT * radius} />
     );
+    const body = (
+        <>
+            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
+                <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
+                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
+            </g>
+            {item && (
+                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
+            )}
+        </>
+    );
     return (
         <>
             {!ghost && <ellipse className="ag-ra-shadow" cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH / 2} ry={ISO_HALF_HEIGHT / 2} />}
             {marker && groundRing(`ag-ra-marker ag-ra-marker--${marker}`, MARKER_RADIUS)}
             {ring && groundRing(`ag-ra-ring ag-ra-ring--${ring}`, RING_RADIUS)}
             {/* `spriteBox` places a sprite from its square's back corner, half a diamond above the middle. */}
-            <g ref={moving}>
-                <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
-                    <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
-                    {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
-                </g>
-                {item && (
-                    <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
-                )}
-            </g>
+            {moving ? <g ref={moving}>{body}</g> : body}
             {/* The art is a whole cell, mostly see-through: only the body is tapped, so a tap above a figure reaches the square or the figure behind it. */}
             <circle className="ag-ra-figure-hit" cx={x} cy={y} r={FIGURE_RADIUS} />
         </>
@@ -349,16 +352,18 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
  */
 function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
-    const fill = useRef<SVGRectElement>(null);
-    const chip = useRef<SVGRectElement>(null);
-    usePlaybackFrame(ms => {
+    // The fill and the chip each read `toldAt` for themselves: cheap, and it
+    // keeps each draw to its own element.
+    const fill = usePlaybackRef<SVGRectElement>((rect, ms) => {
+        if (!told) return;
+        setAttributes(rect, { width: HP_BAR_WIDTH * hpFraction(toldAt(told, fighter, ms).drawn) });
+    });
+    const chip = usePlaybackRef<SVGRectElement>((rect, ms) => {
         if (!told) return;
         const { drawn, chip: level } = toldAt(told, fighter, ms);
         const width = HP_BAR_WIDTH * hpFraction(drawn);
         const lagging = level === undefined ? 0 : HP_BAR_WIDTH * hpFraction(drawn, drawn.hp - level) - width;
-        writeAttribute(fill.current, 'width', width);
-        writeAttribute(chip.current, 'x', corner.x + width);
-        writeAttribute(chip.current, 'width', Math.max(0, lagging));
+        setAttributes(rect, { x: corner.x + width, width: Math.max(0, lagging) });
     });
     return (
         <>
@@ -393,45 +398,36 @@ function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; 
 }
 
 /**
- * Sets an attribute of an element the playback moves, or takes it off for
- * null: how a frame is drawn, straight into the SVG, with no render. An
- * element is only ever written this way or given as a prop, never both, since
- * a render would put the prop back.
- */
-function writeAttribute(element: Element | null, name: string, value: string | number | null) {
-    if (value === null) element?.removeAttribute(name);
-    else element?.setAttribute(name, String(value));
-}
-
-/** A `translate` by `x` and `y` board units, or null for none: what a frame sets a moving group's `transform` to. */
-const translation = ({ x, y }: Point) => x === 0 && y === 0 ? null : `translate(${x} ${y})`;
-
-/**
  * A group for a figure to stand in (`Figure`'s `moving`), knocked or lunging
  * by `shoves` (`shoveAt`) a frame at a time as the playback runs: the ref to
  * hand it.
  */
 function useShoved(view: IsoView, shoves: readonly Shove[]): React.RefObject<SVGGElement | null> {
-    const group = useRef<SVGGElement>(null);
-    usePlaybackFrame(ms => writeAttribute(group.current, 'transform', translation(shoveAt(shoves, ms, square => isoCentre(view, square)))));
-    return group;
+    return usePlaybackRef<SVGGElement>((group, ms) => {
+        setAttributes(group, { transform: translation(shoveAt(shoves, ms, square => isoCentre(view, square))) });
+    });
 }
 
 /**
- * What the action being played takes off the board (§26.1) — a character it
- * downed, cover it blasted — there as it was until its cue starts, then
- * fading out over the cue, easing in, and gone (`fadeOutAt`). Faded a frame at
- * a time on the playback's clock, by the `opacity` and `visibility` attributes
- * rather than by keyframes: a keyframed fade here, in the middle of the
- * board's depth order, would have the browser lift it and everything drawn in
- * front of it into layers of their own for as long as the playback lasts —
- * which a phone pays for in flashes and stutter.
+ * Something that comes or goes during the action being played (§26.1), faded a
+ * frame at a time on the playback's clock: `frame` says how much of it is there
+ * `ms` in — an opacity, or null while it isn't drawn at all — and it is hidden
+ * for null or an opacity of nothing, and drawn at that opacity otherwise. By
+ * default it goes: a character the action downed, cover it blasted, there as it
+ * was until its cue starts, then easing out and gone (`fadeOutAt`). Given
+ * `fadeInAt` it comes: a downed character lying where it fell, unseen until its
+ * blow lands and then easing in quicker at first, so it and the standing figure
+ * it replaces never leave a gap to see through. Set as the `opacity` and
+ * `visibility` attributes rather than by keyframes: a keyframed fade here, in
+ * the middle of the board's depth order, would have the browser lift it and
+ * everything drawn in front of it into layers of their own for as long as the
+ * playback lasts — which a phone pays for in flashes and stutter.
  */
-function Fading({ cue, className, children }: { cue: Timed; className: string; children: React.ReactNode }) {
-    const group = useRef<SVGGElement>(null);
-    usePlaybackFrame(ms => {
-        writeAttribute(group.current, 'opacity', fadeOutAt(cue, ms));
-        writeAttribute(group.current, 'visibility', progressOf(cue, ms) >= 1 ? 'hidden' : null);
+function CueFade({ cue, frame = fadeOutAt, className, children }: { cue: Timed; frame?: (cue: Timed, ms: number) => number | null; className?: string; children: React.ReactNode }) {
+    const group = usePlaybackRef<SVGGElement>((element, ms) => {
+        const opacity = frame(cue, ms);
+        const shown = opacity !== null && opacity > 0;
+        setAttributes(element, { visibility: shown ? null : 'hidden', opacity: shown && opacity < 1 ? opacity : null });
     });
     return <g ref={group} className={className}>{children}</g>;
 }
@@ -447,11 +443,27 @@ function Falling({ artId, view, cue, shoves, facing, tintFor, colourFor }: { art
     const { x, y } = isoCentre(view, fighter.square);
     const moving = useShoved(view, shoves);
     return (
-        <Fading cue={cue} className="ag-ra-falling">
+        <CueFade cue={cue} className="ag-ra-falling">
             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} moving={moving} ghost />
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
-        </Fading>
+        </CueFade>
     );
+}
+
+/** Where a walker is `ms` in, and the square of its path it is nearest (`walkerAt`): one reading of it a frame, shared by every slot of its path (`onePerFrame`). */
+type Walker = (ms: number) => ReturnType<typeof walkerAt>;
+
+/** `read`, remembering its last answer: asked again for the same time, it gives that back rather than working it out again. */
+function onePerFrame<T>(read: (ms: number) => T): (ms: number) => T {
+    let at = Number.NaN;
+    let last: T;
+    return ms => {
+        if (ms !== at) {
+            last = read(ms);
+            at = ms;
+        }
+        return last;
+    };
 }
 
 /**
@@ -473,28 +485,31 @@ function Falling({ artId, view, cue, shoves, facing, tintFor, colourFor }: { art
  * (`usePlaybackValue`), so only the two slots it passes between render, and no
  * ref is read to find where to draw.
  */
-function WalkerSlot({ artId, view, field, walks, slot, legLength, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; slot: number; legLength: (from: Square, to: Square) => number; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function WalkerSlot({ artId, view, field, fighter, walker, slot, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; slot: number; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const leg = usePlaybackValue(ms => {
-        const now = walkerAt(walks, ms, legLength);
+        const now = walker(ms);
         return now && now.at === slot ? `${now.from}>${now.to}` : null;
     });
     if (leg === null) return null;
     const [from, to] = leg.split('>').map(Number);
-    return <WalkingFigure artId={artId} view={view} field={field} walks={walks} from={from} to={to} legLength={legLength} tintFor={tintFor} colourFor={colourFor} />;
+    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} tintFor={tintFor} colourFor={colourFor} />;
 }
 
 /** A walker on one leg, from `from` to `to`: slid and lifted a frame at a time (`WalkerSlot`). */
-function WalkingFigure({ artId, view, field, walks, from, to, legLength, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; from: Square; to: Square; legLength: (from: Square, to: Square) => number; tintFor: TintFor; colourFor: (owner: string) => string }) {
-    const { fighter } = walks[0];
+function WalkingFigure({ artId, view, field, fighter, walker, from, to, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const feet = isoCentre(view, from), next = isoCentre(view, to);
-    const slide = useRef<SVGGElement>(null);
-    const lift = useRef<SVGGElement>(null);
-    usePlaybackFrame(ms => {
-        const now = walkerAt(walks, ms, legLength);
-        // A frame in which the walker has moved on to its next leg, before this slot has been rendered over: stay as it was.
-        if (!now || now.from !== from || now.to !== to) return;
-        writeAttribute(slide.current, 'transform', translation({ x: (next.x - feet.x) * now.across, y: (next.y - feet.y) * now.across }));
-        writeAttribute(lift.current, 'transform', translation({ x: 0, y: walkLift(now, square => view.heights[square]) }));
+    // A frame in which the walker has moved on to its next leg, before this slot has been rendered over: stay as it was.
+    const onThisLeg = (ms: number) => {
+        const now = walker(ms);
+        return now && now.from === from && now.to === to ? now : null;
+    };
+    const slide = usePlaybackRef<SVGGElement>((group, ms) => {
+        const now = onThisLeg(ms);
+        if (now) setAttributes(group, { transform: translation({ x: (next.x - feet.x) * now.across, y: (next.y - feet.y) * now.across }) });
+    });
+    const lift = usePlaybackRef<SVGGElement>((group, ms) => {
+        const now = onThisLeg(ms);
+        if (now) setAttributes(group, { transform: translation({ x: 0, y: walkLift(now, square => view.heights[square]) }) });
     });
     return (
         <g ref={slide} className="ag-ra-walker">
@@ -508,23 +523,6 @@ function WalkingFigure({ artId, view, field, walks, from, to, legLength, tintFor
 function Arriving({ at, children }: { at: number; children: React.ReactNode }) {
     const arrived = usePlaybackValue(ms => ms >= at);
     return <g visibility={arrived ? undefined : 'hidden'}>{children}</g>;
-}
-
-/**
- * A character the action being played downed, lying where it fell: unseen until
- * its blow lands (`cue.start`), then faded in over the cue as the standing
- * figure over it (`Falling`) fades out — quicker at first (`fadeInAt`), so the
- * two together never leave a gap to see through. Faded a frame at a time, like
- * `Fading`, and for the same reason.
- */
-function Appearing({ cue, children }: { cue: Timed; children: React.ReactNode }) {
-    const group = useRef<SVGGElement>(null);
-    usePlaybackFrame(ms => {
-        const shown = fadeInAt(cue, ms);
-        writeAttribute(group.current, 'visibility', shown === null ? 'hidden' : null);
-        writeAttribute(group.current, 'opacity', shown === null || shown >= 1 ? null : shown);
-    });
-    return <g ref={group}>{children}</g>;
 }
 
 /** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
@@ -705,8 +703,8 @@ function ToldFighterNode({ told, ...props }: FighterNodeProps & { told: Told }) 
 function ShakeClock({ cues, board, fx }: { cues: readonly BattleCue[]; board: React.RefObject<SVGGElement | null>; fx: React.RefObject<SVGGElement | null> }) {
     usePlaybackFrame(ms => {
         const transform = translation(shakeAt(cues, ms));
-        writeAttribute(board.current, 'transform', transform);
-        writeAttribute(fx.current, 'transform', transform);
+        if (board.current) setAttributes(board.current, { transform });
+        if (fx.current) setAttributes(fx.current, { transform });
     });
     useLayoutEffect(() => {
         const groups = [board.current, fx.current];
@@ -757,9 +755,9 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
         return {
             depth: block.depth,
             node: (
-                <Fading key={`blast-${playback.key}-${square}`} cue={cue} className="ag-ra-blasting">
+                <CueFade key={`blast-${playback.key}-${square}`} cue={cue} className="ag-ra-blasting">
                     <RaisedSquare id={artId} block={block} shades={[]} />
-                </Fading>
+                </CueFade>
             ),
         };
     });
@@ -840,7 +838,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * second SVG stacked over the board's (`.ag-ra-fx-layer`), where nothing can be
  * tapped. What is hidden by walls stays in the board, in its depth order: anyone
  * the action downed stands where it fell until the blow lands, then fades
- * (`Falling`); cover it blasted away fades (`Fading`). A move walks: the
+ * (`Falling`); cover it blasted away fades (`CueFade`). A move walks: the
  * character is drawn along the path it was told, turned to face each step, in
  * the depth slot of the square it is nearest (`WalkerSlot`), while its resting
  * figure waits out the walk (`Arriving`) — and, with reduced motion, is simply
@@ -1032,10 +1030,14 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // depth, and draws in the one it is nearest (`WalkerSlot`), so it is hidden
     // by exactly what stands in front of the square it is crossing.
     const legLength = legLengthOn(view);
-    walking.forEach((walks, id) => walkSquares(walks).forEach((square, slot) => items.push({
-        depth: isoDepth(view, square) + 0.6,
-        node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} walks={walks} slot={slot} legLength={legLength} tintFor={tintFor} colourFor={colourFor} />,
-    })));
+    // Every slot of a walker asks where it is each frame, so it is worked out once a frame, not once a slot.
+    walking.forEach((walks, id) => {
+        const walker = onePerFrame(ms => walkerAt(walks, ms, legLength));
+        walkSquares(walks).forEach((square, slot) => items.push({
+            depth: isoDepth(view, square) + 0.6,
+            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} slot={slot} tintFor={tintFor} colourFor={colourFor} />,
+        }));
+    });
     // Anyone the action downs lies unseen until its blow lands, so its fallen
     // figure never shows round the standing one (`Falling`) before the shot flies.
     const falls = new Map<number, FallCue>();
@@ -1063,7 +1065,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const fall = falls.get(fighter.id);
         const appears = Math.max(arrives ?? 0, fall?.start ?? 0);
         let shown = node;
-        if (fall && !still) shown = <Appearing key={`rise-${fighter.id}-${playback?.key}`} cue={{ start: appears, length: fall.length }}>{node}</Appearing>;
+        if (fall && !still) shown = <CueFade key={`rise-${fighter.id}-${playback?.key}`} cue={{ start: appears, length: fall.length }} frame={fadeInAt}>{node}</CueFade>;
         else if (fall || arrives !== undefined) shown = <Arriving key={`${fighter.id}-${playback?.key}`} at={appears}>{node}</Arriving>;
         items.push({
             // Anyone standing over a body is drawn on top of it.

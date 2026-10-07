@@ -16,7 +16,6 @@ describe("PlaybackClock", () => {
         const { clock, pass } = wound(500);
         pass(200);
         expect(clock.ms).toBe(0);
-        expect(clock.running).toBe(false);
         clock.resume();
         pass(200);
         expect(clock.ms).toBe(200);
