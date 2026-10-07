@@ -1,5 +1,5 @@
 'use client'
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import BoardZoom, { useBoardCentre, type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
@@ -722,12 +722,16 @@ function ShakeClock({ cues, board, fx }: { cues: readonly BattleCue[]; board: Re
  * the middle of the frame as it goes, on the playback's own clock, from where
  * the view framed the walk's start to where it ends. It moves the view by
  * `BoardZoom`'s `useBoardCentre`, which gives way the moment the player grabs
- * the board, so a player who pans or pinches stops it. It draws nothing, and
- * is keyed by its playback.
+ * the board, so a player who pans or pinches stops it, and lets go of the
+ * view once the walk is over. It draws nothing, and is keyed by its playback.
  */
 function WalkCamera({ view, walks }: { view: IsoView; walks: readonly WalkCue[] }) {
     const centre = useBoardCentre();
-    usePlaybackFrame(ms => centre?.(walkerGroundAt(walks, view, ms)));
+    const end = endOf(walks);
+    // Let go once the walk is over, so the board is scrolled where the walk left it —
+    // and on going away, should a new playback or a hold come first, while the board stays.
+    usePlaybackFrame(ms => centre?.(ms < end ? walkerGroundAt(walks, view, ms) : null));
+    useEffect(() => () => centre?.(null), [centre]);
     return null;
 }
 
@@ -1047,8 +1051,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     const tracked = follow && !('aim' in follow) && follow.track && playback && !held ? walking.values().next().value : undefined;
     const arrival = (fighterId: number): number | undefined => {
         const walks = walking.get(fighterId);
-        const last = walks?.[walks.length - 1];
-        return last && last.start + last.length;
+        return walks && endOf(walks);
     };
     // A walker has a depth slot for every square of its path, at that square's
     // depth, and draws in the one it is nearest (`WalkerSlot`), so it is hidden

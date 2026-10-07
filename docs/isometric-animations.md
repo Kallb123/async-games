@@ -70,7 +70,12 @@ draws it.
    `track`) is framed where it starts, and `WalkCamera` keeps the walker in
    the middle of the frame from there, a frame at a time on the same clock
    (`walkerGroundAt`, `useBoardCentre`), until the player takes hold of the
-   board.
+   board. It moves the board as a glide does, by a sub-pixel transform on a
+   layer of its own, and hands it back to the pane's scroll once the walk is
+   over: scrolling the pane a frame at a time moved it in whole pixels, and
+   the walker juddered against it. The loop reads each frame's time from
+   `requestAnimationFrame`, not from when its tick happens to run, so
+   everything steps by exactly a frame's worth.
 3. **One way of moving.** Everything that moves reads that clock: each piece
    calls `usePlaybackRef` (or `usePlaybackFrame`) and sets its own SVG attributes (`transform`,
    `opacity`, `visibility`, a bar's `width`) through a ref, a frame at a time,

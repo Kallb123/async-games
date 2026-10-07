@@ -25,9 +25,16 @@ class PlaybackLoop {
     private readonly draws = new Set<(ms: number) => void>();
     private frame = 0;
     private told = false;
+    /**
+     * The time of the frame being drawn, as `requestAnimationFrame` hands it
+     * over, while the loop runs: read rather than the moment each tick happens
+     * to run, which wanders with whatever else the frame is doing, so a walker
+     * and a camera following it step by exactly a frame's worth each frame.
+     */
+    private frameTime: number | null = null;
 
     constructor(end: number) {
-        this.clock = new PlaybackClock(end);
+        this.clock = new PlaybackClock(end, () => this.frameTime ?? performance.now());
     }
 
     ms(): number {
@@ -39,10 +46,15 @@ class PlaybackLoop {
         return () => this.draws.delete(draw);
     }
 
-    /** Runs the clock from where it stands, and `ended` once it's over — once only, however often it is stopped and started. */
+    /**
+     * Runs the clock from where it stands, from the first frame on — resumed at
+     * that frame's time, so it never reads a frame from before it resumed — and
+     * `ended` once it's over: once only, however often it is stopped and started.
+     */
     start(ended: () => void): void {
-        this.clock.resume();
-        const tick = () => {
+        const tick = (time: number) => {
+            this.frameTime = time;
+            this.clock.resume();
             const ms = this.clock.ms;
             this.draws.forEach(draw => draw(ms));
             if (!this.clock.ended) {
@@ -61,6 +73,7 @@ class PlaybackLoop {
     stop(): void {
         cancelAnimationFrame(this.frame);
         this.clock.pause();
+        this.frameTime = null;
     }
 }
 

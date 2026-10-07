@@ -242,11 +242,22 @@ function focusCentre(rect: Rect, viewBox: { width: number; height: number }): { 
 }
 
 /**
- * What a board calls to keep a point in the middle of the pane. It is the same
- * function for the life of the `BoardZoom` that provides it, so a board's clock
- * can hold it without resubscribing.
+ * What a board calls to keep a point in the middle of the pane, or null once
+ * it has stopped following anything. It is the same function for the life of
+ * the `BoardZoom` that provides it, so a board's clock can hold it without
+ * resubscribing.
  */
-type BoardCentre = (point: { x: number; y: number }) => void;
+type BoardCentre = (point: { x: number; y: number } | null) => void;
+
+/**
+ * The board following a point a frame at a time (`useBoardCentre`). Like a
+ * glide, it is drawn as a transform over the pane unscrolled — sub-pixel, and
+ * on a layer of its own, so a frame moves what's already drawn rather than
+ * scrolling the pane a whole pixel at a time and repainting it — and handed back
+ * to the pane's scroll once it lets go. `content` is the board's laid-out size
+ * as it lifted off, which the transform mustn't be measured into.
+ */
+type Track = Pick<ZoomView, 'content' | 'scroll'>;
 
 const BoardCentreContext = createContext<BoardCentre | null>(null);
 
@@ -255,8 +266,9 @@ const BoardCentreContext = createContext<BoardCentre | null>(null);
  * board keeping something moving in the middle of the frame — Realm Arena
  * following a walker across the board — calls the function this returns each
  * frame, from its own clock, with the point (in the child SVG's viewBox units)
- * that should be there. The pane is scrolled to it at once, at the zoom it is
- * already at; nothing here runs a loop of its own. It does nothing while a
+ * that should be there, and with null once it's done. The board is moved to it
+ * at once, at the zoom it is already at (`Track`); nothing here runs a loop of
+ * its own. It does nothing while a
  * focus glide is still on its way, during a pinch, or once the player has taken
  * hold of the board — a touch, a wheel or the zoom pill — since the focus
  * began: a player who grabs the board mid-walk keeps it, until the next focus.
@@ -375,6 +387,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     const pinchRef = useRef<Pinch | null>(null);
     const focusTargetRef = useRef<FocusTarget | null>(null);
     const glideRef = useRef<Glide | null>(null);
+    const trackRef = useRef<Track | null>(null);
     // Whether the player has touched, wheeled or stepped the board since the
     // latest focus began, which stops `useBoardCentre` until the next one.
     const takenRef = useRef(false);
@@ -449,22 +462,40 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         return () => observer.disconnect();
     }, []);
 
+    // A follow lands where it got to, the pane scrolled there.
+    const landTrack = useCallback(() => {
+        const pane = paneRef.current, content = contentRef.current, track = trackRef.current;
+        trackRef.current = null;
+        if (pane && content && track) landAt(pane, content, track.scroll);
+    }, []);
+    // Whatever else moves the view first ends a glide where it was heading, and
+    // a follow where it got to, so it starts from a board as it's laid out.
+    const letGo = useCallback(() => {
+        glideRef.current?.settle();
+        landTrack();
+    }, [landTrack]);
     // Keeping a point in the middle is only for a view that is nobody's but the
     // board's: no glide on its way (nor one about to start, its zoom still
     // laying out), no pinch, and no player's hand on it. One function for the
     // component's life, so a board's clock holds it without resubscribing.
-    const centre = useCallback((point: { x: number; y: number }) => {
+    const centre = useCallback<BoardCentre>(point => {
         const pane = paneRef.current;
+        const content = contentRef.current;
         const size = viewBoxRef.current;
-        if (!pane || !size || takenRef.current || pinchRef.current || focusTargetRef.current) return;
+        if (!point) { landTrack(); return; }
+        if (!pane || !content || !size || takenRef.current || pinchRef.current || focusTargetRef.current) return;
         if (glideRef.current && !glideRef.current.settled()) return;
-        const to = centredScroll(point, size, { x: pane.scrollWidth, y: pane.scrollHeight }, { x: pane.clientWidth, y: pane.clientHeight });
-        pane.scrollLeft = to.x;
-        pane.scrollTop = to.y;
-    }, []);
+        // Measured before it lifts off: a transform can count towards what the pane scrolls over.
+        const lifted = trackRef.current?.content;
+        const board = lifted ?? { x: pane.scrollWidth, y: pane.scrollHeight };
+        const scroll = centredScroll(point, size, board, { x: pane.clientWidth, y: pane.clientHeight });
+        trackRef.current = { content: board, scroll };
+        if (lifted) drawAt(content, { x: -scroll.x, y: -scroll.y }, 1);
+        else liftOff(pane, content, { x: -scroll.x, y: -scroll.y });
+    }, [landTrack]);
 
     // A glide still in flight as the board goes away has nothing left to draw on.
-    useEffect(() => () => glideRef.current?.settle(), []);
+    useEffect(() => () => letGo(), [letGo]);
 
     // The auto-focus itself: pick the deepest zoom step the region still fits
     // at (or, for an `exact` focus, the zoom that just fits it), then glide
@@ -477,7 +508,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const pane = paneRef.current;
         const content = contentRef.current;
         if (!pane || !content || !focus || !viewBox) return;
-        glideRef.current?.settle();
+        letGo();
         takenRef.current = false;
         const level = focus.exact
             ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max)
@@ -511,7 +542,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const pane = paneRef.current;
         const content = contentRef.current;
         if (!pane || !content || !pivot || !viewBox) return;
-        glideRef.current?.settle();
+        letGo();
         // Read as it's drawn: mid-pinch, the pane sits unscrolled under the transform.
         const view = currentView(pane, zoomRef.current, pinchRef.current);
         pinchRef.current = null;
@@ -533,7 +564,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const pane = paneRef.current;
         if (!pane) { setZoom(next); return; }
         takenRef.current = true;
-        glideRef.current?.settle();
+        letGo();
         // A live focus is what the player is looking at right now — the pill
         // should zoom in on that, not on wherever they last panned to. Instant
         // rather than the auto-focus's smooth scroll: this jump is the one the
@@ -556,7 +587,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             // A finger on the board ends a glide where it was heading, so a
             // pan or a pinch starts from the board as it's laid out.
             takenRef.current = true;
-            glideRef.current?.settle();
+            letGo();
             if (event.touches.length !== 2 || pinchRef.current) return;
             const start = midpoint(event.touches, pane);
             const scroll = { x: pane.scrollLeft, y: pane.scrollTop };
@@ -623,7 +654,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         // lesser evil next to the board jumping a level per notch.
         const onWheel = (event: WheelEvent) => {
             takenRef.current = true;
-            glideRef.current?.settle();
+            letGo();
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
             if (pinchRef.current) return;
@@ -644,7 +675,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             pane.removeEventListener('touchcancel', endPinch);
             pane.removeEventListener('wheel', onWheel);
         };
-    }, [levels.length, max]);
+    }, [levels.length, max, letGo]);
 
     return (
         <>
