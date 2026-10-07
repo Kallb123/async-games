@@ -34,6 +34,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
+import { usePrefersReducedMotion } from "@/utils/hooks/usePrefersReducedMotion";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useScrollIntoViewOnOpen } from "@/utils/hooks/useScrollIntoViewOnOpen";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
@@ -81,6 +82,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     };
     const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
+    // With reduced motion the board draws no walk and no flight, so neither
+    // takes any time in what it plays, nor in how long a review rests on it.
+    const still = usePrefersReducedMotion();
+
     // Planning is out by design (§17.3 PR 8): every attack worth planning
     // needs a roll, and the turn sheet already shows the odds of one before
     // it's sent. So the review steps back through the match, and no further.
@@ -93,7 +98,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     }, {
         // Play rests on a step for as long as the board takes to play it,
         // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters) : STEP_MIN_MS,
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -107,8 +112,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepOutcome = nav.displayedOutcome;
     const stepFighters = nav.displayedState?.fighters;
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters) : [],
-        [nav.isLive, previous, stepOutcome, stepFighters],
+        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        [nav.isLive, previous, stepOutcome, stepFighters, still],
     );
     const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
@@ -221,7 +226,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [own, setOwn] = useState<{ playback: Playback; follow: FollowTo | null } | null>(null);
     const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
-        const cues = battleCues(events, fighters, after);
+        const cues = battleCues(events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
         const frame = moveFrame(events, fighters, after);
         const touches = frame ? [] : actionSquares(fighters, after);
