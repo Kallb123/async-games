@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -44,6 +44,9 @@ import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { capitalise } from "@/utils/ui/text";
+
+/** Where the board is told to look: a target's aim, or a set of squares. */
+type FollowTo = NonNullable<ComponentProps<typeof RealmArenaBoard>["follow"]>;
 
 /**
  * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5): the
@@ -209,16 +212,29 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // Gone once it has had its time — and the time the board may hold it while
     // the view glides to it — whether or not the board was showing it, so
     // coming back from a review doesn't play it again.
-    const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
+    // The view stays on the action itself while it plays — the target the
+    // player picked, the stretch a move covered, or whatever it touched —
+    // rather than going where the selection or the board's resting view would
+    // next take it, so a shot isn't played from further out than it was aimed
+    // and a long walk doesn't start off the frame. That is worked out as the
+    // action is sent, and goes when the playback does.
+    const [own, setOwn] = useState<{ playback: Playback; follow: FollowTo | null } | null>(null);
+    const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(events, fighters, after);
-        setOwnPlayback(cues.length > 0 ? { key, cues, field, before: fighters } : null);
+        if (cues.length === 0) return setOwn(null);
+        const frame = moveFrame(events, fighters, after);
+        const touches = frame ? [] : actionSquares(fighters, after);
+        const to: FollowTo | null = picked ?? (frame ? { squares: frame, key: `play:${key}`, exact: true }
+            : touches.length > 0 && !spreadWide(field, touches) ? { squares: touches, key: `play:${key}` }
+            : null);
+        setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
     };
     useEffect(() => {
-        if (!ownPlayback) return;
-        const played = setTimeout(() => setOwnPlayback(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
+        if (!own) return;
+        const played = setTimeout(() => setOwn(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
         return () => clearTimeout(played);
-    }, [ownPlayback]);
+    }, [own]);
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
@@ -257,7 +273,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // What the undone action did is no longer what happened, so its results go too.
     const undo = () => submitCommand(new RealmArenaUndo(), () => {
         setLastEvents([]);
-        setOwnPlayback(null);
+        setOwn(null);
     }, 'undo');
     // A tap on a character aims the action lined up, when it can; otherwise it selects.
     const tapFighter = (id: number) => {
@@ -286,8 +302,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // battlefield (`spreadWide`), the view goes to the viewer's own side
     // instead, just fit, rather than out to the whole board; a move is always
     // kept, since it's known. Live, it goes to a target picked from the turn
-    // sheet's list instead. Each part is its own key, so the view glides
-    // again for each.
+    // sheet's list instead, and while the viewer's own action plays, to that.
+    // Each part is its own key, so the view glides again for each.
     const friendly = friendlySquares(fighters, myUserId, coop);
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
     const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
@@ -300,7 +316,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             : followed && touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key: stepKey }
             : friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true }
             : null
-        : picked;
+        : own?.follow ?? picked;
     // A followed step the board can't point to — something happened out of
     // sight, which cost the viewer something they were told of — says so with
     // a "?" over the board for as long as it is shown, while the view rests on
