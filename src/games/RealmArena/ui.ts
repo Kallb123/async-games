@@ -5,14 +5,14 @@
 import type { Rect } from "@/utils/ui/mapLabels";
 import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
-import { capitalise, pluralize, possessive } from "@/utils/ui/text";
+import { andList, capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -490,72 +490,132 @@ export function whoseName(fighters: readonly Fighter[], id: number, viewerId: st
     return fighter.owner === viewerId ? `your ${name}` : `${possessive(nameFor(fighter.owner))} ${name}`;
 }
 
+/** How a line is led: by a glyph, or by the drawn mark of the effect or item it's about. */
+type LineLead = { icon: string; mark?: never } | { mark: Sprite; icon?: never };
+
 /**
  * One line of what an action did, as the board shows it coming back, led by a
  * glyph or by the drawn mark of the effect or item it's about. A shot carries
  * the roll it was decided by.
+ *
+ * The results panel reads it as a `title` over a `sub`; the board's caption
+ * reads the same line as one `sentence`, which has to stand on its own with
+ * nothing beside it ("Alice's Archer hit your Knight for 3"). `event` is the
+ * index of the event it tells, which is how a caption cue (`CaptionCue`) finds
+ * its words.
  */
 export type EventLine = {
     title: string;
     sub?: string;
-    /** The 1–100 roll a shot was decided by. */
+    /** The 1–100 roll a shot was decided by: absent from an event a review told without it. */
     roll?: number;
-} & ({ icon: string; mark?: never } | { mark: Sprite; icon?: never });
+    /** The whole line as a sentence of its own: capitalised, with no full stop. */
+    sentence: string;
+    /** The index, in the events it was made from, of the event it tells. */
+    event: number;
+} & LineLead;
+
+/** A line before it is given the event it tells; with no `sentence` of its own, its title says it. */
+type LineDraft = { title: string; sub?: string; roll?: number; sentence?: string } & LineLead;
+
+/** Who a blow or a landing caught, as a run of prose: "nobody", "your Knight and Bob's Archer". */
+const caught = (names: readonly string[]) => names.length === 0 ? "nobody" : andList(names);
+
+/**
+ * The index of the first move among `events`. A move broken up by the
+ * reactions it set off is told once, at its first segment, in the lines
+ * (`eventLines`) and the captions (`battleCues`) alike.
+ */
+function firstMoveOf(events: readonly ToldEvent[]): number {
+    return events.findIndex(event => event.kind === "moved");
+}
 
 /**
  * What an action did, in order, in the viewer's words (§17.3 PR 7). A move
  * broken up by the reactions it set off is told once. `fighters` names
  * everyone the viewer can see after the action, which without fog of war is
  * everyone it touched; in fog (§27), one that shot from out of sight is "a
- * character out of sight" (`whoseName`).
+ * character out of sight" (`whoseName`). Takes a review's events, which come
+ * without a shot's roll, as well as an action's own.
  */
-export function eventLines(events: readonly BattleEvent[], fighters: readonly Fighter[], viewerId: string, nameFor: (userId: string) => string): EventLine[] {
+export function eventLines(events: readonly ToldEvent[], fighters: readonly Fighter[], viewerId: string, nameFor: (userId: string) => string): EventLine[] {
     const name = (id: number) => whoseName(fighters, id, viewerId, nameFor);
     const Name = (id: number) => capitalise(name(id));
-    const firstMove = events.findIndex(event => event.kind === "moved");
-    return events.flatMap((event, index): EventLine[] => {
+    /** Whose a thing is, led by the owner's name: "Alice's Mage's". */
+    const Owner = (id: number) => possessive(Name(id));
+    const firstMove = firstMoveOf(events);
+    const draft = (event: ToldEvent, index: number): LineDraft[] => {
         switch (event.kind) {
             case "moved":
                 return index === firstMove ? [{ icon: "👣", title: `${Name(event.fighter)} ${event.sneaking ? "sneaked" : "moved"}` }] : [];
             case "shot": {
                 const title = event.result === "miss" ? "Miss" : `${event.result === "hit" ? "Hit" : "Graze"} for ${event.damage}`;
-                const who = `${Name(event.fighter)}${event.reaction ? " on overwatch" : ""} at ${name(event.target)}`;
-                return [{ icon: "🎯", title, sub: `${who} · ${event.chance}% to hit`, roll: event.roll }];
+                const who = `${Name(event.fighter)}${event.reaction ? " on overwatch" : ""}`;
+                const verb = event.result === "miss" ? "missed" : event.result === "hit" ? "hit" : "grazed";
+                return [{
+                    icon: "🎯",
+                    title,
+                    sub: `${who} at ${name(event.target)} · ${event.chance}% to hit`,
+                    ...("roll" in event && typeof event.roll === "number" ? { roll: event.roll } : {}),
+                    sentence: `${who} ${verb} ${name(event.target)}${event.result === "miss" ? "" : ` for ${event.damage}`}`,
+                }];
             }
-            case "struck":
-                return [{ icon: "⚔️", title: `${Name(event.fighter)} struck ${name(event.target)} for ${event.damage}`, sub: event.reaction ? "On guard" : undefined }];
-            case "fireball":
-                return [{ icon: "🔥", title: `Fireball: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`, sub: `${event.damage} damage each` }];
+            case "struck": {
+                const title = `${Name(event.fighter)} struck ${name(event.target)} for ${event.damage}`;
+                return [{ icon: "⚔️", title, sub: event.reaction ? "On guard" : undefined, sentence: event.reaction ? `${title} on guard` : title }];
+            }
+            case "fireball": {
+                const names = event.targets.map(name);
+                return [{
+                    icon: "🔥",
+                    title: `Fireball: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
+                    sub: `${event.damage} damage each`,
+                    sentence: `${Owner(event.fighter)} fireball hit ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
+                }];
+            }
             case "downed":
                 return [{ icon: "✕", title: `${Name(event.fighter)} is down` }];
-            case "healed":
+            case "healed": {
+                const amount = event.hp > 0 ? ` for ${event.hp}` : "";
+                const title = `${Name(event.target)} ${event.via === "purify" ? "purified" : "healed"}${amount}`;
+                const itself = event.fighter === event.target;
+                const whom = itself ? "itself" : name(event.target);
+                const sentence = event.via === "draught" ? `${Name(event.fighter)} ${itself ? "drank a healing draught" : `gave ${whom} a healing draught`}${amount}`
+                    : `${Name(event.fighter)} ${event.via === "purify" ? "purified" : "healed"} ${whom}${amount}`;
                 return [{
                     ...(event.via === "draught" ? { mark: ITEM_ART.healingDraught, sub: ITEMS.healingDraught.name }
                         : { icon: "✚", ...(event.via === "purify" ? { sub: ABILITIES.purify.name } : {}) }),
-                    title: `${Name(event.target)} ${event.via === "purify" ? "purified" : "healed"}${event.hp > 0 ? ` for ${event.hp}` : ""}`,
+                    title,
+                    sentence,
                 }];
+            }
             case "thrown": {
                 const { name: item } = ITEMS[event.item];
                 if (event.item === "smokePot") return [{ mark: ITEM_ART.smokePot, title: `${Name(event.fighter)} threw a smoke pot` }];
+                const names = event.targets.map(name);
                 return [{
                     mark: ITEM_ART[event.item],
-                    title: `${item}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    title: `${item}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
                     ...(event.damage > 0 ? { sub: `${event.damage} damage each` } : {}),
+                    sentence: `${Owner(event.fighter)} ${item.toLowerCase()} ${event.targets.length > 0 && event.damage === 0 ? "caught" : "hit"} ${caught(names)}${event.targets.length > 0 && event.damage > 0 ? ` for ${event.damage} each` : ""}`,
                 }];
             }
             case "blasted":
                 return [{ icon: "💥", title: `${capitalise(pluralize(event.squares.length, "square"))} of low cover blasted away`, sub: "Open ground now" }];
             case "demolished":
-            case "burst":
+            case "burst": {
+                const names = event.targets.map(name);
                 return [{
                     icon: "💥",
-                    title: `${event.kind === "burst" ? `${Name(event.fighter)} burst` : ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : event.targets.map(name).join(", ")}`,
+                    title: `${event.kind === "burst" ? `${Name(event.fighter)} burst` : ABILITIES.demolish.name}: ${event.targets.length === 0 ? "nobody hit" : names.join(", ")}`,
                     ...(event.targets.length > 0 ? { sub: `${event.damage} damage each` } : {}),
+                    sentence: `${Name(event.fighter)} ${event.kind === "burst" ? "burst" : `used ${ABILITIES.demolish.name}`} and hit ${caught(names)}${event.targets.length > 0 ? ` for ${event.damage} each` : ""}`,
                 }];
+            }
             case "marked":
                 return [{ icon: "◎", title: `${Name(event.fighter)} used ${ABILITIES.huntersMark.name} on ${name(event.target)}` }];
             case "raised":
-                return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP` }];
+                return [{ icon: "✚", title: `${Name(event.target)} is back up at ${event.hp} HP`, sentence: `${Name(event.fighter)} raised ${name(event.target)} to ${event.hp} HP` }];
             case "hunkered":
                 return [{ mark: EFFECT_ART.hunkered, title: `${Name(event.fighter)} hunkered down` }];
             case "shieldWall":
@@ -571,7 +631,8 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
             case "scored":
                 return [{ icon: "★", title: `${event.player === viewerId ? "You" : nameFor(event.player)} scored ${event.points}`, sub: capitalise(SCORED_FOR[event.reason]) }];
         }
-    });
+    };
+    return events.flatMap((event, index) => draft(event, index).map((line): EventLine => ({ ...line, sentence: line.sentence ?? line.title, event: index })));
 }
 
 // ─── Battle visuals (§26) ───────────────────────────────────────────────────
@@ -707,8 +768,22 @@ export interface ScorchCue extends Timed {
     squares: readonly Square[];
 }
 
+/**
+ * What the board's caption says, from the moment the event at `event` starts
+ * to play: an index into the events the cues were built from, whose
+ * `EventLine` has the words. It lasts until the next caption starts, and the
+ * last one until the rest of the playback is over, so a caption never makes a
+ * playback longer (`endOf` is the same with or without them). An event that
+ * drew nothing has none, and neither has a later segment of a broken-up move,
+ * which `eventLines` doesn't tell either: the caption before it stands.
+ */
+export interface CaptionCue extends Timed {
+    kind: "caption";
+    event: number;
+}
+
 /** One thing the board plays as an action comes back. */
-export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue | WalkCue;
+export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue | WalkCue | CaptionCue;
 
 /** How long a piece of hit text takes to rise and fade (§26.1), when nothing needs it shortened. */
 export const HIT_TEXT_MS = 1000;
@@ -861,6 +936,35 @@ function laneTexts(cues: readonly BattleCue[]) {
     }
 }
 
+/**
+ * Gives each caption its length: to the start of the next, and the last to the
+ * end of everything else. Captions are told in the order of their events, which
+ * is also the order they start in (`timeline` sees to it), so none is ever
+ * cut short by one that began earlier.
+ */
+function closeCaptions(cues: readonly BattleCue[]): BattleCue[] {
+    const end = endOf(cues.filter(cue => cue.kind !== "caption"));
+    const captions = cues.filter((cue): cue is CaptionCue => cue.kind === "caption");
+    return cues.map(cue => {
+        if (cue.kind !== "caption") return cue;
+        const next = captions[captions.indexOf(cue) + 1];
+        return { ...cue, length: Math.max(0, (next ? next.start : end) - cue.start) };
+    });
+}
+
+/**
+ * The caption the board shows `ms` into a playback: the latest one that has
+ * started by then, or null before the first. Outside a playback the board asks
+ * with `Infinity`, which is the last caption — what the action ended on.
+ */
+export function captionAt(cues: readonly BattleCue[], ms: number): CaptionCue | null {
+    let latest: CaptionCue | null = null;
+    for (const cue of cues) {
+        if (cue.kind === "caption" && cue.start <= ms && (!latest || cue.start >= latest.start)) latest = cue;
+    }
+    return latest;
+}
+
 /** Every timing in a cue, scaled: the last resort of fitting an action in, when squeezing its paces has not been enough. */
 function scaled(cue: BattleCue, scale: number): BattleCue {
     const by = (ms: number) => Math.round(ms * scale);
@@ -977,7 +1081,12 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
         else cues.push({ kind: "flight", missile, from, to, result, start: land - flight, land: flight, length: flight + after });
     };
 
+    /** Where eventLines tells a move: a broken-up one is told once, so its later segments have no caption. */
+    const firstMove = firstMoveOf(events);
+    /** When the last caption turned. */
+    let captionStart = 0;
     for (const [index, event] of events.entries()) {
+        const drawn = cues.length;
         switch (event.kind) {
             case "moved": {
                 walk(event.fighter, event.path);
@@ -1093,9 +1202,15 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 break;
             }
         }
+        // The caption turns to an event as the first of its cues starts, never before the last caption did, so they read in the order things happened.
+        const added = cues.slice(drawn);
+        if (added.length > 0 && (event.kind !== "moved" || index === firstMove)) {
+            captionStart = Math.max(captionStart, Math.min(...added.map(cue => cue.start)));
+            cues.push({ kind: "caption", event: index, start: captionStart, length: 0 });
+        }
     }
 
-    return cues;
+    return closeCaptions(cues);
 }
 
 /**
@@ -1154,7 +1269,7 @@ export function battleCues(field: Battlefield, events: readonly ToldEvent[], bef
     laneTexts(cues);
     const end = endOf(cues);
     // Squeezed as far as it goes and still too long: scaling keeps what overlaps.
-    return end <= PLAYBACK_MS ? cues : cues.map(cue => scaled(cue, PLAYBACK_MS / end));
+    return end <= PLAYBACK_MS ? cues : closeCaptions(cues.map(cue => scaled(cue, PLAYBACK_MS / end)));
 }
 
 /**

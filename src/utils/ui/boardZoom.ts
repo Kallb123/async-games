@@ -56,19 +56,28 @@ export function focusZoom(levels: number[], rectWidth: number, viewBoxWidth: num
  * much of: a character's reach, which at full AP runs most of a board's width
  * and so would fall right back to the fit. Down is measured against the
  * pane's own height, which is the board's fitted height at every zoom.
+ *
+ * `insetPx` is a strip at the foot of the pane something floats over, which
+ * the region must stay clear of as well as the margin: it takes from the room
+ * down the pane but not across it. It's taken off here rather than from
+ * `pane.height` by the caller, because that height is also the scale the
+ * board's own height is measured in, and shrinking it would shrink both.
  */
-export function exactZoom(rect: Size, viewBox: Size, pane: Size, marginPx: number, max: number): number {
+export function exactZoom(rect: Size, viewBox: Size, pane: Size, marginPx: number, max: number, insetPx = 0): number {
     if (!(rect.width > 0) || !(rect.height > 0) || !(pane.width > 0) || !(pane.height > 0)) return FIT_WIDTH;
     const across = fillZoom(rect.width, viewBox.width, pane.width, marginPx);
-    const down = fillZoom(rect.height, viewBox.height, pane.height, marginPx);
+    const down = fillZoom(rect.height, viewBox.height, pane.height, marginPx, insetPx);
     return Math.min(max, Math.max(FIT_WIDTH, Math.min(across, down)));
 }
 
 interface Size { width: number; height: number }
 
-/** The zoom at which `rect` of the child's `view` units, plus `marginPx` either side, just fills `pane` pixels along one axis. */
-function fillZoom(rect: number, view: number, pane: number, marginPx: number): number {
-    return ((100 * view) / rect) * (1 - (2 * marginPx) / pane);
+/**
+ * The zoom at which `rect` of the child's `view` units, plus `marginPx` either
+ * side and `insetPx` more at the far end, just fills `pane` pixels along one axis.
+ */
+function fillZoom(rect: number, view: number, pane: number, marginPx: number, insetPx = 0): number {
+    return ((100 * view) / rect) * (1 - (2 * marginPx + Math.max(0, insetPx)) / pane);
 }
 
 /**
@@ -102,12 +111,17 @@ export function clampOffset(offset: number, contentSize: number, paneSize: numbe
  * end of the board on each axis, as a pane can't scroll further; a board no
  * bigger than the pane along an axis has nothing to scroll there, so that axis
  * is zero.
+ *
+ * `insetPx` is a strip at the foot of the pane something floats over: the
+ * point is centred in the pane above it instead, `insetPx / 2` higher than
+ * the middle of the whole. It moves where the point sits, not how far the
+ * pane can scroll, so the clamps are the pane's own.
  */
-export function centredScroll(point: { x: number; y: number }, viewBox: Size, content: { x: number; y: number }, pane: { x: number; y: number }): { x: number; y: number } {
-    const axis = (at: number, view: number, size: number, room: number) => Math.min(Math.max(0, size - room), Math.max(0, at / view * size - room / 2));
+export function centredScroll(point: { x: number; y: number }, viewBox: Size, content: { x: number; y: number }, pane: { x: number; y: number }, insetPx = 0): { x: number; y: number } {
+    const axis = (at: number, view: number, size: number, room: number, inset: number) => Math.min(Math.max(0, size - room), Math.max(0, at / view * size - (room - inset) / 2));
     return {
-        x: axis(point.x, viewBox.width, content.x, pane.x),
-        y: axis(point.y, viewBox.height, content.y, pane.y),
+        x: axis(point.x, viewBox.width, content.x, pane.x, 0),
+        y: axis(point.y, viewBox.height, content.y, pane.y, Math.max(0, insetPx)),
     };
 }
 

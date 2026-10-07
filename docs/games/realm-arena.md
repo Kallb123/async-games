@@ -1825,6 +1825,17 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   then fades, so the arrow has something to hit. One downed partway through a
   move stands on the square it fell on only once it has walked there.
   Otherwise the board shows the state after the action, as it does today.
+- **A caption says what is happening.** While an action plays, a pill over
+  the foot of the board says it in a sentence — "Alice's Man-at-Arms struck
+  your Knight for 4" — and turns to the next as each thing starts to play: a
+  move as the walk sets off, a shot as it's loosed, "Your Knight is down" as
+  it falls. It is the same wording as the action's results (`eventLines`'
+  `sentence`), so in fog of war a shooter out of sight is "a character out of
+  sight" there too. Each caption is a cue on the timeline (`CaptionCue`,
+  `captionAt`), so it keeps in step however the playback is squeezed, and the
+  last one stays for as long as the step is shown. Live, in a review, and for
+  each of a co-op warband's actions alike; the view frames the action clear
+  of it (`BoardZoom`'s focus `inset`).
 - **When it plays.** It plays when the player's own action comes back, and
   when a review steps through another player's turn (§17.3 PR 8). The review
   is where most players will see their own squad get hurt. Opening the game

@@ -15,9 +15,9 @@ import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
-import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
+import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick, type ToldEvent } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, captionAt, eventLines, type BattleCue, type CaptionCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkCameraAt, legPoint, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -151,9 +151,13 @@ interface RealmArenaBoardProps {
     home?: { squares: readonly Square[]; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
-    /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
+    /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. A playback's caption takes its place while it plays. */
     overlay?: React.ReactNode;
-    /** What an action did, played over the figures (§26): a new `key` starts it over. */
+    /**
+     * What an action did, played over the figures (§26): a new `key` starts it
+     * over. A pill at the foot of the frame says in words what is happening,
+     * event by event, as it plays, and rests on the last when it is over.
+     */
     playback?: Playback | null;
     /**
      * The playback with this `key` has played to its end: told once each, as
@@ -175,6 +179,8 @@ interface RealmArenaBoardProps {
 export interface Playback {
     key: string;
     cues: readonly BattleCue[];
+    /** What the cues were built from, which the caption at the foot of the frame tells in words as each lands. */
+    events: readonly ToldEvent[];
     /** The battlefield as the action found it: what cover it blasted away is drawn from until it goes. */
     field: Battlefield;
     /** Everyone as the action found them: what a figure's HP bar and marks show until the cues that changed them land. */
@@ -764,6 +770,37 @@ interface DepthItem {
     node: React.ReactNode;
 }
 
+/** How much of the foot of the frame a playback's caption takes, with its gap from the edge, in pixels: kept clear by the view framing the action (`BoardZoomFocus.inset`). */
+const CAPTION_INSET = 44;
+
+/**
+ * What the playback is doing, in a sentence, as each event lands: the pill at
+ * the foot of the frame (`.ag-ra-caption`), which is outside the zoom so it
+ * stays put as the board pans. An event the action's lines pass over (a move
+ * broken by an overwatch shot is told once) says nothing of its own, so the
+ * last sentence stays up until one that does. It keeps the final one when the
+ * clock has run out — a review step rests showing what happened — and renders
+ * only when the sentence changes (`usePlaybackValue`). Keyed by the playback
+ * where it is mounted, so a new one starts from nothing rather than from the
+ * last one's closing line. `fighters` is the board after the action, which is
+ * what `eventLines` names everyone from.
+ */
+function PlaybackCaption({ playback, fighters, viewerId, nameFor }: { playback: Playback; fighters: readonly Fighter[]; viewerId: string; nameFor: (userId: string) => string }) {
+    const { cues, sentences } = useMemo(() => {
+        const sentences = new Map(eventLines(playback.events, fighters, viewerId, nameFor).map(line => [line.event, line.sentence]));
+        return { cues: playback.cues.filter((cue): cue is CaptionCue => cue.kind === 'caption' && sentences.has(cue.event)), sentences };
+    }, [playback.events, playback.cues, fighters, viewerId, nameFor]);
+    const sentence = usePlaybackValue(ms => {
+        const cue = captionAt(cues, ms);
+        return cue ? sentences.get(cue.event) ?? null : null;
+    });
+    return (
+        <div className="ag-ra-caption" role="status" aria-live="polite">
+            {sentence && <span key={sentence}>{sentence}</span>}
+        </div>
+    );
+}
+
 /**
  * The cover the action being played blasted away (§26.1), standing on each
  * square as it did — drawn from the battlefield as the action found it — until
@@ -871,7 +908,10 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * where it ended up. Everyone else keeps their HP bar, marks and item as the
  * action found them until the cue that changed them lands (`ToldFighterNode`),
  * and anyone downed lies unseen until its blow. A fireball or a thunder flask
- * shakes the board and the effects over it together (`ShakeClock`).
+ * shakes the board and the effects over it together (`ShakeClock`). Outside
+ * the zoom, so it stays put as the board pans, a pill at the foot of the frame
+ * says what is happening as each event lands (`PlaybackCaption`), and rests on
+ * the last once it is over; it gives way to the targets overlay when that shows.
  *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
@@ -951,6 +991,10 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
     else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
+
+    // While an action plays, its caption floats over the foot of the frame
+    // (`PlaybackCaption`), so the view frames it clear of that strip.
+    if (focus && playback) focus = { ...focus, inset: CAPTION_INSET };
 
     // What the board plays waits for the view to get there: an action plays
     // only once the glide to it has landed, so nothing happens while the
@@ -1136,11 +1180,11 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
 
     return (
         <div className="ag-board-frame ag-realmarena-frame">
-            {/* 84 squares corner to corner fitted to a phone is under ten
-                pixels a square, so the deep step is what makes one
-                tappable: about seven squares across (§13.1). */}
-            <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
-                <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
+            <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
+                {/* 84 squares corner to corner fitted to a phone is under ten
+                    pixels a square, so the deep step is what makes one
+                    tappable: about seven squares across (§13.1). */}
+                <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
                     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`}>
                         <g ref={shakeBoard}>
                             <g className="ag-ra-ground--earth">
@@ -1247,16 +1291,19 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                         </g>
                         {playback && !still && shakesOf(playback.cues).length > 0 && <ShakeClock key={playback.key} cues={playback.cues} board={shakeBoard} fx={shakeFx} />}
                     </svg>
-                </PlaybackProvider>
-            </BoardZoom>
-            {/* Turning the view: beside BoardZoom rather than in it, since
-                turning is this board's own, in the top corner opposite the
-                zoom pill. */}
-            <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
-                <button type="button" onClick={() => turn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
-                <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
-            </div>
-            {overlay}
+                </BoardZoom>
+                {/* Turning the view: beside BoardZoom rather than in it, since
+                    turning is this board's own, in the top corner opposite the
+                    zoom pill. */}
+                <div className="ag-board-tag ag-ra-turn" role="group" aria-label="Turn the view">
+                    <button type="button" onClick={() => turn(3)} aria-label="Turn the view anticlockwise" title="Turn anticlockwise">↺</button>
+                    <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
+                </div>
+                {/* Over the foot of the frame, out of the zoom: while an action plays,
+                    what is happening in words; otherwise the targets, which want the
+                    same spot while a character is selected. */}
+                {playback ? <PlaybackCaption key={playback.key} playback={playback} fighters={fighters} viewerId={viewerId} nameFor={nameFor} /> : overlay}
+            </PlaybackProvider>
             {/* Something happened, but not anywhere the viewer can see: a
                 question mark over the frame, not the board, so it stays in the
                 middle as the board pans and zooms. The layer fades in and out

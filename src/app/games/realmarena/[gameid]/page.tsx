@@ -257,7 +257,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         const cues = battleCues(field, events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`, still);
-        setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
+        setOwn({ playback: { key, cues, events, field, before: fighters }, follow: to });
     };
     // The board has played the playback with this key through to its end (the
     // view's glide to it included): live, that is the viewer's own action, which
@@ -352,7 +352,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : partPlays ? { key: partKey, cues: part.cues, field: part.field, before: part.before.fighters } : null;
+        : partPlays ? { key: partKey, cues: part.cues, events: part.events, field: part.field, before: part.before.fighters } : null;
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 

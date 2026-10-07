@@ -1,6 +1,6 @@
 'use client'
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { centredScroll, clampOffset, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import { centredScroll, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -20,6 +20,15 @@ export interface BoardZoomFocus {
      * region the steps would frame badly either way (`exactZoom`).
      */
     exact?: boolean;
+    /**
+     * Pixels at the foot of the pane the region must stay clear of, because
+     * something floats there — Realm Arena's caption over the bottom of its
+     * board. An `exact` zoom fits `rect` into the pane above it (`exactZoom`; the
+     * steps a plain focus chooses between are picked by width, which a strip at
+     * the foot doesn't change), and `rect` is centred in that part rather than
+     * in the whole pane. Defaults to 0: nothing floats there.
+     */
+    inset?: number;
 }
 
 /**
@@ -69,7 +78,7 @@ const FOCUS_MARGIN_PX = 28;
  * and — for a smooth one — the view it glides from, recorded before its zoom
  * changed.
  */
-interface FocusTarget { cx: number; cy: number; smooth: boolean; from?: ZoomView; landed?: () => void }
+interface FocusTarget { cx: number; cy: number; inset: number; smooth: boolean; from?: ZoomView; landed?: () => void }
 
 /** The class on the board while a pinch or a glide is drawing it (`drawAt`). */
 const MOVING = 'ag-board-zoom-content--moving';
@@ -154,10 +163,8 @@ function currentView(pane: HTMLDivElement, zoom: number, pinch: Pinch | null): Z
  */
 function focusView(pane: HTMLDivElement, target: FocusTarget, zoom: number): ZoomView {
     const content = { x: pane.scrollWidth, y: pane.scrollHeight };
-    const scroll = {
-        x: -clampOffset(pane.clientWidth / 2 - target.cx * content.x, content.x, pane.clientWidth),
-        y: -clampOffset(pane.clientHeight / 2 - target.cy * content.y, content.y, pane.clientHeight),
-    };
+    // The target is a fraction of the board, which is its viewBox taken as 1 x 1.
+    const scroll = centredScroll({ x: target.cx, y: target.cy }, { width: 1, height: 1 }, content, { x: pane.clientWidth, y: pane.clientHeight }, target.inset);
     const pointY = pane.getBoundingClientRect().top + target.cy * content.y - scroll.y;
     if (pointY < FOCUS_MARGIN_PX || pointY > window.innerHeight - FOCUS_MARGIN_PX) {
         window.scrollTo({ top: Math.max(0, window.scrollY + pointY - window.innerHeight / 2), behavior: target.smooth ? 'smooth' : 'auto' });
@@ -510,12 +517,14 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         if (!pane || !content || !focus || !viewBox) return;
         letGo();
         takenRef.current = false;
+        const inset = focus.inset ?? 0;
         const level = focus.exact
-            ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max)
+            ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max, inset)
             : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
         const { key } = focus;
         const target: FocusTarget = {
             ...focusCentre(focus.rect, viewBox),
+            inset,
             smooth: !prefersReducedMotion(),
             from: currentView(pane, zoom, pinchRef.current),
             landed: () => onFocusedRef.current?.(key),
@@ -570,7 +579,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         // rather than the auto-focus's smooth scroll: this jump is the one the
         // player just asked for by tapping, not an unprompted one to soften.
         if (focus && viewBox) {
-            focusTargetRef.current = { ...focusCentre(focus.rect, viewBox), smooth: false };
+            focusTargetRef.current = { ...focusCentre(focus.rect, viewBox), inset: focus.inset ?? 0, smooth: false };
         } else {
             anchorRef.current = anchorAt(pane, pane.clientWidth / 2, pane.clientHeight / 2);
         }

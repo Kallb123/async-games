@@ -147,6 +147,31 @@ describe('exactZoom', () => {
         expect(exactZoom({ width: 10, height: 10 }, viewBox, pane, 28, 360)).toBe(360);
         expect(exactZoom({ width: 0, height: 10 }, viewBox, pane, 28, 360)).toBe(FIT_WIDTH);
     });
+
+    it('is the same with no inset as with an inset of zero', () => {
+        const rect = { width: 60, height: 300 };
+        expect(exactZoom(rect, viewBox, pane, 28, 360, 0)).toBe(exactZoom(rect, viewBox, pane, 28, 360));
+    });
+
+    it('keeps a strip at the foot clear when the height runs out first', () => {
+        const zoom = exactZoom({ width: 60, height: 300 }, viewBox, pane, 28, 360, 60);
+        expect(zoom).toBeCloseTo(160 * (1 - (56 + 60) / 457));
+        expect(zoom).toBeLessThan(exactZoom({ width: 60, height: 300 }, viewBox, pane, 28, 360));
+    });
+
+    it('leaves a region held by its width alone', () => {
+        const rect = { width: 240, height: 100 };
+        expect(exactZoom(rect, viewBox, pane, 28, 360, 60)).toBe(exactZoom(rect, viewBox, pane, 28, 360));
+    });
+
+    it('falls back to fit when the inset leaves no room down the pane', () => {
+        expect(exactZoom({ width: 60, height: 300 }, viewBox, pane, 28, 360, 500)).toBe(FIT_WIDTH);
+    });
+
+    it('ignores a negative inset rather than zooming past the margin', () => {
+        const rect = { width: 60, height: 300 };
+        expect(exactZoom(rect, viewBox, pane, 28, 360, -40)).toBe(exactZoom(rect, viewBox, pane, 28, 360));
+    });
 });
 
 describe('centredScroll', () => {
@@ -170,5 +195,24 @@ describe('centredScroll', () => {
     it('has nothing to scroll along an axis the board does not overflow', () => {
         expect(centredScroll({ x: 200, y: 150 }, viewBox, { x: 300, y: 1200 }, pane)).toEqual({ x: 0, y: 360 });
         expect(centredScroll({ x: 200, y: 150 }, viewBox, { x: 300, y: 400 }, pane)).toEqual({ x: 0, y: 0 });
+    });
+
+    it('centres the point in the pane above an inset, half of it higher than the middle', () => {
+        // The middle of the pane is 240 up; with 100px floating at the foot the room above is 380, middle 190.
+        expect(centredScroll({ x: 200, y: 150 }, viewBox, content, pane, 100)).toEqual({ x: 640, y: 410 });
+    });
+
+    it('takes an inset of zero as no inset, and leaves the sideways axis alone', () => {
+        expect(centredScroll({ x: 200, y: 150 }, viewBox, content, pane, 0)).toEqual(centredScroll({ x: 200, y: 150 }, viewBox, content, pane));
+        expect(centredScroll({ x: 100, y: 150 }, viewBox, content, pane, 100).x).toBe(centredScroll({ x: 100, y: 150 }, viewBox, content, pane).x);
+    });
+
+    it('still stops at either end of the board with an inset', () => {
+        expect(centredScroll({ x: 10, y: 0 }, viewBox, content, pane, 100)).toEqual({ x: 0, y: 0 });
+        expect(centredScroll({ x: 395, y: 300 }, viewBox, content, pane, 100)).toEqual({ x: 1280, y: 720 });
+    });
+
+    it('takes a fraction of the board as readily as a point, for a viewBox of one', () => {
+        expect(centredScroll({ x: 0.5, y: 0.5 }, { width: 1, height: 1 }, content, pane, 100)).toEqual({ x: 640, y: 410 });
     });
 });
