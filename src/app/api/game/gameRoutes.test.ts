@@ -39,6 +39,8 @@ vi.mock('@/utils/games/achievements', async importOriginal => ({
     ...(await importOriginal<typeof import('@/utils/games/achievements')>()),
     ACHIEVEMENT_CATALOGUE: testCatalogue,
 }));
+// Mustering a Realm Arena squad would ask for the players' mastery ranks.
+vi.mock('@/games/RealmArena/masteryRecord', () => ({ masterySnapshotOf: vi.fn(async () => ({})) }));
 // A fixed die, so a rolled position is something a test can assert.
 vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: vi.fn(() => 3) }));
 
@@ -50,6 +52,7 @@ import {
 } from '@/utils/testing/apiRoute';
 import { baseState } from '@/games/FiresOut/testFixtures';
 import { race } from '@/games/RaceCars/testFixtures';
+import { makeGame as realmArenaGame, musterAll as realmArenaMuster } from '@/games/RealmArena/testFixtures';
 import { makeState, player } from '@/games/SettlementsAndCities/testFixtures';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import type { ISnakesAndLaddersGameStateResponse } from '@/games/SnakesAndLadders/apiModels';
@@ -67,6 +70,7 @@ import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
 import { POST as timeline } from './[gameid]/timeline/route';
 import { withFullHistories } from '@/utils/games/historyDelta';
+import { getReplayAdapter } from '@/utils/games/replay';
 
 /** Where each player stands, as the stored game holds it. */
 function positions(saved: Record<string, unknown>): Record<string, { position: number }> {
@@ -290,6 +294,73 @@ describe('POST /api/game/command', () => {
         expect(positions(saved)[ANN.id].position).toBe(13);
         expect(commandHistory(saved)).toHaveLength(1);
         expect(saved.currentTurn).toBe(BOB.id);
+    });
+
+    it("sends a Realm Arena co-op End turn back with the review's step for it, part by part, as the timeline would", async () => {
+        // The warband's turn rides inside the player's End turn, and `outcome`
+        // is cut to its events (`outcomeFor` leaves out the recap the parts
+        // are made of), so the board can only play it action by action from
+        // the step.
+        const game = realmArenaGame([ANN.id, BOB.id], {}, { coop: { enemy: 'realm' } });
+        await realmArenaMuster(game);
+        const { markModified: _, ...data } = game;
+        seedGame({
+            ...JSON.parse(JSON.stringify(data)),
+            gameId: 'game_1',
+            kind: 'RealmArenaGameData',
+            turnTimer: '1 day',
+            lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
+            timerWarningNotificationSent: true,
+        });
+        signIn(ANN);
+
+        const response = await command(commandPost({
+            id: '00000000-0000-0000-0000-0000000000e1', timestamp: '2026-01-01T00:00:00.000Z',
+            gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'RealmArenaEndTurn', keepStill: [],
+        }));
+        expect(response.status).toBe(200);
+        const body = await response.json();
+
+        expect(body.outcome).not.toHaveProperty('recap');
+        const kinds = (body.step.parts as { kind: string }[]).map(part => part.kind);
+        expect(kinds[0]).toBe('ended');
+        expect(kinds).toContain('enemy');
+        // The same step the sender's own review shows for that command, not a
+        // second reading of the outcome: nothing here a timeline wouldn't send.
+        signIn(ANN);
+        const reviewed = await (await timeline(jsonPost('/api/game/game_1/timeline', { plannedCommands: [] }), { params: Promise.resolve({ gameid: 'game_1' }) })).json();
+        expect(body.step).toEqual(reviewed.snapshots.at(-1).outcome);
+    });
+
+    it("still answers a move that stands when its step can't be worked out, without the step", async () => {
+        const game = realmArenaGame([ANN.id, BOB.id], {}, { coop: { enemy: 'realm' } });
+        await realmArenaMuster(game);
+        const { markModified: _, ...data } = game;
+        seedGame({ ...JSON.parse(JSON.stringify(data)), gameId: 'game_1', kind: 'RealmArenaGameData', turnTimer: '1 day', lastTurnTimestamp: '2026-01-01T00:00:00.000Z', timerWarningNotificationSent: true });
+        signIn(ANN);
+        const adapter = getReplayAdapter('RealmArenaGameType')!;
+        const broken = vi.spyOn(adapter, 'snapshotOutcome').mockImplementation(() => { throw new Error('no board'); });
+        const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await command(commandPost({
+                id: '00000000-0000-0000-0000-0000000000e2', timestamp: '2026-01-01T00:00:00.000Z',
+                gameId: 'game_1', senderId: ANN.id, senderUsername: 'ann', className: 'RealmArenaEndTurn', keepStill: [],
+            }));
+            expect(response.status).toBe(200);
+            expect(await response.json()).not.toHaveProperty('step');
+        } finally {
+            broken.mockRestore();
+            quiet.mockRestore();
+        }
+    });
+
+    it('leaves the step out of a response for a game whose replay adapter shows no outcome', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const body = await (await command(commandPost(diceRoll()))).json();
+
+        expect(body).not.toHaveProperty('step');
     });
 
     it("restarts the turn timer when a figure's turn ends inside one player's own turn", async () => {

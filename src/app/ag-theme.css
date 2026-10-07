@@ -5250,6 +5250,8 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    of earth; the flat colours below are the ground under it. */
 .ag-game--realmarena {
     --ra-night: oklch(0.27 0.04 25);
+    /* What floats over the board's foot — the targets card, a playback's caption — reads on. */
+    --ra-float: color-mix(in oklch, var(--ra-night) 90%, transparent);
     --ra-night-2: oklch(0.33 0.05 25);
     --ra-oxblood: #8a2c2c;
     --ra-oxblood-deep: #5f1c1c;
@@ -5594,6 +5596,47 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-crosshair, .ag-board-frame .ag-ra-crosshair { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .ag-ra-unit-targets { flex: none; display: inline-flex; align-items: center; gap: 3px; font: 800 12.5px var(--ag-font); color: var(--ra-oxblood); }
 .ag-ra-unit-targets--none { color: var(--ag-ink-softer); }
+/* What the action being played is doing, in a sentence, floating over the foot
+   of the frame (`PlaybackCaption`): the targets card's dark (.ag-ra-targets)
+   as a pill, centred, outside the zoom so it stays put as the board pans. The layer spans the
+   frame's width, less a gutter, and the pill sits in it; the board never
+   mounts the caption while the targets card (which wants the same spot) shows,
+   and BoardZoom's and the turn pills are both in the top corners, so nothing
+   else is down here. At most two lines, then an ellipsis. The text is keyed by
+   the sentence, so each one fades in afresh; with reduced motion, it just
+   changes. Never takes a tap. */
+.ag-ra-caption {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+.ag-ra-caption > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    max-width: 100%;
+    background: var(--ra-float);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 6px 14px;
+    font: 700 12px/1.3 var(--ag-font);
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.19);
+    animation: ag-ra-caption-in 220ms ease-out both;
+}
+@keyframes ag-ra-caption-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-caption > span { animation: none; }
+}
 /* The selected character's likeliest targets, floating over the foot of the
    board: the dark pill (.ag-board-tag) grown into a little card. Taps go
    through it to the board beneath. */
@@ -5604,7 +5647,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     max-width: calc(100% - 24px);
     padding: 7px 11px;
     border-radius: 12px;
-    background: color-mix(in oklch, var(--ra-night) 90%, transparent);
+    background: var(--ra-float);
     pointer-events: none;
 }
 .ag-ra-targets-head { display: flex; align-items: center; gap: 5px; color: var(--ra-centre); }

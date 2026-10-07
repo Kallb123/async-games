@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBattlefield } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, coordsOf } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { isoCentre, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH } from "@/utils/ui/isometric";
@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, captionAt, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkCameraAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type CaptionCue, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -303,6 +303,8 @@ describe("aimFocus", () => {
     });
 });
 
+/** The cues that draw something: a playback's captions are checked on their own. */
+const drawn = (cues: readonly BattleCue[]) => cues.filter(cue => cue.kind !== "caption");
 const nameFor = (userId: string) => ({ a: "Alice", b: "Bob" })[userId] ?? userId;
 
 describe("reachFocus", () => {
@@ -388,7 +390,7 @@ describe("eventLines", () => {
             { kind: "downed", fighter: 1, by: 0 },
             { kind: "scored", player: "a", points: 5, reason: "knockout" },
         ];
-        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+        expect(eventLines(events, fighters, "a", nameFor)).toMatchObject([
             { icon: "👣", title: "Your Archer moved" },
             { icon: "🎯", title: "Graze for 2", sub: "Bob's Knight on overwatch at your Archer · 65% to hit", roll: 70 },
             { icon: "🎯", title: "Hit for 4", sub: "Your Archer at Bob's Knight · 80% to hit", roll: 12 },
@@ -402,7 +404,7 @@ describe("eventLines", () => {
             { kind: "fireball", fighter: 0, at: 5, targets: [], damage: 3 },
             { kind: "blasted", fighter: 0, squares: [4, 6] },
         ];
-        expect(eventLines(events, fighters, "a", nameFor).at(-1)).toEqual({ icon: "💥", title: "2 squares of low cover blasted away", sub: "Open ground now" });
+        expect(eventLines(events, fighters, "a", nameFor).at(-1)).toMatchObject({ icon: "💥", title: "2 squares of low cover blasted away", sub: "Open ground now" });
     });
 
     it("leads an effect put on, cleared or burning with the effect's mark", () => {
@@ -411,7 +413,7 @@ describe("eventLines", () => {
             { kind: "burned", fighter: 0, damage: 1 },
             { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
         ];
-        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+        expect(eventLines(events, fighters, "a", nameFor)).toMatchObject([
             { mark: EFFECT_ART.burning, title: "Your Archer is burning" },
             { mark: EFFECT_ART.burning, title: "Your Archer burned for 1" },
             { mark: EFFECT_ART.burning, title: "Your Archer is no longer burning" },
@@ -424,7 +426,7 @@ describe("eventLines", () => {
             { kind: "thrown", fighter: 0, item: "smokePot", at: 5, targets: [], damage: 0 },
             { kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" },
         ];
-        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+        expect(eventLines(events, fighters, "a", nameFor)).toMatchObject([
             { mark: ITEM_ART.fireFlask, title: "Fire flask: Bob's Knight", sub: "2 damage each" },
             { mark: ITEM_ART.smokePot, title: "Your Archer threw a smoke pot" },
             { mark: ITEM_ART.healingDraught, title: "Your Archer healed for 3", sub: "Healing draught" },
@@ -439,7 +441,7 @@ describe("eventLines", () => {
             { kind: "healed", fighter: 0, target: 0, hp: 2, via: "purify" },
             { kind: "healed", fighter: 0, target: 0, hp: 0, via: "purify" },
         ];
-        expect(eventLines(events, fighters, "a", nameFor)).toEqual([
+        expect(eventLines(events, fighters, "a", nameFor)).toMatchObject([
             { icon: "💥", title: "Demolish: Bob's Knight", sub: "2 damage each" },
             { icon: "💥", title: "Demolish: nobody hit" },
             { icon: "◎", title: "Your Archer used Hunter's mark on Bob's Knight" },
@@ -449,7 +451,8 @@ describe("eventLines", () => {
     });
 
     it("calls a missed shot a miss", () => {
-        const [line] = eventLines([{ kind: "shot", fighter: 0, target: 1, chance: 80, roll: 95, result: "miss", damage: 0, reaction: false }], fighters, "b", nameFor);
+        const miss: BattleEvent = { kind: "shot", fighter: 0, target: 1, chance: 80, roll: 95, result: "miss", damage: 0, reaction: false };
+        const [line] = eventLines([miss], fighters, "b", nameFor);
         expect(line).toMatchObject({ title: "Miss", sub: "Alice's Archer at your Knight · 80% to hit" });
     });
 });
@@ -523,7 +526,7 @@ describe("battleCues", () => {
             { kind: "moved", fighter: 8, path: [40, 41], sneaking: false },
         ];
         expect(battleCues(FIELD, told, before)).toEqual([]);
-        expect(battleCues(FIELD, told, before, [{ ...entered, square: 31 }])).toEqual([
+        expect(drawn(battleCues(FIELD, told, before, [{ ...entered, square: 31 }]))).toEqual([
             { kind: "walk", fighter: { ...entered, square: 31 }, path: [30, 31], start: 0, length: WALK_STEP_MS },
         ]);
     });
@@ -629,7 +632,7 @@ describe("battleCues", () => {
             { kind: "healed", fighter: 3, target: 0, hp: 4 },
             { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
         ], before);
-        expect(cues).toMatchObject([
+        expect(drawn(cues)).toMatchObject([
             { fighter: 0, value: "\u22121", tone: "hit", mark: "burning", start: 0 },
             { fighter: 0, value: "+4", label: "Cured", tone: "heal", start: 450 },
         ]);
@@ -637,7 +640,7 @@ describe("battleCues", () => {
 
     it("says what a stance is as it's taken, with the stance's mark beside it", () => {
         const cues = battleCues(FIELD, [{ kind: "hunkered", fighter: 0 }, { kind: "shieldWall", fighter: 0 }], before);
-        expect(cues).toMatchObject([
+        expect(drawn(cues)).toMatchObject([
             { kind: "text", fighter: 0, square: 10, value: "Hunker down", tone: "word", mark: "hunkered", start: 0, length: HIT_TEXT_MS },
             { kind: "text", fighter: 0, square: 10, value: "Shield wall", tone: "word", mark: "shieldWall", start: 450 },
         ]);
@@ -942,25 +945,39 @@ describe("moveFrame", () => {
     const arrived = { ...mover, square: 31 };
     const move = (path: number[], fighter = 0): ToldEvent => ({ kind: "moved", fighter, path, sneaking: false });
 
-    it("is where the mover stood before and where it stands after", () => {
-        expect(moveFrame([move([10, 20, 31])], [mover], [arrived])).toEqual([10, 31]);
+    it("is where the mover stood before, every square it walked and where it stands after", () => {
+        expect(moveFrame([move([10, 20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
     });
 
-    it("runs a move split by an overwatch shot as one, from where it began to where it ended", () => {
+    it("runs a move split by an overwatch shot as one, from where it began to where it ended, without repeating the square it stopped on", () => {
         const shot: ToldEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 1, reaction: true };
-        expect(moveFrame([move([10, 20]), shot, move([20, 31])], [mover], [arrived])).toEqual([10, 31]);
+        expect(moveFrame([move([10, 20]), shot, move([20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
+    });
+
+    it("keeps a route that bends away from the line between its ends in frame", () => {
+        const at = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
+        // Round a wall: down the column, across, and back up again to end beside where it began.
+        const path = [at(10, 10), at(10, 14), at(14, 14), at(14, 10)];
+        const frame = moveFrame([move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }])!;
+        expect(frame).toEqual(path);
+        const ends = areaRect(RUINED_FORT, [path[0], path[3]]);
+        expect(ends.height).toBe(1);
+        expect(areaRect(RUINED_FORT, frame).height).toBeGreaterThan(ends.height);
+        expect(coordsOf(RUINED_FORT, path[1]).row).toBeGreaterThanOrEqual(ends.y + ends.height);
     });
 
     it("frames the part of the move the viewer saw when it came into sight or went out of it", () => {
         // Out of the fog: from where it was first seen to where it stands.
         expect(moveFrame([move([30, 31])], [], [arrived])).toEqual([30, 31]);
         // Into the fog: from where it stood to the last square it was seen on.
-        expect(moveFrame([move([10, 20, 25])], [mover], [])).toEqual([10, 25]);
+        expect(moveFrame([move([10, 20, 25])], [mover], [])).toEqual([10, 20, 25]);
         // Through the viewer's sight and out again: just the stretch they saw.
-        expect(moveFrame([move([40, 41]), move([41, 42])], [], [])).toEqual([40, 42]);
+        expect(moveFrame([move([40, 41]), move([41, 42])], [], [])).toEqual([40, 41, 42]);
     });
 
     it("is null when nothing of the move was seen, there was none, or it ended where it began", () => {
+        // A route that crossed where it ended on the way still ends there.
+        expect(moveFrame([move([10, 31, 20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
         expect(moveFrame([move([])], [], [])).toBeNull();
         expect(moveFrame([move([10])], [mover], [])).toBeNull();
         expect(moveFrame([{ kind: "hunkered", fighter: 0 }], [mover], [arrived])).toBeNull();
@@ -997,7 +1014,7 @@ describe("a review step's parts", () => {
         const entered = ready(5, warbandOwner(0), "archer", 80);
         const outcome: IRealmArenaStepOutcome = { events: [{ kind: "moved", fighter: 5, path: [80, 81], sneaking: false }] };
         expect(reviewParts(FORT, outcome, { fighters: start, blasted: [] })[0].cues).toEqual([]);
-        expect(reviewParts(FORT, outcome, { fighters: start, blasted: [] }, [...start, { ...entered, square: 81 }])[0].cues).toMatchObject([{ kind: "walk", path: [80, 81] }]);
+        expect(reviewParts(FORT, outcome, { fighters: start, blasted: [] }, [...start, { ...entered, square: 81 }])[0].cues.filter(cue => cue.kind !== "caption")).toMatchObject([{ kind: "walk", path: [80, 81] }]);
     });
 
     it("keeps a step that took twelve shots within the playback cap", () => {
@@ -1094,8 +1111,22 @@ describe("actionFollow", () => {
     const move = (path: number[]): ToldEvent => ({ kind: "moved", fighter: 0, path, sneaking: false });
     const at2 = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
 
-    it("frames a move exactly, from where it began to where it ended", () => {
-        expect(actionFollow(RUINED_FORT, [move([10, 20, 31])], [mover], [arrived], "k")).toEqual({ squares: [10, 31], key: "k", exact: true });
+    it("frames a short move exactly, the whole of its path", () => {
+        const path = [at2(10, 20), at2(11, 20), at2(12, 21), at2(13, 22)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k"))
+            .toEqual({ squares: path, key: "k", exact: true });
+    });
+
+    it("follows a long move rather than framing it, from where it starts", () => {
+        const path = [at2(10, 20), at2(18, 20), at2(26, 20), at2(34, 20)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k"))
+            .toEqual({ squares: [path[0]], key: "k", exact: true, track: true });
+    });
+
+    it("frames only where a long move ended when nothing walks", () => {
+        const path = [at2(10, 20), at2(18, 20), at2(26, 20), at2(34, 20)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k", true))
+            .toEqual({ squares: [path[3]], key: "k", exact: true });
     });
 
     it("goes to what a step touched, as deep as it fits, when it was no move", () => {
@@ -1119,6 +1150,12 @@ describe("actionFollow", () => {
         const second = actionFollow(RUINED_FORT, [shot], [{ ...archer, ap: 2 }, { ...soldier, hp: soldier.hp - 2 }], [{ ...archer, ap: 0 }, { ...soldier, hp: soldier.hp - 4 }], "k");
         expect(first).toEqual({ squares: [archer.square, soldier.square], key: "k", exact: true, close: true });
         expect(second).toEqual(first);
+    });
+
+    it("is null when whoever the events name is spread over more than half the field: burning ticking all over it", () => {
+        const near = ready(1, "b", "archer", at2(2, 2)), far = ready(2, "b", "mage", at2(30, 40));
+        const burned: ToldEvent[] = [{ kind: "burned", fighter: 1, damage: 1 }, { kind: "burned", fighter: 2, damage: 1 }];
+        expect(actionFollow(RUINED_FORT, burned, [near, far], [near, far].map(fighter => ({ ...fighter, hp: fighter.hp - 1 })), "k")).toBeNull();
     });
 
     it("is null when nothing changed or what changed is spread over more than half the field", () => {
@@ -1521,6 +1558,80 @@ describe("the board at a moment", () => {
         });
     });
 
+    describe("where a camera following a walker looks", () => {
+        const heights = Array(25).fill(0);
+        heights[1] = 3;
+        const view = isoView({ width: 5, height: 5, heights }, { base: 0, headroom: 0 });
+        const walk = (path: number[], start: number, length = 1000): WalkCue => ({ kind: "walk", fighter: knight, path, start, length });
+        const centre = (square: number) => isoCentre(view, square);
+
+        it("is the first square's centre before the walk starts, and the last square's from the end of it on", () => {
+            const walks = [walk([0, 5, 10], 500), walk([10, 11], 2000)];
+            expect(walkerGroundAt(walks, view, 0)).toEqual(centre(0));
+            expect(walkerGroundAt(walks, view, 500)).toEqual(centre(0));
+            expect(walkerGroundAt(walks, view, 3000)).toEqual(centre(11));
+            expect(walkerGroundAt(walks, view, 9000)).toEqual(centre(11));
+        });
+
+        it("lies between the two centres of the leg it is partway over", () => {
+            const walks = [walk([0, 5, 10], 500)];
+            const now = walkerAt(walks, 800, legLengthOn(view))!;
+            expect(now).toMatchObject({ from: 0, to: 5 });
+            expect(now.across).toBeGreaterThan(0);
+            expect(now.across).toBeLessThan(1);
+            const ground = walkerGroundAt(walks, view, 800), a = centre(0), b = centre(5);
+            expect(ground.x).toBeGreaterThan(Math.min(a.x, b.x));
+            expect(ground.x).toBeLessThan(Math.max(a.x, b.x));
+            expect(ground.y).toBeGreaterThan(Math.min(a.y, b.y));
+            expect(ground.y).toBeLessThan(Math.max(a.y, b.y));
+        });
+
+        describe("smoothed", () => {
+            const flat = isoView({ width: 7, height: 7, heights: Array(49).fill(0) }, { base: 0, headroom: 0 });
+            const at = (square: number) => isoCentre(flat, square);
+            const long = (path: number[]): WalkCue => ({ kind: "walk", fighter: knight, path, start: 1000, length: 2400 });
+
+            it("is exactly where the walk starts until it starts, and where it ends from its end on", () => {
+                const walks = [long([0, 1, 2, 3, 4, 5, 6])];
+                expect(walkCameraAt(walks, flat, 0)).toEqual(at(0));
+                expect(walkCameraAt(walks, flat, 1000)).toEqual(at(0));
+                expect(walkCameraAt(walks, flat, 3400)).toEqual(at(6));
+                expect(walkCameraAt(walks, flat, 9000)).toEqual(at(6));
+            });
+
+            it("is where the walker is on a stretch walked straight and steadily", () => {
+                const walks = [long([0, 1, 2, 3, 4, 5, 6])];
+                const camera = walkCameraAt(walks, flat, 2200), walker = walkerGroundAt(walks, flat, 2200);
+                expect(camera.x).toBeCloseTo(walker.x, 6);
+                expect(camera.y).toBeCloseTo(walker.y, 6);
+            });
+
+            it("cuts the corners of a path that zig-zags, rather than jerking round each", () => {
+                // A straight step, then a diagonal one, over and over: on screen they go different ways. At a walk's pace, a leg a ninth of a second.
+                const walks: WalkCue[] = [{ kind: "walk", fighter: knight, path: [0, 1, 9, 10, 18, 19, 27], start: 1000, length: 700 }];
+                const a = at(0), b = at(27);
+                // Which side of the straight way from start to end a point is, and how far.
+                const off = (p: { x: number; y: number }) => ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / Math.hypot(b.x - a.x, b.y - a.y);
+                const moments = Array.from({ length: 30 }, (_, i) => 1200 + i * 10);
+                // How far it swings from side to side through the middle of the walk.
+                const sway = (point: (ms: number) => { x: number; y: number }) => {
+                    const offs = moments.map(ms => off(point(ms)));
+                    return Math.max(...offs) - Math.min(...offs);
+                };
+                expect(sway(ms => walkCameraAt(walks, flat, ms))).toBeLessThan(sway(ms => walkerGroundAt(walks, flat, ms)) / 4);
+            });
+        });
+
+        it("is the straight way between the two centres of a leg that climbs, without the hop", () => {
+            const walks = [walk([0, 1], 0)];
+            const now = walkerAt(walks, 400, legLengthOn(view))!;
+            expect(walkLift(now, square => view.heights[square])).toBeLessThan(0);
+            const a = centre(0), b = centre(1), ground = walkerGroundAt(walks, view, 400);
+            expect(ground.x).toBeCloseTo(a.x + (b.x - a.x) * now.across, 10);
+            expect(ground.y).toBeCloseTo(a.y + (b.y - a.y) * now.across, 10);
+        });
+    });
+
     describe("a flight", () => {
         const cue = (extra: Partial<FlightCue> = {}): FlightCue => ({ kind: "flight", missile: "arrow", from: 0, to: 5, result: "hit", start: 300, length: 600, land: 400, ...extra });
 
@@ -1701,6 +1812,257 @@ describe("the board at a moment", () => {
 
         it("never leaves a gap between what goes and what comes in", () => {
             for (let ms = 100; ms <= 300; ms += 5) expect(fadeOutAt(cue, ms) + fadeInAt(cue, ms)!).toBeGreaterThanOrEqual(1);
+        });
+    });
+});
+
+describe("eventLines as sentences", () => {
+    const fighters = [ready(0, "a", "archer", 0), ready(1, "b", "knight", 1), ready(2, "a", "mage", 2), ready(3, "a", "cleric", 3)];
+    /** What Bob, whose Knight is fighter 1, is told of one event. */
+    const bobSees = (event: BattleEvent) => eventLines([event], fighters, "b", nameFor)[0].sentence;
+    const shot = (result: "hit" | "graze" | "miss", extra: Partial<Extract<BattleEvent, { kind: "shot" }>> = {}): BattleEvent =>
+        ({ kind: "shot", fighter: 0, target: 1, chance: 70, roll: 40, result, damage: result === "hit" ? 3 : result === "graze" ? 1 : 0, reaction: false, ...extra });
+
+    it("tells a shot as who hit, grazed or missed whom, and for how much", () => {
+        expect(bobSees(shot("hit"))).toBe("Alice's Archer hit your Knight for 3");
+        expect(bobSees(shot("graze"))).toBe("Alice's Archer grazed your Knight for 1");
+        expect(bobSees(shot("miss"))).toBe("Alice's Archer missed your Knight");
+    });
+
+    it("says an overwatch shot is one, straight after the shooter", () => {
+        expect(bobSees(shot("hit", { reaction: true }))).toBe("Alice's Archer on overwatch hit your Knight for 3");
+        expect(bobSees(shot("miss", { reaction: true }))).toBe("Alice's Archer on overwatch missed your Knight");
+    });
+
+    it("tells it from the viewer's side: their own characters are theirs, another's are named for their owner", () => {
+        expect(eventLines([shot("hit")], fighters, "a", nameFor)[0].sentence).toBe("Your Archer hit Bob's Knight for 3");
+    });
+
+    it("names a shooter out of sight as a character out of sight", () => {
+        expect(bobSees(shot("hit", { fighter: 9 }))).toBe("A character out of sight hit your Knight for 3");
+    });
+
+    it("tells a strike, and a blow on guard", () => {
+        expect(bobSees({ kind: "struck", fighter: 1, target: 0, damage: 4, reaction: false })).toBe("Your Knight struck Alice's Archer for 4");
+        expect(bobSees({ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: true })).toBe("Alice's Archer struck your Knight for 4 on guard");
+    });
+
+    it("tells a fireball by whoever cast it, and who it caught", () => {
+        expect(bobSees({ kind: "fireball", fighter: 2, at: 5, targets: [1, 0], damage: 2 })).toBe("Alice's Mage's fireball hit your Knight and Alice's Archer for 2 each");
+        expect(bobSees({ kind: "fireball", fighter: 2, at: 5, targets: [1], damage: 2 })).toBe("Alice's Mage's fireball hit your Knight for 2 each");
+        expect(bobSees({ kind: "fireball", fighter: 2, at: 5, targets: [], damage: 2 })).toBe("Alice's Mage's fireball hit nobody");
+        expect(eventLines([{ kind: "fireball", fighter: 2, at: 5, targets: [], damage: 2 }], fighters, "a", nameFor)[0].sentence).toBe("Your Mage's fireball hit nobody");
+    });
+
+    it("tells a thrown flask by its thrower, and a smoke pot by its title", () => {
+        expect(bobSees({ kind: "thrown", fighter: 0, item: "fireFlask", at: 5, targets: [1], damage: 2 })).toBe("Alice's Archer's fire flask hit your Knight for 2 each");
+        expect(bobSees({ kind: "thrown", fighter: 0, item: "thunderFlask", at: 5, targets: [1], damage: 0 })).toBe("Alice's Archer's thunder flask caught your Knight");
+        expect(bobSees({ kind: "thrown", fighter: 0, item: "smokePot", at: 5, targets: [], damage: 0 })).toBe("Alice's Archer threw a smoke pot");
+    });
+
+    it("tells a character going down, capitalised", () => {
+        expect(bobSees({ kind: "downed", fighter: 1, by: 0 })).toBe("Your Knight is down");
+        expect(eventLines([{ kind: "downed", fighter: 1, by: 0 }], fighters, "a", nameFor)[0].sentence).toBe("Bob's Knight is down");
+    });
+
+    it("tells who healed whom, and what a draught was given to", () => {
+        expect(bobSees({ kind: "healed", fighter: 3, target: 0, hp: 3 })).toBe("Alice's Cleric healed Alice's Archer for 3");
+        expect(bobSees({ kind: "healed", fighter: 3, target: 3, hp: 3, via: "purify" })).toBe("Alice's Cleric purified itself for 3");
+        expect(bobSees({ kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" })).toBe("Alice's Archer drank a healing draught for 3");
+        expect(bobSees({ kind: "healed", fighter: 0, target: 2, hp: 3, via: "draught" })).toBe("Alice's Archer gave Alice's Mage a healing draught for 3");
+    });
+
+    it("tells a move, sneaking or not", () => {
+        expect(bobSees({ kind: "moved", fighter: 0, path: [0, 1], sneaking: false })).toBe("Alice's Archer moved");
+        expect(bobSees({ kind: "moved", fighter: 0, path: [0, 1], sneaking: true })).toBe("Alice's Archer sneaked");
+        expect(eventLines([{ kind: "moved", fighter: 0, path: [0, 1], sneaking: false }], fighters, "a", nameFor)[0].sentence).toBe("Your Archer moved");
+    });
+
+    it("gives every other kind a sentence that reads on its own, capitalised, with no full stop", () => {
+        const events: BattleEvent[] = [
+            { kind: "blasted", fighter: 2, squares: [4, 6] },
+            { kind: "demolished", fighter: 1, at: 5, targets: [0], damage: 2 },
+            { kind: "burst", fighter: 0, targets: [], damage: 2 },
+            { kind: "marked", fighter: 0, target: 1 },
+            { kind: "raised", fighter: 3, target: 0, hp: 2 },
+            { kind: "hunkered", fighter: 1 },
+            { kind: "shieldWall", fighter: 1 },
+            { kind: "watching", fighter: 0, banked: 2 },
+            { kind: "spotted", fighter: 1, by: 0 },
+            { kind: "effect", fighter: 1, effect: "burning", change: "applied" },
+            { kind: "burned", fighter: 1, damage: 1 },
+            { kind: "scored", player: "b", points: 5, reason: "knockout" },
+        ];
+        expect(eventLines(events, fighters, "b", nameFor).map(line => line.sentence)).toEqual([
+            "2 squares of low cover blasted away",
+            "Your Knight used Demolish and hit Alice's Archer for 2 each",
+            "Alice's Archer burst and hit nobody",
+            "Alice's Archer used Hunter's mark on your Knight",
+            "Alice's Cleric raised Alice's Archer to 2 HP",
+            "Your Knight hunkered down",
+            "Your Knight raised a shield wall",
+            "Alice's Archer is on watch",
+            "Your Knight found Alice's Archer in its way",
+            "Your Knight is burning",
+            "Your Knight burned for 1",
+            "You scored 5",
+        ]);
+    });
+
+    it("carries the index of the event each line tells, a broken-up move told once at its first segment", () => {
+        const events: BattleEvent[] = [
+            { kind: "scored", player: "a", points: 1, reason: "centre" },
+            { kind: "moved", fighter: 0, path: [0, 1], sneaking: false },
+            shot("hit", { fighter: 1, target: 0, reaction: true }),
+            { kind: "moved", fighter: 0, path: [1, 2], sneaking: false },
+            { kind: "downed", fighter: 0, by: 1 },
+        ];
+        expect(eventLines(events, fighters, "a", nameFor).map(line => line.event)).toEqual([0, 1, 2, 4]);
+    });
+
+    it("keeps its title, sub and roll, and has no roll for a shot a review told without one", () => {
+        const [line] = eventLines([shot("hit")], fighters, "b", nameFor);
+        expect(line).toMatchObject({ title: "Hit for 3", sub: "Alice's Archer at your Knight · 70% to hit", roll: 40, icon: "🎯" });
+        const { roll: _roll, ...told } = shot("hit") as Extract<BattleEvent, { kind: "shot" }>;
+        const [unrolled] = eventLines([told], fighters, "b", nameFor);
+        expect(unrolled).not.toHaveProperty("roll");
+        expect(unrolled.sentence).toBe("Alice's Archer hit your Knight for 3");
+    });
+});
+
+describe("the board's caption", () => {
+    const before = [ready(0, "a", "knight", 10), ready(1, "b", "archer", 50), ready(2, "b", "archer", 60)];
+    const captions = (cues: readonly BattleCue[]) => cues.filter((cue): cue is CaptionCue => cue.kind === "caption");
+    const moveShotDown: BattleEvent[] = [
+        { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+        { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 3, reaction: true },
+        { kind: "downed", fighter: 0, by: 1 },
+    ];
+
+    it("turns to each event as the first of its cues starts: the walk, the arrow's flight, the fall", () => {
+        const cues = battleCues(FIELD, moveShotDown, before);
+        const walkEnd = 2 * WALK_STEP_MS, land = walkEnd + 450, loosed = land - flight("arrow", 50, 12);
+        expect(captions(cues)).toMatchObject([
+            { event: 0, start: 0 },
+            { event: 1, start: loosed },
+            { event: 2, start: land },
+        ]);
+        // The fall starts with the blow that causes it; the shot's Overwatch word is the first of its own cues.
+        expect(cues.find(cue => cue.kind === "fall")?.start).toBe(land);
+        expect(cues.find(cue => cue.kind === "flight")?.start).toBe(loosed);
+    });
+
+    it("runs each to the start of the next, the last to the end of everything else, so it never makes the playback longer", () => {
+        const cues = battleCues(FIELD, moveShotDown, before);
+        const [first, second, third] = captions(cues);
+        expect(first.start + first.length).toBe(second.start);
+        expect(second.start + second.length).toBe(third.start);
+        const rest = cues.filter(cue => cue.kind !== "caption");
+        expect(third.start + third.length).toBe(endOf(rest));
+        expect(endOf(cues)).toBe(endOf(rest));
+    });
+
+    it("keeps its place in the cue list, after the cues of the event it turns to", () => {
+        const cues = battleCues(FIELD, moveShotDown, before);
+        expect(cues[0].kind).toBe("walk");
+        expect(captions(cues).map(cue => cue.event)).toEqual([0, 1, 2]);
+    });
+
+    it("gives an event that drew nothing no caption, so a playback of nothing drawn stays empty", () => {
+        const nothing: BattleEvent[] = [{ kind: "scored", player: "a", points: 5, reason: "knockout" }, { kind: "moved", fighter: 0, path: [10], sneaking: false }];
+        expect(battleCues(FIELD, nothing, before)).toEqual([]);
+        const some = battleCues(FIELD, [...nothing, { kind: "hunkered", fighter: 0 }], before);
+        expect(captions(some).map(cue => cue.event)).toEqual([2]);
+    });
+
+    it("gives the later segments of a move broken up by overwatch no caption, as eventLines tells it once", () => {
+        const events: BattleEvent[] = [
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "graze", damage: 1, reaction: true },
+            { kind: "moved", fighter: 0, path: [12, 13, 14], sneaking: false },
+        ];
+        const cues = battleCues(FIELD, events, before);
+        expect(cues.filter(cue => cue.kind === "walk")).toHaveLength(2);
+        expect(captions(cues).map(cue => cue.event)).toEqual([0, 1]);
+        // The shot's caption stands while the rest of the walk plays.
+        const [, shot] = captions(cues);
+        expect(shot.start + shot.length).toBe(endOf(cues.filter(cue => cue.kind !== "caption")));
+        // Every caption has a line to say.
+        const lines = eventLines(events, before, "a", nameFor);
+        for (const caption of captions(cues)) expect(lines.some(line => line.event === caption.event)).toBe(true);
+    });
+
+    it("still steps through its events for a player who asked for less motion", () => {
+        const cues = battleCues(FIELD, moveShotDown, before, [], { still: true });
+        const steps = captions(cues);
+        expect(steps.map(cue => cue.event)).toEqual([0, 1, 2]);
+        expect(steps.every((cue, i) => i === 0 || cue.start >= steps[i - 1].start)).toBe(true);
+        expect(endOf(cues)).toBe(endOf(cues.filter(cue => cue.kind !== "caption")));
+    });
+
+    describe("captionAt", () => {
+        const cues: BattleCue[] = [
+            { kind: "caption", event: 0, start: 100, length: 200 },
+            { kind: "caption", event: 1, start: 300, length: 150 },
+            { kind: "caption", event: 2, start: 450, length: 50 },
+        ];
+
+        it("is none before the first has started", () => {
+            expect(captionAt(cues, 0)).toBeNull();
+            expect(captionAt(cues, 99)).toBeNull();
+            expect(captionAt([], 500)).toBeNull();
+        });
+
+        it("is the latest that has started, at the moment it starts", () => {
+            expect(captionAt(cues, 100)?.event).toBe(0);
+            expect(captionAt(cues, 299)?.event).toBe(0);
+            expect(captionAt(cues, 300)?.event).toBe(1);
+            expect(captionAt(cues, 449)?.event).toBe(1);
+        });
+
+        it("holds the last one after the playback is over, and for Infinity, which is how the board asks outside one", () => {
+            expect(captionAt(cues, 450)?.event).toBe(2);
+            expect(captionAt(cues, 5000)?.event).toBe(2);
+            expect(captionAt(cues, Infinity)?.event).toBe(2);
+        });
+
+        it("ignores cues that aren't captions, and takes the later of two that start together", () => {
+            const mixed: BattleCue[] = [
+                { kind: "caption", event: 0, start: 0, length: 0 },
+                { kind: "caption", event: 1, start: 0, length: 100 },
+                { kind: "scorch", squares: [1], start: 50, length: 10 },
+            ];
+            expect(captionAt(mixed, 20)?.event).toBe(1);
+        });
+    });
+
+    describe("in a playback squeezed to fit", () => {
+        const ROW_BEFORE = [ready(0, "a", "knight", 10), ready(1, "b", "archer", 50)];
+
+        it("keeps each caption on the start of its event's first cue when the walks are quickened", () => {
+            const events: BattleEvent[] = [
+                { kind: "moved", fighter: 0, path: Array.from({ length: 40 }, (_, i) => 10 + i), sneaking: false },
+                { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: true },
+            ];
+            const cues = battleCues(ROW, events, ROW_BEFORE);
+            const [walk] = cues.filter(cue => cue.kind === "walk");
+            const [flightCue] = cues.filter(cue => cue.kind === "flight");
+            expect(walk.length).toBeLessThan(39 * WALK_STEP_MS);
+            expect(captions(cues)).toMatchObject([{ event: 0, start: walk.start }, { event: 1, start: flightCue.start }]);
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
+
+        it("keeps them in step, contiguous and ending with the rest, when the whole playback is scaled down", () => {
+            const events: BattleEvent[] = Array.from({ length: 30 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
+            const cues = battleCues(FIELD, events, before);
+            const steps = captions(cues), flights = cues.filter(cue => cue.kind === "flight");
+            expect(Math.min(...cues.filter((cue): cue is TextCue => cue.kind === "text").map(cue => cue.length))).toBeLessThan(800);
+            expect(steps).toHaveLength(30);
+            expect(steps.map(cue => cue.start)).toEqual(flights.map(cue => cue.start));
+            steps.forEach((cue, i) => {
+                expect(cue.start + cue.length).toBe(i + 1 < steps.length ? steps[i + 1].start : endOf(cues.filter(other => other.kind !== "caption")));
+            });
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
         });
     });
 });
