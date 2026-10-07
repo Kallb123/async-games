@@ -543,6 +543,13 @@ export interface TextCue extends Timed {
      * same, so none of them is drawn on top of another.
      */
     lane?: number;
+    /**
+     * Where the blow it tells came from, for the knock the target takes as it
+     * lands: the shooter's or striker's square, or where a fireball or a flask
+     * came down, or a Bloater burst. Absent on anything that isn't a blow —
+     * burning, a heal, a word.
+     */
+    from?: Square;
 }
 
 /** Something flying from one square to another (§26.1). */
@@ -574,6 +581,9 @@ export interface BurstCue extends Timed {
 export interface SlashCue extends Timed {
     kind: "slash";
     square: Square;
+    /** Who strikes, and the square it strikes from: it lunges at `square` as the slash crosses it. */
+    striker: number;
+    from: Square;
 }
 
 /**
@@ -773,7 +783,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         landed = landed === null ? lead : landed + Math.max(CUE_STEP_MS, lead);
         return landed;
     };
-    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange"> = {}) => {
+    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange" | "from"> = {}) => {
         const square = at.get(fighter);
         if (square === undefined) return;
         const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: HIT_TEXT_MS };
@@ -835,16 +845,18 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 // An overwatch shot says so as it's loosed, so the camera's pan to the watcher says why.
                 if (event.reaction) say(event.fighter, land - flightOf(missile), OVERWATCH_WORD);
                 fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
+                const from = event.result === "miss" ? undefined : at.get(event.fighter);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
-                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}) });
+                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}), from });
                 break;
             }
             case "struck": {
                 const land = beat(SLASH_MS);
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
-                if (square !== undefined) cues.push({ kind: "slash", square, start: land - SLASH_MS, length: 2 * SLASH_MS });
-                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage });
+                const from = at.get(event.fighter);
+                if (square !== undefined && from !== undefined) cues.push({ kind: "slash", square, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage, from });
                 break;
             }
             case "burned":
@@ -873,24 +885,25 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
                 cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
-                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
+                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from: event.at }));
                 break;
             }
             case "demolished":
             case "burst": {
                 // A blow at the cover, or the Bloater's splash over the 3×3
                 // round it: everyone it caught is hit at once as it lands.
-                let land: number;
+                let land: number, from: Square | undefined;
                 if (event.kind === "demolished") {
                     land = beat(SLASH_MS);
-                    cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                    from = at.get(event.fighter);
+                    if (from !== undefined) cues.push({ kind: "slash", square: event.at, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
                 } else {
                     land = beat();
-                    const square = at.get(event.fighter);
-                    if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
+                    from = at.get(event.fighter);
+                    if (from !== undefined) cues.push({ kind: "burst", burst: "acid", at: from, radius: 1, start: land, length: BURST_MS });
                 }
                 landing = { start: land, targets: event.targets };
-                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
+                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from }));
                 break;
             }
             case "blasted":
