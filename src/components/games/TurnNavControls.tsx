@@ -18,7 +18,7 @@ interface TurnNavControlsProps {
     /** The game's players in seat order, used to colour the reviewed action's swatch. */
     userIdList?: string[];
     /** Offer auto-play in the transport. Opt-in: a game turns it on once it has
-     *  animations worth waiting out (see useTurnNavigation's `stepDurationMs`). */
+     *  animations worth waiting out (see useTurnNavigation's `awaitsStepEnd`). */
     canPlay?: boolean;
     /** A short note after the action's text — Realm Arena says which part of an
      *  End turn it is playing ("enemy action 2 of 5"). */

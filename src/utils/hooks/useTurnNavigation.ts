@@ -41,27 +41,38 @@ interface ITimelineWireResponse<TState, TOutcome> extends Omit<ITimelineResponse
 export type NavMode = "live" | "recap" | "planning";
 
 // How long auto-play rests on a step before moving to the next, for a game that
-// doesn't say. Long enough to read a one-line action, short enough that a
-// match's worth doesn't drag.
+// doesn't say when its step has finished playing (`awaitsStepEnd`). Long enough
+// to read a one-line action, short enough that a match's worth doesn't drag.
 export const DEFAULT_STEP_DURATION_MS = 1500;
 
 // What the hook accepts beyond the game id and the live view. Everything here
 // is opt-in: a game that passes nothing gets the plain stepper it always had.
-export interface TurnNavigationOptions<TState, TOutcome> {
-    // How long auto-play stays on `snapshot` before advancing — the time the
-    // game's own animation of that step needs. `previous` is the position the
-    // step was played from (undefined for the opening position). Realm Arena
-    // returns longer for a step that plays out several hits.
-    stepDurationMs?: (
-        snapshot: ITurnSnapshot<TState, TOutcome>,
-        previous: ITurnSnapshot<TState, TOutcome> | undefined
-    ) => number;
+export interface TurnNavigationOptions {
+    // The game animates each step itself and says when it has finished playing,
+    // by calling `stepEnded(index)` — so auto-play arms no timer of its own and
+    // rests on a step for exactly as long as the animation takes, however long
+    // a slow phone makes that. Realm Arena does: its board says when a
+    // playback has played, and its page, once a step's last part has, ends the
+    // step. Without it, auto-play rests `DEFAULT_STEP_DURATION_MS` on each.
+    awaitsStepEnd?: boolean;
 }
 
-// A duration a game hands back is trusted no further than it can be used: NaN
-// or a negative would turn the timer into a busy loop, so it falls back.
-export function playbackDelay(ms: number | undefined): number {
-    return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_STEP_DURATION_MS;
+// Where auto-play stands: what `stepEnded` decides from.
+export interface AutoPlayPosition {
+    playing: boolean;
+    viewIndex: number;
+    currentIndex: number;
+}
+
+// What auto-play does when the step at `index` has finished playing: on to the
+// next step, or — at the live position, the last step waited out too — stop.
+// Null when the call is stale, either because it is for a step no longer shown
+// or because auto-play is no longer on, and so changes nothing.
+export function autoPlayAfter(position: AutoPlayPosition, index: number): { playing: boolean; viewIndex: number } | null {
+    if (!position.playing || index !== position.viewIndex) return null;
+    return position.viewIndex >= position.currentIndex
+        ? { playing: false, viewIndex: position.viewIndex }
+        : { playing: true, viewIndex: position.viewIndex + 1 };
 }
 
 // Where "replay from your last turn" starts *from* — the position before the
@@ -96,14 +107,14 @@ export interface LiveGameView<TState> {
 // that took several commands (roll, build, build, end) is several steps here.
 // Both are driven by the same reconstructed timeline from /api/game/[id]/timeline.
 //
-// Auto-play is the same stepping on a timer: `play` walks forward to the live
-// position and stops there, resting on each step for as long as the game says
-// its animation takes (`options.stepDurationMs`). Anything the player does by
-// hand stops it.
+// Auto-play is the same stepping on its own: `play` walks forward to the live
+// position and stops there. A step ends after `DEFAULT_STEP_DURATION_MS`, or —
+// for a game that animates its steps (`options.awaitsStepEnd`) — when the game
+// says so with `stepEnded`. Anything the player does by hand stops it.
 export function useTurnNavigation<TState, TOutcome = unknown>(
     gameId: string,
     live: LiveGameView<TState>,
-    options?: TurnNavigationOptions<TState, TOutcome>
+    options?: TurnNavigationOptions
 ) {
     const [mode, setMode] = useState<NavMode>("live");
     const [snapshots, setSnapshots] = useState<ITurnSnapshot<TState, TOutcome>[]>([]);
@@ -113,14 +124,6 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [playing, setPlaying] = useState(false);
-
-    // Callers pass `stepDurationMs` inline, so it is a new function every
-    // render. Held in a ref the timer reads when it is armed, it cannot
-    // re-arm (and so restart) the timer on every render.
-    const stepDurationRef = useRef(options?.stepDurationMs);
-    useEffect(() => {
-        stepDurationRef.current = options?.stepDurationMs;
-    });
 
     const fetchTimeline = useCallback(
         async (planned: unknown[]): Promise<ITimelineResponse<TState, TOutcome> | null> => {
@@ -261,23 +264,35 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
         [openTimeline]
     );
 
-    // The player: rest on the step shown for as long as it takes to animate,
-    // then move on — or, at the live position, stop (the last step is waited
-    // out too, so Stop stays up until its animation has finished). The state
-    // is only set inside the timeout, and the cleanup clears it, so any change
-    // to what is on screen (a manual step, a new timeline) re-arms it cleanly.
+    // `stepEnded` is called from a timer or the board's say-so, long after the
+    // render that made it, so it reads where auto-play stands from a ref kept
+    // up to date after each render — and stays one function, which a caller's
+    // own timer can hold without re-arming.
+    const position = useRef<AutoPlayPosition>({ playing, viewIndex, currentIndex });
     useEffect(() => {
-        if (!playing) return;
-        const shown = snapshots[viewIndex];
-        const ms = shown
-            ? playbackDelay(stepDurationRef.current?.(shown, snapshots[viewIndex - 1]))
-            : DEFAULT_STEP_DURATION_MS;
-        const timer = setTimeout(() => {
-            if (viewIndex >= currentIndex) setPlaying(false);
-            else setViewIndex(viewIndex + 1);
-        }, ms);
+        position.current = { playing, viewIndex, currentIndex };
+    });
+    // The step at `index` has finished playing. When it is the step shown and
+    // auto-play is on, move on to the next — or, at the live position, stop
+    // (the last step is waited out too, so Stop stays up until its animation
+    // has finished). Any other call is stale and does nothing.
+    const stepEnded = useCallback((index: number) => {
+        const next = autoPlayAfter(position.current, index);
+        if (!next) return;
+        setPlaying(next.playing);
+        setViewIndex(next.viewIndex);
+    }, []);
+
+    // The default player, for a game that doesn't say when its steps end: rest
+    // on the step shown, then end it. The state is only set inside the
+    // timeout, and the cleanup clears it, so any change to what is on screen
+    // (a manual step, a new timeline) re-arms it cleanly.
+    const awaitsStepEnd = !!options?.awaitsStepEnd;
+    useEffect(() => {
+        if (!playing || awaitsStepEnd) return;
+        const timer = setTimeout(() => stepEnded(viewIndex), DEFAULT_STEP_DURATION_MS);
         return () => clearTimeout(timer);
-    }, [playing, viewIndex, snapshots, currentIndex]);
+    }, [playing, awaitsStepEnd, viewIndex, currentIndex, stepEnded]);
 
     // Hidden, the player isn't watching, and a backgrounded tab's throttled
     // timers would play on in fits: so auto-play stops, and coming back finds
@@ -339,9 +354,12 @@ export function useTurnNavigation<TState, TOutcome = unknown>(
         jumpToStart,
         jumpToCurrent,
         // Auto-play (see above): `play` from the viewed step, `stop` to hold
-        // where it is, `playFromLastTurnOf` for the recap screen's replay.
+        // where it is, `playFromLastTurnOf` for the recap screen's replay, and
+        // `stepEnded` for a game that `awaitsStepEnd` to say the step at that
+        // index has played.
         play,
         stop,
+        stepEnded,
         playFromLastTurnOf,
         // Modes
         enterRecap,

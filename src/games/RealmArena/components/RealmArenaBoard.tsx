@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import BoardZoom, { type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
@@ -7,16 +7,17 @@ import { facingTowards, type Battlefield, type Facing, type Square, type Terrain
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
-import RealmArenaFx, { useElapsed, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
+import RealmArenaFx from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
+import { PlaybackProvider, setAttributes, translation, usePlaybackFrame, usePlaybackRef, usePlaybackValue } from '@/utils/hooks/usePlayback';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type Shove, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkLift, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type FxPoints, type ScorchCue, type Shove, type Timed, type WalkCue, effectsOn, facingOf, fadeInAt, fadeOutAt, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, progressOf, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkLift, walkSquares, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -134,9 +135,11 @@ interface RealmArenaBoardProps {
      * (§17.3 PR 8), or — `aim` — a target picked from the turn sheet's list,
      * framed close with whoever is aiming at it (`aimFocus`). `exact` zooms to
      * just fit the squares, rather than to the deepest step they fit at: a
-     * move's start and end, which are often a dozen squares apart.
+     * move's start and end, which are often a dozen squares apart. `close`
+     * frames them as tight as `aim` does: an action's caster and whoever it
+     * reached (`actionFollow`).
      */
-    follow?: { squares: readonly Square[]; key: string; exact?: boolean } | AimFollow | null;
+    follow?: { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean } | AimFollow | null;
     /**
      * Where the view rests when nothing else says where to look — the
      * viewer's own side, as the board opens and whenever a selection, a pick
@@ -150,6 +153,13 @@ interface RealmArenaBoardProps {
     overlay?: React.ReactNode;
     /** What an action did, played over the figures (§26): a new `key` starts it over. */
     playback?: Playback | null;
+    /**
+     * The playback with this `key` has played to its end: told once each, as
+     * its clock gets there — after the glide to it and any hold on the way, however
+     * long they took. The page moves on by it, not by a guess at how long the
+     * glide takes.
+     */
+    onPlayed?: (key: string) => void;
     /**
      * A review step that happened out of the viewer's sight (`isUnplaced`),
      * as a key — the step's, so each one's mark fades in afresh: a big
@@ -288,18 +298,17 @@ interface FigureProps {
     /** Drawn over whatever hides it, rather than standing on its square: no shadow. */
     ghost?: boolean;
     /**
-     * How far the figure — and the item it carries — is off its square, in
-     * board units: a bob in its step, a knock from a blow, a lunge. Its shadow,
-     * rings and the tap on it stay where they are.
+     * The group the figure — and the item it carries — stands in, for the
+     * playback's frame loop to move off its square by setting its `transform`
+     * (`usePlaybackFrame`): a bob in its step, a knock from a blow, a lunge. Its
+     * shadow, rings and the tap on it stay where they are. Without one, nothing
+     * moves it.
      */
-    offset?: Point;
+    moving?: React.Ref<SVGGElement>;
 }
 
-/** A figure that is where its square puts it. */
-const NO_OFFSET: Point = { x: 0, y: 0 };
-
 /** A character standing or lying on its square, facing its way, in its owner's colour, over its shadow and rings, with the item it carries. */
-function Figure({ artId, view, square, character, facing, pose = 'standing', item, className = '', tint, ring, marker, ghost = false, offset = NO_OFFSET }: FigureProps) {
+function Figure({ artId, view, square, character, facing, pose = 'standing', item, className = '', tint, ring, marker, ghost = false, moving }: FigureProps) {
     const feet = isoCentre(view, square);
     const { x, y } = discCentre(view, square);
     const art = CHARACTER_ART[character][pose];
@@ -308,21 +317,26 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
     const groundRing = (className: string, radius: number) => (
         <ellipse className={className} cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH * radius} ry={ISO_HALF_HEIGHT * radius} />
     );
+    const body = (
+        <>
+            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
+                <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
+                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
+            </g>
+            {item && (
+                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
+            )}
+        </>
+    );
     return (
         <>
             {!ghost && <ellipse className="ag-ra-shadow" cx={feet.x} cy={feet.y} rx={ISO_HALF_WIDTH / 2} ry={ISO_HALF_HEIGHT / 2} />}
             {marker && groundRing(`ag-ra-marker ag-ra-marker--${marker}`, MARKER_RADIUS)}
             {ring && groundRing(`ag-ra-ring ag-ra-ring--${ring}`, RING_RADIUS)}
             {/* `spriteBox` places a sprite from its square's back corner, half a diamond above the middle. */}
-            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x + offset.x} ${feet.y - ISO_HALF_HEIGHT + offset.y})`}>
-                <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
-                {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
-            </g>
+            {moving ? <g ref={moving}>{body}</g> : body}
             {/* The art is a whole cell, mostly see-through: only the body is tapped, so a tap above a figure reaches the square or the figure behind it. */}
             <circle className="ag-ra-figure-hit" cx={x} cy={y} r={FIGURE_RADIUS} />
-            {item && (
-                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x + offset.x} y={y + ITEM_MARK_OFFSET.y + offset.y} size={ITEM_MARK_SIZE} />
-            )}
         </>
     );
 }
@@ -332,19 +346,32 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
 
 /**
  * A standing figure's HP bar, over the figure standing on the square whose
- * middle is (`x`, `y`), in its owner's colour, as its figure is. `chip` is the
- * HP a blow has just taken off, still drawn pale past the end of the fill while
- * it drains away.
+ * middle is (`x`, `y`), in its owner's colour, as its figure is. Given what the
+ * action being played told of the figure (`told`), the fill's width, and the
+ * pale chip of the HP a blow has just taken off past the end of it while it
+ * drains away, are set a frame at a time from the playback's clock
+ * (`toldAt`) — so they are no props of the rects they draw.
  */
-function HpBar({ x, y, fighter, colour, chip }: { x: number; y: number; fighter: Fighter; colour: string; chip?: number }) {
+function HpBar({ x, y, fighter, colour, told }: { x: number; y: number; fighter: Fighter; colour: string; told?: Told }) {
     const corner = hpBarCorner(x, y);
-    const fill = HP_BAR_WIDTH * hpFraction(fighter);
-    const lagging = chip === undefined ? 0 : HP_BAR_WIDTH * hpFraction(fighter, fighter.hp - chip) - fill;
+    // The fill and the chip each read `toldAt` for themselves: cheap, and it
+    // keeps each draw to its own element.
+    const fill = usePlaybackRef<SVGRectElement>((rect, ms) => {
+        if (!told) return;
+        setAttributes(rect, { width: HP_BAR_WIDTH * hpFraction(toldAt(told, fighter, ms).drawn) });
+    });
+    const chip = usePlaybackRef<SVGRectElement>((rect, ms) => {
+        if (!told) return;
+        const { drawn, chip: level } = toldAt(told, fighter, ms);
+        const width = HP_BAR_WIDTH * hpFraction(drawn);
+        const lagging = level === undefined ? 0 : HP_BAR_WIDTH * hpFraction(drawn, drawn.hp - level) - width;
+        setAttributes(rect, { x: corner.x + width, width: Math.max(0, lagging) });
+    });
     return (
         <>
             <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={fill} height={HP_BAR_HEIGHT} />
-            {lagging > 0 && <rect className="ag-ra-hp-chip" x={corner.x + fill} y={corner.y} width={lagging} height={HP_BAR_HEIGHT} />}
+            <rect ref={fill} className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={told ? undefined : HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
+            {told && <rect ref={chip} className="ag-ra-hp-chip" y={corner.y} height={HP_BAR_HEIGHT} />}
             {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
             <rect className="ag-ra-hp-edge" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
         </>
@@ -372,86 +399,132 @@ function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; 
     );
 }
 
-/** How far through its cue the playback is `ms` in, 0 before it starts and 1 once it is over. */
-function cueProgress(ms: number, cue: { start: number; length: number }): number {
-    return Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+/**
+ * A group for a figure to stand in (`Figure`'s `moving`), knocked or lunging
+ * by `shoves` (`shoveAt`) a frame at a time as the playback runs: the ref to
+ * hand it.
+ */
+function useShoved(view: IsoView, shoves: readonly Shove[]): React.RefObject<SVGGElement | null> {
+    return usePlaybackRef<SVGGElement>((group, ms) => {
+        setAttributes(group, { transform: translation(shoveAt(shoves, ms, square => isoCentre(view, square))) });
+    });
 }
 
 /**
- * What the action being played takes off the board (§26.1) — a character it
- * downed, cover it blasted — there as it was until its cue starts, then
- * fading out over the cue, easing in, and gone. Faded a frame at a time, as
- * the walkers are walked, rather than by keyframes: a keyframed fade here, in
+ * Something that comes or goes during the action being played (§26.1), faded a
+ * frame at a time on the playback's clock: `frame` says how much of it is there
+ * `ms` in — an opacity, or null while it isn't drawn at all — and it is hidden
+ * for null or an opacity of nothing, and drawn at that opacity otherwise. By
+ * default it goes: a character the action downed, cover it blasted, there as it
+ * was until its cue starts, then easing out and gone (`fadeOutAt`). Given
+ * `fadeInAt` it comes: a downed character lying where it fell, unseen until its
+ * blow lands and then easing in quicker at first, so it and the standing figure
+ * it replaces never leave a gap to see through. Set as the `opacity` and
+ * `visibility` attributes rather than by keyframes: a keyframed fade here, in
  * the middle of the board's depth order, would have the browser lift it and
  * everything drawn in front of it into layers of their own for as long as the
  * playback lasts — which a phone pays for in flashes and stutter.
  */
-function Fading({ cue, held, className, children }: { cue: { start: number; length: number }; held: boolean; className: string; children: React.ReactNode }) {
-    const ms = useElapsed(cue.start + cue.length, held);
-    const faded = cueProgress(ms, cue);
-    if (faded >= 1) return null;
-    return <g className={className} opacity={1 - faded * faded}>{children}</g>;
+function CueFade({ cue, frame = fadeOutAt, className, children }: { cue: Timed; frame?: (cue: Timed, ms: number) => number | null; className?: string; children: React.ReactNode }) {
+    const group = usePlaybackRef<SVGGElement>((element, ms) => {
+        const opacity = frame(cue, ms);
+        const shown = opacity !== null && opacity > 0;
+        setAttributes(element, { visibility: shown ? null : 'hidden', opacity: shown && opacity < 1 ? opacity : null });
+    });
+    return <g ref={group} className={className}>{children}</g>;
 }
 
 /**
  * A character the action being played downed, standing as it was until the
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
- * something to hit. Drawn without its marks, and not to be tapped.
+ * something to hit. Knocked by the blow that downs it, as it would be standing.
+ * Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, cue, shoves, held, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; shoves: readonly Shove[]; held: boolean; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function Falling({ artId, view, cue, shoves, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; shoves: readonly Shove[]; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
-    // Its own clock, only for as long as it is knocked by the blow that downs it.
-    const ms = useElapsed(endOf(shoves), held);
-    const offset = shoveAt(shoves, ms, square => isoCentre(view, square));
+    const moving = useShoved(view, shoves);
     return (
-        <Fading cue={cue} held={held} className="ag-ra-falling">
-            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} offset={offset} ghost />
+        <CueFade cue={cue} className="ag-ra-falling">
+            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} moving={moving} ghost />
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
-        </Fading>
+        </CueFade>
     );
 }
 
+/** Where a walker is `ms` in, and the square of its path it is nearest (`walkerAt`): one reading of it a frame, shared by every slot of its path (`onePerFrame`). */
+type Walker = (ms: number) => ReturnType<typeof walkerAt>;
+
+/** `read`, remembering its last answer: asked again for the same time, it gives that back rather than working it out again. */
+function onePerFrame<T>(read: (ms: number) => T): (ms: number) => T {
+    let at = Number.NaN;
+    let last: T;
+    return ms => {
+        if (ms !== at) {
+            last = read(ms);
+            at = ms;
+        }
+        return last;
+    };
+}
+
 /**
- * A character walking the path the action being played told (§26.1): its
- * figure, over its shadow and with its HP bar, slid from square to square a
- * frame at a time — turned to face each step, rising and falling with the
- * ground, bobbing a little in each step and hopping a change of height, the
- * figure alone, so its bar and shadow stay steady — and gone once its last walk is over, which is when its resting
- * figure (`Arriving`) appears where the path ends. Drawn without its marks, and
- * not to be tapped.
+ * A character walking the path the action being played told (§26.1), in the
+ * depth slot of the square it is nearest (`WalkerSlot`, one for each square of
+ * the path, `walkerAt`'s `at`): its figure, over its shadow and with its HP
+ * bar, slid along the leg it is on a frame at a time — turned to face each
+ * step, rising and falling with the ground, bobbing a little in each step and
+ * hopping a change of height, the figure alone, so its bar and shadow stay
+ * steady. Only the slot it is nearest draws it, so it is hidden by exactly what
+ * stands in front of that square — a tower it has gone behind, not the front of
+ * its whole path — and gone once its last walk is over, which is when its
+ * resting figure (`Arriving`) appears where the path ends. Drawn without its
+ * marks, and not to be tapped.
+ *
+ * A slot draws the walker itself while it is the current one, and nothing
+ * otherwise, rather than the walker moving between slots by `createPortal`:
+ * which slot is current is a value that changes once a half-leg
+ * (`usePlaybackValue`), so only the two slots it passes between render, and no
+ * ref is read to find where to draw.
  */
-function Walker({ artId, view, field, walks, held, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; held: boolean; tintFor: TintFor; colourFor: (owner: string) => string }) {
-    const last = walks[walks.length - 1];
-    const ms = useElapsed(last.start + last.length, held);
-    const now = walkerAt(walks, ms, legLengthOn(view));
-    if (!now) return null;
-    const { fighter } = walks[0];
-    const feet = isoCentre(view, now.from), next = isoCentre(view, now.to);
+function WalkerSlot({ artId, view, field, fighter, walker, slot, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; slot: number; tintFor: TintFor; colourFor: (owner: string) => string }) {
+    const leg = usePlaybackValue(ms => {
+        const now = walker(ms);
+        return now && now.at === slot ? `${now.from}>${now.to}` : null;
+    });
+    if (leg === null) return null;
+    const [from, to] = leg.split('>').map(Number);
+    return <WalkingFigure artId={artId} view={view} field={field} fighter={fighter} walker={walker} from={from} to={to} tintFor={tintFor} colourFor={colourFor} />;
+}
+
+/** A walker on one leg, from `from` to `to`: slid and lifted a frame at a time (`WalkerSlot`). */
+function WalkingFigure({ artId, view, field, fighter, walker, from, to, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; fighter: Fighter; walker: Walker; from: Square; to: Square; tintFor: TintFor; colourFor: (owner: string) => string }) {
+    const feet = isoCentre(view, from), next = isoCentre(view, to);
+    // A frame in which the walker has moved on to its next leg, before this slot has been rendered over: stay as it was.
+    const onThisLeg = (ms: number) => {
+        const now = walker(ms);
+        return now && now.from === from && now.to === to ? now : null;
+    };
+    const slide = usePlaybackRef<SVGGElement>((group, ms) => {
+        const now = onThisLeg(ms);
+        if (now) setAttributes(group, { transform: translation({ x: (next.x - feet.x) * now.across, y: (next.y - feet.y) * now.across }) });
+    });
+    const lift = usePlaybackRef<SVGGElement>((group, ms) => {
+        const now = onThisLeg(ms);
+        if (now) setAttributes(group, { transform: translation({ x: 0, y: walkLift(now, square => view.heights[square]) }) });
+    });
     return (
-        <g className="ag-ra-walker" transform={`translate(${(next.x - feet.x) * now.across} ${(next.y - feet.y) * now.across})`}>
-            <Figure artId={artId} view={view} square={now.from} character={fighter.character} facing={facingTowards(field, now.from, now.to)} item={fighter.item} tint={tintFor(fighter.owner)} offset={{ x: 0, y: walkLift(now, square => view.heights[square]) }} />
+        <g ref={slide} className="ag-ra-walker">
+            <Figure artId={artId} view={view} square={from} character={fighter.character} facing={facingTowards(field, from, to)} item={fighter.item} tint={tintFor(fighter.owner)} moving={lift} />
             <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </g>
     );
 }
 
-/** What waits out a walk, hidden until `ms` into the playback (`ag-ra-arriving`): a walker's resting figure, standing where its path ends. */
-function Arriving({ ms, children }: { ms: number; children: React.ReactNode }) {
-    return <g className="ag-ra-arriving" style={{ animationDelay: `${ms}ms` }}>{children}</g>;
-}
-
-/**
- * A character the action being played downed, lying where it fell: unseen until
- * its blow lands (`cue.start`), then faded in over the cue as the standing
- * figure over it (`Falling`) fades out — quicker at first, so the two together
- * never leave a gap to see through. Faded a frame at a time, like `Fading`, and
- * for the same reason.
- */
-function Appearing({ cue, held, children }: { cue: { start: number; length: number }; held: boolean; children: React.ReactNode }) {
-    const ms = useElapsed(cue.start + cue.length, held);
-    const left = 1 - cueProgress(ms, cue);
-    return <g visibility={ms < cue.start ? 'hidden' : undefined} opacity={left > 0 ? 1 - left * left : undefined}>{children}</g>;
+/** What waits out a walk, hidden until `at` ms into the playback: a walker's resting figure, standing where its path ends. It shows with one render when the time comes, not by keyframes. */
+function Arriving({ at, children }: { at: number; children: React.ReactNode }) {
+    const arrived = usePlaybackValue(ms => ms >= at);
+    return <g visibility={arrived ? undefined : 'hidden'}>{children}</g>;
 }
 
 /** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
@@ -562,14 +635,14 @@ interface FighterNodeProps {
      * it's called stay `fighter`'s.
      */
     drawn?: Fighter;
-    /** The HP a blow has just taken off, still draining off the end of the bar. */
-    chip?: number;
-    /** How far its figure is knocked or lunging off its square (`Figure`'s `offset`): its bar and marks stay put. */
-    offset?: Point;
+    /** What the action tells of it, where its HP bar is drawn a frame at a time from that rather than from `drawn` (`HpBar`). */
+    told?: Told;
+    /** The group its figure is knocked or lunging in (`Figure`'s `moving`): its bar and marks stay put. */
+    moving?: React.Ref<SVGGElement>;
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, chip, offset }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, told, moving }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -596,9 +669,9 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
                 item={standing ? drawn.item : null}
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
-                offset={offset}
+                moving={moving}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={drawn} colour={colour} chip={chip} />}
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={drawn} colour={colour} told={told} />}
             <RealmArenaEffectMarks id={artId} effects={standing ? effectsOn(drawn) : []} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
@@ -607,52 +680,39 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
 
 /**
  * A resting character an action being played changes the bar, marks or item of
- * (`toldOf`): its own frame clock, so only these redraw every frame, drawing
- * them as the action found them until the cue that changed them lands, and
- * its figure knocked by the blows it takes and lunging as it strikes. The
- * clock stops once the last of it is over, and the figure is its real self.
+ * (`toldOf`): its marks and item are as the action found them until the cue
+ * that changed them lands, which takes one render when it does
+ * (`usePlaybackValue`); its HP bar's fill and chip are drawn a frame at a time
+ * from the playback's clock (`HpBar`'s `told`), and its figure is knocked by
+ * the blows it takes and lunges as it strikes (`useShoved`).
  */
-function ToldFighterNode({ told, held, ...props }: FighterNodeProps & { told: Told; held: boolean }) {
-    const ms = useElapsed(told.until, held);
-    const offset = shoveAt(told.shoves, ms, square => isoCentre(props.view, square));
-    return <FighterNode {...props} {...toldAt(told, props.fighter, ms)} offset={offset} />;
+function ToldFighterNode({ told, ...props }: FighterNodeProps & { told: Told }) {
+    const marked = usePlaybackValue(ms => ms >= told.marksAt);
+    const moving = useShoved(props.view, told.shoves);
+    const { fighter } = props;
+    const { effects, banked, item } = told.before;
+    return <FighterNode {...props} drawn={marked ? fighter : { ...fighter, effects, banked, item }} told={told} moving={moving} />;
 }
 
 /**
- * The clock of a shake (`Shaking`): its own frame loop, which moves the group
- * it is given by the shake's offset a frame at a time and puts it back when it
- * is over or unmounted. It draws nothing itself, and is keyed by its playback
- * so each one's clock starts at nothing.
+ * The shake of the battlefield (§26.1) as a fireball or a thunder flask
+ * lands, drawn a frame at a time on the playback's clock: it moves both groups
+ * it is given — the board's contents and the overlay's, so the flights and the
+ * text shake with the ground — by the shake's offset, and puts them back when
+ * it is over or unmounted. It draws nothing itself, and is keyed by its
+ * playback.
  */
-function ShakeClock({ target, cues, until, held }: { target: React.RefObject<SVGGElement | null>; cues: readonly BattleCue[]; until: number; held: boolean }) {
-    const ms = useElapsed(until, held);
-    const { x, y } = shakeAt(cues, ms);
-    useEffect(() => {
-        const group = target.current;
-        group?.setAttribute('transform', `translate(${x} ${y})`);
-        return () => group?.removeAttribute('transform');
-    }, [target, x, y]);
+function ShakeClock({ cues, board, fx }: { cues: readonly BattleCue[]; board: React.RefObject<SVGGElement | null>; fx: React.RefObject<SVGGElement | null> }) {
+    usePlaybackFrame(ms => {
+        const transform = translation(shakeAt(cues, ms));
+        if (board.current) setAttributes(board.current, { transform });
+        if (fx.current) setAttributes(fx.current, { transform });
+    });
+    useLayoutEffect(() => {
+        const groups = [board.current, fx.current];
+        return () => groups.forEach(group => group?.removeAttribute('transform'));
+    }, [board, fx]);
     return null;
-}
-
-/**
- * The whole battlefield, shaken (§26.1) as a fireball or a thunder flask lands:
- * its `children` in one group that stays where it is, the clock (`ShakeClock`)
- * setting that group's `transform` attribute a frame at a time. Setting it from
- * outside rather than as a prop is what lets the group stay mounted from one
- * playback to the next, so the board's thousand sprites are neither redrawn
- * nor remade for a shake; the clock is only mounted while there is one to play,
- * and not at all with reduced motion.
- */
-function Shaking({ playback, still, held, children }: { playback: Playback | null | undefined; still: boolean; held: boolean; children: React.ReactNode }) {
-    const group = useRef<SVGGElement>(null);
-    const until = playback && !still ? endOf(shakesOf(playback.cues)) : 0;
-    return (
-        <g ref={group}>
-            {children}
-            {playback && until > 0 && <ShakeClock key={playback.key} target={group} cues={playback.cues} until={until} held={held} />}
-        </g>
-    );
 }
 
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
@@ -688,7 +748,7 @@ interface DepthItem {
  * square as it did — drawn from the battlefield as the action found it — until
  * the burst fades, then fading off the scorched ground under it.
  */
-function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue, held: boolean): DepthItem[] {
+function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue): DepthItem[] {
     const before = playback.field;
     const was: IsoView = { ...view, heights: before.tiles.map(tile => tile.elevation) };
     const plinths = plinthsOf(view, before);
@@ -697,9 +757,9 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
         return {
             depth: block.depth,
             node: (
-                <Fading key={`blast-${playback.key}-${square}`} cue={cue} held={held} className="ag-ra-blasting">
+                <CueFade key={`blast-${playback.key}-${square}`} cue={cue} className="ag-ra-blasting">
                     <RaisedSquare id={artId} block={block} shades={[]} />
-                </Fading>
+                </CueFade>
             ),
         };
     });
@@ -762,22 +822,33 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * Placing a squad (`placing`), a tap on a square or on a character of the
  * squad both go to `placing.onTap`, with the square tapped.
  *
- * Stepping through a review (`follow`), the view goes to each step: every
- * character it moved or touched, zoomed as deep as they all still fit — or, for
- * a move, to just fit where it began and where it ended (`follow.exact`).
+ * Stepping through a review (`follow`), the view goes to each step: for a
+ * move, just fit round where it began and where it ended (`follow.exact`);
+ * for anything else, just fit and close round whoever acted and whoever it
+ * reached (`follow.close`), as a target picked to aim at is.
  * With nothing selected, picked up or followed, it rests on `home`: just fit
  * round the viewer's own side, which is also how the board opens.
  *
- * What an action did plays over the figures (`playback`, §26) — the viewer's
- * own as it comes back, and each step of a review — drawn by `RealmArenaFx`
- * above everything else, where nothing can be tapped: the shots and the
- * throws flying, their bursts, the slashes and the hit text. Anyone it
- * downed stands where it fell until the blow lands, then fades. A move walks:
- * the character is drawn along the path it was told (`Walker`), turned to face
- * each step, while its resting figure waits out the walk (`Arriving`) — and,
- * with reduced motion, is simply where it ended up. Everyone else keeps their
- * HP bar, marks and item as the action found them until the cue that changed
- * them lands (`ToldFighterNode`), and anyone downed lies unseen until its blow.
+ * What an action did plays over the figures (`playback`, §26) on one clock
+ * (`PlaybackProvider`, docs/isometric-animations.md §4): the viewer's own as
+ * it comes back, and each step of a review. Everything that moves reads that
+ * clock a frame at a time and writes its own SVG attributes, with no render a
+ * frame (`usePlaybackFrame`), and what changes now and then renders once when
+ * it does (`usePlaybackValue`). It stands still while the view glides to the
+ * action (`held`), and tells the page once it has played to its end
+ * (`onPlayed`). What flies and bursts over the figures — the shots and the
+ * throws, their bursts, the slashes and the hit text — is `RealmArenaFx`, in a
+ * second SVG stacked over the board's (`.ag-ra-fx-layer`), where nothing can be
+ * tapped. What is hidden by walls stays in the board, in its depth order: anyone
+ * the action downed stands where it fell until the blow lands, then fades
+ * (`Falling`); cover it blasted away fades (`CueFade`). A move walks: the
+ * character is drawn along the path it was told, turned to face each step, in
+ * the depth slot of the square it is nearest (`WalkerSlot`), while its resting
+ * figure waits out the walk (`Arriving`) — and, with reduced motion, is simply
+ * where it ended up. Everyone else keeps their HP bar, marks and item as the
+ * action found them until the cue that changed them lands (`ToldFighterNode`),
+ * and anyone downed lies unseen until its blow. A fireball or a thunder flask
+ * shakes the board and the effects over it together (`ShakeClock`).
  *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
@@ -786,7 +857,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback, unplaced }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback, onPlayed, unplaced }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -829,6 +900,9 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     };
     const { width, height } = view.size;
     const artId = useSvgId('ra');
+    // The two groups a shake moves (`ShakeClock`): the board's contents, and the effects over them.
+    const shakeBoard = useRef<SVGGElement>(null);
+    const shakeFx = useRef<SVGGElement>(null);
     const facingFor: FacingFor = figure => facingOf(field, figure);
     // Each squad's characters wear its owner's colour; anyone else keeps the art's grey.
     const tintFor: TintFor = userId => {
@@ -850,14 +924,14 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
     if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
-    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
+    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, (follow.close ? aimFocus : focusOn)(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
     else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
 
     // What the board plays waits for the view to get there: an action plays
     // only once the glide to it has landed, so nothing happens while the
-    // board is still moving (`held`, which stops its clocks and keyframes).
+    // board is still moving (`held`, which stands the playback's clock still).
     const [landed, setLanded] = useState<string | null>(null);
     const held = !!playback && !!focus && landed !== focus.key;
 
@@ -943,7 +1017,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         ),
     }));
 
-    // Whoever the action being played walks is drawn walking (`Walker`), and
+    // Whoever the action being played walks is drawn walking (`WalkerSlot`), and
     // its resting figure — the whole of it, marks and all — stays hidden until
     // its last walk is over (`Arriving`).
     const walking = new Map<number, WalkCue[]>();
@@ -955,13 +1029,18 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         const last = walks?.[walks.length - 1];
         return last && last.start + last.length;
     };
-    walking.forEach((walks, id) => items.push({
-        // Over the front-most square it crosses, so it is never hidden by one
-        // it has walked past — at the cost of standing over a wall it passes
-        // behind, for the squares it is still behind it.
-        depth: Math.max(...walks.flatMap(walk => walk.path.map(square => isoDepth(view, square)))) + 0.6,
-        node: <Walker key={`walk-${playback?.key}-${id}`} artId={artId} view={view} field={field} walks={walks} held={held} tintFor={tintFor} colourFor={colourFor} />,
-    }));
+    // A walker has a depth slot for every square of its path, at that square's
+    // depth, and draws in the one it is nearest (`WalkerSlot`), so it is hidden
+    // by exactly what stands in front of the square it is crossing.
+    const legLength = legLengthOn(view);
+    // Every slot of a walker asks where it is each frame, so it is worked out once a frame, not once a slot.
+    walking.forEach((walks, id) => {
+        const walker = onePerFrame(ms => walkerAt(walks, ms, legLength));
+        walkSquares(walks).forEach((square, slot) => items.push({
+            depth: isoDepth(view, square) + 0.6,
+            node: <WalkerSlot key={`walk-${playback?.key}-${id}-${slot}`} artId={artId} view={view} field={field} fighter={walks[0].fighter} walker={walker} slot={slot} tintFor={tintFor} colourFor={colourFor} />,
+        }));
+    });
     // Anyone the action downs lies unseen until its blow lands, so its fallen
     // figure never shows round the standing one (`Falling`) before the shot flies.
     const falls = new Map<number, FallCue>();
@@ -983,14 +1062,14 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // Its bar, marks and item are as the action found them until the cue that changed them lands.
         const told = playback ? toldOf(playback.cues, found.get(fighter.id), fighter, still) : null;
         const node = told
-            ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} held={held} />
+            ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} />
             : <FighterNode key={fighter.id} {...props} />;
         // Hidden until its walk is over, and for one downed, its blow lands: the later of the two.
         const fall = falls.get(fighter.id);
         const appears = Math.max(arrives ?? 0, fall?.start ?? 0);
         let shown = node;
-        if (fall && !still) shown = <Appearing key={`rise-${fighter.id}-${playback?.key}`} cue={{ start: appears, length: fall.length }} held={held}>{node}</Appearing>;
-        else if (fall || arrives !== undefined) shown = <Arriving key={`${fighter.id}-${playback?.key}`} ms={appears}>{node}</Arriving>;
+        if (fall && !still) shown = <CueFade key={`rise-${fighter.id}-${playback?.key}`} cue={{ start: appears, length: fall.length }} frame={fadeInAt}>{node}</CueFade>;
+        else if (fall || arrives !== undefined) shown = <Arriving key={`${fighter.id}-${playback?.key}`} at={appears}>{node}</Arriving>;
         items.push({
             // Anyone standing over a body is drawn on top of it.
             depth: isoDepth(view, fighter.square) + (isStanding(fighter) ? 0.6 : 0.5),
@@ -1004,13 +1083,13 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         // One downed partway through a move stands on its square only once it has walked there.
         if (cue.kind === 'fall') {
-            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} shoves={shovesOf(playback.cues, cue.fighter.id, still)} held={held} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
+            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} shoves={shovesOf(playback.cues, cue.fighter.id, still)} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
             items.push({
                 depth: isoDepth(view, cue.fighter.square) + 0.6,
-                node: cue.arrives === undefined || still ? falling : <Arriving key={`fall-${playback.key}-${cue.fighter.id}`} ms={cue.arrives}>{falling}</Arriving>,
+                node: cue.arrives === undefined || still ? falling : <Arriving key={`fall-${playback.key}-${cue.fighter.id}`} at={cue.arrives}>{falling}</Arriving>,
             });
         }
-        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue, held));
+        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }
     items.sort((a, b) => a.depth - b.depth);
 
@@ -1036,107 +1115,113 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 pixels a square, so the deep step is what makes one
                 tappable: about seven squares across (§13.1). */}
             <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
-                <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`} className={held ? 'ag-ra-held' : undefined}>
-                    <Shaking playback={playback} still={still} held={held}>
-                        <g className="ag-ra-ground--earth">
-                            <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
-                            <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
+                <PlaybackProvider playKey={playback?.key ?? null} end={playback ? endOf(playback.cues) : 0} held={held} onEnd={onPlayed}>
+                    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`}>
+                        <g ref={shakeBoard}>
+                            <g className="ag-ra-ground--earth">
+                                <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
+                                <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
+                            </g>
+                            <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
+                            <TintDefs artId={artId} colours={owners.map(colourFor)} />
+                            <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
+                            <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
+                            {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
+                            <path className="ag-ra-grid" d={ground.lines} />
+
+                            {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
+                            {zones.map(zone => (
+                                <polygon
+                                    key={zone.key}
+                                    className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
+                                    points={zone.points}
+                                    style={zone.style}
+                                />
+                            ))}
+                            {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
+                            {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
+
+                            {/* Under everything that stands up, so a tap on a
+                                character goes to the character; the terrain lets a
+                                tap through to it. */}
+                            {onTapSquare && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
+
+                            {items.map(item => item.node)}
+
+                            {path && pathEnd && (
+                                <>
+                                    <polyline className="ag-ra-path" points={isoPoints(path)} />
+                                    <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
+                                </>
+                            )}
+
+                            {/* A standing character something in front hides, drawn
+                                again faintly over it, so it's still there to see and
+                                to tap. */}
+                            {ghosts.map(fighter => {
+                                const { x, y } = discCentre(view, fighter.square);
+                                return (
+                                    <ClickableMapNode
+                                        key={`ghost-${fighter.id}`}
+                                        x={x} y={y} radius={FIGURE_RADIUS}
+                                        isValid
+                                        showRing={false}
+                                        onClick={() => onSelect(fighter.id)}
+                                        title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
+                                    >
+                                        <g className="ag-ra-ghost">
+                                            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />
+                                        </g>
+                                    </ClickableMapNode>
+                                );
+                            })}
+
+                            {/* Over every figure, so a neighbour never hides one. */}
+                            {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
+
+                            {/* The centre's name sits just clear of its dashed edge,
+                                big enough to read fitted to a phone. */}
+                            {centre && (
+                                <MapLabelLayer
+                                    labels={[{
+                                        key: CENTRE,
+                                        ...isoPoint(view, centre.x + centre.width / 2, centre.y + centre.height / 2, 0),
+                                        text: 'Centre',
+                                        radius: (centre.width + centre.height) * ISO_HALF_HEIGHT / 2,
+                                    }]}
+                                    obstacles={figureRects}
+                                    width={width} height={height}
+                                    offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
+                                    fontSize={10}
+                                    fontWeight={800}
+                                />
+                            )}
+
+                            {/* The pulses — the wave's zones breathing over their lit
+                                ground, and the HP a lined-up action would change — one
+                                group of each, after everything else, so the layer the
+                                browser makes of a pulse lifts nothing else with it
+                                (`.ag-ra-pulse`). */}
+                            {waves.length > 0 && (
+                                <g className="ag-ra-pulse ag-ra-pulse--wave">
+                                    {waves.map(zone => <polygon key={zone.key} className="ag-ra-wave" points={zone.points} style={zone.style} />)}
+                                </g>
+                            )}
+                            {hpChanges.length > 0 && (
+                                <g className="ag-ra-pulse ag-ra-pulse--hp">
+                                    {hpChanges.map(({ fighter, change }) => <HpChange key={fighter.id} view={view} fighter={fighter} change={change} />)}
+                                </g>
+                            )}
                         </g>
-                        <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
-                        <TintDefs artId={artId} colours={owners.map(colourFor)} />
-                        <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
-                        <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
-                        {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
-                        <path className="ag-ra-grid" d={ground.lines} />
-
-                        {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
-                        {zones.map(zone => (
-                            <polygon
-                                key={zone.key}
-                                className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
-                                points={zone.points}
-                                style={zone.style}
-                            />
-                        ))}
-                        {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
-                        {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
-
-                        {/* Under everything that stands up, so a tap on a
-                            character goes to the character; the terrain lets a
-                            tap through to it. */}
-                        {onTapSquare && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
-
-                        {items.map(item => item.node)}
-
-                        {path && pathEnd && (
-                            <>
-                                <polyline className="ag-ra-path" points={isoPoints(path)} />
-                                <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
-                            </>
-                        )}
-
-                        {/* A standing character something in front hides, drawn
-                            again faintly over it, so it's still there to see and
-                            to tap. */}
-                        {ghosts.map(fighter => {
-                            const { x, y } = discCentre(view, fighter.square);
-                            return (
-                                <ClickableMapNode
-                                    key={`ghost-${fighter.id}`}
-                                    x={x} y={y} radius={FIGURE_RADIUS}
-                                    isValid
-                                    showRing={false}
-                                    onClick={() => onSelect(fighter.id)}
-                                    title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
-                                >
-                                    <g className="ag-ra-ghost">
-                                        <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />
-                                    </g>
-                                </ClickableMapNode>
-                            );
-                        })}
-
-                        {/* Over every figure, so a neighbour never hides one. */}
-                        {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
-
-                        {/* The centre's name sits just clear of its dashed edge,
-                            big enough to read fitted to a phone. */}
-                        {centre && (
-                            <MapLabelLayer
-                                labels={[{
-                                    key: CENTRE,
-                                    ...isoPoint(view, centre.x + centre.width / 2, centre.y + centre.height / 2, 0),
-                                    text: 'Centre',
-                                    radius: (centre.width + centre.height) * ISO_HALF_HEIGHT / 2,
-                                }]}
-                                obstacles={figureRects}
-                                width={width} height={height}
-                                offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
-                                fontSize={10}
-                                fontWeight={800}
-                            />
-                        )}
-
-                        {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
-                        {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} held={held} />}
-
-                        {/* The pulses — the wave's zones breathing over their lit
-                            ground, and the HP a lined-up action would change — one
-                            group of each, after everything else, so the layer the
-                            browser makes of a pulse lifts nothing else with it
-                            (`.ag-ra-pulse`). */}
-                        {waves.length > 0 && (
-                            <g className="ag-ra-pulse ag-ra-pulse--wave">
-                                {waves.map(zone => <polygon key={zone.key} className="ag-ra-wave" points={zone.points} style={zone.style} />)}
-                            </g>
-                        )}
-                        {hpChanges.length > 0 && (
-                            <g className="ag-ra-pulse ag-ra-pulse--hp">
-                                {hpChanges.map(({ fighter, change }) => <HpChange key={fighter.id} view={view} fighter={fighter} change={change} />)}
-                            </g>
-                        )}
-                    </Shaking>
-                </svg>
+                    </svg>
+                    {/* What the last action did, flying, bursting and rising off the figures it happened to, over everything and the shake with it, on a layer of its own: its frames repaint this SVG and not the board's, whose sprites at the deeper zoom steps are hundreds under every rectangle a moving arrow dirties. It follows the board's own SVG so `BoardZoom` measures that one (`.ag-ra-fx-layer`). */}
+                    <svg viewBox={`0 0 ${width} ${height}`} className="ag-ra-fx-layer" aria-hidden="true">
+                        <g ref={shakeFx}>
+                            {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} />}
+                        </g>
+                        {playback && !still && shakesOf(playback.cues).length > 0 && <ShakeClock key={playback.key} cues={playback.cues} board={shakeBoard} fx={shakeFx} />}
+                    </svg>
+                </PlaybackProvider>
             </BoardZoom>
             {/* Turning the view: beside BoardZoom rather than in it, since
                 turning is this board's own, in the top corner opposite the

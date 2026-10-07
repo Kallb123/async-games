@@ -5290,6 +5290,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 }
 .ag-realmarena-frame .ag-board-scroll,
 .ag-realmarena-frame svg { border-radius: 0; }
+/* The board and the effects over it are two SVGs in one zoomed box: the
+   overlay (`.ag-ra-fx-layer`, RealmArenaFx's) is laid exactly over the board's,
+   same viewBox and so the same size, so it zooms, pans and turns with it while
+   its frames repaint only itself. */
+.ag-realmarena-frame .ag-board-zoom-content { position: relative; }
+.ag-ra-fx-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
 
 /* ---- The battlefield ---- */
 /* Terrain is drawn from its tile art (src/games/RealmArena/art.ts). What's
@@ -5368,7 +5374,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-hp-loss { fill: var(--ra-hp-dark); }
 .ag-ra-hp-gain { fill: var(--ra-hp-light); }
 /* The HP a blow has just taken off, pale on the end of the bar and draining after
-   the fill (`HpBar`'s `chip`): its width is set a frame at a time, never animated. */
+   the fill (`HpBar` given a `told`): its width is set a frame at a time, never animated. */
 .ag-ra-hp-chip { fill: var(--ra-hp-light); fill-opacity: 0.8; pointer-events: none; }
 /* The board's pulses: a wave's zones breathing and those HP flashes, each kind
    one group pulsing as a whole, drawn after everything else on the board.
@@ -5396,17 +5402,15 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-odds rect { fill: color-mix(in oklch, var(--ra-night) 88%, transparent); stroke: var(--ag-gold); stroke-width: 0.3; }
 .ag-ra-odds text { font: 800 3.1px var(--ag-font); fill: var(--ag-gold); text-anchor: middle; dominant-baseline: central; }
 /* Hit text (§26.1): what an action did, rising off the figure it happened to
-   and fading. RealmArenaFx sets each one's delay and length from its cue;
-   before its delay it's unseen, and once played it stays unseen. Outlined in
-   the night so it reads on grass, stone or a figure. Nothing here takes a tap. */
+   and fading. Nothing here is keyframed: RealmArenaFx moves the text, the bursts,
+   the slashes and the missiles a frame at a time, on the playback's one clock,
+   by setting their SVG `opacity` and `transform` attributes (`usePlayback`). So
+   no rule below may set either on them: a CSS property beats an attribute, and
+   would freeze the piece where the stylesheet left it. The stylesheet only says
+   how each looks. Outlined in the night so it reads on grass, stone or a figure.
+   Nothing here takes a tap. */
 .ag-ra-fx { pointer-events: none; }
-.ag-ra-hit {
-    --ra-hit: var(--ag-on-dark);
-    --ra-hit-settle: 1.5px;
-    --ra-hit-lift: -6px;
-    opacity: 0;
-    animation: ag-ra-hit-rise 1s ease-out both;
-}
+.ag-ra-hit { --ra-hit: var(--ag-on-dark); }
 .ag-ra-hit text {
     fill: var(--ra-hit);
     stroke: var(--ra-night);
@@ -5421,72 +5425,22 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-ra-hit--graze { --ra-hit: var(--ag-gold); }
 .ag-ra-hit--miss { --ra-hit: color-mix(in oklch, var(--ag-on-dark) 65%, var(--ra-night)); }
 .ag-ra-hit--heal { --ra-hit: color-mix(in oklch, var(--ag-green) 80%, var(--ag-on-dark)); }
-@keyframes ag-ra-hit-rise {
-    0% { opacity: 0; transform: translateY(var(--ra-hit-settle)); }
-    15% { opacity: 1; transform: translateY(0); }
-    65% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(var(--ra-hit-lift)); }
-}
-/* A blow that lands (a hit or a graze, not a miss, a heal or a word) pops as
-   its text appears: 1.25 down to 1 about its own middle. The group inside the
-   hit text takes it, so it composes with the rise; RealmArenaFx sets the delay
-   (the cue's start) and the length (`POP_MS`). The fx layer is drawn above the
-   board's depth-sorted items, so keyframing a transform here lifts nothing. */
-:is(.ag-ra-hit--hit, .ag-ra-hit--graze) .ag-ra-hit-pop {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: ag-ra-hit-pop ease-out both;
-}
-@keyframes ag-ra-hit-pop {
-    from { transform: scale(1.25); }
-    to { transform: scale(1); }
-}
-/* A burst (§26.1): the fireball's or a flask's, flaring over where it landed
-   and fading. A strike's slash: wiped across its target. Both are timed by
-   their cue, like the hit text, and grow about their own middles. What flies
-   is moved a frame at a time by RealmArenaFx itself. */
-.ag-ra-burst, .ag-ra-slash { opacity: 0; transform-box: fill-box; transform-origin: center; }
-/* No length of their own: each cue sets its delay and length inline (`cueTiming`). */
-.ag-ra-burst { animation: ag-ra-burst ease-out both; }
-.ag-ra-slash { animation: ag-ra-slash ease-out both; }
-@keyframes ag-ra-burst {
-    0% { opacity: 0; transform: scale(0.35); }
-    20% { opacity: 1; transform: scale(1); }
-    60% { opacity: 0.85; }
-    100% { opacity: 0; transform: scale(1.08); }
-}
-@keyframes ag-ra-slash {
-    0% { opacity: 0; transform: translate(2px, -2px) scale(0.7); }
-    30% { opacity: 1; }
-    100% { opacity: 0; transform: translate(-2px, 2px) scale(1.05); }
-}
 /* A character the action downed, standing as it was until its blow lands,
    then fading off its fallen figure; and cover it blasted away, standing
    until the burst fades, then fading off its scorched ground. The board fades
-   them a frame at a time (`Fading`). Never in the way of a tap. */
+   them on the same clock (`usePlayback`). Never in the way of a tap. */
 .ag-ra-falling, .ag-ra-blasting { pointer-events: none; }
-/* A character walking its path (§26.1) is drawn frame by frame by the board,
-   and never in the way of a tap. What it leaves behind waits out the walk: its
-   resting figure, standing where the path ends, is hidden until the walk is
-   over (the delay is set inline, by the cue) and then simply there. Only its
-   visibility is keyframed: a keyframed opacity, even one waiting out its
-   delay, is a layer of its own, and lifts everything in front of it into more. */
+/* A character walking its path (§26.1) is drawn frame by frame by the board, on
+   the same clock, and never in the way of a tap. What it leaves behind waits out
+   the walk: its resting figure, standing where the path ends, is hidden until the
+   walk is over and then simply there. */
 .ag-ra-walker { pointer-events: none; }
-.ag-ra-arriving { animation: ag-ra-arrive 1ms both; }
-@keyframes ag-ra-arrive {
-    from { visibility: hidden; }
-    to { visibility: visible; }
-}
-/* Everything the board plays waits, as it stands at its start, while the view
-   is still gliding to it (`held` on the board), and plays once it has landed. */
-.ag-ra-held :is(.ag-ra-hit, .ag-ra-hit-pop, .ag-ra-burst, .ag-ra-slash, .ag-ra-arriving) { animation-play-state: paused; }
-/* With reduced motion the text doesn't rise or pop: it appears where it happened,
-   and fades. Nothing flies, bursts, slashes or walks. */
-@media (prefers-reduced-motion: reduce) {
-    .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
-    .ag-ra-hit .ag-ra-hit-pop { animation: none; }
-    .ag-ra-burst, .ag-ra-slash { display: none; }
-}
+/* The board and its effects overlay are moved by one frame loop setting SVG
+   attributes, which lifts no layers, so nothing in the depth order is
+   composited by being animated. A hold on the board pauses the clock itself. With
+   reduced motion the components draw less rather than the stylesheet hiding it:
+   the text doesn't rise or pop but appears where it happened and fades, and
+   nothing flies, bursts, slashes or walks. */
 /* A review step that happened out of the viewer's sight (§26.2): a big,
    half-transparent question mark over the middle of the board's frame — the
    frame, not the board, so it stays put as the board pans and zooms. The layer
