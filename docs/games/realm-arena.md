@@ -1831,8 +1831,10 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   doesn't replay anything by itself.
 - **It never gets in the way.** The board can be used while it plays, and the
   next action cuts it short. However much one action set off, its whole
-  playback fits in about four and a half seconds, with each part shortened to
-  fit: the longest run, twenty-six squares, is 2.75 s of it on its own. With
+  playback fits in about four and a half seconds: the walks are hurried
+  first, then the gaps between blows, then the text, and what flies keeps
+  its time (the longest run, twenty-six straight squares, is 2.75 s of it
+  before any hurrying). With
   `prefers-reduced-motion` set, nothing flies, bursts or walks: the hit text
   appears in place and fades.
 

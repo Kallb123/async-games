@@ -7,12 +7,16 @@ everything here is read off it, but the timeline and the frame loop in §4
 belong to the board rather than to the game, and the next isometric board
 should get them for free.
 
-**Status: first fixes built.** §3.1–§3.4 and §3.8 are in: bars and marks
+**Status: steps 1 and 2 of §6 built.** §3.1–§3.4 and §3.8 went in with
+[#880](https://github.com/Kallb123/async-games/pull/880): bars and marks
 wait for their blow, the fallen wait for theirs, the view stays on the
 player's own action, hit text stacks in lanes (`TextCue.lane`) and reduced
-motion times nothing it doesn't draw (`battleCues`' `still`). §2 still
-describes the rest of the code as it stood; §3.5–§3.7, §4 and §5 are
-proposals, ranked; §6 orders them into PRs. Realm Arena's design
+motion times nothing it doesn't draw (`battleCues`' `still`). §5's timings,
+bar the two camera rows, went in with [#881](https://github.com/Kallb123/async-games/pull/881): flights timed by distance,
+capped arcs, walks paced by leg and eased, prioritised squeezing, a knock, a
+lunge and a shake on impact, and a pop on a blow's text. §2 describes the
+code as it stands now. Still to do: §3.5, the timeline (§4, which settles
+§3.6 and §3.7), the camera rows of §5, and the art; §6 orders them. Realm Arena's design
 document keeps what the player should see (§26 of
 [`games/realm-arena.md`](./games/realm-arena.md)); this keeps how the board
 draws it.
@@ -35,12 +39,18 @@ draws it.
 
 1. **Cues.** `battleCues` walks the events in order. Each thing that lands
    starts no sooner than `CUE_STEP_MS` (450ms) after the last landed (`beat`).
-   A move walks its told path at `WALK_STEP_MS` (110ms) a square. A shot flies
-   for its missile's `FLIGHT_MS`, then its hit text (`HIT_TEXT_MS`, 1000ms)
+   A move walks its told path at `WALK_STEP_MS` (110ms) a straight square,
+   more for a diagonal (`DIAGONAL_LEG`) or a climb (`CLIMB_LEG`; `legWeight`).
+   A shot flies for `flightMs` — its missile's `FLIGHT_PACE`, longer the
+   farther it goes, up to a cap — then its hit text (`HIT_TEXT_MS`, 1000ms)
    starts as it lands. A slash takes `SLASH_MS` before its blow; a burst lasts
    `BURST_MS`; blasted cover fades from 60% through its burst; a downed figure
    fades over `FALL_MS` from the moment its blow lands. If the whole lot runs
-   past `PLAYBACK_MS` (4.5s), every timing is scaled by the same factor.
+   past `PLAYBACK_MS` (4.5s), it is rebuilt squeezing walks first (down to
+   70ms a square), then the gaps between landings (down to 200ms), then the
+   text (down to 800ms), never a flight; only if that still overruns is every
+   timing scaled by the same factor. `battleCues` takes the battlefield for
+   the distances and the heights.
 2. **Hold.** The board computes its `focus` and holds the playback
    (`held = playback && focus && landed !== focus.key`) until `BoardZoom` says
    it has landed there. Held, the frame clocks stand still and `.ag-ra-held`
@@ -50,7 +60,12 @@ draws it.
    each by its own `useElapsed` clock: a `requestAnimationFrame` loop that sets
    React state every frame. What stays put — hit text, bursts, slashes, and
    `Arriving`'s reveal — is CSS keyframes with an inline `animation-delay` and
-   `animation-duration` (`cueTiming`).
+   `animation-duration` (`cueTiming`). A walker's time is shared over its legs
+   by their length on screen (`walkerAt`), eased in and out (`walkEase`), with
+   a bob and a hop (`walkLift`). A blow knocks its target, a slash lunges its
+   striker (`shovesOf`, `shoveAt`, both drawn as `Figure`'s `offset`), and a
+   fireball or a thunder flask shakes the whole battlefield (`shakeAt`, set on
+   one group by `ShakeClock`). Hit text on a blow pops (`ag-ra-hit-pop`).
 4. **Depth.** Walkers, falls and blasted cover are pushed into the board's
    depth-sorted `items`, so walls hide them. The rest is drawn after
    everything, inside the same SVG.
@@ -245,19 +260,20 @@ same timeline without touching the board.
 ## 5. Feel and timings
 
 Small changes, mostly constants and pure functions in `ui.ts` and
-`RealmArenaFx.tsx`.
+`RealmArenaFx.tsx`. All but the last two rows are built; the last column says
+with what.
 
-| What | Today | Proposed |
-|---|---|---|
-| **Flight time** (`FLIGHT_MS`) | Fixed per missile: an arrow takes 400ms across two squares or twenty-five. | By distance: `clamp(base + k × squares)` — an arrow about `180 + 14ms` a square, capped near 650ms. Long shots stop teleporting and short ones stop crawling. |
-| **Arc height** (`FLIGHT[missile].arc`) | A share of the distance, uncapped: a lob across the map rises 30% of it. | Capped at about three squares, so a cross-map fireball stays inside a close frame. |
-| **Walk pace** (`walkerAt`) | `WALK_STEP_MS` a square, diagonal or not. On screen a diagonal step is 20 units across or 10 up, a straight one about 11, so the walker visibly surges and slows. | Each leg timed by its length on screen, plus a little for climbing. |
-| **Walk motion** | Constant speed; a step up a wall is a straight diagonal slide. | Ease in on the first leg and out on the last; a small hop over a change of height; a bob of about 0.6 units a step. |
-| **Squeezing** (`scaled`) | Every timing by one factor, text and flights included. | Squeeze in order: walk steps down to about 70ms first, then the gaps between landings; text never under about 800ms, flights never shortened. |
-| **Impact** | Nothing happens to whoever is hit. | A 120ms flash or nudge on the target; a melee striker lunging two or three units at its target through the slash; a 2px, 150ms shake of the frame for the fireball and the thunder flask (none with reduced motion). |
-| **Hit text** | One fade-and-rise for every tone. | A short pop — scale 1.25 to 1 over 120ms — for a hit; none for a miss. The difference reads at a glance. |
-| **Dead time** | Glide (380ms), then the action, then `STEP_BEAT_MS` (500ms). | A review step's first cue starts at about three-quarters through the glide, not after it. |
-| **Framing a walk** | `moveFrame` frames the start and the end, zoomed to fit both. A route round a wall can leave that frame. | Frame the whole path; for a long walk, have the camera follow the walker instead of zooming out to fit it. |
+| What | Before | Proposed | Status |
+|---|---|---|---|
+| **Flight time** (`FLIGHT_MS`) | Fixed per missile: an arrow takes 400ms across two squares or twenty-five. | By distance: `clamp(base + k × squares)` — an arrow about `180 + 14ms` a square, capped near 650ms. Long shots stop teleporting and short ones stop crawling. | Built in [#881](https://github.com/Kallb123/async-games/pull/881): `FLIGHT_PACE` — arrow 180 + 14 a square up to 650ms, bolt 120 + 9 up to 420, acid 220 + 16 up to 650, a fireball or a throw 300 + 20 up to 800. |
+| **Arc height** (`FLIGHT[missile].arc`) | A share of the distance, uncapped: a lob across the map rises 30% of it. | Capped at about three squares, so a cross-map fireball stays inside a close frame. | Built in [#881](https://github.com/Kallb123/async-games/pull/881): `MAX_ARC`, a peak of three squares' depth (30 units). |
+| **Walk pace** (`walkerAt`) | `WALK_STEP_MS` a square, diagonal or not. On screen a diagonal step is 20 units across or 10 up, a straight one about 11, so the walker visibly surges and slows. | Each leg timed by its length on screen, plus a little for climbing. | Built in [#881](https://github.com/Kallb123/async-games/pull/881): the timeline weights a diagonal step 1.34 (the average of its two lengths on screen, so it doesn't depend on the view's turn) and a climb 0.25 a quarter; the board shares the walk's time over its legs by their length on screen, plus `CLIMB_EXTRA`. |
+| **Walk motion** | Constant speed; a step up a wall is a straight diagonal slide. | Ease in on the first leg and out on the last; a small hop over a change of height; a bob of about 0.6 units a step. | Built in [#881](https://github.com/Kallb123/async-games/pull/881): `walkEase` (a trapezoid of speed, its ramps the first and last legs), `WALK_HOP` 3 units, `WALK_BOB` 0.6; the figure alone moves, not its bar or shadow. |
+| **Squeezing** (`scaled`) | Every timing by one factor, text and flights included. | Squeeze in order: walk steps down to about 70ms first, then the gaps between landings; text never under about 800ms, flights never shortened. | Built in [#881](https://github.com/Kallb123/async-games/pull/881), as proposed: walk step to 70ms, gaps to 200ms, text to 800ms; the old uniform scale is the last resort. |
+| **Impact** | Nothing happens to whoever is hit. | A 120ms flash or nudge on the target; a melee striker lunging two or three units at its target through the slash; a 2px, 150ms shake of the frame for the fireball and the thunder flask (none with reduced motion). | Built in [#881](https://github.com/Kallb123/async-games/pull/881): `KNOCK` 1.5 units over `IMPACT_MS` (120), `LUNGE` 2.5 through the slash, `SHAKE` 2 units over `SHAKE_MS` (150). Not yet on a target that is walking (an overwatch shot). |
+| **Hit text** | One fade-and-rise for every tone. | A short pop — scale 1.25 to 1 over 120ms — for a hit; none for a miss. The difference reads at a glance. | Built in [#881](https://github.com/Kallb123/async-games/pull/881), for a hit and a graze. |
+| **Dead time** | Glide (380ms), then the action, then `STEP_BEAT_MS` (500ms). | A review step's first cue starts at about three-quarters through the glide, not after it. | Not yet: §6 step 4, with the camera. |
+| **Framing a walk** | `moveFrame` frames the start and the end, zoomed to fit both. A route round a wall can leave that frame. | Frame the whole path; for a long walk, have the camera follow the walker instead of zooming out to fit it. | Not yet: §6 step 4, with the camera. |
 
 Longer term, the biggest step in life is art rather than timing: an attack and
 a hurt frame per character, in each of the eight facings, from the
@@ -271,7 +287,8 @@ them until then.
 1. **What gives the result away** — §3.1–§3.5 and §3.8. Local to the board,
    the page and `battleCues`; the most noticeable gain. **Built in
    [#880](https://github.com/Kallb123/async-games/pull/880)**, all but §3.5.
-2. **Timings** — §5's table, bar the camera rows.
+2. **Timings** — §5's table, bar the camera rows. **Built in [#881](https://github.com/Kallb123/async-games/pull/881)**, bar
+   the knock on a walking target.
 3. **The timeline** — §4.1–§4.5, which also settles §3.6 and §3.7, and makes a
    skip and a 2× review a few lines each. §4.6's tests go in with it.
 4. **Camera** — §5's last two rows, on the timeline from 3.
