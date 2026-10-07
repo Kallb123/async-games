@@ -16,7 +16,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type TextCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -321,13 +321,21 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
 /** The top-left corner of the HP bar over the figure standing on the square whose middle is (`x`, `y`). */
 const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2, y: y - HP_BAR_RISE - HP_BAR_HEIGHT });
 
-/** A standing figure's HP bar, over the figure standing on the square whose middle is (`x`, `y`), in its owner's colour, as its figure is. */
-function HpBar({ x, y, fighter, colour }: { x: number; y: number; fighter: Fighter; colour: string }) {
+/**
+ * A standing figure's HP bar, over the figure standing on the square whose
+ * middle is (`x`, `y`), in its owner's colour, as its figure is. `chip` is the
+ * HP a blow has just taken off, still drawn pale past the end of the fill while
+ * it drains away.
+ */
+function HpBar({ x, y, fighter, colour, chip }: { x: number; y: number; fighter: Fighter; colour: string; chip?: number }) {
     const corner = hpBarCorner(x, y);
+    const fill = HP_BAR_WIDTH * hpFraction(fighter);
+    const lagging = chip === undefined ? 0 : HP_BAR_WIDTH * hpFraction({ ...fighter, hp: chip }) - fill;
     return (
         <>
             <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
-            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={HP_BAR_WIDTH * hpFraction(fighter)} height={HP_BAR_HEIGHT} />
+            <rect className="ag-ra-hp-fill" style={{ fill: colour }} x={corner.x} y={corner.y} width={fill} height={HP_BAR_HEIGHT} />
+            {lagging > 0 && <rect className="ag-ra-hp-chip" x={corner.x + fill} y={corner.y} width={lagging} height={HP_BAR_HEIGHT} />}
             {/* A dark edge round the whole bar, over what's in it, so it reads on grass, stone or a figure alike. */}
             <rect className="ag-ra-hp-edge" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
         </>
@@ -434,6 +442,19 @@ function Arriving({ ms, children }: { ms: number; children: React.ReactNode }) {
     return <g className="ag-ra-arriving" style={{ animationDelay: `${ms}ms` }}>{children}</g>;
 }
 
+/**
+ * A character the action being played downed, lying where it fell: unseen until
+ * its blow lands (`cue.start`), then faded in over the cue as the standing
+ * figure over it (`Falling`) fades out — quicker at first, so the two together
+ * never leave a gap to see through. Faded a frame at a time, like `Fading`, and
+ * for the same reason.
+ */
+function Appearing({ cue, held, children }: { cue: { start: number; length: number }; held: boolean; children: React.ReactNode }) {
+    const ms = useElapsed(cue.start + cue.length, held);
+    const left = 1 - Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+    return <g visibility={ms < cue.start ? 'hidden' : undefined} opacity={left > 0 ? 1 - left * left : undefined}>{children}</g>;
+}
+
 /** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
 function SmokePuff({ artId, view, square }: { artId: string; view: IsoView; square: Square }) {
     const { x, y } = isoCentre(view, square);
@@ -535,15 +556,24 @@ interface FighterNodeProps {
     tintFor: TintFor;
     nameFor: (userId: string) => string;
     onSelect: (fighterId: number) => void;
+    /**
+     * The fighter its HP bar, effect marks, watch ring and item are drawn from,
+     * where that isn't how it stands now: an action being played hasn't told
+     * the blow that changed them yet (`ToldFighterNode`). Where it is and what
+     * it's called stay `fighter`'s.
+     */
+    drawn?: Fighter;
+    /** The HP a blow has just taken off, still draining off the end of the bar. */
+    chip?: number;
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, chip }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
     const standing = isStanding(fighter);
-    const watching = standing && fighter.banked > 0;
+    const watching = standing && drawn.banked > 0;
     return (
         <ClickableMapNode
             x={x} y={y} radius={FIGURE_RADIUS}
@@ -562,15 +592,106 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
                 facing={facingFor(fighter)}
                 pose={standing ? 'standing' : 'fallen'}
                 artId={artId}
-                item={standing ? fighter.item : null}
+                item={standing ? drawn.item : null}
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
             />
-            {standing && <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colour} />}
-            <RealmArenaEffectMarks id={artId} effects={effectsOn(fighter)} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
+            {standing && <HpBar x={feet.x} y={feet.y} fighter={drawn} colour={colour} chip={chip} />}
+            <RealmArenaEffectMarks id={artId} effects={standing ? effectsOn(drawn) : []} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
             {standing && acting && <ApPips x={x + AP_PIP_OFFSET} y={y} fighter={fighter} />}
         </ClickableMapNode>
     );
+}
+
+/** How long an HP bar's fill takes to move to a new value, and how long the pale chip of what it lost then takes to drain. */
+const HP_TWEEN_MS = 250;
+const HP_CHIP_MS = 300;
+
+/** The HP an action's cue took a fighter to as it lands (`to`), `at` ms into the playback. */
+interface HpStep {
+    at: number;
+    to: number;
+}
+
+/**
+ * What an action being played tells of one fighter whose bar, marks or item it
+ * changes: the fighter as the action found it (`before`), the HP its blows and
+ * heals take it through, when its first cue lands (`marksAt`, when its marks
+ * stop being `before`'s), and when the last of it is over (`until`).
+ */
+interface Told {
+    before: Fighter;
+    steps: readonly HpStep[];
+    marksAt: number;
+    until: number;
+}
+
+/**
+ * What the action being played tells of `fighter`, or null if it changes
+ * nothing a figure draws — it has no cue on it, it wasn't there when the action
+ * started, it's down (no bar, no marks) or it ends as it began. Each of its
+ * HP cues steps its bar by the cue's `hpChange`, and the last ends it on its
+ * real HP, so the bar is right even if the cues' sums aren't.
+ */
+function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
+    if (!before || !isStanding(fighter)) return null;
+    const texts = cues.filter((cue): cue is TextCue => cue.kind === 'text' && cue.fighter === fighter.id);
+    if (texts.length === 0) return null;
+    const max = CHARACTERS[fighter.character].hp;
+    const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
+    let level = before.hp;
+    const steps = blows.map((cue, index): HpStep => {
+        level = Math.min(max, Math.max(0, level + (cue.hpChange ?? 0)));
+        return { at: cue.start, to: index === blows.length - 1 ? fighter.hp : level };
+    });
+    const marksDiffer = effectsOn(before).join() !== effectsOn(fighter).join() || before.banked !== fighter.banked || before.item !== fighter.item;
+    if (!marksDiffer && steps.every(step => step.to === before.hp)) return null;
+    const marksAt = Math.min(...texts.map(cue => cue.start));
+    const last = steps[steps.length - 1];
+    return { before, steps, marksAt, until: Math.max(marksAt, last ? last.at + (still ? 0 : HP_TWEEN_MS + HP_CHIP_MS) : 0) };
+}
+
+/**
+ * Where a value that starts at `from` and moves to each of `steps` is `ms` into
+ * the playback: each step begins `delay` after its cue and takes `tween` to get
+ * there, from wherever the one before had got to — so a second blow landing
+ * mid-tween carries on from there rather than jumping. With no `tween` it
+ * jumps.
+ */
+function stepped(from: number, steps: readonly HpStep[], delay: number, tween: number, ms: number): number {
+    const valueAt = (index: number, time: number): number => {
+        if (index < 0) return from;
+        const start = valueAt(index - 1, steps[index].at + delay);
+        const across = tween > 0 ? Math.min(1, (time - steps[index].at - delay) / tween) : 1;
+        return start + (steps[index].to - start) * across;
+    };
+    let reached = -1;
+    steps.forEach((step, index) => { if (ms >= step.at + delay) reached = index; });
+    return valueAt(reached, ms);
+}
+
+/**
+ * A fighter `ms` into the playback as its figure shows it: its bar at the HP
+ * its cues have taken it to — the fill tweened to it, and with the pale chip of
+ * what it lost draining after — and its marks and item as the action found them
+ * until its first cue lands. With reduced motion the bar jumps at its cue.
+ */
+function toldAt({ before, steps, marksAt }: Told, fighter: Fighter, ms: number, still: boolean): { drawn: Fighter; chip: number | undefined } {
+    const marks = ms >= marksAt ? fighter : before;
+    const fill = steps.length > 0 ? stepped(before.hp, steps, 0, still ? 0 : HP_TWEEN_MS, ms) : fighter.hp;
+    const chip = still || steps.length === 0 ? undefined : stepped(before.hp, steps, HP_TWEEN_MS, HP_CHIP_MS, ms);
+    return { drawn: { ...fighter, hp: fill, effects: marks.effects, banked: marks.banked, item: marks.item }, chip };
+}
+
+/**
+ * A resting character an action being played changes the bar, marks or item of
+ * (`toldOf`): its own frame clock, so only these redraw every frame, drawing
+ * them as the action found them until the cue that changed them lands. The
+ * clock stops once the last of it is over, and the figure is its real self.
+ */
+function ToldFighterNode({ told, held, still, ...props }: FighterNodeProps & { told: Told; held: boolean; still: boolean }) {
+    const ms = useElapsed(told.until, held);
+    return <FighterNode {...props} {...toldAt(told, props.fighter, ms, still)} />;
 }
 
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
@@ -693,7 +814,9 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * downed stands where it fell until the blow lands, then fades. A move walks:
  * the character is drawn along the path it was told (`Walker`), turned to face
  * each step, while its resting figure waits out the walk (`Arriving`) — and,
- * with reduced motion, is simply where it ended up.
+ * with reduced motion, is simply where it ended up. Everyone else keeps their
+ * HP bar, marks and item as the action found them until the cue that changed
+ * them lands (`ToldFighterNode`), and anyone downed lies unseen until its blow.
  *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
@@ -878,28 +1001,39 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         depth: Math.max(...walks.flatMap(walk => walk.path.map(square => isoDepth(view, square)))) + 0.6,
         node: <Walker key={`walk-${playback?.key}-${id}`} artId={artId} view={view} field={field} walks={walks} held={held} tintFor={tintFor} colourFor={colourFor} />,
     }));
+    // Anyone the action downs lies unseen until its blow lands, so its fallen
+    // figure never shows round the standing one (`Falling`) before the shot flies.
+    const falls = new Map<number, FallCue>();
+    const found = new Map<number, Fighter>();
+    if (playback) {
+        for (const cue of playback.cues) if (cue.kind === 'fall') falls.set(cue.fighter.id, cue);
+        for (const fighter of playback.before) found.set(fighter.id, fighter);
+    }
     for (const fighter of fighters) {
         const arrives = arrival(fighter.id);
-        const node = (
-            <FighterNode
-                key={fighter.id}
-                artId={artId}
-                view={view}
-                fighter={fighter}
-                ring={ringOf(fighter)}
-                selected={fighter.id === selected?.id}
-                acting={fighter.owner === acting}
-                colour={colourFor(fighter.owner)}
-                facingFor={facingFor}
-                tintFor={tintFor}
-                nameFor={nameFor}
-                onSelect={onSelect}
-            />
-        );
+        const props: FighterNodeProps = {
+            artId, view, fighter,
+            ring: ringOf(fighter),
+            selected: fighter.id === selected?.id,
+            acting: fighter.owner === acting,
+            colour: colourFor(fighter.owner),
+            facingFor, tintFor, nameFor, onSelect,
+        };
+        // Its bar, marks and item are as the action found them until the cue that changed them lands.
+        const told = playback ? toldOf(playback.cues, found.get(fighter.id), fighter, still) : null;
+        const node = told
+            ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} held={held} still={still} />
+            : <FighterNode key={fighter.id} {...props} />;
+        // Hidden until its walk is over, and for one downed, its blow lands: the later of the two.
+        const fall = falls.get(fighter.id);
+        const appears = Math.max(arrives ?? 0, fall?.start ?? 0);
+        let shown = node;
+        if (fall && !still) shown = <Appearing key={`rise-${fighter.id}-${playback?.key}`} cue={{ start: appears, length: fall.length }} held={held}>{node}</Appearing>;
+        else if (fall || arrives !== undefined) shown = <Arriving key={`${fighter.id}-${playback?.key}`} ms={appears}>{node}</Arriving>;
         items.push({
             // Anyone standing over a body is drawn on top of it.
             depth: isoDepth(view, fighter.square) + (isStanding(fighter) ? 0.6 : 0.5),
-            node: arrives === undefined ? node : <Arriving key={`${fighter.id}-${playback?.key}`} ms={arrives}>{node}</Arriving>,
+            node: shown,
         });
     }
     // Anyone the action being played downed stands over its fallen figure
