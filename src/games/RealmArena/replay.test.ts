@@ -262,15 +262,11 @@ describe("Realm Arena recap", () => {
 
         const feed = await noRandomness(() => buildEventFeed(game, NAMES, "a"));
         const rows = feed.events.filter(event => acts.some(command => command.id === event.commandId));
-        // The first character's two moves are one row (`byCharacter`); quiet moves by different characters
-        // are then told as one (`byDeed`), a row ending where a character already named would repeat —
-        // the Man-at-arms being two characters.
+        // The first character's two moves are one row (`byCharacter`); quiet moves by different
+        // characters are then told as one (`byDeed`), the Man-at-arms being two characters, counted.
         const firsts = [...fighters].map(fighter => acts.find(command => command.action.fighter === fighter)!.id);
         expect(fighters.size).toBe(5);
-        expect(rows.map(row => [row.commandId, row.title])).toEqual([
-            [firsts[0], "Bob moved their Knight and their Man-at-arms"],
-            [firsts[2], "Bob moved their Man-at-arms, their Archer and their Cleric"],
-        ]);
+        expect(rows.map(row => [row.commandId, row.title])).toEqual([[firsts[0], "Bob moved their Knight, two Men-at-arms, their Archer and their Cleric"]]);
         expect(JSON.stringify(feed)).not.toMatch(/"fighter"|"battle"|"clause"|"deed"|"roll"/);
     });
 

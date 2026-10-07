@@ -38,11 +38,11 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IHistoryEntry } from "@/utils/games/history";
-import { andList, capitalise, pluralize } from "@/utils/ui/text";
+import { andList, capitalise, numberWord, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import { unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
-import { enemyNameOf, UNKNOWN_ENEMY, type ItemId } from "./characters";
+import { CHARACTERS, enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
@@ -52,9 +52,11 @@ type RAState = IRealmArenaSpecificGameStateResponse;
  * What a character did in a turn, when all of it was quiet, as sentences around
  * the character they name — "put" + "their Archer" + " on watch" — in the order
  * they happened (`steps`), and the player's name the line starts with. What
- * `byDeed` strings the same deeds by different characters together by.
+ * `byDeed` strings the same deeds by different characters together by. A
+ * character told by its kind — "their Archer" — has that `character`, so
+ * several of a kind can be counted: "two Archers".
  */
-type Deed = { prefix: string; whom: string; steps: { verb: string; tail: string }[] };
+type Deed = { prefix: string; whom: string; character?: CharacterId; steps: { verb: string; tail: string }[] };
 
 /**
  * An action's row as `toEvents` leaves it: the character that acted, what
@@ -184,19 +186,26 @@ const QUIET_DEEDS: Partial<Record<BattleEvent["kind"], { verb: string; tail: str
     hunkered: { verb: "hunkered", tail: " down" },
 };
 
+/** How a hidden enemy's characters are named (§29.3): all alike, so they can only be counted. */
+const UNNAMED_CHARACTER = "one of its characters";
+
 /**
  * The deed an action was, when it was nothing else: a move, going on watch or
  * hunkering down, and no reaction to it, which would be an event of another
  * kind. Read off its events and the clause `narrate` wrote for them, which
- * must say it as expected (a hidden enemy's sneak is told as a move).
+ * must say it as expected (a hidden enemy's sneak is told as a move) and name
+ * the character as `whose` names its own: by its kind, or not at all.
  */
-function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string): Deed | undefined {
+function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string, fighter?: Fighter): Deed | undefined {
     const [first] = events;
     const words = first && QUIET_DEEDS[first.kind];
     if (!words || !events.every(event => event.kind === first.kind)) return undefined;
     const verb = first.kind === "moved" && first.sneaking ? "sneaked" : words.verb;
     if (!clause.startsWith(`${verb} `) || !clause.endsWith(words.tail)) return undefined;
-    return { prefix, whom: clause.slice(verb.length + 1, clause.length - words.tail.length), steps: [{ verb, tail: words.tail }] };
+    const whom = clause.slice(verb.length + 1, clause.length - words.tail.length);
+    const steps = [{ verb, tail: words.tail }];
+    if (fighter && whom === `their ${CHARACTERS[fighter.character].name}`) return { prefix, whom, character: fighter.character, steps };
+    return whom === UNNAMED_CHARACTER ? { prefix, whom, steps } : undefined;
 }
 
 /**
@@ -217,7 +226,7 @@ function actionRow(base: RowBase, name: string, title: string, events: readonly 
         fighter,
         battle: events,
         clause,
-        deed: quietDeed(events, clause, prefix),
+        deed: quietDeed(events, clause, prefix, fighters.find(one => one.id === fighter)),
     };
 }
 
@@ -433,16 +442,20 @@ function byCharacter(events: readonly RAEvent[]): RAEvent[] {
     return rows;
 }
 
-/** How a hidden enemy's characters are named (§29.3): all alike, so they can only be counted. */
-const UNNAMED_CHARACTER = "one of its characters";
-
-/** Whom a run of deeds were done by or to, as one list: "their Archer and their Knight", "3 of its characters". */
+/**
+ * Whom a run of deeds were done by or to, as one list, in order of first
+ * appearance: "their Archer and their Knight", a kind seen again counted —
+ * "their Knight, their Cleric and two Men-at-arms" — and so a hidden enemy's:
+ * "3 of its characters".
+ */
 function whomOf(run: readonly Deed[]): string {
-    const hidden = run.filter(deed => deed.whom === UNNAMED_CHARACTER).length;
-    return andList([
-        ...run.filter(deed => deed.whom !== UNNAMED_CHARACTER).map(deed => deed.whom),
-        ...hidden > 1 ? [`${hidden} of its characters`] : hidden === 1 ? [UNNAMED_CHARACTER] : [],
-    ]);
+    const kinds = new Map<string, { deed: Deed; count: number }>();
+    for (const deed of run) {
+        const key = deed.character ?? deed.whom;
+        kinds.set(key, { deed, count: (kinds.get(key)?.count ?? 0) + 1 });
+    }
+    return andList([...kinds.values()].map(({ deed, count }) => count === 1 ? deed.whom
+        : deed.character ? `${numberWord(count)} ${CHARACTERS[deed.character].plural}` : `${count} of its characters`));
 }
 
 /** What makes two rows one to tell together: the same actor, as named, and the same words around the characters, in the same order. */
@@ -455,10 +468,9 @@ const deedKey = (row?: RAEvent) => row?.deed && `${row.actorId}|${row.deed.prefi
  * their Archer, their Knight and their Mage on watch". Where each did several
  * deeds, the same ones in the same order, the first names the characters and
  * the rest say "them": "Alice moved their Archer and their Knight, then
- * hunkered them down". A sneak only joins sneaks, and a character already in
- * the run starts a new one — "their Archer and their Archer" says nothing —
- * except a hidden enemy's, which are counted: "moved 3 of its characters".
- * Anything between — a shot, a character's row that did more than quiet deeds,
+ * hunkered them down". A sneak only joins sneaks, and several characters of
+ * a kind are counted, as a hidden enemy's are: "moved two Archers", "moved 3
+ * of its characters". Anything between — a shot, a character's row that did more than quiet deeds,
  * an End turn — closes the run, so the order of the feed stays what happened.
  */
 function byDeed(rows: readonly RAEvent[]): RAEvent[] {
@@ -486,8 +498,7 @@ function byDeed(rows: readonly RAEvent[]): RAEvent[] {
             folded.push(row);
             continue;
         }
-        const { whom } = row.deed;
-        if (deedKey(run[0]) !== deedKey(row) || (whom !== UNNAMED_CHARACTER && run.some(one => one.deed!.whom === whom))) close();
+        if (deedKey(run[0]) !== deedKey(row)) close();
         run.push(row);
     }
     close();

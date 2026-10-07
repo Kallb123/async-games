@@ -42,3 +42,10 @@ export function possessive(name: string): string {
 export function andList(items: readonly string[]): string {
     return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/** A small count in words, for prose: "two", "three" — and the digits past ten, where a word stops being easier to read. */
+export function numberWord(count: number): string {
+    return NUMBER_WORDS[count] ?? `${count}`;
+}

@@ -381,13 +381,24 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
         expect(titles(both)).toEqual(["Alice moved their Archer; then put their Archer on watch", "Alice moved their Knight"]);
     });
 
-    it("starts a new row at a character of a kind it already named, as the feed can't tell two Archers apart", () => {
+    it("counts the characters of a kind a run names, in the order the kinds first appear", () => {
         const rows = forFeed([
             ...act("c1", 0, "Alice moved their Archer", [move(0)]),
             ...act("c2", 1, "Alice moved their Knight", [move(1)]),
             ...act("c3", 4, "Alice moved their Archer", [move(4)]),
         ]);
-        expect(titles(rows)).toEqual(["Alice moved their Archer and their Knight", "Alice moved their Archer"]);
+        expect(titles(rows)).toEqual(["Alice moved two Archers and their Knight"]);
+        // Several of a kind, whatever the plural of it is, and a deed told after the first still says "them".
+        const mustered = [...squad, newFighter(5, "a", "manAtArms", 14), newFighter(6, "a", "manAtArms", 15), newFighter(7, "a", "manAtArms", 16)];
+        const actAs = (id: string, fighter: number, events: BattleEvent[], text: string) => toEvents(
+            snap(state({ fighters: mustered })), snap(state({ fighters: mustered }), [{ ...line(text, "a"), commandId: id }]),
+            cmd("RealmArenaAct", { id, senderId: "a", senderUsername: "Alice", action: { kind: "move", fighter } }), valid(events));
+        const turns = (fighters: [number, string][]) => forFeed(fighters.flatMap(([fighter, name], index) => [
+            ...actAs(`m${index}`, fighter, [move(fighter)], `Alice moved their ${name}`),
+            ...actAs(`h${index}`, fighter, [{ kind: "hunkered", fighter }], `Alice hunkered their ${name} down`),
+        ]));
+        expect(titles(turns([[1, "Knight"], [2, "Mage"], [5, "Man-at-arms"], [6, "Man-at-arms"], [7, "Man-at-arms"]])))
+            .toEqual(["Alice moved their Knight, their Mage and three Men-at-arms, then hunkered them down"]);
     });
 
     it("tells the co-op enemy's run of moves as one row, counting a hidden enemy's characters", () => {
