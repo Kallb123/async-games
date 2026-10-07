@@ -150,6 +150,13 @@ interface RealmArenaBoardProps {
     overlay?: React.ReactNode;
     /** What an action did, played over the figures (§26): a new `key` starts it over. */
     playback?: Playback | null;
+    /**
+     * A review step that happened out of the viewer's sight (`isUnplaced`),
+     * as a key — the step's, so each one's mark fades in afresh: a big
+     * half-transparent "?" over the middle of the board's frame, outside the
+     * zoom so it stays put as the board pans. Null when there's nothing to say.
+     */
+    unplaced?: string | null;
 }
 
 /** What the board plays. */
@@ -666,7 +673,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback, unplaced }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -983,6 +990,16 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
             </div>
             {overlay}
+            {/* Something happened, but not anywhere the viewer can see: a
+                question mark over the frame, not the board, so it stays in the
+                middle as the board pans and zooms. The layer fades in and out
+                as a step comes and goes; the mark in it, keyed by the step,
+                settles in afresh for each. */}
+            {unplaced !== undefined && (
+                <div className={`ag-ra-unplaced${unplaced ? ' ag-ra-unplaced--on' : ''}`} aria-hidden="true">
+                    <span key={unplaced ?? undefined}>?</span>
+                </div>
+            )}
         </div>
     );
 }

@@ -12,6 +12,8 @@ const VALUE_RISE = 4;
 const LABEL_DROP = 3.6;
 const MARK_SIZE = 3.4;
 const MARK_OFFSET = 5.4;
+/** How much further out each character past a number's two ("−3") pushes a mark, so one beside a word — "Hunker down" — clears it: half a character's width. */
+const MARK_PER_CHAR = 1.6;
 /** A strike's slash, across the figure it lands on. */
 const SLASH_SIZE = 14;
 
@@ -130,7 +132,7 @@ function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
         <g className={`ag-ra-hit ag-ra-hit--${cue.tone}`} style={cueTiming(cue)}>
             <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
             {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}
-            {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET} y={y - VALUE_RISE} size={MARK_SIZE} />}
+            {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={y - VALUE_RISE} size={MARK_SIZE} />}
         </g>
     );
 }

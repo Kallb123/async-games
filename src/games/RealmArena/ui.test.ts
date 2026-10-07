@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
+import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -474,7 +474,11 @@ describe("battleCues", () => {
         ]);
         const second = firstLand + 2 * WALK_STEP_MS, secondLand = second + 450;
         expect(only(cues, "flight")[1].start).toBe(secondLand - FLIGHT_MS.arrow);
-        expect(told(cues)).toEqual([`0@12 \u22123 ${firstLand}`, `0@14 \u22122/Graze ${secondLand}`]);
+        // Each watcher says "Overwatch" as its arrow is loosed, ahead of the hit that lands on the mover.
+        expect(told(cues)).toEqual([
+            `1@50 Overwatch ${firstLand - FLIGHT_MS.arrow}`, `0@12 \u22123 ${firstLand}`,
+            `2@60 Overwatch ${secondLand - FLIGHT_MS.arrow}`, `0@14 \u22122/Graze ${secondLand}`,
+        ]);
         expect(only(cues, "walk")).toMatchObject([
             { fighter: { id: 0, square: 10 }, path: [10, 11, 12], start: 0, length: first },
             { path: [12, 13, 14], start: firstLand, length: 2 * WALK_STEP_MS },
@@ -491,7 +495,7 @@ describe("battleCues", () => {
         // Nothing after it starts before it is over.
         const walkEnd = 3 * WALK_STEP_MS;
         expect(only(cues, "flight")[0].start).toBeGreaterThanOrEqual(walkEnd);
-        expect(only(cues, "text")[0].start).toBeGreaterThan(walkEnd);
+        expect(only(cues, "text").every(cue => cue.start > walkEnd)).toBe(true);
     });
 
     it("walks a move the viewer only saw the end of as it looks after, and plays nothing for a path of one square or a character in neither", () => {
@@ -614,12 +618,59 @@ describe("battleCues", () => {
         ]);
     });
 
-    it("plays nothing of its own for a stance, a watch or a score", () => {
+    it("says what a stance is as it's taken, with the stance's mark beside it", () => {
+        const cues = battleCues([{ kind: "hunkered", fighter: 0 }, { kind: "shieldWall", fighter: 0 }], before);
+        expect(cues).toMatchObject([
+            { kind: "text", fighter: 0, square: 10, value: "Hunker down", tone: "word", mark: "hunkered", start: 0, length: HIT_TEXT_MS },
+            { kind: "text", fighter: 0, square: 10, value: "Shield wall", tone: "word", mark: "shieldWall", start: 450 },
+        ]);
+    });
+
+    it("says a watch by the weapon it keeps: Overwatch for a ranged one, On guard for a melee one, all of a turn's together", () => {
+        expect(told(battleCues([{ kind: "watching", fighter: 1, banked: 4 }], before))).toEqual(["1@50 Overwatch 0"]);
+        expect(told(battleCues([{ kind: "watching", fighter: 0, banked: 4 }], before))).toEqual(["0@10 On guard 0"]);
+        // The knight's mace is melee; the archer's bow and the mage's bolt are ranged.
+        expect(told(battleCues([
+            { kind: "watching", fighter: 0, banked: 4 },
+            { kind: "watching", fighter: 1, banked: 2 },
+            { kind: "watching", fighter: 3, banked: 2 },
+        ], before))).toEqual(["0@10 On guard 0", "1@50 Overwatch 0", "3@70 Overwatch 0"]);
+        // A watch is a stance's mark-less word: nothing beside it.
+        expect(only(battleCues([{ kind: "watching", fighter: 1, banked: 4 }], before), "text")[0].mark).toBeUndefined();
+    });
+
+    it("says nothing of a stance or a watch by a character whose square isn't known, and plays nothing of a score", () => {
         expect(battleCues([
-            { kind: "hunkered", fighter: 0 },
-            { kind: "watching", fighter: 1, banked: 4 },
+            { kind: "hunkered", fighter: 9 },
+            { kind: "watching", fighter: 8, banked: 4 },
             { kind: "scored", player: "a", points: 5, reason: "centre" },
         ], before)).toEqual([]);
+    });
+
+    it("says Overwatch over a reaction shot's shooter and Guard over a reaction strike's, as each is loosed, not for one taken on the turn", () => {
+        const shot = battleCues([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true }], before);
+        expect(told(shot)).toEqual(["1@50 Overwatch 0", `0@10 \u22123 ${FLIGHT_MS.arrow}`]);
+        // The hit lands when it always did.
+        expect(only(shot, "text")[1].start).toBe(only(shot, "flight")[0].start + FLIGHT_MS.arrow);
+        const strike = battleCues([{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: true }], before);
+        expect(told(strike)).toEqual(["0@10 Guard 0", "1@50 \u22124 250"]);
+        expect(only(strike, "slash")[0].start).toBe(0);
+        const turn = [
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false },
+            { kind: "struck", fighter: 0, target: 1, damage: 4, reaction: false },
+        ] as const;
+        expect(only(battleCues([...turn], before), "text").map(cue => cue.tone)).toEqual(["hit", "hit"]);
+    });
+
+    it("leaves a reaction's word out of what a fall starts by and an effect lands under", () => {
+        const cues = battleCues([
+            { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
+            { kind: "downed", fighter: 1, by: 0 },
+        ], before);
+        // The archer said Overwatch as it loosed, but that is no blow on it: it falls when the fall is told, not when it spoke.
+        const [fall] = only(cues, "fall");
+        expect(fall.start).toBe(2 * WALK_STEP_MS + 450 + 450);
     });
 
     it("fits however much an action set off into the playback cap, every flight still landing as its text rises", () => {
@@ -627,10 +678,12 @@ describe("battleCues", () => {
         const cues = battleCues(shots, before);
         expect(Math.max(...cues.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
         const flights = only(cues, "flight"), texts = only(cues, "text");
-        expect(texts).toHaveLength(12);
-        flights.forEach((flight, i) => expect(Math.abs(flight.start + flight.land - texts[i].start)).toBeLessThanOrEqual(1));
+        const hits = texts.filter(cue => cue.tone === "hit"), words = texts.filter(cue => cue.value === "Overwatch");
+        expect(hits).toHaveLength(12);
+        expect(words).toHaveLength(12);
+        flights.forEach((flight, i) => expect(Math.abs(flight.start + flight.land - hits[i].start)).toBeLessThanOrEqual(1));
         // Still in order, and still one after another.
-        expect(texts.every((cue, i) => i === 0 || cue.start > texts[i - 1].start)).toBe(true);
+        expect(hits.every((cue, i) => i === 0 || cue.start > hits[i - 1].start)).toBe(true);
     });
 
     it("leaves the longest run, and a shot after it, unshortened, and shortens a longer one with its walk", () => {
@@ -776,5 +829,39 @@ describe("a review step's parts", () => {
         const parts = [{ kind: "enemy" as const }, { kind: "enemy" as const }];
         expect(parts.map((_, index) => partLabel(parts, index, "the enemy"))).toEqual(["the enemy's action 1 of 2", "the enemy's action 2 of 2"]);
         expect(partLabel([{}], 0, "the enemy")).toBeUndefined();
+    });
+});
+
+describe("isUnplaced", () => {
+    const start = [ready(0, "a", "knight", 10), ready(1, warbandOwner(0), "archer", 50)];
+    const part = (events: ToldEvent[], before: Fighter[] = start) => ({ events, cues: battleCues(events, before), before: { fighters: before, blasted: [] } });
+    const hunkered: ToldEvent = { kind: "hunkered", fighter: 5 };
+    const scored: ToldEvent = { kind: "scored", player: "a", points: 2, reason: "centre" };
+
+    it("is a followed step that told of something and can be placed nowhere: no move, no change, no cue", () => {
+        expect(isUnplaced(part([hunkered]), start, true)).toBe(true);
+        // A cost the viewer was told of with no one to point to is the same.
+        expect(isUnplaced(part([hunkered, scored]), start, true)).toBe(true);
+    });
+
+    it("is not one a cue, a move or a changed character can place", () => {
+        // A shot at someone the viewer sees plays a cue.
+        expect(isUnplaced(part([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false }]), start, true)).toBe(false);
+        // A stance by a character the viewer sees does too.
+        expect(isUnplaced(part([{ kind: "hunkered", fighter: 0 }]), start, true)).toBe(false);
+        // A move with something to frame.
+        const moved: ToldEvent = { kind: "moved", fighter: 0, path: [10, 11], sneaking: false };
+        expect(isUnplaced(part([moved]), [{ ...start[0], square: 11 }, start[1]], true)).toBe(false);
+        // A character that is different after: spent AP, say, which `actionSquares` follows.
+        expect(isUnplaced(part([hunkered]), [{ ...start[0], ap: start[0].ap - 1 }, start[1]], true)).toBe(false);
+    });
+
+    it("is not one when nothing was told of it but a score, or nothing at all", () => {
+        expect(isUnplaced(part([scored]), start, true)).toBe(false);
+        expect(isUnplaced(part([]), start, true)).toBe(false);
+    });
+
+    it("is not one that isn't followed, such as the turn passing on", () => {
+        expect(isUnplaced(part([hunkered]), start, false)).toBe(false);
     });
 });

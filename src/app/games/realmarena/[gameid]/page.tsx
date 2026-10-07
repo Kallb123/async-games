@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -300,6 +300,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
             : friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true }
             : null
         : picked;
+    // A followed step the board can't point to — something happened out of
+    // sight, which cost the viewer something they were told of — says so with
+    // a "?" over the board for as long as it is shown, while the view rests on
+    // the viewer's own side as above. Never live.
+    const unplaced = !nav.isLive && previous && part && isUnplaced(part, fighters, followed) ? stepKey : null;
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
@@ -522,6 +527,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             odds={reach?.options}
                             overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}
+                            unplaced={unplaced}
                         />
                     </div>
 

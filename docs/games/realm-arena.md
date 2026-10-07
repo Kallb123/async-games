@@ -1777,7 +1777,18 @@ sends (`BattleEvent` in `rules.ts`).
   | A heal or a draught | **+4**, in green |
   | An effect put on | its name under the number ("Stunned") |
   | Knocked out | **Down**, after the damage |
+  | A stance taken | **Hunker down** or **Shield wall**, with the stance's mark beside it |
+  | A watch kept | **Overwatch** over an archer or a mage, **On guard** over a melee fighter, all of a turn's together |
+  | A reaction fired | **Overwatch** over the shooter as its arrow is loosed, **Guard** over the fighter as its slash starts |
 
+- **Words for what the camera is looking at.** The review pans to a character
+  that hunkers, raises a wall, goes on watch or reacts, and none of those
+  put anything on the board but a stance's mark on the figure: the words are
+  said over the character itself, in the same text as "Down" and "Spotted"
+  (the "word" tone), so a player needn't look down to the log to see what
+  they are. They are said only for what the viewer was told, and over a
+  character whose square isn't known they are skipped. A reaction's word
+  lands as it fires, so the hit's own timing doesn't move.
 - **The Archer's shot.** An arrow flies from the Archer to the target on a
   shallow arc, quickly (about 0.4 s). On a hit it stops in the figure. On a
   graze it glances off. On a miss it flies past and lands beyond the target.
@@ -1885,6 +1896,17 @@ sends (`BattleEvent` in `rules.ts`).
   the part as usual so it still glides again for each; a move is always kept.
   The dock says which part it is on ("the Renegades' action 2 of
   5"). A step with no parts is one part, so the two take the same path.
+- **Somewhere out of sight.** A followed step or part that told of something
+  other than a score, and that the board can place nowhere — no move to frame
+  (`moveFrame`), no character it changed (`actionSquares`), no cue — is
+  unplaced (`isUnplaced`): in fog of war, an enemy's action the viewer was
+  told only the cost of. The view still falls back on the viewer's own side,
+  and the board lays a large half-transparent "?" over the middle of its
+  frame — outside the zoom, so it stays centred as the board pans — for as
+  long as the step is shown, fading in and out and settling in afresh for each
+  step. A step spread wide is placed, only wide, and gets no mark; the
+  hand-off and anything live get none either. With `prefers-reduced-motion`
+  set it just appears and goes.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
   a second game wants it (AGENTS.md's second-copy rule).
@@ -3782,4 +3804,4 @@ Realm, its sibling in the same world.
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
-| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
+| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.

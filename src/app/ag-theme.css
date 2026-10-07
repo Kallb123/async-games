@@ -5462,6 +5462,40 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
     .ag-ra-burst, .ag-ra-slash { display: none; }
 }
+/* A review step that happened out of the viewer's sight (§26.2): a big,
+   half-transparent question mark over the middle of the board's frame — the
+   frame, not the board, so it stays put as the board pans and zooms. The layer
+   is its own container, so the mark is sized by the frame's height whatever
+   that is (a floor for a squat one). It fades with the step coming and going,
+   and the mark settles in for each; with reduced motion, it just is or isn't
+   there. Never takes a tap. */
+.ag-ra-unplaced {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    container-type: size;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 300ms ease;
+}
+.ag-ra-unplaced--on { opacity: 1; }
+.ag-ra-unplaced > span {
+    font: 800 clamp(5rem, 40cqh, 20rem) / 1 var(--ag-font);
+    color: color-mix(in oklch, var(--ag-on-dark) 55%, transparent);
+    text-shadow: 0 0 0.08em color-mix(in oklch, var(--ra-night) 70%, transparent);
+    animation: ag-ra-unplaced-settle 400ms ease-out both;
+}
+@keyframes ag-ra-unplaced-settle {
+    from { transform: scale(0.85); }
+    to { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-unplaced { transition: none; }
+    .ag-ra-unplaced > span { animation: none; }
+}
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but faded and uncoloured, since it isn't on the battlefield until both have
    mustered. */

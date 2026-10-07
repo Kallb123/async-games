@@ -10,7 +10,7 @@ import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefi
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -507,11 +507,11 @@ export interface TextCue extends Timed {
      * overwatch shot is taken where the mover had got to, not where it stopped.
      */
     square: Square;
-    /** The big text: "−3", "+4", "Miss", "Down", or an effect's name on its own. */
+    /** The big text: "−3", "+4", "Miss", "Down", an effect's name on its own, or what a character is doing: "Overwatch". */
     value: string;
     /** The small text under it: "Graze", or the effect it put on. */
     label?: string;
-    /** The effect whose mark stands beside it: burning's, as it does its damage. */
+    /** The effect whose mark stands beside it: burning's, as it does its damage, or a stance's as it takes it. */
     mark?: EffectId;
     tone: HitTone;
 }
@@ -628,6 +628,21 @@ const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "b
 /** What each thrown item bursts into (§26.1), and over how much. */
 const THROWN_BURST: Readonly<Record<ThrownItem, BurstKind>> = { fireFlask: "fire", thunderFlask: "thunder", smokePot: "smoke" };
 
+/**
+ * What a character says it is doing as it does it, over its own head (§26.1):
+ * the words the log has for it, short enough to read in a glance at the board
+ * — a stance, a watch, a reaction.
+ */
+const STANCE_WORD: Readonly<Record<"hunkered" | "shieldWall", string>> = { hunkered: "Hunker down", shieldWall: "Shield wall" };
+/**
+ * A watch is told by the weapon the watcher keeps — "Overwatch" for a ranged
+ * one, "On guard" for a melee one — and what it sets off by what it does: an
+ * overwatch shot is "Overwatch" again, a guard's blow "Guard".
+ */
+const OVERWATCH_WORD = "Overwatch";
+const ON_GUARD_WORD = "On guard";
+const GUARD_WORD = "Guard";
+
 /** Damage as the board shows it, with a real minus sign. */
 const minus = (damage: number) => `−${damage}`;
 
@@ -663,8 +678,11 @@ function scaled(cue: BattleCue, scale: number): BattleCue {
  * `after` is everyone as the action left them: the look of a mover who wasn't
  * in `before` because it came into sight on the way. A move told with a path
  * of fewer than two squares, or of a character in neither, plays nothing.
- * Stances, watches and scores play nothing of their own. However much
- * happened, it all fits in `PLAYBACK_MS`.
+ * A stance, a watch and a reaction say what the character is doing, in
+ * words over it ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard") — as
+ * it's taken, or, for an overwatch shot or a guard's blow, as it's loosed —
+ * since the view pans to them and the log is out of sight; scores play
+ * nothing of their own. However much happened, it all fits in `PLAYBACK_MS`.
  */
 export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[] = []): BattleCue[] {
     const as = new Map(before.map(fighter => [fighter.id, fighter]));
@@ -695,6 +713,15 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         latest.set(fighter, cue);
     };
     /**
+     * What a character is doing, over it — a stance, a watch, a reaction. Not
+     * the latest text on it: it names no blow, so a fall never starts by it
+     * and an effect never lands under it.
+     */
+    const say = (fighter: number, when: number, value: string, mark?: EffectId) => {
+        const square = at.get(fighter);
+        if (square !== undefined) cues.push({ kind: "text", fighter, square, value, tone: "word", ...(mark ? { mark } : {}), start: when, length: HIT_TEXT_MS });
+    };
+    /**
      * A character walking `path`, starting as the last thing landed: so a shot
      * told before it has landed first, and one told after it flies once it's
      * over, as the next thing to land.
@@ -716,7 +743,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         cues.push({ kind: "flight", missile, from, to, result, start: land - flight, land: flight, length: flight + after });
     };
 
-    for (const event of events) {
+    for (const [index, event] of events.entries()) {
         switch (event.kind) {
             case "moved": {
                 walk(event.fighter, event.path);
@@ -734,6 +761,8 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const shooter = as.get(event.fighter)?.character;
                 const missile = (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
                 const land = beat(FLIGHT_MS[missile]);
+                // An overwatch shot says so as it's loosed, so the camera's pan to the watcher says why.
+                if (event.reaction) say(event.fighter, land - FLIGHT_MS[missile], OVERWATCH_WORD);
                 fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
                     event.result === "graze" ? { label: "Graze" } : {});
@@ -742,6 +771,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
             case "struck": {
                 const land = beat(SLASH_MS);
                 const square = at.get(event.target);
+                if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
                 if (square !== undefined) cues.push({ kind: "slash", square, start: land - SLASH_MS, length: 2 * SLASH_MS });
                 text(event.target, land, minus(event.damage), "hit");
                 break;
@@ -749,6 +779,17 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
             case "burned":
                 text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning" });
                 break;
+            case "hunkered":
+            case "shieldWall":
+                say(event.fighter, beat(), STANCE_WORD[event.kind], event.kind);
+                break;
+            case "watching": {
+                // Every character a turn ends on watch is told at once, so they say so together.
+                const fighter = as.get(event.fighter);
+                const when = events[index - 1]?.kind === "watching" && landed !== null ? landed : beat();
+                if (fighter) say(event.fighter, when, weaponOf(fighter).kind === "ranged" ? OVERWATCH_WORD : ON_GUARD_WORD);
+                break;
+            }
             case "fireball":
             case "thrown": {
                 const item = event.kind === "thrown" ? event.item : null;
@@ -874,6 +915,22 @@ export function reviewParts(outcome: IRealmArenaStepOutcome | undefined, before:
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
         return played;
     });
+}
+
+/**
+ * Whether a review step or part, as it's shown, happened somewhere the board
+ * can't point to (§26.2): it is followed — not the turn handing on, which
+ * moves everyone's AP and no one in particular — something was told of it
+ * other than a score (points are bookkeeping, not an action somewhere), and
+ * none of it can be placed on the viewer's board: no move to frame, no
+ * character it changed, no cue to play. In fog of war that is an enemy's
+ * action out of sight that still cost something the viewer was told of. A
+ * step that touched squares spread wide is placed — just wide — so it isn't one.
+ * `after` is the board the part left, as `actionSquares` reads it.
+ */
+export function isUnplaced(part: Pick<ReviewPart, "events" | "cues" | "before">, after: readonly Fighter[], followed: boolean): boolean {
+    if (!followed || part.cues.length > 0 || !part.events.some(event => event.kind !== "scored")) return false;
+    return !moveFrame(part.events, part.before.fighters, after) && actionSquares(part.before.fighters, after).length === 0;
 }
 
 /** How long a review rests on a whole step: its parts' times added up. */
