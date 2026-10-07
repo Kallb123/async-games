@@ -71,7 +71,7 @@ as black flashes and stutter. Every proposal below keeps that rule.
 
 Ranked: the first four are what a player notices most.
 
-### 3.1 The HP bar drops before the blow lands — *built*
+### 3.1 The HP bar drops before the blow lands — *built in [#880](https://github.com/Kallb123/async-games/pull/880)*
 
 Every resting figure (`FighterNode`) draws its `HpBar` from the state *after*
 the action. The target's bar is already short while the arrow is still in the
@@ -83,7 +83,7 @@ action found it. At that fighter's hit cue, tween the fill down to the new
 value, with a pale "chip" segment that lags behind and drains over about 300ms
 — the classic damage read. Effect marks swap at the cue that told them.
 
-### 3.2 The fallen pose shows under the standing one — *built*
+### 3.2 The fallen pose shows under the standing one — *built in [#880](https://github.com/Kallb123/async-games/pull/880)*
 
 `Falling` fades the standing figure over the resting `FighterNode` — which is
 already lying in its `fallen` pose. The lying sprite is wider, so it shows
@@ -94,7 +94,7 @@ overwatch, the resting node arrives as its walk ends, again before the blow.
 so the body appears as the standing figure starts to go — better still, fade
 the fallen figure in as the standing one fades out, with a unit or so of drop.
 
-### 3.3 The camera leaves the action before playing it — *built*
+### 3.3 The camera leaves the action before playing it — *built in [#880](https://github.com/Kallb123/async-games/pull/880)*
 
 Live, the focus that holds the playback is whatever the board would show
 next, not the action:
@@ -114,7 +114,7 @@ move's frame (`moveFrame`), what it touched (`actionSquares`), or the target
 already picked — and the selection's focus takes over once it's played (§4.1
 gives the board the "played" to wait for).
 
-### 3.4 Hit text lands on itself — *built*
+### 3.4 Hit text lands on itself — *built in [#880](https://github.com/Kallb123/async-games/pull/880)*
 
 A knock-out's "Down" starts `CUE_STEP_MS` after the damage that caused it, at
 the same point over the same head, while the damage text still has 550ms to
@@ -157,7 +157,7 @@ shows.
 
 **Fix.** §4.5.
 
-### 3.8 Reduced motion still waits out the walks — *built*
+### 3.8 Reduced motion still waits out the walks — *built in [#880](https://github.com/Kallb123/async-games/pull/880)*
 
 The walker isn't drawn, but the cues keep its time: the player looks at a still
 board for up to three seconds before the text comes.
@@ -269,7 +269,8 @@ them until then.
 ## 6. Order of work
 
 1. **What gives the result away** — §3.1–§3.5 and §3.8. Local to the board,
-   the page and `battleCues`; the most noticeable gain. All but §3.5 built.
+   the page and `battleCues`; the most noticeable gain. **Built in
+   [#880](https://github.com/Kallb123/async-games/pull/880)**, all but §3.5.
 2. **Timings** — §5's table, bar the camera rows.
 3. **The timeline** — §4.1–§4.5, which also settles §3.6 and §3.7, and makes a
    skip and a 2× review a few lines each. §4.6's tests go in with it.
