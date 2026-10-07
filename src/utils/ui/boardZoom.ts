@@ -1,7 +1,7 @@
 /**
- * The two pieces of arithmetic behind `BoardZoom`, kept out here so they can be
- * tested the way the rest of the shared board kit's maths is (`mapEdges.ts`,
- * `mapLabels.ts`). Everything else in that component is DOM and gestures.
+ * The arithmetic behind `BoardZoom`, kept out here so it can be tested the way
+ * the rest of the shared board kit's maths is (`mapEdges.ts`, `mapLabels.ts`).
+ * Everything else in that component is DOM and gestures.
  */
 
 /** The width the board is drawn at when it's fitted to the column, as a percentage. */
@@ -93,6 +93,22 @@ export function pinchOffset(scroll: number, startFinger: number, finger: number,
  */
 export function clampOffset(offset: number, contentSize: number, paneSize: number): number {
     return Math.min(0, Math.max(paneSize - contentSize, offset));
+}
+
+/**
+ * The scroll that puts `point` — in the child's own `viewBox` units — in the
+ * middle of the pane, given the board's size on screen (`content`) and the
+ * pane's (`pane`), both in pixels. Held between nothing scrolled and the far
+ * end of the board on each axis, as a pane can't scroll further; a board no
+ * bigger than the pane along an axis has nothing to scroll there, so that axis
+ * is zero.
+ */
+export function centredScroll(point: { x: number; y: number }, viewBox: Size, content: { x: number; y: number }, pane: { x: number; y: number }): { x: number; y: number } {
+    const axis = (at: number, view: number, size: number, room: number) => Math.min(Math.max(0, size - room), Math.max(0, at / view * size - room / 2));
+    return {
+        x: axis(point.x, viewBox.width, content.x, pane.x),
+        y: axis(point.y, viewBox.height, content.y, pane.y),
+    };
 }
 
 /** Ease in and out (cubic): a glide sets off and arrives gently rather than lurching. */

@@ -1879,9 +1879,10 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   or telling the review hook the step is over (`awaitsStepEnd`, `stepEnded`).
   A part with nothing to play rests a floor (`STEP_MIN_MS`) instead. The cues
   wait for the view: the board's playback clock stands still, as it stands at
-  its start, until `BoardZoom` says the glide to it has landed (`onFocused`),
-  so nothing happens while the board is still moving, however long a slow
-  phone takes over it.
+  its start, until `BoardZoom` says the glide to it has all but landed
+  (`onFocused`, three-quarters of the way through it), so the action starts as
+  the view eases in rather than after a glide that has nearly arrived, however
+  long a slow phone takes over it.
   In co-op the warband takes its whole turn inside the player's End turn, so
   that one step's outcome also carries `parts`: the player's End turn with the
   burning that began the warband's turn, one part for each action the
@@ -1895,16 +1896,23 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   follow key). The follow is by kind: the player's End turn and each of the
   warband's actions are followed, the hand-off is not (it moved everyone's AP,
   not anyone in particular), whether or not the part before it was left out.
-  A move is framed from where the mover began to where it ended, with the zoom
-  that just fits both (`moveFrame`; the first `moved` event of the part to the
-  last of the same character's). In fog of war, a move that came into sight or
-  went out of it is framed over the stretch the viewer saw instead — from where
-  its told path begins, or to where it ends — which is what the board walks; a
-  move told with no path frames nothing. Anything else is framed round whoever
+  A move is framed over its whole path, from where the mover began to where it
+  ended, with the zoom that just fits it (`moveFrame`; the first `moved` event
+  of the part to the last of the same character's), so a route round a wall
+  stays in frame. In fog of war, a move that came into sight or went out of it
+  is framed over the stretch the viewer saw instead — from where its told path
+  begins, or to where it ends — which is what the board walks; a move told with
+  no path frames nothing. A move too long to frame that way (`TRACK_SPAN`) is
+  followed instead: the view frames where it starts, as close as a character
+  selected with nowhere to go, and keeps the walker in the middle of the frame
+  as it goes (`track`, the board's `WalkCamera`), until a player's own touch on
+  the board takes the view back; with reduced motion nothing walks, so it
+  frames where the move ended. Anything else is framed round whoever
   acted and whoever it reached, as the part's events name them (`toldSquares`),
   with the zoom that just fits them and as close as a target picked to aim at
   (`aimFocus`): a heal three squares off fills the frame, and two shots at the
-  same target are framed alike. Only a part told nothing that places it follows
+  same target are framed alike; told squares spread over more than half the
+  battlefield fall back on the viewer's side, as below. Only a part told nothing that places it follows
   every character it changed (`actionSquares`), as deep as they all fit. A turn beginning is not a character doing something: AP going
   up (everyone's fresh allowance) is not a change `actionSquares` follows, only
   AP spent, banked AP changing, and a new square, hit points or effects. A part

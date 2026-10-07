@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBattlefield } from "@/utils/games/battlefield/terrain";
+import { buildBattlefield, coordsOf } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
 import { isoCentre, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH } from "@/utils/ui/isometric";
@@ -7,7 +7,7 @@ import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
-import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
+import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, reviewParts, withPartState, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkerGroundAt, walkLift, walkSquares, flightAt, hitTextAt, POP_MS, burstAt, slashAt, progressOf, fadeOutAt, fadeInAt, FLIGHT_ARC, type FxPoints, type FallCue, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -942,25 +942,39 @@ describe("moveFrame", () => {
     const arrived = { ...mover, square: 31 };
     const move = (path: number[], fighter = 0): ToldEvent => ({ kind: "moved", fighter, path, sneaking: false });
 
-    it("is where the mover stood before and where it stands after", () => {
-        expect(moveFrame([move([10, 20, 31])], [mover], [arrived])).toEqual([10, 31]);
+    it("is where the mover stood before, every square it walked and where it stands after", () => {
+        expect(moveFrame([move([10, 20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
     });
 
-    it("runs a move split by an overwatch shot as one, from where it began to where it ended", () => {
+    it("runs a move split by an overwatch shot as one, from where it began to where it ended, without repeating the square it stopped on", () => {
         const shot: ToldEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 1, reaction: true };
-        expect(moveFrame([move([10, 20]), shot, move([20, 31])], [mover], [arrived])).toEqual([10, 31]);
+        expect(moveFrame([move([10, 20]), shot, move([20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
+    });
+
+    it("keeps a route that bends away from the line between its ends in frame", () => {
+        const at = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
+        // Round a wall: down the column, across, and back up again to end beside where it began.
+        const path = [at(10, 10), at(10, 14), at(14, 14), at(14, 10)];
+        const frame = moveFrame([move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }])!;
+        expect(frame).toEqual(path);
+        const ends = areaRect(RUINED_FORT, [path[0], path[3]]);
+        expect(ends.height).toBe(1);
+        expect(areaRect(RUINED_FORT, frame).height).toBeGreaterThan(ends.height);
+        expect(coordsOf(RUINED_FORT, path[1]).row).toBeGreaterThanOrEqual(ends.y + ends.height);
     });
 
     it("frames the part of the move the viewer saw when it came into sight or went out of it", () => {
         // Out of the fog: from where it was first seen to where it stands.
         expect(moveFrame([move([30, 31])], [], [arrived])).toEqual([30, 31]);
         // Into the fog: from where it stood to the last square it was seen on.
-        expect(moveFrame([move([10, 20, 25])], [mover], [])).toEqual([10, 25]);
+        expect(moveFrame([move([10, 20, 25])], [mover], [])).toEqual([10, 20, 25]);
         // Through the viewer's sight and out again: just the stretch they saw.
-        expect(moveFrame([move([40, 41]), move([41, 42])], [], [])).toEqual([40, 42]);
+        expect(moveFrame([move([40, 41]), move([41, 42])], [], [])).toEqual([40, 41, 42]);
     });
 
     it("is null when nothing of the move was seen, there was none, or it ended where it began", () => {
+        // A route that crossed where it ended on the way still ends there.
+        expect(moveFrame([move([10, 31, 20, 31])], [mover], [arrived])).toEqual([10, 20, 31]);
         expect(moveFrame([move([])], [], [])).toBeNull();
         expect(moveFrame([move([10])], [mover], [])).toBeNull();
         expect(moveFrame([{ kind: "hunkered", fighter: 0 }], [mover], [arrived])).toBeNull();
@@ -1094,8 +1108,22 @@ describe("actionFollow", () => {
     const move = (path: number[]): ToldEvent => ({ kind: "moved", fighter: 0, path, sneaking: false });
     const at2 = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
 
-    it("frames a move exactly, from where it began to where it ended", () => {
-        expect(actionFollow(RUINED_FORT, [move([10, 20, 31])], [mover], [arrived], "k")).toEqual({ squares: [10, 31], key: "k", exact: true });
+    it("frames a short move exactly, the whole of its path", () => {
+        const path = [at2(10, 20), at2(11, 20), at2(12, 21), at2(13, 22)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k"))
+            .toEqual({ squares: path, key: "k", exact: true });
+    });
+
+    it("follows a long move rather than framing it, from where it starts", () => {
+        const path = [at2(10, 20), at2(18, 20), at2(26, 20), at2(34, 20)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k"))
+            .toEqual({ squares: [path[0]], key: "k", exact: true, track: true });
+    });
+
+    it("frames only where a long move ended when nothing walks", () => {
+        const path = [at2(10, 20), at2(18, 20), at2(26, 20), at2(34, 20)];
+        expect(actionFollow(RUINED_FORT, [move(path)], [{ ...mover, square: path[0] }], [{ ...mover, square: path[3] }], "k", true))
+            .toEqual({ squares: [path[3]], key: "k", exact: true });
     });
 
     it("goes to what a step touched, as deep as it fits, when it was no move", () => {
@@ -1119,6 +1147,12 @@ describe("actionFollow", () => {
         const second = actionFollow(RUINED_FORT, [shot], [{ ...archer, ap: 2 }, { ...soldier, hp: soldier.hp - 2 }], [{ ...archer, ap: 0 }, { ...soldier, hp: soldier.hp - 4 }], "k");
         expect(first).toEqual({ squares: [archer.square, soldier.square], key: "k", exact: true, close: true });
         expect(second).toEqual(first);
+    });
+
+    it("is null when whoever the events name is spread over more than half the field: burning ticking all over it", () => {
+        const near = ready(1, "b", "archer", at2(2, 2)), far = ready(2, "b", "mage", at2(30, 40));
+        const burned: ToldEvent[] = [{ kind: "burned", fighter: 1, damage: 1 }, { kind: "burned", fighter: 2, damage: 1 }];
+        expect(actionFollow(RUINED_FORT, burned, [near, far], [near, far].map(fighter => ({ ...fighter, hp: fighter.hp - 1 })), "k")).toBeNull();
     });
 
     it("is null when nothing changed or what changed is spread over more than half the field", () => {
@@ -1518,6 +1552,44 @@ describe("the board at a moment", () => {
             expect(walkerAt(walks, 300, gap)).toMatchObject({ from: 5, to: 5, at: 0 });
             expect(walkerAt(walks, 500, gap)).toMatchObject({ from: 6, to: 7, at: 1 });
             expect(walkerAt(walks, 1400, gap)).toMatchObject({ from: 6, to: 7, at: 2 });
+        });
+    });
+
+    describe("where a camera following a walker looks", () => {
+        const heights = Array(25).fill(0);
+        heights[1] = 3;
+        const view = isoView({ width: 5, height: 5, heights }, { base: 0, headroom: 0 });
+        const walk = (path: number[], start: number, length = 1000): WalkCue => ({ kind: "walk", fighter: knight, path, start, length });
+        const centre = (square: number) => isoCentre(view, square);
+
+        it("is the first square's centre before the walk starts, and the last square's from the end of it on", () => {
+            const walks = [walk([0, 5, 10], 500), walk([10, 11], 2000)];
+            expect(walkerGroundAt(walks, view, 0)).toEqual(centre(0));
+            expect(walkerGroundAt(walks, view, 500)).toEqual(centre(0));
+            expect(walkerGroundAt(walks, view, 3000)).toEqual(centre(11));
+            expect(walkerGroundAt(walks, view, 9000)).toEqual(centre(11));
+        });
+
+        it("lies between the two centres of the leg it is partway over", () => {
+            const walks = [walk([0, 5, 10], 500)];
+            const now = walkerAt(walks, 800, legLengthOn(view))!;
+            expect(now).toMatchObject({ from: 0, to: 5 });
+            expect(now.across).toBeGreaterThan(0);
+            expect(now.across).toBeLessThan(1);
+            const ground = walkerGroundAt(walks, view, 800), a = centre(0), b = centre(5);
+            expect(ground.x).toBeGreaterThan(Math.min(a.x, b.x));
+            expect(ground.x).toBeLessThan(Math.max(a.x, b.x));
+            expect(ground.y).toBeGreaterThan(Math.min(a.y, b.y));
+            expect(ground.y).toBeLessThan(Math.max(a.y, b.y));
+        });
+
+        it("is the straight way between the two centres of a leg that climbs, without the hop", () => {
+            const walks = [walk([0, 1], 0)];
+            const now = walkerAt(walks, 400, legLengthOn(view))!;
+            expect(walkLift(now, square => view.heights[square])).toBeLessThan(0);
+            const a = centre(0), b = centre(1), ground = walkerGroundAt(walks, view, 400);
+            expect(ground.x).toBeCloseTo(a.x + (b.x - a.x) * now.across, 10);
+            expect(ground.y).toBeCloseTo(a.y + (b.y - a.y) * now.across, 10);
         });
     });
 

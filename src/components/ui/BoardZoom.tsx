@@ -1,6 +1,6 @@
 'use client'
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clampOffset, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { centredScroll, clampOffset, easeInOut, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels, type ZoomView } from '@/utils/ui/boardZoom';
 import { prefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import type { Rect } from '@/utils/ui/mapLabels';
 
@@ -50,9 +50,9 @@ interface BoardZoomProps {
     /** A region to smooth-scroll (and zoom) to reveal whenever `focus.key` changes. */
     focus?: BoardZoomFocus | null;
     /**
-     * Told each focus's key once the board has got there — its glide over, cut
-     * short, or skipped — so a board can hold what it plays until the view has
-     * stopped moving under it.
+     * Told each focus's key once the board has all but got there — `GLIDE_LEAD`
+     * of the way through its glide, or as it is cut short or skipped — so a
+     * board can hold what it plays until the view is nearly where it is going.
      */
     onFocused?: (key: string) => void;
     /** Keeps the player's place when the board is redrawn under them. Needs `viewBox`. */
@@ -78,13 +78,21 @@ const MOVING = 'ag-board-zoom-content--moving';
 const GLIDE_MS = 380;
 
 /**
+ * How far through a glide, of the time it takes, a focus is told it has landed.
+ * A board holding what it plays until the view gets there starts it as the
+ * glide eases in to land, so the action doesn't wait out the slowest quarter of
+ * a glide that has all but arrived.
+ */
+const GLIDE_LEAD = 0.75;
+
+/**
  * A focus glide in flight. Like a pinch, it is drawn as a CSS transform over a
  * board already laid out at the zoom it's heading for, with the pane unscrolled
  * underneath; `settle` drops the transform and scrolls the pane to where the
  * glide ends, so whatever interrupts it reads a board that is simply there. A
- * glide that has finished settles to nothing.
+ * glide that has finished settles to nothing. `settled` says whether it has.
  */
-interface Glide { settle: () => void }
+interface Glide { settle: () => void; settled: () => boolean }
 
 /**
  * Draw the board `offset` into the pane at `scale` times its laid-out size.
@@ -173,22 +181,30 @@ function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to
     draw(0);
     let frame = 0;
     let done = false;
+    // Told once, however the glide ends: at its lead, or as it's cut short.
+    let told = false;
+    const tell = () => {
+        if (told) return;
+        told = true;
+        landed?.();
+    };
     const settle = () => {
         if (done) return;
         done = true;
         cancelAnimationFrame(frame);
         landAt(pane, content, to.scroll);
-        landed?.();
+        tell();
     };
     const started = performance.now();
     const step = (now: number) => {
         const t = (now - started) / GLIDE_MS;
         if (t >= 1) { settle(); return; }
         draw(easeInOut(t));
+        if (t >= GLIDE_LEAD) tell();
         frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
-    return { settle };
+    return { settle, settled: () => done };
 }
 
 /** Bring a focus into view on a board already laid out at its zoom: a glide when it's smooth, otherwise (the pill, or reduced motion) it simply lands. */
@@ -223,6 +239,31 @@ function focusCentre(rect: Rect, viewBox: { width: number; height: number }): { 
         cx: (rect.x + rect.width / 2) / viewBox.width,
         cy: (rect.y + rect.height / 2) / viewBox.height,
     };
+}
+
+/**
+ * What a board calls to keep a point in the middle of the pane. It is the same
+ * function for the life of the `BoardZoom` that provides it, so a board's clock
+ * can hold it without resubscribing.
+ */
+type BoardCentre = (point: { x: number; y: number }) => void;
+
+const BoardCentreContext = createContext<BoardCentre | null>(null);
+
+/**
+ * The fourth way a board's view moves, and the only one the board drives: a
+ * board keeping something moving in the middle of the frame — Realm Arena
+ * following a walker across the board — calls the function this returns each
+ * frame, from its own clock, with the point (in the child SVG's viewBox units)
+ * that should be there. The pane is scrolled to it at once, at the zoom it is
+ * already at; nothing here runs a loop of its own. It does nothing while a
+ * focus glide is still on its way, during a pinch, or once the player has taken
+ * hold of the board — a touch, a wheel or the zoom pill — since the focus
+ * began: a player who grabs the board mid-walk keeps it, until the next focus.
+ * `null` outside a `BoardZoom`.
+ */
+export function useBoardCentre(): BoardCentre | null {
+    return useContext(BoardCentreContext);
 }
 
 function spread(touches: TouchList): number {
@@ -316,6 +357,7 @@ function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
  * And a board can be redrawn under the player without anything happening on
  * it — Realm Arena's battlefield turned a quarter — which hands this a
  * `pivot`, so whatever was in the middle of the frame is still there after.
+ * The fourth is the board's own, frame by frame: `useBoardCentre`.
  */
 export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocused, pivot, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
@@ -333,6 +375,13 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     const pinchRef = useRef<Pinch | null>(null);
     const focusTargetRef = useRef<FocusTarget | null>(null);
     const glideRef = useRef<Glide | null>(null);
+    // Whether the player has touched, wheeled or stepped the board since the
+    // latest focus began, which stops `useBoardCentre` until the next one.
+    const takenRef = useRef(false);
+    const viewBoxRef = useRef(viewBox);
+    useEffect(() => {
+        viewBoxRef.current = viewBox;
+    });
     // Read when a glide lands rather than when it starts: boards pass it inline.
     const onFocusedRef = useRef(onFocused);
     useEffect(() => {
@@ -400,6 +449,20 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         return () => observer.disconnect();
     }, []);
 
+    // Keeping a point in the middle is only for a view that is nobody's but the
+    // board's: no glide on its way (nor one about to start, its zoom still
+    // laying out), no pinch, and no player's hand on it. One function for the
+    // component's life, so a board's clock holds it without resubscribing.
+    const centre = useCallback((point: { x: number; y: number }) => {
+        const pane = paneRef.current;
+        const size = viewBoxRef.current;
+        if (!pane || !size || takenRef.current || pinchRef.current || focusTargetRef.current) return;
+        if (glideRef.current && !glideRef.current.settled()) return;
+        const to = centredScroll(point, size, { x: pane.scrollWidth, y: pane.scrollHeight }, { x: pane.clientWidth, y: pane.clientHeight });
+        pane.scrollLeft = to.x;
+        pane.scrollTop = to.y;
+    }, []);
+
     // A glide still in flight as the board goes away has nothing left to draw on.
     useEffect(() => () => glideRef.current?.settle(), []);
 
@@ -415,6 +478,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const content = contentRef.current;
         if (!pane || !content || !focus || !viewBox) return;
         glideRef.current?.settle();
+        takenRef.current = false;
         const level = focus.exact
             ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max)
             : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
@@ -457,8 +521,9 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             x: (view.scroll.x + middle.x) / view.content.x * viewBox.width,
             y: (view.scroll.y + middle.y) / view.content.y * viewBox.height,
         });
-        pane.scrollLeft = to.x / viewBox.width * pane.scrollWidth - middle.x;
-        pane.scrollTop = to.y / viewBox.height * pane.scrollHeight - middle.y;
+        const scroll = centredScroll(to, viewBox, { x: pane.scrollWidth, y: pane.scrollHeight }, { x: pane.clientWidth, y: pane.clientHeight });
+        pane.scrollLeft = scroll.x;
+        pane.scrollTop = scroll.y;
         // Only `pivot.key` should retrigger this, as with `focus.key` above.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pivot?.key]);
@@ -467,6 +532,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
     const stepZoom = () => {
         const pane = paneRef.current;
         if (!pane) { setZoom(next); return; }
+        takenRef.current = true;
         glideRef.current?.settle();
         // A live focus is what the player is looking at right now — the pill
         // should zoom in on that, not on wherever they last panned to. Instant
@@ -489,6 +555,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         const onTouchStart = (event: TouchEvent) => {
             // A finger on the board ends a glide where it was heading, so a
             // pan or a pinch starts from the board as it's laid out.
+            takenRef.current = true;
             glideRef.current?.settle();
             if (event.touches.length !== 2 || pinchRef.current) return;
             const start = midpoint(event.touches, pane);
@@ -555,6 +622,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
         // browser's own keyboard zoom over the pane, and taking that one is the
         // lesser evil next to the board jumping a level per notch.
         const onWheel = (event: WheelEvent) => {
+            takenRef.current = true;
             glideRef.current?.settle();
             if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
@@ -598,7 +666,9 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
                     height: zoom > FIT_WIDTH && fitHeight ? fitHeight : undefined,
                 } as React.CSSProperties}
             >
-                <div ref={contentRef} className="ag-board-zoom-content">{children}</div>
+                <div ref={contentRef} className="ag-board-zoom-content">
+                    <BoardCentreContext.Provider value={centre}>{children}</BoardCentreContext.Provider>
+                </div>
             </div>
         </>
     );

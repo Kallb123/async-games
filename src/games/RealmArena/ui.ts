@@ -179,25 +179,29 @@ export function spreadWide(field: Pick<Battlefield, "width" | "height">, squares
 }
 
 /**
- * The two squares a review frames a move by (§26.2): where the character that
- * moved stood before, and where it stands after — from the first `moved` event
- * of `events` to the last of the same character's (an overwatch shot splits one
- * move into several). Where one end is out of the viewer's sight — a mover
- * missing from `before` came into sight on the way, one missing from `after`
+ * The squares a review frames a move by (§26.2): the whole stretch of it the
+ * viewer saw, in order and without repeats — where the character that moved
+ * stood before, every square of the paths it was told to have walked, and where
+ * it stands after — so a route round a wall stays in frame, where framing just
+ * its two ends would leave it. That is every `moved` event of the first mover
+ * `events` tell of (an overwatch shot splits one move into several). Where one
+ * end is out of the viewer's sight — a mover missing from `before` came into sight on the way, one missing from `after`
  * went out of it — that end is where the path the viewer was told begins or
  * ends instead: the part of the move they saw, which is what the board walks.
  * Null when there's no move, when nothing of it was seen (a move told with no
  * path, from a mover that wasn't in sight at either end), or when it ended
  * where it began — for the caller to follow `actionSquares`.
  */
-export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[]): [Square, Square] | null {
+export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[]): Square[] | null {
     const moves = events.filter((event): event is Extract<ToldEvent, { kind: "moved" }> => event.kind === "moved");
     if (moves.length === 0) return null;
     const mover = moves[0].fighter;
     const seen = moves.filter(move => move.fighter === mover).flatMap(move => move.path);
     const start = before.find(fighter => fighter.id === mover)?.square ?? seen[0];
     const end = after.find(fighter => fighter.id === mover)?.square ?? seen.at(-1);
-    return start === undefined || end === undefined || start === end ? null : [start, end];
+    if (start === undefined || end === undefined || start === end) return null;
+    // Where it ended stays last, however often the route crossed it on the way.
+    return [...new Set([start, ...seen].filter(square => square !== end)), end];
 }
 
 /**
@@ -223,15 +227,42 @@ export interface ActionFollow {
     key: string;
     exact?: true;
     close?: true;
+    /**
+     * The move is too long to frame (`TRACK_SPAN`): `squares` is only where it
+     * starts, and the view follows the walker from there rather than zooming
+     * out to fit the whole of it.
+     */
+    track?: true;
 }
 
 /**
+ * How far apart, in squares across plus squares down (`areaRect`'s width and
+ * height added, which is what sets how wide a region looks on the isometric
+ * board), a move's frame may spread before the view follows the walker instead
+ * of zooming out to fit all of it. A character moves up to eight points an AP
+ * (a diagonal step costs one and a half), so one AP spans at most about twelve
+ * — a scout running on the diagonal — and a detour round a wall a little more:
+ * that is framed, as close as the move allows. A dash of three or four AP is a
+ * third of a 48-square battlefield and more, and spans twenty and over (a
+ * knight, at four points an AP, only gets there on four), so fitting it in one
+ * frame would show most of the board, too far out to see a figure walk.
+ * Sixteen sits between the two.
+ */
+const TRACK_SPAN = 16;
+
+/**
  * Where the view goes for a step of the battle, whoever took it: the stretch a
- * move covered (`moveFrame`), framed exactly; failing that whoever acted and
+ * move covered (`moveFrame`), the whole path of it framed exactly — or, if it
+ * is spread over more than `TRACK_SPAN`, only where it starts, with `track` set
+ * for the view to follow the walker from there; with `still` (reduced motion,
+ * when nothing walks and the figure simply appears where it ended) only where
+ * it ended is shown instead. Failing that whoever acted and
  * whoever it reached (`toldSquares`), framed exactly and close, as a target
  * picked to aim at is — so a heal three squares off is seen three squares
  * across, not snapped out to a zoom step that shows twenty, and two shots from
- * the same archer at the same soldier are framed alike. Only a step told
+ * the same archer at the same soldier are framed alike — unless they are spread
+ * over too much of the battlefield to be worth framing (`spreadWide`), as
+ * burning ticking on characters all over it can be. Only a step told
  * nothing that places it falls back on every character it changed
  * (`actionSquares`), as deep as they all still fit, unless they are spread
  * over too much of the battlefield to be worth framing (`spreadWide`): what
@@ -239,11 +270,15 @@ export interface ActionFollow {
  * action. Null where there is nothing to follow, for the caller to rest the
  * view somewhere of its own. `key` is the one the view glides again for.
  */
-export function actionFollow(field: Pick<Battlefield, "width" | "height">, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], key: string): ActionFollow | null {
+export function actionFollow(field: Pick<Battlefield, "width" | "height">, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], key: string, still = false): ActionFollow | null {
     const frame = moveFrame(events, before, after);
-    if (frame) return { squares: frame, key, exact: true };
+    if (frame) {
+        const { width, height } = areaRect(field, frame);
+        if (width + height <= TRACK_SPAN) return { squares: frame, key, exact: true };
+        return still ? { squares: [frame[frame.length - 1]], key, exact: true } : { squares: [frame[0]], key, exact: true, track: true };
+    }
     const told = toldSquares(events, before, after);
-    if (told.length > 0) return { squares: told, key, exact: true, close: true };
+    if (told.length > 0) return spreadWide(field, told) ? null : { squares: told, key, exact: true, close: true };
     const touched = actionSquares(before, after);
     return touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key } : null;
 }
@@ -1392,6 +1427,23 @@ export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from
     while (leg < lengths.length - 1 && gone >= passed + lengths[leg]) passed += lengths[leg++];
     const across = Math.min(1, Math.max(0, (gone - passed) / lengths[leg]));
     return { from: path[leg], to: path[leg + 1], across, at: first + (across < 0.5 ? leg : leg + 1) };
+}
+
+/**
+ * Where on the board (board units) a camera following a walker keeps in the
+ * middle: the point on the ground under it `ms` into the playback, between the
+ * centres of the two squares of the leg it is on, as far over as it has got
+ * (`walkerAt`, by the view's lengths). Not the bob or the hop (`walkLift`),
+ * which a camera following them would shake with. Once its last walk is over it
+ * is the centre of the last square of the last walk's path, and before the
+ * first starts the centre of that path's first. `walks` is never empty, as
+ * `walkerAt` assumes.
+ */
+export function walkerGroundAt(walks: readonly WalkCue[], view: IsoView, ms: number): Point {
+    const leg = walkerAt(walks, ms, legLengthOn(view));
+    if (!leg) return isoCentre(view, walks[walks.length - 1].path.at(-1)!);
+    const from = isoCentre(view, leg.from), to = isoCentre(view, leg.to);
+    return { x: from.x + (to.x - from.x) * leg.across, y: from.y + (to.y - from.y) * leg.across };
 }
 
 /**

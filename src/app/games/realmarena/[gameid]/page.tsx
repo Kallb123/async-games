@@ -239,7 +239,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // leaving live for a review, whether or not the board had played it, so
     // coming back doesn't play it again.
     // The view stays on the action itself while it plays — the target the
-    // player picked, the stretch a move covered, or whatever it touched —
+    // player picked, the route a move took, or whatever it touched —
     // rather than going where the selection or the board's resting view would
     // next take it, so a shot isn't played from further out than it was aimed
     // and a long walk doesn't start off the frame. That is worked out as the
@@ -256,7 +256,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(field, events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
-        const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
+        const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`, still);
         setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
     };
     // The board has played the playback with this key through to its end (the
@@ -316,13 +316,15 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         : null;
 
     // Stepping through the match, the view goes to each action as it comes.
-    // A move is framed from where it began to where it ended, as close as
-    // both fit — or, where in fog of war it came into sight or went out of it,
-    // over the stretch of it the viewer saw (`moveFrame`); anything else is
-    // framed just fit and close round whoever acted and whoever it reached
-    // (`toldSquares`), as a target picked to aim at is, live or in a review —
-    // or, told nothing that places it, every character it changed, as deep as
-    // they all still fit. A step that handed the turn on
+    // A move is framed over the whole path the viewer saw of it (`moveFrame`),
+    // as close as all of it fits — a route round a wall included, and where in
+    // fog of war it came into sight or went out of it, just the stretch they
+    // saw; a walk too long to frame is followed instead (`track`): framed where
+    // it starts, with the camera keeping the walker in the middle as it goes.
+    // Anything else is framed just fit and close round whoever acted and
+    // whoever it reached (`toldSquares`), as a target picked to aim at is, live
+    // or in a review — or, told nothing that places it, every character it
+    // changed, as deep as they all still fit. A step that handed the turn on
     // moved everyone's AP, not anyone in particular — and so for the hand-off
     // part of an End turn, but not for the enemy's actions before it, which
     // are followed. One that ended the battle hands it to nobody, and is
@@ -339,7 +341,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const stepKey = `${nav.viewIndex}:${partIndex}`;
     const follow = !nav.isLive
         ? !previous || !part ? null
-            : (followed ? actionFollow(field, part.events, part.before.fighters, fighters, stepKey) : null)
+            : (followed ? actionFollow(field, part.events, part.before.fighters, fighters, stepKey, still) : null)
                 ?? (friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true } : null)
         : own?.follow ?? picked;
     // A followed step the board can't point to — something happened out of

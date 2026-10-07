@@ -92,7 +92,11 @@ out. A second copy is the signal to extract the first one.
   unit's reach and for a caster and its target, which no step frames well. A board redrawn under the player without anything
   happening on it — Realm Arena's battlefield turned a quarter — passes a
   `pivot` instead, which keeps whatever was in the middle of the frame there
-  at the zoom it was at. (The track editor is the one exception, and says why
+  at the zoom it was at. And a board keeping something that moves in the
+  middle of the frame — Realm Arena following a long walk — calls
+  `useBoardCentre()` a frame at a time from its own playback clock, rather than
+  feeding `BoardZoom` a new focus each frame; a player taking hold of the board
+  stops it until the next focus. (The track editor is the one exception, and says why
   in its own file: it owns every pointer press on its canvas.)
   Names printed on a board's art go through `MapLabelLayer`, never a bare
   `MapLabel` per node: it lays every name out in one pass so none of them lands

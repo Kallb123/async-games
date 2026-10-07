@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
+import { centredScroll, exactZoom, FIT_WIDTH, focusZoom, glideFrame, pinchOffset, wheelZoomFactor, zoomLevels } from './boardZoom';
 
 describe('zoomLevels', () => {
     it("steps fit, the board's own width, then twice it", () => {
@@ -146,5 +146,29 @@ describe('exactZoom', () => {
         expect(exactZoom({ width: 400, height: 100 }, viewBox, pane, 28, 360)).toBe(FIT_WIDTH);
         expect(exactZoom({ width: 10, height: 10 }, viewBox, pane, 28, 360)).toBe(360);
         expect(exactZoom({ width: 0, height: 10 }, viewBox, pane, 28, 360)).toBe(FIT_WIDTH);
+    });
+});
+
+describe('centredScroll', () => {
+    const viewBox = { width: 400, height: 300 };
+    const content = { x: 1600, y: 1200 };
+    const pane = { x: 320, y: 480 };
+
+    it('puts the point in the middle of the pane', () => {
+        // Halfway across the board is 800px in; half a pane back from it is 640.
+        expect(centredScroll({ x: 200, y: 150 }, viewBox, content, pane)).toEqual({ x: 640, y: 360 });
+    });
+
+    it('stops at the start of the board rather than scrolling before it', () => {
+        expect(centredScroll({ x: 10, y: 5 }, viewBox, content, pane)).toEqual({ x: 0, y: 0 });
+    });
+
+    it('stops at the end of the board rather than scrolling past it', () => {
+        expect(centredScroll({ x: 395, y: 298 }, viewBox, content, pane)).toEqual({ x: 1280, y: 720 });
+    });
+
+    it('has nothing to scroll along an axis the board does not overflow', () => {
+        expect(centredScroll({ x: 200, y: 150 }, viewBox, { x: 300, y: 1200 }, pane)).toEqual({ x: 0, y: 360 });
+        expect(centredScroll({ x: 200, y: 150 }, viewBox, { x: 300, y: 400 }, pane)).toEqual({ x: 0, y: 0 });
     });
 });
