@@ -130,16 +130,47 @@ export function reachFocus(state: BattleState, fighter: Fighter, ap: number): Re
  * every character it changed — moved, hurt, spent AP, took a stance — where
  * it stood before and where it stands now. Comparing the states either side
  * of the step rather than reading the action is what lets a reaction be
- * followed too: the watcher spent its banked AP.
+ * followed too: the watcher spent its banked AP. AP going *up* is a turn
+ * beginning, every one of a side's characters getting a fresh allowance
+ * wherever it stands, not anyone doing anything, so it isn't a change.
  */
 export function actionSquares(before: readonly Fighter[], after: readonly Fighter[]): Square[] {
-    const changed = (was: Fighter, now: Fighter) => was.square !== now.square || was.hp !== now.hp || was.ap !== now.ap
+    const changed = (was: Fighter, now: Fighter) => was.square !== now.square || was.hp !== now.hp || now.ap < was.ap
         || was.banked !== now.banked || !sameCounts(was.effects, now.effects);
     return after.flatMap(fighter => {
         const was = before.find(one => one.id === fighter.id);
         if (!was || !changed(was, fighter)) return [];
         return was.square === fighter.square ? [fighter.square] : [was.square, fighter.square];
     });
+}
+
+/**
+ * Where the viewer's own side stands: the squares of its standing characters,
+ * which the view falls back on when nothing else says where to look. In co-op
+ * (§29) that's the whole team — every owner that isn't a warband — and in a
+ * free-for-all the viewer's own squad. Empty when there are none: during the
+ * muster nothing is on `fighters` yet, a spectator has no side in a
+ * free-for-all, and a squad that has fallen has nobody left to frame. Fog of
+ * war never hides a viewer's own side (`viewOf`), so nothing here needs it.
+ */
+export function friendlySquares(fighters: readonly Fighter[], viewerId: string, coop: boolean): Square[] {
+    return fighters
+        .filter(fighter => isStanding(fighter) && (coop ? !isWarband(fighter.owner) : fighter.owner === viewerId))
+        .map(fighter => fighter.square);
+}
+
+/**
+ * How much of the battlefield, across or down, squares may span before a
+ * review stops following them: past half, framing them is hardly closer than
+ * the whole board, and the view is better spent on the viewer's own side.
+ */
+const SPREAD_LIMIT = 1 / 2;
+
+/** Whether squares are spread over more than `SPREAD_LIMIT` of the battlefield, in either direction. */
+export function spreadWide(field: Pick<Battlefield, "width" | "height">, squares: readonly Square[]): boolean {
+    if (squares.length === 0) return false;
+    const { width, height } = areaRect(field, squares);
+    return width > field.width * SPREAD_LIMIT || height > field.height * SPREAD_LIMIT;
 }
 
 /**

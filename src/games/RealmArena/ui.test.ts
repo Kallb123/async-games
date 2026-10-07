@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
+import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -59,6 +59,65 @@ describe("actionSquares", () => {
     it("is nowhere for a step that changed nobody, or that put the squads on the field", () => {
         expect(actionSquares(before, before.map(fighter => ({ ...fighter })))).toEqual([]);
         expect(actionSquares([], before)).toEqual([]);
+    });
+
+    it("doesn't count a turn's fresh AP as anyone doing anything", () => {
+        const spent = before.map(fighter => ({ ...fighter, ap: 0 }));
+        const refreshed = spent.map(fighter => ({ ...fighter, ap: ACTION_POINTS }));
+        expect(actionSquares(spent, refreshed)).toEqual([]);
+    });
+
+    it("still follows AP spent, and AP banked or used by a watcher", () => {
+        const fresh = before.map(fighter => ({ ...fighter, ap: ACTION_POINTS }));
+        expect(actionSquares(fresh, [{ ...fresh[0], ap: 1 }, fresh[1], fresh[2]])).toEqual([from]);
+        expect(actionSquares(fresh, [fresh[0], { ...fresh[1], ap: 0, banked: 4 }, fresh[2]])).toEqual([far]);
+        const watching = fresh.map((fighter, i) => i === 1 ? { ...fighter, banked: 4 } : fighter);
+        expect(actionSquares(watching, [watching[0], { ...watching[1], banked: 2 }, watching[2]])).toEqual([far]);
+    });
+});
+
+describe("friendlySquares", () => {
+    const a = squareAt(RUINED_FORT, 4, 40)!, b = squareAt(RUINED_FORT, 8, 41)!, c = squareAt(RUINED_FORT, 30, 6)!, ai = squareAt(RUINED_FORT, 20, 4)!;
+    const fighters = [
+        newFighter(0, "alice", "knight", a),
+        newFighter(1, "bob", "archer", b),
+        newFighter(2, "alice", "mage", c),
+        newFighter(3, warbandOwner(0), "knight", ai),
+    ].map(fighter => ({ ...fighter }));
+    const down = (fighter: Fighter): Fighter => ({ ...fighter, hp: 0 });
+
+    it("is the viewer's own squad in a free-for-all", () => {
+        expect(friendlySquares(fighters, "alice", false)).toEqual([a, c]);
+        expect(friendlySquares(fighters, "bob", false)).toEqual([b]);
+    });
+
+    it("is the whole team in co-op, never a warband", () => {
+        expect(friendlySquares(fighters, "alice", true)).toEqual([a, b, c]);
+    });
+
+    it("leaves out anyone fallen", () => {
+        expect(friendlySquares([down(fighters[0]), ...fighters.slice(1)], "alice", false)).toEqual([c]);
+    });
+
+    it("is nowhere with nobody on the field, or for a viewer with no squad", () => {
+        expect(friendlySquares([], "alice", true)).toEqual([]);
+        expect(friendlySquares(fighters, "carol", false)).toEqual([]);
+        expect(friendlySquares(fighters.map(down), "alice", true)).toEqual([]);
+    });
+});
+
+describe("spreadWide", () => {
+    // The Ruined Fort is 36 squares across and 48 down.
+    const at2 = (col: number, row: number) => squareAt(RUINED_FORT, col, row)!;
+
+    it("is false for squares that stay within half the field either way, or for none", () => {
+        expect(spreadWide(RUINED_FORT, [])).toBe(false);
+        expect(spreadWide(RUINED_FORT, [at2(2, 2), at2(19, 25)])).toBe(false);
+    });
+
+    it("is true once they span more than half the width or the height", () => {
+        expect(spreadWide(RUINED_FORT, [at2(2, 2), at2(20, 3)])).toBe(true);
+        expect(spreadWide(RUINED_FORT, [at2(2, 2), at2(3, 26)])).toBe(true);
     });
 });
 

@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -277,18 +277,27 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // both fit, when both are known (`moveFrame`: in fog of war a move can
     // start or end out of sight); anything else goes to every character it
     // touched, as deep as they all still fit. A step that handed the turn on
-    // moved everyone's AP, not anyone in particular, so the view stays where
-    // it is — and so for the hand-off part of an End turn, but not for the
-    // enemy's actions before it, which are followed. One that ended the
-    // battle hands it to nobody, and is followed: it's the blow that decided
-    // it. Live, it goes to a target picked from the turn sheet's list
-    // instead. Each part is its own key, so the view glides again for each.
+    // moved everyone's AP, not anyone in particular — and so for the hand-off
+    // part of an End turn, but not for the enemy's actions before it, which
+    // are followed. One that ended the battle hands it to nobody, and is
+    // followed: it's the blow that decided it. Where there's nothing to
+    // follow, or what a step touched is spread over more than half the
+    // battlefield (`spreadWide`), the view goes to the viewer's own side
+    // instead, just fit, rather than out to the whole board; a move is always
+    // kept, since it's known. Live, it goes to a target picked from the turn
+    // sheet's list instead. Each part is its own key, so the view glides
+    // again for each.
+    const friendly = friendlySquares(fighters, myUserId, coop);
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
     const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
     const moved = part && followed ? moveFrame(part.events, part.before.fighters, fighters) : null;
+    const stepKey = `${nav.viewIndex}:${partIndex}`;
+    const touched = previous && part && followed && !moved ? actionSquares(part.before.fighters, fighters) : [];
     const follow = !nav.isLive
-        ? previous && part && followed
-            ? { squares: moved ?? actionSquares(part.before.fighters, fighters), key: `${nav.viewIndex}:${partIndex}`, exact: !!moved }
+        ? !previous || !part ? null
+            : moved ? { squares: moved, key: stepKey, exact: true }
+            : followed && touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key: stepKey }
+            : friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true }
             : null
         : picked;
     // And plays what each step — each part of one — did as it's stepped to
@@ -503,6 +512,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             refocus={refocus}
                             acting={!mustering && !complete ? currentTurn : null}
                             follow={follow}
+                            // Nothing selected, picked up or followed rests on the viewer's
+                            // own side: how the board opens, and where it comes back to on
+                            // returning to live. Letting a character go — deselecting it, or
+                            // the page doing so after its last AP — comes back here too:
+                            // that's the "doesn't know where to zoom" case. The key holds
+                            // for the mode, so the frame doesn't jitter as units move.
+                            home={{ squares: friendly, key: `home:${nav.mode}` }}
                             odds={reach?.options}
                             overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}

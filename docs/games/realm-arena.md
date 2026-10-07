@@ -570,6 +570,14 @@ its time zoomed in:
   a square and a half round them, zoomed exactly to fit too. A replay of other
   players' turns follows the action. All of them use `BoardZoom`'s `focus`,
   the way Race Cars follows a car.
+- With none of those claiming the view, it rests on the player's own side: the
+  board opens on every standing character of theirs — the whole team in co-op,
+  their own squad in a free-for-all (`friendlySquares`) — zoomed exactly to fit
+  them, and comes back to them on returning to the live board and on letting a
+  character go (deselecting it, or its last AP spent). With nobody on the
+  field, as in the muster, the board stays fitted to the column. Fog of war
+  never hides a player's own side, so this shows nothing it shouldn't. This is
+  the board's `home`, the lowest of its focuses.
 - The flat ground is better drawn as one image than as a shape per square, because
   a 48×48 board has 2,304 of them. Kingdom Builder's tile sheet is a
   precedent.
@@ -1867,7 +1875,14 @@ sends (`BattleEvent` in `rules.ts`).
   last of the same character's) — only when it is known where it both began and
   ended, which in fog of war it isn't for a move that came into or went out of
   sight; anything else follows every character the part touched, as deep as
-  they all fit. The dock says which part it is on ("the Renegades' action 2 of
+  they all fit. A turn beginning is not a character doing something: AP going
+  up (everyone's fresh allowance) is not a change `actionSquares` follows, only
+  AP spent, banked AP changing, and a new square, hit points or effects. A part
+  with nothing to follow (the hand-off), or whose squares span more than half
+  the battlefield across or down (`spreadWide`), takes the view to the viewer's
+  own side instead (`friendlySquares`), zoomed exactly to fit them and keyed by
+  the part as usual so it still glides again for each; a move is always kept.
+  The dock says which part it is on ("the Renegades' action 2 of
   5"). A step with no parts is one part, so the two take the same path.
 - **Kept local for now.** Hit text could suit other games, such as World
   Domination's battles. It stays in `src/games/RealmArena/components/` until
@@ -3766,4 +3781,4 @@ Realm, its sibling in the same world.
 | 1.48 | B9 PR 6 builds solo (§30.6): co-op with a team of one, one warband opposite on the Ruined Fort for a duel's 15 rounds, with no turn timer; the muster and the End turn keep the turn with the player without a push, and the End turn clears the undo stack. Solo is the setup screen's third mode, and the library lists the game as 1–4 players. B9 is built. |
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
-| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end (§26.1, §26.2); the playback cap is four and a half seconds. |
+| 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end (§26.1, §26.2); the playback cap is four and a half seconds. | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.

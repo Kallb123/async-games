@@ -137,6 +137,13 @@ interface RealmArenaBoardProps {
      * move's start and end, which are often a dozen squares apart.
      */
     follow?: { squares: readonly Square[]; key: string; exact?: boolean } | AimFollow | null;
+    /**
+     * Where the view rests when nothing else says where to look — the
+     * viewer's own side, as the board opens and whenever a selection, a pick
+     * or a review step lets go of it: just fit round `squares`, again
+     * whenever `key` changes. No squares, no focus: the board stays as it is.
+     */
+    home?: { squares: readonly Square[]; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
@@ -640,6 +647,8 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * Stepping through a review (`follow`), the view goes to each step: every
  * character it moved or touched, zoomed as deep as they all still fit — or, for
  * a move, to just fit where it began and where it ended (`follow.exact`).
+ * With nothing selected, picked up or followed, it rests on `home`: just fit
+ * round the viewer's own side, which is also how the board opens.
  *
  * What an action did plays over the figures (`playback`, §26) — the viewer's
  * own as it comes back, and each step of a review — drawn by `RealmArenaFx`
@@ -657,7 +666,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -724,6 +733,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
+    else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
 
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
