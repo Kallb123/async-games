@@ -29,8 +29,8 @@ const LANE_RISE = 9;
 const SLASH_SIZE = 14;
 
 /**
- * How each missile is drawn (§26.1), in board units: how big it is. A flask or
- * a pot tumbles end over end; anything else points the way it goes. (How high
+ * How each missile is drawn (§26.1), in board units: how big it is. A flask, a
+ * pot or a stick of dynamite tumbles end over end; anything else points the way it goes. (How high
  * its arc rises is `FLIGHT_ARC`, in `ui.ts`, with the rest of where it is.)
  */
 const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>> = {
@@ -41,6 +41,7 @@ const FLIGHT: Readonly<Record<Missile, { size: number; tumbles?: true }>> = {
     thunderFlask: { size: 7, tumbles: true },
     smokePot: { size: 7, tumbles: true },
     acid: { size: 10 },
+    dynamite: { size: 9, tumbles: true },
 };
 /** How fast a flask or a pot turns over, in degrees a millisecond. */
 const TUMBLE = 0.9;

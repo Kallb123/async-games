@@ -14,14 +14,18 @@ import { FULL_HEIGHT } from "@/utils/games/battlefield/terrain";
 export type CharacterId =
     | "manAtArms" | "knight" | "archer" | "scout" | "mage" | "cleric"
     // The Swarm's (§31).
-    | "skitterling" | "ravager" | "spitter" | "bloater" | "broodmother";
+    | "skitterling" | "ravager" | "spitter" | "bloater" | "broodmother"
+    // The Miners' (§33).
+    | "miner" | "stonewarden" | "prospector" | "sapper" | "runepriest";
 
 export type AbilityId =
     | "cleave" | "shieldWall" | "aimedShot" | "sneak" | "fireball" | "heal" | "raise"
     // The abilities an option swaps in (§23.2).
     | "shieldBash" | "demolish" | "cripplingShot" | "huntersMark" | "purify"
     // The Swarm's (§31).
-    | "rend" | "regrowth" | "burst";
+    | "rend" | "regrowth" | "burst"
+    // The Miners' (§33).
+    | "dynamite";
 
 /**
  * Something that happens to a character for a few of its owner's turns
@@ -91,9 +95,9 @@ export interface Ability {
     oncePerBattle?: true;
     /** Added to a shot's chance to hit (Aimed shot). */
     hitBonus?: number;
-    /** How far away, in squares, it can be aimed (Fireball, Hunter's mark, Heal, Regrowth). */
+    /** How far away, in squares, it can be aimed (Fireball, Dynamite, Hunter's mark, Heal, Regrowth). */
     range?: number;
-    /** What it does to each character it hits, in place of the weapon's (Fireball, Shield bash, Demolish, Rend, Burst). */
+    /** What it does to each character it hits, in place of the weapon's (Fireball, Dynamite, Shield bash, Demolish, Rend, Burst). */
     damage?: number;
     /** HP it restores (Heal, Purify, Regrowth). */
     hp?: number;
@@ -101,7 +105,7 @@ export interface Ability {
     effect?: Affliction;
     /**
      * Blasts away low cover after its damage (§22): every square of it in the
-     * 3×3 round where it lands (`area`, Fireball), or the one square it's aimed
+     * 3×3 round where it lands (`area`, Fireball, Dynamite), or the one square it's aimed
      * at (`target`, Demolish).
      */
     blasts?: "area" | "target";
@@ -110,7 +114,7 @@ export interface Ability {
 
 export const ABILITIES = {
     cleave: { name: "Cleave", ap: 2, cooldown: 3, description: "Strike two enemies next to them" },
-    shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to the Knight count as in half cover until its next turn" },
+    shieldWall: { name: "Shield wall", ap: 2, cooldown: 3, description: "Allies next to them count as in half cover until its next turn" },
     aimedShot: { name: "Aimed shot", ap: 3, cooldown: 2, hitBonus: 20, description: "A shot at +20% to hit" },
     sneak: { name: "Sneak", ap: 2, cooldown: 0, description: "Move without setting off overwatch or guard" },
     fireball: { name: "Fireball", ap: 3, cooldown: 3, range: 12, damage: 3, effect: "burning", blasts: "area", description: "Hits every character in a 3×3 area, friend or foe, sets them burning, and blasts away the low cover there" },
@@ -124,6 +128,7 @@ export const ABILITIES = {
     rend: { name: "Rend", ap: 3, cooldown: 3, damage: 6, description: "Tear into one enemy next to them for 6" },
     regrowth: { name: "Regrowth", ap: 2, cooldown: 2, range: 8, hp: 3, description: "Restore 3 HP to an ally it can see within 8 squares, and clear burning, slowed, stunned and corroded" },
     burst: { name: "Burst", ap: 1, cooldown: 0, oncePerBattle: true, damage: 3, effect: "corroded", description: "Burst, splashing acid on everyone next to it for 3, friend or foe, and corroding them. The Bloater is downed" },
+    dynamite: { name: "Dynamite", ap: 3, cooldown: 3, range: 8, damage: 4, blasts: "area", description: "Thrown at a 3×3 area within 8 squares: 4 damage to every character in it, friend or foe, and it blasts away the low cover there" },
 } as const satisfies Record<AbilityId, Ability>;
 
 export interface Character {
@@ -188,6 +193,28 @@ export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     broodmother: {
         name: "Broodmother", plural: "Broodmothers", role: "Leads the brood; mends it", movement: 5, sight: 25, hp: 8,
         weapon: { name: "Talons", kind: "melee", damage: 3 }, abilities: ["regrowth"], points: 20,
+    },
+    // The Miners (§33): each one tougher than the Realm's character it
+    // stands in for, hitting as hard and no harder, and dearer for its HP.
+    miner: {
+        name: "Miner", plural: "Miners", role: "Sturdy front line; digs through cover", movement: 5, hp: 11,
+        weapon: { name: "Pickaxe", kind: "melee", damage: 4 }, abilities: ["demolish"], points: 20,
+    },
+    stonewarden: {
+        name: "Stonewarden", plural: "Stonewardens", role: "Slow and very tough; holds the line", movement: 4, sight: 15, hp: 15,
+        weapon: { name: "War pick", kind: "melee", damage: 4 }, abilities: ["shieldWall"], points: 30,
+    },
+    prospector: {
+        name: "Prospector", plural: "Prospectors", role: "Crossbow; steady at range", movement: 5, sight: 25, hp: 10,
+        weapon: { name: "Crossbow", kind: "ranged", damage: 3, accuracy: 80, range: 16 }, abilities: ["aimedShot"], points: 30,
+    },
+    sapper: {
+        name: "Sapper", plural: "Sappers", role: "Lights dynamite; blasts an area", movement: 5, hp: 9,
+        weapon: { name: "Throwing picks", kind: "ranged", damage: 3, accuracy: 70, range: 8 }, abilities: ["dynamite"], points: 40,
+    },
+    runepriest: {
+        name: "Runepriest", plural: "Runepriests", role: "Support; tough enough for the front", movement: 5, hp: 10,
+        weapon: { name: "Rune hammer", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 30,
     },
 };
 
@@ -373,7 +400,7 @@ export interface Faction {
     enemyName: string;
 }
 
-export type FactionId = "realm" | "swarm";
+export type FactionId = "realm" | "swarm" | "miners";
 
 /**
  * Every faction, by the id a battle stores. An id, once used, is never
@@ -413,6 +440,23 @@ export const FACTIONS: Readonly<Record<FactionId, Faction>> = {
             120: ["ravager", "ravager", "broodmother", "skitterling", "skitterling", "spitter", "spitter", "bloater"],
         },
         enemyName: "the Swarm",
+    },
+    // Dwarves out of the deep mines (§33): fewer of them, each tougher than
+    // the Realm's and dearer for it, with pickaxes and dynamite.
+    miners: {
+        name: "The Miners",
+        characters: ["miner", "stonewarden", "prospector", "sapper", "runepriest"],
+        readyMade: {
+            50: ["miner", "prospector"],
+            60: ["stonewarden", "prospector"],
+            70: ["miner", "miner", "prospector"],
+            80: ["stonewarden", "miner", "prospector"],
+            90: ["stonewarden", "miner", "sapper"],
+            100: ["stonewarden", "miner", "miner", "prospector"],
+            110: ["stonewarden", "miner", "prospector", "runepriest"],
+            120: ["stonewarden", "miner", "prospector", "sapper"],
+        },
+        enemyName: "the Miners",
     },
 };
 

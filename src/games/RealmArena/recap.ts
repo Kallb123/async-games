@@ -71,6 +71,7 @@ const RA_MUSTER = "ra_muster";
 const RA_BATTLE = "ra_battle";
 const RA_KNOCKOUT = "ra_knockout";
 const RA_FIREBALL = "ra_fireball";
+const RA_DYNAMITE = "ra_dynamite";
 const RA_THROWN = "ra_thrown";
 const RA_HIT = "ra_hit";
 const RA_MISS = "ra_miss";
@@ -141,6 +142,7 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     // A Bloater downs itself as it bursts (§31.2): that's no knock-out.
     if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
     if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: "🔥" };
+    if (has(event => event.kind === "dynamite")) return { type: RA_DYNAMITE, glyph: "🧨" };
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
     if (thrown) return { type: RA_THROWN, glyph: ITEM_GLYPH[thrown.item] };
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };
@@ -163,6 +165,7 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
             case "shot":
             case "struck": return event.damage > 0 ? [event.target] : [];
             case "fireball":
+            case "dynamite":
             case "thrown":
             case "demolished":
             case "burst": return event.damage > 0 ? event.targets : [];
@@ -303,11 +306,11 @@ function enemyRows(base: RowBase, command: IGameCommand, turn: EnemyTurn, lines:
     // Named as its latest line names it, which is the last to see a sighting.
     const own = { ...base, actorId: turn.owner, actorUsername: nameOf(lines.at(-1)?.text ?? "") };
     // While it's hidden, its rows tell what its characters did as the wire
-    // does (`unnamed`), and a blast as the hit it was: a fireball, a Demolish
-    // or a Burst names the kind of character that did it.
+    // does (`unnamed`), and a blast as the hit it was: a fireball, dynamite, a
+    // Demolish or a Burst names the kind of character that did it.
     const notTeam = (id: number) => !next.fighters.some(fighter => fighter.id === id && !isWarband(fighter.owner));
     const told = (events: readonly BattleEvent[]): readonly BattleEvent[] => next.enemy ? events
-        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "demolished" || event.kind === "burst"
+        : unnamed(events, notTeam).flatMap((event): BattleEvent[] => event.kind === "fireball" || event.kind === "dynamite" || event.kind === "demolished" || event.kind === "burst"
             ? event.targets.map(target => ({ kind: "struck", fighter: event.fighter, target, damage: event.damage, reaction: false }))
             : [event]);
     // In fog, only the parts the viewer was told of wrote them a line (§27.2).

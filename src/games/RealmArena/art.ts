@@ -47,15 +47,15 @@ export const ART_SHEETS = {
      * cells wide. Rendered from `art-masters/realmarena/fx.svg` by
      * `npm run ra-marks`.
      */
-    fx: { href: "/art/realmarena/fx.png", width: 768, height: 192 },
+    fx: { href: "/art/realmarena/fx.png", width: 864, height: 192 },
     /**
      * The characters (`CHARACTER_ART`): every one in every pose, from all eight
      * facings. Rendered from the models in `art-masters/realmarena/characters`
      * by `npm run ra-characters`.
      */
-    characters: { href: "/art/realmarena/characters.png", width: 1024, height: 3520 },
+    characters: { href: "/art/realmarena/characters.png", width: 1024, height: 5120 },
     /** The owner's colour on the characters, grey and shaded, cell for cell with `characters`: tinted per seat. */
-    charactersTeam: { href: "/art/realmarena/characters-team.png", width: 1024, height: 3520 },
+    charactersTeam: { href: "/art/realmarena/characters-team.png", width: 1024, height: 5120 },
 } as const;
 
 export type ArtSheet = keyof typeof ART_SHEETS;
@@ -178,19 +178,19 @@ export const SMOKE_ART = mark("items", ITEM_IDS.length);
 /** Something thrown: never the draught, which is drunk. */
 export type ThrownItem = Exclude<ItemId, "healingDraught">;
 
-/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, a thrown flask or pot, and the Spitter's acid. */
-export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem | "acid";
+/** What flies (§26.1): the Archer's arrow, the Mage's bolt and fireball, a thrown flask or pot, the Spitter's acid and the Sapper's dynamite. */
+export type Missile = "arrow" | "bolt" | "fireball" | ThrownItem | "acid" | "dynamite";
 
-/** What a burst looks like (§26.1): the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff, the Bloater's acid. */
-export type BurstKind = "fire" | "thunder" | "smoke" | "acid";
+/** What a burst looks like (§26.1): the fireball's and the fire flask's flame, the thunder flask's flash, the smoke pot's puff, the Bloater's acid, dynamite's blast. */
+export type BurstKind = "fire" | "thunder" | "smoke" | "acid" | "blast";
 
 /** The order what flies is drawn in along the top of the fx sheet. */
-const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot", "acid"];
+const MISSILE_IDS: readonly Missile[] = ["arrow", "bolt", "fireball", "fireFlask", "thunderFlask", "smokePot", "acid", "dynamite"];
 
 /**
  * Each missile as it flies (§26.1). An arrow, a bolt or a fireball points
  * right, its front at its cell's right edge, for the board to turn along its
- * flight; a flask or a pot is upright in its cell, to tumble.
+ * flight; a flask, a pot or a stick of dynamite is upright in its cell, to tumble.
  */
 export const MISSILE_ART = marks("fx", MISSILE_IDS);
 
@@ -206,6 +206,7 @@ export const BURST_ART: Readonly<Record<BurstKind, Sprite>> = {
     fire: { sheet: "fx", x: 0, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     thunder: { sheet: "fx", x: 2 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     acid: { sheet: "fx", x: 4 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
+    blast: { sheet: "fx", x: 6 * MARK_PX, y: MARK_PX, width: 2 * MARK_PX, height: MARK_PX },
     smoke: SMOKE_ART,
 };
 

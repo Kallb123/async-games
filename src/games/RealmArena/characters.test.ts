@@ -33,6 +33,29 @@ describe("the Swarm's characters (§31)", () => {
     });
 });
 
+describe("the Miners' characters (§33)", () => {
+    const miners = FACTIONS.miners.characters.map(id => CHARACTERS[id]);
+    const realm = FACTIONS.realm.characters.map(id => CHARACTERS[id]);
+
+    it("each have 9–15 HP, hit no harder than the Realm's, and have abilities that exist", () => {
+        const hardest = Math.max(...realm.map(character => character.weapon.damage));
+        for (const character of miners) {
+            expect(character.hp, character.name).toBeGreaterThanOrEqual(9);
+            expect(character.hp, character.name).toBeLessThanOrEqual(15);
+            expect(character.weapon.damage, character.name).toBeLessThanOrEqual(hardest);
+            for (const ability of character.abilities) expect(ABILITIES[ability], `${character.name}: ${ability}`).toBeDefined();
+        }
+    });
+
+    it("are dearer for their HP than the Realm's, so a ready-made squad fields fewer of them, and from 70 points up more HP in all", () => {
+        const hpOf = (squad: readonly CharacterId[]) => squad.reduce((total, id) => total + CHARACTERS[id].hp, 0);
+        for (const budget of BUDGETS) {
+            expect(FACTIONS.miners.readyMade[budget].length, `${budget}`).toBeLessThan(FACTIONS.realm.readyMade[budget].length);
+            if (budget >= 70) expect(hpOf(FACTIONS.miners.readyMade[budget]), `${budget}`).toBeGreaterThan(hpOf(FACTIONS.realm.readyMade[budget]));
+        }
+    });
+});
+
 describe("the factions (§29.3)", () => {
     it("muster every character, each for one faction alone", () => {
         const rosters = Object.values(FACTIONS).flatMap(faction => faction.characters);

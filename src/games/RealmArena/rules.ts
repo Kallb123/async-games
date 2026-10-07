@@ -237,7 +237,7 @@ export type Action =
     | { kind: "hunker" | "watch" | "shieldWall" | "purify" | "burst"; fighter: number }
     | { kind: "cleave"; fighter: number; targets: number[] }
     /** A demolish is aimed at the square of low cover it blasts. */
-    | { kind: "fireball" | "throw" | "demolish"; fighter: number; at: Square };
+    | { kind: "fireball" | "dynamite" | "throw" | "demolish"; fighter: number; at: Square };
 
 export type ShotResult = "hit" | "graze" | "miss";
 
@@ -247,6 +247,8 @@ export type BattleEvent =
     | { kind: "shot"; fighter: number; target: number; chance: number; roll: number; result: ShotResult; damage: number; reaction: boolean }
     | { kind: "struck"; fighter: number; target: number; damage: number; reaction: boolean }
     | { kind: "fireball"; fighter: number; at: Square; targets: number[]; damage: number }
+    /** A Sapper's Dynamite, landing as a fireball does but leaving nothing alight (§33.2). Its `blasted` follows. */
+    | { kind: "dynamite"; fighter: number; at: Square; targets: number[]; damage: number }
     | { kind: "downed"; fighter: number; by: number }
     /**
      * A Cleric's Heal; or, by `via`, a healing draught given by `fighter` — to
@@ -808,7 +810,8 @@ export function check(battle: BattleState, player: string, action: unknown): Che
         case "purify":
             return ability("purify", () => purified(state, actor).length > 0 ? undefined : "Nobody beside them needs it");
         case "fireball":
-            return ability("fireball", () => aimRefusal(state, actor, at, ABILITIES.fireball.range));
+        case "dynamite":
+            return ability(kind, () => aimRefusal(state, actor, at, ABILITIES[kind].range));
         case "heal":
         case "regrowth":
             return ability(kind, () => healRefusal(state, actor, target, false, ABILITIES[kind].range));
@@ -1165,15 +1168,19 @@ export function act(state: BattleState, player: string, action: Action, roll: Ro
             actor.effects.shieldWall = EFFECTS.shieldWall.count;
             events.push({ kind: "shieldWall", fighter: actor.id });
             break;
-        case "fireball": {
-            // Every character in the area, friend or foe — the Mage too, if it's
-            // that close — and no roll (§13.6). Whoever it doesn't down is left
-            // burning: it doesn't roll, so it always does (§20.2). Then the
-            // low cover it landed on is gone (§22).
-            const { damage, effect } = ABILITIES.fireball;
-            run.land(actor, areaAround(state.field, action.at), damage, effect,
-                targets => ({ kind: "fireball", fighter: actor.id, at: action.at, targets, damage }));
-            run.blast(actor, blastedBy(state.field, ABILITIES.fireball, action.at));
+        case "fireball":
+        case "dynamite": {
+            // Every character in the area, friend or foe — the thrower too, if
+            // it's that close — and no roll (§13.6). Whoever a fireball doesn't
+            // down is left burning: it doesn't roll, so it always does (§20.2);
+            // dynamite leaves nothing behind (§33.2). Then the low cover it
+            // landed on is gone (§22).
+            const kind = action.kind;
+            const ability: Ability = ABILITIES[kind];
+            const damage = ability.damage ?? 0;
+            run.land(actor, areaAround(state.field, action.at), damage, ability.effect,
+                targets => ({ kind, fighter: actor.id, at: action.at, targets, damage }));
+            run.blast(actor, blastedBy(state.field, ability, action.at));
             break;
         }
         case "heal":

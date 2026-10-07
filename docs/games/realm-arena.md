@@ -3783,6 +3783,83 @@ Swarm in co-op.
 - **A timed-out muster** gets the first allowed faction's ready-made squad.
 - **Mastery** is earned by any character, so the profile lists every faction's.
 
+## 33. The Miners: a third faction (B6)
+
+Playtesting said the Realm's characters feel flimsy: an Archer or a Mage goes
+down to two good blows. The Miners are the other side of the coin to the
+Swarm — dwarves out of the deep mines, with pickaxes and dynamite, each one
+**tougher** than the Realm's character it stands in for, hitting **as hard and
+no harder**, and costing **a little more** for the HP. They are mustered from
+the setup's faction toggles (§32) and fought in co-op as the host's pick or
+drawn at Random (§29.3), with nothing new in either.
+
+### 33.1 What it's like
+
+- **Fewer of them, each tougher.** Every Miner has 9–15 HP, against the
+  Realm's 5–12, so a ready-made squad fields one character fewer than the
+  Realm's at every budget — two at 50 points, four at 120 — and, from 70
+  points up, more HP in all. A knock-out scores a fifth of what was downed
+  (§13.7), so each one is worth more too.
+- **The same damage.** No Miner weapon does more than the Realm's 4; the
+  Sapper's Dynamite does 4 to a 3×3 at once, where a fireball does 3 and
+  leaves 2 more burning.
+- **Dearer for it.** Points go up by about what the HP is worth: +5 for a
+  character three HP sturdier, +10 for a fragile one (an Archer's or a Mage's
+  part) made four HP sturdier, since that nearly doubles how long it lasts.
+- **Slower.** Short legs: 5 squares an AP, the Stonewarden 4, against the
+  Realm's 6. No Miner climbs better than most, and only the Prospector sees
+  further.
+
+### 33.2 The characters
+
+| Character | Points | HP | Move | Weapon | Ability | In place of |
+|---|---|---|---|---|---|---|
+| Miner | 20 | 11 | 5 | Pickaxe: melee, 4 | Demolish | Man-at-arms (15, 8 HP) |
+| Stonewarden | 30 | 15 | 4, sight 15 | War pick: melee, 4 | Shield wall | Knight (25, 12 HP) |
+| Prospector | 30 | 10 | 5, sight 25 | Crossbow: 80%, range 16, 3 | Aimed shot | Archer (20, 6 HP) |
+| Sapper | 40 | 9 | 5 | Throwing picks: 70%, range 8, 3 | Dynamite | Mage (30, 5 HP) |
+| Runepriest | 30 | 10 | 5 | Rune hammer: melee, 2 | Heal, Raise | Cleric (25, 7 HP) |
+
+- **Miner:** the front line. Its own ability is the Knight's rank-1 option,
+  **Demolish** — hacking through a square of low cover beside it and striking
+  everyone else next to that square for 2.
+- **Stonewarden:** the anchor, behind a slab of stone, with the Knight's
+  **Shield wall**.
+- **Prospector:** a steadier, shorter-ranged shot than the Archer, with
+  **Aimed shot**.
+- **Sapper:** **Dynamite** (3 AP, cooldown 3) is thrown at a square it can
+  see within 8, hitting every character in the 3×3 round it for 4, friend or
+  foe, with no roll, then blasting away the low cover there (§22). It leaves
+  no effect. Between throws it flings picks.
+- **Runepriest:** the Cleric's **Heal** and **Raise** on a body that can
+  stand nearer the front.
+
+The ready-made squads: 50 Miner, Prospector · 60 Stonewarden, Prospector ·
+70 two Miners, Prospector · 80 Stonewarden, Miner, Prospector · 90
+Stonewarden, Miner, Sapper · 100 Stonewarden, two Miners, Prospector · 110
+Stonewarden, Miner, Prospector, Runepriest · 120 Stonewarden, Miner,
+Prospector, Sapper.
+
+### 33.3 How it's built
+
+- **Data.** Five characters and one ability in `characters.ts`, and
+  `FACTIONS.miners` with a ready-made squad for every rung of `BUDGETS`, held
+  there by the test that holds every faction's. The tests also hold its
+  promise: 9–15 HP, no harder a weapon than the Realm's, fewer bodies at every
+  budget.
+- **Reused abilities.** Demolish, Shield wall, Aimed shot, Heal and Raise were
+  never the Realm's alone: every rule reads the ability, not who has it.
+- **Dynamite** is Fireball's shape with its own numbers: the check and the act
+  for the two are one `case`, reading `ABILITIES`, and it's told as a
+  `dynamite` event beside `fireball` wherever that one is — the log, the
+  board's lines and cues, the recap, the battle record, fog and a hidden
+  enemy. The computer needed one line in `ACTION_AIMS`.
+- **Figures** are modelled in code like the rest (§26.5), from a `dwarf` body
+  in `kit.mjs` — `body`, crouched short, with a barrel chest and a beard —
+  and a shared `pick` and `dynamiteStick`. The stick tumbles as it flies, and
+  lands in a blast of fire and flung rock that shakes the battlefield as a
+  fireball does.
+
 ---
 
 ## Appendix: Working title
@@ -3857,3 +3934,4 @@ Realm, its sibling in the same world.
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
+| 1.52 | The Miners, a third faction (§33, B6): five dwarves — the Miner, the Stonewarden, the Prospector, the Sapper and the Runepriest — each tougher and a little dearer than the Realm character it stands in for, hitting as hard; and Dynamite, the Sapper's blast of 4 over a 3×3, which leaves no effect. |

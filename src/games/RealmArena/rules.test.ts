@@ -1370,3 +1370,41 @@ describe("the Swarm (§31)", () => {
         });
     });
 });
+
+describe("the Miners (§33)", () => {
+    // Rubble beside (4, 2), a wall above it, and room either side.
+    const field = fieldOf(["............", "....#.......", "...,........", "............", "............"]);
+
+    describe("Dynamite", () => {
+        it("hits every character in the 3×3 for 4, friend or foe, leaves nothing burning, blasts the low cover, and goes on cooldown", () => {
+            const sapper = fighter(1, "a", "sapper", at(field, 0, 2));
+            const enemy = fighter(2, "b", "knight", at(field, 4, 2));
+            const friend = fighter(3, "a", "miner", at(field, 5, 3));
+            const away = fighter(4, "b", "archer", at(field, 7, 2));
+            const { byId, events } = run({ field, fighters: [sapper, enemy, friend, away] }, "a", { kind: "dynamite", fighter: 1, at: at(field, 4, 2) });
+            expect(events).toEqual([
+                { kind: "dynamite", fighter: 1, at: at(field, 4, 2), targets: [2, 3], damage: ABILITIES.dynamite.damage },
+                { kind: "blasted", fighter: 1, squares: [at(field, 3, 2)] },
+            ]);
+            expect(byId(2)).toMatchObject({ hp: CHARACTERS.knight.hp - 4, effects: {} });
+            expect(byId(3).hp).toBe(CHARACTERS.miner.hp - 4);
+            expect(byId(4).hp).toBe(CHARACTERS.archer.hp);
+            expect(byId(1)).toMatchObject({ ap: ACTION_POINTS - ABILITIES.dynamite.ap, cooldowns: { dynamite: 3 } });
+        });
+
+        it("reaches 8 squares, in sight, and only a Sapper throws it", () => {
+            const wide = fieldOf(["..............."]);
+            const sapper = fighter(1, "a", "sapper", at(wide, 0, 0));
+            const miner = fighter(2, "a", "miner", at(wide, 1, 0));
+            expect(check({ field: wide, fighters: [sapper, miner] }, "a", { kind: "dynamite", fighter: 1, at: at(wide, 8, 0) })).toEqual({ ap: 3 });
+            expect(check({ field: wide, fighters: [sapper, miner] }, "a", { kind: "dynamite", fighter: 1, at: at(wide, 9, 0) })).toEqual({ refused: "Out of range or out of sight" });
+            expect(check({ field: wide, fighters: [sapper, miner] }, "a", { kind: "dynamite", fighter: 2, at: at(wide, 4, 0) })).toEqual({ refused: "This Miner can't use Dynamite" });
+        });
+    });
+
+    it("dig through cover with a Miner's own Demolish, no option needed", () => {
+        const miner = fighter(1, "a", "miner", at(field, 2, 2));
+        const { events } = run({ field, fighters: [miner] }, "a", { kind: "demolish", fighter: 1, at: at(field, 3, 2) });
+        expect(events.at(-1)).toEqual({ kind: "blasted", fighter: 1, squares: [at(field, 3, 2)] });
+    });
+});

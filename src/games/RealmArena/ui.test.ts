@@ -196,7 +196,7 @@ describe("canAct, apPips and hpFraction", () => {
 describe("squadCounts and squadOf", () => {
     it("count a squad, and list it back in the muster's order", () => {
         const counts = squadCounts(["cleric", "manAtArms", "knight", "manAtArms"]);
-        expect(counts).toEqual({ manAtArms: 2, knight: 1, archer: 0, scout: 0, mage: 0, cleric: 1, skitterling: 0, ravager: 0, spitter: 0, bloater: 0, broodmother: 0 });
+        expect(counts).toEqual({ manAtArms: 2, knight: 1, archer: 0, scout: 0, mage: 0, cleric: 1, skitterling: 0, ravager: 0, spitter: 0, bloater: 0, broodmother: 0, miner: 0, stonewarden: 0, prospector: 0, sapper: 0, runepriest: 0 });
         expect(squadOf(counts)).toEqual(["manAtArms", "manAtArms", "knight", "cleric"]);
     });
 });

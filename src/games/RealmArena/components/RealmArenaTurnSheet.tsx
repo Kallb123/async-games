@@ -33,6 +33,7 @@ const AIM_HINT: Readonly<Record<Aim, string>> = {
     aimedShot: 'Tap an enemy to see the odds.',
     cleave: 'Tap two enemies next to them.',
     fireball: 'Tap the square to centre the fireball on. It hits the 3×3 around it, friend or foe.',
+    dynamite: `Tap a square within ${ABILITIES.dynamite.range} to throw the dynamite at. It hits the 3×3 around it, friend or foe.`,
     heal: `Tap a hurt ally they can see within ${ABILITIES.heal.range} squares.`,
     raise: 'Tap a downed ally next to them.',
     throw: 'Tap a shaded square to throw it there: where it lands is shaded red, and catches friend and foe alike.',
@@ -53,6 +54,7 @@ const SEND_LABEL: Readonly<Record<Aim, string>> = {
     aimedShot: 'Take the aimed shot',
     cleave: 'Cleave',
     fireball: 'Throw the fireball',
+    dynamite: 'Throw the dynamite',
     heal: 'Heal',
     raise: 'Raise',
     throw: 'Throw',
@@ -73,6 +75,7 @@ const ABILITY_ROW: Readonly<Record<AbilityId, { icon: string; tag: string; needs
     sneak: { icon: '🤫', tag: 'Sneak' },
     shieldWall: { icon: '🛡️', tag: 'Raise it' },
     fireball: { icon: '🔥', tag: 'Aim' },
+    dynamite: { icon: '🧨', tag: 'Aim' },
     cleave: { icon: ABILITY_MARK, tag: 'Aim', needs: 'attack', least: 2 },
     aimedShot: { icon: ABILITY_MARK, tag: 'Aim', needs: 'aimedShot' },
     heal: { icon: '✚', tag: 'Aim', needs: 'heal' },
@@ -296,12 +299,12 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
 
     if (draft.path) return <MoveDetail draft={draft} name={name} ap={ap} />;
     if (draft.area) {
-        // What lands — a fireball, the item thrown, or a Demolish — and on whom.
+        // What lands — a fireball, dynamite, the item thrown, or a Demolish — and on whom.
         const thrown = aim === 'throw' ? itemOf(fighter) : undefined;
         if (thrown?.hitPenalty) return hint('Smoke over the 3×3 until your next turn. It hurts nobody.');
         const area = new Set(draft.area);
         const caught = battle.fighters.filter(one => isStanding(one) && area.has(one.square));
-        const lands: Ability | Item = thrown ?? (aim === 'demolish' ? ABILITIES.demolish : ABILITIES.fireball);
+        const lands: Ability | Item = thrown ?? ABILITIES[aim === 'demolish' || aim === 'dynamite' ? aim : 'fireball'];
         const { damage = 0, effect } = lands;
         return hint(<>
             {caught.length === 0 ? `Nobody is ${draft.area.length > 1 ? 'in the blast' : 'there'}.` : landsOn(caught.map(one => name(one.id)).join(', '), damage, effect)}
