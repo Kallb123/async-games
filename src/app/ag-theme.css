@@ -5430,12 +5430,12 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 /* A blow that lands (a hit or a graze, not a miss, a heal or a word) pops as
    its text appears: 1.25 down to 1 about its own middle. The group inside the
    hit text takes it, so it composes with the rise; RealmArenaFx sets the delay
-   (the cue's start), the length is here. The fx layer is drawn above the
+   (the cue's start) and the length (`POP_MS`). The fx layer is drawn above the
    board's depth-sorted items, so keyframing a transform here lifts nothing. */
-.ag-ra-hit--hit .ag-ra-hit-pop, .ag-ra-hit--graze .ag-ra-hit-pop {
+:is(.ag-ra-hit--hit, .ag-ra-hit--graze) .ag-ra-hit-pop {
     transform-box: fill-box;
     transform-origin: center;
-    animation: ag-ra-hit-pop 120ms ease-out both;
+    animation: ag-ra-hit-pop ease-out both;
 }
 @keyframes ag-ra-hit-pop {
     from { transform: scale(1.25); }
@@ -5484,7 +5484,7 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
    and fades. Nothing flies, bursts, slashes or walks. */
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
-    :is(.ag-ra-hit--hit, .ag-ra-hit--graze) .ag-ra-hit-pop { animation: none; }
+    .ag-ra-hit .ag-ra-hit-pop { animation: none; }
     .ag-ra-burst, .ag-ra-slash { display: none; }
 }
 /* A review step that happened out of the viewer's sight (§26.2): a big,

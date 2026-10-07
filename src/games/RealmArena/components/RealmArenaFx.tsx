@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
 import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
-import type { BattleCue, BurstCue, FlightCue, SlashCue, TextCue } from '@/games/RealmArena/ui';
+import { endOf, POP_MS, type BattleCue, type BurstCue, type FlightCue, type SlashCue, type TextCue } from '@/games/RealmArena/ui';
 import { SpriteUse } from './RealmArenaTerrain';
 import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 
@@ -148,18 +148,12 @@ function fade(ms: number, cue: FlightCue): number {
 /** A cue's timing as CSS animation: what the keyframed cues — text, a burst, a slash, and the board's fall and blast — are timed by. */
 export const cueTiming = ({ start, length }: BattleCue): React.CSSProperties => ({ animationDelay: `${start}ms`, animationDuration: `${length}ms` });
 
-/**
- * A blow that lands pops as it appears (`ag-ra-hit-pop`, which only a hit or a
- * graze plays); its length is the stylesheet's, its start the cue's.
- */
-const popTiming = ({ start }: BattleCue): React.CSSProperties => ({ animationDelay: `${start}ms` });
-
 function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
     const { x } = over;
     const y = over.y - (cue.lane ?? 0) * LANE_RISE;
     return (
         <g className={`ag-ra-hit ag-ra-hit--${cue.tone}`} style={cueTiming(cue)}>
-            <g className="ag-ra-hit-pop" style={popTiming(cue)}>
+            <g className="ag-ra-hit-pop" style={cueTiming({ ...cue, length: POP_MS })}>
                 <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
                 {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}
                 {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={y - VALUE_RISE} size={MARK_SIZE} />}
@@ -208,7 +202,7 @@ function Flight({ id, cue, at, ms }: { id: string; cue: FlightCue; at: RealmAren
  * long as the last of them lasts.
  */
 function Flights({ id, flights, at, held }: { id: string; flights: readonly FlightCue[]; at: RealmArenaFxProps['at']; held: boolean }) {
-    const ms = useElapsed(Math.max(0, ...flights.map(cue => cue.start + cue.length)), held);
+    const ms = useElapsed(endOf(flights), held);
     return flights.map((cue, index) => <Flight key={index} id={id} cue={cue} at={at} ms={ms - cue.start} />);
 }
 

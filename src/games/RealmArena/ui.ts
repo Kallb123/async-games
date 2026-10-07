@@ -3,13 +3,14 @@
 // state the response already ships, never a rule: those are rules.ts's.
 
 import type { Rect } from "@/utils/ui/mapLabels";
-import type { Point } from "@/utils/ui/isometric";
+import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
 import { coordsOf, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
+import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
@@ -508,9 +509,14 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
 export type HitTone = "hit" | "graze" | "miss" | "heal" | "word";
 
 /** When a cue starts and how long it lasts, in milliseconds from the moment the action starts playing. */
-interface Timed {
+export interface Timed {
     start: number;
     length: number;
+}
+
+/** When the last of a run of timed things is over: 0 for none. */
+export function endOf(timed: readonly Timed[]): number {
+    return Math.max(0, ...timed.map(({ start, length }) => start + length));
 }
 
 /** Hit text over a figure (§26.1). */
@@ -644,13 +650,15 @@ const CUE_STEP_MS = 450;
  * square can be followed. A long action walks quicker (`MIN_WALK_STEP_MS`).
  */
 export const WALK_STEP_MS = 110;
+/** How long a straight step is on screen, in board units: the length a walk step is measured in. */
+const STRAIGHT = Math.hypot(ISO_HALF_WIDTH, ISO_HALF_HEIGHT);
 /**
  * How many walk steps a diagonal leg takes. On screen a straight step is about
  * 11 units long and a diagonal one 20 or 10 by how the view is turned — 15 on
  * average — so a diagonal leg takes 1.34 steps, and the timeline never depends
  * on which way the player has turned the board.
  */
-export const DIAGONAL_LEG = 1.34;
+export const DIAGONAL_LEG = (ISO_HALF_WIDTH + ISO_HALF_HEIGHT) / STRAIGHT;
 /** How many walk steps each quarter of height climbed or dropped adds to a leg: a full wall, four quarters, costs a whole step more. */
 export const CLIMB_LEG = 0.25;
 /**
@@ -719,6 +727,20 @@ export function legWeight(field: Battlefield, from: Square, to: Square): number 
     // A square the map doesn't have (a battle read against another map) has no height to climb.
     const climb = field.tiles[from] && field.tiles[to] ? Math.abs(riseOf(field, to, from)) : 0;
     return (diagonal ? DIAGONAL_LEG : 1) + CLIMB_LEG * climb;
+}
+
+/**
+ * How long a leg of a walk is on screen as the view draws it, plus what its
+ * climb costs (`CLIMB_LEG` of a straight step for each quarter of height): what
+ * a walk's time is shared out over its legs by (`walkerAt`), so a walker moves
+ * at an even pace. The same prices `legWeight` puts on a leg, but measured as
+ * this view draws it rather than turned every way at once.
+ */
+export function legLengthOn(view: IsoView): (from: Square, to: Square) => number {
+    return (from, to) => {
+        const a = isoCentre(view, from), b = isoCentre(view, to);
+        return Math.hypot(b.x - a.x, b.y - a.y) + CLIMB_LEG * STRAIGHT * Math.abs(view.heights[to] - view.heights[from]);
+    };
 }
 
 /** What each character that shoots something other than an arrow shoots (§26.1): the Mage's bolt, the Spitter's acid. */
@@ -802,11 +824,6 @@ const EASY_PACE: Pace = { walkStepMs: WALK_STEP_MS, cueStepMs: CUE_STEP_MS, text
 
 /** The paces to squeeze, in the order an action that runs over gives them up, each with the least it goes down to. */
 const SQUEEZES = [["walkStepMs", MIN_WALK_STEP_MS], ["cueStepMs", MIN_CUE_STEP_MS], ["textMs", MIN_TEXT_MS]] as const;
-
-/** When the last of a run of cues is over. */
-function endOf(cues: readonly BattleCue[]): number {
-    return Math.max(0, ...cues.map(cue => cue.start + cue.length));
-}
 
 /** The largest whole number from `floor` to `ceiling` that `fits`, by halving; `fits` only gets harder as the number grows, and `floor` is the answer when nothing fits. */
 function largestFit(floor: number, ceiling: number, fits: (ms: number) => boolean): number {
@@ -911,9 +928,8 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
                 // An overwatch shot says so as it's loosed, so the camera's pan to the watcher says why.
                 if (event.reaction) say(event.fighter, land - flight, OVERWATCH_WORD);
                 fly(event.fighter, to, missile, event.result, land, flight, SHOT_AFTER_MS);
-                const from = event.result === "miss" ? undefined : at.get(event.fighter);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
-                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}), from });
+                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}), from: at.get(event.fighter) });
                 break;
             }
             case "struck": {
@@ -1052,20 +1068,18 @@ function timeline(field: Battlefield, events: readonly ToldEvent[], before: read
  * the squeezing. With `still`, every walk and flight takes no time.
  */
 export function battleCues(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[] = [], options: BattleCueOptions = {}): BattleCue[] {
-    // Every cue is told, so each text can find the others over its fighter.
-    const build = (pace: Pace) => {
-        const cues = timeline(field, events, before, after, options, pace);
-        laneTexts(cues);
-        return cues;
-    };
+    const build = (pace: Pace) => timeline(field, events, before, after, options, pace);
     let pace = EASY_PACE;
     let cues = build(pace);
     for (const [key, floor] of SQUEEZES) {
-        if (endOf(cues) <= PLAYBACK_MS) return cues;
-        const slower = pace;
-        pace = { ...slower, [key]: largestFit(floor, slower[key], ms => endOf(build({ ...slower, [key]: ms })) <= PLAYBACK_MS) };
-        cues = build(pace);
+        if (endOf(cues) > PLAYBACK_MS) {
+            const previous = pace;
+            pace = { ...previous, [key]: largestFit(floor, previous[key], ms => endOf(build({ ...previous, [key]: ms })) <= PLAYBACK_MS) };
+            cues = build(pace);
+        }
     }
+    // Every cue is told, so each text can find the others over its fighter; lane only the one that plays.
+    laneTexts(cues);
     const end = endOf(cues);
     // Squeezed as far as it goes and still too long: scaling keeps what overlaps.
     return end <= PLAYBACK_MS ? cues : cues.map(cue => scaled(cue, PLAYBACK_MS / end));
@@ -1104,6 +1118,8 @@ export interface ReviewPart {
     events: readonly ToldEvent[];
     /** Which part of a co-op End turn it is; absent on an ordinary step. */
     kind?: IRealmArenaStepPart["kind"];
+    /** The battlefield it is played and drawn on: the map with what was blasted before it cleared. */
+    field: Battlefield;
     /** What the board plays for it. */
     cues: BattleCue[];
     /** The board as the part found it: where its cues stand, and what the follow-zoom compares against. */
@@ -1121,16 +1137,18 @@ export interface ReviewPart {
  * the first), which is how its cues find where everyone stood. `after` is the
  * board the step's last part leaves, which the others carry in `state`: what
  * a move into sight is drawn as, and the end of the move a review frames.
- * `field` is the battlefield its cues are played on, which times their flights
- * and walks (`battleCues`). `options` is how each part's cues are built:
+ * `mapId` is the map it is fought on: each part is played on it as the part
+ * found it, with what had been blasted by then cleared (`ReviewPart.field`),
+ * which times its flights and walks (`battleCues`). `options` is how each part's cues are built:
  * `still` for a player who sees no walk or flight.
  */
-export function reviewParts(field: Battlefield, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): ReviewPart[] {
+export function reviewParts(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): ReviewPart[] {
     const told: (Omit<IRealmArenaStepPart, "kind"> & Partial<Pick<IRealmArenaStepPart, "kind">>)[] = outcome?.parts?.length ? outcome.parts : [{ events: outcome?.events ?? [] }];
     let from = before;
     return told.map(part => {
+        const field = battlefieldOf(mapId, from.blasted);
         const cues = battleCues(field, part.events, from.fighters, part.state?.fighters ?? after, options);
-        const played: ReviewPart = { kind: part.kind, events: part.events, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
+        const played: ReviewPart = { kind: part.kind, events: part.events, field, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
         return played;
     });
@@ -1153,8 +1171,8 @@ export function isUnplaced(part: Pick<ReviewPart, "events" | "cues" | "before">,
 }
 
 /** How long a review rests on a whole step: its parts' times added up. */
-export function reviewStepMs(field: Battlefield, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): number {
-    return reviewParts(field, outcome, before, after, options).reduce((total, part) => total + part.durationMs, 0);
+export function reviewStepMs(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): number {
+    return reviewParts(mapId, outcome, before, after, options).reduce((total, part) => total + part.durationMs, 0);
 }
 
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
@@ -1240,7 +1258,7 @@ export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, 
     const marksAt = texts.length > 0 ? Math.min(...texts.map(cue => cue.start)) : 0;
     const tweenMs = still ? 0 : HP_TWEEN_MS, chipMs = still ? 0 : HP_CHIP_MS;
     const last = steps[steps.length - 1];
-    const until = Math.max(marksAt, last ? last.at + tweenMs + chipMs : 0, ...shoves.map(shove => shove.at + shove.length));
+    const until = Math.max(marksAt, last ? last.at + tweenMs + chipMs : 0, endOf(shoves));
     return { before, steps, marksAt, tweenMs, chipMs, shoves, until };
 }
 
@@ -1355,6 +1373,8 @@ export function walkLift({ from, to, across }: WalkerLeg, heightOf: (square: Squ
 
 /** How long a blow's knock on its target takes to go and come back. */
 export const IMPACT_MS = 120;
+/** How long the hit text of a blow that lands (a hit or a graze) takes to pop as it appears, from its cue's start. */
+export const POP_MS = 120;
 /** How far a blow knocks its target off its square, in board units, away from where it came from. */
 export const KNOCK = 1.5;
 /** How far a melee striker lunges at its target through its slash, in board units. */
@@ -1374,9 +1394,7 @@ const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "th
  * middle of it. A target is knocked from where its blow came from to where it
  * stands; a striker lunges from where it stands to where it strikes.
  */
-export interface Shove {
-    at: number;
-    length: number;
+export interface Shove extends Timed {
     from: Square;
     to: Square;
     reach: number;
@@ -1392,9 +1410,9 @@ export function shovesOf(cues: readonly BattleCue[], id: number, still: boolean)
     if (still) return [];
     return cues.flatMap((cue): Shove[] => {
         if (cue.kind === "text" && cue.fighter === id && cue.from !== undefined && (cue.hpChange ?? 0) < 0) {
-            return [{ at: cue.start, length: IMPACT_MS, from: cue.from, to: cue.square, reach: KNOCK }];
+            return [{ start: cue.start, length: IMPACT_MS, from: cue.from, to: cue.square, reach: KNOCK }];
         }
-        if (cue.kind === "slash" && cue.striker === id) return [{ at: cue.start, length: cue.length, from: cue.from, to: cue.square, reach: LUNGE }];
+        if (cue.kind === "slash" && cue.striker === id) return [{ start: cue.start, length: cue.length, from: cue.from, to: cue.square, reach: LUNGE }];
         return [];
     });
 }
@@ -1408,8 +1426,8 @@ export function shovesOf(cues: readonly BattleCue[], id: number, still: boolean)
  */
 export function shoveAt(shoves: readonly Shove[], ms: number, project: (square: Square) => Point): Point {
     let x = 0, y = 0;
-    for (const { at, length, from, to, reach } of shoves) {
-        const across = (ms - at) / Math.max(1, length);
+    for (const { start, length, from, to, reach } of shoves) {
+        const across = (ms - start) / Math.max(1, length);
         if (across < 0 || across > 1) continue;
         const a = project(from), b = project(to);
         const dx = b.x - a.x, dy = b.y - a.y, away = Math.hypot(dx, dy);
@@ -1420,27 +1438,21 @@ export function shoveAt(shoves: readonly Shove[], ms: number, project: (square: 
     return { x, y };
 }
 
-/** How far a told fighter's figure is pushed off its square `ms` into the playback (`shoveAt` over everything it's told). */
-export function toldOffsetAt({ shoves }: Told, ms: number, project: (square: Square) => Point): Point {
-    return shoveAt(shoves, ms, project);
-}
-
-/** When the last shake of the cues is over, or 0 if nothing in them shakes the battlefield. */
-export function shakeUntil(cues: readonly BattleCue[]): number {
-    return Math.max(0, ...cues.flatMap(cue => cue.kind === "flight" && SHAKING_MISSILES.has(cue.missile) ? [cue.start + cue.land + SHAKE_MS] : []));
+/** When each shake of the battlefield is: `SHAKE_MS` from the moment each missile that explodes lands. */
+export function shakesOf(cues: readonly BattleCue[]): Timed[] {
+    return cues.flatMap((cue): Timed[] => cue.kind === "flight" && SHAKING_MISSILES.has(cue.missile) ? [{ start: cue.start + cue.land, length: SHAKE_MS }] : []);
 }
 
 /**
  * How far the whole battlefield is shaken `ms` into the playback, as a board
  * offset: a quick wobble as a fireball or a thunder flask lands (`start +
- * land` of its flight), swinging `SHAKE_SWINGS` times and dying away to
+ * land` of its flight, `shakesOf`), swinging `SHAKE_SWINGS` times and dying away to
  * nothing over `SHAKE_MS`. Still outside any shake.
  */
 export function shakeAt(cues: readonly BattleCue[], ms: number): Point {
     let x = 0, y = 0;
-    for (const cue of cues) {
-        if (cue.kind !== "flight" || !SHAKING_MISSILES.has(cue.missile)) continue;
-        const across = (ms - (cue.start + cue.land)) / SHAKE_MS;
+    for (const { start, length } of shakesOf(cues)) {
+        const across = (ms - start) / length;
         if (across < 0 || across >= 1) continue;
         const swing = SHAKE * (1 - across) * Math.sin(2 * Math.PI * SHAKE_SWINGS * across);
         x += swing;

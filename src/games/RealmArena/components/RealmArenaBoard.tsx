@@ -4,7 +4,7 @@ import BoardZoom, { type BoardZoomFocus, type BoardZoomPivot } from '@/component
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import { facingTowards, type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
-import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, ISO_STEP, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
+import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
 import RealmArenaFx, { useElapsed, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
@@ -16,7 +16,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type Shove, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, shakeAt, shakeUntil, shovesOf, shoveAt, terrainLetter, toldAt, toldOffsetAt, toldOf, walkerAt, walkLift, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type Shove, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkLift, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -402,7 +402,7 @@ function Falling({ artId, view, cue, shoves, held, facing, tintFor, colourFor }:
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     // Its own clock, only for as long as it is knocked by the blow that downs it.
-    const ms = useElapsed(Math.max(0, ...shoves.map(shove => shove.at + shove.length)), held);
+    const ms = useElapsed(endOf(shoves), held);
     const offset = shoveAt(shoves, ms, square => isoCentre(view, square));
     return (
         <Fading cue={cue} held={held} className="ag-ra-falling">
@@ -410,21 +410,6 @@ function Falling({ artId, view, cue, shoves, held, facing, tintFor, colourFor }:
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </Fading>
     );
-}
-
-/**
- * How much longer a step up or down counts for, per board unit of height it
- * climbs, when a walk's time is shared out over its legs: climbing is slower
- * than the ground it covers on screen.
- */
-const CLIMB_EXTRA = 2;
-
-/** How long a leg of a walk is on screen as the view draws it, plus a little for the height it climbs (`CLIMB_EXTRA`): what a walk's time is shared out by, so a walker moves at an even pace. */
-function legLengthOn(view: IsoView): (from: Square, to: Square) => number {
-    return (from, to) => {
-        const a = isoCentre(view, from), b = isoCentre(view, to);
-        return Math.hypot(b.x - a.x, b.y - a.y) + CLIMB_EXTRA * Math.abs(view.heights[to] - view.heights[from]) * ISO_STEP;
-    };
 }
 
 /**
@@ -629,7 +614,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
  */
 function ToldFighterNode({ told, held, ...props }: FighterNodeProps & { told: Told; held: boolean }) {
     const ms = useElapsed(told.until, held);
-    const offset = toldOffsetAt(told, ms, square => isoCentre(props.view, square));
+    const offset = shoveAt(told.shoves, ms, square => isoCentre(props.view, square));
     return <FighterNode {...props} {...toldAt(told, props.fighter, ms)} offset={offset} />;
 }
 
@@ -643,9 +628,10 @@ function ShakeClock({ target, cues, until, held }: { target: React.RefObject<SVG
     const ms = useElapsed(until, held);
     const { x, y } = shakeAt(cues, ms);
     useEffect(() => {
-        target.current?.setAttribute('transform', `translate(${x} ${y})`);
+        const group = target.current;
+        group?.setAttribute('transform', `translate(${x} ${y})`);
+        return () => group?.removeAttribute('transform');
     }, [target, x, y]);
-    useEffect(() => () => target.current?.removeAttribute('transform'), [target]);
     return null;
 }
 
@@ -660,7 +646,7 @@ function ShakeClock({ target, cues, until, held }: { target: React.RefObject<SVG
  */
 function Shaking({ playback, still, held, children }: { playback: Playback | null | undefined; still: boolean; held: boolean; children: React.ReactNode }) {
     const group = useRef<SVGGElement>(null);
-    const until = playback && !still ? shakeUntil(playback.cues) : 0;
+    const until = playback && !still ? endOf(shakesOf(playback.cues)) : 0;
     return (
         <g ref={group}>
             {children}
