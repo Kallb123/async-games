@@ -1762,6 +1762,9 @@ that rise off the figures, and the shot or the fireball flying to get there.
 It changes no rule. Everything it draws comes from events the server already
 sends (`BattleEvent` in `rules.ts`).
 
+How the board draws and times it — and a review of what should change there —
+is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
+
 ### 26.1 What the player sees
 
 - **Hit text** rises off the figure it happened to and fades within about a
