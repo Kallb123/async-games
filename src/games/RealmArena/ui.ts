@@ -195,6 +195,21 @@ export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter
     return start === undefined || end === undefined || start === end ? null : [start, end];
 }
 
+/**
+ * Where the view goes for a step of the battle, whoever took it: the stretch a
+ * move covered (`moveFrame`), framed exactly; failing that every square it
+ * touched (`actionSquares`), as deep as they all still fit — unless they are
+ * spread over too much of the battlefield to be worth framing (`spreadWide`).
+ * Null where there is nothing to follow, for the caller to rest the view
+ * somewhere of its own. `key` is the one the view glides again for.
+ */
+export function actionFollow(field: Pick<Battlefield, "width" | "height">, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], key: string): { squares: Square[]; key: string; exact?: true } | null {
+    const frame = moveFrame(events, before, after);
+    if (frame) return { squares: frame, key, exact: true };
+    const touched = actionSquares(before, after);
+    return touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key } : null;
+}
+
 function sameCounts(a: Fighter["effects"], b: Fighter["effects"]): boolean {
     return EFFECT_IDS.every(id => a[id] === b[id]);
 }
@@ -1027,4 +1042,94 @@ export function partLabel(parts: readonly Pick<ReviewPart, "kind">[], index: num
     const actions = parts.filter(part => part.kind === "enemy").length;
     const nth = parts.slice(0, index + 1).filter(part => part.kind === "enemy").length;
     return `${possessive(enemyName)} action ${nth} of ${actions}`;
+}
+
+// ─── An HP bar through an action (§26.1) ────────────────────────────────────
+
+/** How long an HP bar's fill takes to move to a new value, and how long the pale chip of what it lost then takes to drain. */
+export const HP_TWEEN_MS = 250;
+export const HP_CHIP_MS = 300;
+
+/** The HP an action's cue took a fighter to as it lands (`to`), `at` ms into the playback. */
+export interface HpStep {
+    at: number;
+    to: number;
+}
+
+/**
+ * What an action being played tells of one fighter whose bar, marks or item it
+ * changes: the fighter as the action found it (`before`), the HP its blows and
+ * heals take it through, when its first cue lands (`marksAt`, when its marks
+ * stop being `before`'s), how long its fill takes to move and its chip to
+ * drain (`tweenMs` and `chipMs`, both 0 with reduced motion, when the bar
+ * jumps and leaves no chip), and when the last of it is over (`until`).
+ */
+export interface Told {
+    before: Fighter;
+    steps: readonly HpStep[];
+    marksAt: number;
+    tweenMs: number;
+    chipMs: number;
+    until: number;
+}
+
+/**
+ * What the action being played tells of `fighter`, or null if it changes
+ * nothing a figure draws — it has no cue on it, it wasn't there when the action
+ * started, it's down (no bar, no marks) or it ends as it began. Each of its
+ * HP cues steps its bar by the cue's `hpChange`, and the last ends it on its
+ * real HP, so the bar is right even if the cues' sums aren't. With `still` the
+ * bar jumps at its cue and no chip drains.
+ */
+export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
+    if (!before || !isStanding(fighter)) return null;
+    const texts = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === fighter.id);
+    if (texts.length === 0) return null;
+    const max = CHARACTERS[fighter.character].hp;
+    const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
+    let level = before.hp;
+    const steps = blows.map((cue, index): HpStep => {
+        level = Math.min(max, Math.max(0, level + (cue.hpChange ?? 0)));
+        return { at: cue.start, to: index === blows.length - 1 ? fighter.hp : level };
+    });
+    const marksDiffer = effectsOn(before).join() !== effectsOn(fighter).join() || before.banked !== fighter.banked || before.item !== fighter.item;
+    if (!marksDiffer && steps.every(step => step.to === before.hp)) return null;
+    const marksAt = Math.min(...texts.map(cue => cue.start));
+    const tweenMs = still ? 0 : HP_TWEEN_MS, chipMs = still ? 0 : HP_CHIP_MS;
+    const last = steps[steps.length - 1];
+    return { before, steps, marksAt, tweenMs, chipMs, until: Math.max(marksAt, last ? last.at + tweenMs + chipMs : 0) };
+}
+
+/**
+ * Where a value that starts at `from` and moves to each of `steps` is `ms` into
+ * the playback: each step begins `delay` after its cue and takes `tween` to get
+ * there, from wherever the one before had got to — so a second blow landing
+ * mid-tween carries on from there rather than jumping. With no `tween` it
+ * jumps.
+ */
+export function stepped(from: number, steps: readonly HpStep[], delay: number, tween: number, ms: number): number {
+    let value = from;
+    for (const [index, step] of steps.entries()) {
+        const begins = step.at + delay;
+        if (ms < begins) break;
+        // A step is only carried as far as the next one's cue, once that has landed.
+        const next = steps[index + 1];
+        const time = next && ms >= next.at + delay ? next.at + delay : ms;
+        const across = tween > 0 ? Math.min(1, (time - begins) / tween) : 1;
+        value += (step.to - value) * across;
+    }
+    return value;
+}
+
+/**
+ * A fighter `ms` into the playback as its figure shows it: its bar at the HP
+ * its cues have taken it to — the fill tweened to it, and with the pale chip of
+ * what it lost draining after — and its marks and item as the action found them
+ * until its first cue lands. With reduced motion the bar jumps at its cue.
+ */
+export function toldAt({ before, steps, marksAt, tweenMs, chipMs }: Told, fighter: Fighter, ms: number): { drawn: Fighter; chip: number | undefined } {
+    const marks = ms >= marksAt ? fighter : before;
+    const fill = steps.length > 0 ? stepped(before.hp, steps, 0, tweenMs, ms) : fighter.hp;
+    const chip = chipMs === 0 || steps.length === 0 ? undefined : stepped(before.hp, steps, tweenMs, chipMs, ms);
+    return { drawn: { ...fighter, hp: fill, effects: marks.effects, banked: marks.banked, item: marks.item }, chip };
 }

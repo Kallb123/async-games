@@ -16,7 +16,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type TextCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter, toldAt, toldOf, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -330,7 +330,7 @@ const hpBarCorner = (x: number, y: number): Point => ({ x: x - HP_BAR_WIDTH / 2,
 function HpBar({ x, y, fighter, colour, chip }: { x: number; y: number; fighter: Fighter; colour: string; chip?: number }) {
     const corner = hpBarCorner(x, y);
     const fill = HP_BAR_WIDTH * hpFraction(fighter);
-    const lagging = chip === undefined ? 0 : HP_BAR_WIDTH * hpFraction({ ...fighter, hp: chip }) - fill;
+    const lagging = chip === undefined ? 0 : HP_BAR_WIDTH * hpFraction(fighter, fighter.hp - chip) - fill;
     return (
         <>
             <rect className="ag-ra-hp" x={corner.x} y={corner.y} width={HP_BAR_WIDTH} height={HP_BAR_HEIGHT} />
@@ -363,6 +363,11 @@ function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; 
     );
 }
 
+/** How far through its cue the playback is `ms` in, 0 before it starts and 1 once it is over. */
+function cueProgress(ms: number, cue: { start: number; length: number }): number {
+    return Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+}
+
 /**
  * What the action being played takes off the board (§26.1) — a character it
  * downed, cover it blasted — there as it was until its cue starts, then
@@ -374,7 +379,7 @@ function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; 
  */
 function Fading({ cue, held, className, children }: { cue: { start: number; length: number }; held: boolean; className: string; children: React.ReactNode }) {
     const ms = useElapsed(cue.start + cue.length, held);
-    const faded = Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+    const faded = cueProgress(ms, cue);
     if (faded >= 1) return null;
     return <g className={className} opacity={1 - faded * faded}>{children}</g>;
 }
@@ -451,7 +456,7 @@ function Arriving({ ms, children }: { ms: number; children: React.ReactNode }) {
  */
 function Appearing({ cue, held, children }: { cue: { start: number; length: number }; held: boolean; children: React.ReactNode }) {
     const ms = useElapsed(cue.start + cue.length, held);
-    const left = 1 - Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+    const left = 1 - cueProgress(ms, cue);
     return <g visibility={ms < cue.start ? 'hidden' : undefined} opacity={left > 0 ? 1 - left * left : undefined}>{children}</g>;
 }
 
@@ -603,95 +608,15 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
     );
 }
 
-/** How long an HP bar's fill takes to move to a new value, and how long the pale chip of what it lost then takes to drain. */
-const HP_TWEEN_MS = 250;
-const HP_CHIP_MS = 300;
-
-/** The HP an action's cue took a fighter to as it lands (`to`), `at` ms into the playback. */
-interface HpStep {
-    at: number;
-    to: number;
-}
-
-/**
- * What an action being played tells of one fighter whose bar, marks or item it
- * changes: the fighter as the action found it (`before`), the HP its blows and
- * heals take it through, when its first cue lands (`marksAt`, when its marks
- * stop being `before`'s), and when the last of it is over (`until`).
- */
-interface Told {
-    before: Fighter;
-    steps: readonly HpStep[];
-    marksAt: number;
-    until: number;
-}
-
-/**
- * What the action being played tells of `fighter`, or null if it changes
- * nothing a figure draws — it has no cue on it, it wasn't there when the action
- * started, it's down (no bar, no marks) or it ends as it began. Each of its
- * HP cues steps its bar by the cue's `hpChange`, and the last ends it on its
- * real HP, so the bar is right even if the cues' sums aren't.
- */
-function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
-    if (!before || !isStanding(fighter)) return null;
-    const texts = cues.filter((cue): cue is TextCue => cue.kind === 'text' && cue.fighter === fighter.id);
-    if (texts.length === 0) return null;
-    const max = CHARACTERS[fighter.character].hp;
-    const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
-    let level = before.hp;
-    const steps = blows.map((cue, index): HpStep => {
-        level = Math.min(max, Math.max(0, level + (cue.hpChange ?? 0)));
-        return { at: cue.start, to: index === blows.length - 1 ? fighter.hp : level };
-    });
-    const marksDiffer = effectsOn(before).join() !== effectsOn(fighter).join() || before.banked !== fighter.banked || before.item !== fighter.item;
-    if (!marksDiffer && steps.every(step => step.to === before.hp)) return null;
-    const marksAt = Math.min(...texts.map(cue => cue.start));
-    const last = steps[steps.length - 1];
-    return { before, steps, marksAt, until: Math.max(marksAt, last ? last.at + (still ? 0 : HP_TWEEN_MS + HP_CHIP_MS) : 0) };
-}
-
-/**
- * Where a value that starts at `from` and moves to each of `steps` is `ms` into
- * the playback: each step begins `delay` after its cue and takes `tween` to get
- * there, from wherever the one before had got to — so a second blow landing
- * mid-tween carries on from there rather than jumping. With no `tween` it
- * jumps.
- */
-function stepped(from: number, steps: readonly HpStep[], delay: number, tween: number, ms: number): number {
-    const valueAt = (index: number, time: number): number => {
-        if (index < 0) return from;
-        const start = valueAt(index - 1, steps[index].at + delay);
-        const across = tween > 0 ? Math.min(1, (time - steps[index].at - delay) / tween) : 1;
-        return start + (steps[index].to - start) * across;
-    };
-    let reached = -1;
-    steps.forEach((step, index) => { if (ms >= step.at + delay) reached = index; });
-    return valueAt(reached, ms);
-}
-
-/**
- * A fighter `ms` into the playback as its figure shows it: its bar at the HP
- * its cues have taken it to — the fill tweened to it, and with the pale chip of
- * what it lost draining after — and its marks and item as the action found them
- * until its first cue lands. With reduced motion the bar jumps at its cue.
- */
-function toldAt({ before, steps, marksAt }: Told, fighter: Fighter, ms: number, still: boolean): { drawn: Fighter; chip: number | undefined } {
-    const marks = ms >= marksAt ? fighter : before;
-    const fill = steps.length > 0 ? stepped(before.hp, steps, 0, still ? 0 : HP_TWEEN_MS, ms) : fighter.hp;
-    const chip = still || steps.length === 0 ? undefined : stepped(before.hp, steps, HP_TWEEN_MS, HP_CHIP_MS, ms);
-    return { drawn: { ...fighter, hp: fill, effects: marks.effects, banked: marks.banked, item: marks.item }, chip };
-}
-
 /**
  * A resting character an action being played changes the bar, marks or item of
  * (`toldOf`): its own frame clock, so only these redraw every frame, drawing
  * them as the action found them until the cue that changed them lands. The
  * clock stops once the last of it is over, and the figure is its real self.
  */
-function ToldFighterNode({ told, held, still, ...props }: FighterNodeProps & { told: Told; held: boolean; still: boolean }) {
+function ToldFighterNode({ told, held, ...props }: FighterNodeProps & { told: Told; held: boolean }) {
     const ms = useElapsed(told.until, held);
-    return <FighterNode {...props} {...toldAt(told, props.fighter, ms, still)} />;
+    return <FighterNode {...props} {...toldAt(told, props.fighter, ms)} />;
 }
 
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
@@ -1022,7 +947,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // Its bar, marks and item are as the action found them until the cue that changed them lands.
         const told = playback ? toldOf(playback.cues, found.get(fighter.id), fighter, still) : null;
         const node = told
-            ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} held={held} still={still} />
+            ? <ToldFighterNode key={`${fighter.id}-${playback?.key}`} {...props} told={told} held={held} />
             : <FighterNode key={fighter.id} {...props} />;
         // Hidden until its walk is over, and for one downed, its blow lands: the later of the two.
         const fall = falls.get(fighter.id);

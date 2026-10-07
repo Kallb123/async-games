@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, moveFrame, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -45,9 +45,6 @@ import { tutorialRun } from "@/utils/ui/gameTutorials";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, finishedGameCopy, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import { capitalise } from "@/utils/ui/text";
-
-/** Where the board is told to look: a target's aim, or a set of squares. */
-type FollowTo = NonNullable<ComponentProps<typeof RealmArenaBoard>["follow"]>;
 
 /**
  * Realm Arena's board screen (docs/games/realm-arena.md §17.3 PR 5): the
@@ -192,6 +189,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         submitCommand(command, undefined, 'muster');
     };
 
+    // A target picked from the turn sheet's list brings the view to it and
+    // whoever is aiming at it, and keeps it there until the character acts,
+    // another is selected, a box is tapped or a review is stepped into.
+    const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
+    const [picked, setPicked] = useResettingState<AimFollow | null>(null, pickKey);
+
     // A battle turn: a run of actions, one command each so every result is
     // seen before the next is chosen, then the end of the turn (§17.2).
     const battleTurn = !!gs && !mustering && isMyTurn;
@@ -223,16 +226,12 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // next take it, so a shot isn't played from further out than it was aimed
     // and a long walk doesn't start off the frame. That is worked out as the
     // action is sent, and goes when the playback does.
-    const [own, setOwn] = useState<{ playback: Playback; follow: FollowTo | null } | null>(null);
+    const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
     const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
-        const frame = moveFrame(events, fighters, after);
-        const touches = frame ? [] : actionSquares(fighters, after);
-        const to: FollowTo | null = picked ?? (frame ? { squares: frame, key: `play:${key}`, exact: true }
-            : touches.length > 0 && !spreadWide(field, touches) ? { squares: touches, key: `play:${key}` }
-            : null);
+        const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
         setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
     };
     useEffect(() => {
@@ -254,11 +253,6 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         }, actTarget(action));
     };
     const turn = useTurnDraft(battle, myUserId, actor, turnKey, act);
-    // A target picked from the turn sheet's list brings the view to it and
-    // whoever is aiming at it, and keeps it there until the character acts,
-    // another is selected, a box is tapped or a review is stepped into.
-    const pickKey = `${turnKey}:${nav.isLive}:${refocus}:${selected ? `${selected.id}:${selected.square}:${selected.ap}:${selected.hp}` : ''}`;
-    const [picked, setPicked] = useResettingState<AimFollow | null>(null, pickKey);
     const focusTarget = (target: Fighter) => {
         if (selected) setPicked({ aim: { caster: selected.square, target: target.square }, key: `target:${target.id}:${Date.now()}` });
     };
@@ -312,15 +306,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const friendly = friendlySquares(fighters, myUserId, coop);
     const handedOn = !!previous && previous.currentTurn !== currentTurn && currentTurn !== '';
     const followed = !!part && (part.kind ? part.kind !== 'handOff' : !handedOn);
-    const moved = part && followed ? moveFrame(part.events, part.before.fighters, fighters) : null;
     const stepKey = `${nav.viewIndex}:${partIndex}`;
-    const touched = previous && part && followed && !moved ? actionSquares(part.before.fighters, fighters) : [];
     const follow = !nav.isLive
         ? !previous || !part ? null
-            : moved ? { squares: moved, key: stepKey, exact: true }
-            : followed && touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key: stepKey }
-            : friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true }
-            : null
+            : (followed ? actionFollow(field, part.events, part.before.fighters, fighters, stepKey) : null)
+                ?? (friendly.length > 0 ? { squares: friendly, key: stepKey, exact: true } : null)
         : own?.follow ?? picked;
     // A followed step the board can't point to — something happened out of
     // sight, which cost the viewer something they were told of — says so with
