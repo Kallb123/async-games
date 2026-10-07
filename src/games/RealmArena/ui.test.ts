@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { buildBattlefield } from "@/utils/games/battlefield/terrain";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import { squareAt } from "@/utils/games/battlefield/terrain";
-import { at } from "@/utils/games/battlefield/testFixtures";
+import { isoCentre, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH } from "@/utils/ui/isometric";
+import { at, fieldOf, hillOf } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
-import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, FOLLOW_GLIDE_MS, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue } from "./ui";
+import { EFFECT_ART, ITEM_ART, type Missile } from "./art";
+import { abilityWait, actionFollow, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_PACE, CLIMB_LEG, DIAGONAL_LEG, flightMs, legWeight, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, FOLLOW_GLIDE_MS, partLabel, HP_CHIP_MS, HP_TWEEN_MS, stepped, toldAt, toldOf, type TextCue, IMPACT_MS, KNOCK, LUNGE, SHAKE, SHAKE_MS, WALK_BOB, WALK_HOP, shakeAt, shakesOf, shoveAt, shovesOf, endOf, legLengthOn, walkEase, walkerAt, walkLift, type FlightCue, type SlashCue, type WalkCue } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -277,6 +278,19 @@ function ready(id: number, owner: string, character: CharacterId, square: number
     return { ...newFighter(id, owner, character, square), ap: ACTION_POINTS, ...extra };
 }
 
+/**
+ * A flat battlefield ten squares across, for what a battle plays: square 10 is
+ * the second row's first, 55 the sixth row's sixth, and a character at 50 is
+ * four squares from one at 10.
+ */
+const FIELD = fieldOf(...Array(10).fill(".".repeat(10)));
+/** The map a review is played on, by the id a battle stores: its first row is flat ground thirty-six squares long. */
+const FORT = "ruinedFort";
+/** One long row, for a walk that has to run straight on for dozens of squares. */
+const ROW = fieldOf(".".repeat(100));
+/** How long a missile takes to fly from one square of `FIELD` to another. */
+const flight = (missile: Missile, from: number, to: number) => flightMs(FIELD, missile, from, to);
+
 describe("aimFocus", () => {
     it("frames the caster and the target with a square and a half round them", () => {
         expect(aimFocus(RUINED_FORT, squareAt(RUINED_FORT, 10, 20)!, squareAt(RUINED_FORT, 14, 18)!))
@@ -458,7 +472,7 @@ describe("battleCues", () => {
         .map(cue => `${cue.fighter}@${cue.square} ${cue.value}${cue.label ? `/${cue.label}` : ""} ${cue.start}`);
 
     it("flies a move's overwatch shots one after another, each to where the mover had got to, its text rising as it lands", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
             { kind: "moved", fighter: 0, path: [12, 13, 14], sneaking: false },
@@ -466,18 +480,20 @@ describe("battleCues", () => {
             { kind: "moved", fighter: 0, path: [14, 15], sneaking: false },
         ], before);
         // The first leg walks, then the first shot flies to where the mover stopped, and the next leg walks once it has landed.
-        const first = 2 * WALK_STEP_MS, firstLand = first + 450;
+        // Each flight is as long as its own distance, and short enough that each shot still lands a beat after the last thing.
+        const first = 2 * WALK_STEP_MS, firstLand = first + 450, firstFlight = flight("arrow", 50, 12), secondFlight = flight("arrow", 60, 14);
+        expect(secondFlight).toBeGreaterThan(firstFlight);
         expect(only(cues, "flight")).toMatchObject([
-            { missile: "arrow", from: 50, to: 12, result: "hit", start: firstLand - FLIGHT_MS.arrow, land: FLIGHT_MS.arrow },
+            { missile: "arrow", from: 50, to: 12, result: "hit", start: firstLand - firstFlight, land: firstFlight },
             // Setting off once the first has landed, and landing far enough after it to be seen.
-            { missile: "arrow", from: 60, to: 14, result: "graze", land: FLIGHT_MS.arrow },
+            { missile: "arrow", from: 60, to: 14, result: "graze", land: secondFlight },
         ]);
         const second = firstLand + 2 * WALK_STEP_MS, secondLand = second + 450;
-        expect(only(cues, "flight")[1].start).toBe(secondLand - FLIGHT_MS.arrow);
+        expect(only(cues, "flight")[1].start).toBe(secondLand - secondFlight);
         // Each watcher says "Overwatch" as its arrow is loosed, ahead of the hit that lands on the mover.
         expect(told(cues)).toEqual([
-            `1@50 Overwatch ${firstLand - FLIGHT_MS.arrow}`, `0@12 \u22123 ${firstLand}`,
-            `2@60 Overwatch ${secondLand - FLIGHT_MS.arrow}`, `0@14 \u22122/Graze ${secondLand}`,
+            `1@50 Overwatch ${firstLand - firstFlight}`, `0@12 \u22123 ${firstLand}`,
+            `2@60 Overwatch ${secondLand - secondFlight}`, `0@14 \u22122/Graze ${secondLand}`,
         ]);
         expect(only(cues, "walk")).toMatchObject([
             { fighter: { id: 0, square: 10 }, path: [10, 11, 12], start: 0, length: first },
@@ -487,7 +503,7 @@ describe("battleCues", () => {
     });
 
     it("walks a move one square at a time along exactly the path it was told, ahead of anything after it", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12, 13], sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "miss", damage: 0, reaction: true },
         ], before);
@@ -506,36 +522,37 @@ describe("battleCues", () => {
             { kind: "moved", fighter: 0, path: [], sneaking: false },
             { kind: "moved", fighter: 8, path: [40, 41], sneaking: false },
         ];
-        expect(battleCues(told, before)).toEqual([]);
-        expect(battleCues(told, before, [{ ...entered, square: 31 }])).toEqual([
+        expect(battleCues(FIELD, told, before)).toEqual([]);
+        expect(battleCues(FIELD, told, before, [{ ...entered, square: 31 }])).toEqual([
             { kind: "walk", fighter: { ...entered, square: 31 }, path: [30, 31], start: 0, length: WALK_STEP_MS },
         ]);
     });
 
     it("has a mover downed on its way stand where it fell only once it has walked there", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: true },
             { kind: "downed", fighter: 0, by: 1 },
         ], before);
         expect(only(cues, "fall")).toMatchObject([{ fighter: { id: 0, square: 12 }, arrives: 2 * WALK_STEP_MS }]);
-        expect(only(battleCues([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: false }, { kind: "downed", fighter: 0, by: 1 }], before), "fall")[0].arrives).toBeUndefined();
+        expect(only(battleCues(FIELD, [{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: false }, { kind: "downed", fighter: 0, by: 1 }], before), "fall")[0].arrives).toBeUndefined();
     });
 
     it("calls a miss a miss, on the target where it stood, as the arrow flies past", () => {
-        const cues = battleCues([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "miss", damage: 0, reaction: false }], before);
+        const cues = battleCues(FIELD, [{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "miss", damage: 0, reaction: false }], before);
         expect(only(cues, "flight")).toMatchObject([{ missile: "arrow", from: 50, to: 10, result: "miss" }]);
-        expect(only(cues, "text")).toMatchObject([{ fighter: 0, square: 10, value: "Miss", tone: "miss", start: FLIGHT_MS.arrow, length: HIT_TEXT_MS }]);
+        expect(only(cues, "text")).toMatchObject([{ fighter: 0, square: 10, value: "Miss", tone: "miss", start: flight("arrow", 50, 10), length: HIT_TEXT_MS }]);
     });
 
-    it("flies the Mage's shot as a bolt, quicker than an arrow", () => {
-        const cues = battleCues([{ kind: "shot", fighter: 3, target: 0, chance: 60, result: "hit", damage: 3, reaction: false }], before);
-        expect(only(cues, "flight")).toMatchObject([{ missile: "bolt", from: 70, to: 10, start: 0, land: FLIGHT_MS.bolt }]);
-        expect(only(cues, "text")[0].start).toBe(FLIGHT_MS.bolt);
+    it("flies the Mage's shot as a bolt, quicker than an arrow over the same ground", () => {
+        const cues = battleCues(FIELD, [{ kind: "shot", fighter: 3, target: 0, chance: 60, result: "hit", damage: 3, reaction: false }], before);
+        expect(only(cues, "flight")).toMatchObject([{ missile: "bolt", from: 70, to: 10, start: 0, land: flight("bolt", 70, 10) }]);
+        expect(only(cues, "text")[0].start).toBe(flight("bolt", 70, 10));
+        expect(flight("bolt", 70, 10)).toBeLessThan(flight("arrow", 70, 10));
     });
 
     it("slashes across the cover a Demolish blasts, striking everyone beside it at once, the cover going after", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "demolished", fighter: 0, at: 11, targets: [1, 2], damage: 2 },
             { kind: "blasted", fighter: 0, squares: [11] },
         ], before);
@@ -548,21 +565,21 @@ describe("battleCues", () => {
     });
 
     it("slashes across a struck target, and its damage rises as the slash lands", () => {
-        const cues = battleCues([{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: false }], before);
+        const cues = battleCues(FIELD, [{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: false }], before);
         const [slash] = only(cues, "slash");
         expect(slash).toMatchObject({ square: 50, start: 0 });
         expect(only(cues, "text")[0].start).toBeGreaterThan(slash.start);
     });
 
     it("flies a fireball to its square and bursts it over the 3×3, hitting everyone at once, and downs after the damage", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 },
             { kind: "downed", fighter: 1, by: 3 },
             { kind: "scored", player: "b", points: 4, reason: "knockout" },
             { kind: "effect", fighter: 2, effect: "burning", change: "applied" },
             { kind: "blasted", fighter: 3, squares: [56] },
         ], before);
-        const land = FLIGHT_MS.fireball;
+        const land = flight("fireball", 70, 55);
         expect(only(cues, "flight")).toMatchObject([{ missile: "fireball", from: 70, to: 55, result: "landed", start: 0, land }]);
         expect(only(cues, "burst")).toMatchObject([{ burst: "fire", at: 55, radius: 1, start: land }]);
         expect(told(cues)).toEqual([`1@50 \u22123 ${land}`, `2@60 \u22123/Burning ${land}`, `1@50 Down ${land + 450}`]);
@@ -577,7 +594,7 @@ describe("battleCues", () => {
     });
 
     it("downs a mover where an overwatch shot caught it, standing until the arrow lands", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
             { kind: "downed", fighter: 0, by: 1 },
@@ -587,27 +604,27 @@ describe("battleCues", () => {
     });
 
     it("names what a flask that does no damage puts on, on everyone it lands on at once, as it bursts", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "thrown", fighter: 0, item: "thunderFlask", at: 55, targets: [1, 2], damage: 0 },
             { kind: "effect", fighter: 1, effect: "stunned", change: "applied" },
             { kind: "effect", fighter: 2, effect: "stunned", change: "refreshed" },
         ], before);
-        const land = FLIGHT_MS.thunderFlask;
+        const land = flight("thunderFlask", 10, 55);
         expect(only(cues, "burst")).toMatchObject([{ burst: "thunder", at: 55, radius: 1, start: land }]);
         expect(told(cues)).toEqual([`1@50 Stunned ${land}`, `2@60 Stunned ${land}`]);
     });
 
     it("bursts a fire flask over its one square, and a smoke pot that hits nobody still flies and puffs", () => {
-        const fire = battleCues([{ kind: "thrown", fighter: 0, item: "fireFlask", at: 55, targets: [], damage: 2 }], before);
+        const fire = battleCues(FIELD, [{ kind: "thrown", fighter: 0, item: "fireFlask", at: 55, targets: [], damage: 2 }], before);
         expect(only(fire, "burst")).toMatchObject([{ burst: "fire", radius: 0 }]);
-        const smoke = battleCues([{ kind: "thrown", fighter: 0, item: "smokePot", at: 55, targets: [], damage: 0 }], before);
+        const smoke = battleCues(FIELD, [{ kind: "thrown", fighter: 0, item: "smokePot", at: 55, targets: [], damage: 0 }], before);
         expect(only(smoke, "flight")).toMatchObject([{ missile: "smokePot", from: 10, to: 55 }]);
         expect(only(smoke, "burst")).toMatchObject([{ burst: "smoke", radius: 1 }]);
         expect(only(smoke, "text")).toEqual([]);
     });
 
     it("shows a heal in green, curing what it clears, and burning with its mark", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "burned", fighter: 0, damage: 1 },
             { kind: "healed", fighter: 3, target: 0, hp: 4 },
             { kind: "effect", fighter: 0, effect: "burning", change: "cleared" },
@@ -619,7 +636,7 @@ describe("battleCues", () => {
     });
 
     it("says what a stance is as it's taken, with the stance's mark beside it", () => {
-        const cues = battleCues([{ kind: "hunkered", fighter: 0 }, { kind: "shieldWall", fighter: 0 }], before);
+        const cues = battleCues(FIELD, [{ kind: "hunkered", fighter: 0 }, { kind: "shieldWall", fighter: 0 }], before);
         expect(cues).toMatchObject([
             { kind: "text", fighter: 0, square: 10, value: "Hunker down", tone: "word", mark: "hunkered", start: 0, length: HIT_TEXT_MS },
             { kind: "text", fighter: 0, square: 10, value: "Shield wall", tone: "word", mark: "shieldWall", start: 450 },
@@ -627,20 +644,20 @@ describe("battleCues", () => {
     });
 
     it("says a watch by the weapon it keeps: Overwatch for a ranged one, On guard for a melee one, all of a turn's together", () => {
-        expect(told(battleCues([{ kind: "watching", fighter: 1, banked: 4 }], before))).toEqual(["1@50 Overwatch 0"]);
-        expect(told(battleCues([{ kind: "watching", fighter: 0, banked: 4 }], before))).toEqual(["0@10 On guard 0"]);
+        expect(told(battleCues(FIELD, [{ kind: "watching", fighter: 1, banked: 4 }], before))).toEqual(["1@50 Overwatch 0"]);
+        expect(told(battleCues(FIELD, [{ kind: "watching", fighter: 0, banked: 4 }], before))).toEqual(["0@10 On guard 0"]);
         // The knight's mace is melee; the archer's bow and the mage's bolt are ranged.
-        expect(told(battleCues([
+        expect(told(battleCues(FIELD, [
             { kind: "watching", fighter: 0, banked: 4 },
             { kind: "watching", fighter: 1, banked: 2 },
             { kind: "watching", fighter: 3, banked: 2 },
         ], before))).toEqual(["0@10 On guard 0", "1@50 Overwatch 0", "3@70 Overwatch 0"]);
         // A watch is a stance's mark-less word: nothing beside it.
-        expect(only(battleCues([{ kind: "watching", fighter: 1, banked: 4 }], before), "text")[0].mark).toBeUndefined();
+        expect(only(battleCues(FIELD, [{ kind: "watching", fighter: 1, banked: 4 }], before), "text")[0].mark).toBeUndefined();
     });
 
     it("says nothing of a stance or a watch by a character whose square isn't known, and plays nothing of a score", () => {
-        expect(battleCues([
+        expect(battleCues(FIELD, [
             { kind: "hunkered", fighter: 9 },
             { kind: "watching", fighter: 8, banked: 4 },
             { kind: "scored", player: "a", points: 5, reason: "centre" },
@@ -648,22 +665,22 @@ describe("battleCues", () => {
     });
 
     it("says Overwatch over a reaction shot's shooter and Guard over a reaction strike's, as each is loosed, not for one taken on the turn", () => {
-        const shot = battleCues([{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true }], before);
-        expect(told(shot)).toEqual(["1@50 Overwatch 0", `0@10 \u22123 ${FLIGHT_MS.arrow}`]);
+        const shot = battleCues(FIELD, [{ kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true }], before);
+        expect(told(shot)).toEqual(["1@50 Overwatch 0", `0@10 \u22123 ${flight("arrow", 50, 10)}`]);
         // The hit lands when it always did.
-        expect(only(shot, "text")[1].start).toBe(only(shot, "flight")[0].start + FLIGHT_MS.arrow);
-        const strike = battleCues([{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: true }], before);
+        expect(only(shot, "text")[1].start).toBe(only(shot, "flight")[0].start + flight("arrow", 50, 10));
+        const strike = battleCues(FIELD, [{ kind: "struck", fighter: 0, target: 1, damage: 4, reaction: true }], before);
         expect(told(strike)).toEqual(["0@10 Guard 0", "1@50 \u22124 250"]);
         expect(only(strike, "slash")[0].start).toBe(0);
         const turn = [
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false },
             { kind: "struck", fighter: 0, target: 1, damage: 4, reaction: false },
         ] as const;
-        expect(only(battleCues([...turn], before), "text").map(cue => cue.tone)).toEqual(["hit", "hit"]);
+        expect(only(battleCues(FIELD, [...turn], before), "text").map(cue => cue.tone)).toEqual(["hit", "hit"]);
     });
 
     it("leaves a reaction's word out of what a fall starts by and an effect lands under", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: true },
             { kind: "downed", fighter: 1, by: 0 },
@@ -673,35 +690,168 @@ describe("battleCues", () => {
         expect(fall.start).toBe(2 * WALK_STEP_MS + 450 + 450);
     });
 
-    it("fits however much an action set off into the playback cap, every flight still landing as its text rises", () => {
-        const shots: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: true }));
-        const cues = battleCues(shots, before);
+    it.each([12, 30])("fits however much an action set off into the playback cap, every flight still landing as its text rises (%i shots)", count => {
+        const shots: BattleEvent[] = Array.from({ length: count }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: true }));
+        const cues = battleCues(FIELD, shots, before);
         expect(Math.max(...cues.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
         const flights = only(cues, "flight"), texts = only(cues, "text");
         const hits = texts.filter(cue => cue.tone === "hit"), words = texts.filter(cue => cue.value === "Overwatch");
-        expect(hits).toHaveLength(12);
-        expect(words).toHaveLength(12);
+        expect(hits).toHaveLength(count);
+        expect(words).toHaveLength(count);
         flights.forEach((flight, i) => expect(Math.abs(flight.start + flight.land - hits[i].start)).toBeLessThanOrEqual(1));
         // Still in order, and still one after another.
         expect(hits.every((cue, i) => i === 0 || cue.start > hits[i - 1].start)).toBe(true);
     });
 
-    it("leaves the longest run, and a shot after it, unshortened, and shortens a longer one with its walk", () => {
+    describe("how long a flight and a walk take", () => {
+        it("flies a missile for longer the farther it goes, from a base up to the most it takes", () => {
+            for (const missile of Object.keys(FLIGHT_PACE) as Missile[]) {
+                const { base, perSquare, max } = FLIGHT_PACE[missile];
+                // Along a row, a square apart is a square of flight; no distance at all is the base alone.
+                expect(flightMs(ROW, missile, 0, 0)).toBe(base);
+                expect(flightMs(ROW, missile, 0, 1)).toBe(base + perSquare);
+                expect(flightMs(ROW, missile, 0, 5)).toBeGreaterThan(flightMs(ROW, missile, 0, 2));
+                // Across the whole map, it stops growing.
+                expect(flightMs(ROW, missile, 0, 99)).toBe(max);
+                expect(flightMs(ROW, missile, 0, 60)).toBe(max);
+            }
+            expect(flightMs(ROW, "arrow", 0, 10)).toBe(320);
+            expect(flightMs(ROW, "bolt", 0, 10)).toBe(210);
+            expect(flightMs(ROW, "fireball", 0, 10)).toBe(500);
+        });
+
+        it("measures a flight in a straight line, a diagonal's squares counting longer than a straight one's", () => {
+            // Three across and four down is five squares: 180 + 5 × 14.
+            expect(flightMs(FIELD, "arrow", at(FIELD, 0, 0), at(FIELD, 3, 4))).toBe(250);
+            expect(flightMs(FIELD, "arrow", at(FIELD, 3, 4), at(FIELD, 0, 0))).toBe(250);
+            expect(flightMs(FIELD, "arrow", at(FIELD, 0, 0), at(FIELD, 1, 1))).toBeGreaterThan(flightMs(FIELD, "arrow", at(FIELD, 0, 0), at(FIELD, 1, 0)));
+        });
+
+        it("lands a farther shot later, its text rising as it does", () => {
+            const shoot = (target: number) => battleCues(FIELD, [{ kind: "shot", fighter: 1, target, chance: 60, result: "hit", damage: 2, reaction: false }], [ready(0, "a", "knight", 11), ready(1, "b", "archer", 50), ready(2, "a", "knight", 95)]);
+            const [near, far] = [shoot(0), shoot(2)];
+            expect(only(far, "flight")[0].land).toBeGreaterThan(only(near, "flight")[0].land);
+            expect(only(far, "text")[0].start).toBe(only(far, "flight")[0].land);
+            expect(only(far, "text")[0].start).toBe(flight("arrow", 50, 95));
+        });
+
+        it("weighs a straight leg one step, a diagonal one more, and any climb or drop more again", () => {
+            const flat = FIELD;
+            expect(legWeight(flat, at(flat, 2, 2), at(flat, 3, 2))).toBe(1);
+            expect(legWeight(flat, at(flat, 2, 2), at(flat, 2, 1))).toBe(1);
+            expect(legWeight(flat, at(flat, 2, 2), at(flat, 3, 3))).toBe(DIAGONAL_LEG);
+            // A quarter's rise, then a wall (four quarters) standing on that, then flat ground again.
+            const hill = hillOf(["..#..", "....."], ["01000", "00000"]);
+            expect(legWeight(hill, 0, 1)).toBe(1 + CLIMB_LEG);
+            expect(legWeight(hill, 1, 2)).toBe(1 + 3 * CLIMB_LEG);
+            // Down is as steep as up.
+            expect(legWeight(hill, 2, 1)).toBe(legWeight(hill, 1, 2));
+            expect(legWeight(hill, 2, 3)).toBe(1 + 4 * CLIMB_LEG);
+            // A diagonal step across level ground, and one that also drops a quarter.
+            expect(legWeight(hill, 0, 6)).toBe(DIAGONAL_LEG);
+            expect(legWeight(hill, 1, 5)).toBe(DIAGONAL_LEG + CLIMB_LEG);
+        });
+
+        it("takes each leg of a walk by its weight, the whole of it the walk's length", () => {
+            const walkOf = (field: typeof FIELD, path: number[], mover = ready(0, "a", "knight", path[0])) =>
+                only(battleCues(field, [{ kind: "moved", fighter: 0, path, sneaking: false }], [mover]), "walk")[0].length;
+            const straight = walkOf(FIELD, [10, 11, 12]);
+            expect(straight).toBe(2 * WALK_STEP_MS);
+            // One straight step then one diagonal.
+            expect(walkOf(FIELD, [10, 11, 22])).toBe(Math.round((1 + DIAGONAL_LEG) * WALK_STEP_MS));
+            expect(walkOf(FIELD, [10, 11, 22])).toBeGreaterThan(straight);
+            // Two steps up a hill, each two quarters.
+            const hill = hillOf(["....."], ["02468"]);
+            expect(walkOf(hill, [0, 1, 2])).toBe(Math.round(2 * (1 + 2 * CLIMB_LEG) * WALK_STEP_MS));
+            expect(walkOf(hill, [0, 1, 2])).toBeGreaterThan(walkOf(ROW, [0, 1, 2]));
+            // The same steps back down take as long.
+            expect(walkOf(hill, [2, 1, 0])).toBe(walkOf(hill, [0, 1, 2]));
+        });
+    });
+
+    describe("fitting a long action into the playback", () => {
         const run = (squares: number): BattleEvent[] => [
             { kind: "moved", fighter: 0, path: Array.from({ length: squares }, (_, i) => 10 + i), sneaking: false },
             { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: true },
         ];
-        // Twenty-six squares: twenty-five paces, then a shot.
-        const long = battleCues(run(26), before);
-        expect(only(long, "walk")[0].length).toBe(25 * WALK_STEP_MS);
-        expect(Math.max(...long.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
-        const longer = battleCues(run(60), before);
-        expect(Math.max(...longer.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
-        expect(only(longer, "walk")[0].length).toBeLessThan(59 * WALK_STEP_MS);
+        const shots = (count: number): BattleEvent[] => Array.from({ length: count }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
+        /** When each piece of damage lands, in order. */
+        const hitStarts = (cues: BattleCue[]) => only(cues, "text").filter(cue => cue.tone === "hit").map(cue => cue.start);
+
+        it("leaves the longest run, and a shot after it, unshortened", () => {
+            // Twenty-six squares: twenty-five paces, then a shot.
+            const cues = battleCues(ROW, run(26), before);
+            expect(only(cues, "walk")[0].length).toBe(25 * WALK_STEP_MS);
+            const [shot] = only(cues, "flight");
+            expect(shot.land).toBe(flightMs(ROW, "arrow", 50, 35));
+            expect(only(cues, "text").find(cue => cue.tone === "hit")).toMatchObject({ start: 25 * WALK_STEP_MS + 450, length: HIT_TEXT_MS });
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
+
+        it("quickens a longer run's walk first, as little as it takes, leaving its shot's flight, its gap and its text whole", () => {
+            // Forty squares walked at full pace, then a shot, would run to 5.7 seconds.
+            const cues = battleCues(ROW, run(40), before);
+            const [walk] = only(cues, "walk");
+            expect(walk.length).toBeLessThan(39 * WALK_STEP_MS);
+            expect(walk.length).toBeGreaterThanOrEqual(39 * 70);
+            const [shot] = only(cues, "flight");
+            expect(shot.land).toBe(flightMs(ROW, "arrow", 50, 49));
+            const [hit] = only(cues, "text").filter(cue => cue.tone === "hit");
+            expect(hit).toMatchObject({ length: HIT_TEXT_MS, start: walk.length + 450 });
+            // Squeezed no further than it had to be.
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+            expect(endOf(cues)).toBeGreaterThan(PLAYBACK_MS - 50);
+        });
+
+        it("shortens the gaps between landings once its walks are as quick as they go, leaving flights and text whole", () => {
+            // Forty-six steps at the quickest, 70ms, and a shot a beat after would still overrun.
+            const cues = battleCues(ROW, run(47), before);
+            const [walk] = only(cues, "walk");
+            expect(walk.length).toBe(46 * 70);
+            const [hit] = only(cues, "text").filter(cue => cue.tone === "hit");
+            expect(hit.start - walk.length).toBeLessThan(450);
+            expect(hit.start - walk.length).toBeGreaterThanOrEqual(200);
+            expect(hit.length).toBe(HIT_TEXT_MS);
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
+
+        it("shortens the gaps between a crowd of shots before it shortens their text, and keeps every flight", () => {
+            const cues = battleCues(FIELD, shots(12), before);
+            const starts = hitStarts(cues);
+            expect(starts).toHaveLength(12);
+            const gaps = starts.slice(1).map((start, i) => start - starts[i]);
+            expect(Math.min(...gaps)).toBeGreaterThanOrEqual(200);
+            expect(Math.max(...gaps)).toBeLessThan(450);
+            expect(only(cues, "text").every(cue => cue.length === HIT_TEXT_MS)).toBe(true);
+            expect(only(cues, "flight").every(cue => cue.land === flight("arrow", 50, 10))).toBe(true);
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
+
+        it("shortens the text last, to no less than 800ms, with the gaps at their least and the flights untouched", () => {
+            const cues = battleCues(FIELD, shots(15), before);
+            const starts = hitStarts(cues);
+            // At their least a gap is as long as the flight before it, which no squeeze touches.
+            expect(starts.slice(1).map((start, i) => start - starts[i]).every(gap => gap === flight("arrow", 50, 10))).toBe(true);
+            for (const text of only(cues, "text")) {
+                expect(text.length).toBeGreaterThanOrEqual(800);
+                expect(text.length).toBeLessThan(HIT_TEXT_MS);
+            }
+            expect(only(cues, "flight").every(cue => cue.land === flight("arrow", 50, 10))).toBe(true);
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
+
+        it("scales whatever still runs over as a whole, as a last resort, so it never plays past the cap", () => {
+            const cues = battleCues(ROW, run(60), before);
+            expect(only(cues, "walk")[0].length).toBeLessThan(59 * 70);
+            expect(endOf(cues)).toBeLessThanOrEqual(PLAYBACK_MS);
+            const crowd = battleCues(FIELD, shots(30), before);
+            expect(Math.min(...only(crowd, "text").map(cue => cue.length))).toBeLessThan(800);
+            expect(endOf(crowd)).toBeLessThanOrEqual(PLAYBACK_MS);
+        });
     });
 
     it("stands a knock-out's Down a line above the damage that caused it, and a later text back in the usual place", () => {
-        const cues = battleCues([
+        const cues = battleCues(FIELD, [
             { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: false },
             { kind: "downed", fighter: 0, by: 1 },
             { kind: "burned", fighter: 3, damage: 1 },
@@ -714,7 +864,7 @@ describe("battleCues", () => {
         // Another fighter's text shares nothing with theirs.
         expect(only(cues, "text")[2].lane ?? 0).toBe(0);
         // Once the first text has gone, the next on that fighter is back on the ground.
-        const later = battleCues([
+        const later = battleCues(FIELD, [
             { kind: "burned", fighter: 0, damage: 1 },
             { kind: "burned", fighter: 0, damage: 1 },
             { kind: "burned", fighter: 0, damage: 1 },
@@ -722,23 +872,23 @@ describe("battleCues", () => {
         expect(only(later, "text").map(cue => cue.start)).toEqual([0, 450, 900]);
         // The third starts at 900, while the first (to 1000) and the second (to 1450) are both still showing.
         expect(only(later, "text").map(cue => cue.lane ?? 0)).toEqual([0, 1, 2]);
-        const gap = battleCues(Array.from({ length: 4 }, () => ({ kind: "burned", fighter: 0, damage: 1 }) as const), before);
+        const gap = battleCues(FIELD, Array.from({ length: 4 }, () => ({ kind: "burned", fighter: 0, damage: 1 }) as const), before);
         // The fourth starts at 1350, after the first (to 1000) has gone, so it takes the lowest lane again.
         expect(only(gap, "text").map(cue => [cue.start, cue.lane ?? 0])).toEqual([[0, 0], [450, 1], [900, 2], [1350, 0]]);
     });
 
     it("keeps everyone one fireball hits in the usual place, and gives texts that start together on one fighter lanes of their own", () => {
-        const cues = battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 }], before);
+        const cues = battleCues(FIELD, [{ kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 }], before);
         expect(only(cues, "text").map(cue => cue.lane ?? 0)).toEqual([0, 0]);
-        const together = battleCues([{ kind: "hunkered", fighter: 0 }, { kind: "watching", fighter: 0, banked: 2 }, { kind: "watching", fighter: 1, banked: 2 }], before);
+        const together = battleCues(FIELD, [{ kind: "hunkered", fighter: 0 }, { kind: "watching", fighter: 0, banked: 2 }, { kind: "watching", fighter: 1, banked: 2 }], before);
         const [first, second] = only(together, "text").filter(cue => cue.fighter === 0);
         expect(first.lane ?? 0).not.toBe(second.lane ?? 0);
     });
 
-    it("keeps texts that overlap on different lanes when an action is shortened to fit", () => {
-        const shots: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
-        const texts = only(battleCues([...shots, { kind: "downed", fighter: 0, by: 1 }], before), "text");
-        expect(texts).toHaveLength(13);
+    it.each([12, 30])("keeps texts that overlap on different lanes when an action is shortened to fit (%i shots)", count => {
+        const shots: BattleEvent[] = Array.from({ length: count }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
+        const texts = only(battleCues(FIELD, [...shots, { kind: "downed", fighter: 0, by: 1 }], before), "text");
+        expect(texts).toHaveLength(count + 1);
         expect(Math.max(...texts.map(cue => cue.lane ?? 0))).toBeGreaterThan(0);
         for (const [i, one] of texts.entries()) {
             for (const other of texts.slice(i + 1)) {
@@ -757,9 +907,10 @@ describe("battleCues", () => {
         ];
 
         it("takes no time over a walk, so a shot after it is told at once", () => {
-            const walking = battleCues(run, before), still = battleCues(run, before, [], { still: true });
+            const walking = battleCues(ROW, run, before), still = battleCues(ROW, run, before, [], { still: true });
             const shot = (cues: BattleCue[]) => only(cues, "text").find(cue => cue.value === "\u22123")!;
-            expect(shot(walking).start).toBe(10 * WALK_STEP_MS + 450);
+            // The mover stops at square 20, thirty squares from the archer who shoots it: an arrow that takes longer than a beat.
+            expect(shot(walking).start).toBe(10 * WALK_STEP_MS + Math.max(450, flightMs(ROW, "arrow", 50, 20)));
             expect(shot(still).start).toBe(0);
             expect(shot(still).start).toBeLessThan(shot(walking).start - 1000);
             expect(only(still, "walk")).toMatchObject([{ path: expect.any(Array), start: 0, length: 0 }]);
@@ -769,20 +920,20 @@ describe("battleCues", () => {
         });
 
         it("lands a flight with no lead, and still gives it a moment so it is never drawn landing in no time", () => {
-            const [flight] = only(battleCues([run[1]], before, [], { still: true }), "flight");
+            const [flight] = only(battleCues(FIELD, [run[1]], before, [], { still: true }), "flight");
             expect(flight).toMatchObject({ start: 0, land: 1 });
             expect(flight.length).toBeGreaterThanOrEqual(flight.land);
-            const [fireball] = only(battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1], damage: 3 }], before, [], { still: true }), "burst");
+            const [fireball] = only(battleCues(FIELD, [{ kind: "fireball", fighter: 3, at: 55, targets: [1], damage: 3 }], before, [], { still: true }), "burst");
             expect(fireball.start).toBe(0);
         });
 
         it("leaves the timeline as it was without the option, and carries it through a review's parts and step", () => {
-            expect(battleCues(run, before, [], {})).toEqual(battleCues(run, before));
-            expect(battleCues(run, before, [], { still: false })).toEqual(battleCues(run, before));
+            expect(battleCues(ROW, run, before, [], {})).toEqual(battleCues(ROW, run, before));
+            expect(battleCues(ROW, run, before, [], { still: false })).toEqual(battleCues(ROW, run, before));
             const outcome = { events: run } as IRealmArenaStepOutcome;
             const board = { fighters: before, blasted: [] };
-            expect(reviewParts(outcome, board, [], { still: true })[0].cues).toEqual(battleCues(run, before, [], { still: true }));
-            expect(reviewStepMs(outcome, board, [], { still: true })).toBeLessThan(reviewStepMs(outcome, board));
+            expect(reviewParts(FORT, outcome, board, [], { still: true })[0].cues).toEqual(battleCues(RUINED_FORT, run, before, [], { still: true }));
+            expect(reviewStepMs(FORT, outcome, board, [], { still: true })).toBeLessThan(reviewStepMs(FORT, outcome, board));
         });
     });
 });
@@ -840,43 +991,45 @@ describe("a review step's parts", () => {
     const board = (fighters: Fighter[], blasted: number[] = []): RealmArenaPartState => ({ fighters, ghosts: [], clouds: [], blasted, scores: {} });
     const shot: ToldEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false };
     const moved: ToldEvent = { kind: "moved", fighter: 1, path: [50, 51], sneaking: false };
+    /** A square of the fort's rubble, which a blast clears. */
+    const RUBBLE = squareAt(RUINED_FORT, 15, 4)!;
 
     it("rests on a step for the glide to it, as long as its cues play and a beat more, and never less than the floor", () => {
-        const cues = battleCues([shot], start);
-        const end = Math.max(...cues.map(cue => cue.start + cue.length));
-        expect(partDurationMs(cues)).toBe(Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + end + STEP_BEAT_MS));
+        const cues = battleCues(FIELD, [shot], start);
+        expect(partDurationMs(cues)).toBe(Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + endOf(cues) + STEP_BEAT_MS));
         // A short move walks for a moment, and still gives the board's glide its time.
-        expect(partDurationMs(battleCues([moved], start))).toBe(STEP_MIN_MS);
+        expect(partDurationMs(battleCues(FIELD, [moved], start))).toBe(STEP_MIN_MS);
         expect(partDurationMs([])).toBe(STEP_MIN_MS);
     });
 
     it("rests on a long walk for the glide to it, as long as it takes, and a beat more", () => {
-        const run: ToldEvent = { kind: "moved", fighter: 1, path: Array.from({ length: 21 }, (_, i) => 50 + i), sneaking: false };
-        expect(partDurationMs(battleCues([run], start))).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
+        // Along the fort's top row, level ground all the way.
+        const run: ToldEvent = { kind: "moved", fighter: 1, path: Array.from({ length: 21 }, (_, i) => i), sneaking: false };
+        expect(partDurationMs(battleCues(RUINED_FORT, [run], start))).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
         // A step rests on it too, whether or not its board after is told: that is where a move into sight is drawn from.
         const outcome: IRealmArenaStepOutcome = { events: [run] };
-        expect(reviewStepMs(outcome, { fighters: start, blasted: [] }, [start[0], { ...start[1], square: 70 }])).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
+        expect(reviewStepMs(FORT, outcome, { fighters: start, blasted: [] }, [start[0], { ...start[1], square: 20 }])).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
     });
 
     it("walks a mover who was not on the board before from the board after, for the last part", () => {
         const entered = ready(5, warbandOwner(0), "archer", 80);
         const outcome: IRealmArenaStepOutcome = { events: [{ kind: "moved", fighter: 5, path: [80, 81], sneaking: false }] };
-        expect(reviewParts(outcome, { fighters: start, blasted: [] })[0].cues).toEqual([]);
-        expect(reviewParts(outcome, { fighters: start, blasted: [] }, [...start, { ...entered, square: 81 }])[0].cues).toMatchObject([{ kind: "walk", path: [80, 81] }]);
+        expect(reviewParts(FORT, outcome, { fighters: start, blasted: [] })[0].cues).toEqual([]);
+        expect(reviewParts(FORT, outcome, { fighters: start, blasted: [] }, [...start, { ...entered, square: 81 }])[0].cues).toMatchObject([{ kind: "walk", path: [80, 81] }]);
     });
 
     it("keeps a step that took twelve shots within the playback cap and a beat", () => {
         const shots: ToldEvent[] = Array.from({ length: 12 }, () => shot);
-        expect(partDurationMs(battleCues(shots, start))).toBeLessThanOrEqual(FOLLOW_GLIDE_MS + PLAYBACK_MS + STEP_BEAT_MS);
+        expect(partDurationMs(battleCues(FIELD, shots, start))).toBeLessThanOrEqual(FOLLOW_GLIDE_MS + PLAYBACK_MS + STEP_BEAT_MS);
     });
 
     it("is a single part for an ordinary step, and one with nothing to play for a step with no outcome", () => {
         const plain: IRealmArenaStepOutcome = { events: [shot] };
-        const [only] = reviewParts(plain, { fighters: start, blasted: [] });
+        const [only] = reviewParts(FORT, plain, { fighters: start, blasted: [] });
         expect(only.cues.length).toBeGreaterThan(0);
         expect(only.state).toBeUndefined();
-        expect(reviewStepMs(plain, { fighters: start, blasted: [] })).toBe(only.durationMs);
-        expect(reviewParts(undefined, { fighters: start, blasted: [] })).toMatchObject([{ cues: [], durationMs: STEP_MIN_MS }]);
+        expect(reviewStepMs(FORT, plain, { fighters: start, blasted: [] })).toBe(only.durationMs);
+        expect(reviewParts(FORT, undefined, { fighters: start, blasted: [] })).toMatchObject([{ cues: [], durationMs: STEP_MIN_MS }]);
     });
 
     it("plays each part from the board the one before left, and a step's time is its parts' added up", () => {
@@ -884,18 +1037,21 @@ describe("a review step's parts", () => {
         const outcome: IRealmArenaStepOutcome = {
             events: [moved, shot, shot],
             parts: [
-                { kind: "ended", events: [moved], state: board([start[0], moved1], [7]) },
+                { kind: "ended", events: [moved], state: board([start[0], moved1], [RUBBLE]) },
                 { kind: "enemy", events: [shot] },
             ],
         };
-        const parts = reviewParts(outcome, { fighters: start, blasted: [] });
+        const parts = reviewParts(FORT, outcome, { fighters: start, blasted: [] });
         expect(parts).toHaveLength(2);
         expect(parts[0].before).toEqual({ fighters: start, blasted: [] });
-        expect(parts[1].before).toEqual({ fighters: [start[0], moved1], blasted: [7] });
+        expect(parts[1].before).toEqual({ fighters: [start[0], moved1], blasted: [RUBBLE] });
+        // Each is played, and drawn, on the map as it found it: the rubble stands until the part that blasted it is over.
+        expect(parts[0].field.tiles[RUBBLE].terrain.destructible).toBe(true);
+        expect(parts[1].field.tiles[RUBBLE].terrain.destructible).toBeFalsy();
         // The second part's shot flies from where the first part left the archer.
         const flight = parts[1].cues.find(cue => cue.kind === "flight");
         expect(flight).toMatchObject({ from: 51, to: 10 });
-        expect(reviewStepMs(outcome, { fighters: start, blasted: [] })).toBe(parts[0].durationMs + parts[1].durationMs);
+        expect(reviewStepMs(FORT, outcome, { fighters: start, blasted: [] })).toBe(parts[0].durationMs + parts[1].durationMs);
     });
 
     it("draws a part's board over the snapshot's, leaving out an enemy the part had not met", () => {
@@ -920,7 +1076,7 @@ describe("a review step's parts", () => {
 
 describe("isUnplaced", () => {
     const start = [ready(0, "a", "knight", 10), ready(1, warbandOwner(0), "archer", 50)];
-    const part = (events: ToldEvent[], before: Fighter[] = start) => ({ events, cues: battleCues(events, before), before: { fighters: before, blasted: [] } });
+    const part = (events: ToldEvent[], before: Fighter[] = start) => ({ events, cues: battleCues(FIELD, events, before), before: { fighters: before, blasted: [] } });
     const hunkered: ToldEvent = { kind: "hunkered", fighter: 5 };
     const scored: ToldEvent = { kind: "scored", player: "a", points: 2, reason: "centre" };
 
@@ -1044,5 +1200,220 @@ describe("an HP bar through an action", () => {
         expect(stepped(10, steps, 0, 0, 99)).toBe(10);
         expect(stepped(10, steps, 0, 0, 150)).toBe(6);
         expect(stepped(10, steps, 0, 0, 200)).toBe(3);
+    });
+});
+
+describe("a walk on screen", () => {
+    const fighter = ready(0, "a", "knight", 0);
+    const walk = (path: number[], length = 1000, start = 0): WalkCue => ({ kind: "walk", fighter, path, start, length });
+    /** One unit a square along a row, so a leg's length is the gap between its squares. */
+    const gap = (from: number, to: number) => Math.abs(to - from);
+
+    it("eases in and out and is steady between", () => {
+        // Four legs: the ramps are each a quarter of the time.
+        expect(walkEase(0, 0.25, 0.25)).toBe(0);
+        expect(walkEase(1, 0.25, 0.25)).toBeCloseTo(1, 10);
+        expect(walkEase(0.5, 0.25, 0.25)).toBeCloseTo(0.5, 10);
+        // Continuous where the ramp meets the steady part.
+        expect(walkEase(0.25 - 1e-9, 0.25, 0.25)).toBeCloseTo(walkEase(0.25 + 1e-9, 0.25, 0.25), 6);
+        // Slower than a straight line at the start, quicker in the middle.
+        expect(walkEase(0.1, 0.25, 0.25)).toBeLessThan(0.1);
+        const steady = walkEase(0.6, 0.25, 0.25) - walkEase(0.5, 0.25, 0.25);
+        expect(walkEase(0.4, 0.25, 0.25) - walkEase(0.3, 0.25, 0.25)).toBeCloseTo(steady, 10);
+    });
+
+    it("is a plain ease in and out over one or two legs", () => {
+        expect(walkEase(0.5, 1, 1)).toBeCloseTo(0.5, 10);
+        expect(walkEase(0.25, 1, 1)).toBeCloseTo(0.125, 10);
+        expect(walkEase(0.75, 1, 1)).toBeCloseTo(0.875, 10);
+        expect(walkEase(0.5, 0.5, 0.5)).toBeCloseTo(0.5, 10);
+    });
+
+    it("measures a leg as the view draws it, a diagonal one averaging what legWeight prices it at, and adds what a climb costs", () => {
+        const flat = isoView({ width: 3, height: 3, heights: Array(9).fill(0) }, { base: 0, headroom: 0 });
+        const length = legLengthOn(flat);
+        const straight = Math.hypot(ISO_HALF_WIDTH, ISO_HALF_HEIGHT);
+        expect(length(0, 1)).toBeCloseTo(straight, 10);
+        expect(length(0, 3)).toBeCloseTo(straight, 10);
+        // A diagonal runs 20 across or 10 down by how the board is turned: 15 between them, a leg of DIAGONAL_LEG straight steps.
+        expect(length(0, 4) + length(1, 3)).toBeCloseTo(2 * DIAGONAL_LEG * straight, 10);
+        // A hill adds CLIMB_LEG of one for each quarter it climbs.
+        const hill = isoView({ width: 3, height: 3, heights: [0, 3, 0, 0, 0, 0, 0, 0, 0] }, { base: 0, headroom: 0 });
+        const [a, b] = [isoCentre(hill, 0), isoCentre(hill, 1)];
+        expect(legLengthOn(hill)(0, 1)).toBeCloseTo(Math.hypot(b.x - a.x, b.y - a.y) + 3 * CLIMB_LEG * straight, 10);
+        expect(legLengthOn(hill)(1, 0)).toBeCloseTo(legLengthOn(hill)(0, 1), 10);
+    });
+
+    it("shares a walk's time out over its legs by how long each is", () => {
+        // A short leg then a long one: legs of 1 and 3, so the first is a quarter of the way.
+        const walks = [walk([0, 1, 4])];
+        const at = (ms: number) => walkerAt(walks, ms, gap)!;
+        // Eased over two legs, the quarter-way mark is at the time the ease reaches 0.25.
+        expect(walkEase(0.5, 0.25, 0.5)).toBeGreaterThan(0.25);
+        const first = at(0), later = at(999);
+        expect([first.from, first.to]).toEqual([0, 1]);
+        expect([later.from, later.to]).toEqual([1, 4]);
+        expect(later.across).toBeGreaterThan(0.9);
+    });
+
+    it("moves at an even pace across legs of different lengths in the steady part", () => {
+        // Eleven legs: the ramps are a ninth of the walk each at most, so the middle is steady.
+        const path = [0, 1, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14];
+        const walks = [walk(path, 10000)];
+        const distance = (ms: number) => {
+            const leg = walkerAt(walks, ms, gap)!;
+            return leg.from + (leg.to - leg.from) * leg.across;
+        };
+        // The path is a line along a row, so where the walker is is how far it has got.
+        const step = distance(5000) - distance(4000);
+        expect(distance(6000) - distance(5000)).toBeCloseTo(step, 6);
+        expect(distance(4000) - distance(3000)).toBeCloseTo(step, 6);
+    });
+
+    it("ends exactly on the last square, and is gone after", () => {
+        const walks = [walk([0, 1, 2, 3], 1000, 200)];
+        const near = walkerAt(walks, 1199.9, gap)!;
+        expect(near.to).toBe(3);
+        expect(near.across).toBeCloseTo(1, 3);
+        expect(walkerAt(walks, 1200, gap)).toBeNull();
+    });
+
+    it("stands at the start before a walk and at the end between two", () => {
+        const walks = [walk([0, 1, 2], 1000, 500), walk([2, 3], 1000, 2000)];
+        expect(walkerAt(walks, 0, gap)).toEqual({ from: 0, to: 1, across: 0 });
+        expect(walkerAt(walks, 1800, gap)).toEqual({ from: 1, to: 2, across: 1 });
+        expect(walkerAt(walks, 2000, gap)).toEqual({ from: 2, to: 3, across: 0 });
+    });
+
+    it("copes with legs that measure nothing", () => {
+        const walks = [walk([0, 1, 2])];
+        const now = walkerAt(walks, 500, () => 0)!;
+        expect(Number.isFinite(now.across)).toBe(true);
+        expect(now.across).toBeGreaterThanOrEqual(0);
+        expect(now.across).toBeLessThanOrEqual(1);
+        expect(walkerAt([walk([5])], 100, gap)).toEqual({ from: 5, to: 5, across: 0 });
+    });
+
+    it("bobs a little every step, and hops a leg that changes height", () => {
+        const flat = () => 0;
+        const hill = (square: number) => square === 1 ? 2 : 0;
+        expect(walkLift({ from: 0, to: 2, across: 0.5 }, flat)).toBeCloseTo(-WALK_BOB, 10);
+        expect(walkLift({ from: 0, to: 1, across: 0.5 }, hill)).toBeCloseTo(-(WALK_BOB + WALK_HOP), 10);
+        expect(walkLift({ from: 1, to: 0, across: 0.5 }, hill)).toBeCloseTo(-(WALK_BOB + WALK_HOP), 10);
+        // On the ground at either end of a leg.
+        expect(Math.abs(walkLift({ from: 0, to: 1, across: 0 }, hill))).toBeLessThan(1e-9);
+        expect(Math.abs(walkLift({ from: 0, to: 1, across: 1 }, hill))).toBeLessThan(1e-9);
+    });
+});
+
+describe("impact", () => {
+    const knight = ready(0, "a", "knight", 11);
+    const archer = ready(1, "b", "archer", 10);
+    /** Squares on a row 10 units apart, so one square away along it is straight right. */
+    const project = (square: number) => ({ x: square * 10, y: 0 });
+    const blow = (start: number, extra: Partial<TextCue> = {}): TextCue => ({ kind: "text", fighter: 0, square: 11, value: "−3", tone: "hit", start, length: HIT_TEXT_MS, hpChange: -3, from: 10, ...extra });
+    const slash = (start = 100, length = 250): SlashCue => ({ kind: "slash", square: 11, striker: 1, from: 10, start, length });
+    const hurt = { ...knight, hp: knight.hp - 3 };
+
+    it("knocks a target away from where the blow came from, peaking mid-way", () => {
+        const shoves = shovesOf([blow(500)], 0, false);
+        expect(shoves).toHaveLength(1);
+        const at = (ms: number) => shoveAt(shoves, ms, project);
+        expect(at(499)).toEqual({ x: 0, y: 0 });
+        expect(at(500).x).toBeCloseTo(0, 10);
+        expect(at(500 + IMPACT_MS / 2)).toEqual({ x: KNOCK, y: 0 });
+        expect(at(500 + IMPACT_MS).x).toBeCloseTo(0, 10);
+        expect(at(500 + IMPACT_MS + 1)).toEqual({ x: 0, y: 0 });
+    });
+
+    it("knocks straight up for a blow from its own square, and not at all for one that takes no HP", () => {
+        const burst = shovesOf([blow(0, { from: 11 })], 0, false);
+        expect(shoveAt(burst, IMPACT_MS / 2, project)).toEqual({ x: 0, y: -KNOCK });
+        expect(shovesOf([blow(0, { hpChange: 0 })], 0, false)).toEqual([]);
+        expect(shovesOf([blow(0, { hpChange: 2 })], 0, false)).toEqual([]);
+        expect(shovesOf([blow(0, { from: undefined })], 0, false)).toEqual([]);
+        expect(shovesOf([blow(0, { fighter: 7 })], 0, false)).toEqual([]);
+    });
+
+    it("lunges a striker towards the square it strikes, out and back across the slash", () => {
+        const shoves = shovesOf([slash(100, 250)], 1, false);
+        const at = (ms: number) => shoveAt(shoves, ms, project);
+        expect(at(99)).toEqual({ x: 0, y: 0 });
+        expect(at(225)).toEqual({ x: LUNGE, y: 0 });
+        expect(at(350).x).toBeCloseTo(0, 10);
+        expect(at(351)).toEqual({ x: 0, y: 0 });
+        expect(at(162.5).x).toBeGreaterThan(0);
+        expect(at(162.5).x).toBeLessThan(LUNGE);
+    });
+
+    it("adds the pushes up when they overlap, and goes the other way when the view is turned", () => {
+        const both = shovesOf([blow(0), blow(0)], 0, false);
+        expect(shoveAt(both, IMPACT_MS / 2, project).x).toBeCloseTo(2 * KNOCK, 10);
+        const turned = shoveAt(shovesOf([blow(0)], 0, false), IMPACT_MS / 2, square => ({ x: 0, y: -square }));
+        expect(turned.x).toBeCloseTo(0, 10);
+        expect(turned.y).toBeCloseTo(-KNOCK, 10);
+    });
+
+    it("tells a striker whose own bar and marks don't change, and no one else without a cue", () => {
+        const told = toldOf([slash()], archer, archer, false);
+        expect(told).not.toBeNull();
+        expect(told!.steps).toEqual([]);
+        expect(told!.until).toBe(350);
+        // The striker draws as it is, with nothing held back.
+        expect(toldAt(told!, archer, 0).drawn).toEqual(archer);
+        expect(shoveAt(told!.shoves, 225, project).x).toBeCloseTo(LUNGE, 10);
+        // Someone else with the same cues, and nothing changing, is told nothing.
+        expect(toldOf([slash()], knight, knight, false)).toBeNull();
+        expect(toldOf([], archer, archer, false)).toBeNull();
+    });
+
+    it("carries a target's knock and runs its clock until the knock is over", () => {
+        const told = toldOf([blow(0)], knight, hurt, false)!;
+        expect(shoveAt(told.shoves, IMPACT_MS / 2, project).x).toBeCloseTo(KNOCK, 10);
+        expect(told.until).toBeGreaterThanOrEqual(IMPACT_MS);
+    });
+
+    it("moves nothing with reduced motion", () => {
+        expect(shovesOf([blow(0), slash()], 0, true)).toEqual([]);
+        expect(shovesOf([blow(0), slash()], 1, true)).toEqual([]);
+        expect(toldOf([slash()], archer, archer, true)).toBeNull();
+        const told = toldOf([blow(0)], knight, hurt, true)!;
+        expect(told.shoves).toEqual([]);
+        expect(shoveAt(told.shoves, IMPACT_MS / 2, project)).toEqual({ x: 0, y: 0 });
+    });
+});
+
+describe("shaking the battlefield", () => {
+    const flight = (missile: FlightCue["missile"], start = 100, land = 600): FlightCue => ({ kind: "flight", missile, from: 0, to: 1, result: "landed", start, length: land + 350, land });
+
+    it("shakes as a fireball or a thunder flask lands, and dies away to nothing", () => {
+        for (const missile of ["fireball", "thunderFlask"] as const) {
+            const cues = [flight(missile)];
+            const lands = 700;
+            expect(shakeAt(cues, lands - 1)).toEqual({ x: 0, y: 0 });
+            expect(shakeAt(cues, lands)).toEqual({ x: 0, y: 0 });
+            const moved = Array.from({ length: 30 }, (_, step) => shakeAt(cues, lands + step * SHAKE_MS / 30));
+            expect(moved.some(point => point.x !== 0)).toBe(true);
+            expect(moved.every(point => Math.abs(point.x) <= SHAKE && Math.abs(point.y) <= SHAKE)).toBe(true);
+            expect(shakeAt(cues, lands + SHAKE_MS)).toEqual({ x: 0, y: 0 });
+            expect(shakeAt(cues, lands + SHAKE_MS + 500)).toEqual({ x: 0, y: 0 });
+            expect(shakesOf(cues)).toEqual([{ start: lands, length: SHAKE_MS }]);
+            expect(endOf(shakesOf(cues))).toBe(lands + SHAKE_MS);
+        }
+    });
+
+    it("is stronger early than late in the shake", () => {
+        const cues = [flight("fireball", 0, 0)];
+        const peak = (from: number, to: number) => Math.max(...Array.from({ length: 50 }, (_, step) => Math.abs(shakeAt(cues, from + (to - from) * step / 50).x)));
+        expect(peak(0, SHAKE_MS / 3)).toBeGreaterThan(peak(SHAKE_MS * 2 / 3, SHAKE_MS));
+    });
+
+    it("leaves every other missile and every other cue still", () => {
+        for (const missile of ["arrow", "bolt", "fireFlask", "smokePot", "acid"] as const) {
+            const cues = [flight(missile)];
+            expect(shakesOf(cues)).toEqual([]);
+            for (const ms of [0, 700, 750, 800]) expect(shakeAt(cues, ms)).toEqual({ x: 0, y: 0 });
+        }
+        expect(endOf(shakesOf([]))).toBe(0);
     });
 });

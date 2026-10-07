@@ -3,12 +3,14 @@
 // state the response already ships, never a rule: those are rules.ts's.
 
 import type { Rect } from "@/utils/ui/mapLabels";
+import { isoCentre, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoView, type Point } from "@/utils/ui/isometric";
 import type { IRealmArenaStepOutcome, IRealmArenaStepPart, RealmArenaPartState } from "./apiModels";
 import { capitalise, pluralize, possessive } from "@/utils/ui/text";
 import type { Reach } from "@/utils/games/battlefield/pathfinding";
-import { coordsOf, FACING_COUNT, facingTowards, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
+import { coordsOf, FACING_COUNT, facingTowards, riseOf, squareAt, TERRAIN, type Battlefield, type Facing, type Square, type Terrain, type TerrainLetter } from "@/utils/games/battlefield/terrain";
 import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type AbilityId, type CharacterId, type EffectId, type Item, type ItemId } from "./characters";
 import { CHARACTER_IDS } from "./roster";
+import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
 import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, moveAp, pickOf, reachOf, weaponOf, type BattleEvent, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
 
@@ -507,9 +509,14 @@ export function eventLines(events: readonly BattleEvent[], fighters: readonly Fi
 export type HitTone = "hit" | "graze" | "miss" | "heal" | "word";
 
 /** When a cue starts and how long it lasts, in milliseconds from the moment the action starts playing. */
-interface Timed {
+export interface Timed {
     start: number;
     length: number;
+}
+
+/** When the last of a run of timed things is over: 0 for none. */
+export function endOf(timed: readonly Timed[]): number {
+    return Math.max(0, ...timed.map(({ start, length }) => start + length));
 }
 
 /** Hit text over a figure (§26.1). */
@@ -543,6 +550,13 @@ export interface TextCue extends Timed {
      * same, so none of them is drawn on top of another.
      */
     lane?: number;
+    /**
+     * Where the blow it tells came from, for the knock the target takes as it
+     * lands: the shooter's or striker's square, or where a fireball or a flask
+     * came down, or a Bloater burst. Absent on anything that isn't a blow —
+     * burning, a heal, a word.
+     */
+    from?: Square;
 }
 
 /** Something flying from one square to another (§26.1). */
@@ -574,6 +588,9 @@ export interface BurstCue extends Timed {
 export interface SlashCue extends Timed {
     kind: "slash";
     square: Square;
+    /** Who strikes, and the square it strikes from: it lunges at `square` as the slash crosses it. */
+    striker: number;
+    from: Square;
 }
 
 /**
@@ -595,11 +612,13 @@ export interface FallCue extends Timed {
 /**
  * A character walking its told path (§26.1), square by square: `path` is
  * exactly what the viewer was told — in fog of war, only the squares of it
- * they could see — and `length` is `WALK_STEP_MS` a square crossed. It stands
- * on the path's first square until `start`, and between walks of the same
- * move (an overwatch shot splits one) on the last square of the one before.
- * `fighter` is as it looked: as the action found it, or — for one that came
- * into sight on the way — as it stands after.
+ * they could see — and `length` is the whole walk's time, each leg of it
+ * `legWeight` walk steps long (a diagonal one longer, a climb longer still). It
+ * stands on the path's first square until `start`, and between walks of the
+ * same move (an overwatch shot splits one) on the last square of the one
+ * before. `fighter` is as it looked: as the action found it, or — for one that
+ * came into sight on the way — as it stands after. The board shares `length`
+ * out between the legs itself, by how far each looks on screen.
  */
 export interface WalkCue extends Timed {
     kind: "walk";
@@ -620,26 +639,52 @@ export interface ScorchCue extends Timed {
 /** One thing the board plays as an action comes back. */
 export type BattleCue = TextCue | FlightCue | BurstCue | SlashCue | FallCue | ScorchCue | WalkCue;
 
-/** How long a piece of hit text takes to rise and fade (§26.1). */
+/** How long a piece of hit text takes to rise and fade (§26.1), when nothing needs it shortened. */
 export const HIT_TEXT_MS = 1000;
-/** From one thing an action did landing to the next: long enough to see each land before the next. */
+/** From one thing an action did landing to the next: long enough to see each land before the next, when nothing needs it shortened. */
 const CUE_STEP_MS = 450;
 /**
- * How long a character takes to cross a square on a walk (§26.1): quick enough
- * that a long move — a warband's runs go twelve to twenty-six squares — is
- * over in two or three seconds, slow enough that each square can be followed.
+ * How long a character takes to cross a square on a walk (§26.1), a straight
+ * step of it: quick enough that a long move — a warband's runs go twelve to
+ * twenty-six squares — is over in two or three seconds, slow enough that each
+ * square can be followed. A long action walks quicker (`MIN_WALK_STEP_MS`).
  */
 export const WALK_STEP_MS = 110;
+/** How long a straight step is on screen, in board units: the length a walk step is measured in. */
+const STRAIGHT = Math.hypot(ISO_HALF_WIDTH, ISO_HALF_HEIGHT);
 /**
- * The longest any one action plays for, however much it set off: every part is
- * shortened to fit (§26.1). Four and a half seconds, up from three now that
- * moves walk: the longest run, twenty-six squares, is 2.75 seconds on its
- * own, and a shot after it takes another 1.5 until its text has risen — at
- * three it would be squeezed to a jog to leave room for either.
+ * How many walk steps a diagonal leg takes. On screen a straight step is about
+ * 11 units long and a diagonal one 20 or 10 by how the view is turned — 15 on
+ * average — so a diagonal leg takes 1.34 steps, and the timeline never depends
+ * on which way the player has turned the board.
+ */
+export const DIAGONAL_LEG = (ISO_HALF_WIDTH + ISO_HALF_HEIGHT) / STRAIGHT;
+/** How many walk steps each quarter of height climbed or dropped adds to a leg: a full wall, four quarters, costs a whole step more. */
+export const CLIMB_LEG = 0.25;
+/**
+ * The longest any one action plays for, however much it set off (§26.1). Four
+ * and a half seconds: the longest run, twenty-six squares, is 2.75 seconds on
+ * its own, and a shot after it takes another 1.5 until its text has risen. An
+ * action that would run over it is squeezed to fit, a little at a time and in
+ * order (`battleCues`): the walks quicker, then the gaps between landings
+ * shorter, then the text — and the flights never.
  */
 export const PLAYBACK_MS = 4500;
-/** How long each missile takes to get there (§26.1): an arrow quickly, a bolt quicker, a fireball or a throw on a higher, slower arc. */
-export const FLIGHT_MS: Readonly<Record<Missile, number>> = { arrow: 400, bolt: 250, fireball: 600, fireFlask: 600, thunderFlask: 600, smokePot: 600, acid: 450 };
+/**
+ * How long a missile takes to get there (§26.1): `base` and `perSquare` for
+ * every square it flies, up to `max`. An arrow quickly, a bolt quicker, a
+ * fireball or a throw on a higher, slower arc, and a long shot takes longer
+ * than a short one.
+ */
+export const FLIGHT_PACE: Readonly<Record<Missile, { base: number; perSquare: number; max: number }>> = {
+    arrow: { base: 180, perSquare: 14, max: 650 },
+    bolt: { base: 120, perSquare: 9, max: 420 },
+    acid: { base: 220, perSquare: 16, max: 650 },
+    fireball: { base: 300, perSquare: 20, max: 800 },
+    fireFlask: { base: 300, perSquare: 20, max: 800 },
+    thunderFlask: { base: 300, perSquare: 20, max: 800 },
+    smokePot: { base: 300, perSquare: 20, max: 800 },
+};
 /** How long a shot goes on once it's there: an arrow stuck in a figure, or one glancing off or flying past. */
 const SHOT_AFTER_MS = 350;
 /** How long a burst takes to flash and fade. */
@@ -650,6 +695,53 @@ const SCORCH_AT = 0.6;
 const SLASH_MS = 250;
 /** How long a downed character takes to fade once its blow has landed. */
 const FALL_MS = 400;
+/**
+ * How far an action that runs over `PLAYBACK_MS` may be squeezed before it is
+ * simply shortened to fit, each in turn: a straight walk step down to 70ms, the
+ * gap between landings down to 200ms (`laneTexts` keeps text that now overlaps
+ * readable), then the text down to 800ms. A flight is never squeezed.
+ */
+const MIN_WALK_STEP_MS = 70;
+const MIN_CUE_STEP_MS = 200;
+const MIN_TEXT_MS = 800;
+
+/**
+ * How long a missile is in the air from one square to the next (§26.1): by the
+ * straight line between them, in squares, from its `FLIGHT_PACE` — never less
+ * than its base, never more than its longest.
+ */
+export function flightMs(field: Pick<Battlefield, "width">, missile: Missile, from: Square, to: Square): number {
+    const { base, perSquare, max } = FLIGHT_PACE[missile];
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    return Math.round(Math.min(max, base + perSquare * Math.hypot(a.col - b.col, a.row - b.row)));
+}
+
+/**
+ * How many walk steps one leg of a walk takes (§26.1): one for a straight step,
+ * `DIAGONAL_LEG` for a diagonal one, and `CLIMB_LEG` more for each quarter of
+ * height between the tops of the two squares, up or down.
+ */
+export function legWeight(field: Battlefield, from: Square, to: Square): number {
+    const a = coordsOf(field, from), b = coordsOf(field, to);
+    const diagonal = a.col !== b.col && a.row !== b.row;
+    // A square the map doesn't have (a battle read against another map) has no height to climb.
+    const climb = field.tiles[from] && field.tiles[to] ? Math.abs(riseOf(field, to, from)) : 0;
+    return (diagonal ? DIAGONAL_LEG : 1) + CLIMB_LEG * climb;
+}
+
+/**
+ * How long a leg of a walk is on screen as the view draws it, plus what its
+ * climb costs (`CLIMB_LEG` of a straight step for each quarter of height): what
+ * a walk's time is shared out over its legs by (`walkerAt`), so a walker moves
+ * at an even pace. The same prices `legWeight` puts on a leg, but measured as
+ * this view draws it rather than turned every way at once.
+ */
+export function legLengthOn(view: IsoView): (from: Square, to: Square) => number {
+    return (from, to) => {
+        const a = isoCentre(view, from), b = isoCentre(view, to);
+        return Math.hypot(b.x - a.x, b.y - a.y) + CLIMB_LEG * STRAIGHT * Math.abs(view.heights[to] - view.heights[from]);
+    };
+}
 
 /** What each character that shoots something other than an arrow shoots (§26.1): the Mage's bolt, the Spitter's acid. */
 const SHOT_MISSILE: Readonly<Partial<Record<CharacterId, Missile>>> = { mage: "bolt", spitter: "acid" };
@@ -697,7 +789,7 @@ function laneTexts(cues: readonly BattleCue[]) {
     }
 }
 
-/** Every timing in a cue, scaled. */
+/** Every timing in a cue, scaled: the last resort of fitting an action in, when squeezing its paces has not been enough. */
 function scaled(cue: BattleCue, scale: number): BattleCue {
     const by = (ms: number) => Math.round(ms * scale);
     const timed = { ...cue, start: by(cue.start), length: by(cue.length) };
@@ -717,48 +809,47 @@ export interface BattleCueOptions {
     still?: boolean;
 }
 
-/**
- * What an action did, as the board plays it (§26.2): a timed cue for each
- * thing that happened, one after another in the order of the events, each
- * starting as the last one lands.
- *
- * A shot flies from the shooter to its target — an arrow, or the Mage's
- * bolt — and its hit text rises as it gets there: stuck in the target on a
- * hit, glancing off on a graze, flying past on a miss. A strike slashes
- * across its target. A fireball or a thrown flask flies to the square it was
- * aimed at and bursts there, and everyone it hit is hit at once, with the
- * effect it puts on under each number. A knock-out's "Down" follows its
- * damage, and the character it downed stands until that damage lands. Low
- * cover the burst blasted away goes as the burst fades.
- *
- * `before` is everyone as the action found them, which says where each cue
- * stands: a move carries its mover along, so an overwatch shot flies to where
- * the mover had got to. A move walks its told path (`WalkCue`), one square
- * every `WALK_STEP_MS`, starting as the last thing landed — so an overwatch shot
- * fired part-way through flies once the first leg has walked, at the square
- * the mover stopped on, and the rest of the move walks after the shot lands.
- * `after` is everyone as the action left them: the look of a mover who wasn't
- * in `before` because it came into sight on the way. A move told with a path
- * of fewer than two squares, or of a character in neither, plays nothing.
- * A stance, a watch and a reaction say what the character is doing, in
- * words over it ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard") — as
- * it's taken, or, for an overwatch shot or a guard's blow, as it's loosed —
- * since the view pans to them and the log is out of sight; scores play
- * nothing of their own. However much happened, it all fits in `PLAYBACK_MS`.
- * Text that would stand on other text still showing over the same character
- * stands a line higher (`TextCue.lane`). With `still`, every walk and flight
- * takes no time.
- */
-export function battleCues(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[] = [], options: BattleCueOptions = {}): BattleCue[] {
+/** The paces an action's timeline is built at: what squeezing it to fit `PLAYBACK_MS` turns down. */
+interface Pace {
+    /** A straight step of a walk. */
+    walkStepMs: number;
+    /** The least from one thing landing to the next. */
+    cueStepMs: number;
+    /** How long a piece of hit text shows. */
+    textMs: number;
+}
+
+/** What nothing has to be squeezed for is played at. */
+const EASY_PACE: Pace = { walkStepMs: WALK_STEP_MS, cueStepMs: CUE_STEP_MS, textMs: HIT_TEXT_MS };
+
+/** The paces to squeeze, in the order an action that runs over gives them up, each with the least it goes down to. */
+const SQUEEZES = [["walkStepMs", MIN_WALK_STEP_MS], ["cueStepMs", MIN_CUE_STEP_MS], ["textMs", MIN_TEXT_MS]] as const;
+
+/** The largest whole number from `floor` to `ceiling` that `fits`, by halving; `fits` only gets harder as the number grows, and `floor` is the answer when nothing fits. */
+function largestFit(floor: number, ceiling: number, fits: (ms: number) => boolean): number {
+    let low = floor, high = ceiling;
+    while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (fits(middle)) low = middle;
+        else high = middle - 1;
+    }
+    return low;
+}
+
+/** Each thing an action did, timed at `pace`, before its text is laned or any of it is shortened to fit. */
+function timeline(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], options: BattleCueOptions, pace: Pace): BattleCue[] {
     const { still = false } = options;
-    /** How long a missile is in the air: not at all, for a player who sees none. */
-    const flightOf = (missile: Missile) => (still ? 0 : FLIGHT_MS[missile]);
     const as = new Map(before.map(fighter => [fighter.id, fighter]));
     const afterAs = new Map(after.map(fighter => [fighter.id, fighter]));
     /** When each character's last walk so far ends: a character downed on the way is on its square only from then. */
     const walked = new Map<number, number>();
     const at = new Map(before.map(fighter => [fighter.id, fighter.square]));
     const cues: BattleCue[] = [];
+    /** How long a missile is in the air from a character to a square: not at all, for a player who sees none. */
+    const flightOf = (fighter: number, to: Square | undefined, missile: Missile) => {
+        const from = at.get(fighter);
+        return still || from === undefined || to === undefined ? 0 : flightMs(field, missile, from, to);
+    };
     /** The latest text on each character: where an effect's name goes under the number that came with it. */
     const latest = new Map<number, TextCue>();
     /** When the last thing landed. */
@@ -770,13 +861,13 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
      * last one landed, and far enough after it to be seen on its own.
      */
     const beat = (lead = 0) => {
-        landed = landed === null ? lead : landed + Math.max(CUE_STEP_MS, lead);
+        landed = landed === null ? lead : landed + Math.max(pace.cueStepMs, lead);
         return landed;
     };
-    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange"> = {}) => {
+    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange" | "from"> = {}) => {
         const square = at.get(fighter);
         if (square === undefined) return;
-        const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: HIT_TEXT_MS };
+        const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: pace.textMs };
         cues.push(cue);
         latest.set(fighter, cue);
     };
@@ -787,7 +878,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
      */
     const say = (fighter: number, when: number, value: string, mark?: EffectId) => {
         const square = at.get(fighter);
-        if (square !== undefined) cues.push({ kind: "text", fighter, square, value, tone: "word", ...(mark ? { mark } : {}), start: when, length: HIT_TEXT_MS });
+        if (square !== undefined) cues.push({ kind: "text", fighter, square, value, tone: "word", ...(mark ? { mark } : {}), start: when, length: pace.textMs });
     };
     /**
      * A character walking `path`, starting as the last thing landed: so a shot
@@ -798,16 +889,16 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         const walker = as.get(fighter) ?? afterAs.get(fighter);
         if (!walker || path.length < 2) return;
         const start = landed ?? 0;
-        const length = still ? 0 : (path.length - 1) * WALK_STEP_MS;
+        const steps = path.slice(1).reduce((total, square, i) => total + legWeight(field, path[i], square), 0);
+        const length = still ? 0 : Math.round(steps * pace.walkStepMs);
         cues.push({ kind: "walk", fighter: walker, path, start, length });
         // A walk that takes no time lands nothing: the next thing to land is the first.
         if (length > 0) landed = start + length;
         walked.set(fighter, start + length);
     };
-    /** Something flying from a character to a square, landing at `land`. */
-    const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, after = 0) => {
+    /** Something flying from a character to a square, in the `flight` that `flightOf` told, landing at `land`. */
+    const fly = (fighter: number, to: Square | undefined, missile: Missile, result: FlightCue["result"], land: number, flight: number, after = 0) => {
         const from = at.get(fighter);
-        const flight = flightOf(missile);
         if (from === undefined || to === undefined) return;
         // A flight is drawn by how far through it is, so even one that takes no time lasts a moment.
         if (still) cues.push({ kind: "flight", missile, from, to, result, start: land, land: 1, length: 1 });
@@ -831,20 +922,23 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 // The Mage's bolt, the Spitter's acid; anyone else who shoots has a bow.
                 const shooter = as.get(event.fighter)?.character;
                 const missile = (shooter && SHOT_MISSILE[shooter]) ?? "arrow";
-                const land = beat(flightOf(missile));
+                const to = at.get(event.target);
+                const flight = flightOf(event.fighter, to, missile);
+                const land = beat(flight);
                 // An overwatch shot says so as it's loosed, so the camera's pan to the watcher says why.
-                if (event.reaction) say(event.fighter, land - flightOf(missile), OVERWATCH_WORD);
-                fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
+                if (event.reaction) say(event.fighter, land - flight, OVERWATCH_WORD);
+                fly(event.fighter, to, missile, event.result, land, flight, SHOT_AFTER_MS);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
-                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}) });
+                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}), from: at.get(event.fighter) });
                 break;
             }
             case "struck": {
                 const land = beat(SLASH_MS);
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
-                if (square !== undefined) cues.push({ kind: "slash", square, start: land - SLASH_MS, length: 2 * SLASH_MS });
-                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage });
+                const from = at.get(event.fighter);
+                if (square !== undefined && from !== undefined) cues.push({ kind: "slash", square, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage, from });
                 break;
             }
             case "burned":
@@ -867,30 +961,32 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 // A draught is never thrown: it's drunk, and told as a heal.
                 if (item === "healingDraught") break;
                 const missile = item ?? "fireball";
-                const land = beat(flightOf(missile));
-                fly(event.fighter, event.at, missile, "landed", land);
+                const flight = flightOf(event.fighter, event.at, missile);
+                const land = beat(flight);
+                fly(event.fighter, event.at, missile, "landed", land, flight);
                 // A fireball spreads over the 3×3, and so does a flask made to.
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
                 cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
-                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
+                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from: event.at }));
                 break;
             }
             case "demolished":
             case "burst": {
                 // A blow at the cover, or the Bloater's splash over the 3×3
                 // round it: everyone it caught is hit at once as it lands.
-                let land: number;
+                let land: number, from: Square | undefined;
                 if (event.kind === "demolished") {
                     land = beat(SLASH_MS);
-                    cues.push({ kind: "slash", square: event.at, start: land - SLASH_MS, length: 2 * SLASH_MS });
+                    from = at.get(event.fighter);
+                    if (from !== undefined) cues.push({ kind: "slash", square: event.at, striker: event.fighter, from, start: land - SLASH_MS, length: 2 * SLASH_MS });
                 } else {
                     land = beat();
-                    const square = at.get(event.fighter);
-                    if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
+                    from = at.get(event.fighter);
+                    if (from !== undefined) cues.push({ kind: "burst", burst: "acid", at: from, radius: 1, start: land, length: BURST_MS });
                 }
                 landing = { start: land, targets: event.targets };
-                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
+                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage, from }));
                 break;
             }
             case "blasted":
@@ -927,11 +1023,66 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         }
     }
 
-    // Every cue is told, so each text can find the others over its fighter; scaling keeps what overlaps.
+    return cues;
+}
+
+/**
+ * What an action did, as the board plays it (§26.2): a timed cue for each
+ * thing that happened, one after another in the order of the events, each
+ * starting as the last one lands.
+ *
+ * A shot flies from the shooter to its target — an arrow, or the Mage's
+ * bolt — and its hit text rises as it gets there: stuck in the target on a
+ * hit, glancing off on a graze, flying past on a miss. How long it flies is
+ * `flightMs`: the farther the target, the longer. A strike slashes
+ * across its target. A fireball or a thrown flask flies to the square it was
+ * aimed at and bursts there, and everyone it hit is hit at once, with the
+ * effect it puts on under each number. A knock-out's "Down" follows its
+ * damage, and the character it downed stands until that damage lands. Low
+ * cover the burst blasted away goes as the burst fades.
+ *
+ * `field` is the battlefield it is played on, which says how far each flight
+ * goes and how steep each leg of a walk is. `before` is everyone as the action
+ * found them, which says where each cue stands: a move carries its mover
+ * along, so an overwatch shot flies to where the mover had got to. A move
+ * walks its told path (`WalkCue`), each leg a `legWeight` of `WALK_STEP_MS`,
+ * starting as the last thing landed — so an overwatch shot
+ * fired part-way through flies once the first leg has walked, at the square
+ * the mover stopped on, and the rest of the move walks after the shot lands.
+ * `after` is everyone as the action left them: the look of a mover who wasn't
+ * in `before` because it came into sight on the way. A move told with a path
+ * of fewer than two squares, or of a character in neither, plays nothing.
+ * A stance, a watch and a reaction say what the character is doing, in
+ * words over it ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard") — as
+ * it's taken, or, for an overwatch shot or a guard's blow, as it's loosed —
+ * since the view pans to them and the log is out of sight; scores play
+ * nothing of their own.
+ *
+ * However much happened, it all fits in `PLAYBACK_MS`. An action that runs
+ * over is squeezed in order, only as far as it has to be: its walks get
+ * quicker, down to 70ms a step; then the gaps between one thing landing and
+ * the next shorter, down to 200ms; then its text, down to 800ms. A flight is
+ * never shortened. Only one that still runs over, with all that done, is
+ * scaled down whole. Text that would stand on other text still showing over
+ * the same character stands a line higher (`TextCue.lane`), worked out after
+ * the squeezing. With `still`, every walk and flight takes no time.
+ */
+export function battleCues(field: Battlefield, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[] = [], options: BattleCueOptions = {}): BattleCue[] {
+    const build = (pace: Pace) => timeline(field, events, before, after, options, pace);
+    let pace = EASY_PACE;
+    let cues = build(pace);
+    for (const [key, floor] of SQUEEZES) {
+        if (endOf(cues) > PLAYBACK_MS) {
+            const previous = pace;
+            pace = { ...previous, [key]: largestFit(floor, previous[key], ms => endOf(build({ ...previous, [key]: ms })) <= PLAYBACK_MS) };
+            cues = build(pace);
+        }
+    }
+    // Every cue is told, so each text can find the others over its fighter; lane only the one that plays.
     laneTexts(cues);
-    const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
-    if (end <= PLAYBACK_MS) return cues;
-    return cues.map(cue => scaled(cue, PLAYBACK_MS / end));
+    const end = endOf(cues);
+    // Squeezed as far as it goes and still too long: scaling keeps what overlaps.
+    return end <= PLAYBACK_MS ? cues : cues.map(cue => scaled(cue, PLAYBACK_MS / end));
 }
 
 /**
@@ -955,8 +1106,7 @@ export const STEP_MIN_MS = 1200;
  * bounded by it too.
  */
 export function partDurationMs(cues: readonly BattleCue[]): number {
-    const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
-    return Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + end + STEP_BEAT_MS);
+    return Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + endOf(cues) + STEP_BEAT_MS);
 }
 
 /** The part of a board a review's cues and its follow-zoom read as it stood before a step or part. */
@@ -968,6 +1118,8 @@ export interface ReviewPart {
     events: readonly ToldEvent[];
     /** Which part of a co-op End turn it is; absent on an ordinary step. */
     kind?: IRealmArenaStepPart["kind"];
+    /** The battlefield it is played and drawn on: the map with what was blasted before it cleared. */
+    field: Battlefield;
     /** What the board plays for it. */
     cues: BattleCue[];
     /** The board as the part found it: where its cues stand, and what the follow-zoom compares against. */
@@ -985,15 +1137,18 @@ export interface ReviewPart {
  * the first), which is how its cues find where everyone stood. `after` is the
  * board the step's last part leaves, which the others carry in `state`: what
  * a move into sight is drawn as, and the end of the move a review frames.
- * `options` is how each part's cues are built: `still` for a player who sees no
- * walk or flight.
+ * `mapId` is the map it is fought on: each part is played on it as the part
+ * found it, with what had been blasted by then cleared (`ReviewPart.field`),
+ * which times its flights and walks (`battleCues`). `options` is how each part's cues are built:
+ * `still` for a player who sees no walk or flight.
  */
-export function reviewParts(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): ReviewPart[] {
+export function reviewParts(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): ReviewPart[] {
     const told: (Omit<IRealmArenaStepPart, "kind"> & Partial<Pick<IRealmArenaStepPart, "kind">>)[] = outcome?.parts?.length ? outcome.parts : [{ events: outcome?.events ?? [] }];
     let from = before;
     return told.map(part => {
-        const cues = battleCues(part.events, from.fighters, part.state?.fighters ?? after, options);
-        const played: ReviewPart = { kind: part.kind, events: part.events, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
+        const field = battlefieldOf(mapId, from.blasted);
+        const cues = battleCues(field, part.events, from.fighters, part.state?.fighters ?? after, options);
+        const played: ReviewPart = { kind: part.kind, events: part.events, field, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
         return played;
     });
@@ -1016,8 +1171,8 @@ export function isUnplaced(part: Pick<ReviewPart, "events" | "cues" | "before">,
 }
 
 /** How long a review rests on a whole step: its parts' times added up. */
-export function reviewStepMs(outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): number {
-    return reviewParts(outcome, before, after, options).reduce((total, part) => total + part.durationMs, 0);
+export function reviewStepMs(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): number {
+    return reviewParts(mapId, outcome, before, after, options).reduce((total, part) => total + part.durationMs, 0);
 }
 
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
@@ -1062,7 +1217,10 @@ export interface HpStep {
  * heals take it through, when its first cue lands (`marksAt`, when its marks
  * stop being `before`'s), how long its fill takes to move and its chip to
  * drain (`tweenMs` and `chipMs`, both 0 with reduced motion, when the bar
- * jumps and leaves no chip), and when the last of it is over (`until`).
+ * jumps and leaves no chip), the knocks it takes and the lunges it makes
+ * (`shoves`, none with reduced motion), and when the last of it is over
+ * (`until`). A striker whose own bar and marks don't change is told all the
+ * same, for its lunge.
  */
 export interface Told {
     before: Fighter;
@@ -1070,21 +1228,24 @@ export interface Told {
     marksAt: number;
     tweenMs: number;
     chipMs: number;
+    shoves: readonly Shove[];
     until: number;
 }
 
 /**
  * What the action being played tells of `fighter`, or null if it changes
  * nothing a figure draws — it has no cue on it, it wasn't there when the action
- * started, it's down (no bar, no marks) or it ends as it began. Each of its
- * HP cues steps its bar by the cue's `hpChange`, and the last ends it on its
- * real HP, so the bar is right even if the cues' sums aren't. With `still` the
- * bar jumps at its cue and no chip drains.
+ * started, it's down (no bar, no marks) or it ends as it began, and doesn't
+ * strike either. Each of its HP cues steps its bar by the cue's `hpChange`, and
+ * the last ends it on its real HP, so the bar is right even if the cues' sums
+ * aren't. With `still` the bar jumps at its cue, no chip drains and nothing is
+ * knocked or lunged.
  */
 export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, fighter: Fighter, still: boolean): Told | null {
     if (!before || !isStanding(fighter)) return null;
     const texts = cues.filter((cue): cue is TextCue => cue.kind === "text" && cue.fighter === fighter.id);
-    if (texts.length === 0) return null;
+    const shoves = shovesOf(cues, fighter.id, still);
+    if (texts.length === 0 && shoves.length === 0) return null;
     const max = CHARACTERS[fighter.character].hp;
     const blows = texts.filter(cue => cue.hpChange !== undefined).sort((a, b) => a.start - b.start);
     let level = before.hp;
@@ -1093,11 +1254,12 @@ export function toldOf(cues: readonly BattleCue[], before: Fighter | undefined, 
         return { at: cue.start, to: index === blows.length - 1 ? fighter.hp : level };
     });
     const marksDiffer = effectsOn(before).join() !== effectsOn(fighter).join() || before.banked !== fighter.banked || before.item !== fighter.item;
-    if (!marksDiffer && steps.every(step => step.to === before.hp)) return null;
-    const marksAt = Math.min(...texts.map(cue => cue.start));
+    if (!marksDiffer && steps.every(step => step.to === before.hp) && shoves.length === 0) return null;
+    const marksAt = texts.length > 0 ? Math.min(...texts.map(cue => cue.start)) : 0;
     const tweenMs = still ? 0 : HP_TWEEN_MS, chipMs = still ? 0 : HP_CHIP_MS;
     const last = steps[steps.length - 1];
-    return { before, steps, marksAt, tweenMs, chipMs, until: Math.max(marksAt, last ? last.at + tweenMs + chipMs : 0) };
+    const until = Math.max(marksAt, last ? last.at + tweenMs + chipMs : 0, endOf(shoves));
+    return { before, steps, marksAt, tweenMs, chipMs, shoves, until };
 }
 
 /**
@@ -1132,4 +1294,170 @@ export function toldAt({ before, steps, marksAt, tweenMs, chipMs }: Told, fighte
     const fill = steps.length > 0 ? stepped(before.hp, steps, 0, tweenMs, ms) : fighter.hp;
     const chip = chipMs === 0 || steps.length === 0 ? undefined : stepped(before.hp, steps, tweenMs, chipMs, ms);
     return { drawn: { ...fighter, hp: fill, effects: marks.effects, banked: marks.banked, item: marks.item }, chip };
+}
+
+// ─── A walk on screen (§5, walk pace and motion) ────────────────────────────
+
+/**
+ * The least a leg of a walk counts for when its length is shared out, so a
+ * walk of legs that measure nothing — squares drawn on top of each other —
+ * still divides rather than dividing by nothing.
+ */
+const MIN_LEG_LENGTH = 0.01;
+/** How far a walker's feet leave the ground at the top of a step up or down, in board units: it hops a change of height rather than sliding up it. */
+export const WALK_HOP = 3;
+/** How far a walker rises at the middle of every step, in board units: the bob of someone on foot. */
+export const WALK_BOB = 0.6;
+
+/** Where a walker is on its way: the square it is leaving, the one it is heading for and how far over the leg between their middles it has got. */
+export interface WalkerLeg {
+    from: Square;
+    to: Square;
+    across: number;
+}
+
+/**
+ * How far along a walk — as a share of the whole of it — someone has got a
+ * share `time` of the way through it: speeding up over the first leg's share
+ * of the time, slowing down over the last leg's, and steady between. A walk of
+ * one or two legs has no steady part, and is a plain ease in and out. The
+ * position is continuous where the speed changes, and gets to 1 at 1.
+ */
+export function walkEase(time: number, first: number, last: number): number {
+    const t = Math.min(1, Math.max(0, time));
+    const rampIn = Math.min(0.5, first), rampOut = Math.min(0.5, last);
+    const speed = 1 / (1 - (rampIn + rampOut) / 2);
+    if (t < rampIn) return speed * t * t / (2 * rampIn);
+    if (t > 1 - rampOut) return 1 - speed * (1 - t) * (1 - t) / (2 * rampOut);
+    return speed * (rampIn / 2 + t - rampIn);
+}
+
+/**
+ * Where a character walking `walks` (its own, in order) is `ms` into the
+ * playback: the square of its path it is leaving, the one it is heading for,
+ * and how far over the way between them it has got — or null once its last
+ * walk is over. A walk's `length` is shared out over its legs by how long each
+ * is (`legLength`, on screen), so it moves at an even pace whatever the legs'
+ * lengths, easing in over the first leg and out over the last (`walkEase`).
+ * Before a walk starts it stands where the path begins; between two it stands
+ * where the first left off.
+ */
+export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from: Square, to: Square) => number): WalkerLeg | null {
+    const last = walks[walks.length - 1];
+    if (ms >= last.start + last.length) return null;
+    let walk = walks[0];
+    for (const one of walks) if (ms >= one.start) walk = one;
+    const { path } = walk;
+    if (path.length < 2) return { from: path[0], to: path[0], across: 0 };
+    const lengths = path.slice(1).map((square, leg) => Math.max(MIN_LEG_LENGTH, legLength(path[leg], square)));
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    const time = (ms - walk.start) / Math.max(1, walk.length);
+    const gone = walkEase(time, lengths[0] / total, lengths[lengths.length - 1] / total) * total;
+    let leg = 0, passed = 0;
+    while (leg < lengths.length - 1 && gone >= passed + lengths[leg]) passed += lengths[leg++];
+    return { from: path[leg], to: path[leg + 1], across: Math.min(1, Math.max(0, (gone - passed) / lengths[leg])) };
+}
+
+/**
+ * How far a walker is lifted off the ground over a leg (board units, up
+ * negative): the bob of every step, and over a leg whose two ends stand at
+ * different heights (`heightOf`) a hop on top of it, both peaking mid-way and
+ * back on the ground at either end.
+ */
+export function walkLift({ from, to, across }: WalkerLeg, heightOf: (square: Square) => number): number {
+    const hop = heightOf(from) !== heightOf(to) ? WALK_HOP : 0;
+    return -(hop + WALK_BOB) * Math.sin(Math.PI * across);
+}
+
+// ─── Impact (§5) ────────────────────────────────────────────────────────────
+
+/** How long a blow's knock on its target takes to go and come back. */
+export const IMPACT_MS = 120;
+/** How long the hit text of a blow that lands (a hit or a graze) takes to pop as it appears, from its cue's start. */
+export const POP_MS = 120;
+/** How far a blow knocks its target off its square, in board units, away from where it came from. */
+export const KNOCK = 1.5;
+/** How far a melee striker lunges at its target through its slash, in board units. */
+export const LUNGE = 2.5;
+/** How long the whole battlefield shakes as a fireball or a thunder flask lands. */
+export const SHAKE_MS = 150;
+/** How far the battlefield is shaken at the start of it, in board units: it dies away to nothing. */
+export const SHAKE = 2;
+/** How many times the shake swings to and fro over its length. */
+const SHAKE_SWINGS = 2;
+/** The missiles whose landing shakes the battlefield: the ones that explode. */
+const SHAKING_MISSILES: ReadonlySet<Missile> = new Set<Missile>(["fireball", "thunderFlask"]);
+
+/**
+ * A figure pushed off its square and back over a stretch of the playback: the
+ * way from `from` to `to` is the way it goes, `reach` board units out at the
+ * middle of it. A target is knocked from where its blow came from to where it
+ * stands; a striker lunges from where it stands to where it strikes.
+ */
+export interface Shove extends Timed {
+    from: Square;
+    to: Square;
+    reach: number;
+}
+
+/**
+ * Every push the action being played gives fighter `id`: the knock of each
+ * blow that takes HP off it — a text cue with a `from` and a negative
+ * `hpChange` — over `IMPACT_MS` from the moment it lands, and the lunge of
+ * each melee strike it makes, over the whole slash. None with reduced motion.
+ */
+export function shovesOf(cues: readonly BattleCue[], id: number, still: boolean): Shove[] {
+    if (still) return [];
+    return cues.flatMap((cue): Shove[] => {
+        if (cue.kind === "text" && cue.fighter === id && cue.from !== undefined && (cue.hpChange ?? 0) < 0) {
+            return [{ start: cue.start, length: IMPACT_MS, from: cue.from, to: cue.square, reach: KNOCK }];
+        }
+        if (cue.kind === "slash" && cue.striker === id) return [{ start: cue.start, length: cue.length, from: cue.from, to: cue.square, reach: LUNGE }];
+        return [];
+    });
+}
+
+/**
+ * How far off its square a figure is pushed `ms` into the playback, as a
+ * board offset: out along the way of each push and back, peaking mid-way, and
+ * nothing outside its window. `project` says where a square is on screen,
+ * which is why the way depends on how the view is turned; a push between two
+ * squares drawn on the same spot goes straight up.
+ */
+export function shoveAt(shoves: readonly Shove[], ms: number, project: (square: Square) => Point): Point {
+    let x = 0, y = 0;
+    for (const { start, length, from, to, reach } of shoves) {
+        const across = (ms - start) / Math.max(1, length);
+        if (across < 0 || across > 1) continue;
+        const a = project(from), b = project(to);
+        const dx = b.x - a.x, dy = b.y - a.y, away = Math.hypot(dx, dy);
+        const push = reach * Math.sin(Math.PI * across);
+        x += away > 0 ? dx / away * push : 0;
+        y += away > 0 ? dy / away * push : -push;
+    }
+    return { x, y };
+}
+
+/** When each shake of the battlefield is: `SHAKE_MS` from the moment each missile that explodes lands. */
+export function shakesOf(cues: readonly BattleCue[]): Timed[] {
+    return cues.flatMap((cue): Timed[] => cue.kind === "flight" && SHAKING_MISSILES.has(cue.missile) ? [{ start: cue.start + cue.land, length: SHAKE_MS }] : []);
+}
+
+/**
+ * How far the whole battlefield is shaken `ms` into the playback, as a board
+ * offset: a quick wobble as a fireball or a thunder flask lands (`start +
+ * land` of its flight, `shakesOf`), swinging `SHAKE_SWINGS` times and dying away to
+ * nothing over `SHAKE_MS`. Still outside any shake.
+ */
+export function shakeAt(cues: readonly BattleCue[], ms: number): Point {
+    let x = 0, y = 0;
+    for (const { start, length } of shakesOf(cues)) {
+        const across = (ms - start) / length;
+        if (across < 0 || across >= 1) continue;
+        const swing = SHAKE * (1 - across) * Math.sin(2 * Math.PI * SHAKE_SWINGS * across);
+        x += swing;
+        // Quicker and shallower up and down, so it rattles rather than slides.
+        y += swing * 0.5 * Math.cos(2 * Math.PI * SHAKE_SWINGS * across * 1.5);
+    }
+    return { x, y };
 }

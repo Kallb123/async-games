@@ -95,7 +95,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     }, {
         // Play rests on a step for as long as the board takes to play it,
         // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.specificGameState.map, snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -108,9 +108,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const previous = nav.previousSnapshot;
     const stepOutcome = nav.displayedOutcome;
     const stepFighters = nav.displayedState?.fighters;
+    const stepMap = nav.displayedState?.map ?? '';
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
-        [nav.isLive, previous, stepOutcome, stepFighters, still],
+        () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        [nav.isLive, previous, stepMap, stepOutcome, stepFighters, still],
     );
     const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
@@ -229,7 +230,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
     const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
-        const cues = battleCues(events, fighters, after, { still });
+        const cues = battleCues(field, events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
         setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
@@ -320,7 +321,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted), before: part.before.fighters } : null;
+        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: part.field, before: part.before.fighters } : null;
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 

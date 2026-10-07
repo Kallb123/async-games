@@ -1,5 +1,5 @@
 'use client'
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import BoardZoom, { type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
@@ -16,7 +16,7 @@ import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART,
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter, toldAt, toldOf, type Told } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type Shove, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, endOf, focusOn, hpFraction, legLengthOn, reachFocus, shakeAt, shakesOf, shovesOf, shoveAt, terrainLetter, toldAt, toldOf, walkerAt, walkLift, type Told } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -287,10 +287,19 @@ interface FigureProps {
     marker?: Marker;
     /** Drawn over whatever hides it, rather than standing on its square: no shadow. */
     ghost?: boolean;
+    /**
+     * How far the figure — and the item it carries — is off its square, in
+     * board units: a bob in its step, a knock from a blow, a lunge. Its shadow,
+     * rings and the tap on it stay where they are.
+     */
+    offset?: Point;
 }
 
+/** A figure that is where its square puts it. */
+const NO_OFFSET: Point = { x: 0, y: 0 };
+
 /** A character standing or lying on its square, facing its way, in its owner's colour, over its shadow and rings, with the item it carries. */
-function Figure({ artId, view, square, character, facing, pose = 'standing', item, className = '', tint, ring, marker, ghost = false }: FigureProps) {
+function Figure({ artId, view, square, character, facing, pose = 'standing', item, className = '', tint, ring, marker, ghost = false, offset = NO_OFFSET }: FigureProps) {
     const feet = isoCentre(view, square);
     const { x, y } = discCentre(view, square);
     const art = CHARACTER_ART[character][pose];
@@ -305,14 +314,14 @@ function Figure({ artId, view, square, character, facing, pose = 'standing', ite
             {marker && groundRing(`ag-ra-marker ag-ra-marker--${marker}`, MARKER_RADIUS)}
             {ring && groundRing(`ag-ra-ring ag-ra-ring--${ring}`, RING_RADIUS)}
             {/* `spriteBox` places a sprite from its square's back corner, half a diamond above the middle. */}
-            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x} ${feet.y - ISO_HALF_HEIGHT})`}>
+            <g className={`ag-ra-figure ${className}`} transform={`translate(${feet.x + offset.x} ${feet.y - ISO_HALF_HEIGHT + offset.y})`}>
                 <use href={`#${spriteId(artId, art.body[cell])}`} {...box} />
                 {tint && <use href={`#${spriteId(artId, art.team[cell])}`} {...box} filter={`url(#${tint})`} />}
             </g>
             {/* The art is a whole cell, mostly see-through: only the body is tapped, so a tap above a figure reaches the square or the figure behind it. */}
             <circle className="ag-ra-figure-hit" cx={x} cy={y} r={FIGURE_RADIUS} />
             {item && (
-                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x} y={y + ITEM_MARK_OFFSET.y} size={ITEM_MARK_SIZE} />
+                <SpriteUse className="ag-ra-figure-mark" id={artId} sprite={ITEM_ART[item]} x={x + ITEM_MARK_OFFSET.x + offset.x} y={y + ITEM_MARK_OFFSET.y + offset.y} size={ITEM_MARK_SIZE} />
             )}
         </>
     );
@@ -389,54 +398,39 @@ function Fading({ cue, held, className, children }: { cue: { start: number; leng
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
  * something to hit. Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, cue, held, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; held: boolean; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function Falling({ artId, view, cue, shoves, held, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; shoves: readonly Shove[]; held: boolean; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
+    // Its own clock, only for as long as it is knocked by the blow that downs it.
+    const ms = useElapsed(endOf(shoves), held);
+    const offset = shoveAt(shoves, ms, square => isoCentre(view, square));
     return (
         <Fading cue={cue} held={held} className="ag-ra-falling">
-            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
+            <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} offset={offset} ghost />
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </Fading>
     );
 }
 
 /**
- * Where a character walking `walks` (its own, in order) is `ms` into the
- * playback: the square of its path it is leaving, the one it is heading for,
- * and how far over the way between their middles it has got — or null once its
- * last walk is over. Every square of a path takes the same time. Before a walk
- * starts it stands where the path begins; between two it stands where the
- * first left off.
- */
-function walkerAt(walks: readonly WalkCue[], ms: number): { from: Square; to: Square; across: number } | null {
-    const last = walks[walks.length - 1];
-    if (ms >= last.start + last.length) return null;
-    let walk = walks[0];
-    for (const one of walks) if (ms >= one.start) walk = one;
-    const legs = walk.path.length - 1;
-    const progress = Math.min(1, Math.max(0, (ms - walk.start) / walk.length)) * legs;
-    const leg = Math.min(legs - 1, Math.floor(progress));
-    return { from: walk.path[leg], to: walk.path[leg + 1], across: progress - leg };
-}
-
-/**
  * A character walking the path the action being played told (§26.1): its
  * figure, over its shadow and with its HP bar, slid from square to square a
- * frame at a time — turned to face each step, and rising and falling with the
- * ground — and gone once its last walk is over, which is when its resting
+ * frame at a time — turned to face each step, rising and falling with the
+ * ground, bobbing a little in each step and hopping a change of height, the
+ * figure alone, so its bar and shadow stay steady — and gone once its last walk is over, which is when its resting
  * figure (`Arriving`) appears where the path ends. Drawn without its marks, and
  * not to be tapped.
  */
 function Walker({ artId, view, field, walks, held, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; held: boolean; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const last = walks[walks.length - 1];
     const ms = useElapsed(last.start + last.length, held);
-    const now = walkerAt(walks, ms);
+    const now = walkerAt(walks, ms, legLengthOn(view));
     if (!now) return null;
     const { fighter } = walks[0];
     const feet = isoCentre(view, now.from), next = isoCentre(view, now.to);
     return (
         <g className="ag-ra-walker" transform={`translate(${(next.x - feet.x) * now.across} ${(next.y - feet.y) * now.across})`}>
-            <Figure artId={artId} view={view} square={now.from} character={fighter.character} facing={facingTowards(field, now.from, now.to)} item={fighter.item} tint={tintFor(fighter.owner)} />
+            <Figure artId={artId} view={view} square={now.from} character={fighter.character} facing={facingTowards(field, now.from, now.to)} item={fighter.item} tint={tintFor(fighter.owner)} offset={{ x: 0, y: walkLift(now, square => view.heights[square]) }} />
             <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </g>
     );
@@ -570,10 +564,12 @@ interface FighterNodeProps {
     drawn?: Fighter;
     /** The HP a blow has just taken off, still draining off the end of the bar. */
     chip?: number;
+    /** How far its figure is knocked or lunging off its square (`Figure`'s `offset`): its bar and marks stay put. */
+    offset?: Point;
 }
 
 /** A character on the battlefield, standing or fallen: its figure, HP bar, watch and effects and AP, and the tap that selects it. */
-function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, chip }: FighterNodeProps) {
+function FighterNode({ artId, view, fighter, ring, selected, acting, colour, facingFor, tintFor, nameFor, onSelect, drawn = fighter, chip, offset }: FighterNodeProps) {
     const { x, y } = discCentre(view, fighter.square);
     const feet = isoCentre(view, fighter.square);
     const character = CHARACTERS[fighter.character];
@@ -600,6 +596,7 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
                 item={standing ? drawn.item : null}
                 className={standing ? '' : 'ag-ra-figure--down'}
                 tint={tintFor(fighter.owner)}
+                offset={offset}
             />
             {standing && <HpBar x={feet.x} y={feet.y} fighter={drawn} colour={colour} chip={chip} />}
             <RealmArenaEffectMarks id={artId} effects={standing ? effectsOn(drawn) : []} watching={watching} x={x - EFFECT_MARK_OFFSET} y={y} size={EFFECT_MARK_SIZE} step={EFFECT_MARK_STEP} />
@@ -611,12 +608,51 @@ function FighterNode({ artId, view, fighter, ring, selected, acting, colour, fac
 /**
  * A resting character an action being played changes the bar, marks or item of
  * (`toldOf`): its own frame clock, so only these redraw every frame, drawing
- * them as the action found them until the cue that changed them lands. The
+ * them as the action found them until the cue that changed them lands, and
+ * its figure knocked by the blows it takes and lunging as it strikes. The
  * clock stops once the last of it is over, and the figure is its real self.
  */
 function ToldFighterNode({ told, held, ...props }: FighterNodeProps & { told: Told; held: boolean }) {
     const ms = useElapsed(told.until, held);
-    return <FighterNode {...props} {...toldAt(told, props.fighter, ms)} />;
+    const offset = shoveAt(told.shoves, ms, square => isoCentre(props.view, square));
+    return <FighterNode {...props} {...toldAt(told, props.fighter, ms)} offset={offset} />;
+}
+
+/**
+ * The clock of a shake (`Shaking`): its own frame loop, which moves the group
+ * it is given by the shake's offset a frame at a time and puts it back when it
+ * is over or unmounted. It draws nothing itself, and is keyed by its playback
+ * so each one's clock starts at nothing.
+ */
+function ShakeClock({ target, cues, until, held }: { target: React.RefObject<SVGGElement | null>; cues: readonly BattleCue[]; until: number; held: boolean }) {
+    const ms = useElapsed(until, held);
+    const { x, y } = shakeAt(cues, ms);
+    useEffect(() => {
+        const group = target.current;
+        group?.setAttribute('transform', `translate(${x} ${y})`);
+        return () => group?.removeAttribute('transform');
+    }, [target, x, y]);
+    return null;
+}
+
+/**
+ * The whole battlefield, shaken (§26.1) as a fireball or a thunder flask lands:
+ * its `children` in one group that stays where it is, the clock (`ShakeClock`)
+ * setting that group's `transform` attribute a frame at a time. Setting it from
+ * outside rather than as a prop is what lets the group stay mounted from one
+ * playback to the next, so the board's thousand sprites are neither redrawn
+ * nor remade for a shake; the clock is only mounted while there is one to play,
+ * and not at all with reduced motion.
+ */
+function Shaking({ playback, still, held, children }: { playback: Playback | null | undefined; still: boolean; held: boolean; children: React.ReactNode }) {
+    const group = useRef<SVGGElement>(null);
+    const until = playback && !still ? endOf(shakesOf(playback.cues)) : 0;
+    return (
+        <g ref={group}>
+            {children}
+            {playback && until > 0 && <ShakeClock key={playback.key} target={group} cues={playback.cues} until={until} held={held} />}
+        </g>
+    );
 }
 
 /** The view turned a quarter at a time, and how it got there: what the board keeps its place across. */
@@ -968,7 +1004,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         // One downed partway through a move stands on its square only once it has walked there.
         if (cue.kind === 'fall') {
-            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} held={held} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
+            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} shoves={shovesOf(playback.cues, cue.fighter.id, still)} held={held} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
             items.push({
                 depth: isoDepth(view, cue.fighter.square) + 0.6,
                 node: cue.arrives === undefined || still ? falling : <Arriving key={`fall-${playback.key}-${cue.fighter.id}`} ms={cue.arrives}>{falling}</Arriving>,
@@ -1001,103 +1037,105 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 tappable: about seven squares across (§13.1). */}
             <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
                 <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`} className={held ? 'ag-ra-held' : undefined}>
-                    <g className="ag-ra-ground--earth">
-                        <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
-                        <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
-                    </g>
-                    <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
-                    <TintDefs artId={artId} colours={owners.map(colourFor)} />
-                    <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
-                    <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
-                    {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
-                    <path className="ag-ra-grid" d={ground.lines} />
-
-                    {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
-                    {zones.map(zone => (
-                        <polygon
-                            key={zone.key}
-                            className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
-                            points={zone.points}
-                            style={zone.style}
-                        />
-                    ))}
-                    {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
-                    {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
-
-                    {/* Under everything that stands up, so a tap on a
-                        character goes to the character; the terrain lets a
-                        tap through to it. */}
-                    {onTapSquare && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
-
-                    {items.map(item => item.node)}
-
-                    {path && pathEnd && (
-                        <>
-                            <polyline className="ag-ra-path" points={isoPoints(path)} />
-                            <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
-                        </>
-                    )}
-
-                    {/* A standing character something in front hides, drawn
-                        again faintly over it, so it's still there to see and
-                        to tap. */}
-                    {ghosts.map(fighter => {
-                        const { x, y } = discCentre(view, fighter.square);
-                        return (
-                            <ClickableMapNode
-                                key={`ghost-${fighter.id}`}
-                                x={x} y={y} radius={FIGURE_RADIUS}
-                                isValid
-                                showRing={false}
-                                onClick={() => onSelect(fighter.id)}
-                                title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
-                            >
-                                <g className="ag-ra-ghost">
-                                    <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />
-                                </g>
-                            </ClickableMapNode>
-                        );
-                    })}
-
-                    {/* Over every figure, so a neighbour never hides one. */}
-                    {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
-
-                    {/* The centre's name sits just clear of its dashed edge,
-                        big enough to read fitted to a phone. */}
-                    {centre && (
-                        <MapLabelLayer
-                            labels={[{
-                                key: CENTRE,
-                                ...isoPoint(view, centre.x + centre.width / 2, centre.y + centre.height / 2, 0),
-                                text: 'Centre',
-                                radius: (centre.width + centre.height) * ISO_HALF_HEIGHT / 2,
-                            }]}
-                            obstacles={figureRects}
-                            width={width} height={height}
-                            offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
-                            fontSize={10}
-                            fontWeight={800}
-                        />
-                    )}
-
-                    {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
-                    {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} held={held} />}
-
-                    {/* The pulses — the wave's zones breathing over their lit
-                        ground, and the HP a lined-up action would change — one
-                        group of each, after everything else, so the layer the
-                        browser makes of a pulse lifts nothing else with it
-                        (`.ag-ra-pulse`). */}
-                    {waves.length > 0 && (
-                        <g className="ag-ra-pulse ag-ra-pulse--wave">
-                            {waves.map(zone => <polygon key={zone.key} className="ag-ra-wave" points={zone.points} style={zone.style} />)}
+                    <Shaking playback={playback} still={still} held={held}>
+                        <g className="ag-ra-ground--earth">
+                            <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
+                            <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
                         </g>
-                    )}
-                    {hpChanges.length > 0 && (
-                        <g className="ag-ra-pulse ag-ra-pulse--hp">
-                            {hpChanges.map(({ fighter, change }) => <HpChange key={fighter.id} view={view} fighter={fighter} change={change} />)}
-                        </g>
-                    )}
+                        <RealmArenaTerrainDefs id={artId} origin={isoPoint(view, 0, 0, 0)} />
+                        <TintDefs artId={artId} colours={owners.map(colourFor)} />
+                        <polygon className="ag-ra-top ag-ra-ground--open" points={ground.slab.top} />
+                        <polygon points={ground.slab.top} fill={`url(#${artId}-grass)`} />
+                        {ground.flat.map(art => <RealmArenaTerrainArt key={`flat-${art.square}`} id={artId} {...art} />)}
+                        <path className="ag-ra-grid" d={ground.lines} />
+
+                        {/* A zone drawn in parts — a warband on more than one edge (§30.9) — is outlined part by part. */}
+                        {zones.map(zone => (
+                            <polygon
+                                key={zone.key}
+                                className={`ag-ra-deployment${zone.wave ? ' ag-ra-deployment--wave' : ''}`}
+                                points={zone.points}
+                                style={zone.style}
+                            />
+                        ))}
+                        {centre && <polygon className="ag-ra-centre" points={isoArea(view, centre)} />}
+                        {flatShades.map(run => <path key={run.key} className={run.key} d={run.d} />)}
+
+                        {/* Under everything that stands up, so a tap on a
+                            character goes to the character; the terrain lets a
+                            tap through to it. */}
+                        {onTapSquare && <rect className="ag-ra-tap" width={width} height={height} onClick={tapSquare} />}
+
+                        {items.map(item => item.node)}
+
+                        {path && pathEnd && (
+                            <>
+                                <polyline className="ag-ra-path" points={isoPoints(path)} />
+                                <circle className="ag-ra-path-end" cx={pathEnd.x} cy={pathEnd.y} r={2} />
+                            </>
+                        )}
+
+                        {/* A standing character something in front hides, drawn
+                            again faintly over it, so it's still there to see and
+                            to tap. */}
+                        {ghosts.map(fighter => {
+                            const { x, y } = discCentre(view, fighter.square);
+                            return (
+                                <ClickableMapNode
+                                    key={`ghost-${fighter.id}`}
+                                    x={x} y={y} radius={FIGURE_RADIUS}
+                                    isValid
+                                    showRing={false}
+                                    onClick={() => onSelect(fighter.id)}
+                                    title={`${CHARACTERS[fighter.character].name} · ${nameFor(fighter.owner)} · out of sight`}
+                                >
+                                    <g className="ag-ra-ghost">
+                                        <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facingFor(fighter)} tint={tintFor(fighter.owner)} ghost />
+                                    </g>
+                                </ClickableMapNode>
+                            );
+                        })}
+
+                        {/* Over every figure, so a neighbour never hides one. */}
+                        {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
+
+                        {/* The centre's name sits just clear of its dashed edge,
+                            big enough to read fitted to a phone. */}
+                        {centre && (
+                            <MapLabelLayer
+                                labels={[{
+                                    key: CENTRE,
+                                    ...isoPoint(view, centre.x + centre.width / 2, centre.y + centre.height / 2, 0),
+                                    text: 'Centre',
+                                    radius: (centre.width + centre.height) * ISO_HALF_HEIGHT / 2,
+                                }]}
+                                obstacles={figureRects}
+                                width={width} height={height}
+                                offset={(centre.width + centre.height) * ISO_HALF_HEIGHT / 2 + 4}
+                                fontSize={10}
+                                fontWeight={800}
+                            />
+                        )}
+
+                        {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
+                        {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} held={held} />}
+
+                        {/* The pulses — the wave's zones breathing over their lit
+                            ground, and the HP a lined-up action would change — one
+                            group of each, after everything else, so the layer the
+                            browser makes of a pulse lifts nothing else with it
+                            (`.ag-ra-pulse`). */}
+                        {waves.length > 0 && (
+                            <g className="ag-ra-pulse ag-ra-pulse--wave">
+                                {waves.map(zone => <polygon key={zone.key} className="ag-ra-wave" points={zone.points} style={zone.style} />)}
+                            </g>
+                        )}
+                        {hpChanges.length > 0 && (
+                            <g className="ag-ra-pulse ag-ra-pulse--hp">
+                                {hpChanges.map(({ fighter, change }) => <HpChange key={fighter.id} view={view} fighter={fighter} change={change} />)}
+                            </g>
+                        )}
+                    </Shaking>
                 </svg>
             </BoardZoom>
             {/* Turning the view: beside BoardZoom rather than in it, since
