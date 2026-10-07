@@ -426,6 +426,19 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
         expect(titles(hidden)).toEqual(["Alice ended their turn", "The enemy moved three of its characters"]);
     });
 
+    it("folds an enemy character that moved out of sight, which the viewer's snapshot no longer holds (§27.2)", () => {
+        const owner = warbandOwner(0);
+        const enemyMove = (fighter: number) => ({ action: { kind: "move", fighter }, events: [move(fighter)] });
+        const all = [...squad, newFighter(5, owner, "knight", 30), newFighter(6, owner, "cleric", 31), newFighter(7, owner, "manAtArms", 32), newFighter(8, owner, "manAtArms", 33)];
+        // The Knight and the Cleric ended their moves out of the team's sight.
+        const seen = all.filter(fighter => fighter.id !== 5 && fighter.id !== 6);
+        const lines = ["The Renegades moved their Knight", "The Renegades moved their Cleric", "The Renegades moved their Man-at-arms", "The Renegades moved their Man-at-arms", "The Renegades ended their turn"];
+        const rows = forFeed(toEvents(snap(state({ coop: true, enemy: "realm", fog: true, fighters: all })),
+            snap(state({ coop: true, enemy: "realm", fog: true, fighters: seen }), [...lines.map(text => line(text)).reverse(), line("Alice ended their turn", "a")]),
+            cmd("RealmArenaEndTurn"), { ...valid(), turnOver: true, recap: { enemy: { owner, started: [], steps: [5, 6, 7, 8].map(enemyMove), ended: [] }, started: [] } } as unknown as ICommandOutcome));
+        expect(titles(rows)).toEqual(["Alice ended their turn", "The Renegades moved their Knight, their Cleric and two Men-at-arms"]);
+    });
+
     describe("a character's quiet deeds in a row, the same ones by each of several", () => {
         const hunker = (fighter: number): BattleEvent => ({ kind: "hunkered", fighter });
         const watch = (fighter: number): BattleEvent => ({ kind: "watching", fighter, banked: 2 });

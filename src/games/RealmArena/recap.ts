@@ -200,13 +200,21 @@ const UNNAMED = new Map([
 ]);
 
 /**
+ * Each kind of character by how `whose` names one of the actor's own: "their
+ * Knight". Read off the line rather than the fighter, which in fog of war the
+ * viewer's snapshot may no longer hold — an enemy that moved out of sight
+ * (§27.2) — though the line still named it.
+ */
+const CHARACTER_BY_NAME = new Map((Object.keys(CHARACTERS) as CharacterId[]).map(id => [`their ${CHARACTERS[id].name}`, id]));
+
+/**
  * The deed an action was, when it was nothing else: a move, going on watch or
  * hunkering down, and no reaction to it, which would be an event of another
  * kind. Read off its events and the clause `narrate` wrote for them, which
  * must say it as expected (a hidden enemy's sneak is told as a move) and name
  * the character as `whose` does: by its kind, or as one of the `UNNAMED`.
  */
-function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string, fighter?: Fighter): Deed | undefined {
+function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string): Deed | undefined {
     const [first] = events;
     const words = first && QUIET_DEEDS[first.kind];
     if (!words || !events.every(event => event.kind === first.kind)) return undefined;
@@ -214,7 +222,8 @@ function quietDeed(events: readonly BattleEvent[], clause: string, prefix: strin
     if (!clause.startsWith(`${verb} `) || !clause.endsWith(words.tail)) return undefined;
     const whom = clause.slice(verb.length + 1, clause.length - words.tail.length);
     const steps = [{ verb, tail: words.tail }];
-    if (fighter && whom === `their ${CHARACTERS[fighter.character].name}`) return { prefix, whom, character: fighter.character, steps };
+    const character = CHARACTER_BY_NAME.get(whom);
+    if (character) return { prefix, whom, character, steps };
     return UNNAMED.has(whom) ? { prefix, whom, steps } : undefined;
 }
 
@@ -236,7 +245,7 @@ function actionRow(base: RowBase, name: string, title: string, events: readonly 
         fighter,
         battle: events,
         clause,
-        deed: quietDeed(events, clause, prefix, fighters.find(one => one.id === fighter)),
+        deed: quietDeed(events, clause, prefix),
     };
 }
 
