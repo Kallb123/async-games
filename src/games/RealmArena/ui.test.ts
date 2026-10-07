@@ -699,6 +699,92 @@ describe("battleCues", () => {
         expect(Math.max(...longer.map(cue => cue.start + cue.length))).toBeLessThanOrEqual(PLAYBACK_MS);
         expect(only(longer, "walk")[0].length).toBeLessThan(59 * WALK_STEP_MS);
     });
+
+    it("stands a knock-out's Down a line above the damage that caused it, and a later text back in the usual place", () => {
+        const cues = battleCues([
+            { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 9, reaction: false },
+            { kind: "downed", fighter: 0, by: 1 },
+            { kind: "burned", fighter: 3, damage: 1 },
+        ], before);
+        const [damage, down] = only(cues, "text");
+        expect(damage.lane ?? 0).toBe(0);
+        expect(down).toMatchObject({ value: "Down", lane: 1 });
+        // Down starts while the damage is still rising.
+        expect(down.start).toBeLessThan(damage.start + damage.length);
+        // Another fighter's text shares nothing with theirs.
+        expect(only(cues, "text")[2].lane ?? 0).toBe(0);
+        // Once the first text has gone, the next on that fighter is back on the ground.
+        const later = battleCues([
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "burned", fighter: 0, damage: 1 },
+            { kind: "burned", fighter: 0, damage: 1 },
+        ], before);
+        expect(only(later, "text").map(cue => cue.start)).toEqual([0, 450, 900]);
+        // The third starts at 900, while the first (to 1000) and the second (to 1450) are both still showing.
+        expect(only(later, "text").map(cue => cue.lane ?? 0)).toEqual([0, 1, 2]);
+        const gap = battleCues(Array.from({ length: 4 }, () => ({ kind: "burned", fighter: 0, damage: 1 }) as const), before);
+        // The fourth starts at 1350, after the first (to 1000) has gone, so it takes the lowest lane again.
+        expect(only(gap, "text").map(cue => [cue.start, cue.lane ?? 0])).toEqual([[0, 0], [450, 1], [900, 2], [1350, 0]]);
+    });
+
+    it("keeps everyone one fireball hits in the usual place, and gives texts that start together on one fighter lanes of their own", () => {
+        const cues = battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1, 2], damage: 3 }], before);
+        expect(only(cues, "text").map(cue => cue.lane ?? 0)).toEqual([0, 0]);
+        const together = battleCues([{ kind: "hunkered", fighter: 0 }, { kind: "watching", fighter: 0, banked: 2 }, { kind: "watching", fighter: 1, banked: 2 }], before);
+        const [first, second] = only(together, "text").filter(cue => cue.fighter === 0);
+        expect(first.lane ?? 0).not.toBe(second.lane ?? 0);
+    });
+
+    it("keeps texts that overlap on different lanes when an action is shortened to fit", () => {
+        const shots: BattleEvent[] = Array.from({ length: 12 }, () => ({ kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 1, reaction: false }));
+        const texts = only(battleCues([...shots, { kind: "downed", fighter: 0, by: 1 }], before), "text");
+        expect(texts).toHaveLength(13);
+        expect(Math.max(...texts.map(cue => cue.lane ?? 0))).toBeGreaterThan(0);
+        for (const [i, one] of texts.entries()) {
+            for (const other of texts.slice(i + 1)) {
+                const overlap = Math.min(one.start + one.length, other.start + other.length) - Math.max(one.start, other.start);
+                // A millisecond of rounding either side is no overlap.
+                if (overlap > 2) expect(one.lane ?? 0).not.toBe(other.lane ?? 0);
+            }
+        }
+    });
+
+    describe("for a player who sees no walk or flight", () => {
+        const run: BattleEvent[] = [
+            { kind: "moved", fighter: 0, path: Array.from({ length: 11 }, (_, i) => 10 + i), sneaking: false },
+            { kind: "shot", fighter: 1, target: 0, chance: 60, roll: 10, result: "hit", damage: 3, reaction: true },
+            { kind: "downed", fighter: 0, by: 1 },
+        ];
+
+        it("takes no time over a walk, so a shot after it is told at once", () => {
+            const walking = battleCues(run, before), still = battleCues(run, before, [], { still: true });
+            const shot = (cues: BattleCue[]) => only(cues, "text").find(cue => cue.value === "\u22123")!;
+            expect(shot(walking).start).toBe(10 * WALK_STEP_MS + 450);
+            expect(shot(still).start).toBe(0);
+            expect(shot(still).start).toBeLessThan(shot(walking).start - 1000);
+            expect(only(still, "walk")).toMatchObject([{ path: expect.any(Array), start: 0, length: 0 }]);
+            // The downed mover is on its square from the moment the walk (such as it is) ends.
+            expect(only(still, "fall")).toMatchObject([{ fighter: { id: 0, square: 20 }, arrives: 0 }]);
+            expect(partDurationMs(still)).toBeLessThan(partDurationMs(walking));
+        });
+
+        it("lands a flight with no lead, and still gives it a moment so it is never drawn landing in no time", () => {
+            const [flight] = only(battleCues([run[1]], before, [], { still: true }), "flight");
+            expect(flight).toMatchObject({ start: 0, land: 1 });
+            expect(flight.length).toBeGreaterThanOrEqual(flight.land);
+            const [fireball] = only(battleCues([{ kind: "fireball", fighter: 3, at: 55, targets: [1], damage: 3 }], before, [], { still: true }), "burst");
+            expect(fireball.start).toBe(0);
+        });
+
+        it("leaves the timeline as it was without the option, and carries it through a review's parts and step", () => {
+            expect(battleCues(run, before, [], {})).toEqual(battleCues(run, before));
+            expect(battleCues(run, before, [], { still: false })).toEqual(battleCues(run, before));
+            const outcome = { events: run } as IRealmArenaStepOutcome;
+            const board = { fighters: before, blasted: [] };
+            expect(reviewParts(outcome, board, [], { still: true })[0].cues).toEqual(battleCues(run, before, [], { still: true }));
+            expect(reviewStepMs(outcome, board, [], { still: true })).toBeLessThan(reviewStepMs(outcome, board));
+        });
+    });
 });
 
 describe("moveFrame", () => {
