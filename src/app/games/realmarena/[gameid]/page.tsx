@@ -18,7 +18,7 @@ import { useMusterDraft } from "@/games/RealmArena/useMusterDraft";
 import { enemyNameOf, RA_SOLO_PARAM, REALM_ONLY } from "@/games/RealmArena/characters";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
-import { battlefieldOf } from "@/games/RealmArena/maps";
+import { battlefieldById, battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
 import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
@@ -95,7 +95,8 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     }, {
         // Play rests on a step for as long as the board takes to play it,
         // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
+        // The map as it was drawn: what a blast cleared from it changes no timing.
+        stepDurationMs: (snapshot, from) => from ? reviewStepMs(battlefieldById(snapshot.specificGameState.map), snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -108,9 +109,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const previous = nav.previousSnapshot;
     const stepOutcome = nav.displayedOutcome;
     const stepFighters = nav.displayedState?.fighters;
+    const stepMap = nav.displayedState?.map;
     const parts = useMemo(
-        () => !nav.isLive && previous ? reviewParts(stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
-        [nav.isLive, previous, stepOutcome, stepFighters, still],
+        () => !nav.isLive && previous ? reviewParts(battlefieldById(stepMap ?? ''), stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
+        [nav.isLive, previous, stepMap, stepOutcome, stepFighters, still],
     );
     const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
@@ -229,7 +231,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
     const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
-        const cues = battleCues(events, fighters, after, { still });
+        const cues = battleCues(field, events, fighters, after, { still });
         if (cues.length === 0) return setOwn(null);
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
         setOwn({ playback: { key, cues, field, before: fighters }, follow: to });

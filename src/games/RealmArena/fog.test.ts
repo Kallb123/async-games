@@ -433,12 +433,12 @@ describe("the board playing what it was told (§27)", () => {
             { kind: "moved", fighter: 1, path: [], sneaking: false },
             { kind: "burned", fighter: 1, damage: 1 },
         ];
-        expect(battleCues(events, before)).toEqual([]);
+        expect(battleCues(FIELD, events, before)).toEqual([]);
     });
 
     it("says who a move found in its way, and marks the mover", () => {
         const spotted = { kind: "spotted", fighter: 0, by: 1 } as const;
-        expect(battleCues([spotted], before)).toMatchObject([{ kind: "text", fighter: 0, value: "Spotted" }]);
+        expect(battleCues(FIELD, [spotted], before)).toMatchObject([{ kind: "text", fighter: 0, value: "Spotted" }]);
         expect(eventLines([spotted], before, "a", userId => userId === "b" ? "Bob" : userId)[0].title).toBe("Your Man-at-arms found Bob's Man-at-arms in its way");
         expect(eventLines([spotted], before.slice(0, 1), "a", () => "Bob")[0].title).toBe("Your Man-at-arms found a character out of sight in its way");
     });
