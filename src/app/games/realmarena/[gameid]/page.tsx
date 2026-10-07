@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionFollow, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, partLabel, reviewParts, STEP_BEAT_MS, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -80,7 +80,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const { submitCommand, pendingTarget } = useSubmitCommand<IRealmArenaGameDataResponse>(gameId, user, setGameData, getGameData, gameData);
 
     // With reduced motion the board draws no walk and no flight, so neither
-    // takes any time in what it plays, nor in how long a review rests on it.
+    // takes any time in what it plays.
     const still = usePrefersReducedMotion();
 
     // Planning is out by design (§17.3 PR 8): every attack worth planning
@@ -93,9 +93,10 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         winner: gameData?.winner ?? '',
         history: gameData?.gameState?.history ?? [],
     }, {
-        // Play rests on a step for as long as the board takes to play it,
-        // every part of an End turn included: the same plan the page follows.
-        stepDurationMs: (snapshot, from) => from ? reviewStepMs(snapshot.specificGameState.map, snapshot.outcome, from.specificGameState, snapshot.specificGameState.fighters, { still }) : STEP_MIN_MS,
+        // Play rests on a step until the page says it has played, every part
+        // of an End turn included (`stepEnded`, below): the board says when
+        // each part has, so play never moves on before it has.
+        awaitsStepEnd: true,
     });
     const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     // The first-match welcome: the guided tour, with the guide behind it in ⋮.
@@ -105,6 +106,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // one part at a time, whenever it is shown: each part's cues play over the
     // board as it left the part before, and the board is drawn as that part
     // left it (§26.2). Any other step is the one part. Live shows none.
+    // A part moves on once it has played: the board says so (`played`, below)
+    // and the part rests a beat. A part with nothing to play rests a moment
+    // instead, and so does the opening step, which has no parts at all. Played
+    // by hand a step's parts follow one another just the same; only its last
+    // part going by ends a step, and only auto-play moves on from that.
     const previous = nav.previousSnapshot;
     const stepOutcome = nav.displayedOutcome;
     const stepFighters = nav.displayedState?.fighters;
@@ -113,14 +119,25 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         () => !nav.isLive && previous ? reviewParts(stepMap, stepOutcome, previous.specificGameState, stepFighters, { still }) : [],
         [nav.isLive, previous, stepMap, stepOutcome, stepFighters, still],
     );
-    const [reached, setReached] = useResettingState(0, `${nav.mode}:${nav.viewIndex}`);
+    const stepNow = `${nav.mode}:${nav.viewIndex}`;
+    const [reached, setReached] = useResettingState(0, stepNow);
+    // The playback the board has told us has played, for the step on screen
+    // only: a key left over from another step can't move this one on.
+    const [playedKey, setPlayedKey] = useResettingState<string | null>(null, stepNow);
     const partIndex = Math.min(reached, Math.max(0, parts.length - 1));
     const part = parts[partIndex];
+    const partKey = `step:${nav.viewIndex}:${partIndex}`;
+    const partPlays = !nav.isLive && !!part && part.cues.length > 0;
+    const lastPart = partIndex >= parts.length - 1;
+    const { playing, stepEnded, viewIndex } = nav;
     useEffect(() => {
-        if (partIndex >= parts.length - 1) return;
-        const rested = setTimeout(() => setReached(partIndex + 1), parts[partIndex].durationMs);
+        if (nav.isLive || (partPlays && playedKey !== partKey)) return;
+        const rested = setTimeout(() => {
+            if (!lastPart) setReached(partIndex + 1);
+            else if (playing) stepEnded(viewIndex);
+        }, partPlays ? STEP_BEAT_MS : STEP_MIN_MS);
         return () => clearTimeout(rested);
-    }, [parts, partIndex, setReached]);
+    }, [nav.isLive, partPlays, playedKey, partKey, lastPart, partIndex, playing, stepEnded, viewIndex, setReached]);
     // What the part playing left on the board, over the snapshot's own, so the
     // board, the units, the scores and the stats all agree with what plays.
     const viewed = nav.displayedState;
@@ -218,9 +235,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // What the viewer's own last action or End turn did, played over the board
     // as it comes back (§26.1), from where everyone stood — and the cover that
     // stood — when it was sent.
-    // Gone once it has had its time — and the time the board may hold it while
-    // the view glides to it — whether or not the board was showing it, so
-    // coming back from a review doesn't play it again.
+    // Gone once the board says it has played (`played`, below) — and gone on
+    // leaving live for a review, whether or not the board had played it, so
+    // coming back doesn't play it again.
     // The view stays on the action itself while it plays — the target the
     // player picked, the stretch a move covered, or whatever it touched —
     // rather than going where the selection or the board's resting view would
@@ -228,6 +245,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // and a long walk doesn't start off the frame. That is worked out as the
     // action is sent, and goes when the playback does.
     const [own, setOwn] = useState<{ playback: Playback; follow: AimFollow | ReturnType<typeof actionFollow> } | null>(null);
+    // Reset during render rather than by `useResettingState`, whose value would
+    // come back on returning to the mode it was held in.
+    const [ownMode, setOwnMode] = useState(nav.mode);
+    if (ownMode !== nav.mode) {
+        setOwnMode(nav.mode);
+        setOwn(null);
+    }
     const ownPlayback = own?.playback ?? null;
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(field, events, fighters, after, { still });
@@ -235,11 +259,13 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
         const to = picked ?? actionFollow(field, events, fighters, after, `play:${key}`);
         setOwn({ playback: { key, cues, field, before: fighters }, follow: to });
     };
-    useEffect(() => {
-        if (!own) return;
-        const played = setTimeout(() => setOwn(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
-        return () => clearTimeout(played);
-    }, [own]);
+    // The board has played the playback with this key through to its end (the
+    // view's glide to it included): live, that is the viewer's own action, which
+    // is let go; in a review, it is the part on screen, which then rests its beat.
+    const played = (key: string) => {
+        if (nav.isLive) setOwn(current => current?.playback.key === key ? null : current);
+        else setPlayedKey(key);
+    };
     const act = (action: Action) => {
         const command = new RealmArenaAct();
         command.action = action;
@@ -321,7 +347,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: part.field, before: part.before.fighters } : null;
+        : partPlays ? { key: partKey, cues: part.cues, field: part.field, before: part.before.fighters } : null;
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 
@@ -540,6 +566,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
                             odds={reach?.options}
                             overlay={reach && <RealmArenaTargets reach={reach} fighters={fighters} viewerId={myUserId} nameFor={playerName} />}
                             playback={playback}
+                            onPlayed={played}
                             unplaced={unplaced}
                         />
                     </div>

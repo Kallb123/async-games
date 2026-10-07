@@ -1,8 +1,8 @@
 // The two rules auto-play and "replay from your last turn" hang on, without a
-// React tree or a timer: where a replay starts, and how long a step may rest.
+// React tree or a timer: where a replay starts, and what a finished step does.
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_STEP_DURATION_MS, playbackDelay, replayStartIndex } from "./useTurnNavigation";
+import { autoPlayAfter, replayStartIndex } from "./useTurnNavigation";
 
 const by = (senderId: string | null) => ({
     command: senderId ? { senderId, senderUsername: senderId, timestamp: "", summary: "" } : null,
@@ -36,16 +36,24 @@ describe("replayStartIndex", () => {
     });
 });
 
-describe("playbackDelay", () => {
-    it("trusts a usable duration", () => {
-        expect(playbackDelay(0)).toBe(0);
-        expect(playbackDelay(2400)).toBe(2400);
+describe("autoPlayAfter", () => {
+    const at = (viewIndex: number, currentIndex = 5, playing = true) => ({ playing, viewIndex, currentIndex });
+
+    it("moves on to the next step when the step shown has finished", () => {
+        expect(autoPlayAfter(at(2), 2)).toEqual({ playing: true, viewIndex: 3 });
+        expect(autoPlayAfter(at(0), 0)).toEqual({ playing: true, viewIndex: 1 });
     });
 
-    it("falls back when the game gives nothing it can use", () => {
-        expect(playbackDelay(undefined)).toBe(DEFAULT_STEP_DURATION_MS);
-        expect(playbackDelay(NaN)).toBe(DEFAULT_STEP_DURATION_MS);
-        expect(playbackDelay(-5)).toBe(DEFAULT_STEP_DURATION_MS);
-        expect(playbackDelay(Infinity)).toBe(DEFAULT_STEP_DURATION_MS);
+    it("stops at the live position, once its step has finished too", () => {
+        expect(autoPlayAfter(at(5), 5)).toEqual({ playing: false, viewIndex: 5 });
+    });
+
+    it("ignores a step that is not the one shown", () => {
+        expect(autoPlayAfter(at(2), 1)).toBeNull();
+        expect(autoPlayAfter(at(2), 3)).toBeNull();
+    });
+
+    it("ignores a step that finishes after auto-play was stopped", () => {
+        expect(autoPlayAfter(at(2, 5, false), 2)).toBeNull();
     });
 });
