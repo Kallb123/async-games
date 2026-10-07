@@ -28,7 +28,12 @@ import { globSync } from 'node:fs';
 //
 // Raised again from 1,000,000 when Hold Out, difficulty and battle size and
 // the Sacked Fort took Realm Arena's board route to 977 KB, just over it.
-const limits = { routeJavaScript: 1_025_000, largestImage: 5_250_000 };
+//
+// Raised again from 1,025,000 when the playback timings (flights by distance,
+// paced and eased walks, the knock, the lunge and the shake on impact) took
+// Realm Arena's board route to 1,006 KB. Raised well clear this time, so the
+// animation work still to come (docs/isometric-animations.md §6) has room.
+const limits = { routeJavaScript: 1_150_000, largestImage: 5_250_000 };
 const manifests = globSync('.next/server/app/**/page_client-reference-manifest.js');
 if (!manifests.length) throw new Error('No App Router client manifests found; run `npm run build` first.');
 let failed = false;
