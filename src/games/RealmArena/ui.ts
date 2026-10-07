@@ -662,8 +662,9 @@ export const DIAGONAL_LEG = (ISO_HALF_WIDTH + ISO_HALF_HEIGHT) / STRAIGHT;
 /** How many walk steps each quarter of height climbed or dropped adds to a leg: a full wall, four quarters, costs a whole step more. */
 export const CLIMB_LEG = 0.25;
 /**
- * The longest any one action plays for, however much it set off (§26.1). Four
- * and a half seconds: the longest run, twenty-six squares, is 2.75 seconds on
+ * The longest any one action plays for, however much it set off (§26.1), not
+ * counting the view's glide to it, which the board waits out before it starts
+ * the clock. Four and a half seconds: the longest run, twenty-six squares, is 2.75 seconds on
  * its own, and a shot after it takes another 1.5 until its text has risen. An
  * action that would run over it is squeezed to fit, a little at a time and in
  * order (`battleCues`): the walks quicker, then the gaps between landings
@@ -1086,28 +1087,17 @@ export function battleCues(field: Battlefield, events: readonly ToldEvent[], bef
 }
 
 /**
- * How long the board is given to glide to an action before it plays: the
- * board holds the action until the view has landed (BoardZoom's glide is
- * 380ms), and a phone may start the glide a frame or two late.
+ * How long a review rests after the board says a step's (or part's) cues have
+ * played, before the view moves on to the next: a beat to take the last of it
+ * in. The page waits for the board to say it has played; it doesn't guess.
  */
-export const FOLLOW_GLIDE_MS = 450;
-/** How long a review rests after a step's last cue has landed, before the view moves on to the next step (or part). */
 export const STEP_BEAT_MS = 500;
 /**
- * The least a review step or part lasts, however little it plays: one with no
- * cues (a move) still gives the board's glide to it time to land.
+ * How long a review step or part with nothing to play rests, in place of
+ * waiting for the board: a move that walks nowhere, or a step that happened
+ * out of sight, still gives the view's glide to it time to land.
  */
 export const STEP_MIN_MS = 1200;
-
-/**
- * How long a review rests on a run of cues before the next step or part: the
- * glide to it, the cues playing out once it has landed, and a beat more. Each
- * cue is already shortened to fit `PLAYBACK_MS` by `battleCues`, so this is
- * bounded by it too.
- */
-export function partDurationMs(cues: readonly BattleCue[]): number {
-    return Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + endOf(cues) + STEP_BEAT_MS);
-}
 
 /** The part of a board a review's cues and its follow-zoom read as it stood before a step or part. */
 export type BoardBefore = Pick<RealmArenaPartState, "fighters" | "blasted">;
@@ -1126,8 +1116,6 @@ export interface ReviewPart {
     before: BoardBefore;
     /** The board after it, drawn in place of the snapshot's; absent on the last part, whose board is the snapshot's own. */
     state?: RealmArenaPartState;
-    /** How long a review rests on it. */
-    durationMs: number;
 }
 
 /**
@@ -1148,7 +1136,7 @@ export function reviewParts(mapId: string, outcome: IRealmArenaStepOutcome | und
     return told.map(part => {
         const field = battlefieldOf(mapId, from.blasted);
         const cues = battleCues(field, part.events, from.fighters, part.state?.fighters ?? after, options);
-        const played: ReviewPart = { kind: part.kind, events: part.events, field, cues, before: from, state: part.state, durationMs: partDurationMs(cues) };
+        const played: ReviewPart = { kind: part.kind, events: part.events, field, cues, before: from, state: part.state };
         if (part.state) from = { fighters: part.state.fighters, blasted: part.state.blasted };
         return played;
     });
@@ -1168,11 +1156,6 @@ export function reviewParts(mapId: string, outcome: IRealmArenaStepOutcome | und
 export function isUnplaced(part: Pick<ReviewPart, "events" | "cues" | "before">, after: readonly Fighter[], followed: boolean): boolean {
     if (!followed || part.cues.length > 0 || !part.events.some(event => event.kind !== "scored")) return false;
     return !moveFrame(part.events, part.before.fighters, after) && actionSquares(part.before.fighters, after).length === 0;
-}
-
-/** How long a review rests on a whole step: its parts' times added up. */
-export function reviewStepMs(mapId: string, outcome: IRealmArenaStepOutcome | undefined, before: BoardBefore, after: readonly Fighter[] = [], options: BattleCueOptions = {}): number {
-    return reviewParts(mapId, outcome, before, after, options).reduce((total, part) => total + part.durationMs, 0);
 }
 
 /** A battle's state with what one part of a step left in place of the snapshot's own (every field of it, so one the part leaves out — an enemy not yet seen — is left out). */
@@ -1333,6 +1316,17 @@ export function walkEase(time: number, first: number, last: number): number {
 }
 
 /**
+ * Every square of a character's walks, one after another: each walk's path in
+ * order, and where one walk ends on the square the next starts from, that
+ * square twice. A square's place in this list is its depth slot on the board
+ * (`walkerAt`'s `at`), so a walker is hidden by whatever stands in front of the
+ * square it is crossing.
+ */
+export function walkSquares(walks: readonly WalkCue[]): Square[] {
+    return walks.flatMap(walk => walk.path);
+}
+
+/**
  * Where a character walking `walks` (its own, in order) is `ms` into the
  * playback: the square of its path it is leaving, the one it is heading for,
  * and how far over the way between them it has got — or null once its last
@@ -1340,22 +1334,28 @@ export function walkEase(time: number, first: number, last: number): number {
  * is (`legLength`, on screen), so it moves at an even pace whatever the legs'
  * lengths, easing in over the first leg and out over the last (`walkEase`).
  * Before a walk starts it stands where the path begins; between two it stands
- * where the first left off.
+ * where the first left off. `at` is the place in `walkSquares(walks)` of the
+ * square it is nearest: the one it is leaving for the first half of a leg, and
+ * the one it is heading for from the middle on.
  */
-export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from: Square, to: Square) => number): WalkerLeg | null {
+export function walkerAt(walks: readonly WalkCue[], ms: number, legLength: (from: Square, to: Square) => number): (WalkerLeg & { at: number }) | null {
     const last = walks[walks.length - 1];
     if (ms >= last.start + last.length) return null;
-    let walk = walks[0];
-    for (const one of walks) if (ms >= one.start) walk = one;
+    let walk = walks[0], first = 0, before = 0;
+    for (const one of walks) {
+        if (ms >= one.start) { walk = one; first = before; }
+        before += one.path.length;
+    }
     const { path } = walk;
-    if (path.length < 2) return { from: path[0], to: path[0], across: 0 };
+    if (path.length < 2) return { from: path[0], to: path[0], across: 0, at: first };
     const lengths = path.slice(1).map((square, leg) => Math.max(MIN_LEG_LENGTH, legLength(path[leg], square)));
     const total = lengths.reduce((sum, length) => sum + length, 0);
     const time = (ms - walk.start) / Math.max(1, walk.length);
     const gone = walkEase(time, lengths[0] / total, lengths[lengths.length - 1] / total) * total;
     let leg = 0, passed = 0;
     while (leg < lengths.length - 1 && gone >= passed + lengths[leg]) passed += lengths[leg++];
-    return { from: path[leg], to: path[leg + 1], across: Math.min(1, Math.max(0, (gone - passed) / lengths[leg])) };
+    const across = Math.min(1, Math.max(0, (gone - passed) / lengths[leg]));
+    return { from: path[leg], to: path[leg + 1], across, at: first + (across < 0.5 ? leg : leg + 1) };
 }
 
 /**
@@ -1460,4 +1460,225 @@ export function shakeAt(cues: readonly BattleCue[], ms: number): Point {
         y += swing * 0.5 * Math.cos(2 * Math.PI * SHAKE_SWINGS * across * 1.5);
     }
     return { x, y };
+}
+
+// ─── Flights and keyframes on the clock (§4) ────────────────────────────────
+
+/** Where on a square the visuals go: its ground, the middle of a figure standing there, and the top of that figure. */
+export interface FxPoints {
+    ground: Point;
+    body: Point;
+    head: Point;
+}
+
+/**
+ * How high each missile's arc rises (§26.1), as a share of how far it goes (up
+ * to `MAX_ARC`): an arrow on a shallow arc, a bolt in a straight line, a gobbet
+ * of acid on a lob, a fireball or a throw on a high one.
+ */
+export const FLIGHT_ARC: Readonly<Record<Missile, number>> = {
+    arrow: 0.1,
+    bolt: 0,
+    fireball: 0.3,
+    fireFlask: 0.3,
+    thunderFlask: 0.3,
+    smokePot: 0.3,
+    acid: 0.2,
+};
+/**
+ * The highest any arc peaks above the straight line, in board units: three
+ * squares' depth on screen. Without it a lob across the map would rise by a
+ * share of the whole map, out of a close frame.
+ */
+const MAX_ARC = 3 * 2 * ISO_HALF_HEIGHT;
+/** How far a graze turns a shot, in degrees, and how fast it glances on, as a share of the speed it flew at. */
+const GLANCE_TURN = 40;
+const GLANCE_RUN = 0.5;
+/** How far over the head a miss goes, so it flies past the figure rather than through it, in board units. */
+const MISS_CLEAR = 3;
+/** How much bigger a bolt flares where it hits as it fades. */
+const BOLT_FLARE = 1.5;
+
+/** A missile at one moment: where it is, which way it points in degrees, how clearly it is seen and how big it is drawn. */
+export interface FlightFrame {
+    point: Point;
+    heading: number;
+    opacity: number;
+    scale: number;
+}
+
+/** A point `u` along the curve from `a` through `c` to `b`, and the way it's heading there in degrees — carried on past `b` for `u` over 1. */
+function along(a: Point, c: Point, b: Point, u: number): { point: Point; heading: number } {
+    const v = 1 - u;
+    const point = { x: v * v * a.x + 2 * u * v * c.x + u * u * b.x, y: v * v * a.y + 2 * u * v * c.y + u * u * b.y };
+    const dx = 2 * v * (c.x - a.x) + 2 * u * (b.x - c.x), dy = 2 * v * (c.y - a.y) + 2 * u * (b.y - c.y);
+    return { point, heading: Math.atan2(dy, dx) * 180 / Math.PI };
+}
+
+/** How much of a shot is left once it's there, `ms` into its cue: all of it as it arrives, none by the end of the cue. */
+function fade(ms: number, cue: FlightCue): number {
+    return Math.max(0, 1 - (ms - cue.land) / Math.max(1, cue.length - cue.land));
+}
+
+/**
+ * Where a missile is `ms` into the playback, which way it points and how
+ * clearly it's seen, or null before its cue starts and once it is gone. It
+ * flies an arc from `from` to its target (`at` says where a square's ground,
+ * body and head are), and then, with time left: an arrow stays stuck there and
+ * fades; a bolt flares and fades; a graze glances off, turned upward; and a
+ * miss, aimed just over the head, flies on past and comes down beyond. A shot
+ * that landed on the ground (a throw) ends at the target square's ground.
+ */
+export function flightAt(cue: FlightCue, at: (square: Square) => FxPoints, ms: number): FlightFrame | null {
+    const into = ms - cue.start;
+    if (into < 0 || into > cue.length) return null;
+    const from = at(cue.from).body;
+    const target = at(cue.to);
+    const to = cue.result === "landed" ? target.ground
+        : cue.result === "miss" ? { x: target.head.x, y: target.head.y - MISS_CLEAR }
+        : target.body;
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    // A quadratic arc peaks at half the control point's rise.
+    const rise = 2 * Math.min(FLIGHT_ARC[cue.missile] * distance, MAX_ARC);
+    const control = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - rise };
+    const flying = into <= cue.land;
+    const u = into / cue.land;
+    if (flying || cue.result === "miss") {
+        const { point, heading } = along(from, control, to, u);
+        return { point, heading, opacity: flying ? 1 : fade(into, cue), scale: 1 };
+    }
+    const end = along(from, control, to, 1);
+    const after = fade(into, cue);
+    if (cue.result === "graze") {
+        // Turned up, whichever way it was going.
+        const heading = end.heading + (Math.cos(end.heading * Math.PI / 180) >= 0 ? -GLANCE_TURN : GLANCE_TURN);
+        const run = GLANCE_RUN * (u - 1) * distance;
+        const turned = heading * Math.PI / 180;
+        return { point: { x: end.point.x + run * Math.cos(turned), y: end.point.y + run * Math.sin(turned) }, heading, opacity: after, scale: 1 };
+    }
+    return { ...end, opacity: after, scale: cue.missile === "bolt" ? 1 + BOLT_FLARE * (1 - after) : 1 };
+}
+
+/**
+ * CSS's `ease-out` — the curve `cubic-bezier(0, 0, 0.58, 1)` — at `t` of the
+ * way through an interval, found by bisection on the curve's x. It starts at
+ * full speed and settles, which is how the hit text, the burst and the slash
+ * have always moved between their keyframes.
+ */
+function easeOut(t: number): number {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    const x = (s: number) => 3 * (1 - s) * s * s * 0.58 + s * s * s;
+    let low = 0, high = 1;
+    for (let step = 0; step < 24; step++) {
+        const middle = (low + high) / 2;
+        if (x(middle) < t) low = middle; else high = middle;
+    }
+    const s = (low + high) / 2;
+    return 3 * (1 - s) * s * s + s * s * s;
+}
+
+/** One stop of a keyframed value: `at` is how far through the cue it is, 0 to 1. */
+type Keyframe = readonly [at: number, value: number];
+
+/**
+ * A value `progress` of the way through a cue, between keyframes listed in
+ * order of `at`: eased out over each pair, as a CSS animation with `ease-out`
+ * eases between the stops it names, and held at the first before it and at the
+ * last after it. A property a keyframe doesn't name is left out of that stop,
+ * and the interval runs on to the next that does.
+ */
+function keyframed(frames: readonly Keyframe[], progress: number): number {
+    const next = frames.findIndex(([at]) => progress < at);
+    if (next === 0) return frames[0][1];
+    if (next < 0) return frames[frames.length - 1][1];
+    const [fromAt, from] = frames[next - 1], [toAt, to] = frames[next];
+    return from + (to - from) * easeOut((progress - fromAt) / (toAt - fromAt));
+}
+
+/** How far through its cue the playback is `ms` in: 0 before it starts, 1 once it is over. A cue of no length counts as one of a millisecond. */
+export function progressOf(cue: Timed, ms: number): number {
+    return Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
+}
+
+/** What is left of something that goes during its cue (cover blasted, a downed figure's standing pose): all of it before, none after, going slowly at first. */
+export function fadeOutAt(cue: Timed, ms: number): number {
+    const progress = progressOf(cue, ms);
+    return 1 - progress * progress;
+}
+
+/**
+ * How much of something that appears during its cue is there (a downed figure
+ * lying where it fell), or null before the cue starts, when it isn't drawn at
+ * all. Quicker at first than `fadeOutAt` is slower, so it and the standing pose
+ * it replaces never leave a gap to see through.
+ */
+export function fadeInAt(cue: Timed, ms: number): number | null {
+    if (ms < cue.start) return null;
+    const left = 1 - progressOf(cue, ms);
+    return 1 - left * left;
+}
+
+/** How hit text rises, in board units (down positive): settling in from just below, then floating away. */
+const HIT_SETTLE = 1.5;
+const HIT_LIFT = -6;
+/** How much bigger the hit text of a blow that lands starts, before it pops down to its size. */
+const POP_SCALE = 1.25;
+
+/** Hit text at one moment: how clearly it is seen, how far it has risen from where it is drawn (down positive, board units) and how big it is. */
+export interface HitTextFrame {
+    opacity: number;
+    rise: number;
+    scale: number;
+}
+
+/**
+ * Hit text `ms` into the playback: in over the first 15% of its cue and out
+ * over the last 35%, rising from just below its place to six units above it;
+ * and, for a hit or a graze, popping from 1.25 times its size down to its own
+ * over `POP_MS` from the cue's start. With `still` it doesn't rise or pop: it
+ * appears where it happened, and fades. Unseen before and after.
+ */
+export function hitTextAt(cue: TextCue, ms: number, still: boolean): HitTextFrame {
+    const progress = progressOf(cue, ms);
+    const pops = !still && (cue.tone === "hit" || cue.tone === "graze");
+    return {
+        opacity: keyframed([[0, 0], [0.15, 1], [0.65, 1], [1, 0]], progress),
+        rise: still ? 0 : keyframed([[0, HIT_SETTLE], [0.15, 0], [1, HIT_LIFT]], progress),
+        scale: pops ? keyframed([[0, POP_SCALE], [1, 1]], Math.min(1, Math.max(0, (ms - cue.start) / POP_MS))) : 1,
+    };
+}
+
+/** A burst at one moment: how clearly it is seen and how big it is, as a share of its full size. */
+export interface BurstFrame {
+    opacity: number;
+    scale: number;
+}
+
+/** A burst `ms` into the playback: flaring up from a third of its size to its full size over the first fifth, then fading as it swells a little. Unseen before and after. */
+export function burstAt(cue: Timed, ms: number): BurstFrame {
+    const progress = progressOf(cue, ms);
+    return {
+        opacity: keyframed([[0, 0], [0.2, 1], [0.6, 0.85], [1, 0]], progress),
+        scale: keyframed([[0, 0.35], [0.2, 1], [1, 1.08]], progress),
+    };
+}
+
+/** A slash at one moment: how clearly it is seen, how big it is and how far it has moved from the middle of its target (board units). */
+export interface SlashFrame {
+    opacity: number;
+    scale: number;
+    dx: number;
+    dy: number;
+}
+
+/** A slash `ms` into the playback: wiped across its target from the upper right to the lower left, fading in over the first 30% and out after. Unseen before and after. */
+export function slashAt(cue: Timed, ms: number): SlashFrame {
+    const progress = progressOf(cue, ms);
+    return {
+        opacity: keyframed([[0, 0], [0.3, 1], [1, 0]], progress),
+        scale: keyframed([[0, 0.7], [1, 1.05]], progress),
+        dx: keyframed([[0, 2], [1, -2]], progress),
+        dy: keyframed([[0, -2], [1, 2]], progress),
+    };
 }
