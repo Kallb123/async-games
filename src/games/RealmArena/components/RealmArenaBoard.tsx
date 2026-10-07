@@ -165,6 +165,8 @@ export interface Playback {
     cues: readonly BattleCue[];
     /** The battlefield as the action found it: what cover it blasted away is drawn from until it goes. */
     field: Battlefield;
+    /** Everyone as the action found them: what a figure's HP bar and marks show until the cues that changed them land. */
+    before: readonly Fighter[];
 }
 
 /** What the board shows of an action being lined up (§17.3 PR 7), and where a tap on it goes. */

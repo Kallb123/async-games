@@ -514,6 +514,12 @@ export interface TextCue extends Timed {
     /** The effect whose mark stands beside it: burning's, as it does its damage, or a stance's as it takes it. */
     mark?: EffectId;
     tone: HitTone;
+    /**
+     * What it did to the fighter's HP as it lands: less for a blow, more for a
+     * heal, 0 for a miss. Absent on a word that changes no HP. The board steps
+     * the HP bar by it, so a bar never drops before its blow lands.
+     */
+    hpChange?: number;
 }
 
 /** Something flying from one square to another (§26.1). */
@@ -705,7 +711,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
         landed = landed === null ? lead : landed + Math.max(CUE_STEP_MS, lead);
         return landed;
     };
-    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark"> = {}) => {
+    const text = (fighter: number, when: number, value: string, tone: HitTone, extra: Pick<TextCue, "label" | "mark" | "hpChange"> = {}) => {
         const square = at.get(fighter);
         if (square === undefined) return;
         const cue: TextCue = { kind: "text", fighter, square, value, tone, ...extra, start: when, length: HIT_TEXT_MS };
@@ -765,7 +771,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 if (event.reaction) say(event.fighter, land - FLIGHT_MS[missile], OVERWATCH_WORD);
                 fly(event.fighter, at.get(event.target), missile, event.result, land, SHOT_AFTER_MS);
                 text(event.target, land, event.result === "miss" ? "Miss" : minus(event.damage), event.result,
-                    event.result === "graze" ? { label: "Graze" } : {});
+                    { hpChange: event.result === "miss" ? 0 : -event.damage, ...(event.result === "graze" ? { label: "Graze" } : {}) });
                 break;
             }
             case "struck": {
@@ -773,11 +779,11 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const square = at.get(event.target);
                 if (event.reaction) say(event.fighter, land - SLASH_MS, GUARD_WORD);
                 if (square !== undefined) cues.push({ kind: "slash", square, start: land - SLASH_MS, length: 2 * SLASH_MS });
-                text(event.target, land, minus(event.damage), "hit");
+                text(event.target, land, minus(event.damage), "hit", { hpChange: -event.damage });
                 break;
             }
             case "burned":
-                text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning" });
+                text(event.fighter, beat(), minus(event.damage), "hit", { mark: "burning", hpChange: -event.damage });
                 break;
             case "hunkered":
             case "shieldWall":
@@ -802,7 +808,7 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                 const radius = item && !(ITEMS[item] as Item).area ? 0 : 1;
                 cues.push({ kind: "burst", burst: item ? THROWN_BURST[item] : "fire", at: event.at, radius, start: land, length: BURST_MS });
                 landing = { start: land, targets: event.targets };
-                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
+                if (event.damage > 0) event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
                 break;
             }
             case "demolished":
@@ -819,17 +825,17 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
                     if (square !== undefined) cues.push({ kind: "burst", burst: "acid", at: square, radius: 1, start: land, length: BURST_MS });
                 }
                 landing = { start: land, targets: event.targets };
-                event.targets.forEach(target => text(target, land, minus(event.damage), "hit"));
+                event.targets.forEach(target => text(target, land, minus(event.damage), "hit", { hpChange: -event.damage }));
                 break;
             }
             case "blasted":
                 cues.push({ kind: "scorch", squares: event.squares, start: (landing?.start ?? 0) + Math.round(BURST_MS * SCORCH_AT), length: Math.round(BURST_MS * (1 - SCORCH_AT)) });
                 break;
             case "healed":
-                text(event.target, beat(), event.hp > 0 ? `+${event.hp}` : "Cured", "heal");
+                text(event.target, beat(), event.hp > 0 ? `+${event.hp}` : "Cured", "heal", { hpChange: event.hp });
                 break;
             case "raised":
-                text(event.target, beat(), `+${event.hp}`, "heal", { label: "Raised" });
+                text(event.target, beat(), `+${event.hp}`, "heal", { label: "Raised", hpChange: event.hp });
                 break;
             case "downed": {
                 // It stands as it was until the blow that downed it lands, then fades.

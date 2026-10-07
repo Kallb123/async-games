@@ -212,7 +212,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(events, fighters, after);
-        setOwnPlayback(cues.length > 0 ? { key, cues, field } : null);
+        setOwnPlayback(cues.length > 0 ? { key, cues, field, before: fighters } : null);
     };
     useEffect(() => {
         if (!ownPlayback) return;
@@ -309,7 +309,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // And plays what each step — each part of one — did as it's stepped to
     // (§26.1), whoever took it.
     const playback: Playback | null = nav.isLive ? ownPlayback
-        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted) } : null;
+        : part && part.cues.length > 0 ? { key: `step:${nav.viewIndex}:${partIndex}`, cues: part.cues, field: battlefieldOf(map, part.before.blasted), before: part.before.fighters } : null;
     // Which part of the step the dock says it is on, for a step with several.
     const stepDetail = parts.length > 1 ? partLabel(parts, partIndex, enemyName) : undefined;
 
