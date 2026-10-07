@@ -49,6 +49,12 @@ interface BoardZoomProps {
     viewBox?: { width: number; height: number };
     /** A region to smooth-scroll (and zoom) to reveal whenever `focus.key` changes. */
     focus?: BoardZoomFocus | null;
+    /**
+     * Told each focus's key once the board has got there — its glide over, cut
+     * short, or skipped — so a board can hold what it plays until the view has
+     * stopped moving under it.
+     */
+    onFocused?: (key: string) => void;
     /** Keeps the player's place when the board is redrawn under them. Needs `viewBox`. */
     pivot?: BoardZoomPivot | null;
     /** The board <svg>. */
@@ -63,7 +69,7 @@ const FOCUS_MARGIN_PX = 28;
  * and — for a smooth one — the view it glides from, recorded before its zoom
  * changed.
  */
-interface FocusTarget { cx: number; cy: number; smooth: boolean; from?: ZoomView }
+interface FocusTarget { cx: number; cy: number; smooth: boolean; from?: ZoomView; landed?: () => void }
 
 /** The class on the board while a pinch or a glide is drawing it (`drawAt`). */
 const MOVING = 'ag-board-zoom-content--moving';
@@ -157,7 +163,7 @@ function focusView(pane: HTMLDivElement, target: FocusTarget, zoom: number): Zoo
  * wherever it was rather than snapping to the new width at a scroll offset
  * that meant something else at the old one and travelling on from there.
  */
-function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to: ZoomView): Glide {
+function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to: ZoomView, landed?: () => void): Glide {
     const paneSize = { x: pane.clientWidth, y: pane.clientHeight };
     const draw = (t: number) => {
         const frame = glideFrame(from, to, paneSize, t);
@@ -172,6 +178,7 @@ function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to
         done = true;
         cancelAnimationFrame(frame);
         landAt(pane, content, to.scroll);
+        landed?.();
     };
     const started = performance.now();
     const step = (now: number) => {
@@ -187,8 +194,9 @@ function glide(pane: HTMLDivElement, content: HTMLDivElement, from: ZoomView, to
 /** Bring a focus into view on a board already laid out at its zoom: a glide when it's smooth, otherwise (the pill, or reduced motion) it simply lands. */
 function showFocus(pane: HTMLDivElement, content: HTMLDivElement, target: FocusTarget, zoom: number): Glide | null {
     const to = focusView(pane, target, zoom);
-    if (target.smooth && target.from) return glide(pane, content, target.from, to);
+    if (target.smooth && target.from) return glide(pane, content, target.from, to, target.landed);
     landAt(pane, content, to.scroll);
+    target.landed?.();
     return null;
 }
 
@@ -309,7 +317,7 @@ function rebase(pinch: Pinch, touches: TouchList, pane: HTMLDivElement) {
  * it — Realm Arena's battlefield turned a quarter — which hands this a
  * `pivot`, so whatever was in the middle of the frame is still there after.
  */
-export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, children }: BoardZoomProps) {
+export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocused, pivot, children }: BoardZoomProps) {
     const levels = useMemo(() => zoomLevels(zoomWidth, maxWidth), [zoomWidth, maxWidth]);
     const max = levels[levels.length - 1];
 
@@ -325,6 +333,11 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
     const pinchRef = useRef<Pinch | null>(null);
     const focusTargetRef = useRef<FocusTarget | null>(null);
     const glideRef = useRef<Glide | null>(null);
+    // Read when a glide lands rather than when it starts: boards pass it inline.
+    const onFocusedRef = useRef(onFocused);
+    useEffect(() => {
+        onFocusedRef.current = onFocused;
+    });
 
     // Put the recorded point back under the finger (or back in the middle) once
     // the new width has laid out — before paint, so the board never flashes at
@@ -405,10 +418,12 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, pivot, 
         const level = focus.exact
             ? exactZoom(focus.rect, viewBox, { width: pane.clientWidth, height: pane.clientHeight }, FOCUS_MARGIN_PX, max)
             : focusZoom(levels, focus.rect.width, viewBox.width, pane.clientWidth, FOCUS_MARGIN_PX);
+        const { key } = focus;
         const target: FocusTarget = {
             ...focusCentre(focus.rect, viewBox),
             smooth: !prefersReducedMotion(),
             from: currentView(pane, zoom, pinchRef.current),
+            landed: () => onFocusedRef.current?.(key),
         };
         if (level === zoom) {
             // Fingers still down would otherwise go on drawing over a pane

@@ -20,7 +20,7 @@ import { rematchFlag } from "@/utils/ui/rematch";
 import { reachAfter, useTurnDraft } from "@/games/RealmArena/useTurnDraft";
 import { battlefieldOf } from "@/games/RealmArena/maps";
 import { ACTION_POINTS, battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideScore, TEAM_SIDE, warbandsFor, type Action, type BattleEvent, type Fighter } from "@/games/RealmArena/rules";
-import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, moveFrame, partLabel, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
+import { actionSquares, battleCues, centreInSight, coopColourOf, ENEMY_COLOUR, fighterName, friendlySquares, isUnplaced, moveFrame, partLabel, FOLLOW_GLIDE_MS, PLAYBACK_MS, reviewParts, reviewStepMs, spreadWide, STEP_MIN_MS, TEAM_COLOUR, TEAM_NAME, unseenSquares, waveLineOf, withPartState } from "@/games/RealmArena/ui";
 import type { IRealmArenaOutcome } from "@/games/RealmArena/RealmArenaLogic";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
@@ -206,8 +206,9 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // What the viewer's own last action or End turn did, played over the board
     // as it comes back (§26.1), from where everyone stood — and the cover that
     // stood — when it was sent.
-    // Gone once it has had its time, whether or not the board was showing it,
-    // so coming back from a review doesn't play it again.
+    // Gone once it has had its time — and the time the board may hold it while
+    // the view glides to it — whether or not the board was showing it, so
+    // coming back from a review doesn't play it again.
     const [ownPlayback, setOwnPlayback] = useState<Playback | null>(null);
     const play = (key: string, events: BattleEvent[], after: readonly Fighter[]) => {
         const cues = battleCues(events, fighters, after);
@@ -215,7 +216,7 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     };
     useEffect(() => {
         if (!ownPlayback) return;
-        const played = setTimeout(() => setOwnPlayback(null), PLAYBACK_MS);
+        const played = setTimeout(() => setOwnPlayback(null), FOLLOW_GLIDE_MS + PLAYBACK_MS);
         return () => clearTimeout(played);
     }, [ownPlayback]);
     const act = (action: Action) => {

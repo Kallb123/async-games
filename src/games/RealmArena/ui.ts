@@ -861,8 +861,14 @@ export function battleCues(events: readonly ToldEvent[], before: readonly Fighte
     return cues.map(cue => scaled(cue, PLAYBACK_MS / end));
 }
 
-/** How long a review rests after a step's last cue has landed, before the next step (or part) begins. */
-export const STEP_BEAT_MS = 400;
+/**
+ * How long the board is given to glide to an action before it plays: the
+ * board holds the action until the view has landed (BoardZoom's glide is
+ * 380ms), and a phone may start the glide a frame or two late.
+ */
+export const FOLLOW_GLIDE_MS = 450;
+/** How long a review rests after a step's last cue has landed, before the view moves on to the next step (or part). */
+export const STEP_BEAT_MS = 500;
 /**
  * The least a review step or part lasts, however little it plays: one with no
  * cues (a move) still gives the board's glide to it time to land.
@@ -870,13 +876,14 @@ export const STEP_BEAT_MS = 400;
 export const STEP_MIN_MS = 1200;
 
 /**
- * How long a run of cues takes to play out, and a beat more: the time a review
- * waits before the next step or part. Each cue is already shortened to fit
- * `PLAYBACK_MS` by `battleCues`, so this is bounded by it too.
+ * How long a review rests on a run of cues before the next step or part: the
+ * glide to it, the cues playing out once it has landed, and a beat more. Each
+ * cue is already shortened to fit `PLAYBACK_MS` by `battleCues`, so this is
+ * bounded by it too.
  */
 export function partDurationMs(cues: readonly BattleCue[]): number {
     const end = Math.max(0, ...cues.map(cue => cue.start + cue.length));
-    return Math.max(STEP_MIN_MS, end + STEP_BEAT_MS);
+    return Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + end + STEP_BEAT_MS);
 }
 
 /** The part of a board a review's cues and its follow-zoom read as it stood before a step or part. */

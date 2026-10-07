@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type Point } from '@/utils/ui/isometric';
 import type { Square } from '@/utils/games/battlefield/terrain';
 import { BURST_ART, EFFECT_ART, MISSILE_ART, SLASH_ART, type Missile } from '@/games/RealmArena/art';
@@ -55,23 +55,31 @@ interface RealmArenaFxProps {
     cues: readonly BattleCue[];
     /** Where a cue on a square goes, at the square's height and the view's turn. */
     at: (square: Square) => FxPoints;
+    /** Waiting for the view to get there: nothing moves until it's let go (`useElapsed`, and `.ag-ra-held` for the keyframes). */
+    held: boolean;
 }
 
-/** Milliseconds since it started, a frame at a time, until `until`: what the flights are drawn at, and the board's walkers. */
-export function useElapsed(until: number): number {
+/**
+ * Milliseconds it has run for, a frame at a time, until `until`: what the
+ * flights are drawn at, and the board's walkers and fades. While `held` it
+ * stands still, and carries on from there once let go.
+ */
+export function useElapsed(until: number, held = false): number {
     const [elapsed, setElapsed] = useState(0);
+    const ran = useRef(0);
     useEffect(() => {
-        if (until <= 0) return;
-        const began = performance.now();
+        if (until <= 0 || held) return;
+        const began = performance.now() - ran.current;
         let frame = 0;
         const tick = (now: number) => {
             const ms = now - began;
+            ran.current = ms;
             setElapsed(ms);
             if (ms < until) frame = requestAnimationFrame(tick);
         };
         frame = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(frame);
-    }, [until]);
+    }, [until, held]);
     return elapsed;
 }
 
@@ -176,8 +184,8 @@ function Flight({ id, cue, at, ms }: { id: string; cue: FlightCue; at: RealmAren
  * only this re-renders each frame, not the keyframed cues beside it — for as
  * long as the last of them lasts.
  */
-function Flights({ id, flights, at }: { id: string; flights: readonly FlightCue[]; at: RealmArenaFxProps['at'] }) {
-    const ms = useElapsed(Math.max(0, ...flights.map(cue => cue.start + cue.length)));
+function Flights({ id, flights, at, held }: { id: string; flights: readonly FlightCue[]; at: RealmArenaFxProps['at']; held: boolean }) {
+    const ms = useElapsed(Math.max(0, ...flights.map(cue => cue.start + cue.length)), held);
     return flights.map((cue, index) => <Flight key={index} id={id} cue={cue} at={at} ms={ms - cue.start} />);
 }
 
@@ -198,7 +206,7 @@ function Flights({ id, flights, at }: { id: string; flights: readonly FlightCue[
  *
  * Keyed by its playback, so the next one starts it over and cuts this one short.
  */
-export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
+export default function RealmArenaFx({ id, cues, at, held }: RealmArenaFxProps) {
     const still = usePrefersReducedMotion();
     const flights = cues.filter((cue): cue is FlightCue => cue.kind === 'flight');
     return (
@@ -212,7 +220,7 @@ export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
                     default: return null;
                 }
             })}
-            {!still && flights.length > 0 && <Flights id={id} flights={flights} at={at} />}
+            {!still && flights.length > 0 && <Flights id={id} flights={flights} at={at} held={held} />}
         </g>
     );
 }

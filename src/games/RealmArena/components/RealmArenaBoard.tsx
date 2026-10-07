@@ -362,8 +362,8 @@ function HpChange({ view, fighter, change }: { view: IsoView; fighter: Fighter; 
  * everything drawn in front of it into layers of their own for as long as the
  * playback lasts — which a phone pays for in flashes and stutter.
  */
-function Fading({ cue, className, children }: { cue: { start: number; length: number }; className: string; children: React.ReactNode }) {
-    const ms = useElapsed(cue.start + cue.length);
+function Fading({ cue, held, className, children }: { cue: { start: number; length: number }; held: boolean; className: string; children: React.ReactNode }) {
+    const ms = useElapsed(cue.start + cue.length, held);
     const faded = Math.min(1, Math.max(0, (ms - cue.start) / Math.max(1, cue.length)));
     if (faded >= 1) return null;
     return <g className={className} opacity={1 - faded * faded}>{children}</g>;
@@ -374,11 +374,11 @@ function Fading({ cue, className, children }: { cue: { start: number; length: nu
  * blow lands and then fading (§26.1), over its fallen figure: so a shot has
  * something to hit. Drawn without its marks, and not to be tapped.
  */
-function Falling({ artId, view, cue, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function Falling({ artId, view, cue, held, facing, tintFor, colourFor }: { artId: string; view: IsoView; cue: FallCue; held: boolean; facing: Facing; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const { fighter } = cue;
     const { x, y } = isoCentre(view, fighter.square);
     return (
-        <Fading cue={cue} className="ag-ra-falling">
+        <Fading cue={cue} held={held} className="ag-ra-falling">
             <Figure artId={artId} view={view} square={fighter.square} character={fighter.character} facing={facing} tint={tintFor(fighter.owner)} ghost />
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </Fading>
@@ -412,9 +412,9 @@ function walkerAt(walks: readonly WalkCue[], ms: number): { from: Square; to: Sq
  * figure (`Arriving`) appears where the path ends. Drawn without its marks, and
  * not to be tapped.
  */
-function Walker({ artId, view, field, walks, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; tintFor: TintFor; colourFor: (owner: string) => string }) {
+function Walker({ artId, view, field, walks, held, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; held: boolean; tintFor: TintFor; colourFor: (owner: string) => string }) {
     const last = walks[walks.length - 1];
-    const ms = useElapsed(last.start + last.length);
+    const ms = useElapsed(last.start + last.length, held);
     const now = walkerAt(walks, ms);
     if (!now) return null;
     const { fighter } = walks[0];
@@ -604,7 +604,7 @@ interface DepthItem {
  * square as it did — drawn from the battlefield as the action found it — until
  * the burst fades, then fading off the scorched ground under it.
  */
-function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue): DepthItem[] {
+function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchCue, held: boolean): DepthItem[] {
     const before = playback.field;
     const was: IsoView = { ...view, heights: before.tiles.map(tile => tile.elevation) };
     const plinths = plinthsOf(view, before);
@@ -613,7 +613,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
         return {
             depth: block.depth,
             node: (
-                <Fading key={`blast-${playback.key}-${square}`} cue={cue} className="ag-ra-blasting">
+                <Fading key={`blast-${playback.key}-${square}`} cue={cue} held={held} className="ag-ra-blasting">
                     <RaisedSquare id={artId} block={block} shades={[]} />
                 </Fading>
             ),
@@ -769,6 +769,12 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
     else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
 
+    // What the board plays waits for the view to get there: an action plays
+    // only once the glide to it has landed, so nothing happens while the
+    // board is still moving (`held`, which stops its clocks and keyframes).
+    const [landed, setLanded] = useState<string | null>(null);
+    const held = !!playback && !!focus && landed !== focus.key;
+
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
 
@@ -868,7 +874,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // it has walked past — at the cost of standing over a wall it passes
         // behind, for the squares it is still behind it.
         depth: Math.max(...walks.flatMap(walk => walk.path.map(square => isoDepth(view, square)))) + 0.6,
-        node: <Walker key={`walk-${playback?.key}-${id}`} artId={artId} view={view} field={field} walks={walks} tintFor={tintFor} colourFor={colourFor} />,
+        node: <Walker key={`walk-${playback?.key}-${id}`} artId={artId} view={view} field={field} walks={walks} held={held} tintFor={tintFor} colourFor={colourFor} />,
     }));
     for (const fighter of fighters) {
         const arrives = arrival(fighter.id);
@@ -901,13 +907,13 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
         // One downed partway through a move stands on its square only once it has walked there.
         if (cue.kind === 'fall') {
-            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
+            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} held={held} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
             items.push({
                 depth: isoDepth(view, cue.fighter.square) + 0.6,
                 node: cue.arrives === undefined || still ? falling : <Arriving key={`fall-${playback.key}-${cue.fighter.id}`} ms={cue.arrives}>{falling}</Arriving>,
             });
         }
-        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
+        if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue, held));
     }
     items.sort((a, b) => a.depth - b.depth);
 
@@ -932,8 +938,8 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
             {/* 84 squares corner to corner fitted to a phone is under ten
                 pixels a square, so the deep step is what makes one
                 tappable: about seven squares across (§13.1). */}
-            <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} pivot={pivot}>
-                <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`}>
+            <BoardZoom zoomWidth={250} maxWidth={600} viewBox={view.size} focus={focus} onFocused={setLanded} pivot={pivot}>
+                <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`The ${field.name}`} className={held ? 'ag-ra-held' : undefined}>
                     <g className="ag-ra-ground--earth">
                         <polygon className="ag-ra-side ag-ra-side--left" points={ground.slab.left} />
                         <polygon className="ag-ra-side ag-ra-side--right" points={ground.slab.right} />
@@ -1014,7 +1020,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                     )}
 
                     {/* What the last action did, flying, bursting and rising off the figures it happened to: last, over everything. */}
-                    {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} />}
+                    {playback && <RealmArenaFx key={playback.key} id={artId} cues={playback.cues} at={square => fxPoints(view, square)} held={held} />}
 
                     {/* The pulses — the wave's zones breathing over their lit
                         ground, and the HP a lined-up action would change — one

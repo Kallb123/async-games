@@ -133,8 +133,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Realm Arena's battlefield stops flashing black",
-                detail: "On phones, and in the Android app most of all, the battlefield could flicker black and judder while Hold Out's next spawn zones glowed, while an attack's damage flashed on an HP bar, or while a turn played back. Those effects made the phone redraw large parts of the map over and over. They now cost it next to nothing, so the board stays steady and still looks the same.",
+                title: "Realm Arena's battle plays back steadily, one action at a time",
+                detail: "On phones, and in the Android app most of all, the battlefield could flicker black and judder while Hold Out's next spawn zones glowed, while an attack's damage flashed on an HP bar, or while a turn played back. Those effects no longer make the phone redraw the map over and over, so the board stays steady and still looks the same. Watching a turn play back, each action now waits for the map to finish zooming to it before it plays, and the map rests for half a second after it before moving on to the next.",
                 game: "realmarena",
             },
             {

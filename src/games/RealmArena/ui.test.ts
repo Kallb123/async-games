@@ -6,7 +6,7 @@ import { at } from "@/utils/games/battlefield/testFixtures";
 import { ACTION_POINTS, isWarband, newFighter, reachOf, warbandOwner, type BattleEvent, type Fighter, type ToldEvent } from "./rules";
 import { ABILITIES, kitOf, type CharacterId } from "./characters";
 import { EFFECT_ART, ITEM_ART } from "./art";
-import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, partLabel } from "./ui";
+import { abilityWait, aimFocus, coopColourOf, ALLY_COLOUR, ENEMY_COLOUR, TEAM_COLOUR, actionSquares, apPips, friendlySquares, spreadWide, areaRect, battleCues, canAct, effectsOn, eventLines, facingOf, fighterName, fighterStatus, focusOn, handItem, handOut, hpFraction, itemsOf, NO_ITEMS, numberedName, placeTap, reachFocus, reachShading, squadCounts, squadOf, whoseName, FLIGHT_MS, HIT_TEXT_MS, PLAYBACK_MS, WALK_STEP_MS, moveFrame, isUnplaced, type BattleCue, type Placement, waveLineOf, partDurationMs, reviewParts, reviewStepMs, withPartState, STEP_BEAT_MS, STEP_MIN_MS, FOLLOW_GLIDE_MS, partLabel } from "./ui";
 import type { IRealmArenaStepOutcome, RealmArenaPartState } from "./apiModels";
 
 /** Squares as "col,row", sorted, to read a test's expectations by. */
@@ -755,21 +755,21 @@ describe("a review step's parts", () => {
     const shot: ToldEvent = { kind: "shot", fighter: 1, target: 0, chance: 60, result: "hit", damage: 3, reaction: false };
     const moved: ToldEvent = { kind: "moved", fighter: 1, path: [50, 51], sneaking: false };
 
-    it("rests on a step for as long as its cues play and a beat more, and never less than the floor", () => {
+    it("rests on a step for the glide to it, as long as its cues play and a beat more, and never less than the floor", () => {
         const cues = battleCues([shot], start);
         const end = Math.max(...cues.map(cue => cue.start + cue.length));
-        expect(partDurationMs(cues)).toBe(Math.max(STEP_MIN_MS, end + STEP_BEAT_MS));
+        expect(partDurationMs(cues)).toBe(Math.max(STEP_MIN_MS, FOLLOW_GLIDE_MS + end + STEP_BEAT_MS));
         // A short move walks for a moment, and still gives the board's glide its time.
         expect(partDurationMs(battleCues([moved], start))).toBe(STEP_MIN_MS);
         expect(partDurationMs([])).toBe(STEP_MIN_MS);
     });
 
-    it("rests on a long walk for as long as it takes, and a beat more", () => {
+    it("rests on a long walk for the glide to it, as long as it takes, and a beat more", () => {
         const run: ToldEvent = { kind: "moved", fighter: 1, path: Array.from({ length: 21 }, (_, i) => 50 + i), sneaking: false };
-        expect(partDurationMs(battleCues([run], start))).toBe(20 * WALK_STEP_MS + STEP_BEAT_MS);
+        expect(partDurationMs(battleCues([run], start))).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
         // A step rests on it too, whether or not its board after is told: that is where a move into sight is drawn from.
         const outcome: IRealmArenaStepOutcome = { events: [run] };
-        expect(reviewStepMs(outcome, { fighters: start, blasted: [] }, [start[0], { ...start[1], square: 70 }])).toBe(20 * WALK_STEP_MS + STEP_BEAT_MS);
+        expect(reviewStepMs(outcome, { fighters: start, blasted: [] }, [start[0], { ...start[1], square: 70 }])).toBe(FOLLOW_GLIDE_MS + 20 * WALK_STEP_MS + STEP_BEAT_MS);
     });
 
     it("walks a mover who was not on the board before from the board after, for the last part", () => {
@@ -781,7 +781,7 @@ describe("a review step's parts", () => {
 
     it("keeps a step that took twelve shots within the playback cap and a beat", () => {
         const shots: ToldEvent[] = Array.from({ length: 12 }, () => shot);
-        expect(partDurationMs(battleCues(shots, start))).toBeLessThanOrEqual(PLAYBACK_MS + STEP_BEAT_MS);
+        expect(partDurationMs(battleCues(shots, start))).toBeLessThanOrEqual(FOLLOW_GLIDE_MS + PLAYBACK_MS + STEP_BEAT_MS);
     });
 
     it("is a single part for an ordinary step, and one with nothing to play for a step with no outcome", () => {

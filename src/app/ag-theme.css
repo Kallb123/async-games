@@ -5460,6 +5460,9 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     from { visibility: hidden; }
     to { visibility: visible; }
 }
+/* Everything the board plays waits, as it stands at its start, while the view
+   is still gliding to it (`held` on the board), and plays once it has landed. */
+.ag-ra-held :is(.ag-ra-hit, .ag-ra-burst, .ag-ra-slash, .ag-ra-arriving) { animation-play-state: paused; }
 /* With reduced motion the text doesn't rise: it appears where it happened,
    and fades. Nothing flies, bursts, slashes or walks. */
 @media (prefers-reduced-motion: reduce) {

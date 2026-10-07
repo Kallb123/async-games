@@ -1865,9 +1865,13 @@ sends (`BattleEvent` in `rules.ts`).
   takes its place while it runs. The recap screen's "Replay from your last
   turn" starts the same walk from the step before the viewer's last command.
   Starting it scrolls the board into view. One pure plan in `ui.ts`
-  (`reviewParts`) times every step — its cues' end plus a short beat, never
-  less than a floor that lets the follow-zoom land — and both the hook's
+  (`reviewParts`) times every step — the follow-zoom's glide to it, its cues'
+  end and half a second's beat before the view moves on, never less than a
+  floor — and both the hook's
   `stepDurationMs` and the page's own timer read it, so they never disagree.
+  The cues wait for the view: the board holds whatever it plays, as it stands
+  at its start, until `BoardZoom` says the glide to it has landed
+  (`onFocused`), so nothing happens while the board is still moving.
   In co-op the warband takes its whole turn inside the player's End turn, so
   that one step's outcome also carries `parts`: the player's End turn with the
   burning that began the warband's turn, one part for each action the
