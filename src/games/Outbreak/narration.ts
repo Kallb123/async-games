@@ -6,13 +6,11 @@
 // written twice and drifting apart. Pure presentation: names only, no rules.
 import { CITIES } from "@/games/Outbreak/board";
 import type { IOutbreakOutbreakStep } from "@/games/Outbreak/rules";
+import { andList } from "@/utils/ui/text";
 
 /** "Chicago", "Chicago and Tokyo", "Chicago, Tokyo and Paris". */
 export function cityList(cityIds: number[]): string {
-    const names = cityIds.map(id => CITIES[id].name);
-    if (names.length <= 1) return names.join("");
-    if (names.length === 2) return `${names[0]} and ${names[1]}`;
-    return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return andList(cityIds.map(id => CITIES[id].name));
 }
 
 /**

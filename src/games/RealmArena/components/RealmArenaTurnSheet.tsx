@@ -12,7 +12,7 @@ import { abilityWait, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { HEAL_HP, INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
-import { capitalise, pluralize } from '@/utils/ui/text';
+import { andList, capitalise, pluralize } from '@/utils/ui/text';
 import { SpriteImage } from './RealmArenaTerrain';
 
 /** The `target` an action lined up on the board wears while it's in flight: the sheet's send button. */
@@ -309,7 +309,7 @@ function Detail({ draft, battle, name, ap, target }: DetailProps) {
             {draft.blasts?.length ? ` Blasts away ${pluralize(draft.blasts.length, 'square')} of low cover.` : ''}
         </>);
     }
-    if (aim === 'cleave') return hint(`Strikes ${draft.targets.map(name).join(' and ')} for ${strike} each.`);
+    if (aim === 'cleave') return hint(`Strikes ${andList(draft.targets.map(name))} for ${strike} each.`);
     if (!target) return null;
     const max = CHARACTERS[target.character].hp;
     if (aim === 'heal' || aim === 'regrowth' || aim === 'draught') {

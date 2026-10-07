@@ -128,6 +128,8 @@ export const ABILITIES = {
 
 export interface Character {
     name: string;
+    /** The name for several: "Men-at-arms", which no "s" makes of "Man-at-arms". */
+    plural: string;
     role: string;
     /** Movement points each AP spent on moving buys (§13.2). */
     movement: number;
@@ -143,48 +145,48 @@ export interface Character {
 
 export const CHARACTERS: Readonly<Record<CharacterId, Character>> = {
     manAtArms: {
-        name: "Man-at-arms", role: "Cheap front line", movement: 6, hp: 8,
+        name: "Man-at-arms", plural: "Men-at-arms", role: "Cheap front line", movement: 6, hp: 8,
         weapon: { name: "Sword", kind: "melee", damage: 4 }, abilities: ["cleave"], points: 15,
     },
     knight: {
-        name: "Knight", role: "Slow and very tough", movement: 4, sight: 15, hp: 12,
+        name: "Knight", plural: "Knights", role: "Slow and very tough", movement: 4, sight: 15, hp: 12,
         weapon: { name: "Mace", kind: "melee", damage: 4 }, abilities: ["shieldWall"], points: 25,
     },
     archer: {
-        name: "Archer", role: "Long range; the overwatch specialist", movement: 6, sight: 25, hp: 6,
+        name: "Archer", plural: "Archers", role: "Long range; the overwatch specialist", movement: 6, sight: 25, hp: 6,
         weapon: { name: "Bow", kind: "ranged", damage: 3, accuracy: 80, range: 20 }, abilities: ["aimedShot"], points: 20,
     },
     scout: {
-        name: "Scout", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, sight: 25, hp: 6,
+        name: "Scout", plural: "Scouts", role: "Fastest and fragile; the flanker", movement: 8, climb: FULL_HEIGHT, sight: 25, hp: 6,
         weapon: { name: "Knives", kind: "melee", damage: 3 }, abilities: ["sneak"], points: 20,
     },
     mage: {
-        name: "Mage", role: "Fragile; hits an area", movement: 6, hp: 5,
+        name: "Mage", plural: "Mages", role: "Fragile; hits an area", movement: 6, hp: 5,
         weapon: { name: "Bolt", kind: "ranged", damage: 3, accuracy: 70, range: 10 }, abilities: ["fireball"], points: 30,
     },
     cleric: {
-        name: "Cleric", role: "Support", movement: 6, hp: 7,
+        name: "Cleric", plural: "Clerics", role: "Support", movement: 6, hp: 7,
         weapon: { name: "Staff", kind: "melee", damage: 2 }, abilities: ["heal", "raise"], points: 25,
     },
     // The Swarm (§31): cheaper and weaker, one for one, than the Realm's.
     skitterling: {
-        name: "Skitterling", role: "Fast and frail; strikes in numbers", movement: 8, climb: FULL_HEIGHT, hp: 4,
+        name: "Skitterling", plural: "Skitterlings", role: "Fast and frail; strikes in numbers", movement: 8, climb: FULL_HEIGHT, hp: 4,
         weapon: { name: "Claws", kind: "melee", damage: 2 }, abilities: [], points: 10,
     },
     ravager: {
-        name: "Ravager", role: "Bulky brawler; hits hard", movement: 5, hp: 9,
+        name: "Ravager", plural: "Ravagers", role: "Bulky brawler; hits hard", movement: 5, hp: 9,
         weapon: { name: "Scything talons", kind: "melee", damage: 4 }, abilities: ["rend"], points: 20,
     },
     spitter: {
-        name: "Spitter", role: "Spits acid from its raised tail", movement: 5, hp: 5,
+        name: "Spitter", plural: "Spitters", role: "Spits acid from its raised tail", movement: 5, hp: 5,
         weapon: { name: "Acid spit", kind: "ranged", damage: 2, accuracy: 70, range: 12, effect: "corroded" }, abilities: [], points: 15,
     },
     bloater: {
-        name: "Bloater", role: "Slow sac of acid; bursts among the enemy", movement: 4, hp: 6,
+        name: "Bloater", plural: "Bloaters", role: "Slow sac of acid; bursts among the enemy", movement: 4, hp: 6,
         weapon: { name: "Barbs", kind: "melee", damage: 1 }, abilities: ["burst"], points: 10,
     },
     broodmother: {
-        name: "Broodmother", role: "Leads the brood; mends it", movement: 5, sight: 25, hp: 8,
+        name: "Broodmother", plural: "Broodmothers", role: "Leads the brood; mends it", movement: 5, sight: 25, hp: 8,
         weapon: { name: "Talons", kind: "melee", damage: 3 }, abilities: ["regrowth"], points: 20,
     },
 };

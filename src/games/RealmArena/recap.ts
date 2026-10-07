@@ -8,9 +8,12 @@
 // anyone but the actor: the response carries no names of its own.
 //
 // The feed tells everything one character did in a turn as one row, so a
-// move, a shot and a move back into cover read as one line (`byCharacter`).
-// Everywhere else every command keeps a row of its own, a quiet move
-// included: a reaction to a line of the match history is resolved to the
+// move, a shot and a move back into cover read as one line (`byCharacter`),
+// and then tells a run of quiet deeds by different characters — one player
+// moving, hunkering down or going on watch with several in a row — as one row
+// naming them all: "Alice moved their Archer, their Knight and their Mage"
+// (`byDeed`). Everywhere else every command keeps a row of its own, a quiet
+// move included: a reaction to a line of the match history is resolved to the
 // recap row of the command that wrote it (the reaction route's
 // `buildAllEvents` lookup), so folding a run of moves into one row there
 // would leave the rest of the run unreactable.
@@ -35,23 +38,34 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IHistoryEntry } from "@/utils/games/history";
-import { capitalise, pluralize } from "@/utils/ui/text";
+import { andList, capitalise, numberWord, pluralize } from "@/utils/ui/text";
 import type { IRealmArenaSpecificGameStateResponse } from "./apiModels";
 import { unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, type Told } from "./RealmArenaLogic";
 import { battlefieldOf } from "./maps";
-import { enemyNameOf, UNKNOWN_ENEMY, type ItemId } from "./characters";
+import { CHARACTERS, enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
 import { centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
 
 /**
- * An action's row as `toEvents` leaves it: the character that acted, what
- * happened, and its line without the player's name it starts with — what
- * `byCharacter` folds a character's turn by. `postProcess` strips all three
- * from every row, on every path: `battle` holds each shot's roll.
+ * What a character did in a turn, when all of it was quiet, as sentences around
+ * the character they name — "put" + "their Archer" + " on watch" — in the order
+ * they happened (`steps`), and the player's name the line starts with. What
+ * `byDeed` strings the same deeds by different characters together by. A
+ * character told by its kind — "their Archer" — has that `character`, so
+ * several of a kind can be counted: "two Archers".
  */
-type RAEvent = IGameEvent & { fighter?: number; battle?: readonly BattleEvent[]; clause?: string };
+type Deed = { prefix: string; whom: string; character?: CharacterId; steps: { verb: string; tail: string }[] };
+
+/**
+ * An action's row as `toEvents` leaves it: the character that acted, what
+ * happened, its line without the player's name it starts with, and — for one
+ * that was nothing but quiet deeds — those, which is what `byCharacter`
+ * and `byDeed` fold by. `postProcess` strips all four from every row, on every
+ * path: `battle` holds each shot's roll.
+ */
+type RAEvent = IGameEvent & { fighter?: number; battle?: readonly BattleEvent[]; clause?: string; deed?: Deed };
 
 const RA_MUSTER = "ra_muster";
 const RA_BATTLE = "ra_battle";
@@ -163,12 +177,66 @@ function hurt(events: readonly BattleEvent[], fighters: readonly Fighter[]): str
 type RowBase = Omit<IGameEvent, "type" | "title">;
 
 /**
+ * The quiet deeds a row can be folded by (`byDeed`), by the one event each
+ * is told from: the words around the character `narrate` names.
+ */
+const QUIET_DEEDS: Partial<Record<BattleEvent["kind"], { verb: string; tail: string }>> = {
+    moved: { verb: "moved", tail: "" },
+    watching: { verb: "put", tail: " on watch" },
+    hunkered: { verb: "hunkered", tail: " down" },
+};
+
+/**
+ * How a character is named when its kind is not told, mirroring `whose`
+ * (RealmArenaLogic.ts): all alike, so they can only be counted — by the plural
+ * that goes after the count. A hidden enemy's (§29.3), a warband's seen by
+ * someone else, one out of the viewer's sight (§27.2) or not found at all.
+ */
+const UNNAMED = new Map([
+    ["one of its characters", "of its characters"],
+    ["an enemy character", "enemy characters"],
+    ["a character out of sight", "characters out of sight"],
+    ["a character", "characters"],
+]);
+
+/**
+ * Each kind of character by how `whose` names one of the actor's own: "their
+ * Knight". Read off the line rather than the fighter, which in fog of war the
+ * viewer's snapshot may no longer hold — an enemy that moved out of sight
+ * (§27.2) — though the line still named it.
+ */
+const CHARACTER_BY_NAME = new Map((Object.keys(CHARACTERS) as CharacterId[]).map(id => [`their ${CHARACTERS[id].name}`, id]));
+
+/**
+ * The deed an action was, when it was nothing else: a move, going on watch or
+ * hunkering down, and no reaction to it, which would be an event of another
+ * kind. Read off its events and the clause `narrate` wrote for them, which
+ * must say it as expected (a hidden enemy's sneak is told as a move) and name
+ * the character as `whose` does: by its kind, or as one of the `UNNAMED`.
+ */
+function quietDeed(events: readonly BattleEvent[], clause: string, prefix: string): Deed | undefined {
+    const [first] = events;
+    const words = first && QUIET_DEEDS[first.kind];
+    if (!words || !events.every(event => event.kind === first.kind)) return undefined;
+    const verb = first.kind === "moved" && first.sneaking ? "sneaked" : words.verb;
+    if (!clause.startsWith(`${verb} `) || !clause.endsWith(words.tail)) return undefined;
+    const whom = clause.slice(verb.length + 1, clause.length - words.tail.length);
+    const steps = [{ verb, tail: words.tail }];
+    const character = CHARACTER_BY_NAME.get(whom);
+    if (character) return { prefix, whom, character, steps };
+    return UNNAMED.has(whom) ? { prefix, whom, steps } : undefined;
+}
+
+/**
  * An action's row, a player's or the enemy's (§29.9): its line of the log as
  * the title, the kind and glyph of the most telling thing it did, whom it
- * hurt, and — for `byCharacter` — the character that took it, what happened,
- * and the line without the name `name` it starts with.
+ * hurt, and — for `byCharacter` and `byDeed` — the character that took it,
+ * what happened, the line without the name `name` it starts with, and the
+ * quiet deed it was, if only that.
  */
 function actionRow(base: RowBase, name: string, title: string, events: readonly BattleEvent[], fighter: number | undefined, fighters: readonly Fighter[]): RAEvent {
+    const prefix = title.startsWith(`${name} `) ? `${name} ` : "";
+    const clause = title.slice(prefix.length);
     return {
         ...base,
         ...actionKind(events),
@@ -176,7 +244,8 @@ function actionRow(base: RowBase, name: string, title: string, events: readonly 
         affectedIds: hurt(events, fighters),
         fighter,
         battle: events,
-        clause: title.startsWith(`${name} `) ? title.slice(name.length + 1) : title,
+        clause,
+        deed: quietDeed(events, clause, prefix),
     };
 }
 
@@ -357,7 +426,8 @@ function toEvents(
  * (`narrate`); anything else is told as often as it happened. The row takes
  * the kind of the most telling thing the character did all turn, and everyone
  * any of it hurt. Anything but an action — an End turn, a muster, the
- * battle's end — closes the turn.
+ * battle's end — closes the turn. Characters who did only quiet deeds, the same
+ * ones, are then told together by `byDeed`.
  */
 function byCharacter(events: readonly RAEvent[]): RAEvent[] {
     const rows: RAEvent[] = [];
@@ -380,6 +450,8 @@ function byCharacter(events: readonly RAEvent[]): RAEvent[] {
             ...first,
             ...actionKind(battle),
             title: again ? first.title : `${first.title}; then ${event.clause}`,
+            // Still all quiet while it is the same character's deed after deed.
+            deed: again ? first.deed : first.deed && event.deed?.whom === first.deed.whom ? { ...first.deed, steps: [...first.deed.steps, ...event.deed.steps] } : undefined,
             affectedIds: [...new Set([...(first.affectedIds ?? []), ...(event.affectedIds ?? [])])],
             battle,
             // The clause the row now ends on, so a move repeating it is told once.
@@ -389,10 +461,78 @@ function byCharacter(events: readonly RAEvent[]): RAEvent[] {
     return rows;
 }
 
-/** Folds the feed by character (`byCharacter`); and strips what `toEvents` kept for it from every row. */
+/**
+ * Whom a run of deeds were done by or to, as one list, in order of first
+ * appearance: "their Archer and their Knight", a kind seen again counted —
+ * "their Knight, their Cleric and two Men-at-arms" — and so are the characters
+ * told without one: "three of its characters", "two characters out of sight".
+ */
+function whomOf(run: readonly Deed[]): string {
+    const kinds = new Map<string, { deed: Deed; count: number }>();
+    for (const deed of run) {
+        const key = deed.character ?? deed.whom;
+        kinds.set(key, { deed, count: (kinds.get(key)?.count ?? 0) + 1 });
+    }
+    // The characters named first, then those told without a class: "their Knight and two characters out of sight".
+    const groups = [...kinds.values()].sort((a, b) => Number(!a.deed.character) - Number(!b.deed.character));
+    return andList(groups.map(({ deed, count }) => count === 1 ? deed.whom
+        : `${numberWord(count)} ${deed.character ? CHARACTERS[deed.character].plural : UNNAMED.get(deed.whom)}`));
+}
+
+/** What makes two rows one to tell together: the same actor, as named, and the same words around the characters, in the same order. */
+const deedKey = (row?: RAEvent) => row?.deed && `${row.actorId}|${row.deed.prefix}|${JSON.stringify(row.deed.steps)}`;
+
+/**
+ * Folds a run of consecutive rows that are the same quiet deeds by the same
+ * actor — a player's, or the enemy's in co-op — into the row of its first, told
+ * as one line: "Alice moved their Archer and their Knight", "The Renegades put
+ * their Archer, their Knight and their Mage on watch". Where each did several
+ * deeds, the same ones in the same order, the first names the characters and
+ * the rest say "them": "Alice moved their Archer and their Knight, then
+ * hunkered them down". A sneak only joins sneaks, and several characters of
+ * a kind are counted, and so are those told without one: "moved two Archers",
+ * "moved three of its characters". In fog of war that is only what the viewer
+ * was told, regrouped: each of those characters already had its row (§27.2).
+ * Anything between — a shot, a character's row that did more than quiet
+ * deeds, an End turn — closes the run, so the order of the feed stays what
+ * happened.
+ */
+function byDeed(rows: readonly RAEvent[]): RAEvent[] {
+    const folded: RAEvent[] = [];
+    let run: RAEvent[] = [];
+    const close = () => {
+        if (run.length < 2) folded.push(...run);
+        else {
+            const { prefix, steps } = run[0].deed!;
+            const whom = whomOf(run.map(row => row.deed!));
+            const clause = steps.map(({ verb, tail }, index) => `${verb} ${index === 0 ? whom : "them"}${tail}`).join(", then ");
+            folded.push({
+                ...run[0],
+                title: `${prefix}${clause}`,
+                clause,
+                affectedIds: [...new Set(run.flatMap(row => row.affectedIds ?? []))],
+                battle: run.flatMap(row => row.battle ?? []),
+            });
+        }
+        run = [];
+    };
+    for (const row of rows) {
+        if (!row.deed) {
+            close();
+            folded.push(row);
+            continue;
+        }
+        if (deedKey(run[0]) !== deedKey(row)) close();
+        run.push(row);
+    }
+    close();
+    return folded;
+}
+
+/** Folds the feed by character (`byCharacter`), then its quiet deeds (`byDeed`); and strips what `toEvents` kept for it from every row. */
 function postProcess(events: IGameEvent[], { forFeed }: { forFeed: boolean }): IGameEvent[] {
-    const rows = forFeed ? byCharacter(events) : events as RAEvent[];
-    return rows.map(({ fighter, battle, clause, ...row }) => row);
+    const rows = forFeed ? byDeed(byCharacter(events)) : events as RAEvent[];
+    return rows.map(({ fighter, battle, clause, deed, ...row }) => row);
 }
 
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {

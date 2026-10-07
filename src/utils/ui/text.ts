@@ -37,3 +37,15 @@ export function capitalise(text: string): string {
 export function possessive(name: string): string {
     return name.endsWith("s") ? `${name}'` : `${name}'s`;
 }
+
+/** Items as a run of prose: "A", "A and B", "A, B and C". */
+export function andList(items: readonly string[]): string {
+    return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/** A small count in words, for prose: "two", "three" — and the digits past ten, where a word stops being easier to read. */
+export function numberWord(count: number): string {
+    return NUMBER_WORDS[count] ?? `${count}`;
+}
