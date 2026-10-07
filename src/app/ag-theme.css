@@ -2577,6 +2577,10 @@ button.ag-chat-gif { cursor: pointer; }
     box-shadow: 0 2px 0 color-mix(in oklch, black 22%, var(--ag-gold));
 }
 .ag-review-btn--key:hover:not(:disabled) { background: var(--ag-gold); filter: brightness(1.06); }
+/* Play / Stop: the one labelled button in the transport, so it reads as a
+   different thing from the ▶ (next action) beside it — wider than a step
+   button, and never squeezed below its own text. */
+.ag-review-btn--play { flex: 2 1 0; min-width: max-content; padding-inline: 12px; }
 
 /* One tick per point on the timeline: played turns lit, the viewed one brass
    and tall, anything ahead of it dimmed (hypothetical ones brass-tinted). */
@@ -3893,6 +3897,7 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-end-turn-hand .ag-hand:first-child { border-top: 0; }
 
 .ag-recap-cta { margin-top: 20px; padding: 16px; font-size: 16px; border-radius: 16px; }
+.ag-recap-replay { margin-top: 10px; }
 
 /* ==========================================================================
    World Domination — parchment war-room accent for the shared board frame
@@ -5267,6 +5272,10 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
 .ag-game--realmarena .ag-board-tag { background: var(--ra-oxblood); color: var(--ag-on-dark); }
 .ag-game--realmarena .ag-board-area {
     padding: 4px 0;
+    /* Scrolled to as a review starts playing (`scrollIntoView`): its top lands
+       just under the sticky top bar (62px) rather than behind it. The pinned
+       review dock is at the foot, and the board fits the screen above it. */
+    scroll-margin-top: 72px;
     background: radial-gradient(circle at 50% 30%, var(--ra-night-2), var(--ra-night));
 }
 /* The battlefield floats on the night, edge to edge: an isometric map is a
@@ -5437,11 +5446,55 @@ html:has(.ag-pull) { overscroll-behavior-y: contain; }
     from { opacity: 1; }
     to { opacity: 0; }
 }
+/* A character walking its path (§26.1) is drawn frame by frame by the board,
+   and never in the way of a tap. What it leaves behind waits out the walk: its
+   resting figure, standing where the path ends, is hidden until the walk is
+   over (the delay is set inline, by the cue) and then simply there. */
+.ag-ra-walker { pointer-events: none; }
+.ag-ra-arriving { animation: ag-ra-arrive 1ms both; }
+@keyframes ag-ra-arrive {
+    from { opacity: 0; visibility: hidden; }
+    to { opacity: 1; visibility: visible; }
+}
 /* With reduced motion the text doesn't rise: it appears where it happened,
-   and fades. Nothing flies, bursts or slashes. */
+   and fades. Nothing flies, bursts, slashes or walks. */
 @media (prefers-reduced-motion: reduce) {
     .ag-ra-hit { --ra-hit-settle: 0px; --ra-hit-lift: 0px; }
     .ag-ra-burst, .ag-ra-slash { display: none; }
+}
+/* A review step that happened out of the viewer's sight (§26.2): a big,
+   half-transparent question mark over the middle of the board's frame — the
+   frame, not the board, so it stays put as the board pans and zooms. The layer
+   is its own container, so the mark is sized by the frame's height whatever
+   that is (a floor for a squat one). It fades with the step coming and going,
+   and the mark settles in for each; with reduced motion, it just is or isn't
+   there. Never takes a tap. */
+.ag-ra-unplaced {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    container-type: size;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 300ms ease;
+}
+.ag-ra-unplaced--on { opacity: 1; }
+.ag-ra-unplaced > span {
+    font: 800 clamp(5rem, 40cqh, 20rem) / 1 var(--ag-font);
+    color: color-mix(in oklch, var(--ag-on-dark) 55%, transparent);
+    text-shadow: 0 0 0.08em color-mix(in oklch, var(--ra-night) 70%, transparent);
+    animation: ag-ra-unplaced-settle 400ms ease-out both;
+}
+@keyframes ag-ra-unplaced-settle {
+    from { transform: scale(0.85); }
+    to { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-ra-unplaced { transition: none; }
+    .ag-ra-unplaced > span { animation: none; }
 }
 /* The viewer's own squad while the muster is sealed: drawn where it stands,
    but faded and uncoloured, since it isn't on the battlefield until both have

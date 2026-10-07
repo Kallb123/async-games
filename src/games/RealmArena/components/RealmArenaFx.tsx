@@ -12,6 +12,8 @@ const VALUE_RISE = 4;
 const LABEL_DROP = 3.6;
 const MARK_SIZE = 3.4;
 const MARK_OFFSET = 5.4;
+/** How much further out each character past a number's two ("−3") pushes a mark, so one beside a word — "Hunker down" — clears it: half a character's width. */
+const MARK_PER_CHAR = 1.6;
 /** A strike's slash, across the figure it lands on. */
 const SLASH_SIZE = 14;
 
@@ -55,8 +57,8 @@ interface RealmArenaFxProps {
     at: (square: Square) => FxPoints;
 }
 
-/** Milliseconds since it started, a frame at a time, until `until`: what the flights are drawn at. */
-function useElapsed(until: number): number {
+/** Milliseconds since it started, a frame at a time, until `until`: what the flights are drawn at, and the board's walkers. */
+export function useElapsed(until: number): number {
     const [elapsed, setElapsed] = useState(0);
     useEffect(() => {
         if (until <= 0) return;
@@ -130,7 +132,7 @@ function HitText({ id, cue, over }: { id: string; cue: TextCue; over: Point }) {
         <g className={`ag-ra-hit ag-ra-hit--${cue.tone}`} style={cueTiming(cue)}>
             <text className="ag-ra-hit-value" x={x} y={y - VALUE_RISE}>{cue.value}</text>
             {cue.label && <text className="ag-ra-hit-label" x={x} y={y - VALUE_RISE + LABEL_DROP}>{cue.label}</text>}
-            {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET} y={y - VALUE_RISE} size={MARK_SIZE} />}
+            {cue.mark && <SpriteUse className="ag-ra-figure-mark" id={id} sprite={EFFECT_ART[cue.mark]} x={x + MARK_OFFSET + Math.max(0, cue.value.length - 2) * MARK_PER_CHAR} y={y - VALUE_RISE} size={MARK_SIZE} />}
         </g>
     );
 }
@@ -188,7 +190,8 @@ function Flights({ id, flights, at }: { id: string; flights: readonly FlightCue[
  * What flies — an arrow, a bolt, a fireball, a flask — is moved a frame at a
  * time along its arc, turned to face the way it's going. What stays put —
  * hit text rising and fading, a burst, a slash — is CSS keyframes
- * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. With reduced
+ * (`ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`) timed by its cue. A walk is the
+ * board's, which draws the figure along its path. With reduced
  * motion, nothing flies, bursts or slashes: only the text plays — the
  * flights aren't drawn, and the stylesheet hides the bursts and the slashes. Nothing here
  * can be tapped, so the board goes on working underneath while it plays.
@@ -205,7 +208,7 @@ export default function RealmArenaFx({ id, cues, at }: RealmArenaFxProps) {
                     case 'text': return <HitText key={index} id={id} cue={cue} over={at(cue.square).head} />;
                     case 'burst': return <Burst key={index} id={id} cue={cue} ground={at(cue.at).ground} />;
                     case 'slash': return <Slash key={index} id={id} cue={cue} body={at(cue.square).body} />;
-                    // A flight is drawn below; a fall and a scorch are the board's, which draws the figure and the ground.
+                    // A flight is drawn below; a fall, a scorch and a walk are the board's, which draws the figure and the ground.
                     default: return null;
                 }
             })}

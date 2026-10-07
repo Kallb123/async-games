@@ -93,10 +93,51 @@ export interface IRealmArenaGameDataResponse extends IGameDataResponse {
 }
 
 /**
+ * The board after one part of a step, as the viewer saw it then — what the
+ * board draws in place of the snapshot's while that part plays. Drawn through
+ * the same fog of war as the snapshot is (§27), so it holds only what the
+ * viewer's side could see at that point.
+ */
+export type RealmArenaPartState = Pick<IRealmArenaSpecificGameStateResponse, "fighters" | "ghosts" | "clouds" | "blasted" | "scores" | "enemy">;
+
+/**
+ * One part of a step that held more than one side's doings (a co-op End turn
+ * holding a warband's turn, §29.4): its events, played on their own, and the
+ * board after them.
+ */
+export interface IRealmArenaStepPart {
+    /**
+     * Which part of the End turn it is: the player's own End turn (and the
+     * warband's burning as its turn began), one of the warband's actions, or
+     * the turn passing on. A part the viewer was told nothing of is left out,
+     * so the first part needn't be the player's, nor the last the hand-off.
+     */
+    kind: "ended" | "enemy" | "handOff";
+    events: ToldEvent[];
+    /**
+     * The board after this part. Absent on the last part, whose board is the
+     * snapshot's own.
+     */
+    state?: RealmArenaPartState;
+}
+
+/**
  * What one step of a review did (§26.2), on its replayed snapshot: every event
  * of an action or an End turn, for the board to play. Absent on a step that
  * did nothing to play, a muster above all.
  */
 export interface IRealmArenaStepOutcome {
     events: ToldEvent[];
+    /**
+     * Present only on a co-op End turn whose warband took a turn, and only
+     * when the viewer was told something of at least two of its parts, in
+     * order: the player's own End turn with the burning that began the
+     * warband's turn; each action the warband took; and the warband's End turn
+     * with what happened as the next turn began. A part the viewer was told
+     * nothing of (§27.2) isn't listed, and the board after it is only implied
+     * by the next one's. Together their events are `events`, so a review that
+     * plays `events` whole sees the same. The last part never carries a
+     * `state`: the snapshot's board follows it.
+     */
+    parts?: IRealmArenaStepPart[];
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
 import { withFullHistories, WithHistoryDelta } from "@/utils/games/historyDelta";
@@ -40,6 +40,47 @@ interface ITimelineWireResponse<TState, TOutcome> extends Omit<ITimelineResponse
 
 export type NavMode = "live" | "recap" | "planning";
 
+// How long auto-play rests on a step before moving to the next, for a game that
+// doesn't say. Long enough to read a one-line action, short enough that a
+// match's worth doesn't drag.
+export const DEFAULT_STEP_DURATION_MS = 1500;
+
+// What the hook accepts beyond the game id and the live view. Everything here
+// is opt-in: a game that passes nothing gets the plain stepper it always had.
+export interface TurnNavigationOptions<TState, TOutcome> {
+    // How long auto-play stays on `snapshot` before advancing — the time the
+    // game's own animation of that step needs. `previous` is the position the
+    // step was played from (undefined for the opening position). Realm Arena
+    // returns longer for a step that plays out several hits.
+    stepDurationMs?: (
+        snapshot: ITurnSnapshot<TState, TOutcome>,
+        previous: ITurnSnapshot<TState, TOutcome> | undefined
+    ) => number;
+}
+
+// A duration a game hands back is trusted no further than it can be used: NaN
+// or a negative would turn the timer into a busy loop, so it falls back.
+export function playbackDelay(ms: number | undefined): number {
+    return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_STEP_DURATION_MS;
+}
+
+// Where "replay from your last turn" starts *from* — the position before the
+// first step to be shown, so that step is the viewer's own last command (in a
+// co-op game the enemy's turn rides inside that command, so it plays too).
+// Only played steps count, never a planned one. A viewer who has made no
+// command has no "last turn" to find, and starting at the top of a long game
+// would be the wrong answer, so they get the one step before the present.
+export function replayStartIndex(
+    snapshots: readonly Pick<ITurnSnapshot, "command">[],
+    currentIndex: number,
+    viewerId: string
+): number {
+    for (let i = Math.min(currentIndex, snapshots.length - 1); i >= 1; i--) {
+        if (snapshots[i].command?.senderId === viewerId) return i - 1;
+    }
+    return Math.max(0, currentIndex - 1);
+}
+
 // The live values the page already holds, used when mode === "live".
 export interface LiveGameView<TState> {
     specificGameState: TState | undefined;
@@ -54,7 +95,16 @@ export interface LiveGameView<TState> {
 // future actions). Both step one *command* at a time, not one turn: a turn
 // that took several commands (roll, build, build, end) is several steps here.
 // Both are driven by the same reconstructed timeline from /api/game/[id]/timeline.
-export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, live: LiveGameView<TState>) {
+//
+// Auto-play is the same stepping on a timer: `play` walks forward to the live
+// position and stops there, resting on each step for as long as the game says
+// its animation takes (`options.stepDurationMs`). Anything the player does by
+// hand stops it.
+export function useTurnNavigation<TState, TOutcome = unknown>(
+    gameId: string,
+    live: LiveGameView<TState>,
+    options?: TurnNavigationOptions<TState, TOutcome>
+) {
     const [mode, setMode] = useState<NavMode>("live");
     const [snapshots, setSnapshots] = useState<ITurnSnapshot<TState, TOutcome>[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -62,6 +112,15 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
     const [plannedCommands, setPlannedCommands] = useState<unknown[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [playing, setPlaying] = useState(false);
+
+    // Callers pass `stepDurationMs` inline, so it is a new function every
+    // render. Held in a ref the timer reads when it is armed, it cannot
+    // re-arm (and so restart) the timer on every render.
+    const stepDurationRef = useRef(options?.stepDurationMs);
+    useEffect(() => {
+        stepDurationRef.current = options?.stepDurationMs;
+    });
 
     const fetchTimeline = useCallback(
         async (planned: unknown[]): Promise<ITimelineResponse<TState, TOutcome> | null> => {
@@ -98,23 +157,25 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
         [gameId]
     );
 
-    const enterRecap = useCallback(async () => {
-        const data = await fetchTimeline([]);
-        if (!data) return;
-        setPlannedCommands([]);
-        setViewIndex(data.currentIndex);
-        setMode("recap");
-    }, [fetchTimeline]);
-
-    const enterPlanning = useCallback(async () => {
-        const data = await fetchTimeline([]);
-        if (!data) return;
-        setPlannedCommands([]);
-        setViewIndex(data.currentIndex);
-        setMode("planning");
-    }, [fetchTimeline]);
+    // Fetches the timeline afresh and opens it in `next` mode, at the live
+    // position unless `at` picks another — shared by every way into a review.
+    const openTimeline = useCallback(
+        async (next: Exclude<NavMode, "live">, at = (data: ITimelineResponse<TState, TOutcome>) => data.currentIndex) => {
+            setPlaying(false);
+            const data = await fetchTimeline([]);
+            if (!data) return null;
+            setPlannedCommands([]);
+            setViewIndex(at(data));
+            setMode(next);
+            return data;
+        },
+        [fetchTimeline]
+    );
+    const enterRecap = useCallback(() => openTimeline("recap"), [openTimeline]);
+    const enterPlanning = useCallback(() => openTimeline("planning"), [openTimeline]);
 
     const returnToLive = useCallback(() => {
+        setPlaying(false);
         setMode("live");
         setPlannedCommands([]);
     }, []);
@@ -126,6 +187,7 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
         async (
             command: IGameCommand
         ): Promise<{ snapshot: ITurnSnapshot<TState, TOutcome> | null; resolvedCommand: unknown } | null> => {
+            setPlaying(false);
             const next = [...plannedCommands, command];
             const data = await fetchTimeline(next);
             if (!data) return null;
@@ -142,6 +204,7 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
     );
 
     const clearPlan = useCallback(async () => {
+        setPlaying(false);
         const data = await fetchTimeline([]);
         if (!data) return;
         setPlannedCommands([]);
@@ -150,10 +213,83 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
 
     const maxIndex = snapshots.length > 0 ? snapshots.length - 1 : 0;
     const clamp = useCallback((i: number) => Math.max(0, Math.min(maxIndex, i)), [maxIndex]);
-    const stepBack = useCallback(() => setViewIndex((i) => clamp(i - 1)), [clamp]);
-    const stepForward = useCallback(() => setViewIndex((i) => clamp(i + 1)), [clamp]);
-    const jumpToStart = useCallback(() => setViewIndex(0), []);
-    const jumpToCurrent = useCallback(() => setViewIndex(currentIndex), [currentIndex]);
+    // Reaching for the transport by hand means the player has taken over, so
+    // each of these ends auto-play rather than fighting it for the position.
+    const stepBack = useCallback(() => {
+        setPlaying(false);
+        setViewIndex((i) => clamp(i - 1));
+    }, [clamp]);
+    const stepForward = useCallback(() => {
+        setPlaying(false);
+        setViewIndex((i) => clamp(i + 1));
+    }, [clamp]);
+    const jumpToStart = useCallback(() => {
+        setPlaying(false);
+        setViewIndex(0);
+    }, []);
+    const jumpToCurrent = useCallback(() => {
+        setPlaying(false);
+        setViewIndex(currentIndex);
+    }, [currentIndex]);
+
+    const stop = useCallback(() => setPlaying(false), []);
+
+    // Auto-play never runs into the planned steps — it is for watching what
+    // happened, and a plan is not that. So it only starts where there is a
+    // played step ahead, and only in a review.
+    const canPlay = mode !== "live" && viewIndex < currentIndex;
+    const play = useCallback(() => {
+        if (!canPlay) return;
+        setPlaying(true);
+        // The first step shows at once; the timer below then waits it out.
+        setViewIndex(viewIndex + 1);
+    }, [canPlay, viewIndex]);
+
+    // "Replay from my last turn" on the recap screen: open the review at the
+    // viewer's last command (the step before it is the start, so that command
+    // is the first one played) and play from there. A game with nothing played
+    // yet has nothing to play: it shows the one position and stays put.
+    const playFromLastTurnOf = useCallback(
+        async (viewerId: string) => {
+            let start = 0;
+            const data = await openTimeline("recap", (timeline) => {
+                start = replayStartIndex(timeline.snapshots, timeline.currentIndex, viewerId);
+                return Math.min(start + 1, timeline.currentIndex);
+            });
+            if (data && start < data.currentIndex) setPlaying(true);
+        },
+        [openTimeline]
+    );
+
+    // The player: rest on the step shown for as long as it takes to animate,
+    // then move on — or, at the live position, stop (the last step is waited
+    // out too, so Stop stays up until its animation has finished). The state
+    // is only set inside the timeout, and the cleanup clears it, so any change
+    // to what is on screen (a manual step, a new timeline) re-arms it cleanly.
+    useEffect(() => {
+        if (!playing) return;
+        const shown = snapshots[viewIndex];
+        const ms = shown
+            ? playbackDelay(stepDurationRef.current?.(shown, snapshots[viewIndex - 1]))
+            : DEFAULT_STEP_DURATION_MS;
+        const timer = setTimeout(() => {
+            if (viewIndex >= currentIndex) setPlaying(false);
+            else setViewIndex(viewIndex + 1);
+        }, ms);
+        return () => clearTimeout(timer);
+    }, [playing, viewIndex, snapshots, currentIndex]);
+
+    // Hidden, the player isn't watching, and a backgrounded tab's throttled
+    // timers would play on in fits: so auto-play stops, and coming back finds
+    // the review where they left it, with Play to carry on.
+    useEffect(() => {
+        if (!playing) return;
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") setPlaying(false);
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => document.removeEventListener("visibilitychange", onVisibility);
+    }, [playing]);
 
     const isLive = mode === "live";
     const activeSnapshot: ITurnSnapshot<TState, TOutcome> | undefined = isLive ? undefined : snapshots[viewIndex];
@@ -195,11 +331,18 @@ export function useTurnNavigation<TState, TOutcome = unknown>(gameId: string, li
             : 0,
         canBack: !isLive && viewIndex > 0,
         canForward: !isLive && viewIndex < maxIndex,
+        // Whether auto-play is stepping through the review on its own.
+        playing,
         // Navigation
         stepBack,
         stepForward,
         jumpToStart,
         jumpToCurrent,
+        // Auto-play (see above): `play` from the viewed step, `stop` to hold
+        // where it is, `playFromLastTurnOf` for the recap screen's replay.
+        play,
+        stop,
+        playFromLastTurnOf,
         // Modes
         enterRecap,
         enterPlanning,

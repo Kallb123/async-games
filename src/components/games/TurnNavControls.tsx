@@ -17,6 +17,12 @@ interface TurnNavControlsProps {
     canPlan?: boolean;
     /** The game's players in seat order, used to colour the reviewed action's swatch. */
     userIdList?: string[];
+    /** Offer auto-play in the transport. Opt-in: a game turns it on once it has
+     *  animations worth waiting out (see useTurnNavigation's `stepDurationMs`). */
+    canPlay?: boolean;
+    /** A short note after the action's text — Realm Arena says which part of an
+     *  End turn it is playing ("enemy action 2 of 5"). */
+    stepDetail?: React.ReactNode;
 }
 
 // The war-room scrubber from the design: a dark dock carrying the transport
@@ -31,7 +37,11 @@ interface TurnNavControlsProps {
 // Stepping through the match is only worth anything if you can watch the board
 // change while you do it, and at the end of a tall page the transport would be
 // off screen exactly when it is in use — leaving the player scrubbing blind.
-export default function TurnNavControls({ nav, planningActions, canPlan = true, userIdList = [] }: TurnNavControlsProps) {
+//
+// A game that opts in with `canPlay` gets a labelled Play beside the step
+// buttons — wider than them on purpose, since the ▶ next to it means "next
+// action" — which turns into Stop while the match plays itself forward.
+export default function TurnNavControls({ nav, planningActions, canPlan = true, userIdList = [], canPlay = false, stepDetail }: TurnNavControlsProps) {
     const now = useNowToTheMinute();
     // The pinned dock is out of the flow, so the shell has to be told how much
     // room to keep clear beneath the board. Its height is not fixed — the action
@@ -119,6 +129,13 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
                         <button type="button" className="ag-review-btn" onClick={nav.jumpToStart} disabled={!nav.canBack} aria-label="Jump to start of game" title="Jump to start of game">⏮</button>
                         <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous action" title="Previous action">◀</button>
                         <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next action" title="Next action">▶</button>
+                        {canPlay && nav.mode !== "planning" && (
+                            nav.playing ? (
+                                <button type="button" className="ag-review-btn ag-review-btn--play" onClick={nav.stop} aria-label="Stop playing" title="Stop playing">■ Stop</button>
+                            ) : (
+                                <button type="button" className="ag-review-btn ag-review-btn--play" onClick={nav.play} disabled={!nav.canForward} aria-label="Play the match forward" title="Play the match forward">▶︎ Play</button>
+                            )
+                        )}
                         <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current position" title="Jump to current position">⏭</button>
                     </div>
 
@@ -135,6 +152,7 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
                                 <>
                                     <b>{command.senderUsername}</b> · {command.summary}
                                     {when && <span className="ag-review-now-when"> · {when}</span>}
+                                    {stepDetail && <span className="ag-review-now-when"> · {stepDetail}</span>}
                                 </>
                             ) : (
                                 "Initial position"

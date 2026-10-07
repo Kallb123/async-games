@@ -662,7 +662,13 @@ describe("Realm Arena's random co-op enemy", () => {
             expect(told.some(event => event.kind === "shieldWall")).toBe(false);
         }
         for (const viewer of VIEWERS) {
-            expect(realmArenaStepOutcome(outcome, viewer, game.specificGameState)?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
+            const step = realmArenaStepOutcome(outcome, viewer, game.specificGameState);
+            expect(step?.events.some(event => event.kind === "shieldWall") ?? false).toBe(false);
+            // Nor does a part of the End turn a review plays one action at a
+            // time (§26.2): not the ability, nor the faction on any part's board.
+            const parts = JSON.stringify(step?.parts ?? []);
+            expect(parts).not.toMatch(/shieldWall|marked|"sneaking":true/);
+            expect(step?.parts?.some(part => part.state && "enemy" in part.state) ?? false).toBe(false);
         }
         for (const viewer of VIEWERS) {
             const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer));

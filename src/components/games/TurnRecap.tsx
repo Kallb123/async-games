@@ -23,6 +23,9 @@ export interface TurnRecapEvent {
     reactions?: IReactionSummary[];
 }
 
+/** A button under the recap: its words, and what it does. */
+export interface RecapAction { label: string; onClick: () => void }
+
 interface TurnRecapProps {
     header: { name: string; accent: string; glyph?: string };
     /** The line under the header's game name — "Since your last turn" for the
@@ -43,7 +46,10 @@ interface TurnRecapProps {
      * driver dismiss back to the board first. Omit for nothing there.
      */
     footer?: React.ReactNode;
-    cta: { label: string; onClick: () => void };
+    cta: RecapAction;
+    /** A second, quieter button under the CTA — "Replay from your last turn".
+     *  Omit for nothing there. */
+    replay?: RecapAction;
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
     /** The signed-in viewer's userId — gives their own reaction the
@@ -62,7 +68,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, footer, cta, backHref = '/', viewerId, onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, footer, cta, replay, backHref = '/', viewerId, onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -122,6 +128,12 @@ export default function TurnRecap({ header, since = "Since your last turn", summ
                 <button className="ag-btn ag-btn--primary ag-btn--block ag-recap-cta" onClick={cta.onClick}>
                     {cta.label}
                 </button>
+
+                {replay && (
+                    <button type="button" className="ag-btn ag-btn--light ag-btn--block ag-recap-replay" onClick={replay.onClick}>
+                        {replay.label}
+                    </button>
+                )}
             </div>
         </div>
     );

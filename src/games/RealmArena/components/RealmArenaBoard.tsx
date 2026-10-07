@@ -3,19 +3,20 @@ import React, { useMemo, useState } from 'react';
 import BoardZoom, { type BoardZoomFocus, type BoardZoomPivot } from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapLabelLayer from '@/components/ui/MapLabelLayer';
-import type { Battlefield, Facing, Square, TerrainLetter } from '@/utils/games/battlefield/terrain';
+import { facingTowards, type Battlefield, type Facing, type Square, type TerrainLetter } from '@/utils/games/battlefield/terrain';
 import { isoArea, isoBlock, isoBounds, isoCentre, isoCorner, isoDepth, isoGridLines, isoGroundAt, isoPoint, isoPoints, isoRuns, isoSlab, isoSquareAt, isoView, ISO_HALF_HEIGHT, ISO_HALF_WIDTH, type IsoBlock, type IsoRotation, type IsoView, type Point } from '@/utils/ui/isometric';
 import { RealmArenaTerrainArt, RealmArenaTerrainDefs, spriteId, SpriteUse } from '@/games/RealmArena/components/RealmArenaTerrain';
 import { RealmArenaEffectMarks } from '@/games/RealmArena/components/RealmArenaEffects';
-import RealmArenaFx, { cueTiming, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
+import RealmArenaFx, { cueTiming, useElapsed, type FxPoints } from '@/games/RealmArena/components/RealmArenaFx';
 import type { Rect } from '@/utils/ui/mapLabels';
 import { useSvgId } from '@/utils/hooks/useSvgId';
 import { useStoredValue } from '@/utils/hooks/useStoredValue';
+import { usePrefersReducedMotion } from '@/utils/hooks/usePrefersReducedMotion';
 import { CHARACTER_ART, facingCell, ITEM_ART, SMOKE_ART, spriteBox, TERRAIN_ART, type CharacterPose } from '@/games/RealmArena/art';
 import { CHARACTERS, ITEMS, type CharacterId, type ItemId } from '@/games/RealmArena/characters';
 import { ACTION_POINTS, CENTRE, isStanding, isWarband, smokeSquares, type BattleState, type Fighter, type FogGhost, type MusterPick } from '@/games/RealmArena/rules';
 import type { AttackOption } from '@/games/RealmArena/tactics';
-import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
+import { apPips, areaRect, type BattleCue, type FallCue, type ScorchCue, type WalkCue, effectsOn, facingOf, fighterStatus, aimFocus, focusOn, hpFraction, reachFocus, terrainLetter } from '@/games/RealmArena/ui';
 
 /** How deep the ground is drawn under the map's front edges, in quarters. */
 const SLAB_DEPTH = 3;
@@ -131,15 +132,31 @@ interface RealmArenaBoardProps {
     /**
      * Squares brought into view whenever `key` changes: a review's step
      * (§17.3 PR 8), or — `aim` — a target picked from the turn sheet's list,
-     * framed close with whoever is aiming at it (`aimFocus`).
+     * framed close with whoever is aiming at it (`aimFocus`). `exact` zooms to
+     * just fit the squares, rather than to the deepest step they fit at: a
+     * move's start and end, which are often a dozen squares apart.
      */
-    follow?: { squares: readonly Square[]; key: string } | AimFollow | null;
+    follow?: { squares: readonly Square[]; key: string; exact?: boolean } | AimFollow | null;
+    /**
+     * Where the view rests when nothing else says where to look — the
+     * viewer's own side, as the board opens and whenever a selection, a pick
+     * or a review step lets go of it: just fit round `squares`, again
+     * whenever `key` changes. No squares, no focus: the board stays as it is.
+     */
+    home?: { squares: readonly Square[]; key: string } | null;
     /** The selected character's chance to hit each enemy in reach, floated above each one. */
     odds?: readonly AttackOption[] | null;
     /** Floats over the foot of the board, outside the zoom, so it stays put as the board pans: the selected character's targets. */
     overlay?: React.ReactNode;
     /** What an action did, played over the figures (§26): a new `key` starts it over. */
     playback?: Playback | null;
+    /**
+     * A review step that happened out of the viewer's sight (`isUnplaced`),
+     * as a key — the step's, so each one's mark fades in afresh: a big
+     * half-transparent "?" over the middle of the board's frame, outside the
+     * zoom so it stays put as the board pans. Null when there's nothing to say.
+     */
+    unplaced?: string | null;
 }
 
 /** What the board plays. */
@@ -337,6 +354,53 @@ function Falling({ artId, view, cue, facing, tintFor, colourFor }: { artId: stri
             <HpBar x={x} y={y} fighter={fighter} colour={colourFor(fighter.owner)} />
         </g>
     );
+}
+
+/**
+ * Where a character walking `walks` (its own, in order) is `ms` into the
+ * playback: the square of its path it is leaving, the one it is heading for,
+ * and how far over the way between their middles it has got — or null once its
+ * last walk is over. Every square of a path takes the same time. Before a walk
+ * starts it stands where the path begins; between two it stands where the
+ * first left off.
+ */
+function walkerAt(walks: readonly WalkCue[], ms: number): { from: Square; to: Square; across: number } | null {
+    const last = walks[walks.length - 1];
+    if (ms >= last.start + last.length) return null;
+    let walk = walks[0];
+    for (const one of walks) if (ms >= one.start) walk = one;
+    const legs = walk.path.length - 1;
+    const progress = Math.min(1, Math.max(0, (ms - walk.start) / walk.length)) * legs;
+    const leg = Math.min(legs - 1, Math.floor(progress));
+    return { from: walk.path[leg], to: walk.path[leg + 1], across: progress - leg };
+}
+
+/**
+ * A character walking the path the action being played told (§26.1): its
+ * figure, over its shadow and with its HP bar, slid from square to square a
+ * frame at a time — turned to face each step, and rising and falling with the
+ * ground — and gone once its last walk is over, which is when its resting
+ * figure (`Arriving`) appears where the path ends. Drawn without its marks, and
+ * not to be tapped.
+ */
+function Walker({ artId, view, field, walks, tintFor, colourFor }: { artId: string; view: IsoView; field: Battlefield; walks: readonly WalkCue[]; tintFor: TintFor; colourFor: (owner: string) => string }) {
+    const last = walks[walks.length - 1];
+    const ms = useElapsed(last.start + last.length);
+    const now = walkerAt(walks, ms);
+    if (!now) return null;
+    const { fighter } = walks[0];
+    const feet = isoCentre(view, now.from), next = isoCentre(view, now.to);
+    return (
+        <g className="ag-ra-walker" transform={`translate(${(next.x - feet.x) * now.across} ${(next.y - feet.y) * now.across})`}>
+            <Figure artId={artId} view={view} square={now.from} character={fighter.character} facing={facingTowards(field, now.from, now.to)} item={fighter.item} tint={tintFor(fighter.owner)} />
+            <HpBar x={feet.x} y={feet.y} fighter={fighter} colour={colourFor(fighter.owner)} />
+        </g>
+    );
+}
+
+/** What waits out a walk, hidden until `ms` into the playback (`ag-ra-arriving`): a walker's resting figure, standing where its path ends. */
+function Arriving({ ms, children }: { ms: number; children: React.ReactNode }) {
+    return <g className="ag-ra-arriving" style={{ animationDelay: `${ms}ms` }}>{children}</g>;
 }
 
 /** A puff of a smoke pot's cloud over a square, its foot on the square's top. */
@@ -588,13 +652,19 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * squad both go to `placing.onTap`, with the square tapped.
  *
  * Stepping through a review (`follow`), the view goes to each step: every
- * character it moved or touched, zoomed as deep as they all still fit.
+ * character it moved or touched, zoomed as deep as they all still fit — or, for
+ * a move, to just fit where it began and where it ended (`follow.exact`).
+ * With nothing selected, picked up or followed, it rests on `home`: just fit
+ * round the viewer's own side, which is also how the board opens.
  *
  * What an action did plays over the figures (`playback`, §26) — the viewer's
  * own as it comes back, and each step of a review — drawn by `RealmArenaFx`
  * above everything else, where nothing can be tapped: the shots and the
  * throws flying, their bursts, the slashes and the hit text. Anyone it
- * downed stands where it fell until the blow lands, then fades.
+ * downed stands where it fell until the blow lands, then fades. A move walks:
+ * the character is drawn along the path it was told (`Walker`), turned to face
+ * each step, while its resting figure waits out the walk (`Arriving`) — and,
+ * with reduced motion, is simply where it ended up.
  *
  * The view turns a quarter either way from the buttons in the frame's corner,
  * so a player can see round the far side of a tower or a wall: the same
@@ -603,7 +673,7 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * here and nowhere else — and whatever was in the middle of the frame is still
  * there after it (`BoardZoom`'s `pivot`).
  */
-export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, odds, overlay, playback }: RealmArenaBoardProps) {
+export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unseen, clouds, sides, sealed, owners, waveDue = false, showCentre = true, viewerId, colourFor, nameFor, selected, onSelect, placing, aiming, acting, refocus = 0, follow, home, odds, overlay, playback, unplaced }: RealmArenaBoardProps) {
     const [storedRotation, storeRotation] = useStoredValue(`realmarena-board-rotation-${viewerId}`);
     const rotation = storedRotation === '1' || storedRotation === '2' || storedRotation === '3'
         ? Number(storedRotation) as IsoRotation
@@ -637,6 +707,8 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         };
     }, [field, rotation]);
     const { view } = ground;
+    // Nothing walks or flies with reduced motion: a character is simply where it ended up.
+    const still = usePrefersReducedMotion();
     // Only the turn's own pivot needs the view it turned from, and only once.
     const pivot: BoardZoomPivot | null = turned.turns === 0 ? null : {
         key: String(turned.turns),
@@ -665,9 +737,10 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
     if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
-    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}` };
+    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
+    else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };
 
     const centreSquares = showCentre ? field.objectives[CENTRE] ?? [] : [];
     const centre = centreSquares.length > 0 ? areaRect(field, centreSquares) : null;
@@ -739,27 +812,48 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
         ),
     }));
 
+    // Whoever the action being played walks is drawn walking (`Walker`), and
+    // its resting figure — the whole of it, marks and all — stays hidden until
+    // its last walk is over (`Arriving`).
+    const walking = new Map<number, WalkCue[]>();
+    if (playback && !still) for (const cue of playback.cues) {
+        if (cue.kind === 'walk') walking.set(cue.fighter.id, [...walking.get(cue.fighter.id) ?? [], cue]);
+    }
+    const arrival = (fighterId: number): number | undefined => {
+        const walks = walking.get(fighterId);
+        const last = walks?.[walks.length - 1];
+        return last && last.start + last.length;
+    };
+    walking.forEach((walks, id) => items.push({
+        // Over the front-most square it crosses, so it is never hidden by one
+        // it has walked past — at the cost of standing over a wall it passes
+        // behind, for the squares it is still behind it.
+        depth: Math.max(...walks.flatMap(walk => walk.path.map(square => isoDepth(view, square)))) + 0.6,
+        node: <Walker key={`walk-${playback?.key}-${id}`} artId={artId} view={view} field={field} walks={walks} tintFor={tintFor} colourFor={colourFor} />,
+    }));
     for (const fighter of fighters) {
+        const arrives = arrival(fighter.id);
+        const node = (
+            <FighterNode
+                key={fighter.id}
+                artId={artId}
+                view={view}
+                fighter={fighter}
+                ring={ringOf(fighter)}
+                selected={fighter.id === selected?.id}
+                acting={fighter.owner === acting}
+                hpChange={aiming?.hpChange.get(fighter.id)}
+                colour={colourFor(fighter.owner)}
+                facingFor={facingFor}
+                tintFor={tintFor}
+                nameFor={nameFor}
+                onSelect={onSelect}
+            />
+        );
         items.push({
             // Anyone standing over a body is drawn on top of it.
             depth: isoDepth(view, fighter.square) + (isStanding(fighter) ? 0.6 : 0.5),
-            node: (
-                <FighterNode
-                    key={fighter.id}
-                    artId={artId}
-                    view={view}
-                    fighter={fighter}
-                    ring={ringOf(fighter)}
-                    selected={fighter.id === selected?.id}
-                    acting={fighter.owner === acting}
-                    hpChange={aiming?.hpChange.get(fighter.id)}
-                    colour={colourFor(fighter.owner)}
-                    facingFor={facingFor}
-                    tintFor={tintFor}
-                    nameFor={nameFor}
-                    onSelect={onSelect}
-                />
-            ),
+            node: arrives === undefined ? node : <Arriving key={`${fighter.id}-${playback?.key}`} ms={arrives}>{node}</Arriving>,
         });
     }
     // Anyone the action being played downed stands over its fallen figure
@@ -767,10 +861,14 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // scorched ground until the burst fades: both as the action found them.
     if (playback) for (const cue of playback.cues) {
         // A fighter downed partway through a move falls facing the way it had stepped, as it lies now.
-        if (cue.kind === 'fall') items.push({
-            depth: isoDepth(view, cue.fighter.square) + 0.6,
-            node: <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />,
-        });
+        // One downed partway through a move stands on its square only once it has walked there.
+        if (cue.kind === 'fall') {
+            const falling = <Falling key={`fall-${playback.key}-${cue.fighter.id}`} artId={artId} view={view} cue={cue} facing={facingFor(fighters.find(one => one.id === cue.fighter.id) ?? cue.fighter)} tintFor={tintFor} colourFor={colourFor} />;
+            items.push({
+                depth: isoDepth(view, cue.fighter.square) + 0.6,
+                node: cue.arrives === undefined || still ? falling : <Arriving key={`fall-${playback.key}-${cue.fighter.id}`} ms={cue.arrives}>{falling}</Arriving>,
+            });
+        }
         if (cue.kind === 'scorch') items.push(...blasting(artId, view, playback, cue));
     }
     items.sort((a, b) => a.depth - b.depth);
@@ -892,6 +990,16 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                 <button type="button" onClick={() => turn(1)} aria-label="Turn the view clockwise" title="Turn clockwise">↻</button>
             </div>
             {overlay}
+            {/* Something happened, but not anywhere the viewer can see: a
+                question mark over the frame, not the board, so it stays in the
+                middle as the board pans and zooms. The layer fades in and out
+                as a step comes and goes; the mark in it, keyed by the step,
+                settles in afresh for each. */}
+            {unplaced !== undefined && (
+                <div className={`ag-ra-unplaced${unplaced ? ' ag-ra-unplaced--on' : ''}`} aria-hidden="true">
+                    <span key={unplaced ?? undefined}>?</span>
+                </div>
+            )}
         </div>
     );
 }
