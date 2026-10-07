@@ -318,8 +318,11 @@ export default function GameRealmArena({ params }: { params: Promise<{ gameid: u
     // Stepping through the match, the view goes to each action as it comes.
     // A move is framed from where it began to where it ended, as close as
     // both fit — or, where in fog of war it came into sight or went out of it,
-    // over the stretch of it the viewer saw (`moveFrame`); anything else goes to every character it
-    // touched, as deep as they all still fit. A step that handed the turn on
+    // over the stretch of it the viewer saw (`moveFrame`); anything else is
+    // framed just fit and close round whoever acted and whoever it reached
+    // (`toldSquares`), as a target picked to aim at is, live or in a review —
+    // or, told nothing that places it, every character it changed, as deep as
+    // they all still fit. A step that handed the turn on
     // moved everyone's AP, not anyone in particular — and so for the hand-off
     // part of an End turn, but not for the enemy's actions before it, which
     // are followed. One that ended the battle hands it to nobody, and is

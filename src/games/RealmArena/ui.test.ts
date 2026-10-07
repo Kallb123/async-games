@@ -1103,6 +1103,24 @@ describe("actionFollow", () => {
         expect(actionFollow(RUINED_FORT, [], [mover], [hurt], "k")).toEqual({ squares: [10], key: "k" });
     });
 
+    it("frames a heal close and exactly, on the cleric and whoever it healed, however far apart the zoom steps are", () => {
+        const cleric = ready(1, "a", "cleric", at2(10, 20)), soldier = { ...ready(2, "a", "knight", at2(13, 20)), hp: 3 };
+        const healed: ToldEvent = { kind: "healed", fighter: 1, target: 2, hp: 2 };
+        expect(actionFollow(RUINED_FORT, [healed], [cleric, soldier], [{ ...cleric, ap: 0 }, { ...soldier, hp: 5 }], "k"))
+            .toEqual({ squares: [cleric.square, soldier.square], key: "k", exact: true, close: true });
+    });
+
+    it("frames two shots at the same target alike, whatever else changed as the turn began", () => {
+        const archer = ready(1, "b", "archer", at2(10, 20)), soldier = ready(2, "a", "knight", at2(16, 22));
+        // Someone across the field whose watch the turn's start cleared: it changed, but the shot didn't touch it.
+        const watcher = { ...ready(3, "b", "knight", at2(40, 50)), banked: 2 };
+        const shot: ToldEvent = { kind: "shot", fighter: 1, target: 2, chance: 70, result: "hit", damage: 2, reaction: false };
+        const first = actionFollow(RUINED_FORT, [shot], [archer, soldier, watcher], [{ ...archer, ap: 2 }, { ...soldier, hp: soldier.hp - 2 }, { ...watcher, banked: 0 }], "k");
+        const second = actionFollow(RUINED_FORT, [shot], [{ ...archer, ap: 2 }, { ...soldier, hp: soldier.hp - 2 }], [{ ...archer, ap: 0 }, { ...soldier, hp: soldier.hp - 4 }], "k");
+        expect(first).toEqual({ squares: [archer.square, soldier.square], key: "k", exact: true, close: true });
+        expect(second).toEqual(first);
+    });
+
     it("is null when nothing changed or what changed is spread over more than half the field", () => {
         expect(actionFollow(RUINED_FORT, [], [mover], [{ ...mover }], "k")).toBeNull();
         const near = ready(1, "b", "archer", at2(2, 2)), far = ready(2, "b", "mage", at2(30, 40));

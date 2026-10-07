@@ -135,9 +135,11 @@ interface RealmArenaBoardProps {
      * (§17.3 PR 8), or — `aim` — a target picked from the turn sheet's list,
      * framed close with whoever is aiming at it (`aimFocus`). `exact` zooms to
      * just fit the squares, rather than to the deepest step they fit at: a
-     * move's start and end, which are often a dozen squares apart.
+     * move's start and end, which are often a dozen squares apart. `close`
+     * frames them as tight as `aim` does: an action's caster and whoever it
+     * reached (`actionFollow`).
      */
-    follow?: { squares: readonly Square[]; key: string; exact?: boolean } | AimFollow | null;
+    follow?: { squares: readonly Square[]; key: string; exact?: boolean; close?: boolean } | AimFollow | null;
     /**
      * Where the view rests when nothing else says where to look — the
      * viewer's own side, as the board opens and whenever a selection, a pick
@@ -820,9 +822,10 @@ function blasting(artId: string, view: IsoView, playback: Playback, cue: ScorchC
  * Placing a squad (`placing`), a tap on a square or on a character of the
  * squad both go to `placing.onTap`, with the square tapped.
  *
- * Stepping through a review (`follow`), the view goes to each step: every
- * character it moved or touched, zoomed as deep as they all still fit — or, for
- * a move, to just fit where it began and where it ended (`follow.exact`).
+ * Stepping through a review (`follow`), the view goes to each step: for a
+ * move, just fit round where it began and where it ended (`follow.exact`);
+ * for anything else, just fit and close round whoever acted and whoever it
+ * reached (`follow.close`), as a target picked to aim at is.
  * With nothing selected, picked up or followed, it rests on `home`: just fit
  * round the viewer's own side, which is also how the board opens.
  *
@@ -921,7 +924,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
     // A review follows its steps, as Race Cars follows a roll, ahead of anything selected.
     let focus: BoardZoomFocus | null = null;
     if (follow && 'aim' in follow) focus = { rect: isoBounds(view, aimFocus(field, follow.aim.caster, follow.aim.target)), key: `follow:${follow.key}`, exact: true };
-    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
+    else if (follow && follow.squares.length > 0) focus = { rect: isoBounds(view, (follow.close ? aimFocus : focusOn)(field, ...follow.squares)), key: `follow:${follow.key}`, exact: follow.exact };
     else if (pickedUp) focus = { rect: isoBounds(view, focusOn(field, pickedUp.square)), key: `pick:${pickedUp.square}:${refocus}` };
     else if (selected) focus = { rect: isoBounds(view, reachRect ?? focusOn(field, selected.square)), key: `${selected.id}:${selected.square}:${refocus}`, exact: true };
     else if (home && home.squares.length > 0) focus = { rect: isoBounds(view, focusOn(field, ...home.squares)), key: home.key, exact: true };

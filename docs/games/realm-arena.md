@@ -1900,8 +1900,12 @@ is kept apart, in [`../isometric-animations.md`](../isometric-animations.md).
   last of the same character's). In fog of war, a move that came into sight or
   went out of it is framed over the stretch the viewer saw instead — from where
   its told path begins, or to where it ends — which is what the board walks; a
-  move told with no path frames nothing. Anything else follows every character the part touched, as deep as
-  they all fit. A turn beginning is not a character doing something: AP going
+  move told with no path frames nothing. Anything else is framed round whoever
+  acted and whoever it reached, as the part's events name them (`toldSquares`),
+  with the zoom that just fits them and as close as a target picked to aim at
+  (`aimFocus`): a heal three squares off fills the frame, and two shots at the
+  same target are framed alike. Only a part told nothing that places it follows
+  every character it changed (`actionSquares`), as deep as they all fit. A turn beginning is not a character doing something: AP going
   up (everyone's fresh allowance) is not a change `actionSquares` follows, only
   AP spent, banked AP changing, and a new square, hit points or effects. A part
   with nothing to follow (the hand-off), or whose squares span more than half

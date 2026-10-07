@@ -90,10 +90,13 @@ const AIM_MARGIN = 1.5;
 /**
  * The region `BoardZoom` brings into view for a target picked to aim at, in
  * squares: the caster and the target, and `AIM_MARGIN` round them — closer
- * than `focusOn`, since the two of them are all the player is looking at.
+ * than `focusOn`, since the two of them are all the player is looking at. An
+ * action played or reviewed is framed the same way, round whoever acted and
+ * whoever it reached (`actionFollow`), so a shot is seen as close as it was
+ * aimed.
  */
-export function aimFocus(field: Pick<Battlefield, "width">, caster: Square, target: Square): Rect {
-    return framed(field, [caster, target], AIM_MARGIN);
+export function aimFocus(field: Pick<Battlefield, "width">, ...squares: Square[]): Rect {
+    return framed(field, squares, AIM_MARGIN);
 }
 
 /**
@@ -198,16 +201,49 @@ export function moveFrame(events: readonly ToldEvent[], before: readonly Fighter
 }
 
 /**
- * Where the view goes for a step of the battle, whoever took it: the stretch a
- * move covered (`moveFrame`), framed exactly; failing that every square it
- * touched (`actionSquares`), as deep as they all still fit — unless they are
- * spread over too much of the battlefield to be worth framing (`spreadWide`).
- * Null where there is nothing to follow, for the caller to rest the view
- * somewhere of its own. `key` is the one the view glides again for.
+ * The squares an action's events name: where each character they name —
+ * whoever acted, whoever it reached, whoever downed or found whom — stood as
+ * the action found it (or as it left it, for one that only came into sight),
+ * and where a fireball, a throw or a Demolish landed. A score names a player,
+ * not a square, so it adds none.
  */
-export function actionFollow(field: Pick<Battlefield, "width" | "height">, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], key: string): { squares: Square[]; key: string; exact?: true } | null {
+export function toldSquares(events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[]): Square[] {
+    const where = (id: number) => (before.find(fighter => fighter.id === id) ?? after.find(fighter => fighter.id === id))?.square;
+    const squares = events.flatMap((event): (Square | undefined)[] => {
+        if (event.kind === "scored") return [];
+        const named = [event.fighter, ...("target" in event ? [event.target] : []), ...("targets" in event ? event.targets : []), ...("by" in event ? [event.by] : [])];
+        return [...named.map(where), ...("at" in event ? [event.at] : [])];
+    });
+    return [...new Set(squares.filter((square): square is Square => square !== undefined))];
+}
+
+/** Where the view goes for an action: the squares, framed exactly — `close`, as a target picked to aim at is (`aimFocus`), rather than with `focusOn`'s room round them. */
+export interface ActionFollow {
+    squares: Square[];
+    key: string;
+    exact?: true;
+    close?: true;
+}
+
+/**
+ * Where the view goes for a step of the battle, whoever took it: the stretch a
+ * move covered (`moveFrame`), framed exactly; failing that whoever acted and
+ * whoever it reached (`toldSquares`), framed exactly and close, as a target
+ * picked to aim at is — so a heal three squares off is seen three squares
+ * across, not snapped out to a zoom step that shows twenty, and two shots from
+ * the same archer at the same soldier are framed alike. Only a step told
+ * nothing that places it falls back on every character it changed
+ * (`actionSquares`), as deep as they all still fit, unless they are spread
+ * over too much of the battlefield to be worth framing (`spreadWide`): what
+ * changed also catches what a turn starting resets, which is no part of the
+ * action. Null where there is nothing to follow, for the caller to rest the
+ * view somewhere of its own. `key` is the one the view glides again for.
+ */
+export function actionFollow(field: Pick<Battlefield, "width" | "height">, events: readonly ToldEvent[], before: readonly Fighter[], after: readonly Fighter[], key: string): ActionFollow | null {
     const frame = moveFrame(events, before, after);
     if (frame) return { squares: frame, key, exact: true };
+    const told = toldSquares(events, before, after);
+    if (told.length > 0) return { squares: told, key, exact: true, close: true };
     const touched = actionSquares(before, after);
     return touched.length > 0 && !spreadWide(field, touched) ? { squares: touched, key } : null;
 }
