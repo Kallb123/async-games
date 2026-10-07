@@ -401,6 +401,17 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
             .toEqual(["Alice moved their Knight, their Mage and three Men-at-arms, then hunkered them down"]);
     });
 
+    it("counts the characters a viewer was told of without their kind, in fog of war and out of it (§27.2)", () => {
+        const moves = (told: [number, string][]) => forFeed(told.flatMap(([fighter, text], index) => act(`c${index}`, fighter, `Alice moved ${text}`, [move(fighter)])));
+        const unseen = "a character out of sight";
+        expect(titles(moves([[1, "their Knight"], [0, unseen], [2, "their Mage"], [3, unseen]])))
+            .toEqual(["Alice moved their Knight, their Mage and two characters out of sight"]);
+        expect(titles(moves([[1, "their Knight"], [2, "their Mage"], [0, unseen]]))).toEqual(["Alice moved their Knight, their Mage and a character out of sight"]);
+        expect(titles(moves([[0, "an enemy character"], [1, "an enemy character"], [2, "an enemy character"]]))).toEqual(["Alice moved three enemy characters"]);
+        // Told differently, they are counted apart.
+        expect(titles(moves([[0, "a character"], [1, unseen], [2, "a character"]]))).toEqual(["Alice moved two characters and a character out of sight"]);
+    });
+
     it("tells the co-op enemy's run of moves as one row, counting a hidden enemy's characters", () => {
         const owner = warbandOwner(0);
         const enemyMove = (fighter: number) => ({ action: { kind: "move", fighter }, events: [move(fighter)] });
@@ -412,7 +423,7 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
         expect(titles(known)).toEqual(["Alice ended their turn", "The Renegades moved their Knight, their Archer and their Mage"]);
         expect(known[1]).toMatchObject({ id: "c1:enemy:0", actorId: owner, type: "ra_manoeuvre" });
         const hidden = forFeed(turn([5, 6, 7], [...Array(3).fill("The enemy moved one of its characters"), "The enemy ended their turn"]));
-        expect(titles(hidden)).toEqual(["Alice ended their turn", "The enemy moved 3 of its characters"]);
+        expect(titles(hidden)).toEqual(["Alice ended their turn", "The enemy moved three of its characters"]);
     });
 
     describe("a character's quiet deeds in a row, the same ones by each of several", () => {
@@ -489,7 +500,7 @@ describe("Realm Arena feed, one row for a run of quiet deeds by different charac
             expect(titles(turn("The Renegades", ["their Knight", "their Archer"], "realm")))
                 .toEqual(["Alice ended their turn", "The Renegades moved their Knight and their Archer, then put them on watch"]);
             expect(titles(turn("The enemy", Array(2).fill("one of its characters"))))
-                .toEqual(["Alice ended their turn", "The enemy moved 2 of its characters, then put them on watch"]);
+                .toEqual(["Alice ended their turn", "The enemy moved two of its characters, then put them on watch"]);
         });
     });
 
