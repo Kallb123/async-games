@@ -7,16 +7,19 @@ everything here is read off it, but the timeline and the frame loop in §4
 belong to the board rather than to the game, and the next isometric board
 should get them for free.
 
-**Status: steps 1 and 2 of §6 built.** §3.1–§3.4 and §3.8 went in with
+**Status: steps 1–3 of §6 built.** §3.1–§3.4 and §3.8 went in with
 [#880](https://github.com/Kallb123/async-games/pull/880): bars and marks
 wait for their blow, the fallen wait for theirs, the view stays on the
 player's own action, hit text stacks in lanes (`TextCue.lane`) and reduced
 motion times nothing it doesn't draw (`battleCues`' `still`). §5's timings,
 bar the two camera rows, went in with [#881](https://github.com/Kallb123/async-games/pull/881): flights timed by distance,
 capped arcs, walks paced by leg and eased, prioritised squeezing, a knock, a
-lunge and a shake on impact, and a pop on a blow's text. §2 describes the
-code as it stands now. Still to do: §3.5, the timeline (§4, which settles
-§3.6 and §3.7), the camera rows of §5, and the art; §6 orders them. Realm Arena's design
+lunge and a shake on impact, and a pop on a blow's text. The timeline (§4.1–§4.6),
+which settles §3.6 and §3.7, went in with the PR after: one playback clock
+and one frame loop setting SVG attributes, effects in an overlay SVG, walkers
+in depth slots, and the page moving on when the board says it has played. §2
+describes the code as it stands now. Still to do: §3.5, the camera rows of
+§5, and the art; §6 orders them. Realm Arena's design
 document keeps what the player should see (§26 of
 [`games/realm-arena.md`](./games/realm-arena.md)); this keeps how the board
 draws it.
@@ -28,12 +31,14 @@ draws it.
 | Piece | File | What it does |
 |---|---|---|
 | `battleCues` | `src/games/RealmArena/ui.ts` | Turns an action's told events into timed cues (`BattleCue`) on one timeline, squeezed to fit `PLAYBACK_MS`. Pure. |
-| `reviewParts`, `partDurationMs` | `src/games/RealmArena/ui.ts` | The same per review step and per part of a co-op End turn, and how long the review rests on each. |
-| `RealmArenaBoard` | `src/games/RealmArena/components/RealmArenaBoard.tsx` | Draws the battlefield in depth order, and inside it whatever plays *between* things: `Walker`, `Falling`, `blasting` (via `Fading`), `Arriving`. Holds playback while the view glides (`held`). |
-| `RealmArenaFx` | `src/games/RealmArena/components/RealmArenaFx.tsx` | Draws whatever plays *over* everything: `Flights` (frame by frame), `HitText`, `Burst`, `Slash` (CSS keyframes). Owns `useElapsed`. |
-| `ag-ra-hit`, `ag-ra-burst`, `ag-ra-slash`, `ag-ra-arriving`, `ag-ra-held` | `src/app/ag-theme.css` | The keyframes, the pause while held, and the reduced-motion rules. |
+| `reviewParts` | `src/games/RealmArena/ui.ts` | The same per review step and per part of a co-op End turn. |
+| `flightAt`, `walkerAt`, `hitTextAt`, `burstAt`, `slashAt`, `fadeOutAt`, `fadeInAt`, `toldAt`, `shoveAt`, `shakeAt` | `src/games/RealmArena/ui.ts` | What each thing looks like at a moment of the playback. Pure, and tested at a moment (§4.6). |
+| `PlaybackClock` | `src/utils/ui/playbackClock.ts` | The one clock a playback runs on: paused, resumed, sped up, skipped, over at its end. Pure. |
+| `PlaybackProvider`, `usePlaybackFrame`, `usePlaybackValue` | `src/utils/hooks/usePlayback.tsx` | The one frame loop over that clock, and how whatever moves reads it. |
+| `RealmArenaBoard` | `src/games/RealmArena/components/RealmArenaBoard.tsx` | Draws the battlefield in depth order, and inside it whatever plays *between* things: `WalkerSlot`, `Falling`, `blasting` (via `Fading`), `Appearing`, `Arriving`, `ToldFighterNode`. Runs the playback's clock, held while the view glides (`held`), and says when it has played (`onPlayed`). |
+| `RealmArenaFx` | `src/games/RealmArena/components/RealmArenaFx.tsx` | Draws whatever plays *over* everything, in an overlay SVG: `Flight`, `HitText`, `Burst`, `Slash`. |
 | `BoardZoom` | `src/components/ui/BoardZoom.tsx` | The glide to a `focus` (`GLIDE_MS`), and `onFocused` once it lands. |
-| The page | `src/app/games/realmarena/[gameid]/page.tsx` | Builds the playback — the player's own action as it comes back (`ownPlayback`), or a review step's part — picks the focus, and clears or advances both on `setTimeout`. |
+| The page | `src/app/games/realmarena/[gameid]/page.tsx` | Builds the playback — the player's own action as it comes back (`ownPlayback`), or a review step's part — picks the focus, and lets go of the one or moves the review on when the board says it has played. |
 
 ## 2. How it works today
 
@@ -51,34 +56,44 @@ draws it.
    text (down to 800ms), never a flight; only if that still overruns is every
    timing scaled by the same factor. `battleCues` takes the battlefield for
    the distances and the heights.
-2. **Hold.** The board computes its `focus` and holds the playback
-   (`held = playback && focus && landed !== focus.key`) until `BoardZoom` says
-   it has landed there. Held, the frame clocks stand still and `.ag-ra-held`
-   pauses the keyframes.
-3. **Two ways of moving.** What moves along a path — flights, walkers, and
-   the fades of the fallen and the blasted — is redrawn a frame at a time,
-   each by its own `useElapsed` clock: a `requestAnimationFrame` loop that sets
-   React state every frame. What stays put — hit text, bursts, slashes, and
-   `Arriving`'s reveal — is CSS keyframes with an inline `animation-delay` and
-   `animation-duration` (`cueTiming`). A walker's time is shared over its legs
-   by their length on screen (`walkerAt`), eased in and out (`walkEase`), with
-   a bob and a hop (`walkLift`). A blow knocks its target, a slash lunges its
-   striker (`shovesOf`, `shoveAt`, both drawn as `Figure`'s `offset`), and a
-   fireball or a thunder flask shakes the whole battlefield (`shakeAt`, set on
-   one group by `ShakeClock`). Hit text on a blow pops (`ag-ra-hit-pop`).
+2. **One clock.** The board runs one `PlaybackClock` a playback, through
+   `PlaybackProvider`'s single `requestAnimationFrame` loop, from 0 to the end
+   of its last cue (`endOf`). It computes its `focus` and holds the clock
+   (`held = playback && focus && landed !== focus.key`) until `BoardZoom`
+   says it has landed there, however long that takes, and tells the page
+   once it has played to its end (`onPlayed`).
+3. **One way of moving.** Everything that moves reads that clock: each piece
+   calls `usePlaybackFrame` and sets its own SVG attributes (`transform`,
+   `opacity`, `visibility`, a bar's `width`) through a ref, a frame at a time,
+   with no React render. What it draws at a moment is a pure function of the
+   playback's time in `ui.ts`: `flightAt`, `hitTextAt` (the rise, and the pop
+   on a blow), `burstAt`, `slashAt`, `fadeOutAt` and `fadeInAt` (the fallen
+   and the blasted), `toldAt` (a bar tweening down, its chip draining),
+   `shoveAt` (a knock, a lunge), `shakeAt` and `walkerAt` (a walker's time
+   shared over its legs by their length on screen, eased in and out by
+   `walkEase`, with a bob and a hop from `walkLift`). What changes now and then
+   — a walker turning to its next leg, a figure's marks swapping as its first
+   cue lands, a resting figure arriving — is `usePlaybackValue`, which renders
+   again only when it changes. Nothing is keyframed.
 4. **Depth.** Walkers, falls and blasted cover are pushed into the board's
-   depth-sorted `items`, so walls hide them. The rest is drawn after
-   everything, inside the same SVG.
-5. **Ending.** Nothing tells the page a playback finished. Live, it drops
-   `ownPlayback` after `FOLLOW_GLIDE_MS + PLAYBACK_MS`; in a review, it moves
-   to the next part after `durationMs`, and `useTurnNavigation` to the next
-   step after `reviewStepMs`. All three assume the glide takes
-   `FOLLOW_GLIDE_MS` (450ms).
+   depth-sorted `items`, so walls hide them. A walker has a slot there for
+   every square of its path (`walkSquares`), at that square's depth, and is
+   drawn in the slot of the square it is nearest (`walkerAt`'s `at`). The
+   flights, bursts, slashes and text are drawn in an overlay SVG over the
+   board's, with the same viewBox, inside `BoardZoom`'s content, so they zoom,
+   pan, turn and shake with it but their frames don't repaint the board.
+5. **Ending.** Live, the page lets go of `ownPlayback` when the board says it
+   has played, and on leaving live. In a review, a part that plays moves on
+   `STEP_BEAT_MS` after the board says it has played, and a part with nothing
+   to play after `STEP_MIN_MS`; once a step's last part has gone by,
+   auto-play moves on through `useTurnNavigation`'s `stepEnded` (the page
+   passes `awaitsStepEnd`). Nothing assumes how long the glide takes.
 
 The careful part is worth keeping: nothing keyframes an opacity or a filter
 inside the depth order, because a browser lifts such an element — and
 everything drawn in front of it — into layers of its own, which a phone shows
-as black flashes and stutter. Every proposal below keeps that rule.
+as black flashes and stutter. Setting an SVG attribute lifts nothing, which is
+why the frame loop is safe everywhere. Every proposal below keeps that rule.
 
 ---
 
@@ -150,7 +165,7 @@ shoulder.
 needs no rule: draw the shooter facing `facingTowards(from, to)` for its
 flight cue, and through the rest of the playback.
 
-### 3.6 Timers and frame clocks disagree
+### 3.6 Timers and frame clocks disagree — *built with the timeline (§4.1)*
 
 The page's three timeouts all assume a 450ms glide, but `held` stops the clocks
 for however long the glide really takes: the `setZoom`, the board laid out
@@ -164,7 +179,7 @@ on. And `FOLLOW_GLIDE_MS` (450, `ui.ts`) is kept in step with `GLIDE_MS` (380,
 **Fix.** The board says when a playback has played (§4.1); the page advances on
 that, not on a guess.
 
-### 3.7 A walker stands over the walls it walks behind
+### 3.7 A walker stands over the walls it walks behind — *built with the timeline (§4.5)*
 
 `Walker`'s depth is the front-most square of its *whole* path. The comment owns
 up to it, and on a route that goes behind a tower and round in front of it, it
@@ -186,24 +201,29 @@ nothing.
 
 ### 4.1 A playback clock, and an end
 
-Today every `Walker`, every `Fading` — one *per scorched square*, so a fireball
+*Built.* Before it, every `Walker`, every `Fading` — one *per scorched square*, so a fireball
 blasting nine runs nine loops — and `Flights` each run a
 `requestAnimationFrame` loop that sets state every frame. Each is its own
-React commit. Keyframes run on the document's clock, and the page has
+React commit. Keyframes ran on the document's clock, and the page had
 timeouts of its own. Four timebases, kept roughly in step.
 
-Replace them with one `PlaybackClock` per playback, made by the board:
+They are replaced by one `PlaybackClock` per playback (`src/utils/ui/playbackClock.ts`),
+made by the board's `PlaybackProvider` (`src/utils/hooks/usePlayback.tsx`):
 
 - `start`, `pause` and `resume` — what `held` becomes.
-- `speed` — a review at 2×.
-- `seek(ms)` — a tap to skip goes to the end.
+- `setSpeed` — a review at 2×. On the clock, not yet offered to the player.
+- `seek(ms)` — a tap to skip goes to the end. On the clock, not yet offered
+  to the player either: each is now a prop on the board and a button.
 - `onEnd` — the board's new `onPlayed(key)` prop. The page advances a review
   part, and drops `ownPlayback`, on it instead of on `setTimeout` (§3.6).
-  `useTurnNavigation`'s auto-play does the same through the page.
+  `useTurnNavigation`'s auto-play does the same through the page
+  (`awaitsStepEnd`, `stepEnded`), and `FOLLOW_GLIDE_MS`, `partDurationMs` and
+  `reviewStepMs` are gone.
 
 ### 4.2 One frame loop, writing the SVG directly
 
-One `requestAnimationFrame` loop reads the clock and sets each moving
+*Built:* `usePlaybackFrame` for what moves every frame, `usePlaybackValue`
+for what changes now and then. One `requestAnimationFrame` loop reads the clock and sets each moving
 element's `transform` and `opacity` *attributes* through refs, with no React
 render a frame. React renders the scene once, as the playback starts. The
 positions are already pure functions of time (`walkerAt`, `flightAt`), so this
@@ -212,13 +232,16 @@ keyframed CSS property does, so §2's rule holds.
 
 ### 4.3 Keyframes onto the clock too
 
-Hit text, bursts and slashes move to the same loop. A pause is then one flag on
+*Built:* `hitTextAt`, `burstAt` and `slashAt` play the old keyframes' values,
+eased as CSS `ease-out` was, and the stylesheet has none left. Hit text, bursts and slashes move to the same loop. A pause is then one flag on
 the clock rather than an `animation-play-state` rule, a skip lands everything at
 once, and nothing drifts a frame against the walkers when the hold lets go.
 
 ### 4.4 Effects in an overlay SVG
 
-What's drawn over everything — flights, text, bursts, slashes — moves into a
+*Built:* `.ag-ra-fx-layer`, positioned over the board inside
+`BoardZoom`'s content; its `<use>`s point at the sprites defined in the
+board's SVG. What's drawn over everything — flights, text, bursts, slashes — moves into a
 second SVG stacked over the board inside `BoardZoom`'s content, with the same
 `viewBox`. It still zooms, pans and turns with the board (the pinch and the
 glide transform the content, not the SVG), but its frames no longer repaint
@@ -236,9 +259,21 @@ walk, at that leg's depth. The walker draws into its current leg's slot with
 `createPortal`. The depth order stays as React rendered it, and the walker is
 hidden by exactly what's in front of the square it's crossing (§3.7).
 
+*Built, a little differently:* a slot for each square of the path rather than
+each leg (`walkSquares`), and the walker in the slot of the square it is
+nearest — `from` for the first half of a leg, `to` for the second — so a wall
+in front of where it's heading hides it as it gets there, and one in front of
+where it left stops hiding it as it goes. Each slot draws the walker itself
+while it is the current one (`WalkerSlot`), rather than a portal into it,
+which keeps refs out of render.
+
 ### 4.6 Tests at a moment
 
-`battleCues` is well tested; what the board shows at a given moment isn't, which
+*Built:* "the board at a moment" in `ui.test.ts`, with the three below and
+the flights, the text, the bursts, the slashes, the fades and the walker's
+slot; and the clock's own tests in `playbackClock.test.ts`.
+
+`battleCues` was well tested; what the board shows at a given moment wasn't, which
 is how §3.1 and §3.2 shipped. Export `walkerAt` and `flightAt` and test frames:
 "at the hit cue the bar reads the before HP", "before the blow the fallen pose
 isn't drawn", "a diagonal leg takes as long on screen as its length".
@@ -291,6 +326,8 @@ them until then.
    the knock on a walking target.
 3. **The timeline** — §4.1–§4.5, which also settles §3.6 and §3.7, and makes a
    skip and a 2× review a few lines each. §4.6's tests go in with it.
+   **Built**, without the skip and the 2× themselves: the clock has both, and
+   no button offers them yet.
 4. **Camera** — §5's last two rows, on the timeline from 3.
 5. **Art** — attack and hurt frames, whenever someone's in the character
    models.
