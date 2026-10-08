@@ -57,7 +57,7 @@ describe("WorldDominationDeployArmies", () => {
         expect(outcome.validMove).toBe(false);
     });
 
-    it("places armies and ends the setup turn once the pool empties", async () => {
+    it("places armies and holds the setup turn open once the pool empties (WorldDominationEndTurn hands it on)", async () => {
         const gs = makeState({ phase: "setup", reinforcementsRemaining: 2 });
         const game = makeGame(gs);
         const c = cmd(new WorldDominationDeployArmies());
@@ -65,7 +65,8 @@ describe("WorldDominationDeployArmies", () => {
         c.count = 2;
         const outcome = await c.Execute(game);
         expect(outcome.validMove).toBe(true);
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
         expect(gs.territories[0].armies).toBe(5);
         expect(gs.reinforcementsRemaining).toBe(0);
     });
@@ -229,7 +230,7 @@ describe("WorldDominationEndAttackPhase / WorldDominationFortify / WorldDominati
         expect(gs.phase).toBe("fortify");
     });
 
-    it("fortifies only along a chain of owned territories, and ends the turn", async () => {
+    it("fortifies only along a chain of owned territories, and holds the turn for its undo window", async () => {
         // Alaska(0) -> Northwest Territory(1) -> Ontario(4): 0 and 4 aren't
         // directly adjacent, so this only works if territory 1 is also owned.
         const territories = makeTerritories("u2", {
@@ -245,7 +246,8 @@ describe("WorldDominationEndAttackPhase / WorldDominationFortify / WorldDominati
         c.armies = 2;
         const outcome = await c.Execute(game);
         expect(outcome.validMove).toBe(true);
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
         expect(gs.territories[0].armies).toBe(2);
         expect(gs.territories[4].armies).toBe(3);
     });
@@ -264,12 +266,13 @@ describe("WorldDominationEndAttackPhase / WorldDominationFortify / WorldDominati
         expect((await c.Execute(game)).validMove).toBe(false);
     });
 
-    it("skipping fortify ends the turn without moving armies", async () => {
+    it("skipping fortify holds the turn without moving armies", async () => {
         const gs = makeState({ phase: "fortify" });
         const game = makeGame(gs);
         const outcome = await cmd(new WorldDominationSkipFortify()).Execute(game);
         expect(outcome.validMove).toBe(true);
-        expect(outcome.turnOver).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+        expect(gs.autoEndTurnAt).not.toBeNull();
     });
 });
 

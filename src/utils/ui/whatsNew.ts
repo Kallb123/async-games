@@ -82,6 +82,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "World Domination: take a move back",
+                detail: "Put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind.",
+                game: "worlddomination",
+            },
+            {
                 title: "Realm Arena: watch the battle play back",
                 detail: "Open Review actions and press Play to watch the match play itself forward, every action animated over the board in turn — characters walking along the path they took — with the view following each one, a move framed from where it began to where it ended — and in a co-op battle, each of the enemy's moves played out one at a time rather than all at once. The \"since you were last here\" screen has a button to replay everything from your last turn. The board now opens on your own squad, and comes back to it rather than zooming out across the whole map when there's nothing in particular to look at. Hunkering down, shield walls, overwatch and guard now say so over the character, and a step that happened out of sight shows a faint question mark over the map.",
                 game: "realmarena",
@@ -121,10 +126,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Profile tabs",
                 detail: "Your profile is split into Results, Achievements and Friends tabs, so each is a tap away instead of a long scroll. Friends only appear on your own profile.",
-            },
-            {
-                title: "Achievements",
-                detail: "Unlock achievements as you play — First win, Explorer, Mine Baron in Dice Cities, Double Honours in Settlements & Cities, and Race Cars' nods to real racing moments like Donington '93 and Rascassegate. A toast tells you the moment you earn one, a finished game's results list every achievement anyone at the table unlocked, and your profile (and your friends') shows the lot, with how close you are to the rest.",
             },
         ],
     },

@@ -163,6 +163,28 @@ describe("World Domination's response", () => {
         expect(wire).not.toContain("bob-second-card");
     });
 
+    it("keeps the undo snapshot — every hand and the deck — off the wire, whoever asks", () => {
+        // docs/undo.md §8: a held move's snapshot is a whole state, so it holds
+        // Bob's hand and the deck. Only `canUndo` and `autoEndTurnAt` go out.
+        const deckCard = { id: "top-of-the-deck", type: "wild" as const, territoryId: null };
+        const gs = worldDominationState();
+        gs.cardDeck = [deckCard];
+        gs.undoStack = [{ by: "u1", turnStartedAt: "2026-10-01T08:00:00.000Z", state: { ...gs, cardDeck: [deckCard] } }];
+        gs.undoAnchorId = "last-command";
+        gs.autoEndTurnAt = "2026-10-01T08:00:10.000Z";
+
+        for (const viewerId of ["u1", "u2", null]) {
+            const response = worldDominationStateToResponse(gs, NAMES, viewerId, viewerId === "u1");
+            const wire = JSON.stringify(response);
+            expect(wire).not.toContain("undoStack");
+            expect(wire).not.toContain("undoAnchorId");
+            expect(wire).not.toContain("last-command");
+            expect(wire).not.toContain("top-of-the-deck");
+            expect(response.autoEndTurnAt).toBe(viewerId === "u1" ? gs.autoEndTurnAt : null);
+            expect(response.canUndo).toBe(viewerId === "u1");
+        }
+    });
+
     it("shows nobody's hand when nobody in particular is asking", () => {
         // The recap and result replays build snapshots with no viewer. Counts
         // still have to be right — the recap reports how many cards a player

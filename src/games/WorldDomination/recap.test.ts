@@ -21,6 +21,8 @@ function state(cardCount: number): IWorldDominationSpecificGameStateResponse {
         cardSetsCashedIn: 0,
         cardDeckSize: 0,
         lastBattle: null,
+        canUndo: false,
+        autoEndTurnAt: null,
     };
 }
 
@@ -28,7 +30,7 @@ function snapshot(cardCount: number): ITurnSnapshot {
     return { specificGameState: state(cardCount) } as ITurnSnapshot;
 }
 
-function command(className = "WorldDominationSkipFortify"): IGameCommand {
+function command(className = "WorldDominationEndTurn"): IGameCommand {
     return {
         id: "command" as uuidString,
         timestamp: "2026-09-25T12:00:00.000Z",
@@ -56,6 +58,18 @@ describe("World Domination recap — ending a turn", () => {
             title: "Alice drew a World Domination card",
             detail: "1 card in hand",
         }]);
+    });
+
+    it("still shows the card a fortify or a skip drew in a game recorded before the hold", () => {
+        for (const className of ["WorldDominationFortify", "WorldDominationSkipFortify"]) {
+            expect(worldDominationRecapAdapter.toEvents(snapshot(0), snapshot(1), command(className), outcome)
+                .filter(event => event.type === "wd_draw")).toHaveLength(1);
+        }
+    });
+
+    it("draws nothing in the recap for a held fortify, whose card is only drawn once the hold closes", () => {
+        const held = worldDominationRecapAdapter.toEvents(snapshot(0), snapshot(0), command("WorldDominationFortify"), { validMove: true, turnOver: false });
+        expect(held.some(event => event.type === "wd_draw")).toBe(false);
     });
 
     it("does not mistake cards captured in battle for an end-turn draw", () => {

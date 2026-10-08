@@ -24,6 +24,9 @@ import { readyMadeMuster } from "@/games/RealmArena/rules";
 import { SACBuildRoad, SACEndTurn, SACMoveRobber, SACPlaceRoadSetup, SACPlaceSettlementSetup, SACRollDice } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { legalRoadEdges, randomSetupRoadEdge, randomSetupSettlementVertex, robberVictimCandidates } from "@/games/SettlementsAndCities/board";
+import { WorldDominationEndTurn } from "@/games/WorldDomination/WorldDominationLogic";
+import { IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
+import { holdOpenFor } from "./undo";
 import { mongoMap } from "./mongoMaps";
 import { randomInt } from "./random";
 
@@ -51,6 +54,13 @@ export interface ITurnTimeoutAdapter {
      * game-specific parameters.
      */
     buildTimeoutCommand(gameData: IGameData, userId: string): IGameCommand | null;
+    /**
+     * For a game whose adapter covers only some stalled turns: a turn it
+     * builds no command for, on the first call, falls back to the cron's plain
+     * advance exactly as if nothing were registered ('noAdapter'), rather than
+     * being 'declined' and banked as a missed turn left where it stood.
+     */
+    plainAdvanceOtherwise?: boolean;
 }
 
 const adapters = createAdapterRegistry<ITurnTimeoutAdapter>();
@@ -400,6 +410,26 @@ registerTurnTimeoutAdapter({
     },
 });
 
+registerTurnTimeoutAdapter({
+    className: "WorldDominationGameType",
+    plainAdvanceOtherwise: true,
+    // docs/undo.md §16, "The ninth game". A fortify, a skipped fortify or the
+    // last setup placement holds the turn open for its own undo window rather
+    // than ending it, and a player who closed the app inside that window never
+    // sends the WorldDominationEndTurn that closes it. The hold is the one
+    // stalled turn the cron's plain advance gets wrong: it hands the next seat a
+    // setup phase with nothing left to place (every later pass repeating it, so
+    // setup never finishes), or the fortify phase, skipping their reinforcements
+    // and the conqueror's card draw. WorldDominationEndTurn hands it on through
+    // CheckEndTurn — the setup advance, or the card draw and the next player's
+    // reinforcements. Every other expired World Domination turn keeps the plain
+    // advance it always had (`plainAdvanceOtherwise`), so this builds a command
+    // for the hold and for nothing else.
+    buildTimeoutCommand(gameData, userId) {
+        return holdOpenFor(gameData as IWorldDominationGameData, userId) ? new WorldDominationEndTurn() : null;
+    },
+});
+
 // A stalled turn should resolve in one sweep, not one command per ~15-minute
 // cron tick — the missed-turn count sweepGame keeps per player would
 // otherwise climb once per partial command (the timer never resets between
@@ -410,7 +440,7 @@ registerTurnTimeoutAdapter({
 const MAX_TIMEOUT_COMMANDS = 20;
 
 export type TurnTimeoutOutcome =
-    | 'noAdapter' // nothing registered for this game type — the cron falls back to its old plain advance
+    | 'noAdapter' // nothing registered for this game type, or (plainAdvanceOtherwise) nothing for this turn — the cron falls back to its old plain advance
     | 'advanced' // the registered command(s) ran and ended the turn
     | 'gameOver' // one of them ended the whole game
     | 'declined' // the game had nothing it could run for this turn, and nothing did run
@@ -464,7 +494,10 @@ export async function resolveStalledTurn(
     let accepted = 0;
     for (let i = 0; i < MAX_TIMEOUT_COMMANDS; i++) {
         const command = adapter.buildTimeoutCommand(gameData, userId);
-        if (!command) return unresolved(accepted);
+        if (!command) {
+            if (accepted === 0 && adapter.plainAdvanceOtherwise) return 'noAdapter';
+            return unresolved(accepted);
+        }
 
         command.gameId = gameData.gameId;
         command.senderId = userId;

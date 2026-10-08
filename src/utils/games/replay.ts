@@ -16,7 +16,8 @@ import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlemen
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { sacUnrecordedHoldEnd } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
-import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
+import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData, IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
+import { worldDominationUnrecordedHoldEnd } from "@/games/WorldDomination/WorldDominationLogic";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
@@ -248,8 +249,14 @@ registerReplayAdapter({
         worldDominationStateToModel(specificGameState as never, userIdNameMap, viewerId),
     // Deck freeze is feasible here but unbuilt: battle dice are memoryless and
     // the only deck contact is the end-of-turn draw in riskEndTurn, reached
-    // only via WorldDominationFortify / WorldDominationSkipFortify.
+    // only via WorldDominationEndTurn (CheckEndTurn). A replayed step never
+    // offers undo — `canUndo` needs the live command log — so none is passed.
     plannableCommands: [],
+    // A game recorded before the hold ended its turn inside WorldDominationFortify,
+    // WorldDominationSkipFortify or the last setup placement, and its log has no
+    // WorldDominationEndTurn to close what they hold today.
+    closeUnrecordedHold: (specificGameState, holderId, next) =>
+        worldDominationUnrecordedHoldEnd(specificGameState as IWorldDominationSpecificGameState, holderId, next),
 });
 
 registerReplayAdapter({

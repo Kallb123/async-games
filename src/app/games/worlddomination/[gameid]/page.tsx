@@ -67,6 +67,10 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const complete = nav.displayedComplete;
     const isMyTurn = isPlayersTurn(nav.isLive, user, gameData?.currentTurn) && !complete;
     const myUserId = user?.id ?? '';
+    // A fortify, a skipped fortify or the last setup placement holds the turn
+    // open for ten seconds (docs/undo.md §5): the move is made, so the map has
+    // nothing left to take a tap for — only Pass now and Undo, in the sheet.
+    const held = !!gs?.autoEndTurnAt;
 
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
@@ -85,7 +89,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     const validTerritories = useMemo(() => {
         const s = new Set<number>();
-        if (!gs || !isMyTurn) return s;
+        if (!gs || !isMyTurn || gs.autoEndTurnAt) return s;
         const territories = gs.territories;
 
         const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
@@ -123,7 +127,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }, [gs, isMyTurn, selFrom, selTo, myUserId]);
 
     function handleTerritoryClick(id: number) {
-        if (!gs || !isMyTurn) return;
+        if (!gs || !isMyTurn || held) return;
         const t = gs.territories[id];
 
         const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
@@ -247,7 +251,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     );
 
     let placementPrompt: string | null = null;
-    if (gs && isMyTurn && !complete) {
+    if (gs && isMyTurn && !complete && !held) {
         if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {
             placementPrompt = `◆ ${gs.reinforcementsRemaining} to place`;
         } else if (gs.phase === 'attack' && !gs.pendingOccupation && selFrom === null) {

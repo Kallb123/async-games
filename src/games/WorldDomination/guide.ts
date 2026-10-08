@@ -12,7 +12,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Each turn moves through three phases: Reinforce (place new armies on territories you hold), Attack (invade adjacent enemy territories) and Fortify (move armies once between two of your own connected territories).",
+            body: "Each turn moves through three phases: Reinforce (place new armies on territories you hold), Attack (invade adjacent enemy territories) and Fortify (move armies once between two of your own connected territories). Placed armies, cashed in cards or moved into a conquest by mistake? Tap Undo to take it back — anything but a battle, which is dice — and when you fortify or skip fortifying, your turn waits ten seconds before it passes so you get the chance.",
         },
         {
             heading: "Attacking",
