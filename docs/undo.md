@@ -674,12 +674,14 @@ a five-line pure formatter.
   that screen uses.
 - **A manual *End turn* after an undoable move** sets a local deadline of
   `Date.now() + UNDO_WINDOW_MS` and shows the same two controls (§5), rather
-  than sending straight away. That is `useManualEndTurnHold(canUndo,
+  than sending straight away. That is `useManualEndTurnHold(canUndo, myTurn,
   gs.autoEndTurnAt)` — it returns the deadline to count toward (the server's
   when it set one, else its own), what the End turn button calls, and a
-  `clear`. The local deadline is dropped the moment `canUndo` is false, so a
-  resync that takes the move away, or a turn that has moved on, cannot leave a
-  stale deadline to fire the next End turn at once. It was written inline in
+  `clear`. Once tapped, the hold runs to its end even if `canUndo` turns false
+  under it — a teammate's out-of-turn play in Settlements & Cities moves the
+  anchor, and the player still asked for the turn to end. The local deadline
+  is dropped the moment `myTurn` is false, so a turn that has moved on cannot
+  leave a stale deadline to fire a later End turn at once. It was written inline in
   Settlements & Cities' turn sheet until Fires Out wanted the same thing.
 - **Nothing off-turn.** Off-turn the panel is already inert behind
   `ReadOnlyPanel`, and `canUndo` is false for a viewer who is not the mover.

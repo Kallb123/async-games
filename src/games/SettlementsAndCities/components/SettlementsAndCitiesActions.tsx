@@ -98,13 +98,13 @@ export default function SettlementsAndCitiesActions({
     // tapped "End turn" after an undoable move holds it the same way, purely
     // client-side (`useManualEndTurnHold`), so both endings land at the same
     // offset (§5 "Why a manual End turn waits too"). Whichever set it,
-    // `useUndoHold` drives the
-    // countdown and the eventual SACEndTurn the same way — it re-reads the
-    // deadline every tick, so a last-second Undo (which clears both
-    // `autoEndTurnAt` and this state's own copy) stands the auto-fire down.
+    // `useUndoHold` drives the countdown and the eventual SACEndTurn the same
+    // way — it re-reads the deadline every tick, so a last-second Undo (which
+    // clears both `autoEndTurnAt` and the hook's own copy) stands the auto-fire
+    // down.
     // Hooks stay above every early return in this component, so these run
     // before the `!myState` one below rather than after it.
-    const { holdDeadline, endTurn: tapEndTurn, clear: clearManualHold } = useManualEndTurnHold(gs.canUndo, gs.autoEndTurnAt);
+    const { holdDeadline, endTurn: tapEndTurn, clear: clearManualHold } = useManualEndTurnHold(gs.canUndo, !readOnly, gs.autoEndTurnAt);
 
     const submit = useCallback((cmd: IGameCommand, target: string) => {
         submitCommand(cmd, () => { setBoardMode('idle'); clearManualHold(); }, target);

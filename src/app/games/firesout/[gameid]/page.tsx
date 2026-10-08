@@ -97,7 +97,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // undo waits ten seconds (client-side, as Settlements & Cities' does)
     // before it sends. The hold lasts only while it is still the viewer's turn
     // with a move to take back.
-    const endTurnHold = useManualEndTurnHold(!!gs?.canUndo && isMyTurn);
+    const endTurnHold = useManualEndTurnHold(!!gs?.canUndo, isMyTurn);
     const holdingEndTurn = endTurnHold.holdDeadline !== null;
     // §1's solitaire mode (§17.6 step 12): one player holding the whole crew.
     // Presentation only — every rule already works per figure.
