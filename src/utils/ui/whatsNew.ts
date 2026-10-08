@@ -82,8 +82,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "World Domination: take a move back",
-                detail: "Put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind.",
+                title: "World Domination and Fires Out: a few seconds to take a move back",
+                detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
                 game: "worlddomination",
             },
             {

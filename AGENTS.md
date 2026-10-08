@@ -134,6 +134,9 @@ out. A second copy is the signal to extract the first one.
   with — rather than another hand-built "↩ Undo". A game whose undoable move
   ends the turn holds it open for ten seconds first, and shows that hold with
   `UndoHold`: Pass now, Undo, the countdown and the hand-off it sends by itself.
+  A game whose End turn is the player's own tap (Settlements & Cities, Fires
+  Out) holds a tap that follows an undoable move with `useManualEndTurnHold`
+  (in `src/utils/hooks/`) rather than keeping a deadline of its own.
   A block of the page that folds away behind its heading is a
   `DisclosureSection` (the home page's "What's new", the profile's unplayed
   games) — never another hand-written `<details className="ag-disclosure">`.

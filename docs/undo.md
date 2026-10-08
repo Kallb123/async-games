@@ -318,6 +318,14 @@ minutes is not a cost worth optimising away, and "Pass now" is there for a
 player who disagrees — available identically in both cases, which is what keeps
 it from becoming the tell instead. §8 records what is left.
 
+The same hold serves a game whose turn only ever ends on the player's own tap,
+with no server-side hold at all: Fires Out's End turn runs the Advance Fire, so
+it can never be undone and nothing about it can be held server-side, yet a
+player who taps it a moment after a move they regret should still get the ten
+seconds. That is the manual hold alone, and `useManualEndTurnHold`
+(`src/utils/hooks/`) is the one place it lives — Settlements & Cities and
+Fires Out both go through it (§11, §16).
+
 ### Rejected: holding it server-side
 
 Two alternatives were considered and dropped:
@@ -666,7 +674,13 @@ a five-line pure formatter.
   that screen uses.
 - **A manual *End turn* after an undoable move** sets a local deadline of
   `Date.now() + UNDO_WINDOW_MS` and shows the same two controls (§5), rather
-  than sending straight away.
+  than sending straight away. That is `useManualEndTurnHold(canUndo,
+  gs.autoEndTurnAt)` — it returns the deadline to count toward (the server's
+  when it set one, else its own), what the End turn button calls, and a
+  `clear`. The local deadline is dropped the moment `canUndo` is false, so a
+  resync that takes the move away, or a turn that has moved on, cannot leave a
+  stale deadline to fire the next End turn at once. It was written inline in
+  Settlements & Cities' turn sheet until Fires Out wanted the same thing.
 - **Nothing off-turn.** Off-turn the panel is already inert behind
   `ReadOnlyPanel`, and `canUndo` is false for a viewer who is not the mover.
 
@@ -1428,8 +1442,16 @@ command rather than between commands: every move in Fires Out is one
   game — the seventh rescue, or the chop that brings the building down — is
   settled by `CheckGameOver` outside `specificGameState` and pushes nothing,
   the winning Helicopter Lift once more.
-- **No hold (§5)**, no `currentTurn` to restore: a turn only ever ends on the
-  player's own End turn. The stack is emptied by `applyEndTurn` rather than
+- **The hold is client-side (§5's manual End turn)**, no `currentTurn` to
+  restore: a turn only ever ends on the player's own End turn, which is itself
+  random (the Advance Fire) and so is never undoable and never held by the
+  server — there is no `autoEndTurnAt` and no command or wire change. Tapping
+  End turn while `canUndo` opens a ten-second hold instead of sending
+  (`useManualEndTurnHold`, in the board screen); the sheet shows `UndoHold`
+  with **Pass now** (sends the `endTurn` at once), **Undo** (a `FiresOutUndo`,
+  which also closes the hold) and the countdown, whose end sends the `endTurn`
+  by itself. While it runs the rows and the board take no further action. With
+  nothing to undo, End turn sends at once. The stack is emptied by `applyEndTurn` rather than
   `CheckEndTurn`, because a solo crew's hand-off from one figure to the next
   never gets as far as `CheckEndTurn` (it returns `turnOver: false`); and by
   the dropout adapter, because a snapshot taken before a player left would
