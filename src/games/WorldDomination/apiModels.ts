@@ -66,6 +66,17 @@ export interface IWorldDominationSpecificGameStateResponse {
     cardSetsCashedIn: number;
     cardDeckSize: number;
     lastBattle: IWorldDominationLastBattleResponse | null;
+    /**
+     * True when the viewer has a move of their own they can still take back
+     * (docs/undo.md). Per-viewer; the stack it reads holds every hand and the
+     * deck, and is never sent.
+     */
+    canUndo: boolean;
+    /**
+     * When the viewer's held turn ends on its own (docs/undo.md §5) — set only
+     * while `canUndo` is, and null for everybody else.
+     */
+    autoEndTurnAt: string | null;
 }
 
 export interface IWorldDominationGameDataResponse extends IGameDataResponse {

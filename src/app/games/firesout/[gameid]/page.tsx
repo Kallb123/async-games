@@ -21,6 +21,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameIntro } from "@/utils/hooks/useGameIntro";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
+import { useManualEndTurnHold } from "@/utils/hooks/useManualEndTurnHold";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -91,6 +92,13 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const myUserId = user?.id ?? '';
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
+    // docs/undo.md §5: End turn runs the Advance Fire, so it can never be taken
+    // back — but a move before it can, so a tap on End turn with something to
+    // undo waits ten seconds (client-side, as Settlements & Cities' does)
+    // before it sends. The hold lasts only while it is still the viewer's turn
+    // with a move to take back.
+    const endTurnHold = useManualEndTurnHold(!!gs?.canUndo, isMyTurn);
+    const holdingEndTurn = endTurnHold.holdDeadline !== null;
     // §1's solitaire mode (§17.6 step 12): one player holding the whole crew.
     // Presentation only — every rule already works per figure.
     const solo = isSoloCrew(gs?.firefighters ?? []);
@@ -220,7 +228,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // docs/undo.md: puts the board back as it was before the last action, so
     // whatever the board was armed for goes with it.
     function handleUndo() {
-        submitCommand(new FiresOutUndo(), () => setMode(null), 'undo');
+        submitCommand(new FiresOutUndo(), () => { setMode(null); endTurnHold.clear(); }, 'undo');
     }
 
     // The Advance Fire payoff screen (§17.6 step 7) — lives here, not inside
@@ -232,11 +240,15 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // opens a Fires Out! match, and on demand from the game-options menu.
     const gameIntro = useGameIntro('firesout');
 
+    // Sends the end of the turn now — "Pass now", the hold running out, or a tap
+    // with nothing to take back. The End turn button itself goes through
+    // `endTurnHold.endTurn(handleEndTurn)`.
     function handleEndTurn() {
         const command = new FiresOutAction();
         command.kind = 'endTurn';
         submitCommand(command, (response) => {
             setMode(null);
+            endTurnHold.clear();
             setCarryOnMove(false);
             const advance = (response.outcome as IFiresOutEndTurnOutcome).advanceFire;
             if (advance) {
@@ -381,7 +393,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             userIdList={userIdList}
                             activeFirefighter={gs.activeFirefighter}
                             validSpaces={validSpaces}
-                            onSpaceClick={isMyTurn && !submitting ? handleSpaceClick : undefined}
+                            onSpaceClick={isMyTurn && !submitting && !holdingEndTurn ? handleSpaceClick : undefined}
                             engine={experienced ? gs.engine : undefined}
                             ambulance={experienced ? gs.ambulance : undefined}
                         />
@@ -398,7 +410,8 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 carryToggleKind={carryToggleKind}
                                 carryOnMove={carryOnMove}
                                 onCarryOnMoveChange={setCarryOnMove}
-                                onEndTurn={handleEndTurn}
+                                onEndTurn={() => endTurnHold.endTurn(handleEndTurn)}
+                                holdDeadline={endTurnHold.holdDeadline}
                                 submitting={submitting}
                                 endTurnPending={pendingTarget === 'endTurn'}
                                 canUndo={gs.canUndo}

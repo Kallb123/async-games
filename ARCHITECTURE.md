@@ -793,15 +793,17 @@ exactly like a build or a roll — validated, stamped, recorded on
 The ten-second hold before a turn ends reuses `followUpCommand` from the
 paragraph above: the game simply declines to return one it would otherwise
 have returned.
-Race Cars, Banned Islet, Outbreak, Train Time, Dice Cities, Fires Out and
-Realm Arena have since opted in the same way, by hand (`RaceCarsUndo`,
-`BannedIsletUndo`, `OutbreakUndo`, `TrainTimeUndo`, `DiceCitiesUndo`,
-`FiresOutUndo`, `RealmArenaUndo`); Banned Islet, Outbreak, Fires Out and Realm
-Arena need no hold, because their turns only ever end
-on the player's own End turn, while a Train
-Time claim and a Dice Cities purchase hold their turn open as Race Cars' legs
-do. The ten-second window and the turn-clock staleness test the last two share
-live in `src/utils/games/undo.ts`.
+Race Cars, Banned Islet, Outbreak, Train Time, Dice Cities, Fires Out, Realm
+Arena and World Domination have since opted in the same way, by hand
+(`RaceCarsUndo`, `BannedIsletUndo`, `OutbreakUndo`, `TrainTimeUndo`,
+`DiceCitiesUndo`, `FiresOutUndo`, `RealmArenaUndo`, `WorldDominationUndo`);
+Banned Islet, Outbreak, Fires Out and Realm Arena need no hold, because their
+turns only ever end on the player's own End turn, while a Train Time claim, a
+Dice Cities purchase and a World Domination fortify (or skipped fortify, or
+last setup placement — which is why its end-of-turn card draw waits for
+`WorldDominationEndTurn`, in `CheckEndTurn`) hold their turn open as Race Cars'
+legs do. The ten-second window and the turn-clock staleness test the last
+three share live in `src/utils/games/undo.ts`.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the

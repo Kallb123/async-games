@@ -39,6 +39,9 @@ export function makeState(
         cardSetsCashedIn: 0,
         cardDeck: [],
         lastBattle: null,
+        undoStack: [],
+        undoAnchorId: null,
+        autoEndTurnAt: null,
         ...overrides,
     };
 }

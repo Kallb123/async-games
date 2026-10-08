@@ -4,6 +4,8 @@ import ActionButton from '@/components/ui/ActionButton';
 import BuildRow from '@/components/ui/BuildRow';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import UndoButton from '@/components/ui/UndoButton';
+import UndoHold from '@/components/ui/UndoHold';
+import { UNDO_WINDOW_MS } from '@/utils/games/undo';
 import { AP_COSTS, chopApCost, deckGunApCost, extinguishApCost, SPECIALISTS, SpecialistId } from '@/games/FiresOut/rules';
 
 export type FiresOutBoardMode = 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun' | 'reveal';
@@ -49,7 +51,14 @@ interface FiresOutActionsProps {
     carryToggleKind: 'victim' | 'hazmat' | null;
     carryOnMove: boolean;
     onCarryOnMoveChange: (carry: boolean) => void;
+    /**
+     * The End turn button: opens the ten-second hold when there is a move to
+     * take back and none is open, else ends the turn at once — and, with a hold
+     * open, is also what "Pass now" and the countdown running out call.
+     */
     onEndTurn: () => void;
+    /** `useManualEndTurnHold`'s deadline; non-null while End turn is being held for a last Undo. */
+    holdDeadline: string | null;
     submitting: boolean;
     endTurnPending: boolean;
     /** docs/undo.md: the viewer's last action can still be taken back. */
@@ -88,11 +97,17 @@ interface FiresOutActionsProps {
 export default function FiresOutActions({
     apLeft, bankedAp, mode, onModeChange, targetCounts,
     carryToggleKind, carryOnMove, onCarryOnMoveChange,
-    onEndTurn, submitting, endTurnPending, canUndo, onUndo, undoPending, experienced, specialist, directingName,
+    onEndTurn, holdDeadline, submitting, endTurnPending, canUndo, onUndo, undoPending, experienced, specialist, directingName,
     showTreat, onTreat, treatPending,
     showDisposeHazmat, onDisposeHazmat, disposeHazmatPending,
     showCrewChange, onCrewChange, crewChangePending,
 }: FiresOutActionsProps) {
+    // The player has tapped End turn and is waiting out the hold: nothing
+    // else on the sheet may be started, the same lock a command in flight puts
+    // it under.
+    const holding = holdDeadline !== null;
+    const locked = submitting || holding;
+
     // §11 one-shot abilities with no board target — data, the same way
     // MODE_DEFS is, rather than a parallel show*/on*/*Pending prop for every
     // new one that arrives later.
@@ -121,7 +136,7 @@ export default function FiresOutActions({
                                     icon={def.icon}
                                     name={def.name}
                                     cost={def.hint(specialist)}
-                                    disabled={disabled || submitting}
+                                    disabled={disabled || locked}
                                     active={mode === def.mode}
                                     onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
                                     tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
@@ -140,7 +155,7 @@ export default function FiresOutActions({
                                             description={`Leave it, or bring it along at ${AP_COSTS.carryPerSpace} AP a space`}
                                             on={carryOnMove}
                                             onToggle={() => onCarryOnMoveChange(!carryOnMove)}
-                                            disabled={submitting}
+                                            disabled={locked}
                                         />
                                     </div>
                                 )}
@@ -154,7 +169,7 @@ export default function FiresOutActions({
                         icon={a.icon}
                         name={a.name}
                         cost={a.cost}
-                        disabled={submitting}
+                        disabled={locked}
                         onClick={a.onClick}
                         tag={a.pending ? '…' : 'Go'}
                     />
@@ -170,7 +185,7 @@ export default function FiresOutActions({
                                 key={s.id}
                                 name={s.label}
                                 cost={s.ability}
-                                disabled={submitting}
+                                disabled={locked}
                                 onClick={() => onCrewChange(s.id)}
                                 tag={crewChangePending ? '…' : 'Swap'}
                             />
@@ -181,19 +196,34 @@ export default function FiresOutActions({
 
             {/* Taking back the last action (docs/undo.md) sits beside End turn:
                 `canUndo` is only ever true for the player who made the move,
-                and never once End turn has run the fire. */}
-            <div className="ag-action-grid">
-                {canUndo && <UndoButton pending={undoPending} disabled={submitting} onClick={onUndo} />}
-                <ActionButton
-                    className="ag-btn ag-btn--primary"
-                    onClick={onEndTurn}
-                    disabled={submitting}
-                    pending={endTurnPending}
-                    pendingLabel="Ending turn…"
-                >
-                    🔔 End turn
-                </ActionButton>
-            </div>
+                and never once End turn has run the fire. Tapping End turn with
+                something to take back holds it for ten seconds first (§5's
+                manual End turn), and the hold replaces the row. */}
+            {holding ? (
+                <UndoHold
+                    nested
+                    holdDeadline={holdDeadline}
+                    windowMs={UNDO_WINDOW_MS}
+                    canUndo={canUndo}
+                    onEndTurn={onEndTurn}
+                    onUndo={onUndo}
+                    endTurnPending={endTurnPending}
+                    undoPending={undoPending}
+                />
+            ) : (
+                <div className="ag-action-grid">
+                    {canUndo && <UndoButton pending={undoPending} disabled={submitting} onClick={onUndo} />}
+                    <ActionButton
+                        className="ag-btn ag-btn--primary"
+                        onClick={onEndTurn}
+                        disabled={submitting}
+                        pending={endTurnPending}
+                        pendingLabel="Ending turn…"
+                    >
+                        🔔 End turn
+                    </ActionButton>
+                </div>
+            )}
         </div>
     );
 }

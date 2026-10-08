@@ -10,8 +10,9 @@
 export const UNDO_WINDOW_MS = 10_000;
 
 /**
- * One snapshot on a game's undo stack, for a game with no turn-timeout adapter
- * (Train Time, Dice Cities): its turn timer passes an expired turn on by
+ * One snapshot on a game's undo stack, for a game whose turn-timeout adapter
+ * doesn't cover every expired turn (Train Time and Dice Cities have none;
+ * World Domination's closes only a held turn): its turn timer passes an expired turn on by
  * stepping `currentTurn` and restarting the clock, with no command of the
  * game's own. So besides who pushed it, an entry records `turnStartedAt` — the
  * game's `lastTurnTimestamp` when it was pushed — and a turn the timer moved

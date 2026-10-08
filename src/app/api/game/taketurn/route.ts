@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
   // forever, banking a missed turn against that innocent player every sweep
   // until the abandon ladder ends the race for everyone. Refusing here,
   // before any of that, is cheaper than teaching this route every game's
-  // own notion of "next".
+  // own notion of "next". (For World Domination it also keeps the plain step
+  // from bypassing the undo hold and the end-of-turn card draw.)
   if (getTurnTimeoutAdapter(gameData.gameType.className)) {
     return NextResponse.json({}, {status: 400, statusText: "This game manages its own turn order; use /api/game/command instead"});
   }

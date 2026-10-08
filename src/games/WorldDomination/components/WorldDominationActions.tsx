@@ -6,8 +6,11 @@ import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
 import Dice from '@/components/ui/Dice';
 import ActionButton from '@/components/ui/ActionButton';
 import Stepper from '@/components/ui/Stepper';
+import UndoButton from '@/components/ui/UndoButton';
+import UndoHold from '@/components/ui/UndoHold';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { useResettingState } from '@/utils/hooks/useResettingState';
+import { UNDO_WINDOW_MS } from '@/utils/games/undo';
 import {
     WorldDominationDeployArmies,
     WorldDominationCashInCards,
@@ -16,6 +19,8 @@ import {
     WorldDominationEndAttackPhase,
     WorldDominationFortify,
     WorldDominationSkipFortify,
+    WorldDominationEndTurn,
+    WorldDominationUndo,
 } from '@/utils/apiModels/GameLogic';
 
 const CARD_EMOJI: Record<WorldDominationCardType, string> = {
@@ -71,6 +76,34 @@ export default function WorldDominationActions({
         setSelFrom(null);
         setSelTo(null);
     }
+
+    // ── Taking a move back (docs/undo.md) ─────────────────────────────────────
+    // `canUndo` and `autoEndTurnAt` only ever reach the player they belong to.
+    // Whatever is selected on the map is dropped with the move: the board it
+    // was picked against is no longer the one on screen.
+    function undo() {
+        submitCommand(new WorldDominationUndo(), clearSelection, 'undo');
+    }
+    const undoButton = gs.canUndo && <UndoButton pending={pendingTarget === 'undo'} disabled={pendingTarget !== null} onClick={undo} />;
+    function endTurn() {
+        submitCommand(new WorldDominationEndTurn(), clearSelection, 'endTurn');
+    }
+    // Pass now / Undo with the countdown while a hold is open: the move was the
+    // turn, so that is the whole sheet. Undo alone (nothing held) is a row under
+    // a sheet that has no row of its own to share, and renders nothing when
+    // there is nothing to take back.
+    const undoBar = (held: boolean) => (
+        <UndoHold
+            holdDeadline={held ? gs.autoEndTurnAt : null}
+            windowMs={UNDO_WINDOW_MS}
+            canUndo={gs.canUndo}
+            onEndTurn={endTurn}
+            onUndo={undo}
+            endTurnPending={pendingTarget === 'endTurn'}
+            undoPending={pendingTarget === 'undo'}
+            nested={!held}
+        />
+    );
 
     // ── Cash in a Risk card set (mandatory once you hold 5+) ───────────────────
     function toggleCard(id: string) {
@@ -131,10 +164,18 @@ export default function WorldDominationActions({
     // have to cash in the moment the turn comes round.
     if (readOnly) return cardHand;
 
+    // ── Held: a fortify, a skipped fortify or the last setup placement ──────────
+    // The move was the turn, so Pass now / Undo is the whole sheet; the
+    // countdown sends WorldDominationEndTurn by itself when it runs out.
+    if (gs.autoEndTurnAt) return undoBar(true);
+
+    // A card cash-in that has to come first leaves the hand as the whole sheet.
+    const cardHandWithUndo = <>{cardHand}{undoBar(false)}</>;
+
     // ── Setup / Reinforce: place armies on the board ────────────────────────────
     if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {
         if (gs.phase === 'reinforce' && mustCashIn) {
-            return cardHand;
+            return cardHandWithUndo;
         }
 
         function deploy() {
@@ -172,6 +213,7 @@ export default function WorldDominationActions({
                         </div>
                     </>
                 )}
+                {undoBar(false)}
                 {gs.phase === 'reinforce' && cardHand}
             </div>
         );
@@ -200,11 +242,12 @@ export default function WorldDominationActions({
                     >
                         Move {occupyCount} in
                     </ActionButton>
+                    {undoBar(false)}
                 </div>
             );
         }
 
-        if (mustCashIn) return cardHand;
+        if (mustCashIn) return cardHandWithUndo;
 
         function endAttackPhase() {
             submitCommand(new WorldDominationEndAttackPhase(), clearSelection, 'endAttack');
@@ -215,15 +258,17 @@ export default function WorldDominationActions({
                 <div className="ag-actionsheet">
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>Tap one of your territories (2+ armies) to attack from, or move on.</p>
                     {cardHand}
-                    <ActionButton
-                        className="ag-btn ag-btn--success ag-btn--block"
-                        style={{ marginTop: 10 }}
-                        pending={pendingTarget === 'endAttack'}
-                        pendingLabel="Moving to Fortify…"
-                        onClick={endAttackPhase}
-                    >
-                        ✓ Done attacking → Fortify
-                    </ActionButton>
+                    <div className="ag-action-grid" style={{ marginTop: 10 }}>
+                        <ActionButton
+                            className="ag-btn ag-btn--success"
+                            pending={pendingTarget === 'endAttack'}
+                            pendingLabel="Moving to Fortify…"
+                            onClick={endAttackPhase}
+                        >
+                            ✓ Done attacking → Fortify
+                        </ActionButton>
+                        {undoButton}
+                    </div>
                 </div>
             );
         }
@@ -233,7 +278,10 @@ export default function WorldDominationActions({
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>
                         Attacking from <b>{TERRITORIES[selFrom].name}</b> ({fromTerritory?.armies ?? 0} armies) — tap an adjacent enemy territory.
                     </p>
-                    <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setSelFrom(null)}>↩ Cancel</button>
+                    <div className="ag-action-grid">
+                        <button type="button" className="ag-btn ag-btn--light" onClick={() => setSelFrom(null)}>Cancel</button>
+                        {undoButton}
+                    </div>
                 </div>
             );
         }
@@ -301,6 +349,7 @@ export default function WorldDominationActions({
                 ) : (
                     <p className="ag-action-hint">Not enough armies left here to keep attacking.</p>
                 )}
+                {undoBar(false)}
             </div>
         );
     }
@@ -314,14 +363,17 @@ export default function WorldDominationActions({
             return (
                 <div className="ag-actionsheet">
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>Tap a territory to move armies from, or skip.</p>
-                    <ActionButton
-                        className="ag-btn ag-btn--success ag-btn--block"
-                        pending={pendingTarget === 'skipFortify'}
-                        pendingLabel="Ending your turn…"
-                        onClick={skip}
-                    >
-                        Skip fortifying
-                    </ActionButton>
+                    <div className="ag-action-grid">
+                        <ActionButton
+                            className="ag-btn ag-btn--success"
+                            pending={pendingTarget === 'skipFortify'}
+                            pendingLabel="Ending your turn…"
+                            onClick={skip}
+                        >
+                            Skip fortifying
+                        </ActionButton>
+                        {undoButton}
+                    </div>
                 </div>
             );
         }
@@ -331,7 +383,10 @@ export default function WorldDominationActions({
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>
                         Moving from <b>{TERRITORIES[selFrom].name}</b> — tap a connected territory of yours.
                     </p>
-                    <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setSelFrom(null)}>↩ Cancel</button>
+                    <div className="ag-action-grid">
+                        <button type="button" className="ag-btn ag-btn--light" onClick={() => setSelFrom(null)}>Cancel</button>
+                        {undoButton}
+                    </div>
                 </div>
             );
         }
@@ -360,6 +415,7 @@ export default function WorldDominationActions({
                         Move {fortifyCount}
                     </ActionButton>
                 </div>
+                {undoBar(false)}
             </div>
         );
     }

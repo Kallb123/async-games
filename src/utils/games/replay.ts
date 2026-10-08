@@ -16,7 +16,8 @@ import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlemen
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { sacUnrecordedHoldEnd } from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
-import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
+import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData, IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
+import { worldDominationUnrecordedHoldEnd } from "@/games/WorldDomination/WorldDominationLogic";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
@@ -122,7 +123,14 @@ export interface IReplayAdapter {
     // whose turn it is and that command: return the command that closes the
     // hold (the replay sends it as the player holding it) when the recorded
     // one is something the hold wouldn't have let through, or null.
-    closeUnrecordedHold?(specificGameState: unknown, holderId: string, next: IGameCommand): IGameCommand | null;
+    //
+    // Also asked once more, with `next` null, when the log has run out: a game
+    // whose last recorded move is one of those that held. The replay only
+    // closes it there if the live game has handed the turn on (its
+    // `currentTurn` is no longer the holder's), so a hold genuinely open now
+    // stays open; null `next` means "nothing follows", and the answer is the
+    // command that closes the hold, or null when there is no hold to close.
+    closeUnrecordedHold?(specificGameState: unknown, holderId: string, next: IGameCommand | null): IGameCommand | null;
     // Optional: what of a command's outcome goes on the snapshot after it, for
     // a game whose board plays what each step did, which the difference
     // between two states can't show (a miss changes nothing). Off unless a game
@@ -248,8 +256,14 @@ registerReplayAdapter({
         worldDominationStateToModel(specificGameState as never, userIdNameMap, viewerId),
     // Deck freeze is feasible here but unbuilt: battle dice are memoryless and
     // the only deck contact is the end-of-turn draw in riskEndTurn, reached
-    // only via WorldDominationFortify / WorldDominationSkipFortify.
+    // only via WorldDominationEndTurn (CheckEndTurn). A replayed step never
+    // offers undo — `canUndo` needs the live command log — so none is passed.
     plannableCommands: [],
+    // A game recorded before the hold ended its turn inside WorldDominationFortify,
+    // WorldDominationSkipFortify or the last setup placement, and its log has no
+    // WorldDominationEndTurn to close what they hold today.
+    closeUnrecordedHold: (specificGameState, holderId, next) =>
+        worldDominationUnrecordedHoldEnd(specificGameState as IWorldDominationSpecificGameState, holderId, next),
 });
 
 registerReplayAdapter({
@@ -512,6 +526,31 @@ export async function buildTimeline(
     // Initial state.
     snapshot(null, false);
 
+    // Closes a hold the recorded log never closed, as its holder, with the
+    // command the adapter built. `like` is the recorded command it stands next
+    // to: it lends the game id and the version it was played under.
+    const closeUnrecordedHold = async (closeHold: IGameCommand, like: IGameCommand) => {
+        closeHold.gameId = like.gameId;
+        closeHold.senderId = state.currentTurn;
+        closeHold.version = like.version;
+        const closed = await runCommand(state, gameType, closeHold);
+        if (closed.outcome.validMove) {
+            // Those rules ended the turn inside the move that holds it
+            // today, with no command and no line of its own, so this
+            // leaves neither — and no step: what it did is part of the
+            // next one. Only its own lines go (the pipeline stamps them
+            // with its id), not what the hand-off itself wrote, which
+            // the game wrote too; the history has to stay the length the
+            // game kept, or the creation-time lines sliced off its tail
+            // below would come up short.
+            state.gameState.commandHistory.pop();
+            state.gameState.history = state.gameState.history.filter(line => line.commandId !== closeHold.id);
+        } else {
+            console.warn(`Replay of game ${gameData.gameId} couldn't close a hold its log never closed; ${like.className} is likely refused next`);
+        }
+        return closed.outcome.validMove;
+    };
+
     // Applies an ordered list of raw commands, snapshotting after each. Returns
     // true if the game ended part-way through.
     const applyCommands = async (
@@ -536,26 +575,7 @@ export async function buildTimeline(
             // while a hold is open the turn is still its holder's. Never for a
             // planned command: a plan is today's rules.
             const closeHold = planned ? null : adapter.closeUnrecordedHold?.(state.specificGameState, state.currentTurn, command);
-            if (closeHold) {
-                closeHold.gameId = command.gameId;
-                closeHold.senderId = state.currentTurn;
-                closeHold.version = command.version;
-                const closed = await runCommand(state, gameType, closeHold);
-                if (closed.outcome.validMove) {
-                    // Those rules ended the turn inside the move that holds it
-                    // today, with no command and no line of its own, so this
-                    // leaves neither — and no step: what it did is part of the
-                    // next one. Only its own lines go (the pipeline stamps them
-                    // with its id), not what the hand-off itself wrote, which
-                    // the game wrote too; the history has to stay the length the
-                    // game kept, or the creation-time lines sliced off its tail
-                    // below would come up short.
-                    state.gameState.commandHistory.pop();
-                    state.gameState.history = state.gameState.history.filter(line => line.commandId !== closeHold.id);
-                } else {
-                    console.warn(`Replay of game ${gameData.gameId} couldn't close a hold its log never closed; ${command.className} is likely refused next`);
-                }
-            }
+            if (closeHold) await closeUnrecordedHold(closeHold, command);
             // Every command was executed on its sender's turn — except one
             // played out of turn, which ran on the turn of the player it names
             // (docs/out-of-turn-actions.md §5.4). Putting `currentTurn` back
@@ -623,6 +643,28 @@ export async function buildTimeline(
     };
 
     const gameOver = await applyCommands(gameData.gameState.commandHistory ?? [], false, null);
+
+    // The same hold, at the end of the log: a game recorded before turns were
+    // held, whose last move is one of those that held — the live game handed
+    // the turn on inside it, and no recorded command follows to make the loop
+    // above close the hold. Left open, the final state (the recap, the match
+    // review, the "your move" push body) would still have its holder on turn.
+    // Only when the live game's turn has moved on from the replay's: a hold
+    // that is genuinely open now has the same player on turn live and here.
+    // The closed state replaces the last step's, which is the same step: the
+    // hand-off is part of the move before it, not a step of its own.
+    const lastRecorded = (gameData.gameState.commandHistory ?? []).at(-1);
+    if (!gameOver && lastRecorded && gameData.currentTurn && gameData.currentTurn !== state.currentTurn) {
+        const closeHold = adapter.closeUnrecordedHold?.(state.specificGameState, state.currentTurn, null);
+        if (closeHold && await closeUnrecordedHold(closeHold, deserializeJSON(JSON.stringify(lastRecorded)))) {
+            const last = snapshots[snapshots.length - 1];
+            last.specificGameState = adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId, state.gameState.commandHistory, state.complete);
+            last.currentTurn = state.currentTurn;
+            last.complete = state.complete;
+            last.winner = state.winner;
+            last.history = resolveHistory(state.gameState.history, historyNames, viewerId);
+        }
+    }
     const currentIndex = snapshots.length - 1;
 
     // Creation-time setup entries (e.g. the turn-order roll-off) predate

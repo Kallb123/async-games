@@ -13,6 +13,11 @@
 import { describe, expect, it } from "vitest";
 import { FIRST_COMMAND_VERSION } from "@/utils/ui/games";
 import { registerTurnTimeoutAdapter, resolveStalledTurn } from "./turnTimeout";
+import { WorldDominationDeployArmies, WorldDominationFortify, WorldDominationGameType } from "@/games/WorldDomination/WorldDominationLogic";
+import type { IWorldDominationGameData, IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
+import { startingArmiesForPlayerCount } from "@/games/WorldDomination/board";
+import { makeState, makeTerritories, player } from "@/games/WorldDomination/testFixtures";
+import { runCommand } from "./commandPipeline";
 import { SnakesAndLaddersGameType } from "@/games/SnakesAndLadders/SnakesAndLaddersLogic";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
 import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
@@ -116,5 +121,90 @@ describe("resolveStalledTurn", () => {
 
         expect(await resolveStalledTurn(game, "u1", "Alice")).toBe('stuck');
         expect(commandHistory(game)).toHaveLength(20); // MAX_TIMEOUT_COMMANDS
+    });
+});
+
+// World Domination's adapter covers one stalled turn only — the one a fortify,
+// a skip or the last setup placement is holding open for its undo window — and
+// leaves every other to the cron's plain advance (plainAdvanceOtherwise).
+describe("resolveStalledTurn — World Domination's held turn", () => {
+    const ALASKA = 0;
+    const NORTHWEST = 1;
+
+    function wdGame(overrides: Partial<IWorldDominationSpecificGameState>): IWorldDominationGameData {
+        return {
+            gameId: "g",
+            gameType: new WorldDominationGameType(),
+            currentTurn: "u1",
+            userIdList: ["u1", "u2"],
+            turnTimer: "1d",
+            lastTurnTimestamp: "2026-10-01T08:00:00.000Z",
+            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
+            specificGameState: makeState({ territories: makeTerritories("u1", { [ALASKA]: { owner: "u1", armies: 5 }, 30: { owner: "u2", armies: 3 } }), ...overrides }),
+            complete: false,
+            winner: "",
+            markModified: () => {},
+        } as unknown as IWorldDominationGameData;
+    }
+
+    async function play(game: IWorldDominationGameData, command: IGameCommand) {
+        command.senderId = "u1";
+        command.senderUsername = "Alice";
+        const { outcome } = await runCommand(game, new WorldDominationGameType(), command);
+        expect(outcome.validMove).toBe(true);
+    }
+
+    it("closes a hold left after the last setup placement, and the next seat gets its setup allotment", async () => {
+        const game = wdGame({ phase: "setup", reinforcementsRemaining: 1 });
+        const deploy = new WorldDominationDeployArmies();
+        deploy.territoryId = ALASKA;
+        deploy.count = 1;
+        await play(game, deploy);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
+        expect(game.currentTurn).toBe("u1");
+
+        expect(await resolveStalledTurn(game as unknown as IGameDataDocument, "u1", "Alice")).toBe('advanced');
+        const gs = game.specificGameState;
+        expect(game.currentTurn).toBe("u2");
+        expect(gs.phase).toBe("setup");
+        expect(gs.reinforcementsRemaining).toBe(startingArmiesForPlayerCount(2) - 1);
+        expect(gs.autoEndTurnAt).toBeNull();
+        expect(commandHistory(game).map(c => (c as { className: string }).className)).toEqual(["WorldDominationDeployArmies", "WorldDominationEndTurn"]);
+    });
+
+    it("closes a hold left after a fortify: the card is drawn and the next player reinforces", async () => {
+        const card = { id: "top", type: "cavalry" as const, territoryId: 7 };
+        const game = wdGame({
+            phase: "fortify",
+            cardDeck: [card],
+            playerStates: new Map([["u1", player({ conqueredTerritoryThisTurn: true })], ["u2", player()]]),
+        });
+        const fortify = new WorldDominationFortify();
+        fortify.fromTerritoryId = ALASKA;
+        fortify.toTerritoryId = NORTHWEST;
+        fortify.armies = 1;
+        await play(game, fortify);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
+
+        expect(await resolveStalledTurn(game as unknown as IGameDataDocument, "u1", "Alice")).toBe('advanced');
+        const gs = game.specificGameState;
+        expect(gs.playerStates.get("u1")!.cards.map(c => c.id)).toEqual(["top"]);
+        expect(gs.cardDeck).toHaveLength(0);
+        expect(game.currentTurn).toBe("u2");
+        expect(gs.phase).toBe("reinforce");
+        expect(gs.reinforcementsRemaining).toBeGreaterThan(0);
+    });
+
+    it("falls back to the plain advance for a turn with no hold open", async () => {
+        const game = wdGame({ phase: "reinforce", reinforcementsRemaining: 3 });
+
+        expect(await resolveStalledTurn(game as unknown as IGameDataDocument, "u1", "Alice")).toBe('noAdapter');
+        expect(commandHistory(game)).toEqual([]);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("still declines when an adapter without plainAdvanceOtherwise has nothing to run", async () => {
+        scripted.length = 0;
+        expect(await resolveStalledTurn(makeGame(), "u1", "Alice")).toBe('declined');
     });
 });

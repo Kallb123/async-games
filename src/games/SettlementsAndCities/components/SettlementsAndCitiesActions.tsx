@@ -14,6 +14,7 @@ import ReadOnlyPanel from '@/components/ui/ReadOnlyPanel';
 import { useToast } from '@/components/ToastContext';
 import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import { useUndoHold } from '@/utils/hooks/useUndoHold';
+import { useManualEndTurnHold } from '@/utils/hooks/useManualEndTurnHold';
 import {
     SACRollDice,
     SACEndTurn,
@@ -95,19 +96,19 @@ export default function SettlementsAndCitiesActions({
     // ── Undo & the ten-second hold (docs/undo.md §5, §11) ───────────────────────
     // The server holds a turn open by setting `gs.autoEndTurnAt`; a manually
     // tapped "End turn" after an undoable move holds it the same way, purely
-    // client-side, so both endings land at the same offset (§5 "Why a manual
-    // End turn waits too"). Whichever set it, `useUndoHold` drives the
-    // countdown and the eventual SACEndTurn the same way — it re-reads the
-    // deadline every tick, so a last-second Undo (which clears both
-    // `autoEndTurnAt` and this state's own copy) stands the auto-fire down.
+    // client-side (`useManualEndTurnHold`), so both endings land at the same
+    // offset (§5 "Why a manual End turn waits too"). Whichever set it,
+    // `useUndoHold` drives the countdown and the eventual SACEndTurn the same
+    // way — it re-reads the deadline every tick, so a last-second Undo (which
+    // clears both `autoEndTurnAt` and the hook's own copy) stands the auto-fire
+    // down.
     // Hooks stay above every early return in this component, so these run
     // before the `!myState` one below rather than after it.
-    const [manualHoldDeadline, setManualHoldDeadline] = useState<string | null>(null);
-    const holdDeadline = gs.autoEndTurnAt ?? manualHoldDeadline;
+    const { holdDeadline, endTurn: tapEndTurn, clear: clearManualHold } = useManualEndTurnHold(gs.canUndo, !readOnly, gs.autoEndTurnAt);
 
     const submit = useCallback((cmd: IGameCommand, target: string) => {
-        submitCommand(cmd, () => { setBoardMode('idle'); setManualHoldDeadline(null); }, target);
-    }, [submitCommand, setBoardMode]);
+        submitCommand(cmd, () => { setBoardMode('idle'); clearManualHold(); }, target);
+    }, [submitCommand, setBoardMode, clearManualHold]);
 
     const onHoldExpire = useCallback(() => submit(new SACEndTurn(), 'endTurn'), [submit]);
     const { countdown, fillPct: countdownFillPct } = useUndoHold(holdDeadline, UNDO_WINDOW_MS, onHoldExpire);
@@ -146,11 +147,7 @@ export default function SettlementsAndCitiesActions({
     // Build sections: relabelled "Pass now" once a hold is open, and arms a
     // client-side hold itself when tapped with something still to undo.
     function endTurnControl(label: string, pendingLabel: string) {
-        function onClick() {
-            if (holdDeadline !== null) { submit(new SACEndTurn(), 'endTurn'); return; }
-            if (canUndo) { setManualHoldDeadline(new Date(Date.now() + UNDO_WINDOW_MS).toISOString()); return; }
-            submit(new SACEndTurn(), 'endTurn');
-        }
+        const onClick = () => tapEndTurn(() => submit(new SACEndTurn(), 'endTurn'));
         // Always one child of an ag-action-grid row (the other is undoButton,
         // present or not) — its flex:1 fills the row on its own, same width
         // ag-btn--block gave the button before it had a row to share.
