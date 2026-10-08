@@ -80,6 +80,11 @@ describe("Realm Arena recap rows", () => {
         expect(act({ kind: "healed", fighter: 0, target: 0, hp: 3, via: "draught" })).toMatchObject({ type: "ra_healed", glyph: "🧪" });
     });
 
+    it("tells dynamite by its glyph, naming who it hurt (§33.2)", () => {
+        const act = (event: BattleEvent) => toEvents(snap(state({ fighters })), snap(state({ fighters }), [line("Alice threw dynamite", "a")]), cmd("RealmArenaAct"), valid([event]))[0];
+        expect(act({ kind: "dynamite", fighter: 0, at: 20, targets: [1], damage: 4 })).toMatchObject({ type: "ra_dynamite", glyph: "🧨", affectedIds: ["b"] });
+    });
+
     it("tells a Demolish that struck someone as a hit, naming who, and one that struck nobody as a manoeuvre (§23.2)", () => {
         const act = (event: BattleEvent) => toEvents(snap(state({ fighters })), snap(state({ fighters }), [line("Alice used Demolish", "a")]), cmd("RealmArenaAct"), valid([event]))[0];
         expect(act({ kind: "demolished", fighter: 0, at: 20, targets: [1], damage: 2 })).toMatchObject({ type: "ra_hit", glyph: "💥", affectedIds: ["b"] });

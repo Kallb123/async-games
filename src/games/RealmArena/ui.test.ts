@@ -596,6 +596,14 @@ describe("battleCues", () => {
         expect(scorch.start).toBeLessThan(land + only(cues, "burst")[0].length);
     });
 
+    it("flies dynamite to its square and blasts the 3×3, hitting everyone at once (§33.2)", () => {
+        const cues = battleCues(FIELD, [{ kind: "dynamite", fighter: 3, at: 55, targets: [1, 2], damage: 4 }], before);
+        const land = flight("dynamite", 70, 55);
+        expect(only(cues, "flight")).toMatchObject([{ missile: "dynamite", from: 70, to: 55, result: "landed", start: 0, land }]);
+        expect(only(cues, "burst")).toMatchObject([{ burst: "blast", at: 55, radius: 1, start: land }]);
+        expect(told(cues)).toEqual([`1@50 \u22124 ${land}`, `2@60 \u22124 ${land}`]);
+    });
+
     it("downs a mover where an overwatch shot caught it, standing until the arrow lands", () => {
         const cues = battleCues(FIELD, [
             { kind: "moved", fighter: 0, path: [10, 11, 12], sneaking: false },
@@ -1421,8 +1429,8 @@ describe("impact", () => {
 describe("shaking the battlefield", () => {
     const flight = (missile: FlightCue["missile"], start = 100, land = 600): FlightCue => ({ kind: "flight", missile, from: 0, to: 1, result: "landed", start, length: land + 350, land });
 
-    it("shakes as a fireball or a thunder flask lands, and dies away to nothing", () => {
-        for (const missile of ["fireball", "thunderFlask"] as const) {
+    it("shakes as a fireball, dynamite or a thunder flask lands, and dies away to nothing", () => {
+        for (const missile of ["fireball", "dynamite", "thunderFlask"] as const) {
             const cues = [flight(missile)];
             const lands = 700;
             expect(shakeAt(cues, lands - 1)).toEqual({ x: 0, y: 0 });

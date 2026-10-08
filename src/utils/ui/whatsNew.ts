@@ -82,8 +82,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Realm Arena: the Miners, a faction of dwarves",
-                detail: "A third faction to muster from or fight in co-op: dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it.",
+                title: "Realm Arena: choose your faction — the Realm, the Swarm or the Miners",
+                detail: "Each player now picks a faction as they muster, from those the host allows, and co-op can pit you against any of them. The Swarm fields more, cheaper and weaker beasts whose acid corrodes; the new Miners are dwarves out of the deep mines, each one tougher than the Realm's and a little dearer for it, so you field fewer of them. Miners hack through cover with their pickaxes, Stonewardens hold the line behind slabs of stone, Prospectors shoot steady crossbows, Runepriests heal and raise the fallen, and Sappers throw dynamite that blasts a 3×3 and the low cover in it.",
                 game: "realmarena",
             },
             {

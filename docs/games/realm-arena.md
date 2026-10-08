@@ -1035,7 +1035,7 @@ recap, a guide and a tutorial.
 | C5 | Character mastery, earned by what a character does (§23) | Built. Replaces B4 |
 | B3 | Teams of two, in alternate seats, with a team score (§5.2) | After C |
 | B5 | Fog of war, as the host's choice (§8, §27) | Built |
-| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32) |
+| B6 | More factions | The Swarm, as a co-op enemy (§31); a squad choosing its own faction, from those the host allows (§32); the Miners, a third faction (§33) |
 | B7 | A second mission and battlefield | After C |
 | B8 | Co-op against the computer (§29) | Built: sides, the battlefields, factions as data, the planner, the enemy's turn, the end of it and the screens (§29.2–§29.9) |
 | B9 | After co-op: the shared ending for Banned Islet, Outbreak and Fires Out, last seen in fog, Hold Out, achievements, difficulty and solo (§30) | Built, with battle size beside difficulty (§30.5) |
@@ -1362,8 +1362,8 @@ and opening ground.
   ground and is drawn differently, so it's clear something was there. It costs 1 to move into, can be stood on, and gives no
   cover.
 - **What blasts it:** Fireball, every low cover square in its 3×3; a fire
-  flask, its square and the squares next to it; and Demolish (§23), one square
-  next to a Knight.
+  flask, its square and the squares next to it; Demolish (§23), one square
+  next to a Knight or a Miner; and a Sapper's Dynamite (§33), as Fireball.
 - **Blasting needs no roll** and happens after the damage. So a character
   in the blast loses its cover only for the next attack, not for the one that
   blasted it.
@@ -1379,8 +1379,8 @@ and opening ground.
   it to scorched ground, and ignores anything else, so no list can blast a
   wall. `battlefieldOf(map, blasted)` is the battlefield as it stands, and
   the server, the board, the recap and a replay all read it.
-- **What blasts is data:** `blasts` on Fireball and on the fire flask (the
-  3×3, `area`), and on Demolish (the square it's aimed at, `target`, §23.2).
+- **What blasts is data:** `blasts` on Fireball, Dynamite and the fire flask
+  (the 3×3, `area`), and on Demolish (the square it's aimed at, `target`, §23.2).
   `blastedBy` is the cover something would clear, and both the resolver and
   the turn sheet's preview use it.
 - **The `blasted` event** names the squares and who blasted them. It comes
@@ -1422,7 +1422,7 @@ first, so mastery moved from C4 to C5.
   |---|---:|
   | Fought in it (once, however many of that character were mustered) | 2 |
   | Each attack: a shot, an aimed shot, a strike, or a reaction on overwatch or guard | 3 |
-  | Each ability used: Cleave, Shield wall, Fireball, Heal, Raise, and the options of §23.2 | 5 |
+  | Each ability used: any of every faction's, and the options of §23.2 | 5 |
   | Each item used | 3 |
 
 - **An action earns the same whatever it rolls.** A miss earns as much as a

@@ -445,9 +445,8 @@ function clause(event: BattleEvent, fighters: readonly Fighter[], actor: string,
                 ? `${name(event.fighter)} struck on guard for ${event.damage}`
                 : `struck ${name(event.target)} with ${name(event.fighter)} for ${event.damage}`;
         case "fireball":
-            return `threw a fireball with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "dynamite":
-            return `threw dynamite with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
+            return `${ACTION_PHRASES[event.kind]} with ${name(event.fighter)}, hitting ${pluralize(hitIn(event.targets).length, "character")} for ${event.damage}`;
         case "downed": return `${name(event.fighter)} is down`;
         case "healed": {
             const hp = event.hp > 0 ? ` for ${event.hp}` : "";

@@ -203,7 +203,8 @@ export function pick(hand, top, { haft = 'wood', head = 'steel', reach = 0.15 } 
 
 /** A stick of dynamite from `from` to `to`, its fuse out of the `to` end, lit when `lit`. */
 export function dynamiteStick(from, to, { lit = false } = {}) {
-    const fuse = to.map((v, i) => v + (to[i] - from[i]) * 0.5 + (i === 2 ? 0.02 : 0));
+    const [x, y, z] = to;
+    const fuse = [x + (x - from[0]) * 0.5, y + (y - from[1]) * 0.5, z + (z - from[2]) * 0.5 + 0.02];
     return [
         { capsule: { from, to, r: 0.02 }, mat: 'dynamite' },
         { capsule: { from: to, to: fuse, r: 0.005 }, mat: 'darkLeather' },

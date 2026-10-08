@@ -44,7 +44,7 @@ import { unnamed, type EnemyTurn, type IRealmArenaOutcome, type RealmArenaAct, t
 import { battlefieldOf } from "./maps";
 import { CHARACTERS, enemyNameOf, UNKNOWN_ENEMY, type CharacterId, type ItemId } from "./characters";
 import { battleFrom, centreHolders, ENEMY_SIDE, isStanding, isWarband, sideOf, sideScore, TEAM_SIDE, type BattleEvent, type Fighter } from "./rules";
-import { centreInSight } from "./ui";
+import { AREA_BLAST, centreInSight } from "./ui";
 
 type RAState = IRealmArenaSpecificGameStateResponse;
 
@@ -141,8 +141,8 @@ function actionKind(events: readonly BattleEvent[]): { type: string; glyph: stri
     const has = (match: (event: BattleEvent) => boolean) => events.some(match);
     // A Bloater downs itself as it bursts (§31.2): that's no knock-out.
     if (has(event => event.kind === "downed" && event.by !== event.fighter)) return { type: RA_KNOCKOUT, glyph: "✕" };
-    if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: "🔥" };
-    if (has(event => event.kind === "dynamite")) return { type: RA_DYNAMITE, glyph: "🧨" };
+    if (has(event => event.kind === "fireball")) return { type: RA_FIREBALL, glyph: AREA_BLAST.fireball.icon };
+    if (has(event => event.kind === "dynamite")) return { type: RA_DYNAMITE, glyph: AREA_BLAST.dynamite.icon };
     const thrown = events.find((event): event is Extract<BattleEvent, { kind: "thrown" }> => event.kind === "thrown");
     if (thrown) return { type: RA_THROWN, glyph: ITEM_GLYPH[thrown.item] };
     if (has(event => (event.kind === "shot" || event.kind === "struck") && event.damage > 0)) return { type: RA_HIT, glyph: "🎯" };

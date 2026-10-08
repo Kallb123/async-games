@@ -25,7 +25,7 @@ import { gameStateToModel as realmArenaStateToModel, stepOutcomeToModel as realm
 import { RealmArenaGameType, type IRealmArenaOutcome, type RealmArenaEndTurn } from "@/games/RealmArena/RealmArenaLogic";
 import { buildAllEvents } from "@/utils/games/recap";
 import type { IRealmArenaSpecificGameStateResponse } from "@/games/RealmArena/apiModels";
-import { isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
+import { areaAround as realmArenaAreaAround, check as realmArenaCheck, isStanding as isRealmArenaStanding, warbandOwner } from "@/games/RealmArena/rules";
 import {
     actBy as realmArenaAct,
     battleOf as realmArenaBattle,
@@ -674,6 +674,36 @@ describe("Realm Arena's random co-op enemy", () => {
             const rows = JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer));
             expect(rows).not.toMatch(/shield/i);
             expect(rows).not.toMatch(ENEMY_NAME);
+        }
+    });
+
+    it("never names the Miners by a Sapper's dynamite thrown out of sight (§33.3)", async () => {
+        const game = makeRealmArenaGame(["a", "b"], {}, { fog: true, coop: { enemy: "miners", random: true } });
+        await realmArenaMusterAll(game);
+        const gs = game.specificGameState;
+        // The first warband's Prospector is made a Sapper, and throws its
+        // dynamite at open ground nobody stands round, far out of the team's sight.
+        const sapper = gs.fighters.find(fighter => fighter.owner === warbandOwner(0) && fighter.character === "prospector")!;
+        gs.fighters = gs.fighters.map(one => one.id === sapper.id ? { ...one, character: "sapper" } : one);
+        // Its turn hasn't begun, so it's checked with the AP it will have.
+        const battle = realmArenaBattle(game);
+        const ready = { ...battle, fighters: battle.fighters.map(one => one.id === sapper.id ? { ...one, ap: 4 } : one) };
+        const at = battle.field.tiles.findIndex((_, square) => realmArenaAreaAround(battle.field, square).every(near => !gs.fighters.some(one => one.square === near))
+            && !("refused" in realmArenaCheck(ready, sapper.owner, { kind: "dynamite", fighter: sapper.id, at: square })));
+        expect(at).toBeGreaterThanOrEqual(0);
+        const ended = Object.assign(realmArenaEndTurn("a"), { recordedEnemyActions: [{ kind: "dynamite", fighter: sapper.id, at }] }) as RealmArenaEndTurn;
+        const { outcome } = await playRealmArena(game, ended);
+        expect(outcome.validMove).toBe(true);
+        expect((outcome as IRealmArenaOutcome).events.some(event => event.kind === "dynamite")).toBe(true);
+        expect(gs.coop?.enemySeen).toBeUndefined();
+
+        const MINERS = /dynamite|🧨|Sapper|Miner/i;
+        expect(game.gameState.history.map(({ text }) => text).filter(text => text.startsWith("The enemy")).join("\n")).not.toMatch(MINERS);
+        for (const viewer of ["a", "b"]) expect(JSON.stringify(new RealmArenaGameType().outcomeFor(game, outcome, viewer))).not.toMatch(MINERS);
+        for (const viewer of VIEWERS) {
+            expect(realmArenaStateToModel(gs, viewer, null)).not.toHaveProperty("enemy");
+            expect(JSON.stringify(realmArenaStepOutcome(outcome, viewer, gs) ?? null)).not.toMatch(MINERS);
+            expect(JSON.stringify(await buildAllEvents(game, RA_NAMES, viewer))).not.toMatch(MINERS);
         }
     });
 

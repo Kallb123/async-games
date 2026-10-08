@@ -53,7 +53,7 @@ const isMoving = (aim: Aim) => ACTION_AIMS[aim].at === "path";
 type AtSquare = "fireball" | "dynamite" | "throw" | "demolish";
 
 /** A fireball, dynamite, a throw or a Demolish is aimed at a square, whoever stands on it. */
-const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "square";
+export const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "square";
 
 /**
  * Every square what's aimed at `at` lands on: the 3×3 for a fireball, dynamite
@@ -62,14 +62,14 @@ const isAtSquare = (aim: Aim): aim is AtSquare => ACTION_AIMS[aim].at === "squar
  */
 function landing(state: BattleState, fighter: Fighter, aim: AtSquare, at: Square): Square[] {
     if (aim === "demolish") return demolishArea(state.field, fighter.square, at);
-    return aim === "fireball" || aim === "dynamite" || itemOf(fighter)?.area ? areaAround(state.field, at) : [at];
+    return aim === "throw" ? (itemOf(fighter)?.area ? areaAround(state.field, at) : [at]) : BLASTER[aim].blasts === "area" ? areaAround(state.field, at) : [at];
 }
 
 /** What blasts away low cover where it's aimed (§22): the ability, or the item thrown. */
 const BLASTER: Readonly<Record<Exclude<AtSquare, "throw">, Ability>> = { fireball: ABILITIES.fireball, dynamite: ABILITIES.dynamite, demolish: ABILITIES.demolish };
 
-/** What lands where a fireball, a throw or a Demolish is aimed: the ability, or the item thrown. */
-const landsOf = (fighter: Fighter, aim: AtSquare): Ability | Item | undefined => aim === "throw" ? itemOf(fighter) : BLASTER[aim];
+/** What lands where a fireball, dynamite, a throw or a Demolish is aimed: the ability, or the item thrown. */
+export const landsOf = (fighter: Fighter, aim: AtSquare): Ability | Item | undefined => aim === "throw" ? itemOf(fighter) : BLASTER[aim];
 
 /** The action a draft has lined up, once it has everything the action needs. */
 function actionOf(fighter: Fighter, { aim, square, targets }: Draft, path: Square[] | undefined): Action | null {

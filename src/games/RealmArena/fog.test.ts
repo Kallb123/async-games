@@ -409,14 +409,14 @@ describe("a review in fog of war (§27)", () => {
         expect(told([{ kind: "moved", fighter: 1, path: away, sneaking: false }], gs, "b", true)[0]).toMatchObject({ path: away });
     });
 
-    it("tells a fireball only where the viewer sees some of it, or it hit one of theirs", () => {
+    it.each(["fireball", "dynamite"] as const)("tells a %s only where the viewer sees some of it, or it hit one of theirs", kind => {
         const { gs, inSight, outOfSight } = reviewState();
         const far = outOfSight.at(-1)!;
-        const fireball = (at: number, targets: number[]): BattleEvent => ({ kind: "fireball", fighter: 1, at, targets, damage: 3 });
-        expect(told([fireball(far, [])], gs, "b")).toEqual([]);
-        expect(told([fireball(far, [0])], gs, "b")).toHaveLength(1);
-        expect(told([fireball(inSight[3], [])], gs, "b")).toHaveLength(1);
-        expect(told([fireball(far, [])], gs, "a")).toHaveLength(1);
+        const blast = (at: number, targets: number[]): BattleEvent => ({ kind, fighter: 1, at, targets, damage: 3 });
+        expect(told([blast(far, [])], gs, "b")).toEqual([]);
+        expect(told([blast(far, [0])], gs, "b")).toHaveLength(1);
+        expect(told([blast(inSight[3], [])], gs, "b")).toHaveLength(1);
+        expect(told([blast(far, [])], gs, "a")).toHaveLength(1);
     });
 
     it("tells a viewer with no squad nothing at all", () => {
