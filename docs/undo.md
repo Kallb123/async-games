@@ -222,8 +222,8 @@ it. This is the case AGENTS.md's "a second copy is the signal to extract the
 first one" is *not* about: the pattern repeats, the code doesn't.
 
 Solitaire is not the second copy. The second *multiplayer* game is, and §16 says
-what that one should trigger — because at the five or six games that plausibly
-want undo, a real abstraction does appear, and it isn't this one.
+what that one should trigger — because at the handful of games that plausibly
+want undo (nine, as it turned out), a real abstraction does appear, and it isn't this one.
 
 ### Which command can be undone — the anchor
 
@@ -875,7 +875,7 @@ asserting on.
   purchases, Train Time's route claims, Banned Islet's and Outbreak's actions
   and World Domination's troop movements (not its combat) are all plausible
   candidates — and all of them have since opted in (§16). None of them needs the engine to change again to *work* — but at
-  that many, the six copies stop being a pattern and start being duplication.
+  that many, the copies stop being a pattern and start being duplication.
   §16 says what to promote, when, and what the pilot does now so that promotion
   is mechanical.
 - **Redo.** No.
@@ -915,28 +915,28 @@ plausible excuse.
 So: what gets promoted, when, and what does the pilot do now so that promotion
 is mechanical rather than a rewrite.
 
-### What six games would actually share
+### What nine games would actually share
 
 Per game, an undo is seven pieces. Only some of them repeat.
 
-| Piece | At six games |
+| Piece | At nine games |
 |---|---|
 | `clone<Game>State` | **Already exists in seven of eleven games**, with the same `(gs, userIdList)` signature — Banned Islet, Outbreak, Train Time, World Domination, Race Cars, Fires Out and Settlements & Cities all export one, because the replay engine already wanted it. Stays per-game; there is nothing to share that isn't already shared. |
-| `undoStack` / `undoAnchorId` on the state | **Identical six times.** The fields hold opaque state; nothing about them is game-shaped. |
-| The push at the top of each undoable command | **Identical six times** but for the cloner it names. |
-| The undo command | **Identical six times** but for the cloner and the cast. This is the one that matters. |
-| `canUndo` on the response | **One expression, six times.** |
+| `undoStack` / `undoAnchorId` on the state | **Identical nine times.** The fields hold opaque state; nothing about them is game-shaped. |
+| The push at the top of each undoable command | **Identical nine times** but for the cloner it names. |
+| The undo command | **Identical nine times** but for the cloner and the cast. This is the one that matters. |
+| `canUndo` on the response | **One expression, nine times.** |
 | Which commands are undoable | **Never shareable.** It is a rules judgement, and the roadmap proves it: movement but not combat, a purchase but not the draw that follows it. |
 | The ten-second hold | **Partly.** Two games auto-end a turn today — Settlements & Cities via `sacFinishTurn`'s follow-up, Dice Cities via `settleRoll`/`noActionsAvailable` returning `turnOver` from three call sites — and they do it in two different shapes. The others may never need it. |
 
 ### The one to promote: the undo command
 
-Not because of line count — six hand-written commands are about 150 lines
+Not because of line count — the hand-written commands are about 150 lines
 against roughly 110 for a generic one plus its registrations, which is a wash.
 Because of **invariant count**. The undo command is where the anchor check, the
 "is this your move" check, the depth cap and the `markModified` live, and those
 four decide whether a player can rewind somebody else's move or a move that
-consumed randomness. Six copies of that is how the fifth one ends up subtly
+consumed randomness. Nine copies of that is how a later one ends up subtly
 different from the first, and nothing fails until somebody notices in a game.
 
 The shape is not a new idea in this repo, which is the point:
@@ -978,21 +978,21 @@ through the PR.
    game type that registers an undo adapter — is a change to a security
    boundary, and **it is the locksmith's call, not the caveman's.** Raise it
    with them when game #2 lands, not in a PR description.
-2. **Dice Cities had no `cloneDiceCitiesState`.** It was the one of the six that
+2. **Dice Cities had no `cloneDiceCitiesState`.** It was the one of the games that
    never needed one: its replay adapter rebuilds the opening state from the
    creation parameters (`buildInitialDiceCitiesState(userIdList, enabledDocks,
    bankTotal, theme)`) rather than cloning a stored snapshot. Its undo started
    with writing that cloner, in the shape of the other seven (§16, "The sixth
    game").
 
-### What stays per-game even at six
+### What stays per-game even at nine
 
 - **The cloner.** Already per-game, already written, already tested by replay.
-- **Which commands opt in.** Six different rules answers; the only shared part
+- **Which commands opt in.** Nine different rules answers; the only shared part
   is the CI guard that no `undoable` command executes into a `recorded` field,
   which becomes one test over every game instead of six.
 - **The hold.** Two shapes across two games is not enough to know what the
-  abstraction is, and four of the six may never auto-end a turn at all. If it
+  abstraction is, and several of the nine may never auto-end a turn at all. If it
   does generalise, the field probably belongs on the base `IGameData` beside
   `lastTurnTimestamp` rather than in each game's state — the base engine already
   owns `currentTurn` and the timer — but that is a bigger change than this
@@ -1589,7 +1589,11 @@ first where the line between undoable and not is the game's whole premise:
   step would bypass the hold and the card draw. The dropout adapter leaves the
   stack alone: a drop is recorded in `gameState`, not `specificGameState`, and
   changes nothing on the board, so no snapshot can put a seat back, and clearing
-  would close another player's live hold without a hand-off.
+  would close another player's live hold without a hand-off. A hold is closed
+  only by the board (the countdown), by *Pass now*, or by that adapter when the
+  turn timer expires, so a player who leaves mid-hold keeps the next seat waiting
+  until their own timer runs out — the same backstop §9 accepts for every game
+  with a hold.
 - **Depth.** `UNDO_STACK_DEPTH` is ten, in `board.ts`: a reinforcement can be
   placed one army at a time, so unlike the one-purchase games this has to reach
   back over a whole run of taps, with a cash-in and the end of the attacks on
@@ -1610,7 +1614,11 @@ first where the line between undoable and not is the game's whole premise:
   from the command log and the turn clock (`undoEntryFor`), both false/null for
   everyone but the mover. A replayed step never offers it. `hiddenHands.test.ts`
   and `undo.test.ts` pin it: no `undoStack`, no `undoAnchorId`, no card from
-  the snapshot or the deck on the wire for any viewer.
+  the snapshot or the deck on the wire for any viewer. One leak is accepted:
+  taking back a cash-in leaves its public "(+2 bonus armies on <territory>)"
+  history line, so the table learns one territory card the player still holds.
+  That is the player's own information, given away by their own choice to cash
+  in and then undo, and it is accepted.
 - **Replay and old logs.** A game recorded before the hold ended its turn inside
   the fortify, the skip or the last setup placement, so its log has no
   `WorldDominationEndTurn`. Replayed under today's rules the hold would never
@@ -1618,8 +1626,21 @@ first where the line between undoable and not is the game's whole premise:
   `closeUnrecordedHold` (`worldDominationUnrecordedHoldEnd`) closes it the way
   the old rules did — a `WorldDominationEndTurn` from the holder, before any
   recorded command but the holder's own end turn or undo — and leaves no step or
-  line of its own. Commands carry `recordedTurnStartedAt` like every game's, so
-  a clocked entry goes stale in a replay at the point it did live.
+  line of its own. The same goes for a log that *ends* on one of those moves —
+  an in-flight game from before the hold — where no later command exists to close
+  it: once the loop is done, if the live game's `currentTurn` has moved on from the
+  replay's, the replay closes the hold the same way and the last step shows the
+  hand-off (and the card it drew). A hold still open live has the same player on
+  turn in both, so it is left alone; the hook is shared with Settlements & Cities
+  and takes a null `next` for this case. Commands carry `recordedTurnStartedAt`
+  like every game's, so a clocked entry goes stale in a replay at the point it
+  did live.
+- **Command version 2.** `commandVersion` in World Domination's `meta.ts` went
+  from 1 to 2 (`docs/command-versions.md`). A tab still running the old bundle
+  would send a Fortify, a SkipFortify or a last setup placement that used to end
+  the turn and now only holds it, with no countdown on its screen; the bump has
+  it reload instead. Recorded commands of version 1 or none replay as before,
+  through `closeUnrecordedHold` above.
 - **Recap and charts.** The shared recap engine drops an undo together with the
   command it reversed, so a deployment, cash-in, occupation or fortify taken back
   leaves no row. World Domination has no marker-style result chart to take back:

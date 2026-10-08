@@ -84,19 +84,24 @@ export default function WorldDominationActions({
     function undo() {
         submitCommand(new WorldDominationUndo(), clearSelection, 'undo');
     }
-    const undoButton = gs.canUndo ? <UndoButton pending={pendingTarget === 'undo'} onClick={undo} /> : null;
-    // Undo alone, in a row of its own under a sheet with no row to share (it
-    // renders nothing when there is nothing to take back).
-    const undoRow = (
+    const undoButton = gs.canUndo && <UndoButton pending={pendingTarget === 'undo'} disabled={pendingTarget !== null} onClick={undo} />;
+    function endTurn() {
+        submitCommand(new WorldDominationEndTurn(), clearSelection, 'endTurn');
+    }
+    // Pass now / Undo with the countdown while a hold is open: the move was the
+    // turn, so that is the whole sheet. Undo alone (nothing held) is a row under
+    // a sheet that has no row of its own to share, and renders nothing when
+    // there is nothing to take back.
+    const undoBar = (held: boolean) => (
         <UndoHold
-            holdDeadline={null}
+            holdDeadline={held ? gs.autoEndTurnAt : null}
             windowMs={UNDO_WINDOW_MS}
             canUndo={gs.canUndo}
-            onEndTurn={() => undefined}
+            onEndTurn={endTurn}
             onUndo={undo}
-            endTurnPending={false}
+            endTurnPending={pendingTarget === 'endTurn'}
             undoPending={pendingTarget === 'undo'}
-            nested
+            nested={!held}
         />
     );
 
@@ -162,24 +167,15 @@ export default function WorldDominationActions({
     // ── Held: a fortify, a skipped fortify or the last setup placement ──────────
     // The move was the turn, so Pass now / Undo is the whole sheet; the
     // countdown sends WorldDominationEndTurn by itself when it runs out.
-    if (gs.autoEndTurnAt) {
-        return (
-            <UndoHold
-                holdDeadline={gs.autoEndTurnAt}
-                windowMs={UNDO_WINDOW_MS}
-                canUndo={gs.canUndo}
-                onEndTurn={() => submitCommand(new WorldDominationEndTurn(), clearSelection, 'endTurn')}
-                onUndo={undo}
-                endTurnPending={pendingTarget === 'endTurn'}
-                undoPending={pendingTarget === 'undo'}
-            />
-        );
-    }
+    if (gs.autoEndTurnAt) return undoBar(true);
+
+    // A card cash-in that has to come first leaves the hand as the whole sheet.
+    const cardHandWithUndo = <>{cardHand}{undoBar(false)}</>;
 
     // ── Setup / Reinforce: place armies on the board ────────────────────────────
     if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {
         if (gs.phase === 'reinforce' && mustCashIn) {
-            return <>{cardHand}{undoRow}</>;
+            return cardHandWithUndo;
         }
 
         function deploy() {
@@ -217,7 +213,7 @@ export default function WorldDominationActions({
                         </div>
                     </>
                 )}
-                {undoRow}
+                {undoBar(false)}
                 {gs.phase === 'reinforce' && cardHand}
             </div>
         );
@@ -246,12 +242,12 @@ export default function WorldDominationActions({
                     >
                         Move {occupyCount} in
                     </ActionButton>
-                    {undoRow}
+                    {undoBar(false)}
                 </div>
             );
         }
 
-        if (mustCashIn) return <>{cardHand}{undoRow}</>;
+        if (mustCashIn) return cardHandWithUndo;
 
         function endAttackPhase() {
             submitCommand(new WorldDominationEndAttackPhase(), clearSelection, 'endAttack');
@@ -353,7 +349,7 @@ export default function WorldDominationActions({
                 ) : (
                     <p className="ag-action-hint">Not enough armies left here to keep attacking.</p>
                 )}
-                {undoRow}
+                {undoBar(false)}
             </div>
         );
     }
@@ -419,7 +415,7 @@ export default function WorldDominationActions({
                         Move {fortifyCount}
                     </ActionButton>
                 </div>
-                {undoRow}
+                {undoBar(false)}
             </div>
         );
     }

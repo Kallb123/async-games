@@ -638,9 +638,11 @@ export class WorldDominationEndTurn implements IGameCommand {
 // to (the setup advance, or the card draw and the next player's reinforcements).
 // A hold this game's own rules opened is closed by a recorded
 // WorldDominationEndTurn, so for those this never fires.
-export function worldDominationUnrecordedHoldEnd(gs: IWorldDominationSpecificGameState, holderId: string, next: IGameCommand): WorldDominationEndTurn | null {
+export function worldDominationUnrecordedHoldEnd(gs: IWorldDominationSpecificGameState, holderId: string, next: IGameCommand | null): WorldDominationEndTurn | null {
     if (!gs.autoEndTurnAt || (gs.undoStack ?? []).at(-1)?.by !== holderId) return null;
-    if (next.senderId === holderId && (next.className === 'WorldDominationEndTurn' || next.className === 'WorldDominationUndo')) return null;
+    // Null: the log has run out with the hold still open, and the replay only
+    // asks when the live game has handed on, so nothing here keeps it open.
+    if (next && next.senderId === holderId && (next.className === 'WorldDominationEndTurn' || next.className === 'WorldDominationUndo')) return null;
     return new WorldDominationEndTurn();
 }
 

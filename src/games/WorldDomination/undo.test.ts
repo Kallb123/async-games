@@ -659,6 +659,49 @@ describe("World Domination — replay", () => {
         expect((await buildTimeline(old, NAMES)).snapshots).toHaveLength(old.gameState.commandHistory.length + 1);
     });
 
+    it("closes the hold at the end of an old log whose last move was the fortify, once the live game has handed on", async () => {
+        // Nothing follows the fortify in the old log to make the replay close
+        // its hold, so the final state would still have Alice on turn and no
+        // card drawn — what the recap, the match review and the "your move"
+        // push body read.
+        const game = makeGame({
+            phase: "fortify",
+            cardDeck: [card("d1", "infantry")],
+            playerStates: new Map([["u1", player({ conqueredTerritoryThisTurn: true })], ["u2", player()]]),
+        });
+        const close = endTurn();
+        for (const command of [fortify(ALASKA, NORTHWEST, 1), close]) {
+            game.currentTurn = command.senderId;
+            expect((await run(game, command)).outcome.validMove, command.className).toBe(true);
+        }
+        expect(game.currentTurn).toBe("u2");
+        expect(seat(game).cards).toHaveLength(1);
+
+        const old = replayable(game, new Set([close.id]));
+        expect(old.gameState.commandHistory.map(c => c.className)).toEqual(["WorldDominationFortify"]);
+        const timeline = await buildTimeline(old, NAMES);
+        const last = timeline.snapshots.at(-1)!;
+        expect(last.currentTurn).toBe("u2");
+        expect(last.specificGameState).toEqual(wireFor(game, null));
+        expect(last.specificGameState).toEqual(await lastStep(replayable(game)));
+        // The hand-off left no step of its own, and the step it joined is the one shown last.
+        expect(timeline.snapshots).toHaveLength(old.gameState.commandHistory.length + 1);
+        expect(timeline.currentIndex).toBe(timeline.snapshots.length - 1);
+        expect(last.history).toEqual((await buildTimeline(replayable(game), NAMES)).snapshots.at(-1)!.history);
+    });
+
+    it("leaves a log's hold open when the live game is still holding it", async () => {
+        const game = makeGame({ phase: "fortify" });
+        game.currentTurn = "u1";
+        expect((await run(game, fortify(ALASKA, NORTHWEST, 1))).outcome.validMove).toBe(true);
+        expect(game.specificGameState.autoEndTurnAt).not.toBeNull();
+
+        const timeline = await buildTimeline(replayable(game), NAMES);
+        const last = timeline.snapshots.at(-1)!;
+        expect(last.currentTurn).toBe("u1");
+        expect(last.specificGameState).toEqual(wireFor(game, null));
+    });
+
     it("replays an old log's skipped fortify and last setup placement the same way", async () => {
         const game = makeGame({ phase: "setup", reinforcementsRemaining: 1 });
         const closeSetup = endTurn();

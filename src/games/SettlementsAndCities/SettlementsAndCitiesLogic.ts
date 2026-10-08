@@ -1386,8 +1386,11 @@ export class SACEndTurn implements IGameCommand {
 // recorded command, so for those this never fires. And only a hold that is
 // the holder's own — their snapshot on top of the stack, as the move that
 // opened it left it — since one the log did close can't leave anything else.
-export function sacUnrecordedHoldEnd(gs: ISettlementsAndCitiesGameData['specificGameState'], holderId: string, next: IGameCommand): SACEndTurn | null {
+export function sacUnrecordedHoldEnd(gs: ISettlementsAndCitiesGameData['specificGameState'], holderId: string, next: IGameCommand | null): SACEndTurn | null {
     if (!gs.autoEndTurnAt || (gs.undoStack ?? []).at(-1)?.by !== holderId) return null;
+    // Null: the log has run out with the hold still open, and the replay only
+    // asks when the live game has handed on, so nothing here keeps it open.
+    if (!next) return new SACEndTurn();
     if (recordedOnTurnOf(next) !== undefined) return null;
     if (next.senderId === holderId) {
         if (next.className === 'SACEndTurn' || next.className === 'SACUndo') return null;
