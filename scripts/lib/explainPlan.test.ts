@@ -38,6 +38,8 @@ describe('beyondReading', () => {
 
   it('is empty for a user with the read role and nothing else', () => {
     expect(beyondReading(signedIn(['find', 'collStats', 'listIndexes'], ['listCollections', 'dbStats', 'killCursors']))).toEqual([]);
+    // Atlas's read role, as it reports itself.
+    expect(beyondReading(signedIn(['changeStream', 'collStats', 'dbHash', 'dbStats', 'find', 'killCursors', 'listCollections', 'listIndexes', 'listSearchIndexes', 'planCacheRead']))).toEqual([]);
   });
 
   it('names anything else, including actions it has never heard of', () => {

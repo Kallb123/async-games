@@ -34,8 +34,12 @@ export function explainableCommand(command: Document): Document {
     return Object.fromEntries(Object.entries(command).filter(([key]) => !key.startsWith('$') && !DRIVER_FIELDS.has(key)));
 }
 
-/** The actions MongoDB's built-in `read` and `readAnyDatabase` roles grant: everything a read-only user may hold. */
-const READ_ACTIONS = new Set(['find', 'listCollections', 'listIndexes', 'listSearchIndexes', 'listDatabases', 'collStats', 'dbStats', 'dbHash', 'killCursors', 'changeStream']);
+/**
+ * The actions MongoDB's built-in `read` and `readAnyDatabase` roles grant:
+ * everything a read-only user may hold. Atlas's `read` also grants
+ * `planCacheRead`, which reads the query planner's cache and changes nothing.
+ */
+const READ_ACTIONS = new Set(['find', 'listCollections', 'listIndexes', 'listSearchIndexes', 'listDatabases', 'collStats', 'dbStats', 'dbHash', 'killCursors', 'changeStream', 'planCacheRead']);
 
 /**
  * What a `connectionStatus` (with `showPrivileges`) says the connection's user
