@@ -103,6 +103,7 @@ Win rate · average round overrun in, over 24 battles a cell.
 | *Return plus harder to kill* | | | | |
 | Restore 1 + attack 3 AP | 0% · r13.6 | 29% · r14.0 | 21% · r12.0 | 75% · r12.0 |
 | Restore 1 + armour 1 | 4% · r12.3 | 38% · r15.0 | 25% · r11.6 | 96% · r13.0 |
+| Restore 1 + armour 1 + enemy −1 step | 0% · r12.4 | 83% · r15.0 | 13% · r11.4 | 96% · r12.0 |
 | **Restore 1 + attack 3 AP + armour 1** | **13% · r14.8** | **92% · r15.0** | **79% · r12.2** | **100% · —** |
 
 ## What it says
@@ -124,8 +125,11 @@ Win rate · average round overrun in, over 24 battles a cell.
 4. **Armour hits the factions unevenly.** Taking 1 off a Swarm claw or spit
    (2 damage) halves it, but takes only a quarter off a Realm sword or mace
    (4). So armour 1 swings the Swarm far more: restore 1 + armour 1 is 96% vs
-   the Swarm and 25% vs the Realm for 3 players. Attack 3 AP is even-handed
-   between the two.
+   the Swarm and 25% vs the Realm for 3 players. Making the warbands a step
+   smaller on top widens the gap: 2 players vs the Swarm go from 38% to
+   83%, while vs the Realm they get nowhere (0–13%, if anything slightly
+   worse, as with the smaller Realm squads in point 1). Attack 3 AP is
+   even-handed between the two.
 5. **All three together** (restore 1, attack 3 AP, armour 1) is the first set
    that wins against both factions for 3 players (79% / 100%). It's too easy
    against the Swarm and still hard for 2 players against the Realm.
