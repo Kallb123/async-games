@@ -77,8 +77,8 @@ interface JoinResult {
 
 interface JoinScreenProps {
   /**
-   * Whether the request that asked for this page carried a session, as
-   * `page.tsx` read it off the cookie. Stands in for Clerk until Clerk has
+   * Whether the request that asked for this page looked signed in, as
+   * `page.tsx` guessed from Clerk's cookie. Stands in for Clerk until Clerk has
    * loaded in the browser, so the first paint is one of the two screens
    * below rather than nothing.
    */

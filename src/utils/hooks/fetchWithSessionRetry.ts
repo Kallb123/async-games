@@ -86,11 +86,13 @@ let reloadFired = false;
  * Reloads the page, once, to renew a session cookie that nothing on the client
  * can fix — and reports whether it did.
  *
- * Only a *document* request passes through `clerkMiddleware`, and only the
- * middleware can answer an expired cookie with Clerk's handshake and set a
- * fresh one. An in-app navigation is an RSC request, so it cannot: a player in
- * this state gets nowhere by being sent to another screen, which is why
- * "just refresh the page" is what has always fixed it by hand.
+ * A page load starts Clerk afresh in the browser, and Clerk then mints a new
+ * session cookie from the signed-in client it still holds, which a fetch from a
+ * long-running tab doesn't always manage. (The middleware no longer has a hand
+ * in it: it only runs on the API, so a document request gets no handshake.) An
+ * in-app navigation doesn't start Clerk afresh, so a player in this state gets
+ * nowhere by being sent to another screen, which is why "just refresh the page"
+ * is what has always fixed it by hand.
  *
  * Strictly once per tab per stale session, guarded twice over: a marker written
  * *before* the reload, which survives it and is given back only by a fetch that

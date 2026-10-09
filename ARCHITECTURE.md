@@ -1102,8 +1102,14 @@ game — is documented fully in
 
 ## 10. Auth & access gating
 
-- **Clerk** provides authentication. `src/middleware.ts` wraps the app in
-  `clerkMiddleware()`; the root layout wraps everything in `<ClerkProvider>`.
+- **Clerk** provides authentication. `src/middleware.ts` runs
+  `clerkMiddleware()` on the API only — pages authorise on the client, and a
+  page request would pay Clerk's handshake redirect for nothing — so no page
+  or layout may call `auth()` / `currentUser()` (a guard test,
+  `src/middleware.test.ts`, fails if one can). The home and join pages guess
+  which screen to paint first from Clerk's `__client_uat` cookie
+  (`src/utils/users/signedInHint.ts`); Clerk corrects the guess on the client.
+  The root layout wraps everything in `<ClerkProvider>`.
 - API routes read the session with `await auth()` / `currentUser()` from
   `@clerk/nextjs/server` and reject unauthenticated requests.
 - **Access gating.** Beyond sign-in, the app checks `user.publicMetadata.unlocked`.
@@ -1245,10 +1251,10 @@ description or theme colour is exactly what those two files exist to prevent.
   that, `useRefreshableData`'s backoff repeats that whole dance three more
   times; and if a *board* is still empty at the end of it,
   `reloadForStaleSession` reloads the page **once**. That last rung is the only
-  thing that fixes a cookie Clerk can't renew in place, because only a document
-  request passes through `clerkMiddleware` and gets its handshake — an in-app
-  navigation is an RSC request and cannot, which is why sending the player to
-  another screen has never helped. It is one shot per tab, guarded twice: the
+  thing that fixes a cookie Clerk can't renew in place, because only a page load
+  starts Clerk afresh in the browser — an in-app navigation is an RSC request
+  and does not, which is why sending the player to another screen has never
+  helped. It is one shot per tab, guarded twice: the
   marker lives in `sessionStorage`, is written before the reload and is given
   back only by a fetch that then succeeds, and a document that has fired its
   reload keeps that answer while it is being replaced — the old page goes on

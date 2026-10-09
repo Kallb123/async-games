@@ -10,19 +10,18 @@ import Landing from "@/components/Landing";
  * Which home screen a visitor gets — the player's dashboard or the public
  * landing page.
  *
- * `page.tsx` makes the call on the server, from the session cookie, so the
+ * `page.tsx` makes the call on the server, from Clerk's signed-in cookie, so the
  * first paint is the right screen rather than one replaced by the other once
  * Clerk has loaded. But the cookie is not the last word in either direction,
  * and the screen has to survive both:
  *
- * - The server said signed out and Clerk disagrees. A Clerk session token is
- *   short-lived and refreshed in the browser; a *soft* navigation back to `/`
- *   (a tapped logo, the back button, an app resumed from the background) is an
- *   RSC request, which the middleware can't answer with a handshake redirect
- *   the way it does a document load, so an expired token reads as no session
- *   at all. That kicked a signed-in player to the landing page, where "Sign
- *   in" then recognised them immediately without asking for anything — the
- *   giveaway that they had been signed in the whole time.
+ * - The server said signed out and Clerk disagrees: a sign-in the cookie hasn't
+ *   caught up with, or a browser that kept it from the request. (It is the
+ *   cookie, not the short-lived session token, so a soft navigation back to
+ *   `/` — a tapped logo, the back button, an app resumed from the background —
+ *   doesn't read as signed out just because the token has expired.) Leaving
+ *   them on the landing page would be the giveaway that they were signed in
+ *   the whole time: "Sign in" there recognises them without asking for anything.
  * - The server said signed in and Clerk disagrees: a session it saw and the
  *   browser then rejected (signed out elsewhere, expired, revoked). Showing
  *   them the public page beats bouncing them to /login from their own home.
