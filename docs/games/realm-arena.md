@@ -3688,6 +3688,9 @@ falls, and round by round how many of the team are still standing.
 - **Where it lives.** `scripts/lib/realmArenaBalance.ts` (the battle and the
   statistics), `scripts/realmarena-balance.ts` (the command line and the
   workers), `.github/workflows/realmarena-balance.yml`.
+- **What it has found.** The first experiments — which changes make Hold Out
+  winnable, and by how much — are in
+  [`realm-arena-balance.md`](./realm-arena-balance.md).
 
 ---
 
