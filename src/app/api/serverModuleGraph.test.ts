@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { relative } from 'node:path';
 
 import { apiRouteFiles } from '@/utils/testing/apiRoutes';
-import { reachableFrom, SRC_ROOT } from '@/utils/testing/moduleGraph';
+import { isClientModule, reachableFrom, SRC_ROOT } from '@/utils/testing/moduleGraph';
 
 // A `'use client'` module is a *client reference* in the server graph: importing
 // a function out of one from a route handler hands you a proxy that throws
@@ -15,9 +14,6 @@ import { reachableFrom, SRC_ROOT } from '@/utils/testing/moduleGraph';
 // So walk what each route handler actually reaches at runtime and fail on the
 // first client module in the chain. A shared helper a route needs belongs in a
 // plain module (src/utils/**), which the component can import too.
-
-const isClientModule = (path: string) =>
-    /^\s*['"]use client['"]/.test(readFileSync(path, 'utf8'));
 
 describe('API route handlers', () => {
     const routes = apiRouteFiles();

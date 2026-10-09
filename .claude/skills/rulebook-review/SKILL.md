@@ -122,7 +122,8 @@ change that added one → also a finding, the other way round.
   import chain, and route handlers stay out of client modules'
   (`serverModuleGraph.test.ts`).
 - The two-audience routes (`/` and `/join`) settle who is looking **on the
-  server** with `await auth()` and hand the answer down — deciding it in the
+  server** from Clerk's cookie (`signedInHint()`, never `auth()` — Clerk's
+  middleware runs on the API only) and hand the answer down — deciding it in the
   browser meant each showed the wrong thing until Clerk loaded. Anything the
   guest form starts out holding (its random name, its die face) is drawn on the
   server too, because server HTML and the first client render have to agree.

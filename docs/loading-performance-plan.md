@@ -23,9 +23,9 @@ The plan should preserve several good foundations:
 
 The [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09.md) added these findings, which the phases below now address:
 
-- `clerkMiddleware()` matches every page, not just the API. Yet only two server components read auth: `/` and `/join`, and both only to guess which screen to paint first. Every other page authorises on the client with `useAuthGuard`.
-- `public/sw.js` answers every navigation network-first, without navigation preload.
-- Every `/games/<game>/[gameid]` route builds as dynamic (`ƒ`), although its page is a pure client component with no server data.
+- `clerkMiddleware()` matched every page, not just the API. Yet only two server components read auth: `/` and `/join`, and both only to guess which screen to paint first. Every other page authorises on the client with `useAuthGuard`. *(Fixed by Phase 1.1c.)*
+- `public/sw.js` answered every navigation network-first, without navigation preload. *(Fixed by Phase 1.1b.)*
+- Every `/games/<game>/[gameid]` route built as dynamic (`ƒ`), although its page is a pure client component with no server data. *(Fixed by Phase 1.1d.)*
 - `buildUserDirectory` / `userIdListToNamesAndMap` call Clerk on every request, uncached. That makes the call the largest server span on both the game and dashboard reads, and every poll pays it again.
 - `/api/dashboard` loads every live game as a full document (move history included), and every completed result the player has ever had, to draw summary rows and ten finished games.
 - Moment.js ships with all of its locales (310 KB raw / 76 KB gzip) on `/`, `/profile` and the result screen, for `fromNow()` and one `format("D MMM")`.
@@ -89,6 +89,8 @@ every phase can be compared with the one before it.
 
 The checkpoint's largest number is the document's TTFB: 3.4 s median on `/` and 1.7 s on a game, before any of our code runs. It is bimodal on every route, static ones included: about 0.25 s, or 4–6 s. The slow cluster is therefore on the path of every document request, not in page rendering. Prove which cause it is, then remove the ones that apply. The three fixes are independent of each other.
 
+**Status: shipped — all four parts (a–d) together.** What is still owed is the evidence, at the next checkpoint: the TTFB distribution before and after, with the 4–6 s cluster gone, and the new phase metrics saying where any remaining wait goes. Two things to watch there. A first API fetch on a cold load may now 401 and retry, if a page's fetch beats Clerk's script to renewing an expired token. And the performance beacon is held until Clerk has loaded, for the same reason.
+
 **a. Attribute it first.** Report the TTFB phases from `web-vitals/attribution` (`waitingDuration`, `cacheDuration`, `dnsDuration`, `connectionDuration`, `requestDuration`). `web-vitals` is already in the tree through Next; make it a direct dependency rather than relying on `useReportWebVitals`, which carries no attribution. Also report the service worker's startup gap from the navigation entry, as `sw_startup`. A long worker gap points at the service worker. A long `waitingDuration` with no worker gap points at redirects — the Clerk handshake among them.
 
 The client can't flag a handshake directly. Clerk strips `__clerk_handshake` with one more redirect before the page is served, and a cross-origin redirect chain zeroes the navigation entry's redirect timings. Once (c) is in, no page request can handshake at all. The evidence is therefore the TTFB distribution before and after this ships: the 4–6 s cluster should go.
@@ -107,13 +109,14 @@ The client can't flag a handshake directly. Clerk strips `__clerk_handshake` wit
 
 - **Pros:** removes a cross-origin redirect pair from every cold open. Static pages come straight from the CDN.
 - **Cons:** security-relevant. A server component added later that calls `auth()` on an unmatched route fails (Clerk throws when its middleware hasn't run).
-- **Mitigation:** add a guard test that every file under `src/app` (outside `api/`) importing `@clerk/nextjs/server` is covered by the exported `config.matcher`. Get a `locksmith` pass on the change, and confirm that no route relied on the middleware for protection (today it protects none: `clerkMiddleware()` is called without `protect`).
+- **Mitigation:** a guard test, `src/middleware.test.ts`, pins the matcher to the API. It also walks the module graph from every page-shaped file under `src/app` (outside `api/`) and fails if any of them can reach `auth()`, `currentUser()` or `getAuth()` — a namespace import, re-export or dynamic import of `@clerk/nextjs/server` counts. Get a `locksmith` pass on the change, and confirm that no route relied on the middleware for protection (it protected none: `clerkMiddleware()` was called without `protect`).
 
 **d. Serve game routes as static shells.** Each game page is a client component that fetches its own data, yet it builds as dynamic. A warm navigation therefore waits on a function render (277 ms median, 530 ms p75, against about 120 ms for static routes), and a cold load can't come from the CDN. Give each game route a server wrapper that exports `generateStaticParams` returning `[]`, so the shell renders once per id and is cached. Put that one export in a single shared module and re-export it from each game's route. Don't hand-write it per game. Confirm in the build output that the routes stop being `ƒ`.
 
 - **Pros:** route commit at static-route speed; `<Link>` prefetch fetches the whole shell; cold loads hit the CDN once (c) is in.
 - **Cons:** one cached shell per game id. A shell that ever read viewer data on the server would be cached and served to everyone.
-- **Mitigation:** the shell stays a data-free client component, which a `croupier` pass checks. Anything personal arrives through the authorised API, as today.
+- **Mitigation:** the shell stays a data-free client component, which a `croupier` pass checks. A guard test (`src/app/games/staticShell.test.ts`) fails if a client game page lacks the shell, or if the shell ever wraps a page that isn't `'use client'`. Anything personal arrives through the authorised API, as today.
+- **Accepted:** any id gets a shell, so requests for made-up ids add cache entries. Each costs one render, which every request used to.
 
 **Exit:** the TTFB p75 for `/` and the game route is under 1 s, and the 4–6 s cluster is gone from the TTFB distribution.
 
@@ -270,7 +273,7 @@ Ship in small, reversible changes and compare each stage with the Phase 0 baseli
 Reordered after the [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09.md): the cold document and the server's Clerk lookup cost more than the client waterfall Phase 1's later items target, and they are cheaper to fix.
 
 1. **Observability:** custom marks, `Server-Timing`, bundle/image report, database explains, and repeatable traces. Then close the checkpoint's gaps: TTFB, CLS, LCP and INP attribution; response bytes and network time from resource timing; entry vs refresh tagging; the dashboard's untimed spans; and the session-retry count.
-2. **Cold document** (Phase 1.1): service-worker navigation preload first, as it is self-contained. Then the Clerk matcher with the cookie hint, if attribution confirms the handshake. Then static game shells.
+2. **Cold document** (Phase 1.1) — *shipped*: TTFB attribution, service-worker navigation preload, the Clerk matcher with the cookie hint, and static game shells, in one change. The next checkpoint compares the TTFB distribution with this one.
 3. **Server reads** (Phase 2): the player-directory cache, then the dashboard projection and bounded completed results. Then any other span still shown to dominate (query/index, conditional validation).
 4. **Navigation semantics:** shared linked game row; route prefetch for the likely destinations.
 5. **Shared memory cache:** request deduplication, identity/schema keys, TTL/LRU, mutation updates, push invalidation, and logout purge.
@@ -290,7 +293,7 @@ For each rollout, use a feature flag or staged percentage, watch p50/p75/p95, er
 - Integration tests that a prefetched response is reused, then revalidated, and that a turn advancing between prefetch and tap cannot enable an invalid action.
 - Navigation tests for mouse, touch, keyboard, browser back/forward, direct URL, push link, expired session, account switch, and offline/online recovery.
 - Performance tests/traces under cold/warm cache and throttled mobile profiles, with budgets for JavaScript, JSON, critical art, and requests.
-- A guard test that every server component under `src/app` importing `@clerk/nextjs/server` is covered by the middleware matcher. Also a manual check that the offline page still appears with navigation preload on.
+- Guard tests that no page-shaped file under `src/app` can reach Clerk's request auth, that the middleware matcher stays on the API (`src/middleware.test.ts`), and that the static shell wraps exactly the client game pages (`src/app/games/staticShell.test.ts`). Also a manual check that the offline page still appears with navigation preload on.
 - Unit tests for the player-directory cache: TTL expiry, LRU bound, fetching only misses, no metadata field ever stored, and invalidation on rename.
 - A projection-equivalence test: `CreateResponse` on a projected live game equals `CreateResponse` on the full document, for every game type. Also a test that the dashboard's completed list still shows "See all" when there are more than ten.
 - Unit tests for `timeAgo` / `shortDate` at each unit boundary.

@@ -62,7 +62,8 @@ src/
 │   ├── newgame/                # game library + per-game setup screens
 │   │   ├── page.tsx            # library grid
 │   │   └── <game>/page.tsx     # one setup screen per game
-│   ├── games/<game>/[gameid]/  # the live board screen for each game
+│   ├── games/<game>/[gameid]/  # the live board screen for each game — a static
+│   │                           #   shell (layout.tsx re-exports games/staticShell.ts)
 │   └── api/                    # server endpoints (see §5, §6)
 │       ├── game/               # taketurn, command, end, list endpoints, [gameid]
 │       ├── newgame/<game>/     # create an invitation for a game
@@ -1126,8 +1127,10 @@ game — is documented fully in
 - **Which screen a two-audience route shows is decided on the server.** `/` and
   `/join` are the two screens with something to show a visitor who has no
   account, and so the two whose *audience* has to be settled before they
-  render. Each is a server page that reads the session with `await auth()` and
-  hands the answer to the client component below it: `/` renders either
+  render. Each is a server page that guesses from Clerk's `__client_uat`
+  cookie (`signedInHint()` in `src/utils/users/signedInHint.ts` — not
+  `auth()`, which would need Clerk's middleware on the page; see above) and
+  hands the guess to the client component below it: `/` renders either
   `components/Dashboard.tsx` or `components/Landing.tsx`, and `/join` passes
   `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in code
   box share one component and most of their state. The browser can't tell the
@@ -1137,9 +1140,9 @@ game — is documented fully in
   landing page, and `/join` — the one route strangers arrive at cold, from a
   link in a chat app — rendered nothing at all. Both screens still mount
   `useAuthGuard({ allowSignedOut: true })` and correct themselves from Clerk,
-  for the session the cookie claims and the browser then rejects. `auth()`
-  makes a route dynamic, which is what buys the right first paint; `/join`
-  already was, for the lobby lookup its `generateMetadata` does. Whatever the
+  for the session the cookie claims and the browser then rejects. Reading the
+  cookie makes a route dynamic, which is what buys the right first paint;
+  `/join` already was, for the lobby lookup its `generateMetadata` does. Whatever the
   guest form starts out holding — its random Adjective+Animal name, the die
   face beside it — is drawn on the server and passed down too, because server
   HTML and the browser's first render have to agree on it.
@@ -1455,7 +1458,10 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `src/app/newgame/<game>/` and a board screen under
    `src/app/games/<game>/[gameid]/` that just import from `src/games/<Game>/`
    (App Router requires `page.tsx` to live under `src/app/**`, so these can't
-   move into the game folder themselves). Reuse `GameSetupLayout`,
+   move into the game folder themselves). The board folder also takes the
+   one-line `layout.tsx` that serves it as a cached static shell — see
+   `src/app/games/staticShell.ts` for why, and for the rule that keeps it safe:
+   nothing in a board route reads the viewer or the game on the server. Reuse `GameSetupLayout`,
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.

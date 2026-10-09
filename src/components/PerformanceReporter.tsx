@@ -15,19 +15,39 @@ declare global {
 }
 const queue: PerformanceMetricInput[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
+const BATCH_SIZE = 10;
+
+// Held until Clerk has loaded. `/api/performance` only takes a signed-in
+// player's samples, and Clerk's middleware no longer runs on page loads to
+// renew an expired session token before the page arrives — Clerk's script does
+// that once it starts. A cold load after a while idle, the very load the TTFB
+// phases are there to explain, would otherwise send its first batch with the
+// stale token, be refused, and never know: a beacon can't see its answer.
+// `auth_ready` releases the queue; so does a deadline, for a screen that never
+// asks Clerk who is signed in.
+let sendable = false;
+const SEND_DEADLINE_MS = 10_000;
+
+function release() {
+  sendable = true;
+  send();
+}
 
 function send() {
   timer = undefined;
-  const body = queue.splice(0, queue.length);
-  if (!body.length) return;
-  const payload = JSON.stringify(body);
-  if (!navigator.sendBeacon('/api/performance', new Blob([payload], { type: 'application/json' }))) {
-    void fetch('/api/performance', { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true });
+  if (!sendable) return;
+  // In batches, so a queue that built up while it was held stays inside the
+  // route's per-request limit.
+  while (queue.length) {
+    const payload = JSON.stringify(queue.splice(0, BATCH_SIZE));
+    if (!navigator.sendBeacon('/api/performance', new Blob([payload], { type: 'application/json' }))) {
+      void fetch('/api/performance', { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true });
+    }
   }
 }
 function enqueue(metric: PerformanceMetricInput) {
   queue.push(metric);
-  if (queue.length >= 10) send(); else timer ??= setTimeout(send, 5000);
+  if (queue.length >= BATCH_SIZE) send(); else timer ??= setTimeout(send, 5000);
 }
 
 let journey: Journey | undefined;
@@ -86,6 +106,7 @@ function registerVitals() {
 function mark(name: JourneyMilestone) {
   const now = performance.now();
   performance.mark(`ag_${name}`);
+  if (name === 'auth_ready' && !sendable) release();
   const current = currentJourney();
   if (current.hidden || current.marked.has(name)) return;
   current.marked.add(name);
@@ -124,7 +145,9 @@ export default function PerformanceReporter() {
       }
     });
     observer.observe({ type: 'resource', buffered: true });
+    const deadline = setTimeout(release, SEND_DEADLINE_MS);
     return () => {
+      clearTimeout(deadline);
       delete window.__agPerformanceReport;
       delete window.__agPerformanceMark;
       document.removeEventListener('pointerdown', intent, true);

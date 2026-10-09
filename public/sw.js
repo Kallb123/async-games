@@ -9,7 +9,10 @@
 // Having a handler in the way of every navigation has a cost of its own: the
 // browser can't send the request until the worker has booted, which on a cold
 // phone is hundreds of ms. Navigation preload gives that time back — see the
-// `activate` and `fetch` handlers.
+// `activate` and `fetch` handlers. Enabling it outlives this file: if a worker
+// without the preload ever replaces this one (a rollback), it must call
+// `self.registration.navigationPreload.disable()` in its own `activate`, or
+// every navigation will fetch the page twice — once for a preload nobody reads.
 //
 // Push is NOT handled here. That stays in `firebase-messaging-sw.js`, which
 // Firebase registers at its own scope the first time a device asks for a

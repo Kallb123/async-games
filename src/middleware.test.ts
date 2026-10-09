@@ -19,7 +19,9 @@ import { walkFiles } from "@/utils/testing/walkFiles";
 // Each matcher turned into a regex by Next's own parser (the `path-to-regexp`
 // dialect the matcher is written in), rather than a regex of ours that could
 // disagree with it. `next build` wraps the pattern in a prefix and suffix for
-// `_next/data` URLs, which no App Router page request uses.
+// `_next/data` URLs, which no App Router page request uses. `tryToParsePath` is
+// Next-internal (`next/dist/lib/…`), so a Next upgrade can move it: if this
+// import breaks after one, find where the matcher parser went.
 const patterns = config.matcher.map(source => new RegExp(tryToParsePath(source).regexStr!));
 const runsMiddleware = (pathname: string) => patterns.some(pattern => pattern.test(pathname));
 
@@ -36,21 +38,31 @@ describe("middleware matcher", () => {
     );
 });
 
-// What `app/` calls a page-shaped file: the ones Next renders for a document
-// request. Route handlers outside api/ (route.ts) are checked too, since they
-// would meet the same missing middleware.
-const SERVER_ENTRY = /^(page|layout|template|loading|not-found|route|manifest)\.tsx?$/;
+// What `app/` calls a page-shaped file: the ones Next renders for a document or
+// crawler request. Route handlers outside api/ (route.ts) are checked too, since
+// they would meet the same missing middleware.
+const SERVER_ENTRY = /^(page|layout|template|default|loading|error|global-error|not-found|forbidden|unauthorized|route|manifest|sitemap|robots|icon|apple-icon|opengraph-image|twitter-image)\.tsx?$/;
 
-// An `import { … } from "@clerk/nextjs/server"` that is not type-only, and the
-// names it brings in. `User` and friends are types and cost nothing at runtime.
-const CLERK_SERVER_IMPORT = /import\s+(?!type\s)\{([^}]*)\}\s*from\s*['"]@clerk\/nextjs\/server['"]/g;
-const REQUEST_AUTH = ["auth", "currentUser"];
+// Every statement that names Clerk's server package at runtime: an import, a
+// re-export, or a dynamic `import()` (which `reachableFrom` doesn't follow, so
+// it is caught where it is written).
+const CLERK_SERVER_STATEMENT = /(import|export)\s+(?!type\s)([^;'"]*?)\s*from\s*['"]@clerk\/nextjs\/server['"]|import\(\s*['"]@clerk\/nextjs\/server['"]\s*\)/g;
+// The functions that read the request the middleware hands them.
+const REQUEST_AUTH = /\b(auth|currentUser|getAuth)\b/;
 
-function requestAuthImports(file: string): string[] {
-    return [...readFileSync(file, "utf8").matchAll(CLERK_SERVER_IMPORT)]
-        .flatMap(match => match[1].split(","))
-        .map(name => name.trim().split(/\s+as\s+/)[0])
-        .filter(name => REQUEST_AUTH.includes(name));
+/**
+ * Whether a file can bring Clerk's request auth into whatever imports it. A
+ * named import is judged by its names (`clerkClient` and the `User` type are
+ * fine), but anything that hides them is counted against it: a namespace
+ * import carries `auth` along, a re-export hands the names to an importer this
+ * can't see, and a dynamic import can take whatever it likes.
+ */
+function reachesRequestAuth(file: string): boolean {
+    return [...readFileSync(file, "utf8").matchAll(CLERK_SERVER_STATEMENT)].some(([, keyword, clause]) =>
+        clause === undefined
+        || keyword === "export"
+        || clause.includes("*")
+        || REQUEST_AUTH.test(clause.replace(/\btype\s+\w+/g, "")));
 }
 
 describe("pages and the Clerk middleware", () => {
@@ -66,7 +78,7 @@ describe("pages and the Clerk middleware", () => {
     it("never reaches Clerk's request auth from a page, layout or template", () => {
         const offenders = entries.flatMap(entry =>
             [...reachableFrom(entry)]
-                .filter(([file]) => requestAuthImports(file).length > 0)
+                .filter(([file]) => reachesRequestAuth(file))
                 .map(([, chain]) => chain.map(file => path.relative(SRC_ROOT, file)).join(" -> ")));
         expect(offenders).toEqual([]);
     });
