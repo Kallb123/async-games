@@ -61,6 +61,17 @@ Do this before selecting an architectural fix.
 
 The admin report splits journey metrics into cold and warm, and ignores journey samples recorded before this scheme (they carry no `cache`). Those samples counted from when the tab opened, which is why a game opened after a minute on the dashboard looked like a one-minute load.
 
+### Checkpoints
+
+Each baseline taken from the admin report is saved, with its analysis, under
+[`docs/performance-checkpoints/`](./performance-checkpoints/), named by date, so
+every phase can be compared with the one before it.
+
+- [2026-10-09](./performance-checkpoints/2026-10-09.md): the first seven-day
+  baseline, before any Phase 1 work. Every target is missed. Cold loads lose
+  1.7–3.4 s before the first byte. Warm game entry is dominated by the API
+  fetch, and server time by the Clerk name lookup.
+
 **Exit criterion:** a trace can attribute the median and p75 game-entry time among route/RSC, JavaScript, Clerk readiness, API/server work, JSON transfer, render, and images.
 
 ## Phase 1 — remove the game-entry waterfall
