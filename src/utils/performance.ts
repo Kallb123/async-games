@@ -12,7 +12,7 @@ export const JOURNEY_MILESTONES = ['auth_ready', 'first_data', 'dashboard_usable
 export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 
 export const PERFORMANCE_METRIC_NAMES = [
-  'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
 ] as const;
 export type PerformanceMetricName = typeof PERFORMANCE_METRIC_NAMES[number];

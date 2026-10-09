@@ -208,6 +208,8 @@ The Clerk name lookup is the largest server span on both reads: about 210 ms of 
 - **Cons:** a rename or new picture can take up to five minutes to reach other players. Names and image URLs are held in server memory.
 - **Mitigation:** hold display fields only, under a stated TTL, and invalidate on our own write paths. A unit test proves that no metadata field is ever stored.
 
+**Status: shipped.** `src/utils/users/directoryCache.ts` holds `{ id, name, handle, imageUrl }` records only, for 5 minutes, LRU-capped at 2,000. An id Clerk doesn't know (a deleted account) is remembered as a miss for 30 seconds, so finished games with a deleted player don't send every lookup back to Clerk. `buildUserDirectory`, the list resolvers and `userIdListToImageMap` read through it. `userIdListToUntaggedNameList` stays uncached, because it decides whether a name is already taken. If Clerk fails, or hasn't answered within 1.5 s, missed ids are answered from stale entries when every one of them has one. Otherwise the read waits on Clerk and fails as before, so the deadline never turns a slow answer into an error, and a lookup given up on still fills the cache when it answers. Display-name, claim, account-delete and guest-delete paths drop the user's entry. `ServerTiming` now runs each span inside an `AsyncLocalStorage` store, so the resolvers report a `names` span (nested inside `response` / `player_directory`, not subtracted from it, so those stay comparable with the baseline) and a `names_cache;desc="hit=… miss=…"` entry, without any game model changing. What is still owed is the evidence, at the next checkpoint: `server_names` and the game route's `server_response` medians against the 2026-10-09 baseline.
+
 ### Make the dashboard read only what it shows
 
 `buildDashboard` reads every live game as a full Mongoose document, each Realm Arena move history included, to build rows that use a dozen top-level fields. It also reads every completed result the player has ever had, of which it shows ten. Its `mongo_query` span is 238 ms median, against 37 ms for a single game.
@@ -219,6 +221,8 @@ The Clerk name lookup is the largest server span on both reads: about 210 ms of 
 - **Cons:** a projection can silently drop a field a summary later starts reading.
 - **Mitigation:** the equivalence test above.
 - **Exit:** dashboard `mongo_query` median under 80 ms, and flat as completed games accumulate.
+
+**Status: shipped.** `GAME_SUMMARY_PROJECTION` sits beside `CreateResponse` in `GameData.ts`: the plan's fields plus the discriminator key `kind`, and `gameType` whole. `endDetail` isn't read by a summary, so it stays out. `GameSummaryProjection.test.ts` builds a fully populated fixture for every engine game type found under `src/games/*/meta.ts` (plus Smartthink's computer-sets-the-code branch). It checks that the summary from a document hydrated through the projection equals the one from the full document. Completed results are projected to the seven fields their readers use. The dashboard asks for `DASHBOARD_COMPLETED_LIMIT + 1` (shared with `Dashboard.tsx`), and `/api/game/mycompletelist` keeps the full list. The `{ playerIds: 1, endedAt: -1 }` index is declared; its `explain` against production data is still owed. `unread_chat` and `kb_worlds` are now spans of their own. What is still owed is the evidence: dashboard `mongo_query` and `total` medians at the next checkpoint, and a check of the projected read on a Smartthink game in a preview.
 
 ## Phase 3 — reduce code, render, and art delay
 
@@ -276,7 +280,7 @@ Reordered after the [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09
 
 1. **Observability:** custom marks, `Server-Timing`, bundle/image report, database explains, and repeatable traces. Then close the checkpoint's gaps: TTFB, CLS, LCP and INP attribution; response bytes and network time from resource timing; entry vs refresh tagging; the dashboard's untimed spans; and the session-retry count.
 2. **Cold document** (Phase 1.1) — *shipped*: TTFB attribution, service-worker navigation preload, the Clerk matcher with the cookie hint, and static game shells, in one change. The next checkpoint compares the TTFB distribution with this one.
-3. **Server reads** (Phase 2): the player-directory cache, then the dashboard projection and bounded completed results. Then any other span still shown to dominate (query/index, conditional validation).
+3. **Server reads** (Phase 2) — *player-directory cache, dashboard projection and bounded completed results shipped*. Next is any other span still shown to dominate (query/index, conditional validation).
 4. **Navigation semantics** (Phase 1.2) — *linked game row shipped*: your-turn cards and finished rows are `<Link>`s, as the rail and waiting rows already were. Route prefetch for the likely destinations is still to do.
 5. **Shared memory cache:** request deduplication, identity/schema keys, TTL/LRU, mutation updates, push invalidation, and logout purge.
 6. **Targeted prefetch:** intent first, then a one-game idle experiment behind a flag. Monitor hit rate, waste, API load, and mobile bytes.

@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Home page and games load faster",
+                detail: "The home page and a game's board come back from the server sooner, above all when you check back often: players' names and pictures no longer have to be looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
+            },
+            {
                 title: "Open a game from home in a new tab",
                 detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
             },
@@ -122,10 +126,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena battle results: the points race, damage by character and more",
                 detail: "A finished battle's results chart every player's score round by round, with a skull on their line wherever one of their characters fell, and each squad's health beside it. A bar chart shows the damage each kind of character dealt, split by whose it was, and a table sets out everything each squad did — knock-outs, damage dealt and taken, healing, shots landed, reactions on watch — with each player's top fighter named.",
                 game: "realmarena",
-            },
-            {
-                title: "Eleven more achievements for Settlements & Cities and Dice Cities",
-                detail: "Win Settlements & Cities without a city, without grain, or away from every 6 and 8 — or Dice Cities on restaurants alone, or spending your very last coin on the final landmark. And try holding one of every card in the Dice Cities market.",
             },
         ],
     },

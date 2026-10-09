@@ -4,6 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
 import { availableUsernameFrom } from '@/utils/users/clerk';
+import { forgetCachedUser } from '@/utils/users/directoryCache';
 import { readableName } from '@/utils/ui/players';
 import { clerkErrorMessage } from '@/utils/users/clerkErrors';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
             await client.emailAddresses.deleteEmailAddress(placeholderEmail.id);
         }
         await client.users.updateUser(userId, { password, username });
+        // The handle just changed, which is half of how others see them.
+        forgetCachedUser(userId);
     } catch (error) {
         console.error('Failed to claim guest account', error);
         return NextResponse.json(
@@ -100,6 +103,10 @@ export async function POST(request: NextRequest) {
     // so every existing `publicMetadata.guest === true` check stays correct
     // with no second value to also check for.
     await client.users.updateUserMetadata(userId, { publicMetadata: { guest: null } });
+    // Again, now the guest flag is gone: it decides whether the handle shows
+    // at all (publicHandle), and a lookup between the two writes would have
+    // cached the new handle as hidden.
+    forgetCachedUser(userId);
 
     await dbConnect();
     // A game counts once every player is a registered account

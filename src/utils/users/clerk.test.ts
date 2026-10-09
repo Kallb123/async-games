@@ -10,9 +10,11 @@ vi.mock('@clerk/nextjs/server', () => ({
 // Safe as a plain import: vitest hoists the vi.mock above it, so ./clerk
 // never pulls in the real Clerk client.
 import { usersById, usersByUsername, userIdListToUsernameList } from './clerk';
+import { __resetDirectoryCacheForTests } from './directoryCache';
 
 describe('Clerk user lookups', () => {
     beforeEach(() => {
+        __resetDirectoryCacheForTests();
         getUserList.mockReset();
         // What a real instance would return for a filter Clerk ignores: every
         // user it has, not the nothing the caller asked for.
@@ -76,6 +78,7 @@ describe('Clerk user lookups', () => {
 
 describe('telling two players with the same display name apart', () => {
     beforeEach(() => {
+        __resetDirectoryCacheForTests();
         getUserList.mockReset();
     });
 

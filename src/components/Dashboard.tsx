@@ -13,6 +13,7 @@ import PullToRefresh from "@/components/ui/PullToRefresh";
 import Link from "next/link";
 import KingdomBuilderWorldList from "@/components/KingdomBuilderWorldList";
 import { useEffect, useRef } from "react";
+import { DASHBOARD_COMPLETED_LIMIT } from "@/utils/apiModels/GameDataApi";
 
 /**
  * The signed-in home screen. `HomeScreen` decides who gets this and who gets
@@ -68,7 +69,7 @@ export default function Dashboard() {
 
             <aside className="ag-desk-col ag-desk-col--side">
                 <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} onChanged={refresh} />
-                <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={10} />
+                <MyCompleteList games={dashboard.completed} isLoading={isLoading} limit={DASHBOARD_COMPLETED_LIMIT} />
 
                 <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
                     <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">

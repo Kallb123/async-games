@@ -1,4 +1,4 @@
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GAME_SUMMARY_PROJECTION, GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { GameResultModel, IGameResultDataDocument } from '@/utils/mongodb/GameResultData';
 import { IInvitationDataDocument, InvitationModel, IInvitationResponse } from '@/utils/mongodb/InvitationData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
@@ -6,26 +6,32 @@ import { ChatReadModel, IChatReadDataDocument } from '@/utils/mongodb/ChatReadDa
 import { invitationToResponse, invitationUserIds } from '@/utils/games/invitationResponse';
 import { buildUserDirectory, UserDirectory } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
+import { DASHBOARD_COMPLETED_LIMIT } from '@/utils/apiModels/GameDataApi';
 import type { ICompletedGame, IDashboardResponse, IGameResponse } from '@/utils/apiModels/GameDataApi';
 import { worldSummaries } from '@/games/KingdomBuilder';
 import { worldIdOfInvitation } from '@/games/KingdomBuilder/worldInvitation';
 
 /**
- * Everything the home screen shows, read as one snapshot.
- *
- * The five lists used to be five endpoints, each fetched and polled by its own
- * component. Two problems with that, and the second is the expensive one:
- *
- *  - Five independent reads are five different moments. A game starting moves
- *    an invitation out of "Awaiting response" and into a turn list, and with
- *    separate reads a player could see it in neither — or in both.
- *  - Nothing caches Clerk. Every game and every invitation resolved its own
- *    players, so rendering one dashboard took twenty-odd round trips. Reading
- *    the lot together means one call for the union of every name on screen.
+ * The fields of a finished game the home screen and the full-history page read:
+ * `toCompletedGames` and `completedGameUserIds` below, and nothing else. A
+ * result carries its per-game `stats` and charts' worth of numbers, which a row
+ * that says who won never touches. Kept beside the two readers so a field added
+ * to one is added here.
  */
-/** Finished games, newest first. Also served on its own to the full-history page. */
-export function completedGameResults(userId: string): Promise<IGameResultDataDocument[]> {
-    return GameResultModel.find({ playerIds: userId }).sort({ endedAt: -1 }).exec();
+const COMPLETED_GAME_PROJECTION = {
+    gameId: 1, url: 1, winner: 1, endReason: 1, endDetail: 1, forfeitedBy: 1, endedAt: 1,
+} as const;
+
+/**
+ * Finished games, newest first. Also served on its own to the full-history page,
+ * which passes no `limit` and gets every one; the home screen passes one so the
+ * read stops at what it can show instead of growing with a player's history.
+ * The `{ playerIds, endedAt: -1 }` index on GameResult serves the filter and the
+ * sort together, so a limited read stops early rather than sorting them all.
+ */
+export function completedGameResults(userId: string, limit?: number): Promise<IGameResultDataDocument[]> {
+    const query = GameResultModel.find({ playerIds: userId }, COMPLETED_GAME_PROJECTION).sort({ endedAt: -1 });
+    return (limit ? query.limit(limit) : query).exec();
 }
 
 /** The ids a finished game names — only ever a winner and a forfeiter. */
@@ -118,6 +124,20 @@ function hasJoinedWorld(invite: IInvitationDataDocument, userId: string): boolea
     return !!worldIdOfInvitation(invite) && invite.userIdList.some(seat => seat.userId === userId && seat.inviteAccepted);
 }
 
+/**
+ * Everything the home screen shows, read as one snapshot.
+ *
+ * The five lists used to be five endpoints, each fetched and polled by its own
+ * component. Two problems with that, and the second is the expensive one:
+ *
+ *  - Five independent reads are five different moments. A game starting moves
+ *    an invitation out of "Awaiting response" and into a turn list, and with
+ *    separate reads a player could see it in neither — or in both.
+ *  - Every game and every invitation resolved its own players, so rendering
+ *    one dashboard took twenty-odd round trips to Clerk. Reading the lot
+ *    together means one lookup for the union of every name on screen (and the
+ *    directory cache answers most of that from memory).
+ */
 export async function buildDashboard(userId: string, time: <T>(name: string, work: () => Promise<T>) => Promise<T> = (_name, work) => work()): Promise<IDashboardResponse> {
     // Three reads, then partitioned here. "My turn" and "their turn" were two
     // Mongo queries over the same set of games, and the two invite lists two
@@ -126,11 +146,19 @@ export async function buildDashboard(userId: string, time: <T>(name: string, wor
     const [games, invites, results] = await time('mongo_query', () => Promise.all([
         // A game that dropped this player for going quiet carries on without
         // them; it is theirs again, as a loss, once it finishes.
-        GameDataModel.find({ userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } }).exec() as Promise<IGameDataDocument[]>,
+        // Projected to what a summary row reads (see GAME_SUMMARY_PROJECTION):
+        // not the move history, not any game's own state. The filter may name
+        // fields the projection leaves out.
+        GameDataModel.find(
+            { userIdList: userId, complete: false, 'gameState.droppedPlayers': { $ne: userId } },
+            GAME_SUMMARY_PROJECTION,
+        ).exec() as Promise<IGameDataDocument[]>,
         InvitationModel.find({
             $or: [{ senderId: userId }, { "userIdList.userId": userId }]
         }).exec() as Promise<IInvitationDataDocument[]>,
-        completedGameResults(userId),
+        // One more than the screen shows: the extra row is how it knows to
+        // offer "See all" without counting every game a player has finished.
+        completedGameResults(userId, DASHBOARD_COMPLETED_LIMIT + 1),
     ]));
 
     // A game names its winner and forfeiter from its own player list, so its
@@ -148,10 +176,12 @@ export async function buildDashboard(userId: string, time: <T>(name: string, wor
 
     // Read separately from the Promise.all above, deliberately: a failure
     // here must not cost the turn lists and invitations that read just fine
-    // (see unreadChatCounts).
+    // (see unreadChatCounts). Each is its own span, so a slow one is named
+    // rather than lost between `player_directory` and `response_build`; they
+    // swallow their own failures, so the span closes either way.
     const [unreadCounts, worlds] = await Promise.all([
-        unreadChatCounts(userId, games),
-        kingdomBuilderWorlds(userId),
+        time('unread_chat', () => unreadChatCounts(userId, games)),
+        time('kb_worlds', () => kingdomBuilderWorlds(userId)),
     ]);
 
     return time('response_build', async () => ({

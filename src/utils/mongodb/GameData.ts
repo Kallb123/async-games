@@ -184,6 +184,50 @@ GameDataSchema.post('init', function(this: IGameDataDocument) {
     }
 });
 
+/**
+ * The fields a live game's summary reads — everything `CreateResponse` (the
+ * generic one below and any discriminator's override) takes off the document.
+ *
+ * The dashboard reads every live game a player is in, and a game's full
+ * document carries its whole move history and its game's own state — Realm
+ * Arena's alone runs to megabytes — to build a row of a dozen fields. It asks
+ * for these and nothing else (`buildDashboard`). One list, in one place, beside
+ * the code that reads it.
+ *
+ * What goes in it:
+ *  - `gameType` whole: the response reads its `gameType`, `friendlyName` and
+ *    `url`, and it is a handful of short strings.
+ *  - `kind`, the discriminator key. Mongoose picks the document's class from
+ *    it, so a projection without it hydrates the generic game and the
+ *    override of `CreateResponse` below it never runs.
+ *  - `specificGameState.codeSetterId`, which is Smartthink's override's: it
+ *    seats the computer in the response when the computer set the code.
+ *
+ * What stays out on purpose: `gameState` (history and the command log), the
+ * rest of `specificGameState`, `missedTurnCounts`, `timerWarningNotificationSent`
+ * and `inviteId`. `endDetail` is out too — it is a field of the data response
+ * and of the finished-game result, not of this summary.
+ *
+ * A field added to a summary has to be added here, and the guard test in
+ * `GameSummaryProjection.test.ts` fails until it is: it builds the summary from
+ * a document read through this projection and from the whole document, for
+ * every game type, and wants the same answer.
+ */
+export const GAME_SUMMARY_PROJECTION = {
+    gameId: 1,
+    kind: 1,
+    gameType: 1,
+    userIdList: 1,
+    turnTimer: 1,
+    currentTurn: 1,
+    lastTurnTimestamp: 1,
+    complete: 1,
+    winner: 1,
+    endReason: 1,
+    forfeitedBy: 1,
+    'specificGameState.codeSetterId': 1,
+} as const;
+
 GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     console.log("CreateResponse: Generic game");
 
