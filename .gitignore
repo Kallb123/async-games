@@ -10,6 +10,7 @@
 /coverage
 /playwright-report
 /test-results
+/perf-report
 /playwright/.auth
 
 # next.js

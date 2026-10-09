@@ -82,7 +82,7 @@ export default function AppRail({ myTurn = [], theirTurn = [], worlds = [], busy
     ];
 
     return (
-        <div className="ag-rail">
+        <div className="ag-rail" data-perf-region="rail">
             {/* The rail's dark column stretches the whole page; this is the
                 part that stays on screen while the dashboard scrolls past it. */}
             <div className="ag-rail-inner">

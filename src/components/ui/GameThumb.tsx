@@ -33,6 +33,7 @@ export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbPro
         return (
             <Image
                 src={meta.art}
+                data-perf-region="thumb"
                 alt=""
                 width={size}
                 height={size}
@@ -42,6 +43,7 @@ export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbPro
     }
     return (
         <div
+            data-perf-region="thumb"
             style={{
                 width: size,
                 height: size,

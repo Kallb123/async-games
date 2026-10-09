@@ -47,6 +47,6 @@ export default function ListRow({ icon, title, sub, action, compact = false, mut
         </>;
     const className = `ag-list-row${compact ? " ag-list-row--compact" : ""}${muted ? " ag-list-row--muted" : ""}`;
     return href
-        ? <Link className={className} href={href} onClick={onClick}>{content}</Link>
-        : <div className={className}>{content}</div>;
+        ? <Link className={className} href={href} onClick={onClick} data-perf-region="list-row">{content}</Link>
+        : <div className={className} data-perf-region="list-row">{content}</div>;
 }

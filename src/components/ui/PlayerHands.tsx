@@ -84,7 +84,7 @@ export default function PlayerHands({
                 const isActive = seat.userId === activeUserId;
 
                 return (
-                    <div className={`ag-hand${isMe ? ' ag-hand--me' : ''}${isActive ? ' ag-hand--active' : ''}`} key={seat.userId}>
+                    <div className={`ag-hand${isMe ? ' ag-hand--me' : ''}${isActive ? ' ag-hand--active' : ''}`} key={seat.userId} data-perf-region="hand">
                         <div className="ag-hand-head">
                             <span className="ag-hand-title">
                                 <span className="ag-hand-dot" style={{ background: playerColourForId(seat.userId, userIdList) }} />

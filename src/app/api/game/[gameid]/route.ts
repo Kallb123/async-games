@@ -1,11 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest } from 'next/server';
 import { dbConnect } from '../../../../utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
-import { attachHistoryReactions } from '@/utils/games/historyReactions';
-import { unlockedHere } from '@/utils/games/unlockedHere';
+import { readGameForViewer } from '@/utils/games/readGame';
 import { ServerTiming, timedJson } from '@/utils/api/serverTiming';
 export interface IGetGameParams { gameid: string }
+const REFUSED = { 404: 'Game not found', 403: 'Not a player in this game' } as const;
 export async function GET(request: NextRequest, { params }: { params: Promise<IGetGameParams> }) {
   console.log(`GET ${request.nextUrl.pathname}`);
   const timing = new ServerTiming();
@@ -13,16 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
   if (!userId) return timedJson({}, timing, { status: 401, statusText: 'Not signed in' });
   await timing.time('mongo_connect', dbConnect);
   const { gameid } = await params;
-  const gameData = await timing.time('mongo_query', () => GameDataModel.findOne({ gameId: gameid }).exec()) as IGameDataDocument | null;
-  if (!gameData) return timedJson({}, timing, { status: 404, statusText: 'Game not found' });
-  if (!gameData.userIdList.includes(userId)) return timedJson({}, timing, { status: 403, statusText: 'Not a player in this game' });
-  const gameDataResponse = await timing.time('response', () => gameData.CreateDataResponse(userId));
-  // Side by side: both are one indexed read, and neither needs the other.
-  const [history, unlocks] = await Promise.all([
-    timing.time('reactions', () => attachHistoryReactions(gameid, gameDataResponse.gameState.history)),
-    timing.time('achievements', () => unlockedHere(gameData, userId)),
-  ]);
-  gameDataResponse.gameState.history = history;
-  gameDataResponse.unlockedHere = unlocks;
-  return timedJson({ success: true, gameData: gameDataResponse }, timing);
+  const read = await readGameForViewer(gameid, userId, (name, work) => timing.time(name, work));
+  if ('status' in read) return timedJson({}, timing, { status: read.status, statusText: REFUSED[read.status] });
+  return timedJson({ success: true, gameData: read.gameData }, timing);
 }

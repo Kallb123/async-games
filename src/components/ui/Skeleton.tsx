@@ -20,6 +20,7 @@ export default function Skeleton({ width, height = 12, radius = 6, className, st
     return (
         <span
             aria-hidden
+            data-perf-region="skeleton"
             className={`ag-skeleton${className ? ` ${className}` : ""}`}
             style={{ width, height, borderRadius: radius, ...style }}
         />
@@ -44,7 +45,7 @@ const ROW_ICON: Record<SkeletonRowIcon, { size: number; radius: number | string 
 export function SkeletonRow({ icon = "avatar" }: { icon?: SkeletonRowIcon }) {
     const box = ROW_ICON[icon];
     return (
-        <div className="ag-list-row" aria-hidden>
+        <div className="ag-list-row" aria-hidden data-perf-region="skeleton">
             {box && <Skeleton width={box.size} height={box.size} radius={box.radius} style={{ flex: "none" }} />}
             <div className="ag-list-row-main">
                 <Skeleton width="55%" height={12} />
@@ -57,7 +58,7 @@ export function SkeletonRow({ icon = "avatar" }: { icon?: SkeletonRowIcon }) {
 /** One placeholder card shaped like a "your move" turn card on the homepage. */
 export function SkeletonTurnCard() {
     return (
-        <div className="ag-turn-card ag-skeleton-card">
+        <div className="ag-turn-card ag-skeleton-card" data-perf-region="skeleton">
             <div className="ag-turn-card-head">
                 <Skeleton width={52} height={52} radius={12} style={{ flex: "none" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>

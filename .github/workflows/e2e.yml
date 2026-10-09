@@ -3,7 +3,15 @@ name: E2E
 on:
   pull_request:
     branches: [main]
+    # `labeled`, so labelling a pull request `perf-traces` runs the traces.
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+  # Weekly, for the performance traces below.
+  schedule:
+    - cron: '17 5 * * 1'
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,6 +20,8 @@ concurrency:
 jobs:
   e2e:
     name: Playwright
+    # Any other label added to a pull request changes nothing worth a run.
+    if: github.event.action != 'labeled' || github.event.label.name == 'perf-traces'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -26,7 +36,8 @@ jobs:
 
       - name: Run E2E tests
         run: npx playwright test
-        env:
+        # Shared with the performance job below.
+        env: &e2e-env
           # Dev-instance Clerk keys (pk_test_/sk_test_) — clerkSetup refuses a
           # live one. See docs/environments.md.
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -56,4 +67,38 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 14
+
+      # The repeatable journey traces and query explains of
+      # docs/loading-performance-plan.md (Phase 0 items 4 and 5), against the
+      # same e2e database, after the smoke tests since both sign in as the same
+      # accounts. Weekly, on a manual run, or on a pull request labelled
+      # `perf-traces`: CI timings are too noisy to gate every push on, so this
+      # asserts no numbers; it reports them.
+      - name: Time the journeys
+        id: journeys
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'perf-traces')
+        run: npm run perf:journeys
+        env: *e2e-env
+
+      # Reads the game the journeys leave behind, so the plans are of real
+      # reads. --writable: the e2e user can write, and this database is only
+      # for tests.
+      - name: Explain the dashboard and game queries
+        if: steps.journeys.outcome == 'success'
+        run: npm run perf:explain -- --writable --out perf-report/explain.md
+        env: *e2e-env
+
+      - name: Summarise the performance report
+        if: ${{ !cancelled() && steps.journeys.outcome != 'skipped' }}
+        run: cat perf-report/journeys.md perf-report/explain.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - name: Upload the performance report and traces
+        if: ${{ !cancelled() && steps.journeys.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: performance-traces
+          path: |
+            perf-report/
+            test-results/perf/
           retention-days: 14
