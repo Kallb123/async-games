@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Open a game from home in a new tab",
+                detail: "Your turn cards and finished games on the home page are proper links now: press and hold, or middle-click, to open one in a new tab. And a game's screen starts loading as soon as its card is on screen, before you tap it.",
+            },
+            {
                 title: "Quicker to open",
                 detail: "Opening the app, or a game from a notification, no longer waits on an extra sign-in check before the page starts to arrive, and a game's screen comes ready-made instead of being built for you each time you open it.",
             },
@@ -122,10 +126,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Eleven more achievements for Settlements & Cities and Dice Cities",
                 detail: "Win Settlements & Cities without a city, without grain, or away from every 6 and 8 — or Dice Cities on restaurants alone, or spending your very last coin on the final landmark. And try holding one of every card in the Dice Cities market.",
-            },
-            {
-                title: "New achievements for Settlements & Cities and Dice Cities",
-                detail: "Win a Settlements & Cities game without building a road after setup, or without gathering or trading for any wool, or a Dice Cities Docks game as the only player without the Dock.",
             },
         ],
     },

@@ -1,7 +1,7 @@
 'use client'
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { gamePath, metaForGame } from "@/utils/ui/games";
 import { opponentsById } from "@/utils/ui/players";
 import GameThumb from "@/components/ui/GameThumb";
@@ -21,7 +21,6 @@ interface MyTurnListProps {
 
 export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
     const { user } = useIsAuthorised();
-    const router = useRouter();
     const now = useNowToTheMinute();
 
     const myUserId = user?.id;
@@ -37,14 +36,11 @@ export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
         const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
         const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
         return (
-            <div
+            <Link
                 key={game.gameId}
+                href={gamePath(game.url, game.gameId)}
                 className="ag-turn-card"
-                style={{ background: accent, cursor: "pointer" }}
-                onClick={() => router.push(gamePath(game.url, game.gameId))}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter") router.push(gamePath(game.url, game.gameId)); }}
+                style={{ background: accent }}
             >
                 <div className="ag-turn-card-head">
                     {meta
@@ -64,7 +60,7 @@ export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
                         {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
                     </div>
                 )}
-            </div>
+            </Link>
         );
     }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 1 } });
 
