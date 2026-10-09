@@ -4,6 +4,7 @@ import { profileImageUrl } from "@/utils/ui/avatar";
 import { recordNameLookup } from "@/utils/api/serverTiming";
 import { cachedUser, DirectoryRecord, lookupStarted, rememberUsers } from "@/utils/users/directoryCache";
 import { sameName } from "@/utils/users/sameName";
+import { withTimeout } from "@/utils/withTimeout";
 import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
@@ -174,14 +175,22 @@ function toDirectoryRecord(user: User): DirectoryRecord {
     return { id: user.id, name: nameOf(user), handle: publicHandle(user), imageUrl: profileImageUrl(user) };
 }
 
+// How long a name lookup waits on Clerk before it settles for the copies it
+// already holds. Clerk's median answer is about 200ms; this is a lookup that
+// has stopped answering, not a slow one, and it only ever gives up when there
+// is something to give up *to* (see directoryRecords).
+const CLERK_DIRECTORY_BUDGET_MS = 1500;
+
 // The records for the ids Clerk knows, from memory where it is fresh and from
 // the one Clerk round trip `usersById` makes for the rest. An id Clerk doesn't
 // return is simply absent, exactly as it is from `usersById`'s answer.
 //
-// If Clerk can't be reached, every id that missed is answered from whatever
-// the cache still holds of it, expired or not — a name a few minutes old beats
-// a screen that won't load. An id with nothing held at all has no such answer,
-// so then the failure is the caller's, as it always was.
+// If Clerk fails, or hasn't answered within CLERK_DIRECTORY_BUDGET_MS, every id
+// that missed is answered from whatever the cache still holds of it, expired or
+// not — a name a few minutes old beats a screen that won't load. An id with
+// nothing held at all has no such answer, so then it waits on Clerk and takes
+// its failure, as it always did: the deadline never turns a slow answer into
+// an error. A lookup given up on still lands in the cache when it does answer.
 async function directoryRecords(userIds: string[]): Promise<Map<string, DirectoryRecord>> {
     const wanted = [...new Set(userIds)];
     if (wanted.length === 0) return new Map();
@@ -200,23 +209,29 @@ async function directoryRecords(userIds: string[]): Promise<Map<string, Director
     const hits = wanted.length - missing.length;
 
     if (missing.length > 0) {
-        try {
-            const started = lookupStarted();
-            const found = (await usersById(missing)).map(toDirectoryRecord);
+        const started = lookupStarted();
+        const lookup = usersById(missing).then(users => {
+            const found = users.map(toDirectoryRecord);
             rememberUsers(missing, found, started);
-            for (const record of found) records.set(record.id, record);
-        } catch (error) {
-            const stale = missing.map(id => cachedUser(id));
-            if (stale.some(held => !held)) throw error;
-            console.error(`Clerk lookup failed; serving ${missing.length} cached player(s) past their expiry`, error);
-            for (const held of stale) {
-                if (held?.record) records.set(held.record.id, held.record);
-            }
-        }
+            return found;
+        });
+        const found = await withTimeout(() => lookup, CLERK_DIRECTORY_BUDGET_MS, null, 'Clerk name lookup')
+            ?? heldPastExpiry(missing)
+            ?? await lookup;
+        for (const record of found) records.set(record.id, record);
     }
 
     recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length });
     return records;
+}
+
+// What the cache still holds for every one of these ids, fresh or not — or null
+// if any of them has nothing held, when only Clerk can answer.
+function heldPastExpiry(userIds: string[]): DirectoryRecord[] | null {
+    const held = userIds.map(id => cachedUser(id));
+    if (held.some(entry => !entry)) return null;
+    console.error(`Clerk lookup failed or timed out; serving ${userIds.length} cached player(s) past their expiry`);
+    return held.flatMap(entry => entry?.record ? [entry.record] : []);
 }
 
 /**

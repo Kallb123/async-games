@@ -262,6 +262,59 @@ describe('the player directory cache', () => {
             await expect(buildUserDirectory(['user_1'])).rejects.toThrow('Clerk is down');
         });
     });
+
+    describe('when Clerk stops answering', () => {
+        // A call Clerk accepted and never answered, until the test says so.
+        function hangClerk() {
+            let answer!: () => void;
+            getUserList.mockImplementation(({ userId }: { userId: string[] }) => new Promise(resolve => {
+                answer = () => resolve({ data: clerkUsers.filter(user => userId.includes(user.id as string)) });
+            }));
+            return () => answer();
+        }
+
+        beforeEach(() => {
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+        });
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it('serves entries past their expiry once the budget runs out, and keeps the late answer', async () => {
+            clerkUsers = [person('user_1', 'Ann', 'ann')];
+            await userIdListToUsernameList(['user_1']);
+            vi.advanceTimersByTime(DIRECTORY_TTL_MS + 1);
+            const answer = hangClerk();
+            clerkUsers = [person('user_1', 'Anne', 'ann')];
+
+            const lookup = userIdListToUsernameList(['user_1']);
+            await vi.advanceTimersByTimeAsync(1500);
+            expect(await lookup).toEqual(['Ann']);
+
+            answer();
+            await vi.waitFor(() => expect(__heldDirectoryEntriesForTests()).toEqual([
+                ['user_1', { id: 'user_1', name: 'Anne', handle: 'ann', imageUrl: null }],
+            ]));
+            getUserList.mockClear();
+            expect(await userIdListToUsernameList(['user_1'])).toEqual(['Anne']);
+            expect(getUserList).not.toHaveBeenCalled();
+        });
+
+        it('keeps waiting when some id has nothing held, rather than fail a slow answer', async () => {
+            clerkUsers = [person('user_1', 'Ann', 'ann')];
+            const answer = hangClerk();
+
+            let settled = false;
+            const lookup = userIdListToUsernameList(['user_1']).finally(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(settled).toBe(false);
+
+            answer();
+            expect(await lookup).toEqual(['Ann']);
+        });
+    });
 });
 
 describe('reporting to the request', () => {
