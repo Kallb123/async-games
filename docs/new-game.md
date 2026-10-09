@@ -157,6 +157,12 @@ then bump it and keep the old rule behind `commandVersion(this)` in `Execute`
   `GameShell`, `useGameData`, `usePushEvents`, `useEndGame`, and (for
   multiplayer games) `useTurnNavigation`/`TurnNavControls`/`useTurnRecap`
   (§7).
+- `src/app/games/<game>/[gameid]/layout.tsx` — the one line
+  `export { default, generateStaticParams } from "../../staticShell";`, so the
+  board route is served as a cached static shell rather than rendered per
+  visit (see `src/app/games/staticShell.ts`; a guard test fails without it).
+  It is only safe because the page reads nothing about the viewer on the
+  server — keep it that way.
 - `src/games/<Game>/guide.ts` *(optional)* — a `GameGuide` (a title plus a
   handful of `{heading, body}` sections) for the how-to-play popup, registered
   in `GAME_GUIDES`. The board screen's `useGameIntro('<game>')` call and its
