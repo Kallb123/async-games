@@ -5,6 +5,7 @@ import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel, IChatReadDataDocument } from '@/utils/mongodb/ChatReadData';
 import { invitationToResponse, invitationUserIds } from '@/utils/games/invitationResponse';
 import { buildUserDirectory, UserDirectory } from '@/utils/users/clerk';
+import { untimed, type TimeSpan } from '@/utils/api/serverTiming';
 import { GAME_META } from '@/utils/ui/games';
 import { DASHBOARD_COMPLETED_LIMIT } from '@/utils/apiModels/GameDataApi';
 import type { ICompletedGame, IDashboardResponse, IGameResponse } from '@/utils/apiModels/GameDataApi';
@@ -138,7 +139,7 @@ function hasJoinedWorld(invite: IInvitationDataDocument, userId: string): boolea
  *    together means one lookup for the union of every name on screen (and the
  *    directory cache answers most of that from memory).
  */
-export async function buildDashboard(userId: string, time: <T>(name: string, work: () => Promise<T>) => Promise<T> = (_name, work) => work()): Promise<IDashboardResponse> {
+export async function buildDashboard(userId: string, time: TimeSpan = untimed): Promise<IDashboardResponse> {
     // Three reads, then partitioned here. "My turn" and "their turn" were two
     // Mongo queries over the same set of games, and the two invite lists two
     // over the same set of invitations — splitting in memory is both cheaper

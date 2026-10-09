@@ -5,6 +5,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 // timer being passed through all of them. Set by `time()` for the span's work.
 const current = new AsyncLocalStorage<ServerTiming>();
 
+/** Runs `work` as a span called `name`: a request's `ServerTiming.time`, or `untimed` where nothing is listening. */
+export type TimeSpan = <T>(name: string, work: () => Promise<T>) => Promise<T>;
+export const untimed: TimeSpan = (_name, work) => work();
+
 export class ServerTiming {
   private readonly started = performance.now();
   private readonly entries: { name: string; duration: number }[] = [];

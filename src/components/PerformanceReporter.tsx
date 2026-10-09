@@ -44,6 +44,7 @@ function release() {
 }
 
 function send() {
+  clearTimeout(timer);
   timer = undefined;
   if (!sendable) return;
   // In batches, so a queue that built up while it was held stays inside the
@@ -176,11 +177,22 @@ export default function PerformanceReporter() {
       if (event.key === 'Enter' || event.key === ' ') intent();
     };
     const popstate = () => { lastPopstate = performance.now(); };
-    const visibility = () => { if (document.visibilityState === 'hidden') currentJourney().hidden = true; };
+    // CLS, LCP and INP are reported as the page is hidden, which may be the
+    // last chance it gets to send anything: a closing tab, or a phone app
+    // frozen as the player switches away. So the queue goes then, not on its
+    // timer — once the vitals' own listeners have run, after this one, and
+    // again on `pagehide`, which a closing tab fires after them but before any
+    // timer could.
+    const visibility = () => {
+      if (document.visibilityState !== 'hidden') return;
+      currentJourney().hidden = true;
+      setTimeout(send);
+    };
     document.addEventListener('pointerdown', intent, true);
     document.addEventListener('keydown', keyboardIntent, true);
     window.addEventListener('popstate', popstate);
     document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('pagehide', send);
     const apiPrefix = `${location.origin}/api/`;
     const observer = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
@@ -199,8 +211,9 @@ export default function PerformanceReporter() {
       document.removeEventListener('keydown', keyboardIntent, true);
       window.removeEventListener('popstate', popstate);
       document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('pagehide', send);
       observer.disconnect();
-      if (timer) { clearTimeout(timer); send(); }
+      if (timer) send();
     };
   }, []);
 

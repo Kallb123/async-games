@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/utils/api/adminRequest';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { PerformanceMetricModel } from '@/utils/mongodb/PerformanceMetricData';
-import { JOURNEY_METRICS, type PerformanceCache, type PerformanceRequest } from '@/utils/performance';
+import { JOURNEY_METRICS, summarisePerformance, type PerformanceCache, type PerformanceRequest, type PerformanceStats } from '@/utils/performance';
 
-export interface PerformanceSummary {
+export interface PerformanceSummary extends PerformanceStats {
   name: string; route: string;
   /** Journey metrics only: a document load (`cold`) and an in-app navigation (`warm`) are different journeys. */
   cache?: PerformanceCache;
@@ -12,10 +12,8 @@ export interface PerformanceSummary {
   request?: PerformanceRequest;
   /** A vital's attribution: the part of the page it names (see `PERFORMANCE_REGIONS`). */
   region?: string;
-  samples: number; median: number; p75: number; p95: number;
 }
 export interface AdminPerformanceResponse { since: string; totalSamples: number; summaries: PerformanceSummary[]; }
-const percentile = (values: number[], fraction: number) => values[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)] ?? 0;
 
 export async function GET(_request: NextRequest) {
   const caller = await requireAdmin();
@@ -35,16 +33,13 @@ export async function GET(_request: NextRequest) {
     read({ request: { $exists: false }, $or: [{ name: { $nin: [...JOURNEY_METRICS] } }, { cache: { $exists: true } }] }),
     read({ request: { $exists: true } }),
   ])).flat();
-  const groups = new Map<string, number[]>();
-  for (const row of rows) {
-    const journey = JOURNEY_METRICS.has(row.name);
-    const key = JSON.stringify([row.name, row.route, journey ? row.cache ?? '' : '', row.request ?? '', row.region ?? '']);
-    const values = groups.get(key) ?? [];
-    values.push(row.value); groups.set(key, values);
-  }
-  const summaries = [...groups].map(([key, values]) => {
-    values.sort((a, b) => a - b); const [name, route, cache, request, region] = JSON.parse(key) as string[];
-    return { name, route, ...(cache && { cache: cache as PerformanceCache }), ...(request && { request: request as PerformanceRequest }), ...(region && { region }), samples: values.length, median: percentile(values, .5), p75: percentile(values, .75), p95: percentile(values, .95) };
-  }).sort((a, b) => b.samples - a.samples || a.name.localeCompare(b.name));
+  const loadOf = (row: { name: string; cache?: string }) => JOURNEY_METRICS.has(row.name) ? row.cache : undefined;
+  const summaries = summarisePerformance(rows, row => [row.name, row.route, loadOf(row), row.request, row.region])
+    .map(({ sample, stats }): PerformanceSummary => {
+      const cache = loadOf(sample);
+      return { name: sample.name, route: sample.route, ...(cache && { cache: cache as PerformanceCache }),
+        ...(sample.request && { request: sample.request as PerformanceRequest }), ...(sample.region && { region: sample.region }), ...stats };
+    })
+    .sort((a, b) => b.samples - a.samples || a.name.localeCompare(b.name));
   return NextResponse.json({ since: since.toISOString(), totalSamples: rows.length, summaries } satisfies AdminPerformanceResponse);
 }

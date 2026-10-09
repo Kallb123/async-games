@@ -249,6 +249,32 @@ export function safeRoute(pathname: string): string {
   return 'other';
 }
 
+/** The count, median, p75 and p95 of one group of samples. */
+export interface PerformanceStats { samples: number; median: number; p75: number; p95: number }
+
+/** The value at `fraction` of the way up already-sorted `values` (nearest rank). */
+const percentile = (values: number[], fraction: number) => values[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)] ?? 0;
+
+/**
+ * Samples grouped on whatever `keyOf` returns, each group's stats beside the
+ * first sample in it (which carries the fields the key was made of). The admin
+ * report and the journey traces both summarise this way, so a median means the
+ * same thing in both.
+ */
+export function summarisePerformance<Row extends { value: number }>(rows: Row[], keyOf: (row: Row) => unknown[]): { sample: Row; stats: PerformanceStats }[] {
+  const groups = new Map<string, { sample: Row; values: number[] }>();
+  for (const row of rows) {
+    const key = JSON.stringify(keyOf(row));
+    const group = groups.get(key) ?? { sample: row, values: [] };
+    group.values.push(row.value);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ sample, values }) => {
+    values.sort((a, b) => a - b);
+    return { sample, stats: { samples: values.length, median: percentile(values, .5), p75: percentile(values, .75), p95: percentile(values, .95) } };
+  });
+}
+
 /** Metrics whose value only means something within one journey, so the report splits them cold/warm. */
 export const JOURNEY_METRICS = new Set<string>([...JOURNEY_MILESTONES, 'navigation']);
 
