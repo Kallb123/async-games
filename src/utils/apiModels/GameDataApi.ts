@@ -405,6 +405,15 @@ export interface ICompletedGame {
     endedAt: string;
 }
 
+/**
+ * How many finished games the home screen lists before it offers "See all".
+ * Shared by the screen that draws the rows (`Dashboard`) and the server read
+ * that fetches one more than this to know whether there are any further —
+ * which is why it lives here, in a module the browser may import, and not in
+ * `utils/dashboard.ts`.
+ */
+export const DASHBOARD_COMPLETED_LIMIT = 10;
+
 // The whole home screen in one response — see `buildDashboard` for why its
 // turn, invitation, result and persistent-world lists share one endpoint.
 export interface IDashboardResponse {

@@ -20,7 +20,8 @@ import { KingdomBuilderSettlementModel } from '@/games/KingdomBuilder';
 import {
     ANN, BOB, resetApiRouteStubs, seedChatMessage, seedChatReadMarker, seedSnakesAndLadders, stubClerkUsers,
 } from '@/utils/testing/apiRoute';
-import { buildDashboard } from './dashboard';
+import { buildDashboard, completedGameResults } from './dashboard';
+import { DASHBOARD_COMPLETED_LIMIT } from './apiModels/GameDataApi';
 import type { IDashboardResponse } from './apiModels/GameDataApi';
 
 /** Every game on the dashboard, keyed by id, whichever of the two turn lists
@@ -35,7 +36,7 @@ beforeEach(async () => {
     await resetApiRouteStubs();
     stubClerkUsers(ANN, BOB);
     vi.spyOn(InvitationModel, 'find').mockReturnValue({ exec: async () => [] } as never);
-    vi.spyOn(GameResultModel, 'find').mockReturnValue({ sort: () => ({ exec: async () => [] }) } as never);
+    vi.spyOn(GameResultModel, 'find').mockReturnValue({ sort: () => ({ limit: () => ({ exec: async () => [] }), exec: async () => [] }) } as never);
     vi.spyOn(KingdomBuilderSettlementModel, 'find').mockReturnValue({
         select: () => ({ lean: async () => [] }),
     } as never);
@@ -125,5 +126,86 @@ describe('buildDashboard world invitations', () => {
 
         vi.spyOn(InvitationModel, 'find').mockReturnValue({ exec: async () => [invite(true)] } as never);
         expect((await buildDashboard(BOB.id)).incoming).toEqual([]);
+    });
+});
+
+describe('buildDashboard finished games', () => {
+    /** `n` results, newest first, behind a GameResult find that honours `.limit()` like the driver. */
+    function stubResults(n: number) {
+        const limits: (number | undefined)[] = [];
+        const projections: unknown[] = [];
+        const results = Array.from({ length: n }, (_, i) => ({
+            gameId: `done_${i}`, url: 'snakesandladders', winner: ANN.id, endReason: 'win',
+            endedAt: `2026-02-${String(28 - i).padStart(2, '0')}T00:00:00.000Z`,
+        }));
+        vi.spyOn(GameResultModel, 'find').mockImplementation(((_filter: unknown, projection: unknown) => {
+            projections.push(projection);
+            let cap = results.length;
+            const query = {
+                sort: () => query,
+                limit: (count: number) => { limits.push(count); cap = count; return query; },
+                exec: async () => results.slice(0, cap),
+            };
+            return query;
+        }) as never);
+        return { limits, projections };
+    }
+
+    it('asks for one more than the screen shows, and hands the extra row back', async () => {
+        const { limits } = stubResults(DASHBOARD_COMPLETED_LIMIT + 5);
+
+        const dashboard = await buildDashboard(ANN.id);
+
+        expect(limits).toEqual([DASHBOARD_COMPLETED_LIMIT + 1]);
+        expect(dashboard.completed).toHaveLength(DASHBOARD_COMPLETED_LIMIT + 1);
+        // Newest first: the cap trims the oldest, not the newest.
+        expect(dashboard.completed[0].gameId).toBe('done_0');
+    });
+
+    it('hands back no extra row when the screen shows every finished game', async () => {
+        // MyCompleteList offers "See all" only when it is handed more rows than
+        // its limit, so exactly that many must come back as exactly that many.
+        stubResults(DASHBOARD_COMPLETED_LIMIT);
+
+        expect((await buildDashboard(ANN.id)).completed).toHaveLength(DASHBOARD_COMPLETED_LIMIT);
+    });
+
+    it('reads only the fields a finished-game row uses, and the full history route reads them all', async () => {
+        const { projections } = stubResults(2);
+
+        await buildDashboard(ANN.id);
+        await completedGameResults(ANN.id);
+
+        expect(projections).toHaveLength(2);
+        for (const projection of projections) {
+            expect(Object.keys(projection as object).sort()).toEqual(
+                ['endDetail', 'endReason', 'endedAt', 'forfeitedBy', 'gameId', 'url', 'winner']);
+        }
+    });
+
+    it('returns every finished game when no limit is given', async () => {
+        const { limits } = stubResults(DASHBOARD_COMPLETED_LIMIT + 5);
+
+        expect(await completedGameResults(ANN.id)).toHaveLength(DASHBOARD_COMPLETED_LIMIT + 5);
+        expect(limits).toEqual([]);
+    });
+});
+
+describe('buildDashboard timing', () => {
+    it('times the chat count and the Kingdom Builder read as spans of their own, side by side', async () => {
+        seedSnakesAndLadders({ gameId: 'game_1' });
+        const spans: string[] = [];
+        const open: string[] = [];
+        let overlapped = false;
+
+        await buildDashboard(ANN.id, async (name, work) => {
+            spans.push(name);
+            open.push(name);
+            if (open.includes('unread_chat') && open.includes('kb_worlds')) overlapped = true;
+            try { return await work(); } finally { open.splice(open.indexOf(name), 1); }
+        });
+
+        expect(spans).toEqual(expect.arrayContaining(['mongo_query', 'player_directory', 'unread_chat', 'kb_worlds', 'response_build']));
+        expect(overlapped).toBe(true);
     });
 });

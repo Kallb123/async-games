@@ -1,6 +1,8 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { chosenName, isGuest, publicHandle, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
+import { recordNameLookup } from "@/utils/api/serverTiming";
+import { cachedUser, DirectoryRecord, lookupStarted, rememberUsers } from "@/utils/users/directoryCache";
 import { sameName } from "@/utils/users/sameName";
 import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
@@ -163,6 +165,60 @@ function nameOf(user: User | undefined): string {
     return user ? readableName(user, NO_NAME_PLAYER_NAME) : UNKNOWN_PLAYER_NAME;
 }
 
+// The display fields of one user and nothing else: what the directory cache
+// holds, and what `namesFor` and the directory read. Taking the fields here,
+// once, is what lets a cached entry and a freshly fetched one go through the
+// very same tagging below — and keeps the rest of the Clerk user (its private
+// metadata above all) from ever being held on to.
+function toDirectoryRecord(user: User): DirectoryRecord {
+    return { id: user.id, name: nameOf(user), handle: publicHandle(user), imageUrl: profileImageUrl(user) };
+}
+
+// The records for the ids Clerk knows, from memory where it is fresh and from
+// the one Clerk round trip `usersById` makes for the rest. An id Clerk doesn't
+// return is simply absent, exactly as it is from `usersById`'s answer.
+//
+// If Clerk can't be reached, every id that missed is answered from whatever
+// the cache still holds of it, expired or not — a name a few minutes old beats
+// a screen that won't load. An id with nothing held at all has no such answer,
+// so then the failure is the caller's, as it always was.
+async function directoryRecords(userIds: string[]): Promise<Map<string, DirectoryRecord>> {
+    const wanted = [...new Set(userIds)];
+    if (wanted.length === 0) return new Map();
+
+    const start = performance.now();
+    const records = new Map<string, DirectoryRecord>();
+    const missing: string[] = [];
+    for (const id of wanted) {
+        const held = cachedUser(id);
+        if (held?.fresh) {
+            if (held.record) records.set(id, held.record);
+        } else {
+            missing.push(id);
+        }
+    }
+    const hits = wanted.length - missing.length;
+
+    if (missing.length > 0) {
+        try {
+            const started = lookupStarted();
+            const found = (await usersById(missing)).map(toDirectoryRecord);
+            rememberUsers(missing, found, started);
+            for (const record of found) records.set(record.id, record);
+        } catch (error) {
+            const stale = missing.map(id => cachedUser(id));
+            if (stale.some(held => !held)) throw error;
+            console.error(`Clerk lookup failed; serving ${missing.length} cached player(s) past their expiry`, error);
+            for (const held of stale) {
+                if (held?.record) records.set(held.record.id, held.record);
+            }
+        }
+    }
+
+    recordNameLookup({ duration: performance.now() - start, hits, misses: missing.length });
+    return records;
+}
+
 /**
  * The names for a whole set of users at once, keyed by id. Every resolver
  * below goes through this rather than naming users one at a time, because a
@@ -190,11 +246,11 @@ function nameOf(user: User | undefined): string {
  * answer stays here with the rest of the naming rules, instead of every caller
  * re-adding the same fallback.
  */
-function namesFor(users: User[]): (userId: string) => string {
+function namesFor(players: DirectoryRecord[]): (userId: string) => string {
     // One entry per id, so a user who appears twice in the list is one player
     // rather than a collision with themselves.
-    const seats = [...new Map(users.map(user => [user.id, user])).values()]
-        .map(user => ({ id: user.id, name: nameOf(user), handle: publicHandle(user) }));
+    const seats = [...new Map(players.map(player => [player.id, player])).values()]
+        .map(({ id, name, handle }) => ({ id, name, handle }));
 
     const uses = new Map<string, number>();
     seats.forEach(({ name }) => uses.set(sameName(name), (uses.get(sameName(name)) ?? 0) + 1));
@@ -241,12 +297,11 @@ export interface UserDirectory {
 
 export async function buildUserDirectory(userIds: (string | null | undefined)[]): Promise<UserDirectory> {
     const wanted = [...new Set(userIds.filter((id): id is string => !!id))];
-    const users = await usersById(wanted);
-    const byId = new Map(users.map(user => [user.id, user]));
+    const byId = await directoryRecords(wanted);
     // Resolved against the whole screen's worth of ids, so two players called
     // Dave are told apart wherever they turn up together — in one game's seat
     // list, or in two rows of the same list of games.
-    const nameFor = namesFor(users);
+    const nameFor = namesFor([...byId.values()]);
 
     return {
         name(userId) {
@@ -254,17 +309,16 @@ export async function buildUserDirectory(userIds: (string | null | undefined)[])
             return nameFor(userId);
         },
         imageUrl(userId) {
-            const user = byId.get(userId);
-            return user ? profileImageUrl(user) : null;
+            return byId.get(userId)?.imageUrl ?? null;
         }
     };
 }
 
-// The one Clerk trip behind every list-shaped name lookup below. The three
+// The one lookup behind every list-shaped name lookup below. The three
 // that follow are the same names in a different container, so they go through
 // this rather than each making their own round trip and re-deriving the names.
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
-    const nameFor = namesFor(await usersById(userIdList));
+    const nameFor = namesFor([...(await directoryRecords(userIdList)).values()]);
     return userIdList.map(nameFor);
 }
 
@@ -273,6 +327,12 @@ export async function userIdListToUsernameList(userIdList: string[]): Promise<st
 // taken even when the two Daves already at the table are showing as
 // "Dave (@dave)" and "Dave (@daveb)". A different rule, not a different
 // container, which is why it doesn't go through the list resolver above.
+//
+// And why it skips the directory cache too: the answer gates a name being
+// *taken* (a guest joining a lobby is renamed if theirs matches a seat's), and
+// a five-minute-old name there would let someone claim the name a player has
+// only just given themselves. It is one small read on a rare path, so it stays
+// fresh rather than spend a stale answer on a decision.
 export async function userIdListToUntaggedNameList(userIdList: string[]): Promise<string[]> {
     const users = await usersById(userIdList);
     return userIdList.map(userId => nameOf(users.find(user => user.id === userId)));
@@ -308,16 +368,18 @@ export async function userIdListToNamesAndMap(userIdList: string[]): Promise<{
 // users a route has already fetched — routes that notify players hold the Clerk
 // user list already, so this saves a second round trip to Clerk.
 export function userListToUserIdNameMap(users: User[]): { [key: string]: string } {
-    const nameFor = namesFor(users);
+    const nameFor = namesFor(users.map(toDirectoryRecord));
     return Object.fromEntries(users.map(user => [user.id, nameFor(user.id)]));
 }
 
 // Profile pictures for a set of users, keyed by user id — null for anyone who
 // has never set one (see profileImageUrl). For routes that show people the
 // current user isn't necessarily friends with, e.g. who reacted to their move.
+// Through the directory cache: a picture is display-only and the same field the
+// directory already holds, so it is as fresh as a name is.
 export async function userIdListToImageMap(userIdList: string[]): Promise<Map<string, string | null>> {
-    const users = await usersById(userIdList);
-    return new Map(users.map(user => [user.id, profileImageUrl(user)]));
+    const records = await directoryRecords(userIdList);
+    return new Map([...records.values()].map(({ id, imageUrl }) => [id, imageUrl]));
 }
 
 /** A user as a screen receives one: enough to name them and picture them. */

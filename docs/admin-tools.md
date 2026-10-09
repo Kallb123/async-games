@@ -553,7 +553,12 @@ authorisation, first JSON, dashboard usability, board paint/interactivity,
 response bytes and image load duration. Dashboard and game responses also expose
 `Server-Timing` for authentication, Mongo connection/query, response building,
 reaction lookup and JSON serialisation; the client records those spans beside the
-journey.
+journey. `names` is the time spent resolving player names (the Clerk directory
+lookup), nested inside the span it ran in — `response` on a game,
+`player_directory` on the dashboard — rather than taken out of it, and a
+`names_cache` entry carries the directory cache's hit and miss counts as a
+`desc` (visible in devtools, not recorded). The dashboard also times its unread
+chat counts (`unread_chat`) and Kingdom Builder worlds (`kb_worlds`).
 
 A document load's `TTFB` is also split into the phases the browser reports for
 it — `TTFB_waiting`, `TTFB_cache`, `TTFB_dns`, `TTFB_connection` and

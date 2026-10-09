@@ -2,6 +2,7 @@ import { clerkClient, User } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import { readableName } from "@/utils/ui/players";
 import { mintSignInToken } from "@/utils/users/signInTokens";
+import { forgetCachedUser } from "@/utils/users/directoryCache";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -120,6 +121,7 @@ export async function createGuest(displayName: string): Promise<GuestTicket> {
 export async function deleteGuest(userId: string): Promise<void> {
     const client = await clerkClient();
     await client.users.deleteUser(userId);
+    forgetCachedUser(userId);
 }
 
 export interface UnclaimedGuests {
