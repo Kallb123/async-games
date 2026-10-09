@@ -34,13 +34,19 @@ export function explainableCommand(command: Document): Document {
     return Object.fromEntries(Object.entries(command).filter(([key]) => !key.startsWith('$') && !DRIVER_FIELDS.has(key)));
 }
 
-/** Privilege actions that change data or schema; one of these on the connection's user means it can write. */
-const WRITE_ACTIONS = new Set(['insert', 'update', 'remove', 'createIndex', 'dropIndex', 'createCollection', 'dropCollection', 'dropDatabase', 'renameCollectionSameDB', 'collMod', 'bypassDocumentValidation', 'anyAction']);
+/** The actions MongoDB's built-in `read` and `readAnyDatabase` roles grant: everything a read-only user may hold. */
+const READ_ACTIONS = new Set(['find', 'listCollections', 'listIndexes', 'listSearchIndexes', 'listDatabases', 'collStats', 'dbStats', 'dbHash', 'killCursors', 'changeStream']);
 
-/** The write actions a `connectionStatus` (with `showPrivileges`) says the connection's user holds. */
-export function writePrivileges(status: Document): string[] {
-    const privileges: { actions?: string[] }[] = status.authInfo?.authenticatedUserPrivileges ?? [];
-    return [...new Set(privileges.flatMap(privilege => privilege.actions ?? []).filter(action => WRITE_ACTIONS.has(action)))].sort();
+/**
+ * What a `connectionStatus` (with `showPrivileges`) says the connection's user
+ * may do beyond reading, or that nobody is signed in at all — a server with
+ * authentication off lets anyone do anything. Empty only for a read-only user.
+ * An allowlist, so an action this hasn't heard of counts against the user.
+ */
+export function beyondReading(status: Document): string[] {
+    if (!status.authInfo?.authenticatedUsers?.length) return ['everything (nobody is signed in)'];
+    const privileges: { actions?: string[] }[] = status.authInfo.authenticatedUserPrivileges ?? [];
+    return [...new Set(privileges.flatMap(privilege => privilege.actions ?? []).filter(action => !READ_ACTIONS.has(action)))].sort();
 }
 
 /** An error, by name and code only: a server's message can quote the command it refused, filter values and all. */

@@ -1,0 +1,75 @@
+name: Production query explain
+
+# The query explains of docs/loading-performance-plan.md (Phase 0 item 4)
+# against production's own data, which the e2e database can't stand in for:
+# `npm run perf:explain` on the busiest player's dashboard and the largest live
+# game, weekly and on demand. The report and the job's log name indexes,
+# stages and counts only, never a player or a game.
+#
+# It reads production, so it gets nothing else:
+# - Its one secret, PRODUCTION_READONLY_MONGODB_URI, lives in the
+#   `production-explain` environment, for a database user with the built-in
+#   `read` role only. The script refuses to run as a user that can write.
+# - No Clerk key: the script gives every player it reads a stand-in name.
+# - The environment's deployment branches must be set to `main` only (repo
+#   Settings → Environments). That, not the `if:` below, is what stops a
+#   branch with an edited copy of this file or the script from reading
+#   production.
+# - The secret is given to the explain step alone, after `npm ci`, so no
+#   package install script ever sees it. That step's stderr is held back
+#   (only its line count is shown): the app's reads log the ids they were
+#   reading when they fail softly. Its stdout carries only the report and a
+#   one-line reason if it stops, so a failure is still explained there.
+# - Production's network access list has to let GitHub's runners connect;
+#   if it doesn't, the run stops with MongooseServerSelectionError.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-production
+  cancel-in-progress: false
+
+jobs:
+  explain:
+    name: Explain the dashboard and game queries
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production-explain
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci --prefer-offline --no-audit --fund=false
+
+      - name: Explain against production
+        shell: bash
+        run: |
+          mkdir -p perf-report
+          status=0
+          npm run --silent perf:explain -- --out perf-report/explain.md 2> "$RUNNER_TEMP/explain-stderr" \
+            | tee perf-report/output.txt || status=$?
+          echo "stderr: $(wc -l < "$RUNNER_TEMP/explain-stderr") line(s), not shown since they can name players."
+          exit $status
+        env:
+          MONGODB_URI: ${{ secrets.PRODUCTION_READONLY_MONGODB_URI }}
+
+      - name: Summarise
+        if: ${{ !cancelled() }}
+        run: cat perf-report/explain.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || tail -n 5 perf-report/output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - name: Upload the report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: production-explain
+          path: perf-report/explain.md
+          retention-days: 90

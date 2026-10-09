@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describePlan, errorLabel, explainableCommand, findExplain, writePrivileges } from './explainPlan';
+import { beyondReading, describePlan, errorLabel, explainableCommand, findExplain } from './explainPlan';
 
 describe('describePlan', () => {
   it('names each stage and the index it scanned, outermost first', () => {
@@ -33,11 +33,21 @@ describe('explainableCommand', () => {
   });
 });
 
-describe('writePrivileges', () => {
-  it('names the write actions a user holds, and none for a read-only one', () => {
-    const readWrite = { authInfo: { authenticatedUserPrivileges: [{ actions: ['find', 'insert', 'update'] }, { actions: ['createIndex', 'find'] }] } };
-    expect(writePrivileges(readWrite)).toEqual(['createIndex', 'insert', 'update']);
-    expect(writePrivileges({ authInfo: { authenticatedUserPrivileges: [{ actions: ['find', 'collStats', 'listIndexes'] }] } })).toEqual([]);
+describe('beyondReading', () => {
+  const signedIn = (...actions: string[][]) => ({ authInfo: { authenticatedUsers: [{ user: 'explain' }], authenticatedUserPrivileges: actions.map(list => ({ actions: list })) } });
+
+  it('is empty for a user with the read role and nothing else', () => {
+    expect(beyondReading(signedIn(['find', 'collStats', 'listIndexes'], ['listCollections', 'dbStats', 'killCursors']))).toEqual([]);
+  });
+
+  it('names anything else, including actions it has never heard of', () => {
+    expect(beyondReading(signedIn(['find', 'insert', 'update'], ['createIndex', 'find'], ['grantRole', 'convertToCapped'])))
+      .toEqual(['convertToCapped', 'createIndex', 'grantRole', 'insert', 'update']);
+  });
+
+  it('refuses a server where nobody is signed in', () => {
+    expect(beyondReading({ authInfo: { authenticatedUsers: [], authenticatedUserPrivileges: [] } })).not.toEqual([]);
+    expect(beyondReading({})).not.toEqual([]);
   });
 });
 

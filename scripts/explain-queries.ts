@@ -3,16 +3,17 @@
 // database MONGODB_URI names. Production-shaped data is the point, so run it
 // against production as a read-only user:
 //
-//   MONGODB_URI=… CLERK_SECRET_KEY=… npm run perf:explain -- --out explain.md
+//   MONGODB_URI=… npm run perf:explain -- --out explain.md
 //   npm run perf:explain -- --user user_… --game <gameId> --out explain.md
 //
 // It doesn't restate any query. It runs the real reads — `buildDashboard` and
 // `readGameForViewer`, which is the game route's — with the driver's command
 // monitoring on, and asks Mongo to explain each command exactly as it was
 // sent. A query changed in `src/` is explained as changed, with nothing here
-// to update. Both resolve player names through Clerk, so CLERK_SECRET_KEY must
-// be the one for the database's Clerk instance; without it, the reads after
-// the names aren't reached, and the report says so.
+// to update. Both look player names up on the way, which the report never
+// shows, so every player they could name is given a stand-in first and Clerk
+// is never asked: no Clerk key is needed, and none should be given to it. (A
+// read that names someone else after all stops there, and the report says so.)
 //
 // With no --user it takes the player in the most live games, and with no
 // --game the largest live game, read as its first player: the worst case,
@@ -24,8 +25,9 @@
 // - It never builds an index or a collection on connecting, as an app would.
 // - It fails if anything it ran wrote to the database all the same.
 // - The report names indexes, stages and counts — never an id, a name or a
-//   filter's values — so `--out` can go into a checkpoint as it is. stderr is
-//   not: a read that fails softly logs the ids it was reading.
+//   filter's values — so `--out` can go into a checkpoint as it is, and so can
+//   stdout. stderr is not: a read that fails softly logs the ids it was
+//   reading, so the production workflow throws it away.
 
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -34,9 +36,12 @@ import type { CommandStartedEvent, Document } from 'mongodb';
 // Registers every game's GameData discriminator, so a game reads as its own class.
 import '@/utils/mongodb/mongodb';
 import { GameDataModel } from '@/utils/mongodb/GameData';
+import { InvitationModel } from '@/utils/mongodb/InvitationData';
+import { GameResultModel } from '@/utils/mongodb/GameResultData';
+import { lookupStarted, rememberUsers } from '@/utils/users/directoryCache';
 import { buildDashboard } from '@/utils/dashboard';
 import { readGameForViewer } from '@/utils/games/readGame';
-import { describePlan, errorLabel, explainableCommand, findExplain, writePrivileges } from './lib/explainPlan';
+import { beyondReading, describePlan, errorLabel, explainableCommand, findExplain } from './lib/explainPlan';
 
 const { values: args } = parseArgs({
     options: {
@@ -47,32 +52,37 @@ const { values: args } = parseArgs({
     },
 });
 
-const uri = process.env.MONGODB_URI ?? '';
-if (!uri) throw new Error('Set MONGODB_URI to the database to explain against (production, as a read-only user).');
-
 const READS = new Set(['find', 'aggregate', 'count', 'distinct']);
+// An aggregate is a read unless a stage of it writes its result somewhere.
+const writesOut = (command: Document) => Array.isArray(command.pipeline)
+    && command.pipeline.some((stage: Document) => '$out' in stage || '$merge' in stage);
+
+/** A reason to stop that this script gives in its own words, which carry no id: safe to print. */
+class ExplainRefusal extends Error {}
 const WRITES = new Set(['insert', 'update', 'delete', 'findAndModify', 'bulkWrite', 'create', 'createIndexes', 'drop', 'dropIndexes', 'dropDatabase', 'collMod', 'renameCollection']);
 
 interface Captured { step: string; name: string; collection: string; command: Document }
 
 async function main() {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) throw new ExplainRefusal('Set MONGODB_URI to the database to explain against (production, as a read-only user).');
     const captured: Captured[] = [];
     const writes: string[] = [];
     let step: string | undefined;
 
     await mongoose.connect(uri, { bufferCommands: false, monitorCommands: true, autoIndex: false, autoCreate: false });
     mongoose.connection.getClient().on('commandStarted', (event: CommandStartedEvent) => {
-        if (READS.has(event.commandName)) {
+        if (READS.has(event.commandName) && !writesOut(event.command)) {
             if (step) captured.push({ step, name: event.commandName, collection: String(event.command[event.commandName]), command: explainableCommand(event.command) });
-        } else if (WRITES.has(event.commandName)) {
+        } else if (WRITES.has(event.commandName) || writesOut(event.command)) {
             writes.push(`${step ?? 'setup'}: ${event.commandName}`);
         }
     });
     const db = mongoose.connection.db!;
 
-    const writable = writePrivileges(await db.command({ connectionStatus: 1, showPrivileges: true }));
-    if (writable.length && !args.writable) {
-        throw new Error(`This database user can write (${writable.join(', ')}). Connect as a read-only user, or pass --writable for a database it doesn't matter to.`);
+    const beyond = beyondReading(await db.command({ connectionStatus: 1, showPrivileges: true }));
+    if (beyond.length && !args.writable) {
+        throw new ExplainRefusal(`This database user can do more than read (${beyond.join(', ')}). Connect as a user with the read role only, or pass --writable for a database it doesn't matter to.`);
     }
 
     /** Runs `work` with every command it sends recorded under `label`; what went wrong, if anything. */
@@ -97,29 +107,56 @@ async function main() {
         { $limit: 1 },
     ]);
     const userId = args.user ?? busiest?._id;
-    const [game] = await GameDataModel.aggregate<{ gameId: string; viewer: string }>([
+    const [game] = await GameDataModel.aggregate<{ gameId: string; players: string[] }>([
         { $match: args.game ? { gameId: args.game } : { complete: false } },
-        { $project: { _id: 0, gameId: 1, viewer: { $first: '$userIdList' }, size: { $bsonSize: '$$ROOT' } } },
+        { $project: { _id: 0, gameId: 1, players: '$userIdList', size: { $bsonSize: '$$ROOT' } } },
         { $sort: { size: -1 } },
         { $limit: 1 },
     ]);
 
+    // A stand-in name for everyone the two reads could name: everyone in a
+    // game, invitation or result with the sampled player, and everyone in the
+    // sampled game. Wider than the reads themselves, so it needn't follow them.
+    // The sample's own players go in last: the cache drops its oldest entries
+    // first once it is full, and those are the ones both reads certainly need.
+    const named = new Set<string>();
+    if (userId) {
+        const lists = await Promise.all([
+            GameDataModel.distinct('userIdList', { userIdList: userId }),
+            InvitationModel.distinct('senderId', { 'userIdList.userId': userId }),
+            InvitationModel.distinct('userIdList.userId', { $or: [{ senderId: userId }, { 'userIdList.userId': userId }] }),
+            GameResultModel.distinct('winner', { playerIds: userId }),
+            GameResultModel.distinct('forfeitedBy', { playerIds: userId }),
+        ]);
+        for (const id of lists.flat()) if (typeof id === 'string' && id) named.add(id);
+    }
+    for (const id of [...(game?.players ?? []), ...(userId ? [userId] : [])]) {
+        named.delete(id);
+        named.add(id);
+    }
+    rememberUsers([...named], [...named].map(id => ({ id, name: 'Player', handle: null, imageUrl: null })), lookupStarted());
+
     const failures: string[] = [];
+    // A read that stopped part-way fails the run once the report is written:
+    // on a weekly job nobody watches, a warning inside a green run goes unread.
+    let incomplete = false;
     if (userId) {
         const failed = await capture('Dashboard', () => buildDashboard(userId));
-        if (failed) failures.push(`The dashboard stopped part-way (${failed}), so the reads after it are missing. Is CLERK_SECRET_KEY the one for this database's Clerk instance?`);
+        incomplete ||= !!failed;
+        if (failed) failures.push(`The dashboard stopped part-way (${failed}), so the reads after it are missing.`);
     } else {
         failures.push('No live game to take a player from, so the dashboard was not explained. Pass --user.');
     }
     if (game) {
-        const failed = await capture('Game', () => readGameForViewer(game.gameId, game.viewer));
+        const failed = await capture('Game', () => readGameForViewer(game.gameId, game.players[0]));
+        incomplete ||= !!failed;
         if (failed) failures.push(`The game read stopped part-way (${failed}), so the reads after it are missing.`);
     } else {
         failures.push(args.game ? 'No game with that id.' : 'No live game to explain the game read against. Pass --game.');
     }
 
     if (writes.length) {
-        throw new Error(`Something wrote to the database while it was being explained, which a read must never do: ${writes.join(', ')}`);
+        throw new ExplainRefusal(`Something wrote to the database while it was being explained, which a read must never do: ${writes.join(', ')}`);
     }
 
     const rows: string[] = [];
@@ -173,8 +210,15 @@ async function main() {
 
     if (args.out) writeFileSync(args.out, report);
     console.log(report);
+    if (incomplete) throw new ExplainRefusal('A read stopped part-way; the report above says which.');
 }
 
+// The reason it stopped, on stdout and safe to keep in a CI log: this script's
+// own refusal, or any other error's name and code, whose message can quote a
+// command and the ids in it.
 main()
-    .catch(error => { console.error(error); process.exitCode = 1; })
+    .catch(error => {
+        console.log(`perf:explain stopped: ${error instanceof ExplainRefusal ? error.message : errorLabel(error)}`);
+        process.exitCode = 1;
+    })
     .finally(() => mongoose.disconnect());
