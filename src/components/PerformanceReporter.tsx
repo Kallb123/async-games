@@ -1,9 +1,9 @@
 'use client'
 
 import { usePathname } from 'next/navigation';
-import { useReportWebVitals } from 'next/web-vitals';
 import { useEffect } from 'react';
-import { loadJourney, nextJourney, safeRoute, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName } from '@/utils/performance';
+import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
+import { loadJourney, nextJourney, safeRoute, ttfbPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName } from '@/utils/performance';
 
 declare global {
   interface Window {
@@ -64,6 +64,25 @@ function report(name: PerformanceMetricName, value: number) {
     build: process.env.NEXT_PUBLIC_BUILD_TIME });
 }
 
+/** A Core Web Vital, or a part of one: they belong to the document load, whichever route they are reported from. */
+function reportVital(name: PerformanceMetricName, value: number) {
+  if (!Number.isFinite(value)) return;
+  enqueue({ name, value, route: safeRoute(location.pathname), source: 'load', cache: 'cold', build: process.env.NEXT_PUBLIC_BUILD_TIME });
+}
+
+// The vitals cannot be unregistered, so they are registered once per page
+// rather than once per mount (React runs effects twice in development).
+let vitalsRegistered = false;
+function registerVitals() {
+  if (vitalsRegistered) return;
+  vitalsRegistered = true;
+  onTTFB(metric => {
+    reportVital('TTFB', metric.value);
+    for (const phase of ttfbPhaseMetrics(metric.attribution)) reportVital(phase.name, phase.value);
+  });
+  for (const observe of [onFCP, onLCP, onCLS, onINP]) observe(metric => reportVital(metric.name, metric.value));
+}
+
 function mark(name: JourneyMilestone) {
   const now = performance.now();
   performance.mark(`ag_${name}`);
@@ -77,11 +96,8 @@ function mark(name: JourneyMilestone) {
 export default function PerformanceReporter() {
   const pathname = usePathname();
 
-  // Vitals belong to the document load, whichever route they are reported from.
-  useReportWebVitals(metric => enqueue({ name: metric.name as PerformanceMetricName, value: metric.value,
-    route: safeRoute(location.pathname), source: 'load', cache: 'cold', build: process.env.NEXT_PUBLIC_BUILD_TIME }));
-
   useEffect(() => {
+    registerVitals();
     window.__agPerformanceReport = report;
     window.__agPerformanceMark = mark;
     currentJourney();

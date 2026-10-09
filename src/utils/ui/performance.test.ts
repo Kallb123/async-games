@@ -17,6 +17,8 @@ describe('performanceMarkdown', () => {
         expect(markdown).toContain(`- Window: ${since} → 2026-09-26T12:00:00.000Z (7 days)`);
         expect(markdown).toContain('| LCP | /game/[id] |  | 10 | 1200 ms | 1800 ms | 3001 ms |');
         expect(markdown).toContain('| CLS | / |  | 2 | 0.010 | 0.100 | 0.250 |');
+        expect(formatPerformanceValue('TTFB_request', 4200.4)).toBe('4200 ms');
+        expect(formatPerformanceValue('sw_startup', 328)).toBe('328 ms');
         expect(markdown).toContain('| game_usable | /game/[id] | warm | 3 | 400 ms | 600 ms | 900 ms |');
     });
 
