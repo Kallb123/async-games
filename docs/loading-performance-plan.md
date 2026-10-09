@@ -21,6 +21,15 @@ The plan should preserve several good foundations:
 - The service worker intentionally caches only the offline fallback. It does not cache API responses, Clerk traffic, or navigations. That is a safe default for personalised state.
 - Static game art is substantial (about 40 MB in the current tree, with individual board images of several MB), so route speed may be dominated by code and art after the JSON arrives.
 
+The [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09.md) added these findings, which the phases below now address:
+
+- `clerkMiddleware()` matches every page, not just the API. Yet only two server components read auth: `/` and `/join`, and both only to guess which screen to paint first. Every other page authorises on the client with `useAuthGuard`.
+- `public/sw.js` answers every navigation network-first, without navigation preload.
+- Every `/games/<game>/[gameid]` route builds as dynamic (`ƒ`), although its page is a pure client component with no server data.
+- `buildUserDirectory` / `userIdListToNamesAndMap` call Clerk on every request, uncached. That makes the call the largest server span on both the game and dashboard reads, and every poll pays it again.
+- `/api/dashboard` loads every live game as a full document (move history included), and every completed result the player has ever had, to draw summary rows and ten finished games.
+- Moment.js ships with all of its locales (310 KB raw / 76 KB gzip) on `/`, `/profile` and the result screen, for `fromNow()` and one `format("D MMM")`.
+
 ## Success criteria and guardrails
 
 Measure separately for cold browser, warm browser, slow mobile network, installed app, and a resumed/backgrounded session.
@@ -61,11 +70,52 @@ Do this before selecting an architectural fix.
 
 The admin report splits journey metrics into cold and warm, and ignores journey samples recorded before this scheme (they carry no `cache`). Those samples counted from when the tab opened, which is why a game opened after a minute on the dashboard looked like a one-minute load.
 
+### Checkpoints
+
+Each baseline taken from the admin report is saved, with its analysis, under
+[`docs/performance-checkpoints/`](./performance-checkpoints/), named by date, so
+every phase can be compared with the one before it.
+
+- [2026-10-09](./performance-checkpoints/2026-10-09.md): the first seven-day
+  baseline, before any Phase 1 work. Every target is missed. Cold loads lose
+  1.7–3.4 s before the first byte. Warm game entry is dominated by the API
+  fetch, and server time by the Clerk name lookup.
+
 **Exit criterion:** a trace can attribute the median and p75 game-entry time among route/RSC, JavaScript, Clerk readiness, API/server work, JSON transfer, render, and images.
 
 ## Phase 1 — remove the game-entry waterfall
 
-### 1. Make game rows real links
+### 1. Stop losing the cold load before the first byte
+
+The checkpoint's largest number is the document's TTFB: 3.4 s median on `/` and 1.7 s on a game, before any of our code runs. It is bimodal on every route, static ones included: about 0.25 s, or 4–6 s. The slow cluster is therefore on the path of every document request, not in page rendering. Prove which cause it is, then remove the ones that apply. The three fixes are independent of each other.
+
+**a. Attribute it first.** Report the TTFB phases from `web-vitals/attribution` (`waitingDuration`, `cacheDuration`, `dnsDuration`, `connectionDuration`, `requestDuration`). `web-vitals` is already in the tree through Next; make it a direct dependency rather than relying on `useReportWebVitals`, which carries no attribution. Also report the navigation entry's `workerStart` → `fetchStart` gap, and whether the URL arrived carrying `__clerk_handshake` (the return leg of a Clerk handshake), as a boolean. A long `waitingDuration` together with the handshake flag points at Clerk. A long worker gap points at the service worker.
+
+**b. Service-worker navigation preload.** In `public/sw.js`, call `self.registration.navigationPreload?.enable()` in `activate`. In the navigate handler, answer with `(await event.preloadResponse) ?? fetch(event.request)`, keeping the network-first order and the offline fallback exactly as they are. The browser then sends the navigation request while the worker boots, instead of after.
+
+- **Pros:** takes worker startup off every document request; one file; caches nothing, so no personal-state risk.
+- **Cons:** needs feature detection on older browsers. A preload the handler never awaits is a wasted request.
+- **Mitigation:** always consume `preloadResponse` when it exists. Test the offline page still appears with the network off.
+
+**c. Keep Clerk off page requests that don't read auth on the server.** On a document request whose session JWT has expired — as it has after a minute idle — `clerkMiddleware` redirects through Clerk's Frontend API and back before serving the page. Pages that authorise on the client gain nothing from that trip.
+
+1. Replace the server `auth()` in `src/app/page.tsx` and `src/app/join/page.tsx` with a signed-in *hint*: whether Clerk's own `__client_uat` cookie (or its suffixed form) is present and non-zero, read with `cookies()`. Both pages already treat the server's answer as a guess that Clerk overrules on load (`HomeScreen`'s refresh, `JoinForm`'s correction), so nothing is decided on the hint.
+2. Narrow the middleware `matcher` to the API (`/(api|trpc)(.*)`) and to any page that still calls `auth()`/`currentUser()` on the server.
+3. API requests are not document requests, so they never handshake. An expired token there gets the 401 that `fetchWithSessionRetry` already refreshes and retries.
+
+- **Pros:** removes a cross-origin redirect pair from every cold open. Static pages come straight from the CDN.
+- **Cons:** security-relevant. A server component added later that calls `auth()` on an unmatched route fails (Clerk throws when its middleware hasn't run).
+- **Mitigation:** add a guard test that every file under `src/app` (outside `api/`) importing `@clerk/nextjs/server` is covered by the exported `config.matcher`. Get a `locksmith` pass on the change, and confirm that no route relied on the middleware for protection (today it protects none: `clerkMiddleware()` is called without `protect`).
+
+**d. Serve game routes as static shells.** Each game page is a client component that fetches its own data, yet it builds as dynamic. A warm navigation therefore waits on a function render (277 ms median, 530 ms p75, against about 120 ms for static routes), and a cold load can't come from the CDN. Give each game route a server wrapper that exports `generateStaticParams` returning `[]`, so the shell renders once per id and is cached. Put that one export in a single shared module and re-export it from each game's route. Don't hand-write it per game. Confirm in the build output that the routes stop being `ƒ`.
+
+- **Pros:** route commit at static-route speed; `<Link>` prefetch fetches the whole shell; cold loads hit the CDN once (c) is in.
+- **Cons:** one cached shell per game id. A shell that ever read viewer data on the server would be cached and served to everyone.
+- **Mitigation:** the shell stays a data-free client component, which a `croupier` pass checks. Anything personal arrives through the authorised API, as today.
+
+**Exit:** the TTFB p75 for `/` and the game route is under 1 s, and the 4–6 s cluster is gone from the TTFB distribution.
+
+### 2. Make game rows real links
 
 Render dashboard and rail destinations as shared Next.js `<Link>`-based rows instead of `div`/keyboard handlers plus `router.push`. Keep one semantic, reusable row component for click, keyboard, focus, and analytics behavior.
 
@@ -73,7 +123,7 @@ Render dashboard and rail destinations as shared Next.js `<Link>`-based rows ins
 - **Cons:** Next route prefetch fetches the route/RSC and code, not the client-fetched game API response; a long list can prefetch more routes than useful.
 - **Mitigation:** prioritise “your turn” and visible rail games. Disable or defer automatic prefetch for long completed/their-turn lists if traces show network contention.
 
-### 2. Add an authenticated in-memory resource cache
+### 3. Add an authenticated in-memory resource cache
 
 Extend the shared data-fetching layer rather than teaching each game its own cache. Store successful bodies by `{userId, URL, response-schema-version}` with fetched time, invalidation state, and one shared in-flight promise. A remount should synchronously use a fresh cached body and revalidate in the background (stale-while-revalidate). A mutation response should update the same entry; push events should mark or refresh it. Apply a small LRU/TTL bound.
 
@@ -90,7 +140,7 @@ Suggested starting policy, to be tuned from data:
 
 A library such as SWR or TanStack Query could supply deduplication, stale time, mutation, and garbage collection. It also adds bundle weight, migration work, and another abstraction alongside push-driven refresh. First prototype the minimal shared cache around `useRefreshableData`; adopt a library only if offline mutation, broad query composition, or cache inspection justifies it.
 
-### 3. Prefetch the likely game data, not every game
+### 4. Prefetch the likely game data, not every game
 
 Once the dashboard response is available and the tab is idle, prefetch the full response for the top one or two “your turn” games. Also prefetch on pointer hover, touch/pointer down, and keyboard focus for any game row. Share the exact cache and in-flight promise used by `useGameData`; prefetch must not be a parallel fetch implementation.
 
@@ -102,7 +152,7 @@ Call `router.prefetch(href)` for imperative/intention-driven navigation where a 
 
 Do **not** include every full game response in `/api/dashboard`. It would slow the dashboard, multiply hidden data in memory, and penalise users with many games. A narrowly bounded optional “next game snapshot” could be tested later, but only if separate prefetch latency is demonstrably the remaining bottleneck.
 
-### 4. Consider server-seeded first data as a measured alternative
+### 5. Consider server-seeded first data as a measured alternative
 
 A deeper option is to make each game route a server component that authenticates and loads the initial authorised response, then passes it to a client board/cache provider. This collapses route and API work into the navigation request and can stream a game shell immediately.
 
@@ -131,12 +181,37 @@ If server-side response caching is later required, use a private, user-scoped ke
 ### Optimise the measured server spans
 
 - Reuse the Mongo connection and verify cold connection time. Do not add a second connection path for prefetch.
-- Project only fields needed by dashboard summaries. Consider `.lean()` only where document/discriminator methods are not required, or replace those methods with pure response builders first.
-- Keep independent dashboard reads concurrent. Paginate completed games in the dashboard query rather than loading an unbounded history and then rendering ten, if measurement confirms that is occurring.
-- Batch reaction data and player-directory reads. Add a short, bounded Clerk-directory cache if that span is material, with a documented rename freshness target.
+- Project only fields needed by dashboard summaries, and paginate its completed games — confirmed necessary; see "Make the dashboard read only what it shows" below. Consider `.lean()` only where document/discriminator methods are not required, or replace those methods with pure response builders first.
+- Keep independent dashboard reads concurrent.
+- Batch reaction data and player-directory reads. The Clerk directory is confirmed material; see "Cache the player directory on the server" below.
 - Validate all proposed Mongo indexes with `explain`; every index costs memory and write time. Add only an index that changes the observed plan or examined-document count.
 - Add response compression/hosting checks and avoid serialising replay/private fields. Smaller payloads improve parse and render time as well as transfer.
 - Return a revision/ETag for games. A conditional validation can answer `304` or a compact “unchanged” response, but only after auth and membership checks. This saves bytes/serialisation, not necessarily database/auth time.
+
+### Cache the player directory on the server
+
+The Clerk name lookup is the largest server span on both reads: about 210 ms of the game API's 270 ms median (inside the `response` span), and 277 ms of the dashboard's 591 ms (`player_directory`). Polls and push refreshes repeat it on every request, and each call also counts against Clerk's Backend API rate limit.
+
+- **Where:** inside `src/utils/users/clerk.ts`, behind the directory-shaped resolvers only: `buildUserDirectory`, `userIdListToUsernameList`, `userIdListToNamesAndMap`. Each looks up the ids it holds and fetches only the misses, in the one `getUserList` call it makes today. The collision tags ("Dave (2)") are still computed per request over the whole set by `namesFor`, so caching changes nothing about who is told apart.
+- **What:** only the display fields `nameOf`, `publicHandle` and `profileImageUrl` read, never the Clerk `User`. `usersById` itself stays uncached: its other callers read private metadata — device tokens, preferences, unlock flags — which must be fresh.
+- **Bounds:** a 5-minute TTL, which is the documented rename freshness target. An LRU capped at about 2,000 entries per instance. Per process, so it is opportunistic: it depends on a warm instance, which a game being polled usually has. If Clerk fails, serve any stale entries held rather than fail the read; with none held, behave as today.
+- **Invalidation:** `/api/user/displayname` and `/api/user/claim` drop the user's entry on the instance that served them. Profile pictures change through Clerk on the client, so the TTL bounds them.
+- **Measure:** split the game route's `response` span into `names` and `response`, so the Clerk share is measured rather than inferred. Add a hit/miss count to `Server-Timing`.
+- **Pros:** about 200 ms off most game reads (270 → under 100 ms median) and about 270 ms off the dashboard (591 → about 320 ms). Far fewer Clerk calls.
+- **Cons:** a rename or new picture can take up to five minutes to reach other players. Names and image URLs are held in server memory.
+- **Mitigation:** hold display fields only, under a stated TTL, and invalidate on our own write paths. A unit test proves that no metadata field is ever stored.
+
+### Make the dashboard read only what it shows
+
+`buildDashboard` reads every live game as a full Mongoose document, each Realm Arena move history included, to build rows that use a dozen top-level fields. It also reads every completed result the player has ever had, of which it shows ten. Its `mongo_query` span is 238 ms median, against 37 ms for a single game.
+
+- **Live games:** add an inclusion projection exported beside `CreateResponse`, so the field list lives next to the code that reads it: `gameId`, `gameType`, `userIdList`, `turnTimer`, `currentTurn`, `lastTurnTimestamp`, `complete`, `winner`, `endReason`, `forfeitedBy`, the discriminator key, and Smartthink's `specificGameState.codeSetterId`, plus whatever `unreadChatCounts` and the filters read. Add a guard test that `CreateResponse` on a projected fixture equals `CreateResponse` on the full document, for every game type. A summary field added later then fails the test instead of rendering blank.
+- **Completed results:** the dashboard draws ten and a "See all" when there are more, so ask for eleven (`limit + 1`) through a `limit` argument on `completedGameResults`, projected to the fields `toCompletedGames` reads. `/api/game/mycompletelist` keeps the full list. The existing `{ playerIds: 1, endedAt: -1 }` index already serves the sorted, limited read; confirm with `explain`.
+- **Untimed work:** time `unreadChatCounts` and `kingdomBuilderWorlds` as their own spans. They account for about 70 ms of the median that no span covers today.
+- **Pros:** less data read, hydrated and garbage-collected per dashboard load. The cost stops growing with a player's history.
+- **Cons:** a projection can silently drop a field a summary later starts reading.
+- **Mitigation:** the equivalence test above.
+- **Exit:** dashboard `mongo_query` median under 80 ms, and flat as completed games accumulate.
 
 ## Phase 3 — reduce code, render, and art delay
 
@@ -146,7 +221,28 @@ If server-side response caching is later required, use a private, user-scoped ke
 4. Convert oversized board/card art to appropriately compressed modern formats and responsive dimensions while preserving masters and the existing art workflow. Prioritise images required above the fold.
 5. Preload only the selected game's critical board image. Do not preload the entire library or both theme art sets. Lazy-load below-the-fold cards/panels and reserve their dimensions to avoid layout shift.
 6. Measure decode/render cost for map-heavy boards. Memoise expensive derived geometry only when profiles show repeated computation; avoid blanket memoisation.
-7. Audit root client providers and Bootstrap/global CSS. Moving stable shells to server components or narrowing providers can reduce hydration, but only do so where bundle traces show a useful saving.
+7. Audit root client providers and Bootstrap/global CSS. Moving stable shells to server components or narrowing providers can reduce hydration, but only do so where bundle traces show a useful saving. The checkpoint measured about 610 KB raw (186 KB gzip) on a route as light as `/newgame`, so this floor is the next audit after item 8.
+8. **Replace Moment.js.** It ships with every locale, 310 KB raw / 76 KB gzip, on `/`, `/profile` and the result screen. That is about a third of what home carries above the floor. Its seven call sites use only `fromNow()` and `format("D MMM")`.
+   - Add `src/utils/ui/time.ts` with `timeAgo(date)`, over `Intl.RelativeTimeFormat('en', { numeric: 'auto' })` with the largest whole unit, and `shortDate(date)`, over `Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' })`.
+   - Switch all seven call sites to it, remove `moment` from `package.json`, and lower `routeJavaScript` in `scripts/check-performance-budget.mjs` by the saving so it can't creep back in.
+   - Wording shifts slightly ("a day ago" becomes "yesterday"). Unit-test the unit boundaries.
+9. **Fix layout shift where it starts.** CLS is above 0.25 at p75 on every product screen except Settings: board 0.45, home 0.62, profile 1.03, result 0.86. "Good" is 0.1.
+   - **Attribute it first.** Report CLS (and LCP) through `web-vitals/attribution`, sending the largest shift's target as a coarse region name from an allow-listed `data-perf-region` attribute on the shared components, never element text or ids.
+   - **Fix it in the shared pieces,** so every screen benefits:
+     - `ListSection` skeletons match the real rows' height and the last-known row count.
+     - `BoardZoom` and `GameShell` reserve the board's box from its viewBox `aspect-ratio` before data arrives.
+     - `GameThumb` and `Avatar` carry fixed dimensions.
+     - Late banners (install, notifications, "What's new") open below the content or into reserved space, never above it.
+     - Home's server signed-in guess (item 1c in Phase 1) must paint the same skeleton height as the screen Clerk confirms.
+   - **Exit:** p75 CLS at or under 0.1 on `/`, the game route, `/profile` and the result screen.
+10. **Make the Realm Arena board answer taps within 200 ms.** Its INP is 224 / 416 / 560 ms (median / p75 / p95). Taps on home sit at 72 ms median.
+    - **Attribute it first:** report the INP target region (same allow-list as item 9) with its `inputDelay`, `processingDuration` and `presentationDelay`. Record a Performance-panel profile of selecting a fighter, tapping a square and choosing a turn-sheet action under 4× CPU throttling.
+    - **Act only on what the profile shows.** Likely candidates:
+      - Keep the tap's immediate feedback urgent, and move reach, path and line-of-sight recomputation into `startTransition` or into memoised derivations keyed on the selected unit.
+      - Stop a selection re-rendering every tile, by making the selection overlay its own layer over a tile layer whose props don't change.
+      - Compute the map's isometric geometry once per battlefield and turn of the view, not per render.
+      - Leave anything that moves frame by frame on the `usePlayback` frame loop.
+    - **Exit:** p75 INP at or under 200 ms on the board.
 
 **Pros of code splitting:** smaller initial route chunks and less parse/hydration work. **Cons:** opening a deferred panel gains a delay and too many chunks add request overhead. Intent-prefetch deferred panels on hover/focus if needed.
 
@@ -169,14 +265,18 @@ For static/public pages, favour server rendering and normal Next route prefetch.
 
 Ship in small, reversible changes and compare each stage with the Phase 0 baseline.
 
-1. **Observability:** custom marks, `Server-Timing`, bundle/image report, database explains, and repeatable traces.
-2. **Navigation semantics:** shared linked game row; route prefetch for the likely destinations.
-3. **Shared memory cache:** request deduplication, identity/schema keys, TTL/LRU, mutation updates, push invalidation, and logout purge.
-4. **Targeted prefetch:** intent first, then a one-game idle experiment behind a flag. Monitor hit rate, waste, API load, and mobile bytes.
-5. **Backend fixes:** address only spans shown to dominate (directory cache, projection/pagination, query/index, conditional validation).
-6. **Bundle and art:** split secondary features and optimise/preload only critical assets.
-7. **Server-seeded pilot:** try one game only if cold deep links still miss the target; compare it with the prefetched-API design before wider migration.
-8. **Broader routes:** reuse the proven link/cache/prefetch primitives throughout the app.
+Reordered after the [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09.md): the cold document and the server's Clerk lookup cost more than the client waterfall Phase 1's later items target, and they are cheaper to fix.
+
+1. **Observability:** custom marks, `Server-Timing`, bundle/image report, database explains, and repeatable traces. Then close the checkpoint's gaps: TTFB, CLS, LCP and INP attribution; response bytes and network time from resource timing; entry vs refresh tagging; the dashboard's untimed spans; and the session-retry count.
+2. **Cold document** (Phase 1.1): service-worker navigation preload first, as it is self-contained. Then the Clerk matcher with the cookie hint, if attribution confirms the handshake. Then static game shells.
+3. **Server reads** (Phase 2): the player-directory cache, then the dashboard projection and bounded completed results. Then any other span still shown to dominate (query/index, conditional validation).
+4. **Navigation semantics:** shared linked game row; route prefetch for the likely destinations.
+5. **Shared memory cache:** request deduplication, identity/schema keys, TTL/LRU, mutation updates, push invalidation, and logout purge.
+6. **Targeted prefetch:** intent first, then a one-game idle experiment behind a flag. Monitor hit rate, waste, API load, and mobile bytes.
+7. **Bundle and art:** replace Moment.js first (Phase 3.8). Then audit the shared floor, split secondary features, and optimise/preload only critical assets.
+8. **Layout shift and responsiveness:** Phase 3.9 and 3.10. They can run beside steps 4–7, since they touch different code.
+9. **Server-seeded pilot:** try one game only if cold deep links still miss the target; compare it with the prefetched-API design before wider migration.
+10. **Broader routes:** reuse the proven link/cache/prefetch primitives throughout the app.
 
 For each rollout, use a feature flag or staged percentage, watch p50/p75/p95, errors, server duration, database reads, transfer bytes, cache correctness, and command-conflict rate, then remove the losing implementation rather than carrying two permanent paths.
 
@@ -188,6 +288,10 @@ For each rollout, use a feature flag or staged percentage, watch p50/p75/p95, er
 - Integration tests that a prefetched response is reused, then revalidated, and that a turn advancing between prefetch and tap cannot enable an invalid action.
 - Navigation tests for mouse, touch, keyboard, browser back/forward, direct URL, push link, expired session, account switch, and offline/online recovery.
 - Performance tests/traces under cold/warm cache and throttled mobile profiles, with budgets for JavaScript, JSON, critical art, and requests.
+- A guard test that every server component under `src/app` importing `@clerk/nextjs/server` is covered by the middleware matcher. Also a manual check that the offline page still appears with navigation preload on.
+- Unit tests for the player-directory cache: TTL expiry, LRU bound, fetching only misses, no metadata field ever stored, and invalidation on rename.
+- A projection-equivalence test: `CreateResponse` on a projected live game equals `CreateResponse` on the full document, for every game type. Also a test that the dashboard's completed list still shows "See all" when there are more than ten.
+- Unit tests for `timeAgo` / `shortDate` at each unit boundary.
 - Existing build, typecheck, lint, and API/game test suites after implementation changes.
 
 ## Decisions to make from evidence
@@ -198,8 +302,14 @@ After Phase 0, record these decisions in the implementation PR:
 2. Does `<Link>` route prefetch plus game-data intent prefetch meet the warm target?
 3. What TTL produces a useful hit rate without a visible stale-board rate?
 4. Is idle prefetch worth its wasted request and mobile-byte rate?
-5. Does Clerk directory lookup justify a server cache and its rename-staleness trade-off?
+5. Does Clerk directory lookup justify a server cache and its rename-staleness trade-off? *(2026-10-09: yes — see Phase 2, "Cache the player directory on the server".)*
 6. Does server-seeded data beat client API prefetch enough to justify migrating all game pages?
 7. Which secondary features and assets dominate each heavy game, and what should remain eager?
 
-The likely first implementation is therefore deliberately modest: **measure, make game rows links, add one user-scoped in-memory stale-while-revalidate cache, and prefetch the top likely game with strict limits**. It attacks the known client waterfall without introducing persistent private-state caching or rewriting every game route, and it leaves a measured path to server seeding if cold entries remain slow.
+The likely first implementation is therefore deliberately modest. It has three parts:
+
+1. **Measure**, closing the attribution gaps.
+2. **Take the cold document and the server's Clerk lookup off the critical path:** navigation preload, a narrower Clerk matcher, and a short display-only directory cache.
+3. **Then the client work:** make game rows links, add one user-scoped in-memory stale-while-revalidate cache, and prefetch the top likely game with strict limits.
+
+It attacks the waits the checkpoint measured without introducing persistent private-state caching or rewriting every game route. It also leaves a measured path to server seeding if cold entries remain slow.
