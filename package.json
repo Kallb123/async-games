@@ -21,6 +21,7 @@
     "optimise-art": "node scripts/optimise-art.mjs",
     "ra-marks": "node scripts/realmarena-marks.mjs",
     "ra-characters": "tsx scripts/realmarena-characters.mjs",
+    "ra-balance": "tsx scripts/realmarena-balance.ts",
     "performance:budget": "node scripts/check-performance-budget.mjs"
   },
   "dependencies": {

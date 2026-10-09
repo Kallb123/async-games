@@ -3665,6 +3665,30 @@ is down, is a ceiling in fog and absent while a random enemy is unseen, and
 goes once the battle is over (`coop.test.ts`, and the null viewer's response
 pinned in `hiddenHands.test.ts`).
 
+### 30.12 Measuring balance
+
+Hold Out's numbers — the wave spacing, the squads, the rally — are tuned by
+playtest, and a playtest of three is a handful of battles. So the balance
+harness fights hundreds: `npm run ra-balance` plays whole co-op battles from
+the muster to their end through the command pipeline, the planner (§29.7)
+playing the team as well as the warbands, and reports for each scenario —
+team size, enemy, mission, battlefield, difficulty, size, fog — how often the
+team wins (with a 95% interval), the round it ends in, how much of each side
+falls, and round by round how many of the team are still standing.
+
+- **A floor and a comparison, not a player's odds.** The planner plays the
+  team by its own score with no plan beyond the next action; people should do
+  better. What it measures well is a change: battle *k* of a scenario rolls
+  from seed *k*, so the same seeds before and after a change differ only
+  where the rules do (and where a warband's turn met its two-second deadline).
+- **On demand in CI.** The *Realm Arena balance* workflow takes the same
+  choices as inputs, splits the battles across runners, and puts the merged
+  report on the run's summary page, keeping every battle's sample as an
+  artifact (`npm run ra-balance -- --merge` re-reads them).
+- **Where it lives.** `scripts/lib/realmArenaBalance.ts` (the battle and the
+  statistics), `scripts/realmarena-balance.ts` (the command line and the
+  workers), `.github/workflows/realmarena-balance.yml`.
+
 ---
 
 ## 31. The Swarm: a second faction (B6)
@@ -3857,3 +3881,4 @@ Realm, its sibling in the same world.
 | 1.49 | The team rallies, and the next wave is told (§30.11): everyone of the team standing regains half their HP as each Hold Out wave lands (command version 6), the scoreboard says how many the next wave brings, and the warbands' zones are lit the round before it. |
 | 1.50 | More Hold Out achievements (§30.4): *Lone Wolf* for winning it in Solo, *Hold the Keep* on the Sacked Fort, *Broken Tide* for downing the whole last wave before the last round is over, and *Unbroken* with every one of the team's characters standing. |
 | 1.51 | The review plays itself (§26.2): Play in the review dock steps through the match on its own, the recap screen replays from the player's last turn, and a co-op End turn's step carries its parts — the End turn, each of the warband's actions and the hand-off, each with what the viewer was told and the board as they saw it after — so the enemy's turn plays one action at a time. Moves walk along their told path and the view frames each move from start to end, or over the stretch seen of one that crossed the edge of sight (§26.1, §26.2); the playback cap is four and a half seconds. Stances, watches and reactions say what they are over the character ("Hunker down", "Shield wall", "Overwatch", "On guard", "Guard"), and a followed step with nothing the viewer can place shows a faint "?" over the board (§26.1, §26.2). | When nothing says where to look, the view rests on the player's own side rather than the whole board: the board opens on their squad (the whole team in co-op), and a review step that has nothing to follow or is spread over more than half the battlefield goes there too; a turn beginning's fresh AP no longer counts as an action to follow.
+| 1.52 | Measuring balance (§30.12): `npm run ra-balance` and the *Realm Arena balance* workflow fight hundreds of co-op battles with the planner playing both sides and report win rates, how long the team lasts and how each round goes. |
