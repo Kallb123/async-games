@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INTENT_WINDOW_MS, loadJourney, nextJourney, safeRoute } from './performance';
+import { INTENT_WINDOW_MS, loadJourney, nextJourney, PERFORMANCE_METRIC_NAMES, safeRoute, ttfbPhaseMetrics } from './performance';
 
 describe('safeRoute', () => {
   it.each([
@@ -31,5 +31,34 @@ describe('nextJourney', () => {
 
   it('starts a document load at the time origin', () => {
     expect(loadJourney('/', false)).toMatchObject({ start: 0, source: 'load', cache: 'cold' });
+  });
+});
+
+describe('ttfbPhaseMetrics', () => {
+  const phases = { waitingDuration: 20, cacheDuration: 35, dnsDuration: 0, connectionDuration: 0, requestDuration: 4200 };
+  const valueOf = (metrics: ReturnType<typeof ttfbPhaseMetrics>, name: string) => metrics.find(metric => metric.name === name)?.value;
+
+  it('reports each phase under its own metric name', () => {
+    const metrics = ttfbPhaseMetrics(phases);
+    expect(metrics.map(metric => metric.name)).toEqual(['TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request']);
+    expect(valueOf(metrics, 'TTFB_request')).toBe(4200);
+    for (const { name } of metrics) expect(PERFORMANCE_METRIC_NAMES).toContain(name);
+  });
+
+  it('times the service worker from workerStart to fetchStart', () => {
+    const metrics = ttfbPhaseMetrics({ ...phases, navigationEntry: { workerStart: 12, fetchStart: 340 } });
+    expect(valueOf(metrics, 'sw_startup')).toBe(328);
+    expect(PERFORMANCE_METRIC_NAMES).toContain('sw_startup');
+  });
+
+  it('reports no service worker gap when no worker was involved, or the gap is backwards', () => {
+    expect(valueOf(ttfbPhaseMetrics({ ...phases, navigationEntry: { workerStart: 0, fetchStart: 340 } }), 'sw_startup')).toBeUndefined();
+    expect(valueOf(ttfbPhaseMetrics(phases), 'sw_startup')).toBeUndefined();
+    expect(valueOf(ttfbPhaseMetrics({ ...phases, navigationEntry: { workerStart: 50, fetchStart: 40 } }), 'sw_startup')).toBe(0);
+  });
+
+  it('leaves out a value that is not a number', () => {
+    const metrics = ttfbPhaseMetrics({ ...phases, dnsDuration: NaN, requestDuration: undefined as unknown as number });
+    expect(metrics.map(metric => metric.name)).toEqual(['TTFB_waiting', 'TTFB_cache', 'TTFB_connection']);
   });
 });

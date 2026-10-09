@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { GameMeta } from "@/utils/ui/games";
 import { isGuest } from "@/utils/ui/players";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
@@ -26,8 +27,13 @@ interface GameSetupLayoutProps {
 // the primary action stays greyed out for them here and an `OfferCard`
 // points at Settings, where `ClaimAccountForm` already lives. One guard in
 // the shell every setup screen shares, instead of seven copies of the check.
+//
+// The action also waits for `isAuthorised`: until Clerk has loaded and
+// confirmed the session token, a create request can go out with a cookie that
+// expired while the app sat idle and be refused as signed out.
 export default function GameSetupLayout({ meta, children, actionLabel, actionDisabled, onSubmit, footnote }: GameSetupLayoutProps) {
     const { user } = useUser();
+    const { isAuthorised } = useIsAuthorised();
     const guest = !!user && isGuest(user);
 
     return (
@@ -46,7 +52,7 @@ export default function GameSetupLayout({ meta, children, actionLabel, actionDis
                 </div>
 
                 <div className="ag-sticky-action">
-                    <button type="submit" className="ag-btn ag-btn--primary ag-btn--block" disabled={actionDisabled || guest}>
+                    <button type="submit" className="ag-btn ag-btn--primary ag-btn--block" disabled={actionDisabled || guest || !isAuthorised}>
                         {actionLabel}
                     </button>
                     {guest ? (

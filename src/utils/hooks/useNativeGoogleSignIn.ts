@@ -40,7 +40,7 @@ import { withTimeout } from '@/utils/withTimeout';
  * against Google's own keys and hands back a Clerk sign-in ticket, which is
  * redeemed here — the same `strategy: 'ticket'` round trip a guest's join
  * does. The session then lands in the WebView's own cookie jar, which is where
- * the rest of the app and the SSR middleware read it from.
+ * the rest of the app and the API's Clerk middleware read it from.
  *
  * Microsoft needs none of this: it renders happily in a WebView, so its hop
  * stays in the WebView and is covered by `allowNavigation` in

@@ -555,6 +555,14 @@ response bytes and image load duration. Dashboard and game responses also expose
 reaction lookup and JSON serialisation; the client records those spans beside the
 journey.
 
+A document load's `TTFB` is also split into the phases the browser reports for
+it — `TTFB_waiting`, `TTFB_cache`, `TTFB_dns`, `TTFB_connection` and
+`TTFB_request` — plus `sw_startup`, how long the navigation waited on the
+service worker (`workerStart` → `fetchStart`, present only when a worker took
+part). They are all milliseconds, cold loads only, and say whether a slow first
+byte was a redirect (counted in `TTFB_waiting`), the service worker or the
+network and server.
+
 Samples deliberately contain no user or game identifier, player name, hand,
 chat, or command body. Dynamic path segments are replaced by route templates,
 inputs are allow-listed and bounded, the endpoint requires a signed-in player,

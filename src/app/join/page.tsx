@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { auth } from "@clerk/nextjs/server";
 import JoinForm from "./JoinForm";
 import { APP_NAME, shareImage } from "@/utils/app";
 import { shareImageForGame } from "@/utils/ui/games";
@@ -10,6 +9,7 @@ import { randomGuestName } from "@/utils/games/guestName";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
 import { LobbyPreview, allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
 import { clientIp } from "@/utils/rateLimit";
+import { signedInHint } from "@/utils/users/signedInHint";
 import { withTimeout } from "@/utils/withTimeout";
 
 // What a join link looks like when it lands in a chat rather than a browser.
@@ -95,23 +95,28 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
 }
 
 /**
- * Who the join screen is for, decided here rather than in the browser.
+ * Who the join screen is for, guessed here rather than in the browser.
  *
  * /join is two screens — the guest lockup for a visitor with no account, the
  * code box for a player who has one — and the browser can't tell them apart
  * until Clerk has loaded. Deciding it in the client meant the screen rendered
  * nothing at all until then: a blank page, on the one route in the app that
- * strangers arrive at cold from a link in a chat app. The session cookie the
- * middleware has already read says which screen it is, so the first paint can
+ * strangers arrive at cold from a link in a chat app. Clerk's "signed in on
+ * this browser" cookie says which screen it probably is, so the first paint can
  * be that screen — server-rendered, rather than an empty shell waiting on
  * JavaScript.
  *
- * `auth()` makes the route dynamic, which `generateMetadata` above already
- * did: reading the search params and looking the lobby up is not something
- * that can be done ahead of the request either.
+ * It is a guess, and a safe one: `JoinForm` corrects itself from Clerk once it
+ * loads, for the account the cookie claims and the browser then rejects (or
+ * the reverse), and joining a game still goes through an API route that
+ * authenticates the request. It is a cookie read rather than `auth()` so that
+ * Clerk's middleware stays off page requests (`src/middleware.ts`), where an
+ * expired session token costs a redirect out to Clerk and back before the page
+ * is served.
  *
- * `JoinForm` still corrects itself from Clerk once it loads, for the session
- * the cookie claims and the browser then rejects.
+ * Reading the cookie makes the route dynamic, which `generateMetadata` above
+ * already did: reading the search params and looking the lobby up is not
+ * something that can be done ahead of the request either.
  *
  * The guest form's random starting name and die face are drawn here for the
  * same reason: what the server renders and what the browser renders on its
@@ -119,7 +124,5 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
  * ends is not.
  */
 export default async function Join() {
-    const { userId } = await auth();
-
-    return <JoinForm initiallySignedIn={!!userId} initialName={randomGuestName()} initialDie={DiceRoll(6)} />;
+    return <JoinForm initiallySignedIn={await signedInHint()} initialName={randomGuestName()} initialDie={DiceRoll(6)} />;
 }

@@ -162,7 +162,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         if (gameData === null && !isLoading && status !== null && !strandedRef.current) {
             strandedRef.current = true;
             // Still 401 after every retry renewed the token and asked again: the
-            // cookie needs the handshake only a document request gets. One
+            // cookie needs Clerk started afresh, which only a page load does. One
             // reload, and the player lands back on the board they were opening
             // rather than on a dashboard that is about to fail the same way.
             // `false` means this tab has already spent its reload on this

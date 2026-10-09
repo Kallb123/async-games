@@ -4,7 +4,7 @@ import Skeleton, { SkeletonRow, SkeletonTurnCard } from "@/components/ui/Skeleto
 import WhatsNew from "@/components/ui/WhatsNew";
 
 /**
- * `page.tsx` calls `auth()` to decide between `Dashboard` and `Landing`,
+ * `page.tsx` reads a cookie to guess between `Dashboard` and `Landing`,
  * which makes `/` dynamic — Next shows this instantly on navigation while
  * that decision is made server-side, instead of leaving the click looking
  * like it did nothing until the response streams back.

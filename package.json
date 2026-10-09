@@ -43,7 +43,8 @@
     "react": "^19",
     "react-bootstrap": "^2",
     "react-dom": "^19",
-    "uuid": "^14"
+    "uuid": "^14",
+    "web-vitals": "^4.2.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

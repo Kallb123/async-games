@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Quicker to open",
+                detail: "Opening the app, or a game from a notification, no longer waits on an extra sign-in check before the page starts to arrive, and a game's screen comes ready-made instead of being built for you each time you open it.",
+            },
+            {
                 title: "World Domination and Fires Out: a few seconds to take a move back",
                 detail: "World Domination: put armies in the wrong territory, cashed in cards you meant to hold, or moved too many into a conquest? Tap Undo and put it right — battles are dice, so those stay. And when you fortify or skip fortifying, your turn now waits ten seconds before it passes, so you can still change your mind. Fires Out's End turn now does the same: tap it straight after a move you regret and it waits ten seconds, with Undo and Pass now beside the countdown, before the fire advances.",
                 game: "worlddomination",
@@ -122,10 +126,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "New achievements for Settlements & Cities and Dice Cities",
                 detail: "Win a Settlements & Cities game without building a road after setup, or without gathering or trading for any wool, or a Dice Cities Docks game as the only player without the Dock.",
-            },
-            {
-                title: "Profile tabs",
-                detail: "Your profile is split into Results, Achievements and Friends tabs, so each is a tap away instead of a long scroll. Friends only appear on your own profile.",
             },
         ],
     },

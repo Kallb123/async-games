@@ -13,8 +13,53 @@ export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 
 export const PERFORMANCE_METRIC_NAMES = [
   'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
 ] as const;
 export type PerformanceMetricName = typeof PERFORMANCE_METRIC_NAMES[number];
+
+/** The parts of a `web-vitals` TTFB attribution the phase metrics are read from. */
+export interface TtfbAttributionInput {
+  waitingDuration: number;
+  cacheDuration: number;
+  dnsDuration: number;
+  connectionDuration: number;
+  requestDuration: number;
+  navigationEntry?: Pick<PerformanceNavigationTiming, 'workerStart' | 'fetchStart'>;
+}
+
+/**
+ * Where a document's TTFB went, as separate metrics beside the `TTFB` total:
+ * the wait before the browser began, which holds any redirects (`waiting`),
+ * the cache check — which with a service worker also holds its boot and fetch
+ * handler (`cache`) — then DNS, the connection, and the request itself, which
+ * is the network plus the server's own time (`request`). A long `waiting` is a
+ * redirect chain such as Clerk's handshake; a long `cache` or `sw_startup` is
+ * the service worker; a long `request` is the server.
+ *
+ * `sw_startup` is `fetchStart - workerStart`. Per Navigation Timing,
+ * `workerStart` is taken just before the worker thread is started (or, when it
+ * is already running, just before the fetch event is dispatched), and
+ * `fetchStart` when the browser begins fetching — after the worker's handler
+ * has run and called `fetch()`, or without it for a request it never
+ * answered. So that gap is exactly how long the navigation waited on the
+ * worker, boot included, which is what a worker that is slow to start makes
+ * the user pay. It sits inside `TTFB_cache`, and is absent when no worker was
+ * involved (`workerStart` is 0). Anything that isn't a finite number is left
+ * out, and a negative gap (some browsers order the two the other way) reads 0.
+ */
+export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): { name: PerformanceMetricName; value: number }[] {
+  const { navigationEntry } = attribution;
+  const phases: { name: PerformanceMetricName; value: number | undefined }[] = [
+    { name: 'TTFB_waiting', value: attribution.waitingDuration },
+    { name: 'TTFB_cache', value: attribution.cacheDuration },
+    { name: 'TTFB_dns', value: attribution.dnsDuration },
+    { name: 'TTFB_connection', value: attribution.connectionDuration },
+    { name: 'TTFB_request', value: attribution.requestDuration },
+    { name: 'sw_startup', value: navigationEntry && navigationEntry.workerStart > 0
+      ? Math.max(0, navigationEntry.fetchStart - navigationEntry.workerStart) : undefined },
+  ];
+  return phases.flatMap(({ name, value }) => value !== undefined && Number.isFinite(value) ? [{ name, value: Math.max(0, value) }] : []);
+}
 
 /** `cold` is a document load (code, auth and data from scratch); `warm` an in-app navigation. */
 export const PERFORMANCE_CACHES = ['cold', 'warm'] as const;

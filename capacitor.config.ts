@@ -20,11 +20,12 @@ const config: CapacitorConfig = {
         // not listed here Capacitor hands to the system browser, which has no
         // way back into the app — a black screen, then a stranded tab.
         //
-        // `clerk.asyncgames.com` is Clerk's production Frontend API: it does a
-        // top-level redirect through its own domain on first load (and back) to
-        // set a first-party session cookie. Add the dev instance's own Frontend
-        // API host here too if building a preview APK against
-        // CAPACITOR_SERVER_URL with pk_test_ keys.
+        // `clerk.asyncgames.com` is Clerk's production Frontend API, which
+        // sign-in flows navigate through at the top level and back. (Page loads
+        // used to as well, for Clerk's session handshake; its middleware now
+        // runs on the API only — see src/middleware.ts — so they no longer do.)
+        // Add the dev instance's own Frontend API host here too if building a
+        // preview APK against CAPACITOR_SERVER_URL with pk_test_ keys.
         //
         // The Microsoft hosts are the sign-in hop for Clerk's Microsoft social
         // connection — `login.microsoftonline.com` for the authorize request,
