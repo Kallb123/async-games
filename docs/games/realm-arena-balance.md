@@ -70,7 +70,7 @@ What the round-by-round tables showed:
 | **Enemy −*n* steps** | Each warband musters, and its waves refill to, the ready-made squad *n* steps down the points ladder (`BUDGETS`) from today's. On Normal for 2 or 3 players, −1 is 70 points and −2 is 60. | Co-op |
 | **No growth** | Waves refill each warband to its squad but no longer add a character a wave (§30.10 off). | Hold Out |
 | **Waves every 4** | A wave every fourth round instead of every third (`WAVE_EVERY`). | Hold Out |
-| **HP ×1.5** | Every character's HP × 1.5, rounded. | Every mode |
+| **HP ×*k*** | Every character's HP × *k* (1.5 or 2), rounded, on both sides. Heals, Raise, the rally and a restore scale with it, since they read full HP; damage, burning and the healing items don't. | Every mode |
 
 ## Results
 
@@ -88,6 +88,7 @@ Win rate · average round overrun in, over 24 battles a cell.
 | *Harder to kill* | | | | |
 | HP ×1.5 | 0% · r9.7 | 0% · r10.3 | 0% · r8.8 | 0% · r10.8 |
 | Enemy −1 step + HP ×1.5 | 0% · r8.9 | 0% · r12.4 | 0% · r9.3 | 8% · r11.3 |
+| HP ×2 | 0% · r11.0 | 0% · r12.3 | 0% · r10.0 | 0% · r11.0 |
 | Attack 3 AP | 0% · r11.4 | 0% · r11.8 | 8% · r11.8 | 13% · r11.5 |
 | Armour 1 | 0% · r11.2 | 8% · r13.4 | 0% · r10.4 | 33% · r11.7 |
 | Armour 1 + waves every 4 | 0% · r10.3 | 17% · r12.9 | 0% · r10.5 | 38% · r12.1 |
@@ -104,6 +105,8 @@ Win rate · average round overrun in, over 24 battles a cell.
 | Restore 1 + attack 3 AP | 0% · r13.6 | 29% · r14.0 | 21% · r12.0 | 75% · r12.0 |
 | Restore 1 + armour 1 | 4% · r12.3 | 38% · r15.0 | 25% · r11.6 | 96% · r13.0 |
 | Restore 1 + armour 1 + enemy −1 step | 0% · r12.4 | 83% · r15.0 | 13% · r11.4 | 96% · r12.0 |
+| Restore 1 + HP ×2 | 4% · r11.1 | 13% · r14.5 | 8% · r11.2 | 63% · r12.0 |
+| Restore 1 + HP ×2 + enemy −1 step | 4% · r10.8 | 13% · r15.0 | 13% · r11.8 | 71% · r13.0 |
 | **Restore 1 + attack 3 AP + armour 1** | **13% · r14.8** | **92% · r15.0** | **79% · r12.2** | **100% · —** |
 
 ## What it says
@@ -133,7 +136,19 @@ Win rate · average round overrun in, over 24 battles a cell.
 5. **All three together** (restore 1, attack 3 AP, armour 1) is the first set
    that wins against both factions for 3 players (79% / 100%). It's too easy
    against the Swarm and still hard for 2 players against the Realm.
-6. **Two players have it harder than three, with the same changes.** Check
+6. **Doubling HP keeps two attacks a turn but helps less than it looks.**
+   It does what it's meant to: a 3-player team against the Swarm still has
+   8.9 characters at the end of round 4 rather than 4.7, and against the
+   Realm 7.3 rather than 5.8. But it doubles the enemy's HP too, so the team
+   takes twice as long to down each one while the waves keep their schedule.
+   The exchange (enemy downed per team loss) barely moves, about 1.1 vs the
+   Realm and 1.6 vs the Swarm for 3 players, as today. On its own it wins
+   nothing; it only stretches the loss from round 8 to round 10–12. With
+   restore 1 it starts to win, and with the warbands a step smaller too it
+   reaches 71% against the Swarm for 3 players. That's still well short of
+   attack 3 AP or armour, which tilt the exchange towards the team rather
+   than slowing both sides alike. Against the Realm it stays at 4–13%.
+7. **Two players have it harder than three, with the same changes.** Check
    2p vs Realm in every row. A 2-player battle runs two rounds past the last
    wave (15 against 13), and the Sacked Fort for two splits the edge between
    two warbands rather than three. It's open which of the two matters; a
@@ -154,6 +169,11 @@ Win rate · average round overrun in, over 24 battles a cell.
   can last long enough for it to matter. Restore + armour + attack 3 AP is
   too easy against the Swarm, so try it with the Swarm's waves no longer
   growing, or the Swarm a step bigger.
+- **To keep two attacks a turn,** slow the killing for the team only:
+  doubled HP for the team's characters in Hold Out (the enemy left as it is),
+  or armour 1. Doubling everyone's HP slows both sides alike, so on its own
+  it shifts the result little (point 6). Team-only HP ×2 with restore 1 is
+  the obvious next run.
 - Every one of these is a rule, so it takes a command version, as growing
   waves (5) and the rally (6) did.
 
@@ -179,7 +199,7 @@ For re-running: each was an environment switch in a scratch worktree.
   `warbandBudget` (`characters.ts`), with `rung` clamped to the ladder.
 - **No growth:** `waveStrength` with no extra characters.
 - **Waves every 4:** `WAVE_EVERY` in `rules.ts`.
-- **HP ×1.5:** every `CHARACTERS[c].hp` scaled and rounded as the table loads.
+- **HP ×*k*:** every `CHARACTERS[c].hp` scaled and rounded as the table loads.
 
 To compare a change properly, run the same scenarios on the base branch and
 on the change with the same `--seed`, and with more battles than these:
