@@ -15,6 +15,7 @@ export const PERFORMANCE_METRIC_NAMES = [
   'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
   'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
+  'CLS_largest_shift', 'LCP_load_delay', 'LCP_load', 'LCP_render_delay', 'INP_input_delay', 'INP_processing', 'INP_presentation',
 ] as const;
 export type PerformanceMetricName = typeof PERFORMANCE_METRIC_NAMES[number];
 
@@ -25,6 +26,9 @@ export interface MetricValue { name: PerformanceMetricName; value: number }
 function finitePhases(phases: { name: PerformanceMetricName; value: number | undefined }[]): MetricValue[] {
   return phases.flatMap(({ name, value }) => value !== undefined && Number.isFinite(value) ? [{ name, value: Math.max(0, value) }] : []);
 }
+
+/** A layout-shift score, which has no unit. */
+export const isShiftMetric = (name: string) => name.startsWith('CLS');
 
 /** A metric counted in bytes rather than milliseconds. */
 export const isByteMetric = (name: string) => name.endsWith('bytes');
@@ -123,6 +127,95 @@ export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue
   ]);
 }
 
+/**
+ * The coarse names a Core Web Vital's attribution may give the part of the page
+ * involved: the element that shifted most, the largest paint, the element
+ * tapped. Shared components wear one as `data-perf-region`, and a sample
+ * carries the path of the marked ancestors from the outside in, such as
+ * `board/hand` or `dashboard/section/list-row/avatar`. The sample's route
+ * already says which screen it is, so a screen is marked only where two share
+ * a route (`/` is the dashboard or the landing page). Never an element's text,
+ * id, selector or URL: an id or an avatar's address would identify a player.
+ * `unmarked` is an element inside none of them.
+ */
+export const PERFORMANCE_REGIONS = [
+  'rail', 'topbar', 'board', 'hand', 'build-row', 'log', 'chat', 'dashboard', 'landing',
+  'section', 'list-row', 'skeleton', 'avatar', 'thumb', 'banner', 'offer', 'disclosure',
+] as const;
+export type PerformanceRegion = typeof PERFORMANCE_REGIONS[number];
+const regionNames = new Set<string>(PERFORMANCE_REGIONS);
+/** The deepest a region path goes: the innermost few are the ones that say where. */
+const REGION_DEPTH = 4;
+
+/** Whether `value` is a region path `performanceRegion` could have produced. */
+export function isPerformanceRegion(value: unknown): value is string {
+  if (value === 'unmarked') return true;
+  if (typeof value !== 'string') return false;
+  const parts = value.split('/');
+  return parts.length <= REGION_DEPTH && parts.every(part => regionNames.has(part));
+}
+
+/** The part of a DOM element `performanceRegion` reads. */
+export interface RegionElement {
+  parentElement: RegionElement | null;
+  getAttribute(name: string): string | null;
+}
+
+/**
+ * The region path of `node` (see `PERFORMANCE_REGIONS`), or undefined when
+ * there is no element to place: the browser didn't say which, or it is text
+ * whose parent is gone. A marker not on the allow-list is skipped, never sent.
+ */
+export function performanceRegion(node: { nodeType: number; parentElement: RegionElement | null } | null | undefined): string | undefined {
+  if (!node) return undefined;
+  const element = node.nodeType === 1 ? node as unknown as RegionElement : node.parentElement;
+  if (!element) return undefined;
+  const path: string[] = [];
+  for (let at: RegionElement | null = element; at; at = at.parentElement) {
+    const region = at.getAttribute('data-perf-region');
+    // A component inside another of its kind (a skeleton bar in a skeleton
+    // row) is the one place, not two.
+    if (region && regionNames.has(region) && path[0] !== region) path.unshift(region);
+  }
+  return path.length ? path.slice(-REGION_DEPTH).join('/') : 'unmarked';
+}
+
+/** The parts of a `web-vitals` CLS, LCP or INP report the phase metrics are read from. */
+export type VitalAttributionInput =
+  | { name: 'TTFB'; attribution: TtfbAttributionInput }
+  | { name: 'CLS'; attribution: { largestShiftValue?: number } }
+  | { name: 'LCP'; attribution: { resourceLoadDelay: number; resourceLoadDuration: number; elementRenderDelay: number } }
+  | { name: 'INP'; attribution: { inputDelay: number; processingDuration: number; presentationDelay: number } };
+
+/**
+ * Where a Core Web Vital went, as metrics beside its total.
+ *
+ * - TTFB: see `ttfbPhaseMetrics`.
+ * - CLS: the score of the largest single shift — what fixing that one element
+ *   would take off.
+ * - LCP, after its TTFB (already reported): the wait before the largest
+ *   element's image began loading, its load, and the render after it. Text has
+ *   no image, so all of it is render delay — on a game, waiting for the data.
+ * - INP: the wait for the main thread before the tap's handlers ran, the
+ *   handlers, and the render and paint after them.
+ */
+export function vitalPhaseMetrics(metric: VitalAttributionInput): MetricValue[] {
+  switch (metric.name) {
+    case 'TTFB': return ttfbPhaseMetrics(metric.attribution);
+    case 'CLS': return finitePhases([{ name: 'CLS_largest_shift', value: metric.attribution.largestShiftValue }]);
+    case 'LCP': return finitePhases([
+      { name: 'LCP_load_delay', value: metric.attribution.resourceLoadDelay },
+      { name: 'LCP_load', value: metric.attribution.resourceLoadDuration },
+      { name: 'LCP_render_delay', value: metric.attribution.elementRenderDelay },
+    ]);
+    case 'INP': return finitePhases([
+      { name: 'INP_input_delay', value: metric.attribution.inputDelay },
+      { name: 'INP_processing', value: metric.attribution.processingDuration },
+      { name: 'INP_presentation', value: metric.attribution.presentationDelay },
+    ]);
+  }
+}
+
 /** `cold` is a document load (code, auth and data from scratch); `warm` an in-app navigation. */
 export const PERFORMANCE_CACHES = ['cold', 'warm'] as const;
 export type PerformanceCache = typeof PERFORMANCE_CACHES[number];
@@ -135,6 +228,8 @@ export interface PerformanceMetricInput {
   cache?: PerformanceCache;
   /** API metrics only: see `PERFORMANCE_REQUESTS`. */
   request?: PerformanceRequest;
+  /** Vital attribution metrics only: see `PERFORMANCE_REGIONS`. */
+  region?: string;
   connection?: string;
   build?: string;
 }

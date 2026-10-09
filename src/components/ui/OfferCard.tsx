@@ -29,7 +29,7 @@ interface OfferCardProps {
  */
 export default function OfferCard({ title, children, action, className, onDismiss, dismissLabel }: OfferCardProps) {
     return (
-        <div className={`ag-cta ag-cta--dark${className ? ` ${className}` : ''}`}>
+        <div className={`ag-cta ag-cta--dark${className ? ` ${className}` : ''}`} data-perf-region="offer">
             <div className="ag-cta-main">
                 <div className="ag-cta-title">{title}</div>
                 <div className="ag-cta-sub">{children}</div>

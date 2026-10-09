@@ -35,6 +35,7 @@ export default function BuildRow({ icon, name, cost, tag, tagMuted, disabled, ac
     return (
         <button
             type="button"
+            data-perf-region="build-row"
             className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${active ? ' ag-build-row--active' : ''}${pending ? ' ag-pending-skin' : ''}`}
             disabled={disabled}
             onClick={onClick}

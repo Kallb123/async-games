@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { PerformanceMetricModel } from '@/utils/mongodb/PerformanceMetricData';
-import { PERFORMANCE_CACHES, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REQUESTS, performanceValueLimit, safeRoute, type PerformanceMetricInput } from '@/utils/performance';
+import { PERFORMANCE_CACHES, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REQUESTS, isPerformanceRegion, performanceValueLimit, safeRoute, type PerformanceMetricInput } from '@/utils/performance';
 import { consumeRateLimit } from '@/utils/rateLimit';
 
 const names = new Set<string>(PERFORMANCE_METRIC_NAMES);
@@ -25,13 +25,14 @@ export async function POST(request: NextRequest) {
     && (entry.source === undefined || sources.has(entry.source))
     && (entry.cache === undefined || caches.has(entry.cache))
     && (entry.request === undefined || requests.has(entry.request))
+    && (entry.region === undefined || isPerformanceRegion(entry.region))
     && (entry.connection === undefined || connections.has(entry.connection))
     && (entry.build === undefined || (typeof entry.build === 'string' && entry.build.length <= 40 && /^[0-9T:.Z+-]+$/.test(entry.build))));
   if (!valid.length) return new NextResponse(null, { status: 202 });
   await dbConnect();
   await PerformanceMetricModel.insertMany(valid.map(entry => ({
     name: entry.name, value: entry.value, route: safeRoute(entry.route),
-    source: entry.source, cache: entry.cache, request: entry.request, connection: entry.connection, build: entry.build,
+    source: entry.source, cache: entry.cache, request: entry.request, region: entry.region, connection: entry.connection, build: entry.build,
   })), { ordered: false });
   return new NextResponse(null, { status: 202 });
 }

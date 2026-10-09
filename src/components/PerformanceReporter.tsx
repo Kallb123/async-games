@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
 import { apiEntryMatcher } from '@/utils/apiResourceEntries';
 import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
-import { apiFetchMetrics, loadJourney, nextJourney, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest } from '@/utils/performance';
+import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
 
 declare global {
   interface Window {
@@ -120,9 +120,16 @@ function reportFetch({ url, response, timing, request }: PerformanceFetch) {
 }
 
 /** A Core Web Vital, or a part of one: they belong to the document load, whichever route they are reported from. */
-function reportVital(name: PerformanceMetricName, value: number) {
+function reportVital(name: PerformanceMetricName, value: number, region?: string) {
   if (!Number.isFinite(value)) return;
-  enqueue({ name, value, route: safeRoute(location.pathname), source: 'load', cache: 'cold', build: process.env.NEXT_PUBLIC_BUILD_TIME });
+  enqueue({ name, value, route: safeRoute(location.pathname), source: 'load', cache: 'cold', region, build: process.env.NEXT_PUBLIC_BUILD_TIME });
+}
+
+/** A vital's total, then its phases, each placed in the region of the element it names. */
+function reportAttributedVital(metric: VitalAttributionInput & { value: number }, node: Node | null | undefined) {
+  reportVital(metric.name, metric.value);
+  const region = performanceRegion(node);
+  for (const phase of vitalPhaseMetrics(metric)) reportVital(phase.name, phase.value, region);
 }
 
 // The vitals cannot be unregistered, so they are registered once per page
@@ -131,11 +138,12 @@ let vitalsRegistered = false;
 function registerVitals() {
   if (vitalsRegistered) return;
   vitalsRegistered = true;
-  onTTFB(metric => {
-    reportVital('TTFB', metric.value);
-    for (const phase of ttfbPhaseMetrics(metric.attribution)) reportVital(phase.name, phase.value);
-  });
-  for (const observe of [onFCP, onLCP, onCLS, onINP]) observe(metric => reportVital(metric.name, metric.value));
+  // The document's first byte names no element, so its phases carry no region.
+  onTTFB(metric => reportAttributedVital(metric, undefined));
+  onFCP(metric => reportVital(metric.name, metric.value));
+  onLCP(metric => reportAttributedVital(metric, metric.attribution.lcpEntry?.element));
+  onCLS(metric => reportAttributedVital(metric, metric.attribution.largestShiftSource?.node));
+  onINP(metric => reportAttributedVital(metric, metric.attribution.interactionTargetElement));
 }
 
 function mark(name: JourneyMilestone) {

@@ -699,6 +699,7 @@ export default function BoardZoom({ zoomWidth, maxWidth, viewBox, focus, onFocus
             <div
                 ref={paneRef}
                 className="ag-board-scroll"
+                data-perf-region="board"
                 style={{
                     '--ag-board-zoom': `${zoom}%`,
                     // Fitted, the board is its own height; zoomed, the frame

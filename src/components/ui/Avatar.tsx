@@ -24,6 +24,7 @@ export default function Avatar({ name, imageUrl, size = 36, ring }: AvatarProps)
         return (
             <Image
                 className="ag-avatar"
+                data-perf-region="avatar"
                 src={imageUrl}
                 alt=""
                 width={size}
@@ -39,6 +40,7 @@ export default function Avatar({ name, imageUrl, size = 36, ring }: AvatarProps)
     return (
         <div
             className="ag-avatar"
+            data-perf-region="avatar"
             style={{
                 width: size,
                 height: size,

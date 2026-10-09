@@ -26,7 +26,7 @@ interface SectionProps {
  */
 export default function Section({ label, count, action, isLoading, children }: SectionProps) {
     return (
-        <div className="ag-section" aria-busy={isLoading || undefined}>
+        <div className="ag-section" aria-busy={isLoading || undefined} data-perf-region="section">
             {label !== undefined && (
                 <div className="ag-section-head">
                     <h2 className="ag-section-label">{label}{count ? ` · ${count}` : ""}</h2>

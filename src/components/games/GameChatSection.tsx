@@ -28,7 +28,7 @@ export default function GameChatSection({ chat, open, onOpen, onClose, enabled, 
 }) {
     if (!enabled) return null;
     return open ? (
-        <div ref={panelRef}>
+        <div ref={panelRef} data-perf-region="chat">
             <GameChat {...state} onClose={onClose} userIdList={chat.userIdList} usernameList={chat.usernameList} />
         </div>
     ) : <PanelToggleRow title={state.hasUnread ? "Chat · new messages" : "Chat"} onOpen={onOpen} />;

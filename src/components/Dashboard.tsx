@@ -49,7 +49,7 @@ export default function Dashboard() {
     }, [isLoading]);
 
     return (
-        <main className="ag-desk">
+        <main className="ag-desk" data-perf-region="dashboard">
             <FcmTokenComp />
             {/* A pull asks the same one fetch the poll does, and so starts the
                 poll's countdown again (see `useRefreshableData`). */}
