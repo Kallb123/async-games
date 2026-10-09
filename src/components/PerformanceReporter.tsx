@@ -122,9 +122,9 @@ export default function PerformanceReporter() {
     window.__agPerformanceReport = report;
     window.__agPerformanceMark = mark;
     currentJourney();
-    // Any tap or key press may be the one that navigates: dashboard rows call
-    // `router.push` rather than being `<a href>`, so a link-only listener
-    // would miss the app's most important journey.
+    // Any tap or key press may be the one that navigates: post-mutation
+    // transitions (create, join, start) call `router.push` from a button
+    // rather than being `<a href>`, so a link-only listener would miss them.
     const intent = () => { lastIntent = performance.now(); };
     const keyboardIntent = (event: KeyboardEvent) => {
       // Typing in a field (a chat message) is not asking to go anywhere.

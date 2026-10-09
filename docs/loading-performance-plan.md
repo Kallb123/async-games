@@ -66,7 +66,7 @@ Do this before selecting an architectural fix.
 
 ### How the client timings are measured
 
-`PerformanceReporter` keeps one **journey** per route arrival, and every milestone a screen marks (`auth_ready`, `first_data`, `dashboard_usable`, `game_board_painted`, `game_usable`, via `window.__agPerformanceMark`) is timed from that journey's start, never from when the tab opened. A document load starts at the time origin and is `cold`. An in-app route change is `warm` and starts at the tap or key press that caused it, or at the back/forward. That includes `router.push` from a clickable row, not just `<Link>`. A route change with no tap or back/forward in the previous thirty seconds is a redirect: it starts a journey but reports no `navigation`. Each milestone counts once per journey. A side panel's data (the chat thread) never marks `first_data`. A journey that goes to the background part-way through reports no more milestones. Web Vitals always belong to the document load (`cold`).
+`PerformanceReporter` keeps one **journey** per route arrival, and every milestone a screen marks (`auth_ready`, `first_data`, `dashboard_usable`, `game_board_painted`, `game_usable`, via `window.__agPerformanceMark`) is timed from that journey's start, never from when the tab opened. A document load starts at the time origin and is `cold`. An in-app route change is `warm` and starts at the tap or key press that caused it, or at the back/forward. That includes `router.push` from a button or a post-mutation transition, not just `<Link>`. A route change with no tap or back/forward in the previous thirty seconds is a redirect: it starts a journey but reports no `navigation`. Each milestone counts once per journey. A side panel's data (the chat thread) never marks `first_data`. A journey that goes to the background part-way through reports no more milestones. Web Vitals always belong to the document load (`cold`).
 
 The admin report splits journey metrics into cold and warm, and ignores journey samples recorded before this scheme (they carry no `cache`). Those samples counted from when the tab opened, which is why a game opened after a minute on the dashboard looked like a one-minute load.
 
@@ -127,6 +127,8 @@ Render dashboard and rail destinations as shared Next.js `<Link>`-based rows ins
 - **Pros:** automatic viewport prefetch; better accessibility and open-in-new-tab behavior; small, low-risk change.
 - **Cons:** Next route prefetch fetches the route/RSC and code, not the client-fetched game API response; a long list can prefetch more routes than useful.
 - **Mitigation:** prioritise “your turn” and visible rail games. Disable or defer automatic prefetch for long completed/their-turn lists if traces show network contention.
+
+**Status: shipped.** The “your turn” cards and the finished-game rows are now real `<Link>`s, so they can be opened in a new tab or long-pressed, take focus as links and get viewport prefetch; the rail's game rows and the waiting-on-others rows already were links and are unchanged. Next's default viewport prefetch is kept everywhere, with no `prefetch={false}`: there is no trace evidence of contention yet. What is still owed is the evidence, at the next checkpoint: warm `navigation` and `game_usable` from the dashboard to a game, and the route-commit time of those taps, compared with the 2026-10-09 baseline. If the finished list's prefetches show up as contention, defer them for that list only.
 
 ### 3. Add an authenticated in-memory resource cache
 
@@ -275,7 +277,7 @@ Reordered after the [2026-10-09 checkpoint](./performance-checkpoints/2026-10-09
 1. **Observability:** custom marks, `Server-Timing`, bundle/image report, database explains, and repeatable traces. Then close the checkpoint's gaps: TTFB, CLS, LCP and INP attribution; response bytes and network time from resource timing; entry vs refresh tagging; the dashboard's untimed spans; and the session-retry count.
 2. **Cold document** (Phase 1.1) — *shipped*: TTFB attribution, service-worker navigation preload, the Clerk matcher with the cookie hint, and static game shells, in one change. The next checkpoint compares the TTFB distribution with this one.
 3. **Server reads** (Phase 2): the player-directory cache, then the dashboard projection and bounded completed results. Then any other span still shown to dominate (query/index, conditional validation).
-4. **Navigation semantics:** shared linked game row; route prefetch for the likely destinations.
+4. **Navigation semantics** (Phase 1.2) — *linked game row shipped*: your-turn cards and finished rows are `<Link>`s, as the rail and waiting rows already were. Route prefetch for the likely destinations is still to do.
 5. **Shared memory cache:** request deduplication, identity/schema keys, TTL/LRU, mutation updates, push invalidation, and logout purge.
 6. **Targeted prefetch:** intent first, then a one-game idle experiment behind a flag. Monitor hit rate, waste, API load, and mobile bytes.
 7. **Bundle and art:** replace Moment.js first (Phase 3.8). Then audit the shared floor, split secondary features, and optimise/preload only critical assets.
