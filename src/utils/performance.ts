@@ -14,8 +14,71 @@ export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 export const PERFORMANCE_METRIC_NAMES = [
   'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
+  'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
 ] as const;
 export type PerformanceMetricName = typeof PERFORMANCE_METRIC_NAMES[number];
+
+/** One reading of one metric. */
+export interface MetricValue { name: PerformanceMetricName; value: number }
+
+/** The phases that have a value: anything missing or not a finite number is left out, and a negative one reads 0. */
+function finitePhases(phases: { name: PerformanceMetricName; value: number | undefined }[]): MetricValue[] {
+  return phases.flatMap(({ name, value }) => value !== undefined && Number.isFinite(value) ? [{ name, value: Math.max(0, value) }] : []);
+}
+
+/** A metric counted in bytes rather than milliseconds. */
+export const isByteMetric = (name: string) => name.endsWith('bytes');
+
+/** The largest value the beacon accepts: two minutes for a time, 50 MB for a size. */
+export const performanceValueLimit = (name: string) => isByteMetric(name) ? 50_000_000 : 120_000;
+
+/**
+ * Which of a screen's own data fetches a sample came from: the `entry` fetch
+ * that brought its first data, or a later `refresh` (a poll, a push, the tab
+ * coming back). Entry is what a player waits on; refreshes are polling load.
+ */
+export const PERFORMANCE_REQUESTS = ['entry', 'refresh'] as const;
+export type PerformanceRequest = typeof PERFORMANCE_REQUESTS[number];
+
+/** The spans of a `Server-Timing` header that we report, as `server_<span>` metrics. Spans we don't know are left out. */
+export function serverTimingMetrics(header: string | null): MetricValue[] {
+  return (header ?? '').split(',').flatMap(span => {
+    const match = /^\s*([a-z_]+);dur=([0-9.]+)/.exec(span);
+    const name = match && `server_${match[1]}`;
+    return name && (PERFORMANCE_METRIC_NAMES as readonly string[]).includes(name)
+      ? [{ name: name as PerformanceMetricName, value: Number(match[2]) }] : [];
+  });
+}
+
+/** The parts of an API request's `PerformanceResourceTiming` the fetch metrics are read from. */
+export type ApiResourceTiming = Pick<PerformanceResourceTiming, 'startTime' | 'requestStart' | 'responseStart' | 'responseEnd' | 'encodedBodySize'>;
+
+/**
+ * Where a screen's data fetch went, from the browser's own record of it:
+ *
+ * - `api_total`: the whole request, from `fetch()` to the last byte.
+ * - `api_connect`: before the request was sent — queueing, DNS and the
+ *   connection, which is a phone waking its radio.
+ * - `api_network`: from sending the request to its first byte, less the
+ *   server's own `server_total` — the round trip and the host's edge. Left out
+ *   without a `server_total` to take away.
+ * - `api_download`: from the first byte to the last, the body's transfer.
+ * - `response_bytes`: the body as sent, compressed. The host strips
+ *   `Content-Length` once it compresses, so the header can't say.
+ *
+ * A phase whose timestamps the browser didn't record (0) is left out, as is
+ * anything that isn't a finite number. A negative difference reads 0.
+ */
+export function apiFetchMetrics(entry: ApiResourceTiming, serverTotal?: number): MetricValue[] {
+  const { startTime, requestStart, responseStart, responseEnd, encodedBodySize } = entry;
+  return finitePhases([
+    { name: 'api_total', value: responseEnd > 0 ? responseEnd - startTime : undefined },
+    { name: 'api_connect', value: requestStart > 0 ? requestStart - startTime : undefined },
+    { name: 'api_network', value: requestStart > 0 && responseStart > 0 && serverTotal !== undefined ? responseStart - requestStart - serverTotal : undefined },
+    { name: 'api_download', value: responseStart > 0 && responseEnd > 0 ? responseEnd - responseStart : undefined },
+    { name: 'response_bytes', value: encodedBodySize > 0 ? encodedBodySize : undefined },
+  ]);
+}
 
 /** The parts of a `web-vitals` TTFB attribution the phase metrics are read from. */
 export interface TtfbAttributionInput {
@@ -47,9 +110,9 @@ export interface TtfbAttributionInput {
  * involved (`workerStart` is 0). Anything that isn't a finite number is left
  * out, and a negative gap (some browsers order the two the other way) reads 0.
  */
-export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): { name: PerformanceMetricName; value: number }[] {
+export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): MetricValue[] {
   const { navigationEntry } = attribution;
-  const phases: { name: PerformanceMetricName; value: number | undefined }[] = [
+  return finitePhases([
     { name: 'TTFB_waiting', value: attribution.waitingDuration },
     { name: 'TTFB_cache', value: attribution.cacheDuration },
     { name: 'TTFB_dns', value: attribution.dnsDuration },
@@ -57,8 +120,7 @@ export function ttfbPhaseMetrics(attribution: TtfbAttributionInput): { name: Per
     { name: 'TTFB_request', value: attribution.requestDuration },
     { name: 'sw_startup', value: navigationEntry && navigationEntry.workerStart > 0
       ? Math.max(0, navigationEntry.fetchStart - navigationEntry.workerStart) : undefined },
-  ];
-  return phases.flatMap(({ name, value }) => value !== undefined && Number.isFinite(value) ? [{ name, value: Math.max(0, value) }] : []);
+  ]);
 }
 
 /** `cold` is a document load (code, auth and data from scratch); `warm` an in-app navigation. */
@@ -71,12 +133,17 @@ export interface PerformanceMetricInput {
   route: string;
   source?: 'link' | 'history' | 'load' | 'deep-link';
   cache?: PerformanceCache;
+  /** API metrics only: see `PERFORMANCE_REQUESTS`. */
+  request?: PerformanceRequest;
   connection?: string;
   build?: string;
 }
 
 export function safeRoute(pathname: string): string {
   const route = pathname.split('?')[0];
+  // A route is a path: anything with whitespace or a control character in it
+  // is forged, and a newline would split a row of the admin report.
+  if (/[\s\x00-\x1f]/.test(route)) return 'other';
   if (/^\/games\/result\/[^/]+$/.test(route)) return '/games/result/[gameId]';
   if (/^\/games\/[^/]+\/[^/]+$/.test(route)) return route.replace(/\/[^/]+$/, '/[gameid]');
   if (/^\/kingdombuilder\/[^/]+\/[^/]+$/.test(route)) return '/kingdombuilder/[worldId]/[settlementId]';

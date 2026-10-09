@@ -3,15 +3,25 @@
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
-import { loadJourney, nextJourney, safeRoute, ttfbPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName } from '@/utils/performance';
+import { apiEntryMatcher } from '@/utils/apiResourceEntries';
+import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
+import { apiFetchMetrics, loadJourney, nextJourney, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest } from '@/utils/performance';
 
 declare global {
   interface Window {
-    /** A duration measured by the caller (a server span, a byte count). */
-    __agPerformanceReport?: (name: PerformanceMetricName, value: number) => void;
     /** A milestone reached now, timed from the start of the current journey. */
     __agPerformanceMark?: (name: JourneyMilestone) => void;
+    /** A screen's own data fetch, answered: its server spans, retry, size and time on the wire. */
+    __agPerformanceFetch?: (fetch: PerformanceFetch) => void;
   }
+}
+
+/** One successful fetch of a screen's data, as `useRefreshableData` hands it over. */
+export interface PerformanceFetch {
+  url: string;
+  response: Response;
+  timing: SessionFetchTiming;
+  request: PerformanceRequest;
 }
 const queue: PerformanceMetricInput[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -77,11 +87,36 @@ function currentJourney(): Journey {
   return journey;
 }
 
-function report(name: PerformanceMetricName, value: number) {
+/** Where a sample is taken now: the route, the journey, the connection. */
+function sampleContext(request?: PerformanceRequest): Omit<PerformanceMetricInput, 'name' | 'value'> {
   const { source, cache } = currentJourney();
   const connection = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection?.effectiveType;
-  enqueue({ name, value: Math.max(0, value), route: safeRoute(location.pathname), source, cache, connection,
-    build: process.env.NEXT_PUBLIC_BUILD_TIME });
+  return { route: safeRoute(location.pathname), source, cache, request, connection, build: process.env.NEXT_PUBLIC_BUILD_TIME };
+}
+
+/** A sample of `name` on the current route and journey. */
+function sample(name: PerformanceMetricName, value: number, request?: PerformanceRequest): PerformanceMetricInput {
+  return { ...sampleContext(request), name, value: Math.max(0, value) };
+}
+
+function report(name: PerformanceMetricName, value: number) {
+  enqueue(sample(name, value));
+}
+
+// Pairs each fetch with the browser's record of it, whichever arrives first.
+const apiEntries = apiEntryMatcher<PerformanceResourceTiming>();
+
+function reportFetch({ url, response, timing, request }: PerformanceFetch) {
+  const spans = serverTimingMetrics(response.headers.get('server-timing'));
+  for (const span of spans) enqueue(sample(span.name, span.value, request));
+  if (timing.retryMs !== undefined) enqueue(sample('session_retry', timing.retryMs, request));
+  // Taken now: by the time the browser's record arrives the player may be on
+  // another screen, and these belong to this one.
+  const context = sampleContext(request);
+  const serverTotal = spans.find(span => span.name === 'server_total')?.value;
+  void apiEntries.find(new URL(url, location.href).href, timing.startedAt).then(entry => {
+    if (entry) for (const metric of apiFetchMetrics(entry, serverTotal)) enqueue({ ...context, ...metric });
+  });
 }
 
 /** A Core Web Vital, or a part of one: they belong to the document load, whichever route they are reported from. */
@@ -119,8 +154,8 @@ export default function PerformanceReporter() {
 
   useEffect(() => {
     registerVitals();
-    window.__agPerformanceReport = report;
     window.__agPerformanceMark = mark;
+    window.__agPerformanceFetch = reportFetch;
     currentJourney();
     // Any tap or key press may be the one that navigates: post-mutation
     // transitions (create, join, start) call `router.push` from a button
@@ -138,18 +173,20 @@ export default function PerformanceReporter() {
     document.addEventListener('keydown', keyboardIntent, true);
     window.addEventListener('popstate', popstate);
     document.addEventListener('visibilitychange', visibility);
+    const apiPrefix = `${location.origin}/api/`;
     const observer = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
         const resource = entry as PerformanceResourceTiming;
         if (resource.initiatorType === 'img') report('image_load', resource.duration);
+        else if (resource.initiatorType === 'fetch' && resource.name.startsWith(apiPrefix)) apiEntries.arrived(resource);
       }
     });
     observer.observe({ type: 'resource', buffered: true });
     const deadline = setTimeout(release, SEND_DEADLINE_MS);
     return () => {
       clearTimeout(deadline);
-      delete window.__agPerformanceReport;
       delete window.__agPerformanceMark;
+      delete window.__agPerformanceFetch;
       document.removeEventListener('pointerdown', intent, true);
       document.removeEventListener('keydown', keyboardIntent, true);
       window.removeEventListener('popstate', popstate);

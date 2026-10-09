@@ -1,7 +1,8 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { clearStaleSessionReload, fetchWithSessionRetry } from "./fetchWithSessionRetry";
+import { clearStaleSessionReload, fetchWithSessionRetry, type SessionFetchTiming } from "./fetchWithSessionRetry";
 import { usePushEvents } from "./usePushEvents";
+import type { PerformanceRequest } from "@/utils/performance";
 import { useIsAuthorised, useSessionRefresh } from "./useAuthGuard";
 
 /**
@@ -129,7 +130,8 @@ export function useRefreshableData<T>(
          *  a caller that only renders once enabled never sees a stale flag. */
         enabled?: boolean;
         /** A side panel's data (the chat thread), whose first load is not the
-         *  screen's: it never marks the `first_data` performance milestone. */
+         *  screen's: it never marks the `first_data` performance milestone, nor
+         *  reports its requests' timings. */
         secondary?: boolean;
     } = {}
 ): RefreshableData<T> {
@@ -228,12 +230,16 @@ export function useRefreshableData<T>(
         // How long until the next attempt, decided by the last time round the
         // loop; null when there is nothing left to retry.
         let retryIn: number | null = null;
+        // Decided once: a re-run asked for while the first load was still out
+        // is a refresh, though `loadedRef` isn't set until this finishes.
+        let request: PerformanceRequest = loadedRef.current ? 'refresh' : 'entry';
         try {
             do {
                 rerunRef.current = false;
                 // Read before the await, compared after it: see `generationRef`.
                 const generation = generationRef.current;
-                const response = await fetchWithSessionRetry(url, () => !mountedRef.current, refreshSession);
+                const timing: SessionFetchTiming = { startedAt: 0 };
+                const response = await fetchWithSessionRetry(url, () => !mountedRef.current, refreshSession, timing);
                 if (!mountedRef.current) {
                     return;
                 }
@@ -243,14 +249,6 @@ export function useRefreshableData<T>(
                     console.error(`Failed to load ${url}: ${responseStatus ?? "network error"}`);
                     retryIn = retryDelayMs(responseStatus, attemptsRef.current);
                     continue;
-                }
-                for (const span of (response.headers.get('server-timing') ?? '').split(',')) {
-                    const match = /^\s*([a-z_]+);dur=([0-9.]+)/.exec(span);
-                    if (match) window.__agPerformanceReport?.(`server_${match[1]}` as import('@/utils/performance').PerformanceMetricName, Number(match[2]));
-                }
-                const responseBytes = Number(response.headers.get('content-length'));
-                if (Number.isFinite(responseBytes) && responseBytes > 0) {
-                    window.__agPerformanceReport?.('response_bytes', responseBytes);
                 }
                 let body: T;
                 try {
@@ -266,6 +264,13 @@ export function useRefreshableData<T>(
                 // A big body can finish downloading after the screen has gone.
                 if (!mountedRef.current) {
                     return;
+                }
+                // The screen's own data only: a side panel's requests would be
+                // counted against the screen's route. Handed over once the body
+                // is in, so the browser's record of it is about to arrive.
+                if (!secondary) {
+                    window.__agPerformanceFetch?.({ url, response, timing, request });
+                    request = 'refresh';
                 }
                 retryIn = null;
                 attemptsRef.current = 0;

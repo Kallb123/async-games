@@ -5,6 +5,7 @@
 // be proving nothing.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SessionFetchTiming } from "./fetchWithSessionRetry";
 
 /** A stand-in browser. `blocked` is private mode, where storage throws. */
 function fakeWindow({ blocked = false } = {}) {
@@ -108,5 +109,44 @@ describe("reloadForStaleSession", () => {
         const { clearStaleSessionReload } = await loadAgainst(browser);
 
         expect(() => clearStaleSessionReload()).not.toThrow();
+    });
+});
+
+describe("fetchWithSessionRetry's timing", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /** A fetch answering each call with the next status. */
+    function stubFetch(...statuses: number[]) {
+        const fetch = vi.fn(async () => new Response(null, { status: statuses.shift() }));
+        vi.stubGlobal('fetch', fetch);
+        return fetch;
+    }
+
+    it("records when the request began, and no retry when none was needed", async () => {
+        stubFetch(200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+        const before = performance.now();
+
+        expect((await fetchWithSessionRetry('/api/x', () => false, undefined, timing))?.status).toBe(200);
+        expect(timing.startedAt).toBeGreaterThanOrEqual(before);
+        expect(timing.retryMs).toBeUndefined();
+    });
+
+    it("records what renewing the session cost, and times the request from the retry", async () => {
+        vi.useFakeTimers();
+        const fetch = stubFetch(401, 200);
+        const { fetchWithSessionRetry } = await import("./fetchWithSessionRetry");
+        const timing: SessionFetchTiming = { startedAt: 0 };
+        const before = performance.now();
+
+        const pending = fetchWithSessionRetry('/api/x', () => false, async () => {}, timing);
+        await vi.runAllTimersAsync();
+        expect((await pending)?.status).toBe(200);
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(timing.retryMs).toBeGreaterThanOrEqual(1000);
+        expect(timing.startedAt).toBeGreaterThanOrEqual(before + 1000);
     });
 });
