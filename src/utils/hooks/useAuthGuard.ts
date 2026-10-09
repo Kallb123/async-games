@@ -1,24 +1,69 @@
 'use client'
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { withTimeout } from "@/utils/withTimeout";
 
+type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
+
 /**
- * Whether the viewer is signed in *and* unlocked — the "safe to fetch" signal,
- * with no side effects of its own. Use this in components that only need to
- * know; the screen they sit on owns the redirect via `useAuthGuard`.
- *
- * A guest (`publicMetadata.guest === true`, docs/account-less-play.md §5/§12)
- * is authorised the moment they exist — the unlock gate is for the real
- * account that vouches for them, not for the guest.
+ * Whether an account may use the app: unlocked, or a guest
+ * (`publicMetadata.guest === true`, docs/account-less-play.md §5/§12), who is
+ * let in the moment they exist — the unlock gate is for the real account that
+ * vouches for them, not for the guest.
+ */
+function isUnlocked(user: ClerkUser): boolean {
+    return user.publicMetadata.unlocked === true || user.publicMetadata.guest === true;
+}
+
+// Whether this page load has confirmed that the session cookie the API reads is
+// current. Clerk's middleware only runs on the API (src/middleware.ts), so a
+// page load no longer gets its expired session token renewed before the page
+// arrives: Clerk's script renews it once it starts. Until then the cookie can
+// still be the one that expired while the app sat idle, and a request sent in
+// that window — a GET, or a POST from a button tapped the moment it appears —
+// is answered as signed out. So the first signed-in render asks Clerk for the
+// token once (`getToken()` hands back the cached one if it is still good, and
+// renews it and writes the cookie if not) and nothing counts as authorised until
+// that has answered. Page-wide rather than per component: one ask per page load.
+let sessionConfirmed = false;
+let confirming = false;
+const sessionListeners = new Set<() => void>();
+
+function confirmSession(getToken: () => Promise<unknown>) {
+    if (sessionConfirmed || confirming) return;
+    confirming = true;
+    // Bounded like every other renewal: a Clerk that never answers holds the
+    // app back for SESSION_REFRESH_TIMEOUT_MS, then the 401 retries take over.
+    void withTimeout(getToken, SESSION_REFRESH_TIMEOUT_MS, null, 'Confirming the session token').then(() => {
+        sessionConfirmed = true;
+        sessionListeners.forEach(listener => listener());
+    });
+}
+
+function subscribeToSession(listener: () => void) {
+    sessionListeners.add(listener);
+    return () => { sessionListeners.delete(listener); };
+}
+
+/**
+ * Whether the viewer is signed in *and* unlocked, with a session token the API
+ * will accept — the "safe to fetch" signal, with no side effects of its own.
+ * Use this in components that only need to know; the screen they sit on owns
+ * the redirect via `useAuthGuard`.
  */
 export function useIsAuthorised() {
     const { user, isLoaded } = useUser();
+    const { getToken } = useAuth();
+    const signedIn = isLoaded && !!user;
+    const confirmed = useSyncExternalStore(subscribeToSession, () => sessionConfirmed, () => false);
+    useEffect(() => {
+        if (signedIn) confirmSession(getToken);
+    }, [signedIn, getToken]);
     return {
         user,
         isLoaded,
-        isAuthorised: isLoaded && !!user && (user.publicMetadata.unlocked === true || user.publicMetadata.guest === true),
+        isAuthorised: signedIn && confirmed && isUnlocked(user),
     };
 }
 
@@ -90,7 +135,7 @@ export function useSessionRefresh(): () => Promise<void> {
  */
 export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: boolean } = {}) {
     const state = useIsAuthorised();
-    const { user, isLoaded, isAuthorised } = state;
+    const { user, isLoaded } = state;
     const router = useRouter();
     const reportedAuth = useRef(false);
 
@@ -125,10 +170,13 @@ export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: bool
             }
             return;
         }
-        if (!isAuthorised) {
+        // The account, not the session: `isAuthorised` is also false for the
+        // moment the session token is being confirmed, which is no reason to
+        // send anyone anywhere.
+        if (!isUnlocked(user)) {
             router.push('/unlockaccess');
         }
-    }, [isLoaded, user, isAuthorised, router, allowSignedOut]);
+    }, [isLoaded, user, router, allowSignedOut]);
 
     return state;
 }
