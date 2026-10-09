@@ -560,7 +560,8 @@ it — `TTFB_waiting`, `TTFB_cache`, `TTFB_dns`, `TTFB_connection` and
 `TTFB_request` — plus `sw_startup`, how long the navigation waited on the
 service worker (`workerStart` → `fetchStart`, present only when a worker took
 part). They are all milliseconds, cold loads only, and say whether a slow first
-byte was the browser, the service worker or the network and server.
+byte was a redirect (counted in `TTFB_waiting`), the service worker or the
+network and server.
 
 Samples deliberately contain no user or game identifier, player name, hand,
 chat, or command body. Dynamic path segments are replaced by route templates,
