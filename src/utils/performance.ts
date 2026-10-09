@@ -29,12 +29,12 @@ export interface TtfbAttributionInput {
 
 /**
  * Where a document's TTFB went, as separate metrics beside the `TTFB` total:
- * the wait before the browser began (`waiting`), the cache check — which with
- * a service worker also holds its boot and fetch handler (`cache`) — then DNS,
- * the connection, and the request itself, which is the network plus the
- * server's own time (`request`). A long `request` is the server or an edge
- * redirect such as Clerk's handshake; a long `cache` or `sw_startup` is the
- * service worker.
+ * the wait before the browser began, which holds any redirects (`waiting`),
+ * the cache check — which with a service worker also holds its boot and fetch
+ * handler (`cache`) — then DNS, the connection, and the request itself, which
+ * is the network plus the server's own time (`request`). A long `waiting` is a
+ * redirect chain such as Clerk's handshake; a long `cache` or `sw_startup` is
+ * the service worker; a long `request` is the server.
  *
  * `sw_startup` is `fetchStart - workerStart`. Per Navigation Timing,
  * `workerStart` is taken just before the worker thread is started (or, when it
