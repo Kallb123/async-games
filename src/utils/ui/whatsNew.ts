@@ -82,6 +82,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Home page and games load faster",
+                detail: "Going back to a game or to the home page now shows it straight away, from what you saw a moment ago, and brings it up to date underneath. A game also starts loading the moment you touch its card, before you let go. The server is quicker too, above all when you check back often: players' names and pictures are no longer looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
+            },
+            {
                 title: "Quicker to open",
                 detail: "Opening the app, or a game from a notification, no longer waits on an extra sign-in check before the page starts to arrive. The home page and a game's screen now come ready-made instead of being built for you each time you open them, so they show up straight away.",
             },
@@ -89,10 +93,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Realm Arena rebalanced: tougher Hold Out defenders, melee can miss, cover matters more at range, a longer-reaching Mage",
                 detail: "In Hold Out your characters now have 50% more HP, and against the Renegades every hit on them does 1 less. The enemy warbands muster one step smaller, and a two-player Hold Out lasts 13 rounds instead of 15. In every battle a blow in melee hits 80% of the time rather than always, a target's cover counts double against a shot from further than 10 squares (so those in cover are much safer at a distance, and those in the open no safer), the Mage's Bolt becomes the Mage Bolt (80% to hit, 12 squares), a Cleric can Heal every turn (once a turn, no waiting), and Raise can be used again four turns after the last one instead of once a battle. Battles already under way keep the rules they started with.",
                 game: "realmarena",
-            },
-            {
-                title: "Home page and games load faster",
-                detail: "The home page and a game's board come back from the server sooner, above all when you check back often: players' names and pictures no longer have to be looked up afresh every time, and the home page reads only what it shows rather than every game you've ever finished. A new name or picture can take up to five minutes to reach other players.",
             },
             {
                 title: "Open a game from home in a new tab",

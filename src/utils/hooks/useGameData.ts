@@ -6,6 +6,7 @@ import { useAchievementToaster } from "@/components/AchievementToaster";
 import { reloadForStaleSession } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
 import { BOARD_EVENTS } from "./usePushEvents";
+import { gameDataUrl, GAME_DATA_CACHE_MS } from "./prefetchGameData";
 import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import { gameHasOutOfTurnPlays, resultPath } from "@/utils/ui/games";
@@ -53,6 +54,14 @@ export function boardCanMove(game: IGameDataResponse | null | undefined, viewerI
  * board never swaps itself out for a skeleton, so the only thing either would
  * drive here is that one bar.
  *
+ * **A return to a board paints from the cache.** A board fetched for this
+ * player less than `GAME_DATA_CACHE_MS` ago — by an earlier visit, a command's
+ * own response, or a prefetch from the dashboard row (`prefetchGameData`) — is on
+ * screen from the first render, and the entry fetch runs at once beneath it
+ * (`loading` is true meanwhile, which is the top-bar bar). It is a provisional
+ * paint: a move sent from it names the board it was built on, so the server
+ * refuses it if the game has moved (see `useSubmitCommand`).
+ *
  * **A failed fetch never moves a player off a board they can see.** It used to:
  * any failure that wasn't a 404 pushed them home, so a single background poll
  * losing its connection — a phone changing network, a session cookie
@@ -82,9 +91,9 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     const { showToast } = useToast();
 
     const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
-        `/api/game/${gameId}`,
+        gameDataUrl(gameId),
         BOARD_EVENTS,
-        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id) },
+        { pollWhileWatching: (body) => boardCanMove(body?.gameData, user?.id), cacheFor: GAME_DATA_CACHE_MS },
     );
 
     // Null until the first response lands, rather than `{} as T`. The cast was

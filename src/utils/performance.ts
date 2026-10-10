@@ -11,8 +11,25 @@
 export const JOURNEY_MILESTONES = ['auth_ready', 'first_data', 'dashboard_usable', 'game_board_painted', 'game_usable'] as const;
 export type JourneyMilestone = typeof JOURNEY_MILESTONES[number];
 
+/**
+ * How the in-memory data cache (`utils/hooks/dataCache.ts`) did, reported by the
+ * screen or the prefetch that used it:
+ *
+ * - `data_cache_hit`: a screen painted its first data from the cache; the value
+ *   is the age of that body in ms, so the report can say how stale a cached
+ *   paint is.
+ * - `data_cache_miss`: a cache-enabled screen had nothing fresh and waited on
+ *   the network (value 0). Together with the hits, the hit rate.
+ * - `data_prefetch`: a prefetch from a game row that finished; the value is how
+ *   long it took, fetch to parsed body.
+ *
+ * No id, name or body is ever attached: the route is the only context.
+ */
+export const DATA_CACHE_METRICS = ['data_cache_hit', 'data_cache_miss', 'data_prefetch'] as const;
+export type DataCacheMetric = typeof DATA_CACHE_METRICS[number];
+
 export const PERFORMANCE_METRIC_NAMES = [
-  'navigation', ...JOURNEY_MILESTONES, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
+  'navigation', ...JOURNEY_MILESTONES, ...DATA_CACHE_METRICS, 'server_total', 'server_auth', 'server_mongo_connect', 'server_mongo_query', 'server_player_directory', 'server_names', 'server_unread_chat', 'server_kb_worlds', 'server_response_build', 'server_response', 'server_reactions', 'server_achievements', 'server_serialise', 'response_bytes', 'image_load', 'LCP', 'INP', 'CLS', 'FCP', 'TTFB',
   'TTFB_waiting', 'TTFB_cache', 'TTFB_dns', 'TTFB_connection', 'TTFB_request', 'sw_startup',
   'api_total', 'api_connect', 'api_network', 'api_download', 'session_retry',
   'CLS_largest_shift', 'LCP_load_delay', 'LCP_load', 'LCP_render_delay', 'INP_input_delay', 'INP_processing', 'INP_presentation',

@@ -1,7 +1,7 @@
 'use client'
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
-import Link from "next/link";
+import GameLink from "@/components/ui/GameLink";
 import { gamePath, metaForGame } from "@/utils/ui/games";
 import { opponentsById } from "@/utils/ui/players";
 import GameThumb from "@/components/ui/GameThumb";
@@ -36,8 +36,9 @@ export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
         const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
         const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
         return (
-            <Link
+            <GameLink
                 key={game.gameId}
+                gameId={game.gameId}
                 href={gamePath(game.url, game.gameId)}
                 className="ag-turn-card"
                 style={{ background: accent }}
@@ -60,7 +61,7 @@ export default function MyTurnList({ games, isLoading }: MyTurnListProps) {
                         {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
                     </div>
                 )}
-            </Link>
+            </GameLink>
         );
     }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 1 } });
 
