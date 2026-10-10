@@ -1,14 +1,16 @@
 'use client'
-import React from 'react';
+import React, { useState } from 'react';
 import ActionButton from '@/components/ui/ActionButton';
 import BuildRow from '@/components/ui/BuildRow';
+import InfoButton from '@/components/ui/InfoButton';
+import InfoModal from '@/components/ui/InfoModal';
 import ListRow from '@/components/ui/ListRow';
 import PendingTag from '@/components/ui/PendingTag';
 import Stat from '@/components/ui/Stat';
 import { ABILITIES, CHARACTERS, EFFECTS, type Ability, type AbilityId, type Affliction, type Item } from '@/games/RealmArena/characters';
 import { ITEM_ART } from '@/games/RealmArena/art';
-import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter } from '@/games/RealmArena/rules';
-import { abilityWait, whoseName } from '@/games/RealmArena/ui';
+import { ATTACK_AP, HUNKER_AP, REACTION_COST, abilitiesOf, allied, check, damageTo, fighterById, hasEffect, healedEffects, isStanding, itemOf, maxHpOf, shotEffect, shotOdds, smokeSquares, strikeChance, weaponOf, type Action, type BattleState, type Fighter, type OddsBreakdown } from '@/games/RealmArena/rules';
+import { abilityWait, oddsLines, whoseName } from '@/games/RealmArena/ui';
 import { rangeSquares, shotOf, targetsOf, type TargetKind } from '@/games/RealmArena/tactics';
 import { ABILITY_MARK, CHARACTER_MARK, weaponLine, weaponMark } from '@/games/RealmArena/roster';
 import { HEAL_HP, INSTANT_KINDS, type Aim, type InstantKind, type TurnDraft } from '@/games/RealmArena/useTurnDraft';
@@ -116,7 +118,7 @@ export function RealmArenaAim({ draft, battle, player, nameFor, pendingTarget, o
     return (
         <>
             <LinedUp draft={draft} battle={battle} name={name} pending={pendingTarget === LINED_UP} disabled={busy} />
-            <TargetList draft={draft} name={name} disabled={busy} onFocus={onFocus} />
+            <TargetList draft={draft} battle={battle} name={name} disabled={busy} onFocus={onFocus} />
         </>
     );
 }
@@ -192,21 +194,75 @@ export default function RealmArenaTurnSheet({ draft, battle, player, pendingTarg
 
 interface TargetListProps {
     draft: TurnDraft;
+    battle: BattleState;
     name: (id: number) => string;
     disabled: boolean;
     onFocus: (fighter: Fighter) => void;
 }
 
+/** The signed percentage a factor moves a chance by: +20%, −40%. */
+const signedPercent = (amount: number) => `${amount < 0 ? '−' : '+'}${Math.abs(amount)}%`;
+
+interface OddsInfoProps {
+    /** Who it's about, as the sheet names them. */
+    target: string;
+    /** What the attacker starts from: "Bow accuracy", "Melee accuracy". */
+    baseLabel: string;
+    odds: OddsBreakdown;
+    onClose: () => void;
+}
+
+/**
+ * Why a target's chance to hit is what the row says: the accuracy it starts
+ * from and each thing that moved it (`oddsLines`), then where it came to. The
+ * numbers are the ones `targetOptions` already worked out, not a second sum.
+ */
+function OddsInfo({ target, baseLabel, odds, onClose }: OddsInfoProps) {
+    const lines = oddsLines(odds, baseLabel);
+    const doubled = lines.some(line => line.note);
+    return (
+        <InfoModal title={`Hitting ${target}`} onClose={onClose} closeLabel="Close">
+            <div className="ag-list">
+                {lines.map((line, i) => (
+                    <ListRow
+                        key={line.label}
+                        title={line.label}
+                        sub={line.note}
+                        action={<span className="ag-build-tag">{i === 0 ? `${line.amount}%` : signedPercent(line.amount)}</span>}
+                    />
+                ))}
+            </div>
+            <div className="ag-stat-row">
+                <Stat value={`${odds.chance}%`} label="Hit" />
+                {odds.grazeChance !== undefined && <Stat value={`${odds.grazeChance}%`} label="Graze" />}
+            </div>
+            {doubled && <p className="ag-hint ag-hint--tight">Cover is doubled once, however many things would double it.</p>}
+        </InfoModal>
+    );
+}
+
 /**
  * Everyone the armed action could be aimed at, each with their HP and — at an
- * enemy — the chance to hit them. Picking one lines it up and brings the
- * board to them; picking a cleave's target again lets it go, and stays put.
+ * enemy — the chance to hit them, with a "?" that opens what that chance is
+ * made of. Picking one lines it up and brings the board to them; picking a
+ * cleave's target again lets it go, and stays put.
  */
-function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
+function TargetList({ draft, battle, name, disabled, onFocus }: TargetListProps) {
+    const [why, setWhy] = useState<number | null>(null);
     if (draft.options.length === 0) return null;
+    const asked = draft.options.find(({ target }) => target.id === why);
+    const weapon = weaponOf(battle, draft.fighter);
     return (
         <div className="ag-build-list">
-            {draft.options.map(({ target, chance }) => {
+            {asked?.odds && (
+                <OddsInfo
+                    target={capitalise(name(asked.target.id))}
+                    baseLabel={asked.odds.grazeChance !== undefined ? `${weapon.name} accuracy` : 'Melee accuracy'}
+                    odds={asked.odds}
+                    onClose={() => setWhy(null)}
+                />
+            )}
+            {draft.options.map(({ target, chance, odds }) => {
                 const aimed = draft.targets.includes(target.id);
                 const pick = () => {
                     draft.pick(target.id);
@@ -222,6 +278,7 @@ function TargetList({ draft, name, disabled, onFocus }: TargetListProps) {
                         disabled={disabled}
                         active={aimed}
                         onClick={pick}
+                        aside={odds && <InfoButton variant="help" label={`Why ${chance}% to hit ${name(target.id)}`} onClick={() => setWhy(target.id)} />}
                     />
                 );
             })}

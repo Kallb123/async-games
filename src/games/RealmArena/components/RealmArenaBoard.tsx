@@ -1287,7 +1287,7 @@ export default function RealmArenaBoard({ field, fighters, fogGhosts = [], unsee
                             })}
 
                             {/* Over every figure, so a neighbour never hides one. */}
-                            {coverAt !== undefined && coverAt !== null && <CoverShields view={view} field={field} square={coverAt} />}
+                            {coverAt != null && <CoverShields view={view} field={field} square={coverAt} />}
                             {odds?.map(({ target, chance }) => <Odds key={target.id} view={view} square={target.square} chance={chance} />)}
 
                             {/* The centre's name sits just clear of its dashed edge,

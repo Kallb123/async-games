@@ -4,8 +4,8 @@ import { battlefieldWith, buildBattlefield, TERRAIN, type Battlefield } from "@/
 import { ABILITIES, CHARACTERS, ITEMS, kitOf, musterBudget, OPTIONS, REALM, THROW_RANGE, type CharacterId, type ItemId, type OptionId } from "./characters";
 import { RUINED_FORT } from "./maps/ruinedFort";
 import {
-    abilitiesOf, ACTION_POINTS, act, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
-    newFighter, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, startTurn, storedFighter, watchedSquares, weaponOf,
+    abilitiesOf, ACTION_POINTS, act, MELEE_ACCURACY, afflicted, areaAround, blastedBy, blastedIn, centreHolders, centrePoints, check, endTurn, fixedRolls, isBattleOver, moveAp, movementOf, musterPoints, musterRefusal,
+    newFighter, oddsBreakdown, pickOf, purified, reachOf, reactionsTo, readyMadeMuster, shotOdds, shotResult, smokeSquares, standings, strikeChance, startTurn, storedFighter, watchedSquares, weaponOf,
     type Action, type BattleState, type Fighter, type MusterPick,
 } from "./rules";
 
@@ -64,6 +64,63 @@ describe("hitting (§13.3)", () => {
 
     it("doubles the cover of a hunkered target", () => {
         expect(odds(fighter(2, "b", "knight", at(field, 5, 2), { effects: { hunkered: 1 } }))?.chance).toBe(40);
+    });
+
+    describe("the breakdown behind a chance", () => {
+        const sum = (breakdown: ReturnType<typeof oddsBreakdown>) => breakdown.factors.reduce((total, factor) => total + factor.amount, breakdown.base);
+        const kinds = (breakdown: ReturnType<typeof oddsBreakdown>) => breakdown.factors.map(factor => factor.kind);
+
+        it("starts at the weapon's accuracy and lists what moved it, summing to the chance shown", () => {
+            const target = fighter(2, "b", "knight", at(field, 5, 2), { effects: { marked: 2 } });
+            const state = { field, fighters: [archer, target] };
+            for (const kind of ["attack", "aimedShot", "overwatch"] as const) {
+                const breakdown = oddsBreakdown(state, archer, target, kind);
+                expect(breakdown.base).toBe(80);
+                expect(sum(breakdown)).toBe(breakdown.raw);
+                expect(breakdown.chance).toBe(shotOdds(state, archer, target, kind)?.chance);
+                expect(breakdown.grazeChance).toBe(shotOdds(state, archer, target, kind)?.grazeChance);
+            }
+            expect(oddsBreakdown(state, archer, target).factors).toEqual([
+                { kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: false },
+                { kind: "effect", amount: 15, effect: "marked" },
+            ]);
+            expect(kinds(oddsBreakdown(state, archer, target, "aimedShot"))).toEqual(["cover", "effect", "aimedShot"]);
+            expect(kinds(oddsBreakdown(state, archer, target, "overwatch"))).toEqual(["cover", "effect", "overwatch"]);
+        });
+
+        it("says what doubled the cover, once, and where a shield wall stood in for it", () => {
+            const hunkered = fighter(2, "b", "knight", at(field, 5, 2), { effects: { hunkered: 1 } });
+            expect(oddsBreakdown({ field, fighters: [archer, hunkered] }, archer, hunkered).factors)
+                .toEqual([{ kind: "cover", amount: -40, cover: "half", doubled: "hunkered", shield: false }]);
+            const open = fighter(2, "b", "knight", at(field, 5, 3));
+            const wall = fighter(3, "b", "knight", at(field, 6, 3), { effects: { shieldWall: 1 } });
+            const walled = { field, fighters: [archer, open, wall] };
+            expect(oddsBreakdown(walled, archer, open).factors).toEqual([{ kind: "cover", amount: -20, cover: "half", doubled: undefined, shield: true }]);
+            expect(oddsBreakdown(walled, archer, open).chance).toBe(shotOdds(walled, archer, open)?.chance);
+        });
+
+        it("keeps the raw sum when it ran past 0 or 100, and the chance held between", () => {
+            const walled = fieldOf(["..........", "..........", "....#.....", "..........", "..........", ".........."]);
+            const hunkered = fighter(2, "b", "knight", at(walled, 5, 2), { effects: { hunkered: 1 } });
+            const shooter = fighter(1, "a", "mage", at(walled, 2, 5));
+            const breakdown = oddsBreakdown({ field: walled, fighters: [shooter, hunkered] }, shooter, hunkered);
+            expect(breakdown.raw).toBeLessThan(0);
+            expect(breakdown).toMatchObject({ chance: 0, raw: sum(breakdown) });
+            const marked = fighter(2, "b", "knight", at(field, 5, 3), { effects: { marked: 2 } });
+            const strong = oddsBreakdown({ field, fighters: [archer, marked] }, archer, marked, "aimedShot");
+            expect(strong.raw).toBeGreaterThan(100);
+            expect(strong.chance).toBe(100);
+        });
+
+        it("is a strike's for a melee weapon: its accuracy, and what's on the target", () => {
+            const knight = fighter(1, "a", "knight", at(field, 4, 2));
+            const marked = fighter(2, "b", "knight", at(field, 5, 2), { effects: { marked: 2 } });
+            const state = { field, fighters: [knight, marked], balanced: true as const };
+            const breakdown = oddsBreakdown(state, knight, marked);
+            expect(breakdown).toMatchObject({ base: MELEE_ACCURACY, factors: [{ kind: "effect", amount: 15, effect: "marked" }], chance: 95 });
+            expect(breakdown.chance).toBe(strikeChance(state, marked));
+            expect(breakdown.grazeChance).toBeUndefined();
+        });
     });
 
     it("adds 10 from high ground, 20 for an aimed shot, and takes 15 off overwatch", () => {

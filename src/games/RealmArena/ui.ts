@@ -12,7 +12,7 @@ import { ABILITIES, CHARACTERS, EFFECT_IDS, EFFECTS, ITEM_IDS, ITEMS, type Abili
 import { CHARACTER_IDS } from "./roster";
 import { battlefieldOf } from "./maps";
 import { EFFECT_ART, ITEM_ART, type BurstKind, type Missile, type Sprite, type ThrownItem } from "./art";
-import { ACTION_POINTS, CENTRE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type ShotResult, type ToldEvent } from "./rules";
+import { ACTION_POINTS, CENTRE, FAR_SHOT_DISTANCE, SCORED_FOR, squadSight, hasEffect, isStanding, isWarband, maxHpOf, moveAp, pickOf, reachOf, shoots, type BattleState, type Fighter, type MusterPick, type OddsBreakdown, type OddsFactor, type ShotResult, type ToldEvent } from "./rules";
 
 const LETTER_OF = new Map<Terrain, TerrainLetter>(
     (Object.entries(TERRAIN) as [TerrainLetter, Terrain][]).map(([letter, terrain]) => [terrain, letter]),
@@ -340,6 +340,43 @@ export function facingOf(field: Pick<Battlefield, "width" | "height">, { square,
 /** How full a character's HP bar is, 0–1 — or would be, were it to lose `lost` HP (gain, if negative), never below empty or past full. */
 export function hpFraction(fighter: Fighter, lost = 0): number {
     return Math.min(1, Math.max(0, fighter.hp - lost) / maxHpOf(fighter));
+}
+
+/** One line of the "why" behind a chance to hit: what moved it, and by how much. */
+export interface OddsLine {
+    label: string;
+    /** What qualifies it: why a cover penalty is doubled. */
+    note?: string;
+    /** Percentage points, signed: below zero takes the chance down. */
+    amount: number;
+}
+
+/** How a factor reads in the player's language. */
+function oddsLineOf(factor: OddsFactor): OddsLine {
+    const { amount } = factor;
+    switch (factor.kind) {
+        case "cover": {
+            const doubled = factor.doubled === "hunkered" ? "doubled: hunkered down"
+                : factor.doubled === "far" ? `doubled: far shot, over ${FAR_SHOT_DISTANCE} squares` : undefined;
+            return { label: factor.shield ? "Shield wall (counts as half cover)" : `${capitalise(factor.cover)} cover`, note: doubled, amount };
+        }
+        case "highGround": return { label: "High ground", amount };
+        case "effect": return { label: `Target is ${EFFECTS[factor.effect].state}`, amount };
+        case "smoke": return { label: "Target in smoke", amount };
+        case "aimedShot": return { label: "Aimed shot", amount };
+        case "overwatch": return { label: "Overwatch", amount };
+    }
+}
+
+/**
+ * The lines behind a chance to hit, for the turn sheet's "?": what it starts
+ * at (`baseLabel` — the weapon's accuracy, or melee's) and each thing that
+ * moved it, in the order `oddsBreakdown` applied them, plus a line for the
+ * 0–100 hold when `raw` ran past it. The sum is rules.ts's; this only words it.
+ */
+export function oddsLines(odds: OddsBreakdown, baseLabel: string): OddsLine[] {
+    const lines = [{ label: baseLabel, amount: odds.base }, ...odds.factors.map(oddsLineOf)];
+    return odds.raw === odds.chance ? lines : [...lines, { label: "Held between 0% and 100%", amount: odds.chance - odds.raw }];
 }
 
 /** Why an ability can't be used yet — "Used", "Used this turn", "Back in 2 turns" — or undefined when it's ready. */
