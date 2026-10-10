@@ -5,12 +5,14 @@ import { useEffect } from 'react';
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals/attribution';
 import { apiEntryMatcher } from '@/utils/apiResourceEntries';
 import type { SessionFetchTiming } from '@/utils/hooks/fetchWithSessionRetry';
-import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type Journey, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
+import { apiFetchMetrics, loadJourney, nextJourney, performanceRegion, safeRoute, serverTimingMetrics, vitalPhaseMetrics, type Journey, type DataCacheMetric, type JourneyMilestone, type PerformanceMetricInput, type PerformanceMetricName, type PerformanceRequest, type VitalAttributionInput } from '@/utils/performance';
 
 declare global {
   interface Window {
     /** A milestone reached now, timed from the start of the current journey. */
     __agPerformanceMark?: (name: JourneyMilestone) => void;
+    /** How the data cache did (see `DATA_CACHE_METRICS`). `pathname` names the route it was for, when that isn't the one the player is on by now. */
+    __agPerformanceMetric?: (name: DataCacheMetric, value: number, pathname?: string) => void;
     /** A screen's own data fetch, answered: its server spans, retry, size and time on the wire. */
     __agPerformanceFetch?: (fetch: PerformanceFetch) => void;
   }
@@ -147,6 +149,11 @@ function registerVitals() {
   onINP(metric => reportAttributedVital(metric, metric.attribution.interactionTargetElement));
 }
 
+function recordDataMetric(name: DataCacheMetric, value: number, pathname?: string) {
+  const metric = sample(name, value);
+  enqueue(pathname === undefined ? metric : { ...metric, route: safeRoute(pathname) });
+}
+
 function mark(name: JourneyMilestone) {
   const now = performance.now();
   performance.mark(`ag_${name}`);
@@ -164,6 +171,7 @@ export default function PerformanceReporter() {
   useEffect(() => {
     registerVitals();
     window.__agPerformanceMark = mark;
+    window.__agPerformanceMetric = recordDataMetric;
     window.__agPerformanceFetch = reportFetch;
     currentJourney();
     // Any tap or key press may be the one that navigates: post-mutation
@@ -206,6 +214,7 @@ export default function PerformanceReporter() {
     return () => {
       clearTimeout(deadline);
       delete window.__agPerformanceMark;
+      delete window.__agPerformanceMetric;
       delete window.__agPerformanceFetch;
       document.removeEventListener('pointerdown', intent, true);
       document.removeEventListener('keydown', keyboardIntent, true);

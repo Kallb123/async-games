@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { clearStaleSessionReload, fetchWithSessionRetry, type SessionFetchTiming } from "./fetchWithSessionRetry";
+import { clearStaleSessionReload } from "./fetchWithSessionRetry";
+import { confirmData, fetchResource, forgetCachedData, loadSharedResource, markDataUnconfirmed, readCachedData, writeCachedData } from "./dataCache";
 import { usePushEvents } from "./usePushEvents";
 import type { PerformanceRequest } from "@/utils/performance";
 import { useIsAuthorised, useSessionRefresh } from "./useAuthGuard";
@@ -133,15 +134,38 @@ export function useRefreshableData<T>(
          *  screen's: it never marks the `first_data` performance milestone, nor
          *  reports its requests' timings. */
         secondary?: boolean;
+        /**
+         * Opt in to the tab's in-memory cache (`dataCache.ts`) with this many ms
+         * of belief. A body fetched for this player and url less than this long
+         * ago is on screen from the first render — `data` set, `isLoading`
+         * false — and the entry fetch still runs at once, as `isRefreshing`:
+         * a cached paint is provisional, never the answer. A successful fetch
+         * and every `setData` write the cache; the entry fetch joins a prefetch
+         * already out for the same url instead of repeating it. Unset (the
+         * default), the hook neither reads nor writes the cache, so a screen
+         * that doesn't ask behaves exactly as it always has.
+         */
+        cacheFor?: number;
     } = {}
 ): RefreshableData<T> {
-    const { pollWhileWatching = false, enabled = true, secondary = false } = options;
-    const { isAuthorised } = useIsAuthorised();
+    const { pollWhileWatching = false, enabled = true, secondary = false, cacheFor } = options;
+    const { isAuthorised, user } = useIsAuthorised();
+    // Who the cache is read and written as: the signed-in, authorised viewer,
+    // and only for a hook that opted in and is switched on. Undefined is "no
+    // cache", and every cache call below is a no-op for it.
+    const cacheUserId = cacheFor !== undefined && enabled && isAuthorised ? user?.id : undefined;
     // Stable, so it can sit in `refresh`'s dependencies without rebuilding it.
     const refreshSession = useSessionRefresh();
-    const [data, setDataState] = useState<T | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+    // Read once, as the screen mounts: what a return to it paints at once. A
+    // screen that opens before Clerk has answered (a document load) has no
+    // `cacheUserId` yet, and nothing cached either — the cache starts empty.
+    const [cached] = useState(() => cacheUserId !== undefined && cacheFor !== undefined
+        ? readCachedData<T>(cacheUserId, url, cacheFor) : null);
+    const [data, setDataState] = useState<T | null>(cached?.body ?? null);
+    const [isLoading, setIsLoading] = useState(cached === null);
+    // True from the first render for a cached paint: the entry fetch is about
+    // to start, and the bar should already say so.
+    const [isRefreshing, setIsRefreshing] = useState(cached !== null);
     const [status, setStatus] = useState<number | null>(null);
     // Which url `status` is the answer for. A screen can swap one url for
     // another without remounting — the rail's game switcher moving between two
@@ -158,7 +182,29 @@ export function useRefreshableData<T>(
     }
 
     const mountedRef = useRef(true);
-    const loadedRef = useRef(false);
+    // A cached paint counts as loaded: the screen already has its first data,
+    // so the fetch that follows is a `refresh` (and shows as `isRefreshing`),
+    // and it is the cache hit, not that fetch, that marks `first_data`.
+    const loadedRef = useRef(cached !== null);
+    // The body the screen is showing, kept beside the state so `setData` can
+    // hand an updater its argument and write the cache in one step.
+    const dataRef = useRef<T | null>(cached?.body ?? null);
+    // Set once this mount has dispatched its first fetch: the one that reports
+    // the cache hit or miss, and the only one allowed to join a prefetch.
+    const startedRef = useRef(false);
+    // Which `refresh` call is the current one (see `requestKey` there): bumped
+    // by each call that starts a fetch, so a loop that finds it has moved on
+    // stops, and leaves the flags to the call that replaced it.
+    const runRef = useRef(0);
+    // What the fetch in flight is for: the viewer and the url.
+    const inFlightKeyRef = useRef('');
+    // The url `dataRef` holds the body of: the cache is written only under it
+    // (`setData`), because a screen whose url has just changed is still showing
+    // the last one's body until the new one's lands.
+    const dataUrlRef = useRef(url);
+    // Who and what `setData` writes the cache as, kept current after each
+    // render (react-hooks/refs) and read only from inside `setData`.
+    const cacheTargetRef = useRef<{ userId: string; url: string } | null>(null);
     const inFlightRef = useRef(false);
     // A refresh asked for while one is already running (e.g. accepting an invite
     // just as a push lands). The in-flight response predates the change that
@@ -204,19 +250,41 @@ export function useRefreshableData<T>(
         };
     }, [clearRetry]);
 
+    useEffect(() => {
+        cacheTargetRef.current = cacheUserId === undefined ? null : { userId: cacheUserId, url };
+    });
+
     const setData = useCallback<Dispatch<SetStateAction<T | null>>>((update) => {
         generationRef.current += 1;
-        setDataState(update);
+        const next = typeof update === 'function' ? (update as (previous: T | null) => T | null)(dataRef.current) : update;
+        dataRef.current = next;
+        setDataState(next);
+        // The newest state this client has — a command's own response, an
+        // optimistic patch — is what coming back to the screen should show.
+        // It lands before any fetch that started earlier does, so those can't
+        // put the cache back (see `writeCachedData`).
+        const target = cacheTargetRef.current;
+        if (target && target.url === dataUrlRef.current) {
+            if (next === null) forgetCachedData(target.userId, target.url);
+            else writeCachedData(target.userId, target.url, next);
+        }
     }, []);
 
     const refresh = useCallback(async () => {
         if (!isAuthorised || !enabled) {
             return;
         }
-        if (inFlightRef.current) {
+        // What this request is for. A fetch already out for something else —
+        // the url changed under it (the rail's switch between two boards), or
+        // the viewer did — is answering a question nobody is asking any more:
+        // it is superseded rather than re-run, and its body dropped (`run`).
+        const requestKey = `${cacheUserId ?? ''}\n${url}`;
+        if (inFlightRef.current && inFlightKeyRef.current === requestKey) {
             rerunRef.current = true;
             return;
         }
+        const run = ++runRef.current;
+        inFlightKeyRef.current = requestKey;
         // Whatever asked for this supersedes a retry still on the clock — it is
         // about to make the same request — and the poll's next tick, which
         // would ask again a moment after this answers (see `restartPoll`).
@@ -226,6 +294,23 @@ export function useRefreshableData<T>(
         if (loadedRef.current) {
             setIsRefreshing(true);
         }
+
+        // This mount's first dispatch: it reports how the cache did, and is the
+        // only fetch that may join a prefetch (a later one is asked for by a
+        // push, a poll or a command, and must start after it).
+        const firstDispatch = !startedRef.current;
+        startedRef.current = true;
+        if (firstDispatch && cacheUserId !== undefined && !secondary) {
+            if (cached) {
+                // Provisional until a request answers (see `isDataUnconfirmed`).
+                markDataUnconfirmed(cacheUserId, url);
+                window.__agPerformanceMetric?.('data_cache_hit', cached.ageMs);
+                window.__agPerformanceMark?.('first_data');
+            } else {
+                window.__agPerformanceMetric?.('data_cache_miss', 0);
+            }
+        }
+        let mayJoin = firstDispatch;
 
         // How long until the next attempt, decided by the last time round the
         // loop; null when there is nothing left to retry.
@@ -238,11 +323,18 @@ export function useRefreshableData<T>(
                 rerunRef.current = false;
                 // Read before the await, compared after it: see `generationRef`.
                 const generation = generationRef.current;
-                const timing: SessionFetchTiming = { startedAt: 0 };
-                const response = await fetchWithSessionRetry(url, () => !mountedRef.current, refreshSession, timing);
-                if (!mountedRef.current) {
+                // Through the cache for a screen that opted in, which shares the
+                // request with a prefetch and keeps its answer; straight to the
+                // network, cancelled with the screen, for one that didn't.
+                const load = cacheUserId === undefined ? null : loadSharedResource(cacheUserId, url, { join: mayJoin, refreshSession });
+                mayJoin = false;
+                const fetched = load ? await load.result : await fetchResource(url, () => !mountedRef.current || runRef.current !== run, refreshSession);
+                // Gone, or replaced by a fetch for something else: this body is
+                // not for the screen now, and is neither shown nor kept for it.
+                if (!mountedRef.current || runRef.current !== run) {
                     return;
                 }
+                const { response, timing } = fetched;
                 const responseStatus = response?.status ?? null;
                 setStatus(responseStatus);
                 if (!response || !response.ok) {
@@ -250,43 +342,44 @@ export function useRefreshableData<T>(
                     retryIn = retryDelayMs(responseStatus, attemptsRef.current);
                     continue;
                 }
-                let body: T;
-                try {
-                    body = await response.json() as T;
-                } catch (error) {
+                if (!fetched.parsed) {
                     // A 200 that isn't JSON — a proxy's error page, a truncated
                     // body — is as transient as a network error, and as worth
                     // asking again about.
-                    console.error(`Failed to parse ${url}`, error);
+                    console.error(`Failed to parse ${url}`, fetched.parseError);
                     retryIn = retryDelayMs(null, attemptsRef.current);
                     continue;
                 }
-                // A big body can finish downloading after the screen has gone.
-                if (!mountedRef.current) {
-                    return;
-                }
+                const body = fetched.body as T;
                 // The screen's own data only: a side panel's requests would be
                 // counted against the screen's route. Handed over once the body
-                // is in, so the browser's record of it is about to arrive.
-                if (!secondary) {
+                // is in, so the browser's record of it is about to arrive. Not
+                // for a request that was already out before this screen asked
+                // (a prefetch): its timings are the prefetch's, not a wait this
+                // screen began, and `data_prefetch` reports them.
+                if (!secondary && !load?.joined) {
                     window.__agPerformanceFetch?.({ url, response, timing, request });
-                    request = 'refresh';
                 }
+                request = 'refresh';
                 retryIn = null;
                 attemptsRef.current = 0;
                 // Something loaded, so whatever the session was, it works now:
                 // give the tab back its one stale-session reload for next time.
                 clearStaleSessionReload();
                 if (generationRef.current === generation) {
+                    dataRef.current = body;
+                    dataUrlRef.current = url;
                     setDataState(body);
+                    if (cacheUserId !== undefined) confirmData(cacheUserId, url);
                     if (!loadedRef.current && !secondary) {
                         window.__agPerformanceMark?.('first_data');
                     }
                 }
-            } while (rerunRef.current && mountedRef.current);
+            } while (rerunRef.current && mountedRef.current && runRef.current === run);
         } finally {
-            inFlightRef.current = false;
-            if (mountedRef.current) {
+            // A superseded run leaves the flags to its replacement.
+            if (runRef.current === run) inFlightRef.current = false;
+            if (mountedRef.current && runRef.current === run) {
                 setIsRefreshing(false);
                 if (retryIn === null) {
                     // Nothing more to try: what is on screen now *is* the
@@ -302,7 +395,7 @@ export function useRefreshableData<T>(
                 }
             }
         }
-    }, [url, isAuthorised, enabled, secondary, clearRetry, refreshSession]);
+    }, [url, isAuthorised, enabled, secondary, cacheUserId, cached, clearRetry, refreshSession]);
 
     useEffect(() => {
         refreshRef.current = refresh;

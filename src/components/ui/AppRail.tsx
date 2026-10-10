@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Avatar from "@/components/ui/Avatar";
 import Brand from "@/components/ui/Brand";
+import GameLink from "@/components/ui/GameLink";
 import GameThumb from "@/components/ui/GameThumb";
 import type { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
@@ -35,19 +36,25 @@ const NAV = [
     { href: "/games/completed", label: "Finished", glyph: "🏁" },
 ];
 
-function RailGameLink({ href, name, thumb, status, isYours = false, onClick }: {
+function RailGameLink({ href, gameId, name, thumb, status, isYours = false, onClick }: {
     href: string;
+    /** A game's board, whose data is fetched as the player reaches for the row; absent for anything else (a world). */
+    gameId?: string;
     name: string;
     thumb: ReactNode;
     status?: ReactNode;
     isYours?: boolean;
     onClick?: () => void;
 }) {
-    return <Link href={href} onClick={onClick} className={`ag-rail-game${isYours ? " ag-rail-game--yours" : ""}`}>
+    const className = `ag-rail-game${isYours ? " ag-rail-game--yours" : ""}`;
+    const content = <>
         {thumb}
         <span className="ag-rail-game-name">{name}</span>
         {isYours ? <span className="ag-rail-game-dot" aria-label="Your move" /> : status}
-    </Link>;
+    </>;
+    return gameId
+        ? <GameLink gameId={gameId} href={href} onClick={onClick} className={className}>{content}</GameLink>
+        : <Link href={href} onClick={onClick} className={className}>{content}</Link>;
 }
 
 /**
@@ -135,6 +142,7 @@ export default function AppRail({ myTurn = [], theirTurn = [], worlds = [], busy
                                     <RailGameLink
                                         key={game.gameId}
                                         href={gamePath(game.url, game.gameId)}
+                                        gameId={game.gameId}
                                         name={game.friendlyName}
                                         isYours={isYours}
                                         thumb={meta

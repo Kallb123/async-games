@@ -490,7 +490,7 @@ step has something real to point at before there's a real turn to take.
 
 ## 11. Tests
 
-`vitest` runs in the `node` environment with no jsdom and no
+`vitest` runs in the `node` environment by default, with no
 `@testing-library`, so nothing here pretends to render a hook. The repo's
 answer to that is
 [`useRefreshableData.test.ts`](../src/utils/hooks/useRefreshableData.test.ts):

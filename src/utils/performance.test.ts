@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { globSync, readFileSync } from 'node:fs';
-import { apiFetchMetrics, INTENT_WINDOW_MS, isPerformanceRegion, loadJourney, nextJourney, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REGIONS, performanceRegion, performanceValueLimit, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, vitalPhaseMetrics, type RegionElement } from './performance';
+import { apiFetchMetrics, DATA_CACHE_METRICS, INTENT_WINDOW_MS, isPerformanceRegion, loadJourney, nextJourney, PERFORMANCE_METRIC_NAMES, PERFORMANCE_REGIONS, performanceRegion, performanceValueLimit, safeRoute, serverTimingMetrics, ttfbPhaseMetrics, vitalPhaseMetrics, type RegionElement } from './performance';
 
 describe('safeRoute', () => {
   it.each([
@@ -193,5 +193,16 @@ describe('vitalPhaseMetrics', () => {
     const metrics = vitalPhaseMetrics({ name: 'INP', attribution: { inputDelay: 12, processingDuration: 300, presentationDelay: 104 } });
     expect(metrics.map(metric => metric.value)).toEqual([12, 300, 104]);
     for (const { name } of metrics) expect(PERFORMANCE_METRIC_NAMES).toContain(name);
+  });
+});
+
+describe('data cache metrics', () => {
+  it('are allow-listed, so the beacon accepts them and the ingest route validates them', () => {
+    expect([...DATA_CACHE_METRICS]).toEqual(['data_cache_hit', 'data_cache_miss', 'data_prefetch']);
+    for (const name of DATA_CACHE_METRICS) expect(PERFORMANCE_METRIC_NAMES).toContain(name);
+  });
+
+  it('are timings, within the limit the ingest route enforces for a time', () => {
+    for (const name of DATA_CACHE_METRICS) expect(performanceValueLimit(name)).toBe(120_000);
   });
 });

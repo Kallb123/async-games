@@ -10,6 +10,11 @@ const NOTHING_YET: IDashboardResponse = {
     worlds: [], myTurn: [], theirTurn: [], incoming: [], outgoing: [], completed: []
 };
 
+// How long a return to the home screen paints the list it last had: short,
+// because invites and turns come and go quickly, and the fetch beneath it
+// corrects the paint at once.
+const DASHBOARD_CACHE_MS = 15_000;
+
 /**
  * The home screen's one fetch. Every list on it reads from this — see
  * `buildDashboard` for why they share a read rather than each owning one.
@@ -24,7 +29,7 @@ export function useDashboard() {
     const { data, isLoading, isRefreshing, refresh } = useRefreshableData<IDashboardResponse>(
         '/api/dashboard',
         DASHBOARD_EVENTS,
-        { pollWhileWatching: true }
+        { pollWhileWatching: true, cacheFor: DASHBOARD_CACHE_MS }
     );
 
     return { dashboard: data ?? NOTHING_YET, isLoading, isRefreshing, refresh };

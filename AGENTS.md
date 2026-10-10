@@ -107,6 +107,10 @@ out. A second copy is the signal to extract the first one.
   dark card holding the dice, the total and a line naming what the roll paid out,
   which Dice Cities puts over its market and Settlements & Cities under its
   board. Don't hand-roll a second dice-and-total card beside it.
+  `GameLink` is a `<Link>` to a game's board that starts fetching the board as
+  the player reaches for it (press, mouse hover, focus): every row on the
+  dashboard or the rail that opens a board is one, so the prefetch is wired once
+  and a new row of that kind uses it rather than a bare `<Link>`.
   `ReadOnlyPanel` is how a game screen shows a waiting player the panels they
   can look at but not act on — their hand, the face-up cards, the market — by
   making the turn sheet inert rather than growing a second read-only copy of it.
@@ -167,8 +171,12 @@ out. A second copy is the signal to extract the first one.
   `PlaybackProvider` round what it draws, and everything that moves reads the
   time with `usePlaybackFrame`, setting its own SVG attributes through a ref
   with no React render a frame, rather than running a clock of its own
-  ([`docs/isometric-animations.md`](./docs/isometric-animations.md) §4), and
-  `useStoredValue` — the one place in the app that touches `localStorage`, so
+  ([`docs/isometric-animations.md`](./docs/isometric-animations.md) §4),
+  `dataCache` — the tab's in-memory cache of what a screen fetched for the
+  signed-in player, which `useRefreshableData` reads and writes for a screen
+  that passes `cacheFor` (the board and the dashboard do; add it elsewhere only
+  deliberately — a cached body is viewer-specific and paints before it is
+  confirmed), and `useStoredValue` — the one place in the app that touches `localStorage`, so
   anything remembered per browser (a dismissed banner, a guest's first turn) is
   a call to it rather than another copy of the swallowed try/catch. A screen
   that wants the phone's pull-down-to-check-again gesture mounts

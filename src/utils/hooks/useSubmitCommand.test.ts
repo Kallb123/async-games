@@ -22,6 +22,14 @@ describe("expectedCommandCountFor", () => {
 
     it("says nothing before the board has loaded", () => {
         expect(expectedCommandCountFor(null)).toBeUndefined();
+        expect(expectedCommandCountFor(null, true)).toBeUndefined();
+    });
+
+    // A board painted from the cache that no request has answered yet: the
+    // server's check is the same for every game, so every game asks for it.
+    it("names the board in any game while it is a cached paint nothing has confirmed", () => {
+        expect(expectedCommandCountFor(testBoard("snakesandladders", { commandCount: 7 }), true)).toBe(7);
+        expect(expectedCommandCountFor(testBoard(INTERRUPTS, { commandCount: 7 }), true)).toBe(7);
     });
 });
 

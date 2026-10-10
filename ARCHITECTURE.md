@@ -1259,7 +1259,26 @@ description or theme colour is exactly what those two files exist to prevent.
   Every fetch also restarts the poll's countdown (`usePushEvents`'
   `restartPoll`), so a refresh from anywhere else — the dashboard's pull to
   refresh (`PullToRefresh`), a push, a foreground return — is not followed by
-  a poll asking the same thing a moment later.
+  a poll asking the same thing a moment later. A fetch whose url (or viewer)
+  has changed under it is superseded, not re-run: its body is dropped, and the
+  new url is fetched.
+- **A short-lived in-memory cache, for the two screens that opt in.**
+  `useRefreshableData` takes `cacheFor` (ms); `useGameData` sets 30 s and
+  `useDashboard` 15 s, and nothing else opts in. `src/utils/hooks/dataCache.ts`
+  holds the bodies — memory only, keyed by signed-in user and url, 20 at most,
+  least recently used out first — and `useDataCacheOwner` (mounted in
+  `Providers`) empties it on sign-out, a locked account or a different
+  account. A return to a screen within its `cacheFor` paints the cached body
+  at once (`isLoading` false) and the entry fetch still runs beneath it, as
+  `isRefreshing`. A fetch and every `setData` write it back; a failed answer is
+  never stored and a 403/404 drops the entry. `GameLink` (the dashboard's
+  your-turn cards, waiting rows and the rail's game rows) calls
+  `prefetchGameData` on pointer-down, mouse hover and focus, which fills the
+  same cache through the same request (the screen's entry fetch joins one
+  still in flight). A cached board is provisional: until a request answers it,
+  `useSubmitCommand` sends `expectedCommandCount` in every game, not only the
+  out-of-turn ones, so the server refuses a move built on a board that has
+  moved. See `docs/loading-performance-plan.md`, Phases 1.3 and 1.4.
 - **An expired session is a ladder, not a failure.** A tab that has been idle
   comes back with a session token that expired while nothing was running to
   renew it, and every request 401s until something asks Clerk for another.
@@ -1580,7 +1599,7 @@ one-liner fails with a message naming the exact file and line to add.
     [`docs/robustness-review.md`](./docs/robustness-review.md) says what they
     cover and, as importantly, what they don't.
   - **Client-hook tests** render the hook through `react-dom/server`, because
-    Vitest runs in `environment: "node"` here and there is no jsdom or
+    Vitest runs in `environment: "node"` here and there is no
     `@testing-library/react` to reach for. A two-line `Harness` component calls
     the hook and returns `null`; `renderToString` runs it; the test asserts on
     what the hook handed back. Stub whatever it fetches from (`useUser`,
@@ -1591,7 +1610,12 @@ one-liner fails with a message naming the exact file and line to add.
     it does cover render-phase state, which is where a `setState` that never
     settles turns into React's "Too many re-renders". Prefer a plain unit test over an
     extracted pure function (`useAnimatedList`'s `planList`) where the logic
-    will come out; reach for this when it won't.
+    will come out; reach for this when it won't. A hook whose *effects* are the
+    thing under test (a fetch that starts on mount, a url that changes under
+    it) is the exception: put `// @vitest-environment jsdom` at the top of the
+    file, render it with `createRoot` from `react-dom/client` inside React's
+    `act`, and stub `fetch` with a promise per request so the test decides when
+    each one answers. Start from `useRefreshableData.cache.test.ts`.
   - **Structural guards** scan the source for what should exist per game, then
     assert every shared file that should reference it does — so a new game is
     checked automatically with no hand-maintained list to keep in sync:
